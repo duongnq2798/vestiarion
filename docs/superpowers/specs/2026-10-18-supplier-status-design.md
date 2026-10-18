@@ -17,19 +17,23 @@ who did not sign up.
 - **V1. The link.** It is `vxv_` and 43 base64url characters, kept only as a SHA-256 and shown once.
   - It expires after 7, 30 or 90 days, and the database refuses more than 91.
   - One link per supplier is live: a new one stops the old one. Stopping sets `revoked_at` once; nothing deletes a link.
-  - It is made for a vendor or a contractor, never a client, and made and stopped by owners and admins (`records.write`).
+  - It is made for a vendor only. A client has a statement link; a contractor, paid by milestones, follows its payments
+    through its payee link. Owners and admins make and stop it (`records.write`).
   - Each step is signed `supplier_status_shared` or `supplier_status_unshared` (domain `ap`). A link whose entry fails is
     stopped at once.
 - **V2. What the page shows.** The business's name, the supplier's own name, and its own bills (payables), never a
   rejected one. Each bill shows its reference (memo and purchase order), amount, due day, and where it stands in the
   supplier's words:
-  - *Received*: pending or matched, not decided yet.
-  - *Being reviewed*: held, flagged, or waiting for details. The page never says why: not the cash, not a guardrail, not
-    a fraud flag.
+  - *Received*: pending, not decided yet.
+  - *Being reviewed*: held, flagged, waiting for details, or `processing` (a person deciding it in Approvals, before any
+    payment exists). The page never says why: not the cash, not a guardrail, not a fraud flag.
   - *To be paid on {day}*: scheduled, with its day.
-  - *Payment on its way*: processing, or a payment started and not yet confirmed.
-  - *Paid on {day}*, with the transaction on the network's explorer when a confirmed payment has one. Paid bills stay for
-    90 days after payment, at most 10.
+  - *Payment on its way*: `matched` (for a payable, a payment submitted and not yet confirmed), or a payment started and
+    not yet confirmed or failed.
+  - *Paid on {day}*, with the transaction on the network's explorer when a confirmed payment has an Arc transaction hash
+    (`0x` and 64 hex characters; a simulated payment's reference is never linked). Paid bills stay for 90 days after
+    payment, at most 10.
+  - In a sandbox the page says its payments are simulated.
 
   Open bills are totalled per currency ("Still to be paid"), never summed across currencies. Nothing else of the
   workspace: no reasoning, no balance, no other counterparty, no member, no ledger.
@@ -41,13 +45,17 @@ who did not sign up.
   is. It names no agent decision and no limit.
 - **V6. Commands.** `supplier_status.share` and `supplier_status.unshare`, `records.write`, from the console only.
 - **V7. Privacy of the link.** The page is `noindex`, with a fixed title ("Your payments"). Analytics sees
-  `/supplier/:token`. Its preview card names nothing of the link.
+  `/supplier/:token`. Its preview card names nothing of the link. A paid bill's link opens the public explorer, where
+  anyone can see the paying wallet, so the copy never says the page hides it. A bill's memo is shown, so the Bills tab
+  asks for internal notes to stay out of memos.
+- **V8. Not in shadow mode.** A workspace in shadow mode pays its bills its own way, and Arc testnet only mirrors the
+  ones it agrees with. A link is refused there, and an existing link shows no bills while shadow mode is on.
 
 ## Data (0131)
 
 - `supplier_status_links (id, org_id, counterparty_id, token_hash unique, created_by, created_at, expires_at,
   revoked_at, revoked_by)`.
-  - A composite FK to the counterparty, and a trigger: not a client.
+  - A composite FK to the counterparty, and a trigger: a vendor only.
   - One live link per supplier (a partial unique index).
   - The tenant role selects; inserts only `org_id`, `counterparty_id`, `token_hash`, `created_by` and `expires_at` (so
     `created_at`, which bounds the expiry, is always now); and updates only `revoked_at` and `revoked_by`. A link is
@@ -57,7 +65,7 @@ who did not sign up.
 
 ## Where members make it
 
-Bills & receivables, Bills tab, **Supplier payment status**: pick a vendor or contractor and how long the link works,
+Bills & receivables, Bills tab, **Supplier payment status**: pick a vendor and how long the link works,
 get the link once to copy, see which suppliers have a live link and until when, and stop one.
 
 ## Not in this change

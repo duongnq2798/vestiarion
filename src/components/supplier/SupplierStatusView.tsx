@@ -1,4 +1,5 @@
 import { CircleCheck, Clock3, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import type { Standing, SupplierBillView, SupplierStatusView as View } from "@/lib/supplier-status/model";
@@ -31,6 +32,9 @@ export function SupplierStatusView({ view }: { view: View }) {
         <p className="text-sm text-ink-2">
           As of {view.asOf}. This link works until {view.until}.
         </p>
+        {view.simulated && (
+          <p className="text-sm text-ink-2">This is a sandbox: its payments are simulated, and none of them moved money.</p>
+        )}
       </header>
 
       <section aria-label="Still to be paid" className="grid gap-3 sm:grid-cols-2">
@@ -57,9 +61,9 @@ export function SupplierStatusView({ view }: { view: View }) {
             Your open bills
           </h2>
           <ul className="space-y-3">
-            {view.open.map((bill) => (
+            {view.open.map((bill, index) => (
               <li key={bill.id}>
-                <Bill bill={bill} />
+                <Bill bill={bill} headingId={`open-bill-${index + 1}`} />
               </li>
             ))}
           </ul>
@@ -72,9 +76,9 @@ export function SupplierStatusView({ view }: { view: View }) {
             Paid recently
           </h2>
           <ul className="space-y-3">
-            {view.paid.map((bill) => (
+            {view.paid.map((bill, index) => (
               <li key={bill.id}>
-                <Bill bill={bill} />
+                <Bill bill={bill} headingId={`paid-bill-${index + 1}`} />
               </li>
             ))}
           </ul>
@@ -88,21 +92,21 @@ export function SupplierStatusView({ view }: { view: View }) {
         </p>
         <p>
           {view.orgName} pays its bills through{" "}
-          <a href="/?from=supplier-status" className="font-medium text-agent underline-offset-2 hover:underline">
+          <Link href="/?from=supplier-status" className="font-medium text-agent underline-offset-2 hover:underline">
             Vestiarion
-          </a>
-          , an AI agent for bills and payments. Each payment above links to its transaction.
+          </Link>
+          , an AI agent for bills and payments.{view.linksTransactions ? " A payment made on Arc links to its transaction, which anyone can open on the public explorer." : ""}
         </p>
       </div>
     </article>
   );
 }
 
-function Bill({ bill }: { bill: SupplierBillView }) {
+function Bill({ bill, headingId }: { bill: SupplierBillView; headingId: string }) {
   return (
-    <article aria-labelledby={`bill-${bill.id}`} className="rounded-2xl border border-line bg-surface p-4 shadow-surface sm:p-5">
+    <article aria-labelledby={headingId} className="rounded-2xl border border-line bg-surface p-4 shadow-surface sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h3 id={`bill-${bill.id}`} className="min-w-0 break-words text-base font-semibold text-ink">
+        <h3 id={headingId} className="min-w-0 break-words text-base font-semibold text-ink">
           {bill.reference}
         </h3>
         <Badge tone={TONE[bill.standing]} icon={bill.standing === "paid" ? <CircleCheck aria-hidden /> : <Clock3 aria-hidden />}>

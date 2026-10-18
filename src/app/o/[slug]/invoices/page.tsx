@@ -771,22 +771,23 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     // The tab shown, and only it, is read and built (B5).
     let tabContent: Pick<Parameters<typeof BillsScreen>[0], "bills" | "plan" | "receivables"> = {};
     if (view.tab === "bills") {
-      // The bills worth paying early for a discount (early-payment offers E1, E2); best effort, none before 0125.
-      const offers = await offersView().catch((error: unknown) => {
-        console.error("invoices: early-payment offers not read", error instanceof Error ? error.message : error);
-        return null;
-      });
-      // Requests for more time on bills held for cash (term requests X1); best effort, none before 0128.
-      const terms = await termRequestsView().catch((error: unknown) => {
-        console.error("invoices: term requests not read", error instanceof Error ? error.message : error);
-        return null;
-      });
-      // Suppliers' payment status links (supplier status V1, V6): the links not stopped. Best effort: a read that fails
-      // hides only this part; none before 0131.
-      const supplierLinks = await listSupplierLinks(db(), asOf).catch((error: unknown) => {
-        console.error("invoices: supplier status links not read", error instanceof Error ? error.message : error);
-        return null;
-      });
+      // Read at once, each best effort: the bills worth paying early for a discount (early-payment offers E1, E2; none
+      // before 0125), requests for more time on bills held for cash (term requests X1; none before 0128), and vendors'
+      // payment status links not stopped (supplier status V1, V6; none before 0131). A read that fails hides only its part.
+      const [offers, terms, supplierLinks] = await Promise.all([
+        offersView().catch((error: unknown) => {
+          console.error("invoices: early-payment offers not read", error instanceof Error ? error.message : error);
+          return null;
+        }),
+        termRequestsView().catch((error: unknown) => {
+          console.error("invoices: term requests not read", error instanceof Error ? error.message : error);
+          return null;
+        }),
+        listSupplierLinks(db(), asOf).catch((error: unknown) => {
+          console.error("invoices: supplier status links not read", error instanceof Error ? error.message : error);
+          return null;
+        }),
+      ]);
       const supplierLinkList = supplierLinks?.available ? supplierLinks.links : [];
       const linkMakers =
         supplierLinkList.length > 0
@@ -795,7 +796,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               .catch(() => null)
           : null;
       const suppliers = counterparties
-        .filter((counterparty) => counterparty.role === "vendor" || counterparty.role === "contractor")
+        .filter((counterparty) => counterparty.role === "vendor")
         .map(({ id, name }) => ({ id, name }))
         .sort((a, b) => a.name.localeCompare(b.name));
       const supplierStatus = supplierLinks ? (

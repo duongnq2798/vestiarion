@@ -4,7 +4,9 @@ import { dayWords, money } from "../customer-portal/model";
 /**
  * A supplier's payment status, pure (docs/superpowers/specs/2026-10-18-supplier-status-design.md V2): where each of the
  * supplier's bills stands, in the supplier's words, and what is still to be paid per currency. The words never say why a
- * bill is held: a supplier reads "Being reviewed" whether the cash is short, a guardrail stopped it or it was flagged.
+ * bill is held: a supplier reads "Being reviewed" whether the cash is short, a guardrail stopped it, it was flagged or a
+ * person is deciding it. For a payable, `matched` is a payment submitted and not yet confirmed (settlement lifecycle
+ * I17), and `processing` the claim a person holds while deciding it in Approvals, before any payment exists.
  */
 
 /** How long a new link lasts, in days: the choice the person is given (the database refuses more than 91). */
@@ -67,16 +69,20 @@ export interface SupplierStatusView {
   paid: SupplierBillView[];
   /** What is still to be paid, per currency, never summed across currencies: "190.00 USDC". */
   stillToBePaid: string[];
+  /** A sandbox: its payments are simulated, and the page says so. */
+  simulated: boolean;
+  /** Whether any bill shown links its payment's transaction. */
+  linksTransactions: boolean;
 }
 
 /** Where a bill stands for its supplier; null for a bill the page never shows (rejected). */
 export function standingOf(bill: Pick<SupplierBillIn, "status" | "inFlight">): Standing | null {
   if (bill.status === "rejected") return null;
   if (bill.status === "paid") return "paid";
-  if (bill.status === "processing" || bill.inFlight) return "on_its_way";
+  if (bill.status === "matched" || bill.inFlight) return "on_its_way";
   if (bill.status === "scheduled") return "scheduled";
-  if (bill.status === "pending" || bill.status === "matched") return "received";
-  // Held, flagged, waiting for details, or anything new: reviewed by the business, never why.
+  if (bill.status === "pending") return "received";
+  // Held, flagged, waiting for details, a person deciding it, or anything new: reviewed by the business, never why.
   return "reviewing";
 }
 
@@ -95,6 +101,9 @@ function wordsOf(standing: Standing, bill: SupplierBillIn): string {
   }
 }
 
+/** A transaction on Arc the explorer can open: a simulated payment's reference (`sim_...`) is never linked. */
+const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
+
 /** Open bills first by what happens next: on its way, then by the day set, then the rest by due day. */
 const ORDER: Record<Standing, number> = { on_its_way: 0, scheduled: 1, reviewing: 2, received: 3, paid: 4 };
 
@@ -103,11 +112,14 @@ export function buildSupplierStatus(input: {
   supplierName: string;
   expiresAt: string;
   now: number;
+  /** A sandbox workspace, whose payments are simulated. */
+  simulated?: boolean;
   bills: SupplierBillIn[];
   /** The network's explorer address for a transaction, without its hash. */
   explorerTx: string;
 }): SupplierStatusView {
-  const views: Array<SupplierBillView & { sortDay: string }> = [];
+  const views: SupplierBillView[] = [];
+  const sortDay = new Map<string, string>();
   for (const bill of input.bills) {
     const standing = standingOf(bill);
     if (!standing) continue;
@@ -120,14 +132,14 @@ export function buildSupplierStatus(input: {
       due: dayWords(bill.dueDate),
       standing,
       words: wordsOf(standing, bill),
-      txUrl: standing === "paid" && bill.txHash ? `${input.explorerTx}${bill.txHash}` : null,
-      sortDay: standing === "paid" ? (bill.settledAt ?? "") : standing === "scheduled" ? (bill.scheduledFor ?? bill.dueDate) : bill.dueDate,
+      txUrl: standing === "paid" && bill.txHash && TX_HASH.test(bill.txHash) ? `${input.explorerTx}${bill.txHash}` : null,
     });
+    sortDay.set(bill.id, standing === "paid" ? (bill.settledAt ?? "") : standing === "scheduled" ? (bill.scheduledFor ?? bill.dueDate) : bill.dueDate);
   }
   const open = views
     .filter((view) => view.standing !== "paid")
-    .sort((a, b) => ORDER[a.standing] - ORDER[b.standing] || a.sortDay.localeCompare(b.sortDay));
-  const paid = views.filter((view) => view.standing === "paid").sort((a, b) => b.sortDay.localeCompare(a.sortDay));
+    .sort((a, b) => ORDER[a.standing] - ORDER[b.standing] || (sortDay.get(a.id) ?? "").localeCompare(sortDay.get(b.id) ?? ""));
+  const paid = views.filter((view) => view.standing === "paid").sort((a, b) => (sortDay.get(b.id) ?? "").localeCompare(sortDay.get(a.id) ?? ""));
 
   const totals = new Map<string, number>();
   for (const bill of input.bills) {
@@ -135,15 +147,16 @@ export function buildSupplierStatus(input: {
     if (!standing || standing === "paid") continue;
     totals.set(bill.currency, (totals.get(bill.currency) ?? 0) + bill.amount);
   }
-  const strip = ({ sortDay: _sortDay, ...view }: SupplierBillView & { sortDay: string }): SupplierBillView => view;
   return {
     orgName: input.orgName,
     supplierName: input.supplierName,
     asOf: utcDay(new Date(input.now).toISOString()),
     until: utcDay(input.expiresAt),
-    open: open.map(strip),
-    paid: paid.map(strip),
+    open,
+    paid,
     stillToBePaid: [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([currency, amount]) => money(amount, currency)),
+    simulated: input.simulated ?? false,
+    linksTransactions: paid.some((view) => view.txUrl !== null),
   };
 }
 

@@ -122,11 +122,12 @@ export default function PrivacyPage() {
           keeps the days, the amount and a SHA-256 fingerprint of the words, never the words.
         </p>
         <p>
-          An owner or admin can send a supplier, a vendor or a contractor, a link to its own payment status. Anyone with the link sees, until it
+          An owner or admin can send a vendor a link to its own payment status. Anyone with the link sees, until it
           expires or is stopped, that supplier&apos;s bills with the workspace (their memos, purchase order references, amounts, due dates and where
           each one stands: received, being reviewed, the day it is set to be paid, on its way, or paid), and for each payment made on Arc, its
-          transaction. It never says why a bill is held, and never shows a rejected bill, another counterparty, the workspace&apos;s balance, records,
-          reasoning or ledger, or the names and emails of its members. The page is read only: nothing is sent through it.
+          transaction on the public explorer. It never says why a bill is held, and never shows a rejected bill, another counterparty, the
+          workspace&apos;s records, reasoning or ledger, or the names and emails of its members. In shadow mode it shows no bills. The page is read
+          only: nothing is sent through it.
         </p>
       </LegalSection>
 

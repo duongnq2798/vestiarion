@@ -126,7 +126,7 @@ describe("the Bills & receivables page", () => {
   });
 
   it("folds the recurring schedules to one line under the bills they create", () => {
-    expect(page).toContain("below: schedules.length > 0 ? <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} /> : undefined");
+    expect(page).toContain("{schedules.length > 0 && <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} />}");
   });
 });
 

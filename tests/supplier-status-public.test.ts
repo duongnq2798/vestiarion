@@ -17,9 +17,11 @@ const LINK = "6d0f3a2e-8c1b-4f7a-9e6d-00000000011d";
 const HELD = "6d0f3a2e-8c1b-4f7a-9e6d-0000000001b1";
 const PAID = "6d0f3a2e-8c1b-4f7a-9e6d-0000000001b2";
 const SENDING = "6d0f3a2e-8c1b-4f7a-9e6d-0000000001b3";
+const TX = "0x1adfad848f00fdadf7021ba1f1ac30505146c40c220eac8cbca36cfc479e3a7b";
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 
-const { rpc, scopes, tenant } = vi.hoisted(() => ({
+const { rpc, scopes, tenant, shadow } = vi.hoisted(() => ({
+  shadow: { on: false },
   rpc: vi.fn(),
   scopes: [] as string[],
   tenant: { reply: ((): unknown => ({ body: [] })) as (request: unknown) => unknown, requests: [] as unknown[] },
@@ -59,11 +61,13 @@ function invoice(id: string, fields: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  shadow.on = false;
   rpc.mockReset();
   scopes.length = 0;
   tenant.requests = [];
   tenant.reply = (request) => {
     const r = request as RecordedRequest;
+    if (r.path === "/rest/v1/shadow_modes") return { body: shadow.on ? [{ currency: "USD", started_at: "2026-10-08T00:00:00Z", started_by: null }] : [] };
     if (r.path === "/rest/v1/invoices" && r.params.get("status") === "eq.paid") {
       return { body: [invoice(PAID, { status: "paid", amount: "50", memo: "CC-2026-1024 production database backups", settled_at: "2026-10-17T21:44:13Z" })] };
     }
@@ -79,7 +83,7 @@ beforeEach(() => {
       return {
         body: [
           { source_id: PAID, status: "failed", tx_hash: null, created_at: "2026-10-17T21:40:00Z" },
-          { source_id: PAID, status: "confirmed", tx_hash: "0x1adfad84", created_at: "2026-10-17T21:44:00Z" },
+          { source_id: PAID, status: "confirmed", tx_hash: TX, created_at: "2026-10-17T21:44:00Z" },
           { source_id: SENDING, status: "submitting", tx_hash: null, created_at: "2026-10-18T08:59:00Z" },
         ],
       };
@@ -138,11 +142,25 @@ describe("readSupplierStatus", () => {
       ["CC-2026-1020 render farm", "Being reviewed"],
     ]);
     expect(read.view.paid).toEqual([
-      expect.objectContaining({ reference: "CC-2026-1024 production database backups", words: "Paid on Oct 17, 2026", txUrl: "https://explorer.testnet.arc.io/tx/0x1adfad84" }),
+      expect.objectContaining({ reference: "CC-2026-1024 production database backups", words: "Paid on Oct 17, 2026", txUrl: `https://explorer.testnet.arc.io/tx/${TX}` }),
     ]);
     expect(read.view.stillToBePaid).toEqual(["185.00 USDC"]);
+    expect(read.view.simulated).toBe(false);
     // Nothing of the workspace's ids reaches the page.
     expect(JSON.stringify(read.view)).not.toContain(ORG);
     expect(JSON.stringify(read.view)).not.toContain(SUPPLIER);
+  });
+
+  it("shows no bills for a workspace in shadow mode, whose testnet payments only mirror the bills it pays its own way (V8)", async () => {
+    shadow.on = true;
+    rpc.mockResolvedValueOnce({ data: LIVE, error: null });
+    expect(await readSupplierStatus(generateSupplierStatusToken().token, NOW)).toEqual({ state: "unavailable" });
+    expect((tenant.requests as RecordedRequest[]).some((request) => request.path === "/rest/v1/invoices")).toBe(false);
+  });
+
+  it("says a sandbox pays nothing for real", async () => {
+    rpc.mockResolvedValueOnce({ data: { ...LIVE, mode: "sandbox" }, error: null });
+    const read = await readSupplierStatus(generateSupplierStatusToken().token, NOW);
+    expect(read.state === "live" && read.sandbox && read.view.simulated).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 -- A supplier's own page of when it is paid, by a link (docs/superpowers/specs/2026-10-18-supplier-status-design.md).
 --
--- supplier_status_links: one link a member made for one supplier (a vendor or contractor counterparty) to see its own
+-- supplier_status_links: one link a member made for one supplier (a vendor counterparty) to see its own
 -- bills and where each stands, kept only as the SHA-256 of its secret, with when it expires (at most about 90 days after
 -- it was made). One link per supplier is live at a time: making a new one stops the old one first. Stopping sets
 -- revoked_at, once; the row is kept, never deleted. The tenant role reads links, adds one with what a new link needs
@@ -33,7 +33,8 @@ create table if not exists public.supplier_status_links (
 -- One live link per supplier: an expired link still counts until it is stopped, which making a new one does.
 create unique index if not exists supplier_status_links_one_live on public.supplier_status_links (org_id, counterparty_id) where revoked_at is null;
 
--- A link is for a supplier: a vendor or contractor counterparty of the same workspace, never a client.
+-- A link is for a supplier: a vendor counterparty of the same workspace. Never a client, which has a statement link, and
+-- never a contractor, paid by milestones, which follows its payments through its payee link.
 create or replace function public.supplier_status_links_supplier()
 returns trigger
 language plpgsql
@@ -42,9 +43,9 @@ as $$
 begin
   if not exists (
     select 1 from public.counterparties c
-     where c.org_id = new.org_id and c.id = new.counterparty_id and c.role in ('vendor', 'contractor')
+     where c.org_id = new.org_id and c.id = new.counterparty_id and c.role = 'vendor'
   ) then
-    raise exception 'supplier_status_not_supplier: a payment status link is made for a vendor or a contractor';
+    raise exception 'supplier_status_not_supplier: a payment status link is made for a vendor';
   end if;
   return new;
 end;
@@ -127,3 +128,11 @@ $$;
 
 revoke all on function public.supplier_status_by_token(text) from public, anon, authenticated, vestiarion_tenant;
 grant execute on function public.supplier_status_by_token(text) to service_role;
+
+notify pgrst, 'reload schema';
+
+-- Down (by hand, never by migrate.ts):
+-- drop function if exists public.supplier_status_by_token(text);
+-- drop table if exists public.supplier_status_links;
+-- drop function if exists public.supplier_status_links_supplier();
+-- drop function if exists public.supplier_status_links_revoke_once();

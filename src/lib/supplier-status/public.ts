@@ -3,6 +3,7 @@ import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { networkOf, type Network } from "../network";
 import { homeChain } from "../payee-chains";
+import { readShadowMode } from "../shadow-mode";
 import { buildSupplierStatus, OPEN_PAYABLE_STATUSES, RECENT_PAID_DAYS, RECENT_PAID_MAX, type SupplierBillIn, type SupplierStatusView } from "./model";
 import { supplierStatusTokenHash } from "./token";
 
@@ -50,6 +51,8 @@ async function lookUp(tokenHash: string): Promise<Found | null> {
 export type SupplierStatusRead =
   | { state: "dead" }
   | { state: "expired"; expiresAt: string }
+  /** The workspace is in shadow mode: it pays its bills its own way, so the page shows none (V8). */
+  | { state: "unavailable" }
   | { state: "live"; view: SupplierStatusView; network: Network; sandbox: boolean };
 
 type InvoiceRow = {
@@ -71,6 +74,8 @@ const BILLS_READ = 500;
 const BILL_COLUMNS = "id, amount, currency, due_date, memo, po_reference, status, scheduled_for, settled_at";
 /** A payment started and not yet settled either way (0004's statuses). */
 const IN_FLIGHT = new Set(["created", "submitting", "pending"]);
+/** Bill ids per payments read: one GET's address stays short however many bills a supplier has. */
+const IDS_PER_READ = 100;
 
 /** The page behind a link: dead, expired (with its day), or the supplier's own bills. */
 export async function readSupplierStatus(token: string, now: number = Date.now()): Promise<SupplierStatusRead> {
@@ -83,6 +88,9 @@ export async function readSupplierStatus(token: string, now: number = Date.now()
   const network = networkOf(link.network);
 
   return withOrg(link.orgId, async () => {
+    // In shadow mode the business pays its bills its own way, and Arc testnet only mirrors the ones it agrees with: a
+    // supplier must never read those as its payments (V8).
+    if (await readShadowMode(db())) return { state: "unavailable" as const };
     const since = new Date(now - RECENT_PAID_DAYS * 86_400_000).toISOString();
     // The open bills, and apart the ones paid recently, so a long history never hides an open one.
     const [openRows, paidRows] = await Promise.all([
@@ -108,16 +116,19 @@ export async function readSupplierStatus(token: string, now: number = Date.now()
 
     // Each bill's payments: a confirmed one's transaction, and whether one is on its way.
     const intents = new Map<string, { txHash: string | null; inFlight: boolean }>();
-    if (bills.length > 0) {
-      const read = await db()
-        .from("payment_intents")
-        .select("source_id, status, tx_hash, created_at")
-        .eq("source_type", "invoice")
-        .in(
-          "source_id",
-          bills.map((bill) => bill.id)
-        )
-        .order("created_at", { ascending: true });
+    const ids = bills.map((bill) => bill.id);
+    const reads = await Promise.all(
+      Array.from({ length: Math.ceil(ids.length / IDS_PER_READ) }, (_, index) =>
+        db()
+          .from("payment_intents")
+          .select("source_id, status, tx_hash, created_at")
+          .eq("source_type", "invoice")
+          .in("source_id", ids.slice(index * IDS_PER_READ, (index + 1) * IDS_PER_READ))
+          .order("created_at", { ascending: true })
+      )
+    );
+    for (const read of reads) {
+      // Best effort: without its payments, a bill still shows where it stands from its own status.
       if (read.error) console.error("supplier status: payments not read", read.error.message);
       for (const row of (read.data ?? []) as IntentRow[]) {
         const entry = intents.get(row.source_id) ?? { txHash: null, inFlight: false };
@@ -145,6 +156,7 @@ export async function readSupplierStatus(token: string, now: number = Date.now()
       supplierName: link.supplierName,
       expiresAt: link.expiresAt,
       now,
+      simulated: link.mode !== "live",
       bills: input,
       explorerTx: homeChain(network).explorerTx,
     });

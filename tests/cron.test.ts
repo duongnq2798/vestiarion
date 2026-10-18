@@ -177,15 +177,23 @@ describe("runLiveOrganizations", () => {
     let running = 0;
     let most = 0;
     const seen: string[] = [];
+    // a-corp's cycle waits until the two others have finished: with two lanes, c-corp can only have started once b-corp
+    // ended, so they overlapped a-corp. Gates, not timers, so a loaded machine cannot reorder them.
+    let releaseA = () => {};
+    const aMayFinish = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
     const run = async () => {
       running += 1;
       most = Math.max(most, running);
       const before = currentOrgId();
-      await new Promise((resolve) => setTimeout(resolve, before === A ? 30 : 5));
+      if (before === A) await aMayFinish;
+      else await Promise.resolve();
       // Still its own scope after the other workspaces ran meanwhile.
       expect(currentOrgId()).toBe(before);
       seen.push(before);
       running -= 1;
+      if (seen.length === 2) releaseA();
       return before;
     };
 

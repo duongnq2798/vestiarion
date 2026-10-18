@@ -9,6 +9,7 @@ import { generateSupplierStatusToken, supplierStatusTokenHash } from "@/lib/supp
  */
 
 const EXPLORER = "https://explorer.testnet.arc.io/tx/";
+const TX = "0x1adfad848f00fdadf7021ba1f1ac30505146c40c220eac8cbca36cfc479e3a7b";
 const NOW = Date.parse("2026-10-18T09:00:00Z");
 
 function bill(fields: Partial<SupplierBillIn> & { id: string }): SupplierBillIn {
@@ -30,10 +31,11 @@ function bill(fields: Partial<SupplierBillIn> & { id: string }): SupplierBillIn 
 describe("standingOf", () => {
   it("reads each status in the supplier's terms, and never shows a rejected bill", () => {
     expect(standingOf({ status: "pending", inFlight: false })).toBe("received");
-    expect(standingOf({ status: "matched", inFlight: false })).toBe("received");
-    for (const status of ["held", "flagged", "awaiting_info", "something_new"]) expect(standingOf({ status, inFlight: false })).toBe("reviewing");
+    // A payable's processing is a person deciding it in Approvals, before any payment exists (review).
+    for (const status of ["held", "flagged", "awaiting_info", "processing", "something_new"]) expect(standingOf({ status, inFlight: false })).toBe("reviewing");
     expect(standingOf({ status: "scheduled", inFlight: false })).toBe("scheduled");
-    expect(standingOf({ status: "processing", inFlight: false })).toBe("on_its_way");
+    // A payable's matched is a payment submitted and not yet confirmed, whatever its payment read says (review).
+    expect(standingOf({ status: "matched", inFlight: false })).toBe("on_its_way");
     // A payment started on a held or scheduled bill is on its way, whatever the bill's status says yet.
     expect(standingOf({ status: "held", inFlight: true })).toBe("on_its_way");
     expect(standingOf({ status: "paid", inFlight: false })).toBe("paid");
@@ -53,10 +55,11 @@ describe("buildSupplierStatus", () => {
       bill({ id: "set", status: "scheduled", scheduledFor: "2026-10-24T00:00:00Z", memo: "CC-2026-1017 GPU hosting" }),
       bill({ id: "new", status: "pending", amount: 30, dueDate: "2026-10-17" }),
       bill({ id: "eurc", status: "pending", amount: 12.5, currency: "EURC", dueDate: "2026-10-30" }),
-      bill({ id: "sending", status: "processing", amount: 4, dueDate: "2026-10-25" }),
-      bill({ id: "paid-old", status: "paid", amount: 90, settledAt: "2026-10-12T10:00:00Z", txHash: "0xaaa" }),
-      bill({ id: "paid-new", status: "paid", amount: 50, settledAt: "2026-10-17T21:44:13Z", txHash: "0x1adfad84" }),
+      bill({ id: "sending", status: "matched", amount: 4, dueDate: "2026-10-25" }),
+      bill({ id: "paid-old", status: "paid", amount: 90, settledAt: "2026-10-12T10:00:00Z", txHash: `0x${"a".repeat(64)}` }),
+      bill({ id: "paid-new", status: "paid", amount: 50, settledAt: "2026-10-17T21:44:13Z", txHash: TX }),
       bill({ id: "paid-bank", status: "paid", amount: 10, settledAt: "2026-10-15T10:00:00Z" }),
+      bill({ id: "paid-sim", status: "paid", amount: 2, settledAt: "2026-10-14T10:00:00Z", txHash: "sim_7f3a" }),
       bill({ id: "refused", status: "rejected", amount: 999 }),
     ],
   });
@@ -79,12 +82,15 @@ describe("buildSupplierStatus", () => {
     expect(view.open.find((line) => line.id === "new")?.reference).toBe("Bill due Oct 17, 2026");
   });
 
-  it("lists recent payments newest first, each with its transaction when it has one, and never a rejected bill", () => {
+  it("lists recent payments newest first, each with its transaction when it has one on Arc, and never a rejected bill", () => {
     expect(view.paid.map((line) => [line.id, line.words, line.txUrl])).toEqual([
-      ["paid-new", "Paid on Oct 17, 2026", `${EXPLORER}0x1adfad84`],
+      ["paid-new", "Paid on Oct 17, 2026", `${EXPLORER}${TX}`],
       ["paid-bank", "Paid on Oct 15, 2026", null],
-      ["paid-old", "Paid on Oct 12, 2026", `${EXPLORER}0xaaa`],
+      // A simulated payment's reference is not a transaction the explorer can open.
+      ["paid-sim", "Paid on Oct 14, 2026", null],
+      ["paid-old", "Paid on Oct 12, 2026", `${EXPLORER}0x${"a".repeat(64)}`],
     ]);
+    expect(view.linksTransactions).toBe(true);
     expect([...view.open, ...view.paid].some((line) => line.id === "refused")).toBe(false);
   });
 
@@ -104,6 +110,8 @@ describe("buildSupplierStatus", () => {
     });
     expect(paidUp.open).toEqual([]);
     expect(paidUp.stillToBePaid).toEqual([]);
+    expect(paidUp.linksTransactions).toBe(false);
+    expect(paidUp.simulated).toBe(false);
   });
 });
 

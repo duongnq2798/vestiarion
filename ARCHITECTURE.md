@@ -1874,22 +1874,27 @@ docs/superpowers/specs/2026-10-18-supplier-status-design.md, migration 0131. The
 read only.
 
 - **The link** (`src/lib/supplier-status/links.ts`, `token.ts`). `vxv_` and 43 base64url characters, kept as the SHA-256
-  of its secret in `supplier_status_links`, for a vendor or contractor (a trigger refuses a client), expiring after 7, 30
+  of its secret in `supplier_status_links`, for a vendor only (a trigger refuses a client or a contractor; refused too in
+  shadow mode, where Arc testnet only mirrors the bills paid outside), expiring after 7, 30
   or 90 days (the database refuses more than 91), one live per supplier (a partial unique index), revoked once, never
   deleted. `createSupplierLink` stops the supplier's live link, inserts the new one and signs `supplier_status_shared`
-  (domain `ap`); a link whose entry fails is stopped at once (`not_recorded`). `stopSupplierLink` revokes first, then
+  (domain `ap`); a link whose entry fails is stopped at once (`not_recorded`), and the links it replaced are signed as
+  stopped, as they are when the new one cannot be stored. `stopSupplierLink` revokes first, then
   signs `supplier_status_unshared` best effort. The commands `supplier_status.share` and `supplier_status.unshare`
   (`records.write`, console only) wrap them; the Bills tab's **Supplier payment status** (`SupplierStatusLinks`) calls
   them through `src/app/actions/supplier-status.ts`.
 - **The page** (`/supplier/[token]`, `src/lib/supplier-status/public.ts`). No session: a malformed token is never looked
   up; `supplier_status_by_token` (service role only) answers null for a stopped or unknown link and only the day for an
   expired one. A live link's bills are read inside the workspace's scope (`withOrg`), filtered to the link's
-  counterparty and `direction = 'payable'`: the open ones (`OPEN_PAYABLE_STATUSES`, never `rejected`) and those paid in
-  the last 90 days (at most 10), with their `payment_intents` (a confirmed one's `tx_hash`, linked on the home chain's
-  explorer; one created, submitting or pending marks the bill on its way). Nothing is written or signed.
-- **The words** (`src/lib/supplier-status/model.ts`, pure). `standingOf` maps a status to received (pending, matched),
-  being reviewed (held, flagged, awaiting info, anything new), to be paid on its `scheduled_for`, on its way
-  (processing, or a payment in flight), or paid on its `settled_at`. The page never says why a bill is held. Open bills
+  counterparty and `direction = 'payable'`: none while the workspace is in shadow mode (`unavailable`), else the open
+  ones (`OPEN_PAYABLE_STATUSES`, never `rejected`) and those paid in the last 90 days (at most 10), with their
+  `payment_intents`, read 100 bills at a time (a confirmed one's `tx_hash`, linked on the home chain's explorer only when
+  it is an Arc transaction hash; one created, submitting or pending marks the bill on its way). A sandbox's page says its
+  payments are simulated. Nothing is written or signed.
+- **The words** (`src/lib/supplier-status/model.ts`, pure). `standingOf` maps a status to received (pending), being
+  reviewed (held, flagged, awaiting info, `processing`, which is a person's claim in Approvals, or anything new), to be
+  paid on its `scheduled_for`, on its way (`matched`, a payable's submitted payment, or a payment in flight), or paid on
+  its `settled_at`. The page never says why a bill is held. Open bills
   are ordered by what happens next, and totalled per currency, never across currencies.
 - **Privacy.** `noindex`, a fixed title and preview card (`linkSocialMetadata("supplier")`), and analytics sees
   `/supplier/:token`.

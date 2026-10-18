@@ -43,13 +43,13 @@ const lookUp = (hash: string) =>
   asServiceRole(db, async (tx) => (await tx.query<{ found: Record<string, unknown> | null }>("select public.supplier_status_by_token($1) as found", [hash])).rows[0].found);
 
 describe("supplier_status_links (0131)", () => {
-  it("keeps a link's hash and expiry, for a vendor or contractor only, one live per supplier", async () => {
+  it("keeps a link's hash and expiry, for a vendor only, one live per vendor", async () => {
     const orgId = await createOrg(db, "supplier-links");
     const vendor = await counterparty(orgId);
     const contractor = await counterparty(orgId, "Alder Copywriting", "contractor");
     const client = await counterparty(orgId, "Harbor Design", "client");
     const first = await link(orgId, vendor);
-    await link(orgId, contractor);
+    await expect(link(orgId, contractor)).rejects.toThrow(/supplier_status_not_supplier/);
     await expect(link(orgId, client)).rejects.toThrow(/supplier_status_not_supplier/);
     await expect(link(orgId, vendor)).rejects.toThrow(/supplier_status_links_one_live/);
     await db.query("update public.supplier_status_links set revoked_at = now() where id = $1", [first.id]);

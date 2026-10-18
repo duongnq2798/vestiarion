@@ -18,7 +18,7 @@ import type { SupplierLinkView } from "@/lib/supplier-status/model";
 
 /**
  * A supplier's payment status link, made and stopped from the Bills tab
- * (docs/superpowers/specs/2026-10-18-supplier-status-design.md V1, V6). An owner or admin picks a vendor or contractor
+ * (docs/superpowers/specs/2026-10-18-supplier-status-design.md V1, V6). An owner or admin picks a vendor
  * and how long the link works, and gets the link once, to copy; every member sees which suppliers have a live link and
  * until when, and an owner or admin stops one. A new link for a supplier stops the one it had. Before migration 0131
  * runs, it says supplier payment status is not set up.
@@ -58,8 +58,9 @@ export function SupplierStatusLinks({
     <section id="supplier-status" aria-labelledby="supplier-status-title" className="scroll-mt-6 space-y-3">
       <SectionHeader id="supplier-status-title" title="Supplier payment status" meta={available ? `${links.filter((link) => !link.expired).length} live` : undefined} />
       <p className="text-sm text-ink-2">
-        Send a supplier a link to its own bills: where each one stands (received, being reviewed, set for a day, on its way) and what was paid, with each
-        payment&rsquo;s transaction. No account needed. It never says why a bill is held, and shows nothing of your other suppliers or your cash.
+        Send a vendor a link to its own bills: where each one stands (received, being reviewed, set for a day, on its way) and what was paid, with each
+        payment&rsquo;s transaction on the public explorer. No account needed. It never says why a bill is held, and shows none of your other suppliers or
+        your records. It shows each bill&rsquo;s memo and purchase order, so keep internal notes out of memos.
       </p>
       {!available ? (
         <p className="text-xs text-ink-3">Supplier payment status is not set up on this deployment yet.</p>
@@ -67,7 +68,7 @@ export function SupplierStatusLinks({
         <>
           {canWrite ? (
             suppliers.length === 0 ? (
-              <p className="text-xs text-ink-3">Add a counterparty with the role vendor or contractor to share its payment status.</p>
+              <p className="text-xs text-ink-3">Add a counterparty with the role vendor to share its payment status.</p>
             ) : (
               <form {...share.formProps} className="grid gap-3 rounded-2xl border border-line bg-surface p-4 shadow-surface sm:grid-cols-[minmax(0,1fr)_10rem_auto] sm:items-end">
                 <input type="hidden" name="orgSlug" value={orgSlug} />

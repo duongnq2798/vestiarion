@@ -2,6 +2,7 @@ import { currentOrgId } from "../context";
 import { db, type OrgDb } from "../dal";
 import { appendLedgerEntry, assertLedgerCanSign } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { readShadowMode } from "../shadow-mode";
 import { LINK_DAYS, SUPPLIER_STATUS_ACTIONS, type LinkDays } from "./model";
 import { generateSupplierStatusToken } from "./token";
 
@@ -17,12 +18,13 @@ import { generateSupplierStatusToken } from "./token";
  * Until migration 0131 runs, listing answers `available: false` and making or stopping refuses with `not_ready`.
  */
 
-export type SupplierLinkErrorCode = "not_ready" | "not_found" | "not_supplier" | "days" | "busy" | "not_recorded" | "already_stopped";
+export type SupplierLinkErrorCode = "not_ready" | "not_found" | "not_supplier" | "shadow" | "days" | "busy" | "not_recorded" | "already_stopped";
 
 export const SUPPLIER_LINK_MESSAGES: Record<SupplierLinkErrorCode, string> = {
   not_ready: "Supplier payment status is not set up on this deployment yet.",
   not_found: "That supplier is not one of this workspace's.",
-  not_supplier: "Payment status links are for suppliers. This counterparty is a client.",
+  not_supplier: "Payment status links are for vendors. A customer gets a statement link, and a contractor follows its payments through its payee link.",
+  shadow: "In shadow mode you pay your bills your own way, so a supplier's payment status would show only the payments mirrored on Arc testnet. Turn shadow mode off first.",
   days: "Choose how long the link works: 7, 30 or 90 days.",
   busy: "Someone made a link for this supplier a moment ago. Reload the page to see it.",
   not_recorded: "The link could not be recorded in the ledger, so it was stopped at once. Try again in a moment.",
@@ -94,7 +96,10 @@ export async function createSupplierLink(input: {
   }
   const supplier = ((found.data ?? []) as Array<{ id: string; name: string; role: string }>)[0];
   if (!supplier) throw new SupplierLinkError("not_found");
-  if (supplier.role !== "vendor" && supplier.role !== "contractor") throw new SupplierLinkError("not_supplier");
+  if (supplier.role !== "vendor") throw new SupplierLinkError("not_supplier");
+  // In shadow mode Arc testnet only mirrors the bills the business agrees with: a supplier must never read those as its
+  // payments (V8).
+  if (await readShadowMode(db())) throw new SupplierLinkError("shadow");
 
   const now = input.now ?? Date.now();
   const stoppedAt = new Date(now).toISOString();
@@ -111,6 +116,20 @@ export async function createSupplierLink(input: {
   }
   const replacedIds = ((replaced.data ?? []) as Array<{ id: string }>).map((row) => row.id);
 
+  // The links stopped here are recorded as stopped, best effort, when no new link replaces them after all.
+  const recordStopped = () =>
+    Promise.all(
+      replacedIds.map((linkId) =>
+        appendLedgerEntryBestEffort(currentOrgId(), {
+          actor: "human",
+          domain: "ap",
+          action: SUPPLIER_STATUS_ACTIONS.unshared,
+          summary: "Stopped a supplier's payment status link",
+          detail: { by: input.actorId, linkId, counterpartyId: supplier.id },
+        })
+      )
+    );
+
   const { token, secretHash } = generateSupplierStatusToken();
   const expiresAt = new Date(now + (input.days as LinkDays) * 86_400_000).toISOString();
   const stored = await db()
@@ -119,6 +138,7 @@ export async function createSupplierLink(input: {
     .select("id")
     .single<{ id: string }>();
   if (stored.error) {
+    await recordStopped();
     if (supplierLinksTableMissing(stored.error)) throw new SupplierLinkError("not_ready");
     // Another person's link for the same supplier went in between the stop and this insert.
     if (stored.error.code === "23505") throw new SupplierLinkError("busy");
@@ -139,6 +159,7 @@ export async function createSupplierLink(input: {
     console.error("payment status link not recorded; stopping it", currentOrgId());
     const revoked = await db().from("supplier_status_links").update({ revoked_at: new Date().toISOString(), revoked_by: input.actorId }).eq("id", linkId);
     if (revoked.error) console.error("payment status link could not be stopped after its entry failed", currentOrgId(), revoked.error.message);
+    await recordStopped();
     throw new SupplierLinkError("not_recorded");
   }
   return { token, linkId, expiresAt, supplierName: supplier.name, replaced: replacedIds.length };

@@ -30,6 +30,7 @@ const PAGES = [
   ["receipt", "Payment receipt"],
   ["report", "Shared report"],
   ["statement", "Your statement"],
+  ["supplier", "Your payments"],
 ] as const;
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
@@ -37,7 +38,7 @@ const card = async (page: string) => (await route.GET(new Request(`https://vesti
 
 describe("a link page's preview card (mainnet polish E1)", () => {
   it("renders one card per kind of link at build time, and no other", () => {
-    expect(route.generateStaticParams()).toEqual([{ page: "pay" }, { page: "payee" }, { page: "receipt" }, { page: "report" }, { page: "statement" }]);
+    expect(route.generateStaticParams()).toEqual([{ page: "pay" }, { page: "payee" }, { page: "receipt" }, { page: "report" }, { page: "statement" }, { page: "supplier" }]);
     expect(route.dynamicParams).toBe(false);
     expect(linkImagePath("pay")).toBe("/og/link/pay");
   });
@@ -71,7 +72,7 @@ describe("a link page's preview card (mainnet polish E1)", () => {
 
   it("reads nothing of any link, and keeps tokens out of the image's address", () => {
     expect(source("src/app/og/link/[page]/route.ts")).not.toMatch(/pay-links|payee-links|receipts|report-shares|shared-report|customer-portal|token/);
-    for (const page of ["pay", "payee", "receipt", "report", "statement"]) {
+    for (const page of ["pay", "payee", "receipt", "report", "statement", "supplier"]) {
       for (const kind of ["opengraph-image", "twitter-image"]) expect(existsSync(path.join(process.cwd(), "src/app", page, "[token]", `${kind}.tsx`))).toBe(false);
     }
   });

@@ -30,9 +30,10 @@ const NOW = Date.parse("2026-10-18T09:00:00Z");
 
 type Row = Record<string, unknown>;
 
-function workspace(start: { role?: string; insert?: FakeReply; missing?: boolean; patch?: FakeReply } = {}) {
+function workspace(start: { role?: string; insert?: FakeReply; missing?: boolean; patch?: FakeReply; shadow?: boolean } = {}) {
   const fake = fakeSupabase((request: RecordedRequest): FakeReply => {
     if (start.missing) return MISSING;
+    if (request.path === "/rest/v1/shadow_modes") return { body: start.shadow ? [{ currency: "USD", started_at: "2026-10-08T00:00:00Z", started_by: USER }] : [] };
     if (request.path === "/rest/v1/counterparties") return { body: [{ id: SUPPLIER, name: "Cobalt Cloud", role: start.role ?? "vendor" }] };
     if (request.path === "/rest/v1/supplier_status_links") {
       if (request.method === "PATCH") return start.patch ?? { body: [{ id: OLD_LINK }] };
@@ -81,9 +82,17 @@ describe("createSupplierLink", () => {
     );
   });
 
-  it("makes one for a contractor too", async () => {
-    const { run } = workspace({ role: "contractor" });
-    await expect(run(() => createSupplierLink({ actorId: USER, counterpartyId: SUPPLIER, days: 7 }))).resolves.toMatchObject({ linkId: "new-link" });
+  it("refuses a contractor, paid by milestones and followed through its payee link", async () => {
+    const contractor = workspace({ role: "contractor" });
+    await expect(contractor.run(() => createSupplierLink({ actorId: USER, counterpartyId: SUPPLIER, days: 7 }))).rejects.toMatchObject({ code: "not_supplier" });
+    expect(writes(contractor.fake.requests, "PATCH", "/rest/v1/supplier_status_links")).toEqual([]);
+  });
+
+  it("refuses in shadow mode, before stopping or writing anything (V8)", async () => {
+    const shadow = workspace({ shadow: true });
+    await expect(shadow.run(() => createSupplierLink({ actorId: USER, counterpartyId: SUPPLIER, days: 7 }))).rejects.toMatchObject({ code: "shadow" });
+    expect(writes(shadow.fake.requests, "PATCH", "/rest/v1/supplier_status_links")).toEqual([]);
+    expect(writes(shadow.fake.requests, "POST", "/rest/v1/supplier_status_links")).toEqual([]);
   });
 
   it("refuses a client and a length it does not offer, before writing anything", async () => {
@@ -103,12 +112,19 @@ describe("createSupplierLink", () => {
     expect(fake.requests).toEqual([]);
   });
 
-  it("stops a link whose entry could not be written, and asks to try again", async () => {
+  it("stops a link whose entry could not be written, records the old link as stopped, and asks to try again", async () => {
     appendLedgerEntry.mockRejectedValueOnce(new Error("ledger down"));
     const { fake, run } = workspace();
     await expect(run(() => createSupplierLink({ actorId: USER, counterpartyId: SUPPLIER, days: 7 }))).rejects.toMatchObject({ code: "not_recorded" });
     const stops = writes(fake.requests, "PATCH", "/rest/v1/supplier_status_links");
     expect(stops.at(-1)?.params.get("id")).toBe("eq.new-link");
+    expect(appendBestEffort).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "supplier_status_unshared", detail: { by: USER, linkId: OLD_LINK, counterpartyId: SUPPLIER } }));
+  });
+
+  it("records the old link as stopped when the new one cannot be stored", async () => {
+    const { run } = workspace({ insert: { status: 500, body: { code: "XX000", message: "boom" } } });
+    await expect(run(() => createSupplierLink({ actorId: USER, counterpartyId: SUPPLIER, days: 7 }))).rejects.toThrow("boom");
+    expect(appendBestEffort).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "supplier_status_unshared", detail: { by: USER, linkId: OLD_LINK, counterpartyId: SUPPLIER } }));
   });
 
   it("says another person made one a moment ago when the one-live index refuses", async () => {

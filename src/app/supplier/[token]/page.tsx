@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CalendarX2, CloudOff, Unlink } from "lucide-react";
+import { CalendarX2, CloudOff, EyeOff, Unlink } from "lucide-react";
 import { SupplierStatusView } from "@/components/supplier/SupplierStatusView";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
@@ -52,6 +52,13 @@ export default async function SupplierStatusPage({ params }: SupplierStatusPageP
               titleAs="h1"
               title="This link has expired."
               body={`It worked until ${utcDay(read.expiresAt)}. Ask the business that sent it for a new one.`}
+            />
+          ) : read.state === "unavailable" ? (
+            <EmptyState
+              icon={<EyeOff />}
+              titleAs="h1"
+              title="Payment status is not shown for this business right now."
+              body="Ask the business that sent the link where your payment stands."
             />
           ) : read.state === "dead" ? (
             <EmptyState icon={<Unlink />} titleAs="h1" title="This link no longer works. Ask the business that sent it for a new one." />

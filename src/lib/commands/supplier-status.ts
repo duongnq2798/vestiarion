@@ -26,7 +26,8 @@ export async function shareSupplierStatus(
     // A link whose entry failed was made and stopped, and one replaced stays stopped: the list changed.
     if (error instanceof SupplierLinkError) return refused(error.code, error.message, error.code === "not_recorded" || error.code === "busy" ? { changed: true } : {});
     console.error("sharing a payment status link failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
-    return refused("failed", TRY_AGAIN);
+    // The supplier's old link may have been stopped before the failure: the list is shown again either way.
+    return refused("failed", TRY_AGAIN, { changed: true });
   }
 }
 
