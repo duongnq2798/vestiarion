@@ -13,6 +13,7 @@ import CounterpartyPurchaseOrdersEdit from "@/components/intake/CounterpartyPurc
 import MirrorAddressControl from "@/components/MirrorAddressControl";
 import ScreeningMatch from "@/components/intake/ScreeningMatch";
 import PayeeLinkControl from "@/components/intake/PayeeLinkControl";
+import { AskEveryPayee } from "@/components/intake/AskEveryPayee";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -34,6 +35,8 @@ import { inOrg } from "@/lib/dal/scope";
 import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks } from "@/lib/platform/payee-links";
+import { askablePayees } from "@/lib/address-requests";
+import { simulatesPayments } from "@/lib/capability-read";
 import { plural } from "@/lib/copy";
 import { listCounterparties, stats } from "@/lib/queries";
 import { readShadowMode } from "@/lib/shadow-mode";
@@ -41,6 +44,8 @@ import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
+// Ask every payee for an address makes up to 25 links and sends their emails in one action (ask every payee A4).
+export const maxDuration = 300;
 
 export const metadata: Metadata = { title: sectionTitle("counterparties") };
 
@@ -78,6 +83,8 @@ export default async function CounterpartiesPage({
     ]);
     // Only those who may send a payee link see which ones are out.
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
+    // The payees with no address of their own to ask at once (ask every payee A1, A2).
+    const askable = canWrite ? askablePayees(counterparties, payeeLinks) : null;
     // Vendors paid to a bank account through BlindPay (bank payouts B4), on a deployment with it; best effort, none
     // before migration 0124.
     const bankPayoutsOn = blindpaySettingsFromEnv() !== null;
@@ -116,6 +123,17 @@ export default async function CounterpartiesPage({
           </IntakeFold>
         ) : (
           <Callout className="mb-8">Only an owner or admin of this workspace can add counterparties.</Callout>
+        )}
+
+        {/* Kept in place for a writer even with no payee left to ask, so the links it just made stay on screen this once. */}
+        {askable && (
+          <AskEveryPayee
+            orgSlug={slug}
+            payees={askable.payees}
+            more={askable.more}
+            linksOut={askable.linksOut}
+            emails={!simulatesPayments(access.membership.mode)}
+          />
         )}
 
         <section>

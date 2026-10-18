@@ -85,7 +85,8 @@ export function LiveSliceStart({
           {opened ? (
             <p className="text-sm text-ink">
               {opened.vendors} {opened.vendors === 1 ? "vendor" : "vendors"} went over. It is not live yet: take it live from its Settings with your own or a
-              passkey wallet, its spending limit and USDC, then add the bills to pay for real there.
+              passkey wallet, its spending limit and USDC, then add the bills to pay for real there. On its Counterparties, Ask every payee for an address
+              sends each vendor with no address its own link.
             </p>
           ) : (
             <p className="text-sm text-ink">{result?.message}</p>
