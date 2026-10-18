@@ -12,15 +12,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
-## [0.1.0-beta.10] - 2026-10-18
-
 ### Added
 
 - **Ask every payee for an address at once.** On **Counterparties**, owners and admins see how many vendors and
   contractors have no address of their own, mirror addresses included, and choose **Ask N for an address**. Each gets
-  its own one-time payee link, emailed to its notice email where it has one, and the rest are shown once to copy.
-  Every address that comes in still waits for a person to confirm it. Signed as `payee_addresses_requested`. No
-  migration. [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#ask-every-payee-at-once).
+  its own one-time payee link, emailed to its notice email where it has one, and the rest are shown once to copy; a
+  workspace sends at most 100 such emails a day, and a sandbox none. Every address that comes in still waits for a
+  person to confirm it. Signed as `payee_addresses_requested`. No migration. [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#ask-every-payee-at-once).
+
+## [0.1.0-beta.10] - 2026-10-18
 
 ### Added
 
