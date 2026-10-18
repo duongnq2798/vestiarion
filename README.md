@@ -127,8 +127,8 @@ One short video for each main flow, recorded in the live product on Arc testnet 
 | [Bills that arrive on their own](https://www.vestiarion.xyz/docs/guides/import-bills#watch-it) | 1:17 | An invoice PDF read into the form, a pasted list of bills, and the email and Chrome intake. | [Watch](https://youtu.be/7ZxrTg0ZHGg) |
 | [Pay a vendor's bank account in pesos](https://www.vestiarion.xyz/docs/guides/bank-payouts#watch-it) | 1:01 | Bank payouts set up with BlindPay, the vendor's bank account, and a payout followed to the end. | [Watch](https://youtu.be/ukbASJof93w) |
 | [Evidence and the audit export](https://www.vestiarion.xyz/docs/guides/evidence#watch-it) | 0:56 | Why a payment was made, how each fact is known, and the audit log's chain check. | [Watch](https://youtu.be/CWGIqRzS_jg) |
-| [Bills from Xero, decided by the agent](https://www.vestiarion.xyz/docs/guides/xero#watch-it) | 1:52 | Bills from the Xero Demo Company come in, one paid in Xero is caught before it is paid twice, and one is paid on Arc testnet. |  |
-| [A deal from HubSpot, collected on Arc](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) | 1:55 | A deal won in HubSpot is planned, its deposit is paid and matched, and the receipt is written back to HubSpot. |  |
+| [Bills from Xero, decided by the agent](https://www.vestiarion.xyz/docs/guides/xero#watch-it) | 1:52 | Bills from the Xero Demo Company come in, one paid in Xero is caught before it is paid twice, and one is paid on Arc testnet. | [Watch](https://youtu.be/tobwyhBOZyU) |
+| [A deal from HubSpot, collected on Arc](https://www.vestiarion.xyz/docs/guides/hubspot#watch-it) | 1:55 | A deal won in HubSpot is planned, its deposit is paid and matched, and the receipt is written back to HubSpot. | [Watch](https://youtu.be/m6BldH7aKkY) |
 
 ## What Vestiarion does
 
