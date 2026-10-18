@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { boundOrder, carriedOrder, competingBills, personOrder, needsPlan, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, type PriorityRow } from "@/lib/agent/cash-priority";
-import { supplierRequestsOf } from "@/lib/agent/cash-priority-plan";
+import { boundOrder, carriedOrder, competingBills, namedRefs, personOrder, needsPlan, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, type PriorityRow } from "@/lib/agent/cash-priority";
+import { PRIORITY_SYSTEM_PROMPT, supplierRequestsOf } from "@/lib/agent/cash-priority-plan";
 
 /**
  * Which bill first when the cash cannot cover them all (docs/superpowers/specs/2026-10-18-cash-priority-design.md P1-P3,
@@ -110,7 +110,8 @@ describe("what a supplier did with earlier requests for more time (live test, Oc
   it("names every outcome, so a request the agent withdrew or whose counter it declined is not read as the supplier's", () => {
     // Cobalt Cloud on Oct 17: it proposed 3 days and the agent declined them; the agent withdrew the next request when cash came in.
     expect(supplierRequestsOf([{ status: "declined", counter_days: 3 }, { status: "withdrawn", counter_days: null }])).toEqual({
-      made: 2,
+      // The requests the agent sent: named `made`, the count was read as the supplier offering more time (Oct 18).
+      requestsTheAgentSent: 2,
       agreed: 0,
       declinedBySupplier: 0,
       supplierProposedFewerDaysWhichTheAgentDeclined: 1,
@@ -122,6 +123,26 @@ describe("what a supplier did with earlier requests for more time (live test, Oc
       declinedBySupplier: 1,
       stillOpen: 1,
     });
+  });
+});
+
+describe("the reasons people read (live test, Oct 18)", () => {
+  const names = new Map([
+    ["B1", "Cobalt Cloud 140.00 USDC"],
+    ["B3", "Cobalt Cloud 45.00 USDC"],
+  ]);
+
+  it("names a bill by payee and amount where the model wrote its ref, and writes dollar amounts in USDC", () => {
+    expect(namedRefs("GPU hosting pairs with B3; paid after B3 and B1.", names)).toBe("GPU hosting pairs with Cobalt Cloud 45.00 USDC; paid after Cobalt Cloud 45.00 USDC and Cobalt Cloud 140.00 USDC.");
+    expect(namedRefs("Paying $45 now saves $1,200.50 USDC later.", names)).toBe("Paying 45 USDC now saves 1,200.50 USDC later.");
+    // A ref it was not given, and words that only look like one, stay as they are.
+    expect(namedRefs("B9 is unknown; a B2B supplier.", names)).toBe("B9 is unknown; a B2B supplier.");
+  });
+
+  it("are asked of the model by payee and in USDC, with the supplier history named for what the agent sent", () => {
+    expect(PRIORITY_SYSTEM_PROMPT).toContain("never name a bill by its ref there");
+    expect(PRIORITY_SYSTEM_PROMPT).toContain("never with a currency sign");
+    expect(PRIORITY_SYSTEM_PROMPT).toContain("requestsTheAgentSent");
   });
 });
 

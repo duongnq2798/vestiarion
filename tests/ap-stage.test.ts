@@ -2065,7 +2065,7 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
   const decisions = [heldForCash(HOSTING), heldForCash(STORAGE)];
 
   /** The model: an order for the cash priority call, and for each bill's own decision `apAnswer`, or the written policy. */
-  async function modelOrders(order: string[], reasons: Record<string, string>, apAnswer?: Record<string, unknown>) {
+  async function modelOrders(order: string[], reasons: Record<string, string>, apAnswer?: Record<string, unknown>, reasoning = "Hosting and storage keep the business running; the render farm can wait.") {
     const actual = await vi.importActual<typeof import("@/lib/agent/decide")>("@/lib/agent/decide");
     decideMock.mockImplementation(async (params: DecideParams<unknown>) => {
       if (params.purpose !== "cash_priority") {
@@ -2075,7 +2075,7 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
         return { value, mode: "deepseek", reference, agreedWithReference: value.action === reference.action };
       }
       const reference = params.fallback();
-      const value = params.schema.parse({ order, reasons, reasoning: "Hosting and storage keep the business running; the render farm can wait." });
+      const value = params.schema.parse({ order, reasons, reasoning });
       return { value, mode: "deepseek", reference, agreedWithReference: true };
     });
   }
@@ -2121,6 +2121,32 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
       execution: { heldBecause: "cash_shortfall", cashNeededUsdc: 230 },
     });
     expect(lines.some((line) => line.message === "Contoso: held, the cash goes to the bills chosen first (140 USDC)")).toBe(true);
+  });
+
+  it("names each bill by payee and amount in USDC where the model wrote its ref or a dollar sign (live test, Oct 18)", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    await modelOrders(
+      ["B2", "B3", "B1"],
+      { B1: "A one-off render, paid after B2 and B3.", B2: "Hosting pairs with B3: $45 keeps the GPUs on.", B3: "Storage holds the client files." },
+      undefined,
+      "B2 and B3 keep the business running for $90; B1 can wait."
+    );
+    const { fake, stage } = apFake({ book: book(), decisions });
+
+    await stage(150.03);
+
+    const [plan] = entries(fake.requests, "cash_priority_set");
+    expect(plan.p_detail).toMatchObject({
+      order: [
+        { invoiceId: HOSTING, reason: "Hosting pairs with Northwind 45.00 USDC: 45 USDC keeps the GPUs on." },
+        { invoiceId: STORAGE, reason: "Storage holds the client files." },
+        { invoiceId: OTHER_INVOICE_ID, reason: "A one-off render, paid after Northwind 45.00 USDC and Northwind 45.00 USDC." },
+      ],
+      reasoning: "Northwind 45.00 USDC and Northwind 45.00 USDC keep the business running for 90 USDC; Contoso 140.00 USDC can wait.",
+    });
+    // The waiting bill's card says it in the same words.
+    const patch = invoicePatches(fake.requests).find((request) => request.params.get("id") === `eq.${OTHER_INVOICE_ID}` && request.params.get("status") !== "eq.held");
+    expect(String((patch?.body as Record<string, unknown>)?.agent_reasoning)).toContain("paid after Northwind 45.00 USDC and Northwind 45.00 USDC.");
   });
 
   it("follows the written policy's order without a model, and reopens nothing it keeps waiting", async () => {
@@ -2344,24 +2370,48 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
       // The render farm, which the agent made wait, was entered by the person now moving it first.
       const theirs = book().map((row) => (row.id === OTHER_INVOICE_ID ? { ...row, created_by: PERSON } : row));
       const { fake } = apFake({ book: theirs, decisions, priorityPlans: [{ detail: agent, ts: SIGNED_AT }] });
-      const set = (soleApprover: boolean) =>
+      const set = (order: string[], options: { soleApprover?: boolean; cash?: number } = {}) =>
         runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
           withOrg(ORG, () =>
             setPersonOrder({
               db: db(),
               now: new Date("2026-10-17T09:00:00.000Z"),
               actorId: PERSON,
-              operatingBalance: 150.03,
+              operatingBalance: options.cash ?? 150.03,
               reserveBalance: 0,
               basedOn: SIGNED_AT,
-              soleApprover: async () => soleApprover,
+              soleApprover: async () => options.soleApprover ?? false,
               fingerprint: agent.fingerprint as string,
-              order: [OTHER_INVOICE_ID, HOSTING, STORAGE],
+              order,
             })
           )
         );
-      await expect(set(false)).rejects.toMatchObject({ code: "self_created", message: "You entered Contoso 140.00 USDC, so someone else must move it ahead of the others." });
-      await expect(set(true)).resolves.toMatchObject({ keep: [OTHER_INVOICE_ID] });
+      const refusal = { code: "self_created", message: "You entered Contoso 140.00 USDC, so someone else must move it ahead of the others." };
+      // The order shown is the agent's: hosting, storage, then the render farm.
+      await expect(set([OTHER_INVOICE_ID, HOSTING, STORAGE])).rejects.toMatchObject(refusal);
+      // With cash for none of them, a place ahead is still paid first once cash comes in (live test, Oct 18).
+      await expect(set([HOSTING, OTHER_INVOICE_ID, STORAGE], { cash: 10 })).rejects.toMatchObject(refusal);
+      // Moving the others, theirs behind both still, is theirs to do.
+      await expect(set([STORAGE, HOSTING, OTHER_INVOICE_ID])).resolves.toMatchObject({ keep: [STORAGE, HOSTING] });
+      await expect(set([OTHER_INVOICE_ID, HOSTING, STORAGE], { soleApprover: true })).resolves.toMatchObject({ keep: [OTHER_INVOICE_ID] });
+    });
+
+    it("refuses to let whoever entered a bill move another behind it", async () => {
+      today("2026-10-17T09:00:00.000Z");
+      const agent = await agentPlan();
+      const SIGNED_AT = "2026-10-17T09:00:01.000Z";
+      // Storage, second in the order shown, was entered by the person now moving hosting to the end.
+      const theirs = book().map((row) => (row.id === STORAGE ? { ...row, created_by: PERSON } : row));
+      const { fake } = apFake({ book: theirs, decisions, priorityPlans: [{ detail: agent, ts: SIGNED_AT }] });
+      const set = (order: string[]) =>
+        runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
+          withOrg(ORG, () =>
+            setPersonOrder({ db: db(), now: new Date("2026-10-17T09:00:00.000Z"), actorId: PERSON, operatingBalance: 150.03, reserveBalance: 0, basedOn: SIGNED_AT, soleApprover: async () => false, fingerprint: agent.fingerprint as string, order })
+          )
+        );
+      await expect(set([STORAGE, OTHER_INVOICE_ID, HOSTING])).rejects.toMatchObject({ code: "self_created", message: "You entered Northwind 45.00 USDC, so someone else must move it ahead of the others." });
+      // Storage moved down, behind the render farm: not ahead of any bill it was behind.
+      await expect(set([HOSTING, OTHER_INVOICE_ID, STORAGE])).resolves.toMatchObject({ keep: [HOSTING, STORAGE], wait: [OTHER_INVOICE_ID] });
     });
 
     it("goes on for the bills still due once one it kept was paid, signed again for them as the person's, with no model call", async () => {

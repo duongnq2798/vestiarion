@@ -2459,7 +2459,9 @@ bank-paid, pending, scheduled or held with `heldBecause: cash_shortfall` on its 
 overdue). When they exceed what is left (`needsPlan`), it reuses the last `cash_priority_set` whose `fingerprint` (bill
 ids, amounts, due days; not statuses, not cash) matches and whose order still splits the same way (`sameSplit`), or asks
 the model (`decide`, purpose `cash_priority`,
-refs B1..Bn in the written policy's order, which is the fallback), bounds the order (`boundOrder`), fits it to the cash
+refs B1..Bn in the written policy's order, which is the fallback; a ref or a dollar amount left in a reason or the
+reasoning becomes the bill's payee and amount in USDC before signing, `namedRefs`, since people read them and never see a
+ref; the supplier history counts `requestsTheAgentSent`), bounds the order (`boundOrder`), fits it to the cash
 (`planFrom`: keep while the kept total fits, skip what does not), and signs the plan. Kept bills that are held are
 reopened with a compare-and-set on `held` and an `invoice_reopened` (`followUp.reason: "cash_priority"`), then loaded,
 unless their latest decision records this plan's fingerprint (`cashPriority.fingerprint`) and that they were kept then
@@ -2478,8 +2480,9 @@ its fingerprint is the current one, with the cash from the accounts. The command
 (`approval.decide`, console only) refuses while a cycle runs or in shadow mode; `setPersonOrder` reads the facts again,
 refuses a changed fingerprint or a newer signed order than the one shown (`basedOn`, the shown order's `ts`; `changed`),
 a cash that covers every bill (`no_choice`), an order that does not name each bill once (`personOrder`, `order`), and
-an order that moves a bill the actor entered (`created_by`) into the kept part unless they are the only approver
-(`self_created`). It signs `cash_priority_set` as the person (`actor: "human"`, `decisionMode: "person"`, `by`,
+an order that puts a bill the actor entered (`created_by`) ahead of any bill it was behind in the order shown (the
+latest plan's order, compared by place, not by the kept part, which is empty while the cash covers no bill) unless they
+are the only approver (`self_created`). It signs `cash_priority_set` as the person (`actor: "human"`, `decisionMode: "person"`, `by`,
 `previousOrder`), each bill keeping the reason last given under the same bills; then
 `runCycleSoon({ kind: "priority_order_set" })`. `planOf` reads `byPerson` and each bill's amount and due day back. While
 every competing bill is one a person's order had, unchanged (`carriedOrder`), `cashPriority` applies it with `planFrom` to

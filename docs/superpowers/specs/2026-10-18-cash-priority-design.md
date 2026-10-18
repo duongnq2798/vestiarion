@@ -28,7 +28,11 @@ due day and days left, whether it is a recurring payment and how often, its memo
 lost, its status, and what the supplier did with earlier requests for more time. It returns every bill, most important
 first, with one sentence on each. The written policy's order (overdue first, then by due day, the smaller first on the
 same day) is given as a reference, as everywhere else: follow it unless the facts say otherwise, and say why. Without a
-model, the written policy decides.
+model, the written policy decides. People read the reasons and the reasoning: they name each bill by its payee and what
+it is, never by the short ref the model orders it by, and write amounts in USDC. A ref or a dollar amount the model
+writes anyway is replaced with the bill's payee and amount in USDC before the plan is signed (live test, Oct 18). The
+supplier history counts the requests the agent sent (`requestsTheAgentSent`), not requests "made", which the model read
+as the supplier offering more time.
 
 **P3. Code keeps it safe.** The order must name each bill once: code drops what it does not know, and appends in the
 written policy's order any bill the model left out, and says so. Code then walks the order and keeps each bill while the
