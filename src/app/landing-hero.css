@@ -179,6 +179,13 @@
   .bill-print .bp-dot:not([data-print="go"])::after {
     animation: none;
   }
+
+  /* The proposal's row (`data-late`) sits above the checks but comes after them. Here nothing prints from the first
+     paint, so a card on screen at load would show the agent proposing before it has checked: the row is not there yet
+     at first, `PrintOnView` prints it after the checks, and if the script never runs it fades in on its own at 2.5 s. */
+  .bill-print [data-late]:not([data-print]) {
+    animation: replay-fade 300ms var(--ease-standard) 2500ms backwards;
+  }
 }
 
 /* A part that waits keeps still and is not there yet; one that is done (jumped past, or whole on screen) keeps still. */

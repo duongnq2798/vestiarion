@@ -194,7 +194,9 @@ from the first of them to print, so the card goes on where the reader is looking
 prints at once, and the ones after it keep their spacing. A line the reader jumped past is set to `done` and shown
 whole. Lines already on screen when the page hydrates are left as they are, printing beside the headline (`go`) or
 whole below it (`done`), so nothing the reader has seen vanishes, and a window that later crosses 1024 px does not
-print them again.
+print them again. The proposal's row (`data-late`) is the one exception: it sits above the checks but comes after them,
+so at 520 × 900 it would be on screen, whole, before any check had printed. Below 1024 px it is not there at the first
+paint, waits with the lines after the checks, and fades in on its own at 2.5 s if the script never runs.
 
 **Under reduce** the card asks for calm motion (`data-calm-motion`): each part fades in where it stands
 (`replay-fade`), in the same order and at the same moments, the stamps without growing; the ticks appear with their

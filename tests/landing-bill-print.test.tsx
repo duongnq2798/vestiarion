@@ -223,11 +223,14 @@ describe("PrintOnView", () => {
   const below = () => window.innerHeight + 400;
 
   /** Mounts a card shaped like the sample bill: its title, then lines at their moments, a tick in each check. */
-  function mount(tops: { payee: number; proposal: number; checks: number }): HTMLElement {
+  function mount(tops: { payee: number; proposal: number; checks: number }, late?: { underTheText: boolean }): HTMLElement {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     globalThis.IntersectionObserver = StandInObserver as unknown as typeof IntersectionObserver;
     Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
     vi.spyOn(performance, "now").mockImplementation(() => now);
+    // The stylesheet's breakpoint, and the proposal's row not shown yet under the text, as its fade-in waits there.
+    window.matchMedia = ((query: string) => ({ matches: query === "(width < 64rem)" && Boolean(late?.underTheText), media: query })) as typeof window.matchMedia;
+    const notShown = late?.underTheText ? { opacity: 0 } : {};
     HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
       const top = Number(this.dataset.top ?? 0);
       return { top, bottom: top + 20, left: 0, right: 0, width: 0, height: 20, x: 0, y: top, toJSON: () => ({}) };
@@ -240,10 +243,10 @@ describe("PrintOnView", () => {
         <PrintOnView className="bill-print">
           <p>Bills &amp; receivables</p>
           <p className="bp-line" style={at(120)} data-top={tops.payee} data-name="payee" />
-          <span className="bp-stamp" style={at(380)} data-top={tops.proposal} data-name="proposal" />
-          {/* As on the card, the wait sits in the proposal's row, though the agent reaches it after the checks. */}
-          <span className="bp-line" style={at(1400)} data-top={tops.proposal} data-name="waiting">
-            <span className="bp-dot" style={at(1460)} data-name="dot" />
+          {/* As on the card, the proposal and the wait sit above the checks, though the agent reaches them after. */}
+          <span className="bp-stamp" style={{ ...at(1480), ...notShown }} data-top={tops.proposal} data-name="proposal" data-late="" />
+          <span className="bp-line" style={{ ...at(1540), ...notShown }} data-top={tops.proposal} data-name="waiting" data-late="">
+            <span className="bp-dot" style={at(1560)} data-name="dot" />
           </span>
           <ul>
             <li className="bp-line" style={at(820)} data-top={tops.checks} data-name="check 1">
@@ -344,19 +347,48 @@ describe("PrintOnView", () => {
   it("never prints a line before one the agent reaches first, even one in view sooner", () => {
     const card = mount({ payee: below(), proposal: below() + 60, checks: below() + 300 });
     expect(Object.values(states(card)).every((state) => state === "wait")).toBe(true);
+    // The proposal's row comes into view with the payee, above the checks, but the agent proposes only once it has checked.
     see(card, ["payee", "proposal", "waiting"], 1000);
-    expect(states(card)).toMatchObject({ payee: "go 0ms", proposal: "go 260ms", waiting: "wait", dot: "wait", "check 1": "wait" });
+    expect(states(card)).toMatchObject({ payee: "go 0ms", proposal: "wait", waiting: "wait", dot: "wait", "check 1": "wait" });
     see(card, ["check 1", "check 2"], 1100);
-    expect(states(card)).toMatchObject({ "check 1": "go 600ms", "check 2": "go 740ms", waiting: "go 1180ms", dot: "go 1240ms" });
+    expect(states(card)).toMatchObject({
+      "check 1": "go 600ms",
+      "check 2": "go 740ms",
+      proposal: "go 1260ms",
+      waiting: "go 1320ms",
+      dot: "go 1340ms",
+    });
   });
 
   it("prints a line reached after its moment at once, and keeps the spacing of the ones after it", () => {
     const card = mount({ payee: below(), proposal: below() + 60, checks: below() + 300 });
     see(card, ["payee"], 0);
     see(card, ["proposal", "waiting"], 2000);
-    expect(states(card)).toMatchObject({ payee: "go 0ms", proposal: "go 0ms", waiting: "wait" });
+    expect(states(card)).toMatchObject({ payee: "go 0ms", proposal: "wait", waiting: "wait" });
     see(card, ["check 1", "check 2"], 2000);
-    expect(states(card)).toMatchObject({ "check 1": "go 440ms", "tick 1": "go 580ms", "check 2": "go 580ms" });
+    expect(states(card)).toMatchObject({ "check 1": "go 0ms", "tick 1": "go 140ms", "check 2": "go 140ms", proposal: "go 660ms", waiting: "go 720ms" });
+  });
+
+  it("under the text, holds the proposal's row until the checks print, even when it is on screen at load", () => {
+    const card = mount({ payee: 200, proposal: 260, checks: below() }, { underTheText: true });
+    expect(states(card)).toMatchObject({ payee: "done", proposal: "wait", waiting: "wait", dot: "wait", "check 1": "wait" });
+    see(card, ["proposal", "waiting"], 500);
+    expect(states(card)).toMatchObject({ proposal: "wait", waiting: "wait" });
+    see(card, ["check 1", "check 2"], 600);
+    expect(states(card)).toMatchObject({ "check 1": "go 0ms", "check 2": "go 140ms", proposal: "go 660ms", waiting: "go 720ms", dot: "go 740ms" });
+  });
+
+  it("under the text, prints the proposal's row at once when the checks were already whole on screen", () => {
+    const card = mount({ payee: 200, proposal: 260, checks: 420 }, { underTheText: true });
+    expect(states(card)).toMatchObject({ payee: "done", "check 1": "done", "check 2": "done", proposal: "wait", waiting: "wait" });
+    see(card, ["proposal", "waiting"], 500);
+    expect(states(card)).toMatchObject({ proposal: "go 0ms", waiting: "go 60ms", dot: "go 80ms" });
+  });
+
+  it("beside the headline, leaves the proposal's row to the stylesheet's print", () => {
+    const card = mount({ payee: 200, proposal: 260, checks: 420 });
+    expect(states(card)).toMatchObject({ proposal: "done", waiting: "done" });
+    expect(observed).toBeNull();
   });
 
   it("shows the lines the reader jumped past whole, without printing them out of sight", () => {
@@ -374,6 +406,6 @@ describe("PrintOnView", () => {
     expect(states(card).payee).toBe("wait");
     now = 1500;
     show(true);
-    expect(states(card)).toMatchObject({ payee: "go 0ms", proposal: "go 260ms", "check 1": "go 700ms", waiting: "go 1280ms" });
+    expect(states(card)).toMatchObject({ payee: "go 0ms", "check 1": "go 700ms", proposal: "go 1360ms", waiting: "go 1420ms" });
   });
 });

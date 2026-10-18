@@ -13,6 +13,9 @@ const LINES = ".bp-line, .bp-stamp";
  */
 const IN_VIEW = "100000px 0px 0px 0px";
 
+/** Where the card sits under the text and nothing prints from the first paint: landing-hero.css's own breakpoint. */
+const UNDER_THE_TEXT = "(width < 64rem)";
+
 /**
  * Prints the sample bill (`.bill-print` in landing-hero.css) where the reader can see it. Where the card sits beside the
  * headline, from 1024 px, the print starts with the page's first paint, in CSS, so it runs before the script and without
@@ -21,7 +24,8 @@ const IN_VIEW = "100000px 0px 0px 0px";
  * it is in view, in the order of the work: a line never prints before one the agent reaches first, and the moments of
  * the lines that waited count from the first of them to print, so the card goes on where the reader is looking rather
  * than below the fold. A line the reader jumped past is shown whole. Lines already on screen are left as they are, so
- * nothing the reader saw vanishes.
+ * nothing the reader saw vanishes, except the proposal's row: it sits above the checks but comes after them, and under
+ * the text it is not there yet at first (`data-late`), so it waits with the lines after the checks.
  */
 export function PrintOnView({ className, children }: { className?: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -30,12 +34,16 @@ export function PrintOnView({ className, children }: { className?: string; child
     const card = ref.current;
     if (!card) return;
     const waiting: { part: HTMLElement; line: HTMLElement; at: number }[] = [];
+    const underTheText = window.matchMedia?.(UNDER_THE_TEXT).matches ?? false;
     for (const part of card.querySelectorAll<HTMLElement>(PARTS)) {
       const line = part.closest<HTMLElement>(LINES) ?? part;
+      // The proposal's row, under the text and not shown yet, waits even on screen: the reader has not seen it, and it
+      // must not come before the checks.
+      const notYet = underTheText && line.hasAttribute("data-late") && getComputedStyle(line).opacity === "0";
       // A part out of sight waits, with its moment from the server's HTML. One on screen is left as it is, printing
       // beside the headline or whole below it, and says which, so its print does not start again if the window later
       // crosses 1024 px.
-      if (document.hidden || line.getBoundingClientRect().top >= window.innerHeight) {
+      if (notYet || document.hidden || line.getBoundingClientRect().top >= window.innerHeight) {
         waiting.push({ part, line, at: parseFloat(part.style.getPropertyValue("--d")) || 0 });
         part.dataset.print = "wait";
       } else {

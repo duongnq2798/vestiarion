@@ -85,12 +85,12 @@ export function BillPreview() {
 
             {/* The proposal is stamped as soon as the bill is read; the wait for a person prints once every check is ticked. */}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="bp-stamp inline-flex" style={at(BILL_PRINT_AT.proposal)}>
+              <span className="bp-stamp inline-flex" style={at(BILL_PRINT_AT.proposal)} data-late="">
                 <Badge tone="proof" size="sm">
                   Agent proposes: pay it
                 </Badge>
               </span>
-              <span className="bp-line inline-flex" style={at(BILL_PRINT_AT.waiting)}>
+              <span className="bp-line inline-flex" style={at(BILL_PRINT_AT.waiting)} data-late="">
                 <Badge
                   tone="agent"
                   size="sm"
