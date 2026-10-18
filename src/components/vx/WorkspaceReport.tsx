@@ -47,7 +47,19 @@ const DECIDED_BY: Record<PaymentRow["decidedBy"], string> = {
   verdict: "Your verdict",
 };
 
-function readinessWords(step: ReadinessStep, mainnetLabel: string): { title: string; note: string } {
+/** The live slice opened from this workspace, as the report's last step shows it (live slice L5). */
+export interface ReportSlice {
+  name: string;
+  slug: string;
+  live: boolean;
+  /** "Oct 18, 2026". */
+  opened: string;
+  vendors: number;
+  /** The viewer opened it, so is a member there: only then is it linked (only its opener belongs to it at first). */
+  canOpen?: boolean;
+}
+
+function readinessWords(step: ReadinessStep, mainnetLabel: string, slice: ReportSlice | null): { title: string; note: string } {
   switch (step.key) {
     case "verdicts":
       return { title: `Give verdicts on at least ${step.target} decisions`, note: `${step.given} of ${step.target} given.` };
@@ -65,7 +77,14 @@ function readinessWords(step: ReadinessStep, mainnetLabel: string): { title: str
             : `${step.mirrorPayees} ${plural(step.mirrorPayees, "supplier is", "suppliers are")} paid at a mirror address. A live workspace pays a supplier's real address, so ask them for it.`,
       };
     case "mainnet":
-      return { title: `Open a workspace on ${mainnetLabel} for the slice`, note: "Start with one supplier, or the bills under a figure you choose. The shadow mode guide says how." };
+      if (slice?.live) return { title: `Live slice on ${mainnetLabel}: ${slice.name}`, note: "It is live: the bills you add there are paid in real USDC. This workspace keeps running alongside it." };
+      if (slice) {
+        return {
+          title: `Go live with ${slice.name}`,
+          note: `Opened on ${slice.opened} with ${slice.vendors} ${plural(slice.vendors, "vendor", "vendors")}. Go live from its Settings: your own or a passkey wallet, its spending limit, and USDC.`,
+        };
+      }
+      return { title: `Open a workspace on ${mainnetLabel} for the slice`, note: "Start with one supplier, or the bills under a figure you choose: Start the live slice, below, opens it with them." };
   }
 }
 
@@ -73,7 +92,20 @@ function readinessWords(step: ReadinessStep, mainnetLabel: string): { title: str
  * `value`: what the agent was worth, measured, estimated and not counted, shown after the figures (shared report S8).
  * `actuals`: the comparison with what the business paid (actual payments A5).
  */
-export function WorkspaceReport({ slug, report, value, actuals }: { slug: string; report: Report; value?: ReactNode; actuals?: ReactNode }) {
+export function WorkspaceReport({
+  slug,
+  report,
+  value,
+  actuals,
+  slice,
+}: {
+  slug: string;
+  report: Report;
+  value?: ReactNode;
+  actuals?: ReactNode;
+  /** The live slice opened from this workspace, and what starts one (live slice L1, L5): shown with Before a live slice. */
+  slice?: { opened: ReportSlice | null; start?: ReactNode };
+}) {
   if (report.bills.handled === 0) {
     return (
       <EmptyState
@@ -96,7 +128,7 @@ export function WorkspaceReport({ slug, report, value, actuals }: { slug: string
     <div className="space-y-8">
       <ReportSummary report={report} />
       {value}
-      {report.readiness && <ReportReadiness steps={report.readiness} />}
+      {report.readiness && <ReportReadiness steps={report.readiness} slice={slice?.opened ?? null} start={slice?.start} />}
       {actuals}
       <ReportLists slug={slug} report={report} />
     </div>
@@ -284,9 +316,11 @@ export function ReportLists({ slug, report }: { slug: string; report: Report }) 
 }
 
 /** What we suggest before a live slice, in shadow mode. */
-export function ReportReadiness({ steps }: { steps: ReadinessStep[] }) {
+export function ReportReadiness({ steps, slice = null, start }: { steps: ReadinessStep[]; slice?: ReportSlice | null; start?: ReactNode }) {
   const mainnetLabel = networkProfile("arc-mainnet").label;
-  const checked = steps.filter((step) => step.done !== null);
+  // The last step is ticked once the live slice opened from here is live (L5); before a slice, it is not counted.
+  const shown = steps.map((step) => (step.key === "mainnet" && slice ? { ...step, done: slice.live } : step));
+  const checked = shown.filter((step) => step.done !== null);
   const done = checked.filter((step) => step.done).length;
   return (
     <section aria-labelledby="report-readiness">
@@ -308,8 +342,8 @@ export function ReportReadiness({ steps }: { steps: ReadinessStep[] }) {
           What we suggest before you move a slice of your bills to real USDC. Nothing here moves money or changes a setting.
         </p>
         <ol>
-          {steps.map((step, index) => {
-            const words = readinessWords(step, mainnetLabel);
+          {shown.map((step, index) => {
+            const words = readinessWords(step as ReadinessStep, mainnetLabel, slice);
             return (
               <li key={step.key} className="flex items-start gap-3 rounded-xl px-3 py-3">
                 <span
@@ -327,11 +361,18 @@ export function ReportReadiness({ steps }: { steps: ReadinessStep[] }) {
                     {step.done && <span className="sr-only"> (done)</span>}
                   </p>
                   <p className="mt-0.5 text-[0.8125rem] text-ink-2">{words.note}</p>
+                  {step.key === "mainnet" && slice?.canOpen && (
+                    <Link href={`/o/${slice.slug}/settings`} className="mt-1 inline-flex items-center gap-1 text-[0.8125rem] font-medium text-agent underline-offset-2 hover:underline">
+                      Open {slice.name}
+                      <ArrowRight aria-hidden className="size-3.5" />
+                    </Link>
+                  )}
                 </div>
               </li>
             );
           })}
         </ol>
+        {start && <div className="border-t border-line px-3 pb-3 pt-4">{start}</div>}
       </Card>
     </section>
   );

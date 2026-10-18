@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-18: Start the live slice from shadow mode
+
+- A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`live_slice_started`** (domain `system`, actor `human`), in a workspace in shadow mode, when an owner opens a workspace on Arc mainnet from it. It carries `by` (their user id), `liveOrgId` and `liveSlug` (the new workspace), `vendors` (each `{ counterpartyId, name, address }`, where `address` says how its address went over: `own`, carried; `mirror`, `other_chain`, `unconfirmed` or `none`, not carried) and `skipped` (each vendor left behind, `{ counterpartyId, name, reason }`, where `reason` is `no_limit`, `not_valid` or `not_added`).
+- In the new workspace, each vendor's **`create_counterparty`** carries `via: "live_slice"`, `fromOrgId`, `fromCounterpartyId` and `addressNeedsConfirmation`. A carried address waits for a member's confirmation, as one added through the API does.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-18: A person's order for which bill first
 
 - **`cash_priority_set`** may now be signed by a member (actor `human`), when an owner, admin or approver sets the order from the payment plan. It then carries `decisionMode: "person"`, `by` (their user id), `previousOrder` (the invoice ids in the order it replaced, or `null`), and `reasoning` saying a person set it; `order`, `cash`, `fingerprint`, `referenceOrder` and `agreedWithReference` are as before. While the same bills compete, the agent applies that order and signs no new one.
