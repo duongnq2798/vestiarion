@@ -201,7 +201,7 @@ function apFake(options: {
   /** The latest AP decisions and payment plan moves on held and scheduled payables, newest first (cash priority P1). */
   decisions?: Array<{ action?: string; detail: Record<string, unknown> }>;
   /** The ledger's last `cash_priority_set` entries, newest first (cash priority P5). */
-  priorityPlans?: Array<{ detail: Record<string, unknown> }>;
+  priorityPlans?: Array<{ detail: Record<string, unknown>; ts?: string }>;
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
@@ -2255,20 +2255,17 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
       { action: "ap_schedule", detail: { invoiceId: STORAGE, cashPriority: { waits: false, reason: null, fingerprint } } },
     ];
 
+    /** The agent's plan reordered by a person: each bill as the agent signed it, with the person's keep flags. */
+    const reordered = (agent: Record<string, unknown>, ids: string[], kept: string[]) => {
+      const items = new Map((agent.order as Array<Record<string, unknown>>).map((item) => [item.invoiceId, item]));
+      return { ...agent, decisionMode: "person", by: PERSON, order: ids.map((id) => ({ ...items.get(id), keep: kept.includes(id) })) };
+    };
+
     it("applies it with no model call, reopens the bill moved up though it waited under the same bills, and holds the ones moved down in the person's words", async () => {
       today("2026-10-17T09:00:00.000Z");
       const agent = await agentPlan();
       // The person puts the render farm first: with 150.03 USDC it is kept, and hosting and storage wait.
-      const personPlan = {
-        ...agent,
-        decisionMode: "person",
-        by: PERSON,
-        order: [
-          { invoiceId: OTHER_INVOICE_ID, keep: true, reason: "A one-off render can wait.", amount: 140 },
-          { invoiceId: HOSTING, keep: false, reason: "Hosting stops the business if unpaid.", amount: 45 },
-          { invoiceId: STORAGE, keep: false, reason: "Storage holds the client files.", amount: 45 },
-        ],
-      };
+      const personPlan = reordered(agent, [OTHER_INVOICE_ID, HOSTING, STORAGE], [OTHER_INVOICE_ID]);
       // Each bill's own decision: the model would pay; code holds the two the person's order makes wait.
       await modelOrders(["B1", "B2", "B3"], {}, { action: "pay", reasoning: "Correct invoice, within the limit; paying.", confidence: 0.9 });
       decideMock.mockClear();
@@ -2291,7 +2288,7 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
     it("is applied to the cash there is, however far it reaches, while the bills are the same", async () => {
       today("2026-10-17T09:00:00.000Z");
       const agent = await agentPlan();
-      const personPlan = { ...agent, decisionMode: "person", by: PERSON, order: [{ invoiceId: OTHER_INVOICE_ID, keep: true }, { invoiceId: HOSTING, keep: false }, { invoiceId: STORAGE, keep: false }] };
+      const personPlan = reordered(agent, [OTHER_INVOICE_ID, HOSTING, STORAGE], [OTHER_INVOICE_ID]);
       decideMock.mockClear();
       // 190 USDC now reaches the render farm and hosting: no model call, the person's order stands.
       const { fake, stage } = apFake({ book: afterPlan(), decisions: decidedUnder(agent.fingerprint), priorityPlans: [{ detail: personPlan }] });
@@ -2305,10 +2302,13 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
     it("is signed as the person's, checked against the bills now, and refused when they changed or a bill is missing", async () => {
       today("2026-10-17T09:00:00.000Z");
       const agent = await agentPlan();
-      const { fake } = apFake({ book: book(), decisions, priorityPlans: [{ detail: agent }] });
-      const set = (input: { fingerprint: string; order: string[] }) =>
+      const SIGNED_AT = "2026-10-17T09:00:01.000Z";
+      const { fake } = apFake({ book: book(), decisions, priorityPlans: [{ detail: agent, ts: SIGNED_AT }] });
+      const set = (input: { fingerprint: string; order: string[]; basedOn?: string }) =>
         runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
-          withOrg(ORG, () => setPersonOrder({ db: db(), now: new Date("2026-10-17T09:00:00.000Z"), actorId: PERSON, operatingBalance: 150.03, reserveBalance: 0, ...input }))
+          withOrg(ORG, () =>
+            setPersonOrder({ db: db(), now: new Date("2026-10-17T09:00:00.000Z"), actorId: PERSON, operatingBalance: 150.03, reserveBalance: 0, basedOn: SIGNED_AT, soleApprover: async () => false, ...input })
+          )
         );
       const made = await set({ fingerprint: agent.fingerprint as string, order: [OTHER_INVOICE_ID, HOSTING, STORAGE] });
       expect(made.keep).toEqual([OTHER_INVOICE_ID]);
@@ -2333,6 +2333,60 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
       await expect(set({ fingerprint: "0".repeat(32), order: [OTHER_INVOICE_ID, HOSTING, STORAGE] })).rejects.toMatchObject({ code: "changed" });
       await expect(set({ fingerprint: agent.fingerprint as string, order: [OTHER_INVOICE_ID, HOSTING] })).rejects.toMatchObject({ code: "order" });
       await expect(set({ fingerprint: agent.fingerprint as string, order: [OTHER_INVOICE_ID, HOSTING, HOSTING] })).rejects.toMatchObject({ code: "order" });
+      // A newer order was signed since the one shown, by another person or the agent: it is not saved over.
+      await expect(set({ fingerprint: agent.fingerprint as string, order: [OTHER_INVOICE_ID, HOSTING, STORAGE], basedOn: "2026-10-17T08:00:00.000Z" })).rejects.toMatchObject({ code: "changed" });
+    });
+
+    it("refuses to let whoever entered a bill move it ahead of the others, unless they are the only approver", async () => {
+      today("2026-10-17T09:00:00.000Z");
+      const agent = await agentPlan();
+      const SIGNED_AT = "2026-10-17T09:00:01.000Z";
+      // The render farm, which the agent made wait, was entered by the person now moving it first.
+      const theirs = book().map((row) => (row.id === OTHER_INVOICE_ID ? { ...row, created_by: PERSON } : row));
+      const { fake } = apFake({ book: theirs, decisions, priorityPlans: [{ detail: agent, ts: SIGNED_AT }] });
+      const set = (soleApprover: boolean) =>
+        runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
+          withOrg(ORG, () =>
+            setPersonOrder({
+              db: db(),
+              now: new Date("2026-10-17T09:00:00.000Z"),
+              actorId: PERSON,
+              operatingBalance: 150.03,
+              reserveBalance: 0,
+              basedOn: SIGNED_AT,
+              soleApprover: async () => soleApprover,
+              fingerprint: agent.fingerprint as string,
+              order: [OTHER_INVOICE_ID, HOSTING, STORAGE],
+            })
+          )
+        );
+      await expect(set(false)).rejects.toMatchObject({ code: "self_created", message: "You entered Contoso 140.00 USDC, so someone else must move it ahead of the others." });
+      await expect(set(true)).resolves.toMatchObject({ keep: [OTHER_INVOICE_ID] });
+    });
+
+    it("goes on for the bills still due once one it kept was paid, signed again for them as the person's, with no model call", async () => {
+      today("2026-10-17T09:00:00.000Z");
+      const agent = await agentPlan();
+      const personPlan = reordered(agent, [OTHER_INVOICE_ID, STORAGE, HOSTING], [OTHER_INVOICE_ID]);
+      decideMock.mockClear();
+      // The render farm was paid: storage and hosting are left, and the person put storage before hosting.
+      const left = [scheduledBill(HOSTING, "GPU hosting", "2026-10-24"), scheduledBill(STORAGE, "Storage", "2026-10-25")];
+      const { fake, stage } = apFake({ book: left, decisions: decidedUnder(agent.fingerprint).slice(1), priorityPlans: [{ detail: personPlan }] });
+      await stage(50);
+      expect(priorityCalls()).toHaveLength(0);
+      const [carried] = entries(fake.requests, "cash_priority_set");
+      expect(carried.p_actor).toBe("agent");
+      expect(carried.p_detail).toMatchObject({
+        decisionMode: "person",
+        by: PERSON,
+        carried: true,
+        order: [
+          { invoiceId: STORAGE, keep: true },
+          { invoiceId: HOSTING, keep: false },
+        ],
+      });
+      const hostingHold = ledger(fake.requests).find((entry) => (entry.p_detail as Record<string, unknown>).invoiceId === HOSTING && entry.p_action === "ap_hold");
+      expect(hostingHold?.p_detail).toMatchObject({ cashPriority: { waits: true, byPerson: true } });
     });
   });
 });

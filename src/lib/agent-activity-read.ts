@@ -53,9 +53,10 @@ export async function readAgentActivity(since: number | null, now: number = Date
     await client
       .from("ledger_entries")
       .select("seq, ts, action, detail")
-      // The agent's own entries, and a supplier's answer to its early-payment offer or its request for more time, which the
-      // system records (offer activity A2, term requests follow-up F3).
-      .or(`actor.eq.agent,and(actor.eq.system,action.in.(${[...SUPPLIER_ANSWERS, ...TERM_ANSWERS].join(",")}))`)
+      // The agent's own entries, a supplier's answer to its early-payment offer or its request for more time, which the
+      // system records (offer activity A2, term requests follow-up F3), and a member's order for which bills the cash goes
+      // to first (order design O6).
+      .or(`actor.eq.agent,and(actor.eq.system,action.in.(${[...SUPPLIER_ANSWERS, ...TERM_ANSWERS].join(",")})),and(actor.eq.human,action.eq.cash_priority_set)`)
       .in("action", ACTIVITY_ACTIONS)
       .gt("seq", since)
       .order("seq", { ascending: true })

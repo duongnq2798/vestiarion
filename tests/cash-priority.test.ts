@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boundOrder, competingBills, personOrder, needsPlan, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, type PriorityRow } from "@/lib/agent/cash-priority";
+import { boundOrder, carriedOrder, competingBills, personOrder, needsPlan, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, type PriorityRow } from "@/lib/agent/cash-priority";
 import { supplierRequestsOf } from "@/lib/agent/cash-priority-plan";
 
 /**
@@ -74,7 +74,7 @@ describe("the plan, signed and read back (P5)", () => {
 
   it("stands while its order splits the bills the same way against the cash there is now (review of the plan)", () => {
     const competing = competingBills(BOOK, TODAY);
-    const plan = { fingerprint: planFingerprint(competing), order: ["hosting-45", "storage-45", "render-140", "cluster-150"], keep: ["hosting-45", "storage-45"], wait: ["render-140", "cluster-150"], reasons: {}, byPerson: null };
+    const plan = { fingerprint: planFingerprint(competing), order: ["hosting-45", "storage-45", "render-140", "cluster-150"], keep: ["hosting-45", "storage-45"], wait: ["render-140", "cluster-150"], reasons: {}, byPerson: null, bills: {} };
     expect(sameSplit(plan, competing, 147.03)).toBe(true);
     expect(sameSplit(plan, competing, 147.1)).toBe(true);
     expect(sameSplit(plan, competing, 230)).toBe(false);
@@ -95,6 +95,7 @@ describe("the plan, signed and read back (P5)", () => {
       wait: ["render-140"],
       reasons: { "hosting-45": "Hosting stops the business.", "render-140": "A one-off render can wait." },
       byPerson: null,
+      bills: { "hosting-45": { amount: null, dueOn: null }, "render-140": { amount: null, dueOn: null } },
     });
     // A person's order says who set it (order design O3).
     expect(planOf({ ...detail, decisionMode: "person", by: "member-1" })?.byPerson).toBe("member-1");
@@ -134,3 +135,26 @@ describe("a person's order (order design O3)", () => {
     expect(personOrder([...ids.slice(1), "not-competing"], competing)).toBeNull();
   });
 });
+
+describe("a person's order carried on (order design O4)", () => {
+  const competing = competingBills(BOOK, TODAY);
+  const facts = Object.fromEntries(competing.map((bill) => [bill.id, { amount: bill.amount, dueOn: bill.dueOn }]));
+  const personal = (order: string[], bills = facts) => ({ fingerprint: "old", order, keep: [], wait: [], reasons: {}, byPerson: "member-1", bills });
+
+  it("goes on for the bills still due once some left it, in the person's order", () => {
+    const order = [...competing.map((bill) => bill.id)].reverse();
+    expect(carriedOrder(personal(order), competing)).toEqual(order);
+    // A bill paid since is no longer competing: the order goes on without it.
+    expect(carriedOrder(personal(["paid-already", ...order]), competing)).toEqual(order);
+  });
+
+  it("stops for a new bill, a changed amount or day, and never carries an agent's order", () => {
+    const order = competing.map((bill) => bill.id);
+    const [first, ...rest] = competing;
+    expect(carriedOrder(personal(order.slice(1), Object.fromEntries(rest.map((bill) => [bill.id, facts[bill.id]]))), competing)).toBeNull();
+    expect(carriedOrder(personal(order, { ...facts, [first.id]: { amount: first.amount + 1, dueOn: first.dueOn } }), competing)).toBeNull();
+    expect(carriedOrder(personal(order, { ...facts, [first.id]: { amount: first.amount, dueOn: "2026-12-31" } }), competing)).toBeNull();
+    expect(carriedOrder({ ...personal(order), byPerson: null }, competing)).toBeNull();
+  });
+});
+

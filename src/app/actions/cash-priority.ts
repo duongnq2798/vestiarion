@@ -26,6 +26,7 @@ export async function setCashPriorityOrderAction(_previous: CashPriorityActionRe
   const auth = await authorize(formData.get("orgSlug"), "approval.decide");
   if (!auth.ok) return { ok: false, message: auth.message };
   const fingerprint = z.string().regex(/^[0-9a-f]{32}$/).safeParse(formData.get("fingerprint"));
+  const basedOn = z.string().min(1).max(64).safeParse(formData.get("basedOn"));
   let parsed: unknown = null;
   try {
     parsed = JSON.parse(String(formData.get("order") ?? "null"));
@@ -33,6 +34,6 @@ export async function setCashPriorityOrderAction(_previous: CashPriorityActionRe
     parsed = null;
   }
   const order = orderSchema.safeParse(parsed);
-  if (!fingerprint.success || !order.success) return { ok: false, message: "The order must name each bill once." };
-  return inOrg(auth, async () => consoleAnswer(await setCashPriorityOrder(consoleActor(auth), { fingerprint: fingerprint.data, order: order.data })));
+  if (!fingerprint.success || !basedOn.success || !order.success) return { ok: false, message: "The order must name each bill once." };
+  return inOrg(auth, async () => consoleAnswer(await setCashPriorityOrder(consoleActor(auth), { fingerprint: fingerprint.data, basedOn: basedOn.data, order: order.data })));
 }

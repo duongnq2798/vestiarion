@@ -389,7 +389,8 @@ function cashAlertItem(entry: ActivityEntry): Omit<ActivityItem, "txUrl" | "netw
  * the first sentence of why. Not a decision for a person: each waiting bill's own hold is the one to decide.
  */
 function cashPriorityItem(entry: ActivityEntry): Omit<ActivityItem, "txUrl" | "network"> | null {
-  if (!Array.isArray(entry.detail.order)) return null;
+  // A person's order carried on to fewer bills once some were paid is the same order, told when it was set (order design O4).
+  if (!Array.isArray(entry.detail.order) || entry.detail.carried === true) return null;
   const order = (entry.detail.order as unknown[]).map(record).filter((item): item is Record<string, unknown> => item !== null);
   const named = (items: Record<string, unknown>[]) => items.map((item) => `${text(item.payee) ?? "a supplier"} ${activityAmount(number(item.amount) ?? 0, "USDC")}`).join(", ");
   const kept = order.filter((item) => item.keep === true);

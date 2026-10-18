@@ -465,7 +465,8 @@ describe("reading the agent's activity", () => {
     expect(triggers.params.get("action")).toBe("in.(create_invoice,invoice_details_added,approval_returned)");
     const asked = client.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("select") === "seq,ts,action,detail")!;
     // The agent's entries, and a supplier's answer to its early-payment offer, which the system records (offer activity A2).
-    expect(asked.params.get("or")).toBe("(actor.eq.agent,and(actor.eq.system,action.in.(early_payment_offer_accepted,early_payment_offer_countered,term_request_accepted,term_request_declined,term_request_countered)))");
+    // A member's order for which bills the cash goes to first is read too (order design O6).
+    expect(asked.params.get("or")).toBe("(actor.eq.agent,and(actor.eq.system,action.in.(early_payment_offer_accepted,early_payment_offer_countered,term_request_accepted,term_request_declined,term_request_countered)),and(actor.eq.human,action.eq.cash_priority_set))");
     expect(asked.params.get("seq")).toBe("gt.967");
     expect(asked.params.get("action")).toContain("ap_pay");
     expect(asked.params.get("action")).not.toContain("cycle_complete");

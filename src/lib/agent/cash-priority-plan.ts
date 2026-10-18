@@ -4,7 +4,7 @@ import { unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import { heldForCash } from "../next-step";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
-import { boundOrder, competingBills, needsPlan, personOrder, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, PRIORITY_HORIZON_DAYS, type Competing, type PriorityPlan, type PriorityRow } from "./cash-priority";
+import { boundOrder, carriedOrder, competingBills, needsPlan, personOrder, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, PRIORITY_HORIZON_DAYS, type Competing, type PriorityPlan, type PriorityRow } from "./cash-priority";
 import { decide } from "./decide";
 import type { CycleLogLine } from "./orchestrator";
 
@@ -29,6 +29,7 @@ export const PRIORITY_SYSTEM_PROMPT = `You are the cash step of a treasury agent
 - Put later what can wait: a one-off purchase, a supplier who agreed to more time before, a bill due later.
 - Paying two small bills can keep two suppliers whole where one large bill keeps one.
 - The written policy's order, given as a reference, pays the bill due first, the smaller first on the same day. Follow it unless the facts say otherwise, and say why when you depart from it.
+- When aPersonsEarlierOrder is given, a person at the business chose that order for those bills before a bill was added or changed: keep it for them unless a bill's facts changed, place the other bills among them by the rules above, and say so.
 - Name every bill once, by its ref. Give each a reason of one sentence.
 - ${REASONING_RULE}
 
@@ -55,6 +56,7 @@ interface OpenRow {
   counterparty_id: string;
   counterparties: { name: string } | null;
   recurring_payables: { every_count: number; every_unit: string } | null;
+  created_by?: string | null;
 }
 
 export interface CashPriority {
@@ -99,7 +101,7 @@ export async function readPriorityFacts(input: { db: OrgDb; now: Date; operating
   const rows = unwrap(
     await db
       .from("invoices")
-      .select("id, status, amount, currency, due_date, memo, po_reference, recurring_id, early_pay_discount_pct, discount_due_date, counterparty_id, counterparties(name), recurring_payables(every_count, every_unit)")
+      .select("id, status, amount, currency, due_date, memo, po_reference, recurring_id, early_pay_discount_pct, discount_due_date, counterparty_id, created_by, counterparties(name), recurring_payables(every_count, every_unit)")
       .eq("direction", "payable")
       .in("status", ["pending", "matched", "scheduled", "held"])
   ) as unknown as OpenRow[];
@@ -168,11 +170,45 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
   const { today, competing, fingerprint, available, committed, byId, latest } = facts;
   const last = (await readLatestPriority(db))?.plan ?? null;
   const keptTotalOf = (plan: PriorityPlan) => Number(plan.keep.reduce((sum, id) => sum + (competing.find((bill) => bill.id === id)?.amount ?? 0), 0).toFixed(6));
-  // A person's order stands while the bills are the same (order design O4): applied to the cash there is now, however
-  // far it reaches, with no model call.
-  if (last && last.fingerprint === fingerprint && last.byPerson) {
-    const split = planFrom(last.order, competing, Math.max(0, available));
-    const plan: PriorityPlan = { ...last, keep: split.keep, wait: split.wait };
+  // A person's order stands (order design O4): while the bills are the same, and on for the bills still due once some
+  // left it, paid or past the window. It is applied to the cash there is now, however far it reaches, with no model call;
+  // carried on to fewer bills, it is signed again for them, as the person's.
+  const carried = last ? carriedOrder(last, competing) : null;
+  if (last && carried) {
+    const split = planFrom(carried, competing, Math.max(0, available));
+    const competingById = new Map(competing.map((bill) => [bill.id, bill] as const));
+    const plan: PriorityPlan = {
+      ...last,
+      fingerprint,
+      order: carried,
+      keep: split.keep,
+      wait: split.wait,
+      bills: Object.fromEntries(competing.map((bill) => [bill.id, { amount: bill.amount, dueOn: bill.dueOn }])),
+    };
+    if (last.fingerprint !== fingerprint) {
+      const keptSet = new Set(split.keep);
+      const reference = referenceOrder(competing);
+      await appendLedgerEntry({
+        actor: "agent",
+        domain: "ap",
+        action: CASH_PRIORITY_SET,
+        summary: `The order a person set goes on for the bills still due: pays ${split.keep.length} first, ${split.wait.length} wait`,
+        detail: {
+          fingerprint,
+          cash: { operating: input.operatingBalance, reserve: input.reserveBalance, committed, available },
+          order: carried.map((id) => {
+            const row = byId.get(id) as OpenRow;
+            return { invoiceId: id, payee: row.counterparties?.name ?? null, amount: competingById.get(id)?.amount ?? num(row.amount), dueOn: competingById.get(id)?.dueOn ?? null, keep: keptSet.has(id), reason: last.reasons[id] ?? referenceReason(competingById.get(id) as Competing, today) };
+          }),
+          reasoning: "The order a person set, with the bills that left it taken out.",
+          decisionMode: "person",
+          by: last.byPerson,
+          carried: true,
+          referenceOrder: reference,
+          agreedWithReference: carried.every((id, index) => reference[index] === id),
+        },
+      });
+    }
     return { plan, keptTotal: keptTotalOf(plan), fresh: false, lines: await reopenKept(db, plan, byId, latest) };
   }
   // The same bills, split the same way by the cash there is now: the last plan stands, with no model call (P5).
@@ -186,6 +222,7 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
   const idOf = new Map<string, string>(reference.map((id, index) => [`B${index + 1}`, id]));
   const competingById = new Map(competing.map((bill) => [bill.id, bill] as const));
   const history = await supplierHistory(db, [...new Set(competing.map((bill) => byId.get(bill.id)?.counterparty_id ?? ""))].filter(Boolean));
+  const personBefore = last?.byPerson ? last.order.filter((id) => competingById.has(id)) : [];
   const bills = reference.map((id) => {
     const row = byId.get(id) as OpenRow;
     const bill = competingById.get(id) as Competing;
@@ -218,6 +255,8 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
       cash: { canPayWith: Math.max(0, available), operating: input.operatingBalance, reserve: input.reserveBalance, alreadyCommitted: committed, billsTotal: Number(competing.reduce((sum, bill) => sum + bill.amount, 0).toFixed(6)) },
       bills,
       writtenPolicy: { order: policy.order },
+      // A person's order for some of these bills, set before a bill was added or changed (order design O4).
+      ...(personBefore.length > 1 ? { aPersonsEarlierOrder: { order: personBefore.map((id) => refOf.get(id)) } } : {}),
       responseShape: { order: "every ref once, most important first", reasons: "{ ref: one sentence }", reasoning: REASONING_SHAPE },
     }),
     schema: orderSchema,
@@ -232,7 +271,15 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
     const said = decided.value.reasons?.[refOf.get(id) as string];
     reasons[id] = typeof said === "string" && said.trim() ? said.trim() : (policy.reasons?.[refOf.get(id) as string] ?? "");
   }
-  const plan: PriorityPlan = { fingerprint, order: orderIds, keep, wait, reasons, byPerson: null };
+  const plan: PriorityPlan = {
+    fingerprint,
+    order: orderIds,
+    keep,
+    wait,
+    reasons,
+    byPerson: null,
+    bills: Object.fromEntries(competing.map((bill) => [bill.id, { amount: bill.amount, dueOn: bill.dueOn }])),
+  };
   const sameAsPolicy = bounded.order.every((id, index) => reference[index] === id);
   const keptSet = new Set(keep);
   await appendLedgerEntry({
@@ -340,17 +387,21 @@ async function supplierHistory(db: OrgDb, counterpartyIds: string[]): Promise<Ma
   return history;
 }
 
-export type PriorityOrderRefusalCode = "no_choice" | "changed" | "order";
+export type PriorityOrderRefusalCode = "no_choice" | "changed" | "order" | "self_created";
 
 export const PRIORITY_ORDER_MESSAGES: Record<PriorityOrderRefusalCode, string> = {
   no_choice: "The cash covers every bill due soon now, so there is no order to set.",
-  changed: "The bills changed since the order was shown. Look at it again, then set it.",
+  changed: "The bills or their order changed since the order was shown. Look at it again, then set it.",
   order: "The order must name each bill once.",
+  self_created: "You entered a bill this order moves ahead of the others, so someone else must set it.",
 };
 
 export class PriorityOrderRefusal extends Error {
-  constructor(readonly code: PriorityOrderRefusalCode) {
-    super(PRIORITY_ORDER_MESSAGES[code]);
+  constructor(
+    readonly code: PriorityOrderRefusalCode,
+    message?: string
+  ) {
+    super(message ?? PRIORITY_ORDER_MESSAGES[code]);
     this.name = "PriorityOrderRefusal";
   }
 }
@@ -366,9 +417,13 @@ export async function setPersonOrder(input: {
   now: Date;
   actorId: string;
   fingerprint: string;
+  /** When the order shown was signed: a newer one, another person's or the agent's, refuses this one (`changed`). */
+  basedOn: string;
   order: string[];
   operatingBalance: number;
   reserveBalance: number;
+  /** Whether the actor is the workspace's only approver, asked only when the order moves a bill they entered ahead. */
+  soleApprover: () => Promise<boolean>;
 }): Promise<{ keep: string[]; wait: string[]; named: (ids: string[]) => string }> {
   const facts = await readPriorityFacts(input);
   if (!facts) throw new PriorityOrderRefusal("no_choice");
@@ -376,15 +431,24 @@ export async function setPersonOrder(input: {
   const order = personOrder(input.order, facts.competing);
   if (!order) throw new PriorityOrderRefusal("order");
   const { competing, byId, available, committed } = facts;
-  const last = (await readLatestPriority(input.db))?.plan ?? null;
-  const sameBills = last !== null && last.fingerprint === facts.fingerprint;
+  const latest = await readLatestPriority(input.db);
+  if (!latest || latest.at !== input.basedOn) throw new PriorityOrderRefusal("changed");
+  const last = latest.plan;
+  const sameBills = last.fingerprint === facts.fingerprint;
   const reference = referenceOrder(competing);
   const { keep, wait } = planFrom(order, competing, Math.max(0, available));
-  const keptSet = new Set(keep);
   const competingById = new Map(competing.map((bill) => [bill.id, bill] as const));
-  // Each bill keeps the reason last given for it under these same bills, so the facts behind it stay in view.
-  const reasonOf = (id: string) => (sameBills ? (last as PriorityPlan).reasons[id] : undefined) ?? referenceReason(competingById.get(id) as Competing, facts.today);
   const named = (ids: string[]) => ids.map((id) => `${byId.get(id)?.counterparties?.name ?? "a supplier"} ${AMOUNT.format(competingById.get(id)?.amount ?? 0)} USDC`).join(", ");
+  // Whoever entered a bill does not move it ahead of the others on their own, as for a plan's day (payment plan P10):
+  // unless they are the only approver (order design O2).
+  const keptBefore = new Set(sameBills ? planFrom(last.order, competing, Math.max(0, available)).keep : []);
+  const theirs = keep.filter((id) => !keptBefore.has(id) && byId.get(id)?.created_by === input.actorId);
+  if (theirs.length > 0 && !(await input.soleApprover())) {
+    throw new PriorityOrderRefusal("self_created", `You entered ${named(theirs)}, so someone else must move it ahead of the others.`);
+  }
+  const keptSet = new Set(keep);
+  // Each bill keeps the reason last given for it under these same bills, so the facts behind it stay in view.
+  const reasonOf = (id: string) => (sameBills ? last.reasons[id] : undefined) ?? referenceReason(competingById.get(id) as Competing, facts.today);
   await appendLedgerEntry({
     actor: "human",
     domain: "ap",
@@ -402,7 +466,7 @@ export async function setPersonOrder(input: {
       by: input.actorId,
       referenceOrder: reference,
       agreedWithReference: order.every((id, index) => reference[index] === id),
-      previousOrder: sameBills ? (last as PriorityPlan).order : null,
+      previousOrder: sameBills ? last.order : null,
     },
   });
   return { keep, wait, named };

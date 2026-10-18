@@ -863,8 +863,10 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           <>
             {priority && (
               <CashPriorityOrder
+                key={`${priority.fingerprint}:${priority.setAt}`}
                 orgSlug={slug}
                 fingerprint={priority.fingerprint}
+                basedOn={priority.setAt}
                 available={priority.available}
                 bills={priority.bills.map((bill) => ({
                   id: bill.id,

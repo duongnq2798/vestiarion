@@ -2,6 +2,7 @@ import { PriorityOrderRefusal, setPersonOrder } from "../agent/cash-priority-pla
 import { readCashBalances } from "../agent/cash-priority-view";
 import { runCycleSoon } from "../agent/cycle-soon";
 import { hasRunningCycle } from "../agent/cycle-running";
+import { isSoleApprover } from "../agent/sole-approver";
 import { db } from "../dal";
 import { readShadowMode } from "../shadow-mode";
 import { cycleEventOf, type Actor } from "./actor";
@@ -14,7 +15,7 @@ import { gate } from "./policy";
  * order, and in shadow mode. The bills are read again and must be the ones shown; the order is signed as the person's,
  * and a cycle starts so the bills it moves are decided now. Nothing here pays.
  */
-export async function setCashPriorityOrder(actor: Actor, input: { fingerprint: string; order: string[] }): Promise<CommandOutcome> {
+export async function setCashPriorityOrder(actor: Actor, input: { fingerprint: string; basedOn: string; order: string[] }): Promise<CommandOutcome> {
   const refusal = gate(actor, "cash_priority.set_order");
   if (refusal) return refusal;
   try {
@@ -26,17 +27,19 @@ export async function setCashPriorityOrder(actor: Actor, input: { fingerprint: s
       now: new Date(),
       actorId: actor.userId,
       fingerprint: input.fingerprint,
+      basedOn: input.basedOn,
       order: input.order,
       operatingBalance: operating,
       reserveBalance: reserve,
+      soleApprover: () => isSoleApprover(actor.userId),
     });
     runCycleSoon(cycleEventOf(actor, "priority_order_set"));
     const pays = set.keep.length > 0 ? `The agent pays ${set.named(set.keep)} first` : "The cash covers none of them yet";
     const waits = set.wait.length > 0 ? `; ${set.named(set.wait)} ${set.wait.length === 1 ? "waits" : "wait"}` : "";
-    return done(`Saved. ${pays}${waits}. It decides them now, each with every check.`);
+    return done(`Saved. With the cash as last read: ${pays.charAt(0).toLowerCase()}${pays.slice(1)}${waits}. It decides them now, each with every check.`);
   } catch (error) {
     // Bills that changed, or a cash that now covers them all: the order shown is out of date, so the page shows it again.
-    if (error instanceof PriorityOrderRefusal) return refused(error.code, error.message, error.code === "order" ? {} : { changed: true });
+    if (error instanceof PriorityOrderRefusal) return refused(error.code, error.message, error.code === "order" || error.code === "self_created" ? {} : { changed: true });
     console.error("setting the cash priority order failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
     return refused("failed", TRY_AGAIN);
   }

@@ -24,6 +24,7 @@ const render = (canSet: boolean) =>
     <CashPriorityOrder
       orgSlug="pinecrest-studio"
       fingerprint={"f".repeat(32)}
+      basedOn="2026-10-17T21:44:00Z"
       available={57.03}
       bills={bills}
       setLabel="Set by the agent on Oct 17, 2026"

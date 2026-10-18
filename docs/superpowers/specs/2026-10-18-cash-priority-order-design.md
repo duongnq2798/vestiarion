@@ -18,17 +18,22 @@ again. The order should be visible where the plan is, and a person should be abl
   - It also says who set the order (the agent, or a person with their email) and when, and what the written policy's
     order would pay first.
 - **O2. Who.** Owners, admins and approvers (`approval.decide`), as for approving the plan's days. Every other member
-  reads it. Not in shadow mode, where there is no order.
+  reads it. Not in shadow mode, where there is no order. As for a plan's day (payment plan P10), whoever entered a bill
+  does not move it into the part the cash covers on their own, unless they are the only approver.
 - **O3. Setting it.** A person moves bills up or down and saves. Before signing, the server reads the competing bills
   again, with the same code the cycle uses.
-  - It refuses when they changed (a different fingerprint), when the order does not name each of them once, or while a
-    cycle is running.
+  - It refuses when they changed (a different fingerprint), when a newer order was signed since the one shown (its
+    signing time is sent back with the order), when the order does not name each of them once, or while a cycle is
+    running. The page then shows the plan as it is now, and the refusal is toasted.
   - It then signs `cash_priority_set` as the person (actor `human`, `decisionMode: "person"`, `by`), with the order,
     which bills the cash covers today, the written policy's order and the order it replaced. It starts a cycle.
 - **O4. The agent keeps it.** While the bills are the same, each cycle applies the person's order to the cash there is
   (`planFrom`), with no model call, even when the cash changes how far it reaches.
-  - When a bill is added, paid, changes amount or day, or leaves the window, the bills are no longer the same. The agent
-    then orders them again as before, and the person may set it again.
+  - When bills leave it (paid, or past the window) and every bill left is one it had, at the same amount and due day,
+    the order goes on for them (`carriedOrder`), signed again for those bills as the person's (`carried: true`, not told
+    again in the activity feed).
+  - When a bill is added or one changes, the agent orders them again, and the model is given the person's earlier order
+    for the bills it had (`aPersonsEarlierOrder`) to keep unless their facts changed. The person may set it again.
   - Code still keeps bills only while the cash lasts: a person's order never pays more than the wallet holds, and every
     payment passes every check.
 - **O5. Reopening.** A bill the person moved into the part the cash covers, held for want of cash, is reopened and decided

@@ -2476,11 +2476,17 @@ competing bills, the cash and the fingerprint the same way for the cycle and for
 (`src/lib/agent/cash-priority-view.ts`) shows the latest order on the Payment plan tab (`CashPriorityOrder`) only while
 its fingerprint is the current one, with the cash from the accounts. The command `cash_priority.set_order`
 (`approval.decide`, console only) refuses while a cycle runs or in shadow mode; `setPersonOrder` reads the facts again,
-refuses a changed fingerprint (`changed`), a cash that covers every bill (`no_choice`) or an order that does not name
-each bill once (`personOrder`, `order`), and signs `cash_priority_set` as the person (`actor: "human"`,
-`decisionMode: "person"`, `by`, `previousOrder`), each bill keeping the reason last given under the same bills; then
-`runCycleSoon({ kind: "priority_order_set" })`. `planOf` reads `byPerson` back. While the fingerprint holds, `cashPriority`
-applies a person's order with `planFrom` to the cash there is, with no model call and nothing signed. A waiting bill's
+refuses a changed fingerprint or a newer signed order than the one shown (`basedOn`, the shown order's `ts`; `changed`),
+a cash that covers every bill (`no_choice`), an order that does not name each bill once (`personOrder`, `order`), and
+an order that moves a bill the actor entered (`created_by`) into the kept part unless they are the only approver
+(`self_created`). It signs `cash_priority_set` as the person (`actor: "human"`, `decisionMode: "person"`, `by`,
+`previousOrder`), each bill keeping the reason last given under the same bills; then
+`runCycleSoon({ kind: "priority_order_set" })`. `planOf` reads `byPerson` and each bill's amount and due day back. While
+every competing bill is one a person's order had, unchanged (`carriedOrder`), `cashPriority` applies it with `planFrom` to
+the cash there is, with no model call; when bills left it, it signs it again for the rest (`carried: true`, actor
+`agent`, not told in the activity feed). When a bill is new or changed, the model is given the person's earlier order
+for the bills it had (`aPersonsEarlierOrder`). The activity reader reads a member's `cash_priority_set` besides the
+agent's entries. A waiting bill's
 hold then says a person chose to pay others first, with no reason of the agent's (`cashPriority.byPerson`), and the
 activity feed says a member set the order.
 
