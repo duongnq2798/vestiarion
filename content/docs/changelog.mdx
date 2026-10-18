@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-18: A supplier's payment status link
+
+- Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in domain `ap`, actor `human`:
+  - **`supplier_status_shared`**, when an owner or admin makes a supplier's payment status link: `by` (their user id), `linkId`, `counterpartyId`, `expiresAt`, `days` (7, 30 or 90) and `replaced` (the ids of the supplier's links it stopped). The link itself is never in the entry.
+  - **`supplier_status_unshared`**, when one is stopped: `by`, `linkId` and `counterpartyId`.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-18: Which bill first when the cash cannot cover them all
 
 - A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`cash_priority_set`** (domain `ap`, actor `agent`), when the bills due within 14 days add up to more than the cash and the agent chooses the order they are paid in. It carries `fingerprint`, `cash: { operating, reserve, committed, available }`, `order` (each bill, most important first: `{ invoiceId, payee, amount, dueOn, keep, reason }`), `reasoning`, `decisionMode`, `referenceOrder` (the written policy's, as invoice ids), `agreedWithReference`, and `orderCorrected: true` when code fixed the model's order. It is signed again only when the bills change, or the cash changes enough to split them differently.

@@ -180,6 +180,7 @@ describe("the docs navigation", () => {
       ["guides/email-invoices", "Add invoices by email"],
       ["guides/where-a-payment-is", "Know where a payment is"],
       ["guides/payment-exceptions", "When a payment does not settle"],
+      ["guides/supplier-status", "Show a supplier when it will be paid"],
       ["guides/get-paid", "Get paid as a freelancer"],
     ]);
     expect(groupsOf("Pay bills")).toEqual([
@@ -192,6 +193,7 @@ describe("the docs navigation", () => {
       "Add bills",
       "Follow a payment",
       "Follow a payment",
+      "For the people you pay",
       "For the people you pay",
     ]);
     expect(pagesOf("Plan and report")).toEqual([

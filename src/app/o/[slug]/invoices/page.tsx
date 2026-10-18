@@ -126,6 +126,9 @@ import { offersView } from "@/lib/early-pay/offers";
 import { CustomerDiscounts } from "@/components/customer-offers/CustomerDiscounts";
 import { customerOffersView } from "@/lib/customer-offers/store";
 import { TermRequests } from "@/components/bills/TermRequests";
+import { SupplierStatusLinks } from "@/components/supplier/SupplierStatusLinks";
+import { listSupplierLinks } from "@/lib/supplier-status/links";
+import { supplierLinkRows } from "@/lib/supplier-status/model";
 import { termRequestsView } from "@/lib/terms/requests";
 
 export const dynamic = "force-dynamic";
@@ -778,6 +781,32 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         console.error("invoices: term requests not read", error instanceof Error ? error.message : error);
         return null;
       });
+      // Suppliers' payment status links (supplier status V1, V6): the links not stopped. Best effort: a read that fails
+      // hides only this part; none before 0131.
+      const supplierLinks = await listSupplierLinks(db(), asOf).catch((error: unknown) => {
+        console.error("invoices: supplier status links not read", error instanceof Error ? error.message : error);
+        return null;
+      });
+      const supplierLinkList = supplierLinks?.available ? supplierLinks.links : [];
+      const linkMakers =
+        supplierLinkList.length > 0
+          ? await listMembers(access.membership.orgId)
+              .then((list) => new Map(list.map((member) => [member.userId, member.email])))
+              .catch(() => null)
+          : null;
+      const suppliers = counterparties
+        .filter((counterparty) => counterparty.role === "vendor" || counterparty.role === "contractor")
+        .map(({ id, name }) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      const supplierStatus = supplierLinks ? (
+        <SupplierStatusLinks
+          orgSlug={slug}
+          suppliers={suppliers}
+          links={supplierLinkRows(supplierLinkList, new Map(counterparties.map((counterparty) => [counterparty.id, counterparty.name])), linkMakers)}
+          canWrite={canWrite}
+          available={supplierLinks.available}
+        />
+      ) : null;
       tabContent = {
         bills: {
           list: listOf("bills"),
@@ -788,7 +817,13 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
                 {terms && <TermRequests orgSlug={slug} view={terms} canWrite={canWrite} />}
               </>
             ) : undefined,
-          below: schedules.length > 0 ? <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} /> : undefined,
+          below:
+            schedules.length > 0 || supplierStatus ? (
+              <>
+                {schedules.length > 0 && <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} />}
+                {supplierStatus}
+              </>
+            ) : undefined,
         },
       };
     } else if (view.tab === "plan") {

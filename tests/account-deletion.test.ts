@@ -197,6 +197,9 @@ describe("0023 is idempotent", () => {
         { tbl: "shadow_modes", col: "started_by", action: "n" },
         { tbl: "slack_installs", col: "installed_by", action: "n" },
         { tbl: "spending_limit_contracts", col: "created_by", action: "n" },
+        // Who made and who stopped a supplier's payment status link (0131).
+        { tbl: "supplier_status_links", col: "created_by", action: "n" },
+        { tbl: "supplier_status_links", col: "revoked_by", action: "n" },
         { tbl: "webhook_endpoints", col: "created_by", action: "n" },
         { tbl: "workspace_payout_partners", col: "set_up_by", action: "n" },
       ]);

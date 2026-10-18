@@ -12,6 +12,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Show a supplier when it will be paid.** An owner or admin can send a supplier, a vendor or a contractor, a link to
+  its own bills: where each one stands (received, being reviewed, the day it is set to be paid, on its way, or paid),
+  what is still to be paid in each currency, and each payment's transaction on Arc. It needs no account, never says why
+  a bill is held, and shows nothing else of the workspace. One link per supplier works for 7, 30 or 90 days, made and
+  stopped on the Bills tab under **Supplier payment status**. It needs migration `0131`.
+  [Guide](https://www.vestiarion.xyz/docs/guides/supplier-status).
+
 ### Fixed
 
 - **Every live workspace gets its scheduled cycle again.** The cycles every six hours ran one workspace after another,
