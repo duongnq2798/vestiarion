@@ -59,7 +59,7 @@ describe("the landing page, while every read is pending", () => {
       "Don't take our word for it.",
       "Loading the agent's latest decision",
       "Loading the open numbers",
-      "What teams ask before they try it.",
+      "Everything you need to know.",
       "See what the agent decides on your next bill.",
     ]) {
       expect(words).toContain(part);

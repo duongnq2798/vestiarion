@@ -20,6 +20,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   workspace sends at most 100 such emails a day, and a sandbox none. Every address that comes in still waits for a
   person to confirm it. Signed as `payee_addresses_requested`. No migration. [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#ask-every-payee-at-once).
 
+### Changed
+
+- **The landing page's questions, rewritten for the owner deciding whether to trust it.** They now ask what a business
+  asks first: whether it can try Vestiarion without real money, who controls the money and approves payments, what pays
+  on its own, what happens when a payment fails, whether it fits the tools it uses, whether it needs crypto, what it
+  costs and who sees its bills, each answered in a few sentences with the guide that goes further. The questions read as
+  one list with thin dividers and a plus that turns to a minus, one open at a time; the heading stays in view beside them
+  on a wide screen, with the docs and a way to reach the founder on GitHub.
+
 ## [0.1.0-beta.10] - 2026-10-18
 
 ### Added

@@ -14,6 +14,7 @@ export function Disclosure({
   defaultOpen,
   variant = "default",
   id,
+  name,
   className,
   summaryClassName,
   contentClassName,
@@ -23,13 +24,15 @@ export function Disclosure({
   defaultOpen?: boolean;
   variant?: "default" | "bare";
   id?: string;
+  /** Disclosures that share a name are one group: the browser keeps one of them open at a time. */
+  name?: string;
   className?: string;
   summaryClassName?: string;
   contentClassName?: string;
 }) {
   const framed = variant === "default";
   return (
-    <details id={id} open={defaultOpen} className={cn("disclosure group/disclosure", framed && "rounded-2xl border border-line bg-surface shadow-surface", className)}>
+    <details id={id} name={name} open={defaultOpen} className={cn("disclosure group/disclosure", framed && "rounded-2xl border border-line bg-surface shadow-surface", className)}>
       <summary
         className={cn(
           "cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden",
