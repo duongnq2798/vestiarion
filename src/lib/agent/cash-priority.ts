@@ -136,6 +136,8 @@ export interface PriorityPlan {
   wait: string[];
   /** Each bill's reason, by id, as the model gave it; the written policy's when it decided. */
   reasons: Record<string, string>;
+  /** The member who set this order from the payment plan (order design O3), or null when the agent did. */
+  byPerson: string | null;
 }
 
 /** The last signed plan, when its detail can be read. */
@@ -153,5 +155,16 @@ export function planOf(detail: Record<string, unknown> | null | undefined): Prio
     (entry.keep === true ? keep : wait).push(entry.invoiceId);
     if (typeof entry.reason === "string") reasons[entry.invoiceId] = entry.reason;
   }
-  return { fingerprint: detail.fingerprint, order, keep, wait, reasons };
+  const byPerson = detail.decisionMode === "person" && typeof detail.by === "string" ? detail.by : null;
+  return { fingerprint: detail.fingerprint, order, keep, wait, reasons, byPerson };
+}
+
+/**
+ * A person's order (order design O3): every competing bill once, in the order given; null when it names a bill that is
+ * not competing, leaves one out, or names one twice.
+ */
+export function personOrder(order: readonly string[], competing: readonly Competing[]): string[] | null {
+  const ids = new Set(competing.map((bill) => bill.id));
+  if (order.length !== ids.size || new Set(order).size !== order.length || order.some((id) => !ids.has(id))) return null;
+  return [...order];
 }

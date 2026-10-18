@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Change which bills the cash goes to first.** When the cash cannot cover every bill due soon, the **Payment plan** tab
+  now shows the agent's order under **Which bill first**: each bill paid first or waiting, its reason, who set the order,
+  and what the written policy would pay first. An owner, admin or approver moves bills up or down and saves; the agent
+  keeps that order while the bills stay the same, decides at once the bills it moves, and never pays more than the cash
+  holds. The order is signed as theirs, as `cash_priority_set`. No migration.
+  [Guide](https://www.vestiarion.xyz/docs/guides/payment-plan#change-the-order).
+
 - **Show a supplier when it will be paid.** An owner or admin can send a vendor a link to its own bills: where each one
   stands (received, being reviewed, the day it is set to be paid, on its way, or paid),
   what is still to be paid in each currency, and each payment's transaction on Arc. It needs no account, never says why

@@ -740,4 +740,15 @@ describe("which bills the cash goes to first (cash priority P6)", () => {
     const held = { seq: 1101, action: "ap_hold", detail: { invoiceId: INVOICE, cashPriority: { waits: true, reason: "A one-off render can wait." } } } as ActivityEntry;
     expect(activityItem(held, refs({ status: "held" }))?.text).toBe("Held Jiren 0.30 USDC: the cash goes first to the bills the agent chose.");
   });
+
+  it("says a member's order as theirs, with no reason of the agent's (order design O6)", () => {
+    const personal = { ...plan, detail: { ...plan.detail, decisionMode: "person", by: "member-1", reasoning: "A person set this order from the payment plan." } } as ActivityEntry;
+    expect(activityItem(personal, refs())).toMatchObject({
+      text: "A member set which bills the cash goes to first: pays Cobalt Cloud 45.00 USDC, Cobalt Cloud 45.00 USDC first; Cobalt Cloud 140.00 USDC waits.",
+      detail: null,
+      tone: "notice",
+    });
+    const held = { seq: 1102, action: "ap_hold", detail: { invoiceId: INVOICE, cashPriority: { waits: true, reason: null, byPerson: true } } } as ActivityEntry;
+    expect(activityItem(held, refs({ status: "held" }))?.text).toBe("Held Jiren 0.30 USDC: the cash goes first to the bills a member chose.");
+  });
 });

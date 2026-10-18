@@ -2462,13 +2462,27 @@ the model (`decide`, purpose `cash_priority`,
 refs B1..Bn in the written policy's order, which is the fallback), bounds the order (`boundOrder`), fits it to the cash
 (`planFrom`: keep while the kept total fits, skip what does not), and signs the plan. Kept bills that are held are
 reopened with a compare-and-set on `held` and an `invoice_reopened` (`followUp.reason: "cash_priority"`), then loaded,
-unless their latest decision records this plan's fingerprint (`cashPriority.fingerprint`): held again under the same
-plan, they are not retried. Waiting bills join the stage's payables even before their day and are left out of the kept
+unless their latest decision records this plan's fingerprint (`cashPriority.fingerprint`) and that they were kept then
+(`waits` not `true`): held again under the same plan, they are not retried, while one that waited under the same bills
+and is kept now, as a person's order may make it, is reopened. Waiting bills join the stage's payables even before their day and are left out of the kept
 bills' `obligationsDueBy` and cash ahead measure, and only theirs; `heldForPriority` turns a model `pay` or `schedule` on
 one into a hold (`timingRule: "cash.priority"`) whose `shortOfCash` holds for want of cash, with `cashNeededUsdc` its own
 amount plus the kept total, which the follow-up measures without re-measuring what falls due before it, so the
 more-time and customer discount stages act on it and only enough cash for everything reopens it. A read that fails leaves the stage in date order. The activity feed tells
 `cash_priority_set` (`cashPriorityItem`, tone `notice`) and a waiting bill's hold.
+
+**A person's order** (docs/superpowers/specs/2026-10-18-cash-priority-order-design.md). `readPriorityFacts` reads the
+competing bills, the cash and the fingerprint the same way for the cycle and for a person; `readPriorityView`
+(`src/lib/agent/cash-priority-view.ts`) shows the latest order on the Payment plan tab (`CashPriorityOrder`) only while
+its fingerprint is the current one, with the cash from the accounts. The command `cash_priority.set_order`
+(`approval.decide`, console only) refuses while a cycle runs or in shadow mode; `setPersonOrder` reads the facts again,
+refuses a changed fingerprint (`changed`), a cash that covers every bill (`no_choice`) or an order that does not name
+each bill once (`personOrder`, `order`), and signs `cash_priority_set` as the person (`actor: "human"`,
+`decisionMode: "person"`, `by`, `previousOrder`), each bill keeping the reason last given under the same bills; then
+`runCycleSoon({ kind: "priority_order_set" })`. `planOf` reads `byPerson` back. While the fingerprint holds, `cashPriority`
+applies a person's order with `planFrom` to the cash there is, with no model call and nothing signed. A waiting bill's
+hold then says a person chose to pay others first, with no reason of the agent's (`cashPriority.byPerson`), and the
+activity feed says a member set the order.
 
 ## Telling the owner before the cash runs short
 

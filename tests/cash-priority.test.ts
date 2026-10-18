@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boundOrder, competingBills, needsPlan, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, type PriorityRow } from "@/lib/agent/cash-priority";
+import { boundOrder, competingBills, personOrder, needsPlan, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, type PriorityRow } from "@/lib/agent/cash-priority";
 import { supplierRequestsOf } from "@/lib/agent/cash-priority-plan";
 
 /**
@@ -74,7 +74,7 @@ describe("the plan, signed and read back (P5)", () => {
 
   it("stands while its order splits the bills the same way against the cash there is now (review of the plan)", () => {
     const competing = competingBills(BOOK, TODAY);
-    const plan = { fingerprint: planFingerprint(competing), order: ["hosting-45", "storage-45", "render-140", "cluster-150"], keep: ["hosting-45", "storage-45"], wait: ["render-140", "cluster-150"], reasons: {} };
+    const plan = { fingerprint: planFingerprint(competing), order: ["hosting-45", "storage-45", "render-140", "cluster-150"], keep: ["hosting-45", "storage-45"], wait: ["render-140", "cluster-150"], reasons: {}, byPerson: null };
     expect(sameSplit(plan, competing, 147.03)).toBe(true);
     expect(sameSplit(plan, competing, 147.1)).toBe(true);
     expect(sameSplit(plan, competing, 230)).toBe(false);
@@ -94,7 +94,11 @@ describe("the plan, signed and read back (P5)", () => {
       keep: ["hosting-45"],
       wait: ["render-140"],
       reasons: { "hosting-45": "Hosting stops the business.", "render-140": "A one-off render can wait." },
+      byPerson: null,
     });
+    // A person's order says who set it (order design O3).
+    expect(planOf({ ...detail, decisionMode: "person", by: "member-1" })?.byPerson).toBe("member-1");
+    expect(planOf({ ...detail, decisionMode: "deepseek", by: "member-1" })?.byPerson).toBeNull();
     expect(planOf({ fingerprint: "f1" })).toBeNull();
     expect(planOf(null)).toBeNull();
   });
@@ -117,5 +121,16 @@ describe("what a supplier did with earlier requests for more time (live test, Oc
       declinedBySupplier: 1,
       stillOpen: 1,
     });
+  });
+});
+
+describe("a person's order (order design O3)", () => {
+  it("names every competing bill once, or is refused", () => {
+    const competing = competingBills(BOOK, TODAY);
+    const ids = competing.map((bill) => bill.id);
+    expect(personOrder([...ids].reverse(), competing)).toEqual([...ids].reverse());
+    expect(personOrder(ids.slice(1), competing)).toBeNull();
+    expect(personOrder([...ids, ids[0]], competing)).toBeNull();
+    expect(personOrder([...ids.slice(1), "not-competing"], competing)).toBeNull();
   });
 });

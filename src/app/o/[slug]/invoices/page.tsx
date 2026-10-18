@@ -78,7 +78,9 @@ import { accountingProvider, accountingProviderOn } from "@/lib/accounting-provi
 import { accountingBookings, type BookingsView } from "@/lib/connectors/bookings-view";
 import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { listCounterparties, listInvoices, stats, type InvoiceRow } from "@/lib/queries";
-import { plural } from "@/lib/copy";
+import { plural, utcDay } from "@/lib/copy";
+import { CashPriorityOrder } from "@/components/vx/CashPriorityOrder";
+import { readPriorityView } from "@/lib/agent/cash-priority-view";
 import { payLinkStates, type PayLinkState } from "@/lib/platform/pay-links";
 import { listRecurringPayables } from "@/lib/recurring-payables";
 import { readPaymentPlan } from "@/lib/payment-plan-read";
@@ -845,8 +847,41 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       // Whoever entered a bill approves its day only as the workspace's only approver (payment plan P10); asked only then.
       const soleApprover =
         canDecide && paymentPlan?.lines.some((line) => line.move !== null && line.createdBy === access.user.id) ? await isSoleApprover(access.user.id) : false;
+      // Which bill first, when the cash cannot cover every bill due soon (order design O1); best effort, as the plan is.
+      const priority = await readPriorityView(db(), new Date(asOf)).catch((error: unknown) => {
+        console.error("invoices: cash priority not read", error instanceof Error ? error.message : error);
+        return null;
+      });
+      const setByEmail =
+        priority?.setBy !== null && priority?.setBy !== undefined
+          ? await listMembers(access.membership.orgId)
+              .then((list) => list.find((member) => member.userId === priority.setBy)?.email ?? "a member")
+              .catch(() => "a member")
+          : null;
       tabContent = {
-        plan: <PaymentPlanSection plan={paymentPlan} outcomes={paymentOutcomes} orgSlug={slug} canDecide={canDecide} viewerId={access.user.id} soleApprover={soleApprover} />,
+        plan: (
+          <>
+            {priority && (
+              <CashPriorityOrder
+                orgSlug={slug}
+                fingerprint={priority.fingerprint}
+                available={priority.available}
+                bills={priority.bills.map((bill) => ({
+                  id: bill.id,
+                  payee: bill.payee,
+                  amount: bill.amount,
+                  due: utcDay(`${bill.dueOn}T12:00:00Z`),
+                  // Under a person's order the agent's reasons are its earlier notes, which may not match the order now.
+                  reason: bill.reason && priority.setBy ? `The agent's earlier note: ${bill.reason}` : bill.reason,
+                }))}
+                setLabel={`Set by ${setByEmail ?? "the agent"} on ${utcDay(priority.setAt)}`}
+                policyFirst={priority.policyFirst}
+                canSet={canDecide}
+              />
+            )}
+            <PaymentPlanSection plan={paymentPlan} outcomes={paymentOutcomes} orgSlug={slug} canDecide={canDecide} viewerId={access.user.id} soleApprover={soleApprover} />
+          </>
+        ),
       };
     } else {
       // A CRM's deal picked to plan: the New deal form filled in from it (HubSpot connector H11, Pipedrive connector P9).

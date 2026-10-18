@@ -395,13 +395,15 @@ function cashPriorityItem(entry: ActivityEntry): Omit<ActivityItem, "txUrl" | "n
   const kept = order.filter((item) => item.keep === true);
   const waiting = order.filter((item) => item.keep !== true);
   if (waiting.length === 0) return null;
-  const pays = kept.length > 0 ? `the agent pays ${named(kept)} first; ` : "";
   const waits = `${named(waiting)} ${waiting.length === 1 ? "waits" : "wait"}`;
   const why = text(entry.detail.reasoning);
+  // A member's order from the payment plan (order design O6): said as theirs, not the agent's.
+  const byPerson = entry.detail.decisionMode === "person";
+  const pays = kept.length > 0 ? `${byPerson ? "pays" : "the agent pays"} ${named(kept)} first; ` : "";
   return {
     seq: entry.seq,
-    text: `The cash cannot cover every bill due soon: ${pays}${waits}.`,
-    detail: why ? (why.match(/^.*?[.!?](?=\s|$)/s)?.[0] ?? why) : null,
+    text: byPerson ? `A member set which bills the cash goes to first: ${pays}${waits}.` : `The cash cannot cover every bill due soon: ${pays}${waits}.`,
+    detail: byPerson ? null : why ? (why.match(/^.*?[.!?](?=\s|$)/s)?.[0] ?? why) : null,
     tone: "notice",
     path: PAYMENT_PLAN_PATH,
     pathLabel: "See the payment plan",
@@ -651,7 +653,9 @@ function invoiceItem(
     case "ap_hold": {
       // Made to wait by the agent's choice of which bills the cash goes to first (cash priority P6).
       if (record(entry.detail.cashPriority)?.waits === true) {
-        return { seq: entry.seq, text: `Held ${invoice.name} ${amount}: the cash goes first to the bills the agent chose.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
+        // A member's order is said as theirs (order design O6).
+        const chose = record(entry.detail.cashPriority)?.byPerson === true ? "a member chose" : "the agent chose";
+        return { seq: entry.seq, text: `Held ${invoice.name} ${amount}: the cash goes first to the bills ${chose}.`, detail: firstSentence(entry.detail), tone: "stopped", ...decide, txHash: null };
       }
       // Held days before the day it was set for, because the cash will not cover it then (cash ahead A4); held then for
       // anything else, it says so as any hold does.

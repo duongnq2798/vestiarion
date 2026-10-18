@@ -7,6 +7,7 @@ import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
 import { dueForDecision, obligationsDueBy, runApStage, SYSTEM_PROMPT, type CycleLogLine } from "@/lib/agent/orchestrator";
+import { setPersonOrder } from "@/lib/agent/cash-priority-plan";
 import { onChainLimitGate, type OnChainLimitGate } from "@/lib/agent/onchain-limit";
 import type { SpendingLimitVerdict } from "@/lib/spending-limit/onchain";
 import { CycleMetricsCollector } from "@/lib/agent/cycle-metrics";
@@ -2229,5 +2230,109 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
     const shadowed = apFake({ book: book(), decisions, shadow: "USD" });
     await shadowed.stage(150.03);
     expect(priorityCalls()).toHaveLength(0);
+  });
+
+  describe("a person's order (order design O3-O5)", () => {
+    const PERSON = "5d0f3a2e-8c1b-4f7a-9e6d-0000000000f1";
+    // After the agent's plan: hosting and storage were scheduled on their days, kept; the render farm was held, waiting.
+    const heldRender = () => ({
+      ...payable({ ...plain, id: OTHER_INVOICE_ID, status: "held", amount: "140", memo: "Render farm", due_date: "2026-10-22T12:00:00+00:00", decided_at: "2026-10-17T08:00:00+00:00", counterparty_id: CONTOSO }),
+      counterparties: counterparty({ id: CONTOSO, name: "Contoso" }),
+    });
+    const scheduledBill = (id: string, memo: string, due: string) =>
+      scheduledPayable({ ...plain, id, amount: "45", memo, po_reference: `PO-${memo.replace(/\W+/g, "-").toUpperCase()}`, due_date: `${due}T12:00:00+00:00`, scheduled_for: `${due}T00:00:00+00:00` });
+    const afterPlan = () => [heldRender(), scheduledBill(HOSTING, "GPU hosting", "2026-10-24"), scheduledBill(STORAGE, "Storage", "2026-10-25")];
+
+    async function agentPlan(): Promise<Record<string, unknown>> {
+      await modelOrders(["B2", "B3", "B1"], { B1: "A one-off render can wait.", B2: "Hosting stops the business if unpaid.", B3: "Storage holds the client files." });
+      const first = apFake({ book: book(), decisions });
+      await first.stage(150.03);
+      return entries(first.fake.requests, "cash_priority_set")[0].p_detail as Record<string, unknown>;
+    }
+    const decidedUnder = (fingerprint: unknown) => [
+      { action: "ap_hold", detail: { invoiceId: OTHER_INVOICE_ID, execution: { heldBecause: "cash_shortfall" }, cashPriority: { waits: true, reason: "A one-off render can wait.", fingerprint } } },
+      { action: "ap_schedule", detail: { invoiceId: HOSTING, cashPriority: { waits: false, reason: null, fingerprint } } },
+      { action: "ap_schedule", detail: { invoiceId: STORAGE, cashPriority: { waits: false, reason: null, fingerprint } } },
+    ];
+
+    it("applies it with no model call, reopens the bill moved up though it waited under the same bills, and holds the ones moved down in the person's words", async () => {
+      today("2026-10-17T09:00:00.000Z");
+      const agent = await agentPlan();
+      // The person puts the render farm first: with 150.03 USDC it is kept, and hosting and storage wait.
+      const personPlan = {
+        ...agent,
+        decisionMode: "person",
+        by: PERSON,
+        order: [
+          { invoiceId: OTHER_INVOICE_ID, keep: true, reason: "A one-off render can wait.", amount: 140 },
+          { invoiceId: HOSTING, keep: false, reason: "Hosting stops the business if unpaid.", amount: 45 },
+          { invoiceId: STORAGE, keep: false, reason: "Storage holds the client files.", amount: 45 },
+        ],
+      };
+      // Each bill's own decision: the model would pay; code holds the two the person's order makes wait.
+      await modelOrders(["B1", "B2", "B3"], {}, { action: "pay", reasoning: "Correct invoice, within the limit; paying.", confidence: 0.9 });
+      decideMock.mockClear();
+      const { fake, stage } = apFake({ book: afterPlan(), decisions: decidedUnder(agent.fingerprint), priorityPlans: [{ detail: personPlan }] });
+      await stage(150.03);
+
+      expect(priorityCalls()).toHaveLength(0);
+      expect(entries(fake.requests, "cash_priority_set")).toEqual([]);
+      const reopened = entries(fake.requests, "invoice_reopened");
+      expect(reopened.map((entry) => (entry.p_detail as Record<string, unknown>).invoiceId)).toEqual([OTHER_INVOICE_ID]);
+      expect(String(reopened[0].p_summary)).toContain("a person chose to pay it first");
+      for (const id of [HOSTING, STORAGE]) {
+        const held = ledger(fake.requests).find((entry) => (entry.p_detail as Record<string, unknown>).invoiceId === id && entry.p_action === "ap_hold");
+        expect(held?.p_detail).toMatchObject({ timingRule: "cash.priority", cashPriority: { waits: true, reason: null, byPerson: true }, execution: { heldBecause: "cash_shortfall" } });
+        const patch = invoicePatches(fake.requests).find((request) => request.params.get("id") === `eq.${id}` && request.params.get("status") !== "eq.held");
+        expect(String((patch?.body as Record<string, unknown>)?.agent_reasoning)).toContain("a person chose to pay others first. It waits for cash");
+      }
+    });
+
+    it("is applied to the cash there is, however far it reaches, while the bills are the same", async () => {
+      today("2026-10-17T09:00:00.000Z");
+      const agent = await agentPlan();
+      const personPlan = { ...agent, decisionMode: "person", by: PERSON, order: [{ invoiceId: OTHER_INVOICE_ID, keep: true }, { invoiceId: HOSTING, keep: false }, { invoiceId: STORAGE, keep: false }] };
+      decideMock.mockClear();
+      // 190 USDC now reaches the render farm and hosting: no model call, the person's order stands.
+      const { fake, stage } = apFake({ book: afterPlan(), decisions: decidedUnder(agent.fingerprint), priorityPlans: [{ detail: personPlan }] });
+      await stage(190);
+      expect(priorityCalls()).toHaveLength(0);
+      const storageHold = ledger(fake.requests).find((entry) => (entry.p_detail as Record<string, unknown>).invoiceId === STORAGE && entry.p_action === "ap_hold");
+      expect(storageHold?.p_detail).toMatchObject({ cashPriority: { waits: true, byPerson: true } });
+      expect(ledger(fake.requests).some((entry) => (entry.p_detail as Record<string, unknown>).invoiceId === HOSTING && entry.p_action === "ap_hold")).toBe(false);
+    });
+
+    it("is signed as the person's, checked against the bills now, and refused when they changed or a bill is missing", async () => {
+      today("2026-10-17T09:00:00.000Z");
+      const agent = await agentPlan();
+      const { fake } = apFake({ book: book(), decisions, priorityPlans: [{ detail: agent }] });
+      const set = (input: { fingerprint: string; order: string[] }) =>
+        runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
+          withOrg(ORG, () => setPersonOrder({ db: db(), now: new Date("2026-10-17T09:00:00.000Z"), actorId: PERSON, operatingBalance: 150.03, reserveBalance: 0, ...input }))
+        );
+      const made = await set({ fingerprint: agent.fingerprint as string, order: [OTHER_INVOICE_ID, HOSTING, STORAGE] });
+      expect(made.keep).toEqual([OTHER_INVOICE_ID]);
+      expect(made.wait).toEqual([HOSTING, STORAGE]);
+      const signed = entries(fake.requests, "cash_priority_set").at(-1);
+      expect(signed?.p_actor).toBe("human");
+      expect(signed?.p_detail).toMatchObject({
+        decisionMode: "person",
+        by: PERSON,
+        fingerprint: agent.fingerprint,
+        previousOrder: [HOSTING, STORAGE, OTHER_INVOICE_ID],
+        referenceOrder: [OTHER_INVOICE_ID, HOSTING, STORAGE],
+        agreedWithReference: true,
+        // Each bill keeps the reason last given for it under these bills.
+        order: [
+          { invoiceId: OTHER_INVOICE_ID, keep: true, reason: "A one-off render can wait." },
+          { invoiceId: HOSTING, keep: false, reason: "Hosting stops the business if unpaid." },
+          { invoiceId: STORAGE, keep: false, reason: "Storage holds the client files." },
+        ],
+      });
+
+      await expect(set({ fingerprint: "0".repeat(32), order: [OTHER_INVOICE_ID, HOSTING, STORAGE] })).rejects.toMatchObject({ code: "changed" });
+      await expect(set({ fingerprint: agent.fingerprint as string, order: [OTHER_INVOICE_ID, HOSTING] })).rejects.toMatchObject({ code: "order" });
+      await expect(set({ fingerprint: agent.fingerprint as string, order: [OTHER_INVOICE_ID, HOSTING, HOSTING] })).rejects.toMatchObject({ code: "order" });
+    });
   });
 });
