@@ -456,7 +456,7 @@ describe("the landing page's integrations", () => {
 describe("the landing page's answer to how bills come in", () => {
   it("names the bill list, Xero, QuickBooks Online, HubSpot and Pipedrive beside the form, PDF, email, Telegram and the API", async () => {
     const { landingFaq } = await import("@/components/landing/Faq");
-    const answer = landingFaq(true).find((entry) => entry.question === "Does it fit how we already work?")?.answer;
+    const answer = landingFaq(true).find((entry) => entry.question === "Does Vestiarion work with my existing tools?")?.answer;
     expect(typeof answer).toBe("string");
     for (const way of ["form", "PDF", "a bill list from your spreadsheet", "email", "Telegram", "the API", "Xero", "QuickBooks Online", "HubSpot", "Pipedrive"]) {
       expect(answer).toContain(way);
