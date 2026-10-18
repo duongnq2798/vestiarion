@@ -29,6 +29,9 @@ import { paidOutside, reportValue } from "@/lib/report-value";
 import { shareOptionWords } from "@/lib/shared-report";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { buildReport } from "@/lib/workspace-report";
+import { LiveSliceStart } from "@/components/vx/LiveSliceStart";
+import { utcDay } from "@/lib/copy";
+import { readLiveSlice, sliceVendors } from "@/lib/live-slice";
 import { readReportFacts } from "@/lib/workspace-report-read";
 import { shellStatus } from "@/lib/shell-status";
 
@@ -73,6 +76,22 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     const canShare = can(access.membership.role, "report.share");
     const canAnswer = can(access.membership.role, "org.administer");
     const report = buildReport(facts);
+    // In shadow mode, the live slice opened from here, or the vendors one would carry (live slice L1, L5). Best effort:
+    // a read that fails shows the steps alone.
+    const sliceRead = report.readiness
+      ? await Promise.all([readLiveSlice(db()), sliceVendors(db())]).catch((error: unknown) => {
+          console.error("report: live slice not read", error instanceof Error ? error.message : error);
+          return null;
+        })
+      : null;
+    const slice = sliceRead
+      ? {
+          opened: sliceRead[0]
+            ? { name: sliceRead[0].name, slug: sliceRead[0].slug, live: sliceRead[0].live, opened: utcDay(sliceRead[0].startedAt), vendors: sliceRead[0].vendors }
+            : null,
+          start: sliceRead[0] ? undefined : <LiveSliceStart orgSlug={slug} vendors={sliceRead[1]} canStart={canAnswer} />,
+        }
+      : undefined;
     // A bill the business recorded paying outside Vestiarion is not "not paid yet".
     const value = reportValue(report, baseline, paidOutside(actuals));
     const comparison = actuals.available ? compareActuals(facts, actuals.facts) : null;
@@ -139,6 +158,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
           <WorkspaceReport
             slug={slug}
             report={report}
+            slice={slice}
             value={
               <ReportValue
                 value={value}

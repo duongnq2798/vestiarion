@@ -1077,6 +1077,15 @@ disagrees with every decision.
 - **Before a live slice.** The workspace report (below) lists, while shadow mode is on, what we suggest before a slice
   of bills moves to Arc mainnet: verdicts on five decisions, none waiting, and no supplier paid at a mirror address.
   Suggestions only; it moves nothing.
+- **Start the live slice** (`docs/superpowers/specs/2026-10-18-live-slice-design.md`). Under those steps an owner
+  (`org.administer`, with Arc mainnet open to them) ticks vendors. `startLiveSlice` (`src/lib/live-slice.ts`) refuses
+  outside shadow mode, on Arc mainnet, when a slice was opened already, with no vendor or more than 25, then makes a
+  workspace on Arc mainnet with the usual `createWorkspace` (allowlist, three per person, starting limits) and carries
+  each vendor with a payment limit through `createCounterparty` with `via: "live_slice"`: an own address waits for a
+  person's confirmation there (`address_changed_at`), a mirror address is never carried. The shadow workspace signs
+  `live_slice_started { by, liveOrgId, liveSlug, vendors: [{ counterpartyId, name, address }], skipped }`;
+  `readLiveSlice` reads it back with whether the new workspace is live, and the report's last step links it and ticks
+  once it is. No bill, history or verdict moves, and no money. No migration.
 - **What the business really paid** (`docs/superpowers/specs/2026-10-10-actual-payments-design.md`). An owner or admin
   (`records.write`, as for adding an invoice) records how the business paid a payable outside Vestiarion: the day, the
   amount and currency as paid (the bill's own by default), the method (bank transfer, card, cash, other), a reference and

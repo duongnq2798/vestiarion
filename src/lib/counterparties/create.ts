@@ -21,7 +21,8 @@ export interface CreatedCounterparty {
  * Adds one counterparty: the row, its `create_counterparty` entry, and its first screening. The one way a counterparty
  * is added, from the console form, the write API (write API R2) or a bounty on a pull request (bounties B7). Runs inside the organization's scope.
  *
- * An address that arrives through the API is stored as a change waiting for a person (R3): `address_changed_at` is set
+ * An address that arrives through the API, or is carried from a shadow workspace to its live slice (live slice L3), is
+ * stored as a change waiting for a person (R3): `address_changed_at` is set
  * and nobody has confirmed it, so the agent holds every payment to it until an owner, admin or approver confirms it on
  * Counterparties, exactly as for an address a payee sent through a link. An address a person typed into the console is
  * theirs, and is not.
@@ -32,8 +33,10 @@ export interface CreatedCounterparty {
 export async function createCounterparty(input: {
   actorId: string | null;
   counterparty: CounterpartyInput;
-  via?: "api" | "github";
+  via?: "api" | "github" | "live_slice";
   apiKeyId?: string;
+  /** With `via: "live_slice"`: the shadow workspace and the vendor it was carried from (live slice L3, L4). */
+  liveSlice?: { fromOrgId: string; fromCounterpartyId: string };
   purchaseOrderRequired?: boolean;
   /** With `via: "github"`: the installation the comment came through, and the GitHub user who wrote it (bounties B11). */
   github?: { installationId: number; login: string };
@@ -50,7 +53,7 @@ export async function createCounterparty(input: {
     | { provider: "zohocrm"; ids: { organizationId: string; accountId: string | null } };
   now?: () => string;
 }): Promise<CreatedCounterparty> {
-  const { actorId, counterparty, via, apiKeyId, github, purchaseOrderRequired, external } = input;
+  const { actorId, counterparty, via, apiKeyId, github, purchaseOrderRequired, external, liveSlice } = input;
   const purchaseOrders = purchaseOrderRequired === undefined ? {} : { purchaseOrderRequired };
   // The workspace's own chain when none is given; one its network does not pay on is refused here too (network threading P3).
   const chain = chainOn(workspaceNetwork().id, counterparty.chain).id;
@@ -94,6 +97,7 @@ export async function createCounterparty(input: {
       ...purchaseOrders,
       ...(via === "api" ? { via, apiKeyId, addressNeedsConfirmation } : {}),
       ...(via === "github" ? { via, installationId: github?.installationId, login: github?.login, addressNeedsConfirmation } : {}),
+      ...(via === "live_slice" ? { via, fromOrgId: liveSlice?.fromOrgId, fromCounterpartyId: liveSlice?.fromCounterpartyId, addressNeedsConfirmation } : {}),
       ...(external ? { via: external.provider, [external.provider]: external.ids } : {}),
     },
   });

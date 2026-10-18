@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Start the live slice from shadow mode.** Once a business trusts the agent in shadow mode, an owner ticks the vendors
+  to pay in real USDC under the report's **Before a live slice** and opens a workspace on Arc mainnet with them: name,
+  payment limit, notice email and purchase orders carried, a vendor's own address waiting to be confirmed there, a
+  mirror address never carried. It carries no bill and moves no money; the new workspace goes live from its Settings,
+  and the report's last step links it and ticks once it is live. Signed as `live_slice_started`. No migration.
+  [Guide](https://www.vestiarion.xyz/docs/guides/report#start-the-live-slice).
+
 - **Change which bills the cash goes to first.** When the cash cannot cover every bill due soon, the **Payment plan** tab
   now shows the agent's order under **Which bill first**: each bill paid first or waiting, its reason, who set the order,
   and what the written policy would pay first. An owner, admin or approver moves bills up or down and saves; the agent

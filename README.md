@@ -349,7 +349,8 @@ run in production, with its ledger entries and transactions.
   workspace's USDC; a person sees what the vendor receives and approves every one (BlindPay's development instance).
 - **Shadow mode** — try the agent on real bills, paid in the business's own way, before it pays anything itself.
 - **Report** — what the agent did with a workspace's real bills: payments with their transactions, what it stopped
-  and why, how often a person stepped in, discounts measured from the transfers, and what is left before a live slice.
+  and why, how often a person stepped in, discounts measured from the transfers, and what is left before a live slice,
+  which an owner then opens on Arc mainnet with the vendors they choose, carried over without typing them in again.
   Agent vs what really happened lays each bill's decision beside what the business recorded paying outside
   Vestiarion, one bill at a time, from a CSV, or from a bank statement whose lines are matched to the bills they could
   have paid, each figure linked to its signed entry. Value keeps measured, estimated and not-counted figures apart, and

@@ -90,6 +90,16 @@ describe("createCounterparty", () => {
     expect(ledgerOf(fake.requests).p_detail).toMatchObject({ via: "api", apiKeyId: KEY_ID, addressNeedsConfirmation: true });
   });
 
+  it("stores an address carried from a shadow workspace to its live slice as a change waiting for a person (live slice L3, L4)", async () => {
+    const { fake, run } = workspace();
+    const FROM_ORG = "0b6c1c9e-4a4f-4a7e-9b1e-00000000f0f0";
+    const FROM_VENDOR = "0b6c1c9e-4a4f-4a7e-9b1e-00000000f0f1";
+    await run(() => createCounterparty({ actorId: USER, counterparty: input(), via: "live_slice", liveSlice: { fromOrgId: FROM_ORG, fromCounterpartyId: FROM_VENDOR }, now: () => NOW }));
+
+    expect(insertOf(fake.requests)).toMatchObject({ address: ADDRESS, address_changed_at: NOW });
+    expect(ledgerOf(fake.requests).p_detail).toMatchObject({ via: "live_slice", fromOrgId: FROM_ORG, fromCounterpartyId: FROM_VENDOR, addressNeedsConfirmation: true });
+  });
+
   it("marks nothing to confirm when the API gives no address", async () => {
     const { fake, run } = workspace();
     await run(() => createCounterparty({ actorId: USER, counterparty: input({ address: "" }), via: "api", apiKeyId: KEY_ID, now: () => NOW }));

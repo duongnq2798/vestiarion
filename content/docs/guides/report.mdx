@@ -65,7 +65,7 @@ In shadow mode, the report also lists what we suggest before you move a slice of
 1. **Give verdicts on at least** five decisions.
 2. **Leave no decision waiting for your verdict.**
 3. **Have each supplier's own Arc address.** A supplier paid at a mirror address needs its real address in a live workspace.
-4. **Open a workspace on** Arc mainnet for the slice: see [Run alongside how you pay today](/docs/guides/shadow-mode#before-a-live-slice).
+4. **Open a workspace on** Arc mainnet for the slice: **Start the live slice**, below the steps, opens it for you. Once it is open, the step reads **Go live with** the new workspace and links it, and it is ticked once that workspace is live.
 
 <Screenshot
   src="/docs/guides/report-readiness.png"
@@ -73,7 +73,19 @@ In shadow mode, the report also lists what we suggest before you move a slice of
   caption="What is left before a live slice, ticked from the workspace's own records."
 />
 
-Nothing on the report moves money, opens a workspace or changes a setting.
+### Start the live slice
+
+Under the steps, an owner ticks the vendors to pay in real USDC and chooses **Open the live slice on Arc mainnet**. Vestiarion opens a workspace on Arc mainnet for them, named after this one with "live slice" at the end, and adds each vendor with its name, payment limit, notice email and purchase-order setting, so nothing is typed in again. Each vendor says how its address goes over:
+
+- **Its own address, confirmed again there**: the vendor's own Arc address is carried, and waits for a person to confirm it in the new workspace before anything is paid to it.
+- **Mirror address: it adds its own there**: a mirror address is a wallet in this workspace on Arc testnet, so it is never carried. In the new workspace the vendor adds its own address, or makes a passkey wallet, from a payee link.
+- **No address yet: it adds its own there**, the same way.
+
+A vendor with no payment limit cannot go: set one on **Counterparties** first. Nothing else is carried: no bill, no history, no verdict, and no limit changed here, since the new workspace starts with the usual Arc mainnet limits. It is not live yet: choose **Open its Settings to go live** and take it live with your own or a passkey wallet, its spending limit and USDC, as in [Go live](/docs/guides/go-live#on-arc-mainnet). Then add there the bills you want paid for real. This workspace keeps running alongside it.
+
+Pay in USDC only where that is lawful for your business, and with a vendor that accepts USDC on Arc. Every other member reads **An owner can start the live slice.** A slice is opened once: the step then links it. The shadow workspace signs `live_slice_started`: see [Run alongside how you pay today](/docs/guides/shadow-mode#what-the-ledger-records).
+
+Apart from **Start the live slice**, nothing on the report moves money, opens a workspace or changes a setting.
 
 ## Agent vs what really happened
 
