@@ -1,7 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LiveProof, NetworkPanels } from "@/components/landing/LiveProof";
-import { LatestPanel, Proof } from "@/components/landing/Proof";
+import { FEATURED_PAYMENT, featuredTxUrl } from "@/components/landing/featured-proof";
+import { CustomerFigures, DecisionFigures, LatestLine, LatestPanel, PaymentFigures, Proof } from "@/components/landing/Proof";
+import { ARC_MAINNET } from "@/lib/network";
 import { landingProvenance, RESERVE_PROOF_HREF } from "@/components/landing/provenance";
 import { ProvenanceBar, ProvenanceList } from "@/components/vx/Provenance";
 import type { OpenNumbers, SideNumbers } from "@/lib/platform/open-numbers";
@@ -224,20 +226,87 @@ describe("the hero's live legs", () => {
     expect(text(markup)).toContain("Screening · OpenSanctions Live");
   });
 
-  it("sit in the landing's proof, with the Arc mainnet claim linked to the mainnet numbers (landing clarity P3)", () => {
-    // Every read still pending: the section's words and links are drawn, each read waits behind its own fallback.
+  it("sit in the landing's proof, which leads with one real payment on Arc mainnet and its explorer link", () => {
+    // Every read still pending: the section's words, the featured payment and the links are drawn, each read waits.
     const markup = renderToStaticMarkup(<Proof numbers={new Promise(() => {})} facts={new Promise(() => {})} />);
-    expect(markup).toMatch(/<a[^>]*href="\/open#mainnet"[^>]*>Live on Arc mainnet<\/a>/);
-    expect(text(markup)).toContain("Live capabilities · Live on Arc mainnet");
-    expect(text(markup)).toContain("Verify it yourself");
-    expect(text(markup)).toContain("Don't take our word for it.");
-    expect(text(markup)).toContain("Loading the agent's latest decision");
-    expect(text(markup)).toContain("Loading the open numbers");
+    const words = text(markup);
+    expect(words).toContain("Proof, not promises");
+    expect(words).toContain("Don't take our word for it.");
+    expect(words).toContain("Real agent decisions. Onchain payment receipts. Publicly verifiable records.");
+    expect(words).toContain("A real payment, with a verifiable trail.");
+    expect(markup).toMatch(new RegExp(`<a[^>]*href="${featuredTxUrl}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>Verify on Arc Explorer`));
+    expect(markup).toMatch(/<a[^>]*href="\/open"[^>]*>Explore the public proof/);
     expect(markup).toMatch(/<a[^>]*href="\/docs\/guides\/audit-export"/);
-    expect(text(renderToStaticMarkup(<ProvenanceBar legs={landingProvenance(base)} />))).toContain("See the latest payment on Arc mainnet");
+    expect(words).toContain("Loading customer activity");
+    expect(words).toContain("Loading the agent's latest decision");
+    expect(words).toContain("Loading the payments settled");
+  });
+
+  it("tell the featured payment as it happened: decided, held by code, approved by a second person, settled on Arc mainnet", () => {
+    expect(FEATURED_PAYMENT.network).toBe(ARC_MAINNET);
+    expect(featuredTxUrl).toBe(`https://explorer.arc.io/tx/${FEATURED_PAYMENT.txHash}`);
+    expect(FEATURED_PAYMENT.txHash).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(FEATURED_PAYMENT.steps.map((step) => step.kind)).toEqual(["Decision", "Rules in code", "Approval", "Settlement"]);
+    const words = text(renderToStaticMarkup(<Proof numbers={new Promise(() => {})} facts={new Promise(() => {})} />));
+    expect(words).toContain("Code held it before anything was sent.");
+    expect(words).toContain("counterparty.new_payee");
+    expect(words).toContain("A second member read the reasons and approved it.");
+    expect(words).toContain("Arc mainnet · Real USDC");
   });
 
   it("show the team's latest decision when there is one, and nothing when there is none", () => {
     expect(renderToStaticMarkup(<LatestPanel latest={null} />)).toBe("");
   });
 });
+
+describe("the proof's three groups of figures", () => {
+  it("count customers apart from the team, on Arc testnet, and say where customers stand on Arc mainnet", () => {
+    const words = text(renderToStaticMarkup(<CustomerFigures mainnet={MAINNET} testnet={TESTNET} />));
+    expect(words).toContain("Workspaces opened 5");
+    expect(words).toContain("3 live, on Arc testnet");
+    expect(words).toContain("Reached a first payment 2");
+    expect(words).toContain("Payments settled 2");
+    expect(words).toContain("22.00 test USDC paid");
+    expect(words).toContain("No customer on Arc mainnet yet");
+    // The team's 89 payments are never a customer figure.
+    expect(words).not.toContain("89");
+  });
+
+  it("give each network's decisions and refusals beside their sum, and customers' shadow-mode verdicts", () => {
+    const main = { ...MAINNET, sides: { ...MAINNET.sides, total: { ...MAINNET.sides.total, modelDecisions: 5, refusedByCode: 1 } } };
+    const test = { ...TESTNET, sides: { ...TESTNET.sides, total: { ...TESTNET.sides.total, modelDecisions: 1040, refusedByCode: 35 } } };
+    const words = text(renderToStaticMarkup(<DecisionFigures mainnet={main} testnet={test} />));
+    expect(words).toContain("Decisions made 1,045");
+    expect(words).toContain("1,040 on Arc testnet, 5 on Arc mainnet");
+    expect(words).toContain("Refused by code 36");
+    expect(words).toContain("Customers agreed 3 of 4");
+  });
+
+  it("keep Arc mainnet's real USDC apart from Arc testnet's test USDC, saying whose payments they are", () => {
+    const markup = renderToStaticMarkup(<PaymentFigures mainnet={MAINNET} testnet={TESTNET} />);
+    const words = text(markup);
+    expect(words).toContain("On Arc mainnet 1");
+    expect(words).toContain("all by our own workspaces, 0.10 real USDC");
+    expect(words).toContain("On Arc testnet 91");
+    expect(words).toContain("2 by customers, 89 by our team, 144.26 test USDC");
+    expect(markup).toContain(`href="https://explorer.arc.io/tx/${MAINNET_TX}"`);
+    expect(markup).toContain(`href="https://explorer.testnet.arc.io/tx/${TESTNET_TX}"`);
+  });
+
+  it("say when a network could not be read, and still show the other", () => {
+    expect(text(renderToStaticMarkup(<PaymentFigures mainnet={null} testnet={TESTNET} />))).toContain("The Arc mainnet numbers could not be read right now.");
+    expect(text(renderToStaticMarkup(<CustomerFigures mainnet={MAINNET} testnet={null} />))).toContain("The Arc testnet numbers could not be read right now.");
+  });
+
+  it("never say no customer agreed when the verdicts could not be read", () => {
+    const unread = { ...TESTNET, sides: { ...TESTNET.sides, customers: { ...TESTNET.sides.customers, verdictsGiven: null, verdictsAgreed: null } } };
+    const words = text(renderToStaticMarkup(<DecisionFigures mainnet={MAINNET} testnet={unread} />));
+    expect(words).toContain("not read just now");
+    expect(words).not.toContain("None yet");
+  });
+
+  it("show no latest decision line when there is none", () => {
+    expect(renderToStaticMarkup(<LatestLine latest={null} />)).toBe("");
+  });
+});
+

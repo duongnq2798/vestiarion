@@ -5,21 +5,14 @@ import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
 import { Integrations } from "@/components/landing/Integrations";
 import { Proof, type ProofFacts } from "@/components/landing/Proof";
-import { landingProvenance, latestOwnPaymentUrl } from "@/components/landing/provenance";
 import { Safety } from "@/components/landing/Safety";
 import { Steps } from "@/components/landing/Steps";
 import { UseCases } from "@/components/landing/UseCases";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
-import { chainModes } from "@/lib/circle";
-import { screeningMode } from "@/lib/compliance";
 import { currentConfig } from "@/lib/context";
-import { withFoundingOrg } from "@/lib/dal/scope";
 import { mainnetOpenToEveryone } from "@/lib/mainnet";
-import { ARC_MAINNET } from "@/lib/network";
 import { readLatestDecision } from "@/lib/platform/latest-decision";
-import { readAllTimeOrNull, type OpenNumbers } from "@/lib/platform/open-numbers";
-import { readRecentDecisions } from "@/lib/platform/recent-decisions";
-import { reserveRunsLive } from "@/lib/platform/usyc-reserve";
+import { readAllTimeOrNull } from "@/lib/platform/open-numbers";
 import { publicOrigin } from "@/lib/public-origin";
 import { X_HANDLE } from "@/lib/site-links";
 
@@ -65,48 +58,9 @@ function structuredData(): string {
   }).replace(/</g, "\\u003c");
 }
 
-/**
- * Whether any live workspace runs a real USYC reserve; false when that cannot be read, so the proof says simulated
- * rather than claiming a reserve it could not see.
- */
-async function reserveLiveAnywhere(): Promise<boolean> {
-  try {
-    return await reserveRunsLive();
-  } catch (error) {
-    console.error("landing: USYC reserve count not read", error instanceof Error ? error.message : error);
-    return false;
-  }
-}
-
-/**
- * What the proof shows besides the open numbers: the team's latest decision and the ones before it, and which legs run live, the payments leg
- * linking to the team's latest Arc mainnet payment (landing proof P2). The founding organization is named explicitly: a
- * sandbox organization's demo data must never inflate its "live" figures. A read that fails says a leg is not live,
- * never that it is.
- */
-async function proofFacts(mainnet: Promise<OpenNumbers | null>): Promise<ProofFacts> {
-  const modes = withFoundingOrg(async () => chainModes()).catch((error: unknown) => {
-    console.error("landing: chain modes not read", error instanceof Error ? error.message : error);
-    return { mode: "simulate", earnMode: "simulate" } as const;
-  });
-  const [current, latest, recent, reserveLive, mainnetNumbers] = await Promise.all([
-    modes,
-    readLatestDecision(),
-    readRecentDecisions(),
-    reserveLiveAnywhere(),
-    mainnet,
-  ]);
-  return {
-    latest,
-    recent,
-    provenance: landingProvenance({
-      paymentsLive: current.mode === "live",
-      foundingReserveLive: current.earnMode === "live",
-      reserveRunsLive: reserveLive,
-      screeningLive: screeningMode() === "live",
-      mainnetTxUrl: latestOwnPaymentUrl(mainnetNumbers, ARC_MAINNET),
-    }),
-  };
+/** What the proof shows besides the open numbers: the team's latest decision, its signature checked in the reader's browser. */
+async function proofFacts(): Promise<ProofFacts> {
+  return { latest: await readLatestDecision() };
 }
 
 /**
@@ -134,7 +88,7 @@ export default function LandingPage() {
         <Steps />
         <UseCases />
         <Safety />
-        <Proof numbers={numbers} facts={proofFacts(mainnet)} />
+        <Proof numbers={numbers} facts={proofFacts()} />
         <Integrations />
         <BuildOnIt />
         <Faq mainnetForEveryone={mainnetOpenToEveryone(currentConfig())} />

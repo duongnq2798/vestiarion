@@ -22,6 +22,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The landing page's proof leads with one real payment you can check.** "Don't take our word for it." now opens on
+  the first payment a team workspace made on Arc mainnet: the agent decided to pay a 0.10 USDC bill, code held it as a
+  first payment to a new address, a second member approved it, and it was paid through the owner's spending-limit
+  contract. Each step has its time, beside the transaction's facts and "Verify on Arc Explorer". The open numbers
+  follow in three groups, customer activity, the agent's decisions and payments settled, each network on its own, with
+  the agent's latest decision and its signature check under the decisions. The section is about a fifth shorter on a
+  wide screen, and the landing reads only the numbers and the latest decision for it.
+
 - **The landing page's questions, rewritten for the owner deciding whether to trust it.** They now ask what a business
   asks first: whether it can try Vestiarion without real money, who controls the money and approves payments, what pays
   on its own, what happens when a payment fails, whether it fits the tools it uses, whether it needs crypto, what it
