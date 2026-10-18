@@ -1,0 +1,35 @@
+Vestiarion connects to the tools a business already keeps its bills, deals, work and conversations in. Nothing needs replacing: bills, won deals and finished work come in from them, the agent decides under every check, and a few tools get the outcome back. This page sets every integration side by side: what it brings in, what it writes back and who allows that, and what it never does. Each tool's own guide says how to connect it.
+
+## Every integration
+
+An owner or admin connects each one from **Settings**. Connecting one changes nothing in the tool until it is allowed to write, and nothing in it is a reason to pay by itself.
+
+| Tool | What comes in | What goes back | How it connects |
+| --- | --- | --- | --- |
+| [Xero](/docs/guides/xero) | Bills approved in Xero with an amount due, and their suppliers, for you to review | Each payment made on Arc for a bill from Xero, booked against that bill once an owner, admin or accountant approves it | Reads and writes: every 15 minutes, or at once when you sync |
+| [QuickBooks Online](/docs/guides/quickbooks) | Bills with a balance left to pay, and their vendors, for you to review | Nothing: it writes nothing to QuickBooks | Read-only: every 15 minutes, and sooner when QuickBooks says a bill or vendor changed. Sandbox companies for now, until Intuit completes its assessment of the app |
+| [Zoho Books](/docs/guides/zohobooks) | Open, overdue and partly paid bills, and their vendors, for you to review; drafts stay out | Nothing | Read-only: every 15 minutes |
+| [HubSpot](/docs/guides/hubspot) | Won deals with their customers, to plan their collections | Once an owner or admin allows it: what each planned deal collected and still owes, in deal fields of its own | Reads, and writes once allowed: every 15 minutes |
+| [Pipedrive](/docs/guides/pipedrive) | Won deals with their organizations and persons, to plan their collections | Once allowed, and only for payments on Arc mainnet outside shadow mode: what each planned deal collected | Reads, and writes once allowed: when Pipedrive says a deal changed, and every 15 minutes |
+| [Zoho CRM](/docs/guides/zohocrm) | Won deals with their accounts and contacts, to plan their collections | Nothing | Read-only: every 15 minutes |
+| [Asana](/docs/guides/asana) | The task a contractor's milestone is linked to: whether it is completed, and its deliverables | Nothing written to the task | Event-triggered: Asana's webhook on each linked task, read again within a minute |
+| [GitHub](/docs/guides/github) | Pull requests and their comments, on the repositories you choose | A comment on each pull request a milestone was paid for, with the amount, the network and the transaction | An app on your repositories |
+| [Slack](/docs/guides/slack) | What members ask, and invoices an owner or admin adds from a message | The agent's decisions, in a channel you pick | A chat app: a minute after each decision |
+| [Telegram](/docs/guides/telegram) | What you ask, and invoices you send the bot | The agent's decisions, in your own chat | A chat bot: a minute after each decision |
+| [Invoice Capture for Chrome](/docs/guides/invoice-capture) | An invoice you select on a page or a file you choose, as a draft | Nothing | A browser extension: when you send the draft |
+
+## What no integration does
+
+None of them approves or pays. A bill approved in Xero or open in QuickBooks, a won deal, a completed Asana task, a merged pull request, a message or a captured invoice comes in to be decided: a person adds the bill or plans the deal, the agent decides each payment under every check, and people decide what the checks stop. See [How payments are controlled](/docs/guides/controls).
+
+The one place outside Vestiarion where a person decides a payment is Slack, when an owner allows it: a payment the agent stopped can be decided from its message, under the same checks, and on Arc mainnet it is approved in Vestiarion only. See [deciding from Slack](/docs/guides/slack).
+
+## What the payments run on
+
+Arc and Circle are not tools you connect: they are what every payment is made with. Payments are made on Arc, in USDC or EURC, sent through Circle's wallets, and each one links to its transaction on Arc's explorer. [Contracts on Arc](/docs/contracts) lists the contracts Vestiarion deploys and the Circle contracts it calls.
+
+Bank payouts to a vendor's bank account in Mexico go through [BlindPay](/docs/guides/bank-payouts), in pesos over SPEI, each one approved by a person. In this version they run on BlindPay's development instance, on Arc testnet, where no pesos reach a bank.
+
+## From your own system
+
+For tools that are not listed, send bills and milestones from your own system with the [REST API](/docs/get-started/quickstart) or the [TypeScript SDK](/docs/get-started/sdk), and get the agent's decisions on your [webhooks](/docs/webhooks). A bill that comes in this way gets every check one typed into the console gets.

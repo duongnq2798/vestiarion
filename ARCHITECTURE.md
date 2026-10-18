@@ -599,6 +599,11 @@ mainnet plan).
     rules in code and Arc mainnet's spending-limit contract, the signed ledger), then one past refusal step by step
     (`safety-example.ts`: ledger entry #3710 in a demo workspace in shadow mode on Arc testnet, refused by
     `workspace.outflow_budget`). A past decision's facts do not change, so they are written there rather than read.
+  - Integrations (`src/components/landing/Integrations.tsx`): Xero and QuickBooks Online first, each with what comes in
+    and what goes back; Xero's loop in four steps, labelled as the supported workflow rather than one payment; the nine
+    other tools in three rows of three, each linking to its guide; then Arc and Circle as what the payments run on. Each
+    sentence is held to the tool's guide by `tests/brand-marks.test.tsx`. "Explore all integrations" leads to
+    `/docs/guides/integrations`, one table of what each tool brings in, writes back and never does.
   - The technical showcase is `/how-it-decides`: the decision receipt replayed in its arch beside the live ledger's
     head, the decision loop step by step, and the claims with the receipts behind them.
   - The questions' answer about Arc mainnet says it is open to anyone only while `MAINNET_ALLOWLIST` holds `*`
