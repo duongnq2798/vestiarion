@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.9] - 2026-10-18
+
 ### Added
 
 - **The agent chooses which bills to pay first when the cash cannot cover them all.** Bills used to be paid in date
@@ -122,9 +124,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **A supplier whose counter the agent declined can be asked for more time again.** The agent's no to a counter was
   counted as the supplier declining, which kept the agent from asking that supplier about any other bill for 30 days.
   Only a request the supplier itself declines now waits.
+
 - **Leaving Bills & receivables no longer asks about a bill already added.** After New ▾ added a bill or an invoice,
   the form cleared itself, a select going back to its default counted as an edit, and the browser asked "Leave site?".
   The form now stays clean after a save until something is typed into it again.
+
 - **The agent no longer adds up the cash for a request for more time itself.** In a live test, the model skipped asking
   a supplier for more time because it compared what customers owe with the bill alone, though that and the cash on
   hand covered it two days after the due date. Code now works out when the bill is covered and gives the model that,
@@ -841,7 +845,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.8...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.9...HEAD
+[0.1.0-beta.9]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.9
 [0.1.0-beta.8]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.8
 [0.1.0-beta.7]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.7
 [0.1.0-beta.6]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.6
