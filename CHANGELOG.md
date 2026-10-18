@@ -74,11 +74,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   one list with thin dividers and a plus that turns to a minus, one open at a time; the heading stays in view beside them
   on a wide screen, with the docs and a way to reach the founder on GitHub.
 
-- **The landing page is lighter, and still once it has loaded.** Its links to the docs and guides now load their page
-  when you open one, not in the background as each scrolls past: those background loads were 570 KB of the 626 KB a
-  full scroll of the page fetched ahead. The call to action, sign-in and how the agent decides still load ahead. The
-  hero's two background tints no longer drift, so nothing on the page moves at rest, and the marker under "Who it's
-  for" and the developer tabs now glides to the tab you choose, or moves at once with reduced motion.
+- **The landing page is lighter, still at rest, and its sample bill checks itself.** Its links to the docs and guides
+  now load their page when you open one, not in the background as each scrolls past: those background loads were 570
+  KB of the 626 KB a full scroll of the page fetched ahead. The call to action, sign-in and how the agent decides still
+  load ahead. The hero's two background tints no longer drift, so nothing on the page moves at rest, and the marker
+  under "Who it's for" and the developer tabs now glides to the tab you choose, or moves at once with reduced motion.
+  The sample bill beside the headline now plays out once, the way the agent works through a bill: it reads the bill,
+  proposes paying it, ticks its four checks one by one and waits for your verdict, then the next bill is held by a rule
+  in code. It is done in 2.5 seconds and does not repeat; on a phone it plays when you scroll to it, and with reduced
+  motion each line fades in where it stands, in the same order. Under it, **See a real decision and its transaction**
+  leads to the real payment in the proof.
 
 ### Fixed
 

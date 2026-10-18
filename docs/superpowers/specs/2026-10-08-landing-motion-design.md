@@ -153,6 +153,48 @@ digits are even-width, and the count starts where the figure starts: 0 at both w
 (300 ms) instead of counting, since counting to 4 is four jumps, and under reduce every figure fades in where it
 stands, as M3 says.
 
+**The sample bill checks itself.** The headline promises that every bill is checked before it is paid, and the sample
+bill beside it (`hero/BillPreview.tsx`, still a server component) now shows it happen, once, the way the agent works
+through a bill, with the receipt's print. Its frame and title are there from the first frame, so it is never an empty
+box. Then, in ms from its start (`BILL_PRINT_AT` in `hero/scenarios.ts`): the payee prints at 120 and the amount at
+200; "Agent proposes: pay it" is stamped at 380 (from 1.12 times its size and transparent, over 300 ms, with no turn,
+unlike the receipt's seal); the reasoning's tint opens at 560 and its words print at 640; the four checks print at 820,
+960, 1100 and 1240, each tick drawing 140 ms after its row, short stroke first, then turning from grey to green;
+"Waiting for your verdict" prints at 1400, and its dot breathes twice from 1460 (a 3 px ring, 500 ms a breath); the
+question and its drawn buttons print at 1500; the next bill, Kestrel Design, at 1700; "Held for you" is stamped at
+1950; "Blocked by code, not by the model" prints at 2050, and its shield turns amber at 2150. A line prints as the
+receipt's do (`replay-print`: opacity, a wipe down and 3 px of travel, over 420 ms). The last part ends at 2,470 ms,
+and nothing repeats. That is 20 animations, of opacity, clip, scale, colour, the tick's stroke and the dot's ring only,
+so nothing in the layout moves. The H1, the lede, the calls to action and Invoice Capture do not move at all.
+
+**When it plays.** The print is CSS from the page's first paint, at every width, so it runs before the script and
+without it, and ends with the whole card. The card sits beside the headline from 1024 px; below that it is under the
+text, but in a narrow window on a laptop (520 px wide, about 900 px tall) its top is still in the first screen (from
+752 px down), so its first paint is the moment to play it there too, and a print only from 1024 px would have left it
+still. `PrintOnView` (`hero/PrintOnView.tsx`, a client wrapper of about 40 lines) holds the print for a reader who
+cannot see it: if the card's first printed line is below the viewport when the page hydrates (at 390 × 844 the card
+starts at 867 px), or the tab is not shown yet, it sets `data-print="armed"`, and every part waits unseen with its
+animation removed; once a quarter of the card is in view, with the tab shown, `go` starts the print from the
+beginning. A card the reader jumped past is set to `done` and shown whole, with nothing left to play out of sight. A
+card already on screen when the page hydrates is left alone, so nothing the reader has seen vanishes.
+
+**Under reduce** the card asks for calm motion (`data-calm-motion`): each part fades in where it stands
+(`replay-fade`), in the same order and at the same moments, the stamps without growing; the ticks appear with their
+rows and only turn from grey to green, the shield turns amber, and the dot does not breathe. Each part changes once
+and stays; nothing flashes.
+
+**The way to the real one.** Under the caption, a plain link, "See a real decision and its transaction"
+(`data-cta="hero-proof"`), leads to the proof's real payment, so the sample's next step is the record it stands for.
+
+Measured on the dev server in headless Edge (2026-10-19), with each animation of the card seeked to 0, 400, 1200 and
+2500 ms of the print, at 1440 × 900, 520 × 900 and 390 × 844, with motion and with reduce, and with JavaScript off: the
+card and the hero's text keep their boxes from the first frame to the last, layout shift is 0 at every size, the last
+animation ends at 2,470 ms, and none is running 3 s later. At 1440 px, the first look at the page found the print
+160 ms in, before the page had hydrated. At 390 px, scrolling by wheel, the card armed at load and played once a
+quarter of it was in view. With JavaScript off it prints from the first paint and is whole 3 s after load at all three
+sizes. No capture script in the repository photographs the hero: `docs:screenshots` and the marketplace images shoot
+`/docs-shots`, and the social image is drawn by `next/og`.
+
 ## Order
 
 M1 with M0 first (the reference's most visible technique, and the policy every later piece relies on), then M2, then
@@ -171,3 +213,9 @@ appears only inside `prefers-reduced-motion: no-preference`. `tests/ui-motion.te
 `tests/landing-count-up.test.tsx` run `Reveal` and `CountUp` in a DOM: hidden below the fold, shown when seen, shown at
 once when jumped past, a sequence numbered in order, and nothing hidden in the server's HTML.
 `tests/landing-prefetch.test.tsx` holds every docs link on the landing to `prefetch={false}`.
+`tests/landing-bill-print.test.tsx` holds the sample bill: every line in the server's HTML, with no inline opacity, no
+hidden attribute and no print state; `BILL_PRINT_AT` in the order of the work; each moving part's moment taken from it
+and its length read from landing-hero.css, all of them done by 2.5 s; the stamp with no turn and the dot breathing
+twice; the reduce rules fading and turning colour only; and `PrintOnView` in a DOM: a card on screen left alone, one
+below the fold armed and played at a quarter in view, one jumped past shown whole, one in a hidden tab played once the
+tab is shown.
