@@ -43,6 +43,7 @@ export function paymentNoticeEmail(input: {
     button: { label: "View the transaction", link: txUrl },
     note,
     origin,
+    loop: "payment_notice",
   });
 
   const text = [`Hi ${payeeName},`, "", lead, sent, confirmed, "", `View the transaction: ${txUrl}`, "", note].join("\n");

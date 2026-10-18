@@ -22,6 +22,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The pages and emails your counterparties get say who sent them.** The supplier payment status, payee link, receipt,
+  early-payment offer, customer discount, request for more time, pay link, customer statement and shared report pages
+  end with "Sent with Vestiarion, the AI agent for bills and payments." and a link to Vestiarion's site, and the
+  emails sent to suppliers, payees and customers link to it in their footer. The link is tagged with the kind of page
+  only, never the business, the person or an amount. Email footers now describe Vestiarion as the AI agent for bills
+  and payments. No migration.
+
 - **The landing page's developer section shows real code for each way in.** "Runs where you already work." now says
   it is for builders, what a key can do, that every check still applies and nothing it reaches approves or pays, and
   that each write is signed into the ledger. Beside it, the API, the SDK and MCP each show the snippet their guide

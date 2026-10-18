@@ -66,6 +66,7 @@ export function receivableReminderEmail(input: {
     button: { label: `Pay on ${label}`, link: payUrl },
     note,
     origin,
+    loop: "receivable_reminder",
   });
 
   const text = [`Hi ${clientName},`, "", lead, ...(part ? [part] : []), how, ...(last ? [last] : []), "", `Pay on ${label}: ${payUrl}`, "", note].join("\n");

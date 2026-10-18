@@ -33,7 +33,7 @@ The model then decides whether to offer and what discount to give, between 0.25%
 
 The agent emails the customer a fixed template, which the model writes none of: who offers what discount on which invoice, what they pay and by when instead of the full amount on the due date, and a one-time link. The pay-by day is 5 days after the offer, and always before the due date.
 
-The link opens a page with no account to make. It says, for example, "Pinecrest Studio offers 1.00% off invoice INV-2041: pay 297.00 USDC by Oct 22, 2026 instead of 300.00 USDC on Nov 16, 2026." with **Accept: pay less by paying early** and **No thanks**.
+The link opens a page with no account to make. It says, for example, "Pinecrest Studio offers 1.00% off invoice INV-2041: pay 297.00 USDC by Oct 22, 2026 instead of 300.00 USDC on Nov 16, 2026." with **Accept: pay less by paying early** and **No thanks**. At its foot, as on every page Vestiarion sends your counterparties, a line says it was sent with Vestiarion and links to Vestiarion's site, tagged with the kind of page only, never your business or theirs.
 
 - **Accept** says "Accepted. Pay the discounted amount through the invoice's pay link by the day shown." with **Open the pay link**. The ledger records `customer_discount_accepted`, and a cycle starts.
 - **No thanks** says "No discount, then. The invoice stays as it was, due on its due date." and records `customer_discount_declined`.

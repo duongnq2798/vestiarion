@@ -39,6 +39,7 @@ export function customerDiscountEmail(input: {
     button: { label: "See the offer", link: url },
     note,
     origin,
+    loop: "customer_discount",
   });
   const text = [`Hi ${customerName},`, "", lead, terms, nothing, "", `See the offer: ${url}`, "", note].join("\n");
   return { subject, html, text };

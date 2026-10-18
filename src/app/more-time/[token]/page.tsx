@@ -47,7 +47,7 @@ export default async function TermsPage({ params }: TermsPageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact />
+      <SiteFooter compact loop="more_time" />
     </div>
   );
 }

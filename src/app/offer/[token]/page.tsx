@@ -50,7 +50,7 @@ export default async function OfferPage({ params }: OfferPageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact />
+      <SiteFooter compact loop="early_offer" />
     </div>
   );
 }

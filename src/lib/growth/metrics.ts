@@ -1,4 +1,5 @@
 import { STAGES, type OrderedStage, type RevenueKind, type Stage } from "./fields";
+import { LOOP_CAMPAIGN } from "./loop";
 
 /**
  * The founder dashboard's figures, worked out from rows already read (src/lib/growth/read.ts). Pure, so every rule is
@@ -197,6 +198,8 @@ export interface GrowthMetrics {
   cashSpendUsd: number;
   founderHours: number;
   costPerActivated: { spendUsd: number; activated: number; value: number | null };
+  /** Customer workspaces whose first touch was a page or email a business sent a counterparty (counterparty loop C4). */
+  fromLoop: { workspaces: number; activated: number };
 }
 
 export interface MetricsInput {
@@ -224,6 +227,7 @@ export function growthMetrics({ leads, events, workspaces, spend, revenue, now }
   const currencies = [...new Set(received.map((row) => (row.currency ?? "").trim().toUpperCase() || "unknown currency"))].sort();
   const cashSpendUsd = sumMoney(spend.map((row) => row.usd));
   const activated = reachedCount("real_invoice_reviewed");
+  const fromLoop = customers.filter((workspace) => workspace.attribution?.utmCampaign === LOOP_CAMPAIGN);
 
   return {
     leadsSourced: funnel.sourced,
@@ -247,5 +251,6 @@ export function growthMetrics({ leads, events, workspaces, spend, revenue, now }
     cashSpendUsd,
     founderHours: Math.round(spend.reduce((total, row) => total + row.founder_hours * 10, 0)) / 10,
     costPerActivated: { spendUsd: cashSpendUsd, activated, value: activated > 0 ? Math.round((cashSpendUsd / activated) * 100) / 100 : null },
+    fromLoop: { workspaces: fromLoop.length, activated: fromLoop.filter((workspace) => workspace.firstDecisionAt !== null).length },
   };
 }

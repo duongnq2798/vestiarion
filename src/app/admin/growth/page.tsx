@@ -125,6 +125,11 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
           <RateTile label="7-day repeat rate" rate={metrics.repeat7d} of="customer workspaces with a first real bill 7 days old added a second within 7 days" />
           <RateTile label="Paid pilot conversion" rate={metrics.paidPilotConversion} of="leads in conversation reached a paid pilot" />
           <Tile
+            label="From counterparty pages"
+            value={metrics.fromLoop.workspaces}
+            detail={`Customer workspaces first reached from a page or email a business sent its supplier, payee or customer; ${metrics.fromLoop.activated} had a decision on a real bill.`}
+          />
+          <Tile
             label="Verified software revenue"
             value={metrics.revenue.length === 0 ? "None received" : metrics.revenue.map((row) => `${money(row.amount)} ${row.currency}`).join(" · ")}
             detail="Payments received only, per currency, never converted. Not payment volume."

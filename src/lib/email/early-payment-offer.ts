@@ -42,6 +42,7 @@ export function earlyPaymentOfferEmail(input: {
     button: { label: "See the offer", link: url },
     note,
     origin,
+    loop: "early_offer",
   });
   const text = [`Hi ${supplierName},`, "", ...(play ? [play, ""] : []), lead, terms, nothing, "", `See the offer: ${url}`, "", note].join("\n");
   return { subject, html, text };
@@ -89,6 +90,7 @@ export function counterAnswerEmail(input: {
     button: { label: "How early payment works", link: guide },
     note,
     origin,
+    loop: "early_offer",
   });
   const text = [`Hi ${supplierName},`, "", ...(input.sandbox ? [sandboxLine(supplierName), ""] : []), lead, after, "", `How early payment works: ${guide}`, "", note].join("\n");
   return { subject, html, text };

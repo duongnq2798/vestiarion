@@ -45,6 +45,7 @@ export function addressRequestEmail(input: {
     button: { label: "Add my address", link },
     note: expiry,
     origin,
+    loop: "address_request",
   });
 
   const text = [`Hi ${payeeName},`, "", lead, "", how, link, "", safe, "", expiry].join("\n");

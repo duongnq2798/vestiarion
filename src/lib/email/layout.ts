@@ -1,3 +1,4 @@
+import { LOOP_EMAIL_LINE, loopEmailUrl, type LoopEmail } from "../growth/loop";
 import { escapeHtml } from "./html";
 
 /**
@@ -6,6 +7,9 @@ import { escapeHtml } from "./html";
  * heading, paragraphs, one button, a note, and the link spelled out for
  * clients that drop the button. Plain strings are escaped here;
  * `paragraphsHtml` is HTML its caller has already escaped.
+ *
+ * `loop` names an email a business's counterparty gets (counterparty loop C1, C2): its footer then links to Vestiarion,
+ * tagged with that kind of email only. An email to a member has none.
  */
 export function actionEmailHtml(input: {
   title: string;
@@ -16,6 +20,7 @@ export function actionEmailHtml(input: {
   button: { label: string; link: string };
   note: string;
   origin: string;
+  loop?: LoopEmail;
 }): string {
   const font = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
   const mono = "'SFMono-Regular',Menlo,Consolas,monospace";
@@ -71,7 +76,12 @@ export function actionEmailHtml(input: {
         </tr>
         <tr>
           <td style="padding:28px 4px 0 4px;font-family:${font};font-size:12px;line-height:18px;color:#646c67;">
-            <p style="margin:0 0 6px 0;"><strong style="color:#4d5a53;">Vestiarion</strong> &middot; An autonomous treasury agent, settled in USDC on Arc.</p>
+            <p style="margin:0 0 6px 0;"><strong style="color:#4d5a53;">Vestiarion</strong> &middot; The AI agent for bills and payments, settled in USDC on Arc.</p>${
+              input.loop
+                ? `
+            <p style="margin:0;">${LOOP_EMAIL_LINE} <a href="${escapeHtml(loopEmailUrl(input.origin, input.loop))}" target="_blank" style="color:#3048c9;text-decoration:none;">${escapeHtml(input.origin.replace(/^https?:\/\/(www\.)?/, "").replace(/\/+$/, ""))}</a></p>`
+                : ""
+            }
           </td>
         </tr>
       </table>

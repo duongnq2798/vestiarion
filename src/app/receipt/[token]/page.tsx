@@ -50,7 +50,7 @@ export default async function ReceiptPage({ params }: ReceiptPageProps) {
           )}
         </div>
       </main>
-      <SiteFooter compact networkLabel={view ? homeChain(networkOfChain(view.facts.chain)).label : undefined} />
+      <SiteFooter compact loop="receipt" networkLabel={view ? homeChain(networkOfChain(view.facts.chain)).label : undefined} />
     </div>
   );
 }

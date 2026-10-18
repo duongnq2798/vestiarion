@@ -44,6 +44,7 @@ export function payeeLinkEmail(input: {
     button: { label: "Add my address", link },
     note: expiry,
     origin,
+    loop: "payee_link",
   });
 
   const text = [`Hi ${payeeName},`, "", lead, "", how, link, "", expiry].join("\n");
