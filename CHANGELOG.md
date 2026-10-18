@@ -22,6 +22,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The landing page's developer section shows real code for each way in.** "Runs where you already work." now says
+  it is for builders, what a key can do, that every check still applies and nothing it reaches approves or pays, and
+  that each write is signed into the ledger. Beside it, the API, the SDK and MCP each show the snippet their guide
+  gives, highlighted and no longer typed out, with a copy button and the guide that goes further. **Read developer
+  docs** opens the quickstart, and **View on GitHub** the repository.
+
 - **The landing page's integrations show what a connection does, not only that it exists.** "Keep your tools.
   Vestiarion connects to them." now leads with Xero and QuickBooks Online, each saying what comes in and what goes
   back: Xero books each payment against its bill once a person approves the entry, and QuickBooks Online is read-only,
