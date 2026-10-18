@@ -7,7 +7,6 @@ import { requireMembership } from "@/lib/auth/membership";
 import { can, canAssignRole, isOrgRole, ORG_ROLES } from "@/lib/auth/roles";
 import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
-import { isInviteVia } from "@/lib/invite-nudge";
 import { keyNamesForViewer } from "@/lib/member-keys";
 import { activeKeyNamesByCreator } from "@/lib/platform/api-keys";
 import { listMembers, listOpenInvitations } from "@/lib/platform/members";
@@ -26,9 +25,10 @@ export default async function MembersPage({
   searchParams: Promise<{ invite?: string | string[]; via?: string | string[] }>;
 }) {
   const { slug } = await params;
-  // From the weekly brief's link (invite nudge I4, I5): the role the invitation form starts on, and where it came from.
-  const { invite, via } = await searchParams;
   const access = await requireMembership(slug);
+  // From the weekly brief's link (invite nudge I4, I5): the role the invitation form starts on, and where it came from.
+  // Only the brief's link is taken here: the console's card marks its own invitations.
+  const { invite, via } = await searchParams;
   return inOrg(access, async () => {
     const { user, membership } = access;
     const canManage = can(membership.role, "members.manage");
@@ -59,7 +59,7 @@ export default async function MembersPage({
           assignable={assignable}
           keyNames={keyNamesForViewer({ members, viewerId: user.id, viewerRole: membership.role, byCreator: keysByCreator })}
           inviteRole={isOrgRole(invite) ? invite : undefined}
-          inviteVia={isInviteVia(via) ? via : undefined}
+          inviteVia={via === "weekly_brief" ? via : undefined}
         />
       </ProductShell>
     );

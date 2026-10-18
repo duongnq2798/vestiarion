@@ -9,7 +9,7 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { cashShortOf, readOpenCashOutlook } from "../agent/cash-alert";
 import { readShadowMode, type ShadowMode } from "../shadow-mode";
 import { inviteHref } from "../invite-nudge";
-import { listMembers } from "../platform/members";
+import { listMembers, listOpenInvitations } from "../platform/members";
 import { decidingRecipients, DIGEST_MAX_RECIPIENTS, DIGEST_SEND_DEADLINE_MS } from "./waiting";
 
 /**
@@ -168,8 +168,8 @@ export async function sendWeeklyBrief(options: { now?: number; only?: { userId: 
     const origin = siteOrigin();
     const base = `${origin}/o/${org.slug}`;
     // A workspace run by one person is asked to bring in a second (invite nudge I4). Best effort: unread, nothing is asked.
-    const alone = await listMembers(scopedOrgId)
-      .then((members) => members.length === 1)
+    const alone = await Promise.all([listMembers(scopedOrgId), listOpenInvitations(scopedOrgId)])
+      .then(([members, invitations]) => members.length === 1 && invitations.length === 0)
       .catch(() => false);
     const email = weeklyBriefEmail({
       orgName: org.name,

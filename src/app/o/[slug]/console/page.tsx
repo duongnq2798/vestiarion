@@ -418,16 +418,13 @@ export default async function DashboardPage({
     // the workspace is one person's with no invitation open and "Not now" was not chosen here. Best effort: a read that
     // fails shows no card.
     const canInvite = can(role, "members.manage");
-    const nudgeShown = canInvite
-      ? await Promise.all([listMembers(access.membership.orgId), listOpenInvitations(access.membership.orgId), cookies()])
-          .then(([members, invitations, jar]) =>
-            inviteNudgeShown({
-              canManage: true,
-              members: members.length,
-              openInvitations: invitations.length,
-              decidedCount: ownDecidedCount(invoices, counterparties),
-              putOff: jar.get(INVITE_LATER_COOKIE)?.value === "1",
-            })
+    const decidedCount = ownDecidedCount(invoices, counterparties);
+    const putOff = (await cookies()).get(INVITE_LATER_COOKIE)?.value === "1";
+    // The members are read only when nothing else rules the card out, so most loads of the page read nothing more.
+    const nudgeShown = inviteNudgeShown({ canManage: canInvite, members: 1, openInvitations: 0, decidedCount, putOff })
+      ? await Promise.all([listMembers(access.membership.orgId), listOpenInvitations(access.membership.orgId)])
+          .then(([members, invitations]) =>
+            inviteNudgeShown({ canManage: true, members: members.length, openInvitations: invitations.length, decidedCount, putOff })
           )
           .catch((error: unknown) => {
             console.error("console: members not read for the invite card", access.membership.orgId, error instanceof Error ? error.message : error);

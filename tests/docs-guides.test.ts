@@ -561,7 +561,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Bring in a second person", "src/components/vx/InviteNudge.tsx"],
     ["An approver", "src/components/vx/InviteNudge.tsx"],
     ["Your accountant", "src/components/vx/InviteNudge.tsx"],
-    ["With a second person, a first payment to an address you gave goes to them, not to you alone.", "src/components/vx/InviteNudge.tsx"],
+    ["Once an approver joins, a first payment to an address you gave needs their approval, not yours alone.", "src/components/vx/InviteNudge.tsx"],
     ["Not now", "src/components/vx/InviteNudge.tsx"],
     ["member_invited", "src/lib/platform/members.ts"],
     ["Treasury", APP_NAV],

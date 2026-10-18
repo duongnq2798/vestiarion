@@ -76,6 +76,10 @@ describe("Members, opened from the weekly brief", () => {
     assignable: ["owner", "admin", "approver", "accountant", "viewer"] as const,
   };
 
+  it("takes only the brief's mark from the address", () => {
+    expect(readFileSync("src/app/o/[slug]/members/page.tsx", "utf8")).toContain('inviteVia={via === "weekly_brief" ? via : undefined}');
+  });
+
   it("starts the form on the role and marks the invitation as the brief's", () => {
     const html = renderToStaticMarkup(<MembersPanel {...props} inviteRole="approver" inviteVia="weekly_brief" />);
     expect(html).toContain('name="via" value="weekly_brief"');

@@ -19,22 +19,25 @@ an owner has to think of opening.
   - and it was not put off in this browser in the last 30 days.
 - **I2. What it says.** "You run this workspace alone." Then two rows, each with its role's reason, an email field and
   **Invite**:
-  - **An approver**: decides the payments the agent holds. "With a second person, a first payment to an address you
-    gave goes to them, not to you alone."
+  - **An approver**: decides the payments the agent holds. "Once an approver joins, a first payment to an address you
+    gave needs their approval, not yours alone." (An accountant decides no payment: with one, the owner is still the
+    workspace's only approver.)
   - **Your accountant**: the accountant role's own summary: reads everything, books payments, decides no payment.
   - **Not now** hides the card in this browser for 30 days. A first-party cookie, `vx_invite_later`, is set on the
     workspace's own path; it holds no more than that.
   - Once an invitation is sent, the card says so where it stood: the email it went to, or the link to share when email
-    is not set up.
+    is not set up. Once shown, the card stays until the page is opened again, since the invitation's result arrives with
+    the page re-read in the same response.
+  - The console reads the members only when nothing else rules the card out.
 - **I3. The same invitation.** It goes through `inviteMember`, so the usual rules hold: the permission, the 50-a-day
   limit, the email, and the link shown once when email is not set up. Each person invited gets their own role's
   checklist.
-- **I4. The weekly brief.** When the workspace has one member, the brief ends with "You run {name} alone on Vestiarion.
+- **I4. The weekly brief.** When the workspace has one member and no open invitation, the brief ends with "You run {name} alone on Vestiarion.
   Invite your approver or your accountant:" and a link to Members, with the approver role already chosen.
 - **I5. Recorded.** `member_invited` gains `via`:
   - `console_nudge` for an invitation sent from the card;
   - `weekly_brief` for one sent from Members when it was opened through the brief's link.
-  - Members passes `via` only when it was opened that way. An invitation sent any other way has no `via`, as before.
+  - Members passes `via` only when it was opened that way, and only `weekly_brief`. An invitation sent any other way has no `via`, as before.
 - **I6. Gone.** The card goes once a second member joins or an invitation is open. It never shows to an approver, an
   accountant or a viewer.
 
