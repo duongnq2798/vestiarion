@@ -557,6 +557,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   // The workspace frame (workspace shell design S1-S5, S9).
   "guides/workspace": [
+    // Bring in a second person (invite nudge I1-I5).
+    ["Bring in a second person", "src/components/vx/InviteNudge.tsx"],
+    ["An approver", "src/components/vx/InviteNudge.tsx"],
+    ["Your accountant", "src/components/vx/InviteNudge.tsx"],
+    ["Once an approver joins, a first payment to an address you gave needs their approval, not yours alone.", "src/components/vx/InviteNudge.tsx"],
+    ["Not now", "src/components/vx/InviteNudge.tsx"],
+    ["member_invited", "src/lib/platform/members.ts"],
     ["Treasury", APP_NAV],
     ["Approvals", APP_NAV],
     ["Operations", APP_NAV],
