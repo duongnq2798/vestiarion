@@ -103,14 +103,21 @@ describe("the console's checklist", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "console", "page.tsx"), "utf8");
 
   it("computes the owner's only for people who may add records, and an approver's for an approver (onboarding by role R1, R2)", () => {
-    expect(page).toMatch(/const ownerChecklist = checklistRole === "owner" && can\(role, "records\.write"\)\s*\?\s*gettingStarted\(/);
+    expect(page).toContain('const ownerChecklistShown = checklistRole === "owner" && can(role, "records.write");');
+    expect(page).toMatch(/const ownerChecklist = ownerChecklistShown\s*\?\s*gettingStarted\(/);
     expect(page).toMatch(/checklistRole === "approver" && marks && acts\s*\?\s*approverChecklist\(/);
   });
 
   it("uses the rows the console already reads, shadow mode's included, with the limits and the dismissal read for the checklist", () => {
     // Where the treasury lives comes from the workspace's configuration, already in scope (wallet treasury W12).
     expect(page.replace(/\s+/g, " ")).toContain(
-      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, payableCount: ownPayableCount(invoices, counterparties), billCount: ownBillCount(invoices, counterparties), decidedCount: ownDecidedCount(invoices, counterparties), onchainPayments: dashboardStats.onchainTransfers, waitingCount: needsReview, network, walletHost, walletTreasuryAvailable: walletTreasuryAvailable(currentOrgConfig(), networkProfile(network)), shadow: shadow ? { currency: shadow.currency, verdictsGiven: (shadowSummary?.agreed ?? 0) + (shadowSummary?.disagreed ?? 0), billCount: ownBillCount(invoices, counterparties) } : null, limits: { confirmed: limitsSet || (marks?.limitsConfirmed ?? false), dailyUsdc: budget?.budget?.dailyUsdc ?? null, weeklyUsdc: budget?.budget?.weeklyUsdc ?? null }, dismissed: marks?.mine.has(\"dismissed_owner\") ?? false, })"
+      "gettingStarted({ mode: access.membership.mode, accounts: accountsRows, counterparties, payableCount: ownPayableCount(invoices, counterparties), billCount: ownBillCount(invoices, counterparties), decidedCount: ownDecidedCount(invoices, counterparties), onchainPayments: dashboardStats.onchainTransfers, waitingCount: needsReview, network, walletHost, walletTreasuryAvailable: walletTreasuryAvailable(currentOrgConfig(), networkProfile(network)), movableUsdc, shadow: shadow ? { currency: shadow.currency, verdictsGiven: (shadowSummary?.agreed ?? 0) + (shadowSummary?.disagreed ?? 0), billCount: ownBillCount(invoices, counterparties) } : null, limits: { confirmed: limitsSet || (marks?.limitsConfirmed ?? false), dailyUsdc: budget?.budget?.dailyUsdc ?? null, weeklyUsdc: budget?.budget?.weeklyUsdc ?? null }, dismissed: marks?.mine.has(\"dismissed_owner\") ?? false, })"
+    );
+  });
+
+  it("reads what the agent can move from the owner's own wallet only while the stored balance says nothing is there (own wallet fund step F2)", () => {
+    expect(page.replace(/\s+/g, " ")).toContain(
+      'const movableRead = ownerChecklistShown && walletHost === "external" && Boolean(ownOperating?.address) && Number(ownOperating?.balance ?? 0) <= 0 && !(access.membership.mode === "live" && dashboardStats.onchainTransfers > 0) ? agentMovableUsdc().catch('
     );
   });
 

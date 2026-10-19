@@ -24,8 +24,8 @@
 
 Vestiarion runs a small business's money cycle with one agent: it screens counterparties, pays vendors, releases
 contractor pay, collects receivables and keeps idle cash working. A model proposes each action; ordinary code decides
-whether it may happen; a person decides what code sends to them; and on Arc mainnet the money itself can only leave
-through a spending-limit contract the owner's own wallet deployed. Every outcome, refusals included, is signed into a
+whether it may happen; a person decides what code sends to them; and on Arc mainnet, when the treasury is the owner's
+own wallet, the money itself can only leave through a spending-limit contract that wallet deployed. Every outcome, refusals included, is signed into a
 hash-chained ledger anyone in the workspace can verify.
 
 **Watch it work:** [the demo](https://youtu.be/9Tgl1eMhlbw) (2:59) or [the full product tour](https://youtu.be/ds6cu4__1J4)
@@ -255,7 +255,7 @@ Each workspace lives on one network, chosen when it is created, and never moves.
 | **Money** | Testnet USDC and EURC from Circle's faucet | Real USDC, sent on Arc or brought from another chain through CCTP |
 | **Treasury** | Hosted wallet, or your own Circle account | Your own wallet or passkey wallet, or your own Circle account |
 | **Spending-limit contract** | Opt-in, deployed through Circle's Smart Contract Platform | Deployed by the owner's wallet on the own-wallet path |
-| **Also available** | USYC reserve, milestone escrow, EURC swaps, CCTP and Gateway payouts to other chains, x402, shadow mode | USDC on Arc only; features Arc mainnet lacks are not shown |
+| **Also available** | USYC reserve, milestone escrow, EURC swaps, CCTP and Gateway payouts to other chains, x402, shadow mode | USDC on Arc, and CCTP payouts to Base; features Arc mainnet lacks are not shown |
 
 ### Mainnet proof
 
@@ -272,6 +272,26 @@ spending-limit contract:
    [`0xcecef38e…dee6`](https://explorer.arc.io/tx/0xcecef38e3f751bc118f8f00cee5bb5344679e84f89123d679b986b47d7f1dee6).
 
 Contract: [`0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6`](https://explorer.arc.io/address/0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6).
+
+On **Oct 19, 2026** two of our own test workspaces, not customers, made the first payouts from Arc mainnet to Base.
+Each paid 1 USDC to a wallet on Base through CCTP V2, with Circle's Forwarding Service minting it there, the CCTP fee
+on top. In both, the agent read the live CCTP fee and chose to pay on the due date: the bill offered no early-payment
+discount, so keeping the cash until then cost nothing. Code then held it as a first payment to a new address, and the
+workspace's only approver approved it.
+
+- From a workspace's own Circle account
+  ([#453](https://github.com/duongnq2798/vestiarion/pull/453)): the burn on Arc,
+  [`0x89f66f7b…17e9`](https://explorer.arc.io/tx/0x89f66f7b618915e4e147c92dd175ba54a3fad8f8f5c689b616f3e552601617e9),
+  and the mint on Base,
+  [`0x33b0f0e5…f0ac`](https://basescan.org/tx/0x33b0f0e5ebd3422a999bfd31ad913033d6396b54a9817e9c7eba1621ee7df0ac).
+- From the owner's passkey wallet, through version 2 of the spending-limit contract: the agent's gas-only wallet
+  called `payAcrossChains`
+  ([#454](https://github.com/duongnq2798/vestiarion/pull/454)), which took the payment and its fee from the passkey
+  wallet and burned them on Arc,
+  [`0x7c3b4b6b…2a17`](https://explorer.arc.io/tx/0x7c3b4b6b2561ca3d3dc0cd15594d7e0e8a9fd6717113e996a14acb243e642a17),
+  and the mint on Base,
+  [`0x9ea0fe5a…150c`](https://basescan.org/tx/0x9ea0fe5aa1b57f799595a48f336d1e008971e9a1d067dac1707ce02ff656150c).
+
 Arc mainnet has no customer workspace yet; [Open numbers](https://www.vestiarion.xyz/open) shows the current count.
 
 ### Proof on Arc testnet
@@ -330,7 +350,7 @@ run in production, with its ledger entries and transactions.
   is set aside, paid and still available, what its deals collected, and its days in the payment plan. The agent never
   sets aside the same money twice, and holds what a budget cannot cover for a person.
 - **Treasury** — safe-to-spend today, cash outlook, USYC reserve with **Bring cash back** (Arc testnet).
-- **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet).
+- **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet), and CCTP payouts to Base from Arc mainnet.
 - **Supplier payment status** — a link per supplier to a page of its own bills: where each one stands, from received to
   paid, with each payment's transaction on Arc, and never why a bill is held.
 - **Early-payment offers** — the agent's later bills, each with the discount worth asking for paying today; an owner or
@@ -376,7 +396,7 @@ run in production, with its ledger entries and transactions.
 | **Smart Contract Platform** | Deploying the escrow and spending-limit contracts on Arc testnet |
 | **Gas Station** | Paying the agent wallet's gas on Arc testnet |
 | **USYC** | The yield-bearing reserve, through its Teller (Arc testnet) |
-| **CCTP V2** and **Gateway** | Paying payees on other chains; Gateway also settles x402 purchases (Arc testnet) |
+| **CCTP V2** and **Gateway** | Paying payees on other chains: through CCTP and Gateway on Arc testnet, where Gateway also settles x402 purchases, and through CCTP to Base from Arc mainnet |
 | **CCTP V2 Forwarding Service** | Adding USDC to a workspace's wallet on Arc from Base, Ethereum and other chains, minted by Circle so the wallet needs no gas (both networks) |
 | **Stablecoin Service** | EURC quotes and USDC→EURC swaps (Arc testnet) |
 | **Notifications** | Settlement and incoming-transfer webhooks, recorded within seconds |

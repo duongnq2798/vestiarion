@@ -264,6 +264,28 @@ describe("getting started with the owner's own wallet (wallet treasury W1, W12)"
     const funded = gettingStarted(input({ network: "arc-mainnet", walletHost: "external", accounts: [{ ...owned, balance: 5 }] })).steps;
     expect(funded.find((step) => step.id === "fund")?.done).toBe(true);
   });
+
+  // Seen live on Oct 19: right after Go live the stored balance was still 0, while Settings read 1.394558 USDC the agent
+  // could move (own wallet fund step F1, F3).
+  it("counts what the agent can move, read from the chain, over a stored balance no cycle has written yet", () => {
+    const live = (movableUsdc: number | null | undefined, balance = 0) =>
+      step(gettingStarted(input({ mode: "live", network: "arc-mainnet", walletHost: "external", accounts: [{ ...owned, balance }], movableUsdc })), "fund");
+    expect(live(undefined).done).toBe(false);
+    expect(live(undefined).body).toBe(
+      "Your wallet holds no USDC the agent can move, so the agent cannot pay. Add USDC on Arc mainnet to it, the workspace's treasury."
+    );
+    expect(live(1.394558).done).toBe(true);
+    // Not read: the stored balance counts, as before.
+    expect(live(null).done).toBe(false);
+    expect(live(null, 5).done).toBe(true);
+    // Read as nothing: the chain's answer wins over a stored figure.
+    expect(live(0, 5).done).toBe(false);
+  });
+
+  it("ignores a chain read for a workspace whose wallets Circle holds", () => {
+    const hosted = { kind: "operating", circle_wallet_id: "w-1", balance: 0, address: "0xb0b0" };
+    expect(step(gettingStarted(input({ mode: "live", network: "arc-mainnet", walletHost: "own", accounts: [hosted], movableUsdc: 3 })), "fund").done).toBe(false);
+  });
 });
 
 describe("gettingStarted in shadow mode", () => {

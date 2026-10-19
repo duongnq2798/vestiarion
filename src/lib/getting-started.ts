@@ -11,7 +11,10 @@
  * Funding reads the stored balance, never Circle (G2): the console makes no
  * Circle call for it. Its balance tile reads the chain and stores the result,
  * so the step ticks itself. It stays undone while the operating wallet holds
- * no USDC, live or not: going live does not fund the wallet.
+ * no USDC, live or not: going live does not fund the wallet. For the owner's
+ * own wallet, the console reads what the agent can move from the chain while
+ * the stored balance is 0, and that counts instead
+ * (docs/superpowers/specs/2026-10-19-own-wallet-fund-step-design.md).
  *
  * Sample rows (sample-data design §1) never tick a step: they show the agent
  * working, not the workspace set up.
@@ -92,6 +95,12 @@ export interface GettingStartedInput {
   walletHost?: WalletHost | null;
   /** Whether this deployment offers paying from the owner's own wallet on the network (W2). */
   walletTreasuryAvailable?: boolean;
+  /**
+   * What the agent can move from the owner's own wallet, read from the chain for this page (`agentMovableUsdc`): the
+   * lesser of its USDC and its approval to the contract. Counted instead of the stored balance when present, since only
+   * a cycle or the balance tile writes that (own wallet fund step F1, F3). Null or absent, the stored balance counts.
+   */
+  movableUsdc?: number | null;
   /**
    * Shadow mode, when it is on: the currency bills are entered in, the verdicts people gave, and every bill of a
    * counterparty a person added, paid or not (`ownBillCount`). Null or absent outside it.
@@ -193,7 +202,8 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
   // The owner's own wallet is the workspace's once its address is the operating account's (wallet treasury W12).
   const ownWallet = input.walletHost === "external";
   const hasWallet = Boolean(operating?.circle_wallet_id) || (ownWallet && Boolean(operating?.address));
-  const funded = (live || hasWallet) && (operating?.balance ?? 0) > 0;
+  const balance = ownWallet && typeof input.movableUsdc === "number" ? input.movableUsdc : (operating?.balance ?? 0);
+  const funded = (live || hasWallet) && balance > 0;
   const payees = input.counterparties.filter(
     (counterparty) => !counterparty.sample && counterparty.role !== "client" && Boolean(counterparty.address)
   );

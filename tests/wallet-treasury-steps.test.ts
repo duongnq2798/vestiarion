@@ -5,6 +5,7 @@ import { deploymentData } from "@/lib/treasury/verify";
 import { ARC_MAINNET } from "@/lib/network";
 import { spendingLimitTerms } from "@/lib/spending-limit/deployment";
 import {
+  agentMovableUsdc,
   chooseWalletTreasury,
   createAgentWallet,
   prepareAgentGas,
@@ -319,6 +320,28 @@ describe("walletTreasuryStatus", () => {
     const status = await database(enforced).inScope(() => walletTreasuryStatus(ORG, { chain: broken }));
     expect(status.step).toBe("gas");
     expect(status.agentGasUsdc).toBeNull();
+  });
+});
+
+describe("agentMovableUsdc (own wallet fund step F1, F2)", () => {
+  const enforced = () => world({ ...chosen, contract: agentRow({ address: CONTRACT, approve_tx_hash: APPROVE_TX, enforced: true }) });
+  const movable = (state: World, onChain: TreasuryChain) => database(state).inScope(() => agentMovableUsdc({ chain: onChain }));
+
+  it("answers the lesser of the wallet's USDC and its approval to the contract", async () => {
+    expect(await movable(enforced(), chain({ usdc: 1_394_558n, allowance: 2n ** 256n - 1n }))).toBe(1.394558);
+    expect(await movable(enforced(), chain({ usdc: 12_500_000n, allowance: 250_000n }))).toBe(0.25);
+    expect(await movable(enforced(), chain({ usdc: 12_500_000n, allowance: 0n }))).toBe(0);
+  });
+
+  it("answers 0 before the contract, and null with no wallet chosen or for another host", async () => {
+    expect(await movable(world({ ...chosen, contract: agentRow() }), chain({ usdc: 12_500_000n }))).toBe(0);
+    expect(await movable(world({ org: { wallet_host: "external" } }), chain({ usdc: 12_500_000n }))).toBeNull();
+    expect(await movable(world({ operating: { address: WALLET } }), chain({ usdc: 12_500_000n }))).toBeNull();
+  });
+
+  it("answers null when the chain cannot be read", async () => {
+    const broken = { ...chain({ usdc: 12_500_000n }), allowance: async () => { throw new Error("rpc down"); } } as TreasuryChain;
+    expect(await movable(enforced(), broken)).toBeNull();
   });
 });
 
