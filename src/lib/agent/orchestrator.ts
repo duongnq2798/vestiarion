@@ -1912,6 +1912,8 @@ async function decideApPayable(
           amount: amountToPay(amount, discount, now).amountPaid,
           currency,
           destinationChain: crossChain ? destination.id : null,
+          // What a version 2 contract is asked a payout to another chain with: the CCTP fee read above (spending limit v2 V12).
+          bridgeFee: crossChain && fee ? { maxFeeUnits: fee.maxFeeUnits, domain: fee.domain } : null,
         })
       : null;
 

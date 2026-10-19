@@ -5,6 +5,7 @@ import { SPENDING_LIMIT_ABI } from "@/lib/spending-limit/onchain";
 import type { TreasuryChain, TreasuryReceipt } from "@/lib/treasury/chain";
 import { deploymentData, verifyApproval, verifyDeployedAt, verifyDeployment, verifyWalletProof, walletProofMessage } from "@/lib/treasury/verify";
 import { ARC_MAINNET } from "@/lib/network";
+import { spendingLimitTerms, type SpendingLimitTerms } from "@/lib/spending-limit/deployment";
 
 /**
  * What the server checks before it trusts an owner's wallet, their contract and their approval (docs/superpowers/
@@ -76,6 +77,9 @@ function fakeChain(input: { receipts: Record<string, TreasuryReceipt | null>; de
 const receipt = (fields: Partial<TreasuryReceipt>): TreasuryReceipt => ({ status: "success", from: WALLET, to: null, contractAddress: CONTRACT, ...fields });
 // What the wallet deployed: Vestiarion's contract for this wallet and agent, its figures aside (storage, not code).
 const deployed = deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 1n, weeklyUnits: 1n });
+// Version 2 as Arc mainnet deploys it (spending limit v2 V3): its TokenMessengerV2, and Base alone.
+const TERMS = spendingLimitTerms(ARC_MAINNET) as SpendingLimitTerms;
+const deployedV2 = deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 1n, weeklyUnits: 1n, terms: TERMS });
 
 describe("verifyDeployment", () => {
   const check = (chain: TreasuryChain, agent: Hex = AGENT) => verifyDeployment(chain, { txHash: DEPLOY_TX, usdc: USDC, treasury: WALLET.toLowerCase() as Hex, agent });
@@ -111,9 +115,25 @@ describe("verifyDeployment", () => {
     expect(await check(fakeChain({ receipts: { [DEPLOY_TX]: receipt({ from: WALLET.toLowerCase() as Hex }) }, deployedWith: deployed }))).toEqual({
       state: "verified",
       contract: CONTRACT,
+      version: 1,
       dailyUnits: 50_000_000n,
       weeklyUnits: 150_000_000n,
     });
+  });
+
+  it("verifies version 2 with the network's terms, and refuses one wired to another messenger or other chains (spending limit v2 V8)", async () => {
+    const withTerms = (chain: TreasuryChain, terms = TERMS) =>
+      verifyDeployment(chain, { txHash: DEPLOY_TX, usdc: USDC, treasury: WALLET, agent: AGENT, terms });
+    const mined = { [DEPLOY_TX]: receipt({}) };
+    expect(await withTerms(fakeChain({ receipts: mined, deployedWith: deployedV2 }))).toMatchObject({ state: "verified", version: 2 });
+    // Version 1 is still recognised where version 2 is deployed now: a deployment sent before the change.
+    expect(await withTerms(fakeChain({ receipts: mined, deployedWith: deployed }))).toMatchObject({ state: "verified", version: 1 });
+    const elsewhere = deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 1n, weeklyUnits: 1n, terms: { ...TERMS, allowedDomains: TERMS.allowedDomains | 1n } });
+    expect(await withTerms(fakeChain({ receipts: mined, deployedWith: elsewhere }))).toMatchObject({ state: "refused" });
+    const otherMessenger = deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 1n, weeklyUnits: 1n, terms: { ...TERMS, tokenMessenger: STRANGER.address } });
+    expect(await withTerms(fakeChain({ receipts: mined, deployedWith: otherMessenger }))).toMatchObject({ state: "refused" });
+    // Without terms only version 1 is asked for: a version 2 there is not one this network deploys.
+    expect(await check(fakeChain({ receipts: mined, deployedWith: deployedV2 }))).toMatchObject({ state: "refused" });
   });
 });
 
@@ -157,6 +177,12 @@ describe("verifyDeployedAt (passkey treasury K7)", () => {
   });
 
   it("verifies Vestiarion's contract there, with its figures", async () => {
-    expect(await at(fakeChain({ receipts: {}, deployedWith: deployed }))).toEqual({ state: "verified", contract: CONTRACT, dailyUnits: 50_000_000n, weeklyUnits: 150_000_000n });
+    expect(await at(fakeChain({ receipts: {}, deployedWith: deployed }))).toEqual({ state: "verified", contract: CONTRACT, version: 1, dailyUnits: 50_000_000n, weeklyUnits: 150_000_000n });
+  });
+
+  it("asks only for the versions it is given: an upgrade's contract must be version 2", async () => {
+    const upgrade = (deployedWith: Hex) => verifyDeployedAt(fakeChain({ receipts: {}, deployedWith }), { contract: CONTRACT, usdc: USDC, treasury: WALLET, agent: AGENT, terms: TERMS, versions: [2] });
+    expect(await upgrade(deployedV2)).toMatchObject({ state: "verified", version: 2 });
+    expect(await upgrade(deployed)).toMatchObject({ state: "refused" });
   });
 });

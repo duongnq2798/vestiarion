@@ -216,6 +216,8 @@ const OWN_WALLET_DEPLOY: GoLiveStatus = {
     limitWeeklyUsdc: 150,
     approval: null,
     figuresRead: false,
+    version: 1,
+    upgrade: null,
   },
 };
 

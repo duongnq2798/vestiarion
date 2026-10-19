@@ -27,12 +27,13 @@ import { circleHttpStatus } from "./check";
 import { batchCalls, BatchNotSentError, SCA_EXECUTE_BATCH } from "./batch";
 import { stablecoinEntry, stablecoinOf } from "./stablecoins";
 import { PAYMENTS_OFF, PaymentsDisabledError } from "../payments-switch";
-import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, cctpOf, forwardedMint, type ContractCall } from "./cctp";
+import { BridgeFeeError, bridgeFee, bridgeStepKey, burnCalls, cctpOf, forwardedMint, toBytes32, type ContractCall } from "./cctp";
 import { burnIntent, burnIntentTypedData, estimateGateway, gatewaySalt, gatewayTransferStatus, submitGatewayTransfer, type GatewayTransferStatus } from "./gateway";
 import { chainOn, paidAcrossChains } from "../payee-chains";
 import { BANK_ID, bankPayoutResult, payToBank, readTokenBalance, reconcileBankPayout } from "./bank-payout";
 import { toBaseUnits } from "../fx/quote";
-import { PAY_SIGNATURE, usdcUnits } from "../spending-limit/onchain";
+import { PAY_ACROSS_CHAINS_SIGNATURE, PAY_SIGNATURE, usdcUnits } from "../spending-limit/onchain";
+import { feeCapUnits } from "../spending-limit/deployment";
 import type { ChainConfig } from "../config";
 import {
   fromUnits,
@@ -455,12 +456,16 @@ export class LiveProvider implements ChainProvider {
   /**
    * Pays through the workspace's spending limit contract (onchain spending limit R3, R12): `pay` from the agent's
    * own wallet, which holds no USDC, so the contract draws the amount from the operating wallet within the daily and
-   * 7-day figures, and pays each ref once. Only USDC on Arc goes this way; anything else sends nothing. A plain Circle
-   * transaction, so reconciliation reads it as it reads a transfer.
+   * 7-day figures, and pays each ref once. Only USDC goes this way; a payee on another chain only through a version 2
+   * contract, by `payAcrossChains` (spending limit v2 V11); anything else sends nothing. A plain Circle transaction, so
+   * reconciliation reads it as it reads a transfer.
    */
   private async spendingLimitPay(params: TransferParams, limit: SpendingLimitPayment): Promise<TransferResult> {
+    if ((params.token ?? "USDC") === "USDC" && paidAcrossChains(params.destinationChain) && limit.version === 2 && (params.route ?? "cctp") === "cctp" && !params.escrow) {
+      return this.spendingLimitPayAcrossChains(params, limit);
+    }
     if ((params.token ?? "USDC") !== "USDC" || paidAcrossChains(params.destinationChain) || params.route || params.escrow) {
-      throw new Error("Only USDC paid on Arc testnet goes through the spending limit contract; nothing was sent.");
+      throw new Error(`Only USDC paid on ${this.network.label} goes through this spending limit contract; nothing was sent.`);
     }
     const started = Date.now();
     const txId = await sendToCircle(
@@ -491,6 +496,46 @@ export class LiveProvider implements ChainProvider {
       providerState: transaction?.state ?? null,
       failureReason: transaction?.errorReason ?? null,
     };
+  }
+
+  /**
+   * Pays a payee on another chain through a version 2 spending limit contract (spending limit v2 V11): the fee read
+   * again from Iris just before the burn, then one `payAcrossChains` from the agent's wallet under the attempt's key.
+   * The contract draws the amount and the fee from the treasury, counts both against its figures and burns both with
+   * the forwarding hook, as the operating wallet's own bridge does (CCTP payouts X2); there is no approve to send. It is
+   * recorded as a bridge's burn, so it counts as paid on the mint and reconciliation reads it as one (X8, X9).
+   */
+  private async spendingLimitPayAcrossChains(params: TransferParams, limit: SpendingLimitPayment): Promise<TransferResult> {
+    const chain = chainOn(this.network.id, params.destinationChain);
+    const fee = await bridgeFee(this.network, chain.id, params.amount, { fetch: this.fetch });
+    if (params.maxBridgeFeeUsdc != null && fee.feeUsdc > params.maxBridgeFeeUsdc) {
+      throw new BridgeFeeError(
+        `The CCTP fee to ${chain.label}, ${fee.feeUsdc} USDC, is above the ${params.maxBridgeFeeUsdc} USDC this payment may pay; nothing was sent.`
+      );
+    }
+    // The contract refuses a fee past its own cap (V4): said here, before anything is sent.
+    const cap = feeCapUnits(usdcUnits(params.amount));
+    if (fee.maxFeeUnits > cap) {
+      throw new BridgeFeeError(
+        `The CCTP fee to ${chain.label}, ${fee.feeUsdc} USDC, is above the ${Number(cap) / 1_000_000} USDC the spending limit contract lets a payout of ${params.amount} USDC pay; nothing was sent.`
+      );
+    }
+    const started = Date.now();
+    const burnId = await sendToCircle(
+      this.client.createContractExecutionTransaction({
+        walletId: limit.agentWalletId,
+        contractAddress: limit.contract,
+        abiFunctionSignature: PAY_ACROSS_CHAINS_SIGNATURE,
+        abiParameters: [usdcUnits(params.amount).toString(), fee.maxFeeUnits.toString(), String(fee.domain), toBytes32(params.toAddress), limit.ref],
+        idempotencyKey: params.idempotencyKey,
+        refId: params.memo,
+        fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+      }),
+      "the payout through the spending limit contract"
+    );
+    const burned = await awaitSettlement(this.client, burnId);
+    const mint = burned.status === "confirmed" && burned.transaction?.txHash ? await this.awaitMint(burned.transaction.txHash) : null;
+    return this.bridgeResult(`${BURN_ID}${burnId}`, burned, { chain: this.network.circleBlockchain, providerMode: "live", destinationChain: chain.id, bridgeFeeUsdc: fee.feeUsdc }, mint, started);
   }
 
   /**

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { decodeFunctionData, erc20Abi, type Hex } from "viem";
 import type { TreasuryChain } from "@/lib/treasury/chain";
 import { deploymentData } from "@/lib/treasury/verify";
+import { ARC_MAINNET } from "@/lib/network";
+import { spendingLimitTerms } from "@/lib/spending-limit/deployment";
 import {
   chooseWalletTreasury,
   createAgentWallet,
@@ -30,6 +32,7 @@ import {
   NOW,
   ORG,
   ourCode,
+  ourCodeV2,
   OWNER_EMAIL,
   REDEPLOY_TX,
   SECOND_CONTRACT,
@@ -127,12 +130,15 @@ describe("deploying the contract from the owner's wallet", () => {
     const state = world({ ...chosen, contract: agentRow() });
     const { inScope } = database(state);
     const defaults = await inScope(() => prepareDeployment({ orgId: ORG, dailyUsdc: null, weeklyUsdc: null }));
-    expect(defaults).toEqual({ to: null, data: deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 50_000_000n, weeklyUnits: 150_000_000n }), value: "0", chainId: 5042 });
+    // Version 2 on Arc mainnet, which has CCTP (spending limit v2 V8).
+    const terms = spendingLimitTerms(ARC_MAINNET);
+    expect(terms).not.toBeNull();
+    expect(defaults).toEqual({ to: null, data: deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 50_000_000n, weeklyUnits: 150_000_000n, terms }), value: "0", chainId: 5042 });
     // An empty figure is the workspace's own, each on its own: leaving one empty never deploys it as "no limit".
     const dailyOnly = await inScope(() => prepareDeployment({ orgId: ORG, dailyUsdc: 20, weeklyUsdc: null }));
-    expect(dailyOnly.data).toBe(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 20_000_000n, weeklyUnits: 150_000_000n }));
+    expect(dailyOnly.data).toBe(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 20_000_000n, weeklyUnits: 150_000_000n, terms }));
     const weeklyOnly = await inScope(() => prepareDeployment({ orgId: ORG, dailyUsdc: null, weeklyUsdc: 1000 }));
-    expect(weeklyOnly.data).toBe(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 50_000_000n, weeklyUnits: 1_000_000_000n }));
+    expect(weeklyOnly.data).toBe(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 50_000_000n, weeklyUnits: 1_000_000_000n, terms }));
     // Refused: a figure of 0 or below, the 7-day figure below the daily one (the workspace's 150 below a typed 200), and a
     // figure too small to be one unit of USDC, which the contract would read as no limit.
     for (const [dailyUsdc, weeklyUsdc] of [[0, 10], [-1, null], [30, 20], [200, null], [0.0000001, null]] as const) {
@@ -158,10 +164,20 @@ describe("deploying the contract from the owner's wallet", () => {
     expect(state.contract).toMatchObject({ address: CONTRACT, deploy_tx_hash: DEPLOY_TX });
     expect(state.budget).toMatchObject({ daily_usdc: 20, weekly_usdc: 60 });
     expect(state.ledger.map((entry) => entry.action)).toEqual(["agent_budget_changed", "spending_limit_deployed"]);
-    expect(state.ledger[1].detail).toEqual({ by: ACTOR, contract: CONTRACT, txHash: DEPLOY_TX, dailyUsdc: 20, weeklyUsdc: 60 });
+    // A version 1 deployment, sent before version 2 was deployed here, is still recorded, as version 1.
+    expect(state.contract).toMatchObject({ version: 1 });
+    expect(state.ledger[1].detail).toEqual({ by: ACTOR, contract: CONTRACT, txHash: DEPLOY_TX, dailyUsdc: 20, weeklyUsdc: 60, version: 1 });
 
     expect(await inScope(() => recordDeployment({ orgId: ORG, actorId: ACTOR, txHash: REDEPLOY_TX }, { chain: onChain }))).toBe("verified");
     expect(state.contract).toMatchObject({ address: SECOND_CONTRACT, deploy_tx_hash: REDEPLOY_TX });
+  });
+
+  it("records a version 2 deployment as version 2 (spending limit v2 V8, V9)", async () => {
+    const state = world({ ...chosen, contract: agentRow() });
+    const onChain = chain({ receipts: { [DEPLOY_TX]: deployedAt(CONTRACT) }, code: { [CONTRACT.toLowerCase()]: ourCodeV2 } });
+    expect(await database(state).inScope(() => recordDeployment({ orgId: ORG, actorId: ACTOR, txHash: DEPLOY_TX }, { chain: onChain }))).toBe("verified");
+    expect(state.contract).toMatchObject({ address: CONTRACT, version: 2 });
+    expect(state.ledger.at(-1)?.detail).toMatchObject({ contract: CONTRACT, version: 2 });
   });
 
   it("refuses to replace an approved contract, and refuses a deployment that is not the workspace's", async () => {
@@ -261,6 +277,9 @@ describe("walletTreasuryStatus", () => {
       limitWeeklyUsdc: 150,
       approval: "unlimited",
       figuresRead: true,
+      version: 1,
+      // Version 1 on a network with CCTP: the upgrade to version 2 is offered (spending limit v2 V10).
+      upgrade: { state: "offer", next: null, previous: null },
     });
   });
 

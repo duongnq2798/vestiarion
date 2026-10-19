@@ -196,6 +196,8 @@ function apFake(options: {
   shadow?: string;
   /** The chain provider; a `Chain` that records transfers when absent. */
   chain?: Chain;
+  /** The CCTP fee to a payee's chain, and the Gateway quote, for a payout across chains; Iris and Gateway are never asked here. */
+  bridgeFee?: ApStageInput["bridgeFee"];
   /** The ledger's `ap_schedule` and `payment_rescheduled` entries, newest first (cash ahead A3); none when absent. */
   schedulings?: Array<{ action: string; detail: Record<string, unknown> }>;
   /** The latest AP decisions and payment plan moves on held and scheduled payables, newest first (cash priority P1). */
@@ -266,6 +268,7 @@ function apFake(options: {
           metrics,
           lines,
           onChainLimit: options.onChainLimit ?? onChainLimitGate({ read: async () => null }),
+          ...(options.bridgeFee ? { bridgeFee: options.bridgeFee, gatewayQuote: async () => null } : {}),
           reevaluations: options.reevaluations,
           ...(options.newPayee ? { newPayee: { load: async () => options.newPayee! } } : {}),
         })
@@ -1300,6 +1303,37 @@ describe("the AP stage and the spending limit enforced on Arc (onchain spending 
     expect(chain.transfers).toEqual([]);
     expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "held" });
     expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "workspace.onchain_limit_route" });
+  });
+
+  it("pays a vendor on another chain through a version 2 contract, asked first with the fee read (spending limit v2 V12)", async () => {
+    today("2026-10-03T09:00:00.000Z");
+    payNow();
+    const crossChainVerdict = vi.fn(async () => ({ state: "allowed" as const }));
+    const gate = onChainLimitGate({ read: async () => ({ ...LIMIT, version: 2 as const }), crossChainVerdict });
+    const onBase = payable({ amount: "300", ...plain, counterparties: counterparty({ address: "0x19801dAA2F1E5E5e707b7E57Ff664f3d27fFdd12", chain: "BASE-SEPOLIA" }) });
+    const bridgeFee = vi.fn(async () => ({ feeUsdc: 0.054, maxFeeUnits: 54_000n, domain: 6 }));
+    const { fake, chain, stage } = apFake({ book: [onBase], onChainLimit: gate, bridgeFee });
+
+    await stage();
+
+    expect(crossChainVerdict).toHaveBeenCalledWith(expect.objectContaining({ contract: LIMIT.contract, agent: LIMIT.agentAddress, amount: 300, maxFeeUnits: 54_000n, domain: 6 }));
+    expect(chain.transfers).toHaveLength(1);
+    expect(chain.transfers[0]).toMatchObject({ destinationChain: "BASE-SEPOLIA", route: "cctp", spendingLimit: { contract: LIMIT.contract, version: 2 } });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailBlocked: false, onChainLimit: { covered: true, verdict: { state: "allowed" } } });
+  });
+
+  it("holds a payout to another chain a version 2 contract would refuse, the fee counted, with its figures", async () => {
+    today("2026-10-03T09:00:00.000Z");
+    payNow();
+    const refused = { state: "refused" as const, error: "OverDailyLimit", spent: 4.9, amount: 300.054, limit: 5 };
+    const gate = onChainLimitGate({ read: async () => ({ ...LIMIT, version: 2 as const }), crossChainVerdict: async () => refused });
+    const onBase = payable({ amount: "300", ...plain, counterparties: counterparty({ chain: "BASE-SEPOLIA" }) });
+    const { fake, chain, stage } = apFake({ book: [onBase], onChainLimit: gate, bridgeFee: async () => ({ feeUsdc: 0.054, maxFeeUnits: 54_000n, domain: 6 }) });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "workspace.onchain_limit", onChainLimit: { covered: true, verdict: refused } });
   });
 
   it("lets the code's own limit speak first, and records the contract's verdict beside it", async () => {

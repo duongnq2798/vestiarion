@@ -10,7 +10,7 @@ import { ARC_TESTNET } from "@/lib/network";
  * figures and what it counts as paid. The node is a stand-in answering as an Ethereum JSON-RPC node does.
  */
 
-const abi = artifact.abi as Abi;
+const abi = artifact.v1.abi as Abi;
 const CONTRACT = "0x5aF3107A4000000000000000000000000000e5c0";
 const AGENT = "0x5aF3107A4000000000000000000000000000a9e7";
 const PAYEE = "0x840de234Bfc3F66fA380888A0a8204D9487D60d4";

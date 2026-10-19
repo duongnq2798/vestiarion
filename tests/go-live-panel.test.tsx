@@ -442,6 +442,7 @@ describe("GoLivePanel's props", () => {
       | keyof GoLiveStatus
       | keyof GoLiveStatus["wallets"][number]
       | keyof NonNullable<GoLiveStatus["walletTreasury"]>
+      | keyof NonNullable<NonNullable<GoLiveStatus["walletTreasury"]>["upgrade"]>
     >();
   });
 });
@@ -532,6 +533,8 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     limitWeeklyUsdc: 150,
     approval: null,
     figuresRead: false,
+    version: 1,
+    upgrade: null,
     ...overrides,
   });
 

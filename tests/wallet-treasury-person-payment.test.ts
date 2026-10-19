@@ -84,3 +84,45 @@ describe("personPaymentThroughContract", () => {
     expect(verdict).not.toHaveBeenCalled();
   });
 });
+
+describe("personPaymentThroughContract with a version 2 contract (spending limit v2 V13)", () => {
+  const acrossChains = { ...input, amount: 25, crossChain: true, destinationChain: "BASE", bridgeFeeUsdc: 0.054 };
+  beforeEach(() => {
+    enforced.mockResolvedValue({ contract: CONTRACT, agentWalletId: "agent-wallet", agentAddress: AGENT, version: 2 });
+  });
+
+  it("goes through payAcrossChains for a payee on Base, asked with the fee just read and Base's domain", async () => {
+    const crossChainVerdict = vi.fn(async () => ({ state: "allowed" as const }));
+    const verdict = vi.fn();
+    expect(await inScope(external, () => personPaymentThroughContract(acrossChains, { verdict, crossChainVerdict }))).toEqual({
+      contract: CONTRACT,
+      agentWalletId: "agent-wallet",
+      ref: spendingLimitRef("invoice", "inv-1"),
+      version: 2,
+    });
+    expect(crossChainVerdict).toHaveBeenCalledWith({ contract: CONTRACT, agent: AGENT, recipient: PAYEE, amount: 25, maxFeeUnits: 54_000n, domain: 6, ref: spendingLimitRef("invoice", "inv-1") });
+    expect(verdict).not.toHaveBeenCalled();
+  });
+
+  it("is refused in the contract's own figures, the fee counted, and past its fee cap, before anything is sent", async () => {
+    const overDay = vi.fn(async () => ({ state: "refused" as const, error: "OverDailyLimit", spent: 40, amount: 25.054, limit: 50 }));
+    await expect(inScope(external, () => personPaymentThroughContract(acrossChains, { crossChainVerdict: overDay }))).rejects.toThrow(
+      "Paying 25.054 USDC with its CCTP fee would pass the contract's daily limit of 50 USDC: 40 USDC paid so far."
+    );
+    const feeTooHigh = vi.fn(async () => ({ state: "refused" as const, error: "FeeTooHigh" }));
+    await expect(inScope(external, () => personPaymentThroughContract(acrossChains, { crossChainVerdict: feeTooHigh }))).rejects.toThrow(/above the most your wallet's contract lets a payout pay/);
+  });
+
+  it("is refused when the fee could not be read, and never asks the contract without it", async () => {
+    const crossChainVerdict = vi.fn();
+    await expect(inScope(external, () => personPaymentThroughContract({ ...acrossChains, bridgeFeeUsdc: null }, { crossChainVerdict }))).rejects.toThrow(/fee for this payout could not be read/);
+    expect(crossChainVerdict).not.toHaveBeenCalled();
+  });
+
+  it("keeps version 1's refusal of another chain, by name", async () => {
+    enforced.mockResolvedValue({ contract: CONTRACT, agentWalletId: "agent-wallet", agentAddress: AGENT, version: 1 });
+    await expect(inScope(external, () => personPaymentThroughContract(acrossChains, { crossChainVerdict: vi.fn() }))).rejects.toThrow(
+      "Only USDC on Arc mainnet can be paid from your wallet's contract."
+    );
+  });
+});

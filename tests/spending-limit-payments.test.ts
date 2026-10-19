@@ -46,7 +46,7 @@ class Store implements PaymentIntentStore, PaymentBatchStore {
       provider: input.provider, providerTxId: null, txHash: null, amount: input.amount, destination: input.destination, status: "created",
       attemptCount: 0, lastError: null, confirmedAt: null, chain: null, providerMode: "live", feeUsd: null, feeSource: null, settledInMs: null,
       executedAt: null, providerState: null, failureReason: null, transferAttempt: 1, previousAttempts: [], createdAt: "2026-10-03T00:00:00Z",
-      updatedAt: "2026-10-03T00:00:00Z", route: input.escrow ? "escrow" : null, batchKey: null, batchSize: null, batchSentAt: null,
+      updatedAt: "2026-10-03T00:00:00Z", route: input.escrow ? "escrow" : (input.route ?? null), batchKey: null, batchSize: null, batchSentAt: null,
     });
   }
   async get(key: string) {
@@ -139,5 +139,19 @@ describe("a payment through the spending limit contract", () => {
     expect(execution.status).toBe("failed");
     expect(execution.error).toMatch(/nothing was sent/);
     expect(transfers).toEqual([]);
+  });
+
+  it("sends a payout to another chain through a version 2 contract by CCTP only, and nothing through version 1 or Gateway (spending limit v2 V11)", async () => {
+    const v2 = (n: number, over: Partial<PaymentRequest> = {}) =>
+      request(n, { destinationChain: "BASE-SEPOLIA", spendingLimit: { ...LIMIT, ref: spendingLimitRef("milestone", `00000000-0000-4000-8000-00000000000${n}`), version: 2 }, ...over });
+    const { provider: chain, transfers } = provider();
+    expect((await executePayment(v2(5, { route: "cctp" }), { provider: chain, store: new Store() })).status).toBe("confirmed");
+    expect(transfers[0]).toMatchObject({ destinationChain: "BASE-SEPOLIA", spendingLimit: { version: 2 } });
+    for (const refused of [request(6, { destinationChain: "BASE-SEPOLIA" }), v2(7, { route: "gateway" })]) {
+      const execution = await executePayment(refused, { provider: chain, store: new Store() });
+      expect(execution.status).toBe("failed");
+      expect(execution.error).toMatch(/cannot go through the spending limit contract; nothing was sent/);
+    }
+    expect(transfers).toHaveLength(1);
   });
 });

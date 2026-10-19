@@ -203,7 +203,7 @@ describe("the artifacts the app deploys", () => {
 
   for (const version of ["v1", "v2"] as const) {
     it(`${version} is what its source compiles to, with the pinned settings`, () => {
-      const fresh = compileSolidity(...sources[version]);
+      const fresh = compileSolidity(sources[version][0], sources[version][1]);
       expect(artifacts[version].bytecode).toBe(fresh.bytecode);
       expect(artifacts[version].abi).toEqual(fresh.abi);
       expect(artifacts[version].settings.evmVersion).toBe("paris");

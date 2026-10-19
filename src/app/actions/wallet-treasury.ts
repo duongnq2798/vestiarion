@@ -26,6 +26,17 @@ import {
   type PreparedPasskeySetup,
   type PreparedTransaction,
 } from "@/lib/treasury/wallet-treasury";
+import {
+  preparePasskeyUpgrade,
+  prepareRevokePrevious,
+  prepareUpgradeApproval,
+  prepareUpgradeDeployment,
+  recordPasskeyUpgrade,
+  recordRevokePrevious,
+  recordUpgradeApproval,
+  recordUpgradeDeployment,
+  type PreparedPasskeyUpgrade,
+} from "@/lib/treasury/contract-upgrade";
 
 /**
  * The setup of a workspace that pays from its owner's own wallet (docs/superpowers/specs/2026-10-07-wallet-treasury-
@@ -201,9 +212,12 @@ export interface RecordActionResult extends WalletTreasuryActionResult {
   chainUnreadable?: true;
 }
 
-/** A recording step's refusal, saying when it was only a moment the chain could not be read. */
+/**
+ * A recording step's refusal, saying when it was only a moment the chain could not be read, or a payment in flight that
+ * an upgrade waits for (spending limit v2 V10): either way the page keeps what was sent and asks again.
+ */
 function recordFailed(action: string, error: unknown): RecordActionResult {
-  const unreadable = error instanceof WalletTreasuryError && error.code === "chain_unreadable";
+  const unreadable = error instanceof WalletTreasuryError && (error.code === "chain_unreadable" || error.code === "in_flight");
   return { ...failed(action, error), state: null, ...(unreadable ? { chainUnreadable: true as const } : {}) };
 }
 
@@ -298,6 +312,89 @@ export async function recordWalletControlAction(orgSlug: string, input: { txHash
       return { ok: true, message: "", state: recorded.state };
     } catch (error) {
       return recordFailed("recordWalletControlAction", error);
+    }
+  });
+}
+
+/**
+ * The upgrade to version 2 of the spending limit contract (docs/superpowers/specs/2026-10-19-spending-limit-v2-cross-chain-
+ * design.md V10), owner or admin, live or not: each `prepare…` builds what the treasury's wallet sends, each `record…`
+ * reads it back from the chain.
+ */
+type UpgradeStep = "deploy" | "approve" | "revoke";
+
+const PREPARE_UPGRADE: Record<UpgradeStep, (orgId: string, capUsdc: number | null) => Promise<PreparedTransaction>> = {
+  deploy: (orgId) => prepareUpgradeDeployment({ orgId }),
+  approve: (orgId, capUsdc) => prepareUpgradeApproval({ orgId, capUsdc }),
+  revoke: (orgId) => prepareRevokePrevious({ orgId }),
+};
+
+const RECORD_UPGRADE: Record<UpgradeStep, (input: { orgId: string; actorId: string; txHash: string }) => Promise<"pending" | "verified">> = {
+  deploy: (input) => recordUpgradeDeployment(input),
+  approve: (input) => recordUpgradeApproval(input),
+  revoke: (input) => recordRevokePrevious(input),
+};
+
+const isUpgradeStep = (step: unknown): step is UpgradeStep => step === "deploy" || step === "approve" || step === "revoke";
+
+/** One of the browser wallet's three upgrade transactions, for it to send (V10). */
+export async function prepareUpgradeAction(orgSlug: string, input: { step: UpgradeStep; capUsdc: number | null }): Promise<PreparedActionResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, transaction: null };
+  return inOrg(auth, async () => {
+    if (!isUpgradeStep(input.step)) return { ok: false, message: GENERIC, transaction: null };
+    try {
+      return { ok: true, message: "", transaction: await PREPARE_UPGRADE[input.step](auth.membership.orgId, input.capUsdc) };
+    } catch (error) {
+      return { ...failed("prepareUpgradeAction", error), transaction: null };
+    }
+  });
+}
+
+/** One of the browser wallet's upgrade transactions, recorded once the chain shows it (V10). */
+export async function recordUpgradeAction(orgSlug: string, input: { step: UpgradeStep; txHash: string }): Promise<RecordActionResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, state: null };
+  return inOrg(auth, async () => {
+    if (!isUpgradeStep(input.step)) return { ok: false, message: GENERIC, state: null };
+    try {
+      const state = await RECORD_UPGRADE[input.step]({ orgId: auth.membership.orgId, actorId: auth.user.id, txHash: input.txHash });
+      if (state === "verified") revalidateOrgPages();
+      return { ok: true, message: "", state };
+    } catch (error) {
+      return recordFailed("recordUpgradeAction", error);
+    }
+  });
+}
+
+export interface PreparedPasskeyUpgradeResult extends WalletTreasuryActionResult {
+  upgrade: PreparedPasskeyUpgrade | null;
+}
+
+/** A passkey wallet's upgrade, for the browser to check and its passkey to sign as one user operation (V10). */
+export async function preparePasskeyUpgradeAction(orgSlug: string, input: { capUsdc: number | null }): Promise<PreparedPasskeyUpgradeResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, upgrade: null };
+  return inOrg(auth, async () => {
+    try {
+      return { ok: true, message: "", upgrade: await preparePasskeyUpgrade({ orgId: auth.membership.orgId, capUsdc: input.capUsdc }) };
+    } catch (error) {
+      return { ...failed("preparePasskeyUpgradeAction", error), upgrade: null };
+    }
+  });
+}
+
+/** A passkey wallet's upgrade, recorded once the chain shows it (V10). */
+export async function recordPasskeyUpgradeAction(orgSlug: string, input: { txHash: string; contract: string }): Promise<RecordActionResult> {
+  const auth = await authorize(orgSlug, "org.administer");
+  if (!auth.ok) return { ok: false, message: auth.message, state: null };
+  return inOrg(auth, async () => {
+    try {
+      const state = await recordPasskeyUpgrade({ orgId: auth.membership.orgId, actorId: auth.user.id, ...input });
+      if (state === "verified") revalidateOrgPages();
+      return { ok: true, message: "", state };
+    } catch (error) {
+      return recordFailed("recordPasskeyUpgradeAction", error);
     }
   });
 }
