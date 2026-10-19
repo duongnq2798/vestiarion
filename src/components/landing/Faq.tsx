@@ -3,6 +3,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Heading } from "@/components/ui/Heading";
+import { Section } from "@/components/ui/Section";
 import { ISSUES_URL } from "@/lib/site-links";
 import { landingPrefetch } from "./prefetch";
 
@@ -116,14 +118,13 @@ function PlusMinus() {
 
 export function Faq({ mainnetForEveryone }: { mainnetForEveryone: boolean }) {
   return (
-    <section id="faq" aria-labelledby="faq-title" className="scroll-mt-16 border-b border-line bg-surface">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16">
+    <Section id="faq" tone="surface" aria-labelledby="faq-title" className="scroll-mt-16 border-b border-line" containerClassName="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:gap-16">
         {/* On a wide screen the heading stays in view beside the questions; below that it scrolls with the page. */}
         <div className="max-w-md lg:sticky lg:top-24 lg:self-start">
           <Eyebrow className="text-agent">Questions</Eyebrow>
-          <h2 id="faq-title" className="mt-3 text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] text-ink sm:text-4xl">
+          <Heading id="faq-title" className="mt-3 max-w-4xl text-balance">
             Everything you need to know.
-          </h2>
+          </Heading>
           <p className="mt-4 text-pretty text-[0.9375rem] leading-relaxed text-ink-2">
             From your first bill to your first payment, here&apos;s how Vestiarion works.
           </p>
@@ -163,7 +164,6 @@ export function Faq({ mainnetForEveryone }: { mainnetForEveryone: boolean }) {
             </Disclosure>
           ))}
         </div>
-      </div>
-    </section>
+    </Section>
   );
 }

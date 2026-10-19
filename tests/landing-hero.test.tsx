@@ -30,32 +30,33 @@ describe("the landing hero", () => {
   it("says what it is in plain words, and what it does with a bill (H1)", () => {
     const words = text(hero());
     expect(words).toContain("Your AI agent for bills and payments");
-    expect(words).toContain("Every bill checked before it's paid. Every decision on record.");
+    expect(words).toContain("Every bill. A clear way through.");
     expect(words).toContain(
       "Vestiarion's agent reviews each invoice from your contractors and suppliers and tells you whether it's ready to pay, should wait, or needs you, and why. Within limits you set, it pays the ready ones in USDC."
     );
-    expect(hero()).toMatch(/<h1 id="hero-title"/);
+    expect(hero()).toMatch(/<h1\b[^>]*id="hero-title"[^>]*>Your AI agent for bills and payments<\/h1>/);
   });
 
   it("leads into shadow mode, and says trying it needs no wallet or funds", () => {
     const markup = hero();
-    expect(markup).toMatch(new RegExp(`<a [^>]*href="${TRY_HREF.replace("?", "\\?")}"[^>]*>${TRY_LABEL}</a>`));
+    const start = markup.match(new RegExp(`<a [^>]*href="${TRY_HREF.replace("?", "\\?")}"[^>]*>[\\s\\S]*?</a>`))?.[0] ?? "";
+    expect(text(start)).toContain(TRY_LABEL);
     expect(TRY_HREF).toBe("/onboarding?shadow=1");
-    expect(markup).toMatch(/<a [^>]*href="#how-it-works"[^>]*>See how it works<\/a>/);
+    expect(markup).toMatch(/<a [^>]*href="#how-it-works"[^>]*>See how it works/);
     expect(markup).toMatch(/<a [^>]*href="\/docs\/guides\/shadow-mode"[^>]*>How shadow mode works/);
     const words = text(markup);
     expect(words).toContain("Start in shadow mode. Keep paying the way you do today while the agent decides on your real bills. No wallet or funds needed.");
     expect(words).toContain("Email sign-in, no password");
   });
 
-  it("keeps to three groups: the message, the call to action with what it asks of you, then Invoice Capture", () => {
+  it("keeps the message, call to action and entry requirements before Invoice Capture", () => {
     const words = text(hero());
-    const order = ["Every bill checked", TRY_LABEL, "Start in shadow mode.", "No wallet or funds needed.", "Capture invoices from Chrome"].map((part) =>
+    const order = ["Every bill. A clear way through.", TRY_LABEL, "Start in shadow mode.", "No wallet or funds needed.", "Capture invoices from Chrome"].map((part) =>
       words.indexOf(part)
     );
     expect(order.every((at) => at >= 0)).toBe(true);
     expect(order).toEqual([...order].sort((a, b) => a - b));
-    // Space sets the groups apart: no rule beside the shadow-mode note, none above Invoice Capture.
+    // The shadow-mode note remains plain prose, without a rule beside it.
     expect(hero()).not.toContain("border-l-2");
   });
 
@@ -114,52 +115,6 @@ describe("the landing hero", () => {
     }
     expect(chrome).not.toMatch(/#4285F4|#EA4335|#FBBC05|#34A853/i);
     expect(existsSync(path.join(process.cwd(), "public/badges/chrome-web-store.png"))).toBe(false);
-  });
-
-  it("shows two sample bills in the product's own words, labelled as samples (H2)", () => {
-    const words = text(hero());
-    for (const part of [
-      "Bills & receivables",
-      "Sample bills",
-      "Agent proposes: pay it",
-      "Waiting for your verdict",
-      "Agent's reasoning",
-      "Do you agree with the agent?",
-      "Agree and pay",
-      "Held for you",
-      "Blocked by code, not by the model. It is above the payee's payment limit.",
-      "Two sample bills in shadow mode. The labels, checks and outcomes are the product's own; the payees and amounts are examples.",
-    ]) {
-      expect(words).toContain(part);
-    }
-    // The sample's controls are drawn, not pressable, and a screen reader hears that they are a sample's.
-    expect(hero()).not.toMatch(/<button\b/);
-    expect(hero()).toMatch(/<div aria-hidden="true" class="[^"]*cursor-default[^"]*"><span[^>]*>Agree and pay<\/span>/);
-    expect(text(hero())).toContain("In the product: Agree and pay, or Disagree. Shown here as a sample.");
-    // An agent's proposal is not a payment: the first bill waits for a person.
-    expect(text(hero())).not.toContain("Agent: pay it");
-    // The drawn Agree and pay is quieter than the page's own call to action: never solid agent blue.
-    const drawn = hero().match(/<span class="([^"]*)">Agree and pay<\/span>/)?.[1].split(" ") ?? [];
-    expect(drawn).toContain("bg-agent-soft");
-    expect(drawn).not.toContain("bg-agent");
-  });
-
-  it("draws the two sample bills as one list: the open bill with its reasoning in focus, the held one as a status row", () => {
-    const markup = hero();
-    // One card: the held bill is the list's next row, not a second card tucked under the first, and the card's title
-    // is a plain line, not a ruled strip.
-    expect(markup).not.toContain("-mt-px");
-    expect(markup).not.toContain("rounded-b-2xl");
-    expect(markup).not.toContain("border-b border-line bg-ground/70");
-    // The agent's reasoning and its checks sit together on a tint, the figure's focus.
-    const reasoning = markup.match(/<div class="[^"]*bg-agent-soft\/30[^"]*">([\s\S]*?)<\/ul><\/div>/)?.[1] ?? "";
-    expect(text(reasoning)).toContain("Agent's reasoning The checkout flow was delivered");
-    expect(reasoning).toContain('aria-label="Checked before deciding"');
-    const words = text(markup);
-    expect(words).toContain("Northwind Dev Invoice 0412 · milestone 2 of 3 2,400.00 USDC");
-    // The held bill, smaller and on the ground's tone: who, which invoice, how much, then why it waits.
-    expect(words).toContain("Kestrel Design Invoice 0931 · 6,500.00 USDC Held for you Blocked by code, not by the model.");
-    expect(markup).toContain("border-t border-line bg-ground/50");
   });
 
   it("keeps the technical vocabulary out of the first screen", () => {

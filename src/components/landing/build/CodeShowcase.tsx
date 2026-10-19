@@ -13,8 +13,8 @@ import { SNIPPETS, type Snippet } from "./snippets";
 /** Each token's colour on the panel's dark ground, every one at least 4.5:1 against it. */
 const TOKEN: Record<TokenKind, string> = {
   plain: "text-ground/90",
-  punctuation: "text-ground/70",
-  comment: "text-ground/60",
+  punctuation: "text-on-agent-muted",
+  comment: "text-on-agent-muted",
   string: "text-proof-line",
   keyword: "text-agent-line",
   command: "text-held-line",
@@ -61,33 +61,33 @@ function Code({ snippet }: { snippet: Snippet }) {
 export function CodeShowcase() {
   const { root: glideRoot, onValueChange: glideFrom } = useTabGlide();
   return (
-    <div className="overflow-hidden rounded-2xl border border-ink/10 bg-ink text-ground shadow-raised">
+    <div className="focus-inverse overflow-hidden rounded-2xl border border-ink/10 bg-ink text-ground shadow-raised">
       <Tabs ref={glideRoot} defaultValue={SNIPPETS[0].id} onValueChange={glideFrom} className="gap-0">
         <div className="border-b border-ground/10 px-3 py-2.5 sm:px-4">
           <TabsList aria-label="Ways to build on Vestiarion" className="w-full border-ground/10 bg-ground/[0.06] sm:w-fit">
             {SNIPPETS.map((snippet) => (
-              <TabsTrigger key={snippet.id} value={snippet.id} className="min-w-16 text-ground/75 hover:text-ground data-[state=active]:text-ink">
+              <TabsTrigger key={snippet.id} value={snippet.id} className="min-w-16 text-on-agent-muted hover:text-on-agent data-[state=active]:bg-surface data-[state=active]:text-ink data-[state=active]:focus-default data-[state=active]:focus-visible:-outline-offset-4">
                 {snippet.tab}
               </TabsTrigger>
             ))}
           </TabsList>
         </div>
         {SNIPPETS.map((snippet) => (
-          <TabsContent key={snippet.id} value={snippet.id} className="min-w-0">
+          <TabsContent key={snippet.id} value={snippet.id} className="min-w-0 focus-visible:-outline-offset-4">
             <div className="flex min-h-11 items-center justify-between gap-3 border-b border-ground/10 pl-4 pr-2 sm:pl-5">
-              <p className="min-w-0 truncate font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-ground/65">{snippet.context}</p>
+              <p className="min-w-0 truncate font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.1em] text-on-agent-muted">{snippet.context}</p>
               <CopyButton
                 value={snippet.code}
                 label={`Copy the ${snippet.tab} example`}
                 aria-label={`Copy the ${snippet.tab} example`}
-                className="shrink-0 text-ground/75 hover:bg-ground/10 hover:text-ground active:bg-ground/15"
+                className="shrink-0 text-on-agent-muted hover:bg-ground/10 hover:text-ground active:bg-ground/15"
               >
                 Copy
               </CopyButton>
             </div>
             <Code snippet={snippet} />
             <div className="min-h-[6.5rem] border-t border-ground/10 px-4 py-3.5 sm:px-5">
-              <p className="text-pretty text-[0.8125rem] leading-relaxed text-ground/75">{snippet.note}</p>
+              <p className="text-pretty text-[0.8125rem] leading-relaxed text-on-agent-muted">{snippet.note}</p>
               <p className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
                 {snippet.links.map((link) => {
                   const external = link.href.startsWith("https://");

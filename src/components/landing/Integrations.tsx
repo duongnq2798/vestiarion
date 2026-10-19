@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Heading } from "@/components/ui/Heading";
+import { Section } from "@/components/ui/Section";
 import { Reveal } from "@/components/ui/Reveal";
 import { BrandMark, isWordmark, type Brand } from "@/components/vx/BrandMarks";
 import { GitHubMark } from "@/components/vx/SiteChrome";
@@ -350,15 +352,14 @@ function MoreTools({ children }: { children: ReactNode }) {
 
 export function Integrations() {
   return (
-    <section id="integrations" aria-labelledby="integrations-title" className="scroll-mt-16 border-b border-line">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+    <Section id="integrations" tone="ground" aria-labelledby="integrations-title" className="scroll-mt-16 border-b border-line">
         {/* The heading and what it means for the business side by side on a wide screen, one above the other below it. */}
         <Reveal className="grid gap-x-12 gap-y-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:items-end">
           <div>
             <Eyebrow className="text-agent">Integrations</Eyebrow>
-            <h2 id="integrations-title" className="mt-3 max-w-3xl text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] text-ink sm:text-5xl">
+            <Heading id="integrations-title" className="mt-3 max-w-4xl text-balance">
               Keep your tools. Vestiarion connects to them.
-            </h2>
+            </Heading>
           </div>
           <p className="max-w-2xl text-pretty text-[0.9375rem] leading-relaxed text-ink-2 sm:text-lg lg:pb-1">
             Your accounting, CRM and team tools stay in place. Bills, won deals and finished work come in from them, nothing is paid until it passes your rules,
@@ -488,7 +489,6 @@ export function Integrations() {
             is built on and connects to, not an endorsement.
           </p>
         </div>
-      </div>
-    </section>
+    </Section>
   );
 }

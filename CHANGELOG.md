@@ -12,6 +12,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Changed
+
+- The landing follows one bill through the agent's checks, rules and payment, with a clearer application view and
+  recorded evidence from the Vestiarion team's own workspace. Available ledger entries have signature checks and
+  payments link to the relevant Arc or Base explorer; missing evidence stays unknown. Migration
+  `0134_landing_team_journeys.sql` adds the read-only team evidence projection.
+
 ### Added
 
 - **A payee sends its invoice, and picks where it is paid, through its payee link.** Creating a payee link on

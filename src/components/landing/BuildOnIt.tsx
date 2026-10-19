@@ -2,6 +2,8 @@ import { ArrowUpRight, Braces, ScrollText, ShieldCheck, type LucideIcon } from "
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Heading } from "@/components/ui/Heading";
+import { Section } from "@/components/ui/Section";
 import { Reveal } from "@/components/ui/Reveal";
 import { GitHubMark } from "@/components/vx/SiteChrome";
 import { GITHUB_URL } from "@/lib/site-links";
@@ -46,14 +48,13 @@ const ALSO = [
  */
 export function BuildOnIt() {
   return (
-    <section id="build" aria-labelledby="build-title" className="scroll-mt-16 border-t border-line bg-surface/60">
-      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-center lg:gap-14">
+    <Section id="build" tone="surface" aria-labelledby="build-title" className="scroll-mt-16 border-b border-line" containerClassName="grid gap-10 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-center lg:gap-14">
         <Reveal>
           <Eyebrow className="text-agent">For developers</Eyebrow>
-          <h2 id="build-title" className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-ink sm:text-5xl">
+          <Heading id="build-title" className="mt-3 max-w-4xl text-balance">
             Runs where you already work.
-          </h2>
-          <p className="mt-4 max-w-md text-pretty text-[0.9375rem] leading-relaxed text-ink-2 md:max-w-2xl lg:max-w-md">
+          </Heading>
+          <p className="mt-4 max-w-md text-pretty text-lede text-ink-2 md:max-w-2xl lg:max-w-md">
             For builders: connect your own applications through the REST API, the TypeScript SDK or the MCP server, with the same payment controls as the
             console.
           </p>
@@ -105,7 +106,6 @@ export function BuildOnIt() {
         <Reveal delay={80} className="min-w-0">
           <CodeShowcase />
         </Reveal>
-      </div>
-    </section>
+    </Section>
   );
 }

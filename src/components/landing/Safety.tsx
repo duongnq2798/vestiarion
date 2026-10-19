@@ -1,8 +1,11 @@
 import { ArrowRight, ArrowUpRight, FileSignature, ShieldCheck, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/components/ui/cn";
+import { Heading } from "@/components/ui/Heading";
+import { Section } from "@/components/ui/Section";
 import { Reveal } from "@/components/ui/Reveal";
 import { utcMinute } from "@/lib/copy";
+import { GITHUB_URL } from "@/lib/site-links";
 import { SAFETY_EXAMPLE } from "./safety-example";
 
 /**
@@ -71,13 +74,13 @@ function Principle({ title, lede, icon: Icon, by, points }: PrincipleItem) {
         <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg border border-agent-line/35 bg-agent/15 text-agent-line">
           <Icon className="size-[1.125rem]" />
         </span>
-        <p className="font-mono text-[0.6875rem] uppercase leading-snug tracking-[0.08em] text-ground/60">{by}</p>
+        <p className="font-mono text-[0.6875rem] uppercase leading-snug tracking-[0.08em] text-on-agent-muted">{by}</p>
       </div>
       <h3 className="mt-4 text-xl font-semibold tracking-tight text-surface">{title}</h3>
-      <p className="mt-1.5 text-pretty text-[0.9375rem] leading-relaxed text-ground/80">{lede}</p>
+      <p className="mt-1.5 text-pretty text-[0.9375rem] leading-relaxed text-on-agent-muted">{lede}</p>
       <ul className="mt-4 grid gap-2.5 border-t border-ground/12 pt-4">
         {points.map((point) => (
-          <li key={point} className="flex gap-2.5 text-pretty text-sm leading-relaxed text-ground/75">
+          <li key={point} className="flex gap-2.5 text-pretty text-sm leading-relaxed text-on-agent-muted">
             <span aria-hidden className="mt-[0.5625rem] size-1 shrink-0 rounded-full bg-agent-line/70" />
             <span>{point}</span>
           </li>
@@ -96,8 +99,8 @@ function Example() {
         <h3 id="safety-example-title" className="text-xl font-semibold tracking-tight text-surface sm:text-2xl">
           What happens when a rule fails?
         </h3>
-        <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-ground/60">
-          {`A real decision · ${e.network.label} · shadow mode · our demo workspace · `}
+        <p className="font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-on-agent-muted">
+          {`A historical team decision · ${e.network.label} · shadow mode · Vestiarion team workspace · `}
           <time dateTime={e.at} className="normal-case tracking-normal">
             {utcMinute(e.at)}
           </time>
@@ -111,7 +114,7 @@ function Example() {
                 {index + 1} · {step.kind}
               </p>
               <p className="mt-2 text-pretty text-[0.9375rem] font-semibold leading-snug text-surface">{step.title}</p>
-              <p className="mt-1.5 text-pretty text-sm leading-relaxed text-ground/75">
+              <p className="mt-1.5 text-pretty text-sm leading-relaxed text-on-agent-muted">
                 {step.detail}
                 {"rule" in step && (
                   <>
@@ -130,8 +133,9 @@ function Example() {
           </li>
         ))}
       </ol>
-      <p className="mt-4 text-pretty text-sm leading-relaxed text-ground/65">
+      <p className="mt-4 text-pretty text-sm leading-relaxed text-on-agent-muted">
         {`Signed as ledger entry #${e.entry} in that workspace. The limit moves only when an owner or admin changes it, never because of what a bill or the model says.`}
+        {" "}<a href={`${GITHUB_URL}/blob/main/src/components/landing/safety-example.ts`} target="_blank" rel="noopener noreferrer" className="font-semibold text-agent-line underline underline-offset-4">View the historical case source<span className="sr-only"> (opens in a new tab)</span></a>
       </p>
     </section>
   );
@@ -139,19 +143,13 @@ function Example() {
 
 export function Safety() {
   return (
-    // focus-inverse: an agent-blue focus ring would barely show on the dark ground, so rings here are white.
-    <section id="safety" aria-labelledby="safety-title" className="focus-inverse relative scroll-mt-16 bg-ink text-ground">
-      <div aria-hidden className="ledger-grid-dark absolute inset-0" />
-      <div aria-hidden className="absolute inset-x-0 top-0 h-[32rem] overflow-hidden">
-        <div className="absolute -top-48 left-1/2 size-[40rem] -translate-x-1/2 rounded-full bg-agent/20 blur-3xl" />
-      </div>
-      <div className="relative mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+    <Section id="safety" tone="ink" aria-labelledby="safety-title" className="scroll-mt-16">
         <Reveal>
           <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-agent-line">Safety and control</p>
-          <h2 id="safety-title" className="mt-4 max-w-4xl text-balance text-4xl font-semibold leading-[1.02] tracking-[-0.045em] text-surface sm:text-6xl">
-            The AI suggests. <span className="font-serif font-normal italic text-agent-line">Your rules decide.</span>
-          </h2>
-          <p className="mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-ground/80">
+          <Heading id="safety-title" className="mt-4 max-w-4xl text-balance">
+            The AI suggests. <span className="font-serif font-normal italic text-agent-line">Your rules in code decide.</span>
+          </Heading>
+          <p className="mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-on-agent-muted">
             A model reads each bill and proposes what to do. Rules in code check every proposal before money moves, and can refuse it. In shadow mode nothing is
             paid until a person agrees; in a live workspace the agent pays on its own only what passes every check.
           </p>
@@ -176,7 +174,7 @@ export function Safety() {
           </Link>
           <Link
             href="/how-it-decides"
-            className="inline-flex min-h-11 items-center gap-1 font-medium text-ground/80 underline-offset-4 hover:text-agent-line hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 font-medium text-on-agent-muted underline-offset-4 hover:text-agent-line hover:underline"
           >
             How a decision is made, step by step
             <ArrowRight aria-hidden className="size-4" />
@@ -184,13 +182,12 @@ export function Safety() {
           <Link
             href="/docs/research/model-vs-policy"
             prefetch={false}
-            className="inline-flex min-h-11 items-center gap-1 font-medium text-ground/80 underline-offset-4 hover:text-agent-line hover:underline"
+            className="inline-flex min-h-11 items-center gap-1 font-medium text-on-agent-muted underline-offset-4 hover:text-agent-line hover:underline"
           >
             When the model and the policy disagree
             <ArrowRight aria-hidden className="size-4" />
           </Link>
         </div>
-      </div>
-    </section>
+    </Section>
   );
 }

@@ -6,6 +6,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Heading } from "@/components/ui/Heading";
+import { Section } from "@/components/ui/Section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { landingPrefetch } from "./prefetch";
 import { useTabGlide } from "./tab-glide";
@@ -218,13 +220,12 @@ function Decision({ decision }: { decision: UseCase["decision"] }) {
 export function UseCases() {
   const { root: glideRoot, onValueChange: glideFrom } = useTabGlide();
   return (
-    <section id="who-its-for" aria-labelledby="who-its-for-title" className="scroll-mt-16 border-b border-line">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+    <Section id="who-its-for" tone="ground" aria-labelledby="who-its-for-title" className="scroll-mt-16 border-b border-line">
         <div className="max-w-3xl">
           <Eyebrow className="text-agent">Who it&apos;s for</Eyebrow>
-          <h2 id="who-its-for-title" className="mt-3 text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] text-ink sm:text-5xl">
+          <Heading id="who-its-for-title" className="mt-3 max-w-4xl text-balance">
             For small businesses that pay people for their work.
-          </h2>
+          </Heading>
           <p className="mt-4 max-w-2xl text-pretty text-[0.9375rem] leading-relaxed text-ink-2 sm:text-lg">
             If you pay contractors, freelancers or suppliers and check each invoice by hand, the agent does the checking and shows its work.
           </p>
@@ -277,7 +278,6 @@ export function UseCases() {
           ))}
         </p>
         <p className="mt-2 text-xs text-ink-3">Payees and amounts are examples. The steps are what the agent does today.</p>
-      </div>
-    </section>
+    </Section>
   );
 }

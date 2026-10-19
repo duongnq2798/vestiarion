@@ -3,6 +3,7 @@ import path from "node:path";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { BillJourney } from "@/components/landing/BillJourney";
 import { BuildOnIt } from "@/components/landing/BuildOnIt";
 import { Faq } from "@/components/landing/Faq";
 import { FinalCta } from "@/components/landing/FinalCta";
@@ -143,6 +144,7 @@ function infiniteClasses(source: string): string[] {
 const SECTIONS: Record<string, () => ReactElement> = {
   SiteHeader: () => createElement(SiteHeader, { landing: true }),
   Hero: () => createElement(Hero),
+  BillJourney: () => createElement(BillJourney, { source: new Promise<never>(() => {}) }),
   Steps: () => createElement(Steps),
   UseCases: () => createElement(UseCases),
   Safety: () => createElement(Safety),
@@ -160,6 +162,8 @@ const utilityOf = (token: string) => token.replace(/^!/, "").split(":").at(-1)!;
 const STYLESHEETS = [
   "src/app/globals.css",
   "src/app/landing-hero.css",
+  "src/components/landing/Hero.module.css",
+  "src/components/landing/BillJourney.module.css",
   "node_modules/tailwindcss/theme.css",
   "node_modules/tw-animate-css/dist/tw-animate.css",
 ];

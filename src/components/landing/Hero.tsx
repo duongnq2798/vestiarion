@@ -1,69 +1,98 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, FileText, LayoutGrid, ListChecks, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { Suspense } from "react";
+import { EvidencePending } from "./EvidencePending";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Heading } from "@/components/ui/Heading";
+import { Section } from "@/components/ui/Section";
+import type { TeamJourneys } from "@/lib/team-journey";
 import { TRY_HREF, TRY_LABEL } from "./cta";
-import { BillPreview } from "./hero/BillPreview";
 import { InvoiceCapture } from "./hero/InvoiceCapture";
+import styles from "./Hero.module.css";
 
-/**
- * The hero (docs/superpowers/specs/2026-10-11-landing-clarity-design.md H1, H2;
- * docs/superpowers/specs/2026-10-16-landing-hero-capture-design.md): what Vestiarion is in a line, what it does with a
- * bill in a sentence, the one call to action with what trying it asks of you right under it, and below them
- * Invoice Capture, the Chrome extension, as a quiet second way in: three groups, set apart by space alone. Beside it, two sample bills as the product shows
- * them, in words a business owner reads without knowing what a chain is.
- */
-export function Hero() {
+const NO_JOURNEY = Promise.resolve(null);
+const amount = new Intl.NumberFormat("en-US", { maximumFractionDigits: 6 });
+const recordedTime = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "medium", timeZone: "UTC" });
+
+async function HeroPayment({ source }: { source: Promise<TeamJourneys | null> }) {
+  const journeys = await source.catch(() => null);
+  const base = journeys?.base?.payment.route === "cctp" && journeys.base.payment.destination.chain === "BASE" ? journeys.base : null;
+  const bill = journeys?.direct ?? base;
+  if (!bill) {
+    return <div className={styles.paymentState}><FileText aria-hidden size={28} /><p>This team&apos;s payment record is unavailable right now.</p><p className="mt-2 text-sm text-ink-2">The bill&apos;s recorded facts will appear here when they can be read.</p></div>;
+  }
+  const events = [
+    { key: "received", label: "Bill recorded", event: bill.received },
+    { key: "check", label: "Decision recorded", event: bill.check },
+    { key: "approval", label: "Approval recorded", event: bill.approval },
+  ];
   return (
-    <section aria-labelledby="hero-title" className="ledger-grid relative overflow-hidden border-b border-line bg-surface/30">
-      {/* Two still tints. Nothing on the landing moves at rest (landing motion M4): a drift this slight could not be
-          seen, and kept two large blurred layers painting for as long as the page was open. */}
-      <div aria-hidden className="absolute -left-36 top-8 size-[28rem] rounded-full bg-proof-soft/80 blur-3xl" />
-      <div aria-hidden className="absolute -right-28 bottom-0 size-[30rem] rounded-full bg-agent-soft/80 blur-3xl" />
-      {/* One column that may shrink below its content on a phone, so nothing in it pushes past the right edge. */}
-      <div className="relative mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-14 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-center lg:gap-12 lg:py-20 xl:grid-cols-[minmax(0,1fr)_29rem] xl:gap-16">
-        <div className="min-w-0">
-          <Eyebrow className="text-agent">Your AI agent for bills and payments</Eyebrow>
-          <h1
-            id="hero-title"
-            className="mt-4 text-balance text-[2.75rem] font-semibold leading-[0.98] tracking-[-0.05em] text-ink sm:text-6xl lg:text-[3.25rem] xl:text-[4rem]"
-          >
-            Every bill checked before it&apos;s paid.{" "}
-            <span className="block font-serif font-normal italic tracking-[-0.035em] text-agent">Every decision on record.</span>
-          </h1>
-          <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-ink-2 sm:text-xl lg:text-lg">
-            Vestiarion&apos;s agent reviews each invoice from your contractors and suppliers and tells you whether it&apos;s ready to pay, should
-            wait, or needs you, and why. Within limits you set, it pays the ready ones in USDC.
-          </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <Button asChild size="lg">
-              <Link href={TRY_HREF} data-cta="hero-try">
-                {TRY_LABEL}
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="secondary" className="bg-surface/80">
-              <a href="#how-it-works" data-cta="hero-how">
-                See how it works
-              </a>
-            </Button>
-          </div>
-          {/* What trying it asks of you, under the call to action: shadow mode, then what it does not need, each fact apart. */}
-          <p className="mt-6 max-w-xl text-pretty text-[0.9375rem] leading-relaxed text-ink-2">
-            <strong className="font-semibold text-ink">Start in shadow mode.</strong> Keep paying the way you do today while the agent decides on your
-            real bills.
-          </p>
-          <p className="mt-1.5 flex max-w-xl flex-wrap items-center gap-x-5 gap-y-1 text-[0.8125rem] text-ink-3">
-            <span>No wallet or funds needed.</span>
-            <span>Email sign-in, no password.</span>
-            <Link href="/docs/guides/shadow-mode" prefetch={false} className="inline-flex min-h-6 items-center gap-1 font-medium text-agent underline-offset-2 hover:underline">
-              How shadow mode works
-              <ArrowRight aria-hidden className="size-3.5" />
-            </Link>
-          </p>
-          <InvoiceCapture />
-        </div>
-        <BillPreview />
+    <div className={styles.payment}>
+      <div className={styles.paymentTitle}>
+        <div><Eyebrow>Recorded team bill</Eyebrow><h2 className="mt-2 text-xl font-semibold tracking-tight">Payment and decision record</h2></div>
+        <span className={styles.paid}><Check aria-hidden size={14} />Paid</span>
       </div>
-    </section>
+      <p className={styles.amount}>{amount.format(bill.amount)} <span>{bill.currency}</span></p>
+      <p className="mt-2 text-sm text-ink-2">Paid on {bill.payment.destination.chain === "BASE" ? "Base" : "Arc mainnet"}</p>
+      <dl className={styles.facts}>
+        {events.map(({ key, label, event }) => (
+          <div key={key}><dt>{label}</dt><dd>{event ? <a href={`#journey-entry-${key}-${event.seq}`} className="inline-flex min-h-6 items-center font-medium text-agent underline underline-offset-4">Entry #{event.seq}</a> : "Not available in this bill's record"}</dd></div>
+        ))}
+      </dl>
+      {bill.payment.confirmationRecordedAt && <p className="mt-4 text-xs leading-relaxed text-ink-2">Payment confirmation recorded<br /><time dateTime={bill.payment.confirmationRecordedAt}>{recordedTime.format(new Date(bill.payment.confirmationRecordedAt))} UTC</time></p>}
+      <div className="flex flex-wrap gap-x-5">
+        <a className={styles.transaction} href={bill.payment.source.url} target="_blank" rel="noopener noreferrer">{bill.payment.route === "cctp" ? "Verify the burn on Arc mainnet" : "Verify payment on Arc Explorer"}<ArrowUpRight aria-hidden size={16} /></a>
+        {bill.payment.destination.chain === "BASE" && <a className={styles.transaction} href={bill.payment.destination.url} target="_blank" rel="noopener noreferrer">Verify the mint on Base<ArrowUpRight aria-hidden size={16} /></a>}
+      </div>
+    </div>
+  );
+}
+
+/** The message and application frame render immediately; only the bill's evidence waits for its read. */
+export function Hero({ journey = NO_JOURNEY }: { journey?: Promise<TeamJourneys | null> } = {}) {
+  return (
+    <>
+      <Section tone="agent" aria-labelledby="hero-title" containerClassName={styles.container}>
+        <Eyebrow inverse>For small businesses with work to do</Eyebrow>
+        <Heading as="h1" size="positioning" id="hero-title" className="mt-5 max-w-[26ch]">Your AI agent for bills and payments</Heading>
+        <div className={styles.heroGrid}>
+          <div className="min-w-0">
+            <Heading as="p" size="display" className={styles.tagline}>Every bill. A clear way through.</Heading>
+            <p className="mt-7 max-w-xl text-lede text-on-agent-muted">Vestiarion&apos;s agent reviews each invoice from your contractors and suppliers and tells you whether it&apos;s ready to pay, should wait, or needs you, and why. Within limits you set, it pays the ready ones in USDC.</p>
+            <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4">
+              <Button asChild size="lg" variant="inverse"><Link href={TRY_HREF} data-cta="hero-try">{TRY_LABEL}<ArrowUpRight aria-hidden /></Link></Button>
+              <a href="#how-it-works" data-cta="hero-how" className="inline-flex min-h-11 items-center gap-2 text-ui font-semibold underline underline-offset-4">See how it works<ArrowDownRight aria-hidden size={18} /></a>
+            </div>
+            <p className="mt-6 max-w-xl text-sm leading-relaxed text-on-agent-muted"><strong className="font-semibold text-on-agent">Start in shadow mode.</strong> Keep paying the way you do today while the agent decides on your real bills.</p>
+            <p className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-caption text-on-agent-muted"><span>No wallet or funds needed.</span><span>Email sign-in, no password.</span></p>
+            <Link href="/docs/guides/shadow-mode" prefetch={false} className="mt-3 inline-flex min-h-6 items-center gap-1 text-caption font-medium underline underline-offset-4">How shadow mode works<ArrowRight aria-hidden size={14} /></Link>
+          </div>
+          <figure className={`${styles.product} focus-default text-ink`} aria-labelledby="hero-product-caption">
+            <div className={styles.windowBar}><span>Vestiarion team workspace</span><span className="font-mono text-[0.625rem] uppercase tracking-wide">Read-only view</span></div>
+            <div className={styles.workspace}>
+              <aside className={styles.sidebar} aria-label="Workspace navigation preview">
+                <p className="text-lg font-semibold tracking-tight">V.</p>
+                <p className="mt-5 font-mono text-[0.625rem] uppercase tracking-wide text-ink-3">Workspace</p>
+                <ul className={styles.navigation}>
+                  <li><LayoutGrid aria-hidden size={15} /><span>Treasury</span></li>
+                  <li className={styles.current}><FileText aria-hidden size={15} /><span>Bills &amp; receivables</span></li>
+                  <li><ListChecks aria-hidden size={15} /><span>Decision record</span></li>
+                  <li><ShieldCheck aria-hidden size={15} /><span>Rules in code</span></li>
+                </ul>
+              </aside>
+              <div className="min-w-0">
+                <div className={styles.productHeading}>Bills &amp; receivables<span>Team payment</span></div>
+                <Suspense fallback={<EvidencePending className={styles.paymentState}><FileText aria-hidden size={28} /><p>Loading this team&apos;s payment record</p><p className="mt-2 text-sm text-ink-2">The product view stays here while its evidence is read.</p></EvidencePending>}><HeroPayment source={journey} /></Suspense>
+                <div className={styles.productAction}><a href="#bill-journey" className="inline-flex min-h-9 items-center gap-2 text-sm font-semibold text-agent underline underline-offset-4">View the bill&apos;s evidence<ArrowDownRight aria-hidden size={16} /></a></div>
+              </div>
+            </div>
+            <figcaption id="hero-product-caption" className={styles.productCaption}>An application view of a real team bill. Only available recorded facts are shown.</figcaption>
+          </figure>
+        </div>
+        <p className={styles.controlling}>The AI suggests.<span>Your rules in code decide.</span></p>
+      </Section>
+      <Section tone="surface" aria-label="Invoice Capture for Chrome" containerClassName="py-6 [&>div]:mt-0 [&>div]:max-w-none"><InvoiceCapture /></Section>
+    </>
   );
 }

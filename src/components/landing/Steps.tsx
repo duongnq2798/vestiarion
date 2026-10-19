@@ -2,6 +2,8 @@ import { Check, FileText, Inbox, Sheet } from "lucide-react";
 import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Heading } from "@/components/ui/Heading";
+import { Section } from "@/components/ui/Section";
 import { Reveal } from "@/components/ui/Reveal";
 
 /**
@@ -52,7 +54,7 @@ const STEPS: ReadonlyArray<{ title: string; body: string; picture: ReactNode }> 
     body: "In shadow mode you agree or disagree with each decision and keep paying as you do today. Once you trust it, it pays in USDC within the limits you set, and holds the rest for you.",
     picture: (
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="inline-flex h-7 items-center rounded-lg bg-agent px-2.5 font-semibold text-on-agent">Agree</span>
+        <span className="inline-flex h-7 items-center focus-inverse rounded-lg bg-agent px-2.5 font-semibold text-on-agent">Agree</span>
         <span className="inline-flex h-7 items-center rounded-lg border border-line-strong bg-surface px-2.5 font-medium text-ink">Disagree</span>
         <span className="inline-flex items-center gap-1 font-medium text-proof">
           <Check className="size-3.5" strokeWidth={3} />
@@ -65,14 +67,13 @@ const STEPS: ReadonlyArray<{ title: string; body: string; picture: ReactNode }> 
 
 export function Steps() {
   return (
-    <section id="how-it-works" aria-labelledby="how-it-works-title" className="scroll-mt-16 border-b border-line bg-surface">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+    <Section id="how-it-works" tone="surface" aria-labelledby="how-it-works-title" className="scroll-mt-16 border-b border-line">
         <Reveal>
           <div className="max-w-3xl">
             <Eyebrow className="text-agent">How it works</Eyebrow>
-            <h2 id="how-it-works-title" className="mt-3 text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] text-ink sm:text-5xl">
+            <Heading id="how-it-works-title" className="mt-3 max-w-4xl text-balance">
               Evaluate first. <span className="font-serif font-normal italic text-agent">Turn on payments later.</span>
-            </h2>
+            </Heading>
             <p className="mt-4 max-w-2xl text-pretty text-[0.9375rem] leading-relaxed text-ink-2 sm:text-lg">
               The first two steps need no wallet and no money. Most teams start in shadow mode, beside the way they pay today, and let the agent
               pay once its decisions match their own.
@@ -94,7 +95,6 @@ export function Steps() {
             ))}
           </ol>
         </Reveal>
-      </div>
-    </section>
+    </Section>
   );
 }
