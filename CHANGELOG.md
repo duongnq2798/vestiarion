@@ -29,6 +29,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **The landing page is lighter, still at rest, and its sample bill checks itself.** Its links to the docs and guides
+  now load their page when you open one, not in the background as each scrolls past: those background loads were 570
+  KB of the 626 KB a full scroll of the page fetched ahead. The call to action, sign-in and how the agent decides still
+  load ahead. The hero's two background tints no longer drift, so nothing on the page moves at rest, and the marker
+  under "Who it's for" and the developer tabs now glides to the tab you choose, or moves at once with reduced motion.
+  The sample bill beside the headline now plays out once, the way the agent works through a bill: it reads the bill,
+  ticks its four checks one by one, only then proposes paying it and waits for your verdict, and the next bill is held
+  by a rule in code. It is done in 2.5 seconds and does not repeat. Where the card sits below the text, on a phone or in a narrow
+  window, each line prints as you scroll to it, so its checks tick where you are looking, and with reduced motion each
+  line fades in where it stands, in the same order. Under it, **See a real decision and its transaction** leads to the
+  real payment in the proof.
+
 - **The pages and emails your counterparties get say who sent them.** The supplier payment status, payee link, receipt,
   early-payment offer, customer discount, request for more time, pay link, customer statement and shared report pages
   end with "Sent with Vestiarion, the AI agent for bills and payments." and a link to Vestiarion's site, and the
@@ -73,18 +85,6 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   costs and who sees its bills, each answered in a few sentences with the guide that goes further. The questions read as
   one list with thin dividers and a plus that turns to a minus, one open at a time; the heading stays in view beside them
   on a wide screen, with the docs and a way to reach the founder on GitHub.
-
-- **The landing page is lighter, still at rest, and its sample bill checks itself.** Its links to the docs and guides
-  now load their page when you open one, not in the background as each scrolls past: those background loads were 570
-  KB of the 626 KB a full scroll of the page fetched ahead. The call to action, sign-in and how the agent decides still
-  load ahead. The hero's two background tints no longer drift, so nothing on the page moves at rest, and the marker
-  under "Who it's for" and the developer tabs now glides to the tab you choose, or moves at once with reduced motion.
-  The sample bill beside the headline now plays out once, the way the agent works through a bill: it reads the bill,
-  ticks its four checks one by one, only then proposes paying it and waits for your verdict, and the next bill is held
-  by a rule in code. It is done in 2.5 seconds and does not repeat. Where the card sits below the text, on a phone or in a narrow
-  window, each line prints as you scroll to it, so its checks tick where you are looking, and with reduced motion each
-  line fades in where it stands, in the same order. Under it, **See a real decision and its transaction** leads to the
-  real payment in the proof.
 
 ### Fixed
 
