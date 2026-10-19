@@ -24,7 +24,7 @@ export function TableHeader({ className, ...props }: ComponentProps<"thead">) {
 }
 
 export function TableBody({ className, ...props }: ComponentProps<"tbody">) {
-  return <tbody className={cn("divide-y divide-line [&>tr]:transition-colors [&>tr]:duration-150 [&>tr]:ease-standard [&>tr:hover]:bg-raised/40", className)} {...props} />;
+  return <tbody className={cn("divide-y divide-line [&>tr]:transition-colors [&>tr]:duration-micro [&>tr]:ease-standard [&>tr:hover]:bg-raised/40", className)} {...props} />;
 }
 
 export function TableRow(props: ComponentProps<"tr">) {

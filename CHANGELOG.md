@@ -12,6 +12,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- Shared public typography and section spacing for the bill journey direction, with accessible blue and dark sections,
+  a flat card elevation and reusable headings. The existing app, email and docs palette and control sizes are preserved.
+
 ## [0.1.0-beta.11] - 2026-10-19
 
 ### Added

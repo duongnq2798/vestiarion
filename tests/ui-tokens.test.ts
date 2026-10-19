@@ -31,11 +31,15 @@ describe("design tokens shared with TypeScript", () => {
     expect(token(`ease-${name}`)).toBe(`cubic-bezier(${curve.join(", ")})`);
   });
 
+  it.each(Object.entries(MOTION.duration))("the %s duration matches its CSS token", (name, seconds) => {
+    expect(token(`transition-duration-${name}`)).toBe(`${Math.round(seconds * 1000)}ms`);
+  });
+
   it("the stagger between a sequence's items matches its CSS token", () => {
     expect(token("stagger")).toBe(`${Math.round(MOTION.stagger * 1000)}ms`);
   });
 
-  it.each(["control", "surface", "raised", "overlay", "brand"])("defines the %s elevation", (name) => {
+  it.each(["flat", "control", "surface", "raised", "overlay", "brand"])("defines the %s elevation", (name) => {
     expect(token(`shadow-${name}`)).toBeDefined();
   });
 
@@ -106,6 +110,9 @@ describe("text colour contrast (WCAG AA)", () => {
     ["refused", "ground"],
     ["refused", "refused-soft"],
     ["on-agent", "agent"],
+    ["on-agent-muted", "agent"],
+    ["on-agent", "ink"],
+    ["on-agent-muted", "ink"],
     ["on-agent", "refused"],
   ])("%s on %s reaches 4.5:1", (foreground, background) => {
     expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);

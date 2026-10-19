@@ -11,14 +11,14 @@ export const overlayMotion = [
   "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
   "data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1",
   "data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1",
-  "duration-200 ease-emphasized data-[state=closed]:duration-150 data-[state=closed]:ease-exit",
+  "duration-overlay ease-emphasized data-[state=closed]:duration-micro data-[state=closed]:ease-exit",
 ].join(" ");
 
 /** The dimmed page behind a dialog or a sheet. */
 export const overlayBackdrop = [
   "fixed inset-0 z-50 bg-ink/40 backdrop-blur-[2px]",
   "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
-  "duration-200 ease-emphasized data-[state=closed]:duration-150 data-[state=closed]:ease-exit",
+  "duration-overlay ease-emphasized data-[state=closed]:duration-micro data-[state=closed]:ease-exit",
 ].join(" ");
 
 /** A panel in the middle of the screen: dialogs and confirmations. */
@@ -28,7 +28,7 @@ export const dialogPanel =
 export const dialogMotion = [
   "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
   "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
-  "duration-200 ease-emphasized data-[state=closed]:duration-150 data-[state=closed]:ease-exit",
+  "duration-overlay ease-emphasized data-[state=closed]:duration-micro data-[state=closed]:ease-exit",
 ].join(" ");
 
 /**
@@ -37,7 +37,7 @@ export const dialogMotion = [
  * about 1.1:1 against the panel, the bar 6:1.
  */
 export const menuItemBase =
-  "relative flex min-h-11 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-2 outline-hidden transition-colors duration-150 ease-standard sm:min-h-9 [&_svg]:size-4 [&_svg]:shrink-0 [&>svg]:text-ink-3 before:pointer-events-none before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-r-full before:bg-agent before:opacity-0 before:transition-opacity before:duration-150 before:ease-standard";
+  "relative flex min-h-11 cursor-default select-none items-center gap-2.5 rounded-lg px-2.5 text-sm text-ink-2 outline-hidden transition-colors duration-micro ease-standard sm:min-h-9 [&_svg]:size-4 [&_svg]:shrink-0 [&>svg]:text-ink-3 before:pointer-events-none before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-r-full before:bg-agent before:opacity-0 before:transition-opacity before:duration-micro before:ease-standard";
 
 /** A Radix menu or select row: Radix marks the row under the pointer or the arrow keys `data-highlighted`. */
 export const menuItem = `${menuItemBase} data-[highlighted]:bg-raised/70 data-[highlighted]:text-ink data-[highlighted]:before:opacity-100 data-[disabled]:pointer-events-none data-[disabled]:opacity-50`;

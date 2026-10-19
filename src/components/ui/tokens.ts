@@ -16,6 +16,8 @@ export const COLOR = {
   agent: "#3048c9",
   agentSoft: "#e9edff",
   agentLine: "#aeb9f6",
+  onAgent: "#ffffff",
+  onAgentMuted: "#e9edff",
   proof: "#11765a",
   proofSoft: "#e2f4ec",
   proofLine: "#9bcfbd",
@@ -37,7 +39,7 @@ export const MOTION = {
     emphasized: [0.16, 1, 0.3, 1],
     exit: [0.4, 0, 1, 1],
   },
-  /** Seconds, the unit Motion takes. */
+  /** Seconds, the unit Motion takes; CSS --transition-duration-* uses ms. */
   duration: {
     micro: 0.15,
     overlay: 0.2,
