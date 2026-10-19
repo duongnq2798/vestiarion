@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
-import { groupAddress, looksLikeAddress, NOT_AN_ADDRESS } from "@/lib/payee-journey";
+import { groupAddress, looksLikeAddress, moveOn, NOT_AN_ADDRESS, type PayeeLinkStatus } from "@/lib/payee-journey";
 
 const INITIAL: PayeeAddressResult = { ok: false, message: "" };
 
@@ -44,9 +44,10 @@ export const PASSKEY_WALLET_LINE =
 
 /**
  * The payee's address, in two screens (freelancer journey §4): the field, then the address read
- * back in fours with three boxes to tick before Send my address. Once it is sent the page refreshes
- * into the next step, which the link now shows. `intro`, how it works, shows with the field only, so
- * the check screen has the address and the boxes and nothing else.
+ * back in fours with three boxes to tick before Send my address. Once it is sent, `onSent` gets the
+ * link's status the action answers with, and the page moves on to the next step with it; an answer
+ * without one refreshes the page instead (payee step advance S1, S2). `intro`, how it works, shows
+ * with the field only, so the check screen has the address and the boxes and nothing else.
  *
  * `passkey`, when offered (payee passkey wallet P1), adds a secondary button under Continue that makes a passkey wallet,
  * or uses one made from an earlier link. Its address is read back under "Your new wallet" or "Your passkey wallet", with
@@ -69,6 +70,7 @@ export default function PayeeAddressForm({
   defaultChain,
   passkeyChains = [],
   keep,
+  onSent,
 }: {
   token: string;
   chainLabel?: string;
@@ -80,6 +82,8 @@ export default function PayeeAddressForm({
   defaultChain?: string;
   passkeyChains?: readonly string[];
   keep?: { masked: string };
+  /** Takes the link's status once the address is sent or kept, for the page to move on as the action returns. */
+  onSent?: (status: PayeeLinkStatus) => void;
 }) {
   const router = useRouter();
   const choosing = chains !== undefined && chains.length > 1;
@@ -98,7 +102,7 @@ export default function PayeeAddressForm({
   const label = choosing ? (chains.find((entry) => entry.id === chain)?.label ?? chainLabel) : chainLabel;
   const checks: readonly string[] = choosing ? [...ADDRESS_CHECKS, chainCheck(label)] : ADDRESS_CHECKS;
   const [checked, setChecked] = useState<boolean[]>(checks.map(() => false));
-  const { state, formProps } = useActionForm(submitPayeeAddressAction, INITIAL, { onSuccess: () => router.refresh() });
+  const { state, formProps } = useActionForm(submitPayeeAddressAction, INITIAL, { onSuccess: (result) => moveOn(result, onSent, () => router.refresh()) });
   const passkeyHere = choosing ? passkeyChains.includes(chain) : passkey;
 
   if (state.ok) {
@@ -194,7 +198,7 @@ export default function PayeeAddressForm({
             </Button>
           )}
         </form>
-        {keep && !choosing && <KeepAddress token={token} orgName={orgName} masked={keep.masked} />}
+        {keep && !choosing && <KeepAddress token={token} orgName={orgName} masked={keep.masked} onSent={onSent} />}
       </>
     );
   }
@@ -294,11 +298,11 @@ export default function PayeeAddressForm({
 
 /**
  * Keep the address on file and go on to the invoice (payee invoice link P4): the link is used, as sending that address
- * again would use it, and nothing changes. The page refreshes into the invoice step.
+ * again would use it, and nothing changes. The page moves on to the invoice step.
  */
-function KeepAddress({ token, orgName, masked }: { token: string; orgName: string; masked: string }) {
+function KeepAddress({ token, orgName, masked, onSent }: { token: string; orgName: string; masked: string; onSent?: (status: PayeeLinkStatus) => void }) {
   const router = useRouter();
-  const { state, formProps } = useActionForm(keepPayeeAddressAction, INITIAL, { onSuccess: () => router.refresh() });
+  const { state, formProps } = useActionForm(keepPayeeAddressAction, INITIAL, { onSuccess: (result) => moveOn(result, onSent, () => router.refresh()) });
   if (state.ok) {
     return (
       <p role="status" className="mt-4 flex items-start gap-2 rounded-xl border border-proof-line bg-proof-soft px-4 py-3 text-sm text-ink">

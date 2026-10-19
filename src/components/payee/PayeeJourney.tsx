@@ -1,6 +1,8 @@
+"use client";
+
 import { ArrowUpRight, CircleCheck, Clock3, FileCheck2 } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import PayeeAddressForm from "@/components/PayeeAddressForm";
 import { Badge } from "@/components/ui/Badge";
@@ -10,7 +12,18 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { Hash, Money } from "@/components/vx/Primitives";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { SIMULATED_PAYMENT } from "@/lib/capability";
-import { amountsLine, invoiceOpen, maskAddress, payeeStage, paymentSimulated, paymentState, type PayeeLinkStatus, type PayeePayment, type PaymentTone, type PayeeStage } from "@/lib/payee-journey";
+import {
+  amountsLine,
+  invoiceOpen,
+  maskAddress,
+  payeeStage,
+  paymentSimulated,
+  paymentState,
+  type PayeeLinkStatus,
+  type PayeePayment,
+  type PaymentTone,
+  type PayeeStage,
+} from "@/lib/payee-journey";
 import { yearAfter } from "@/lib/payee-invoice";
 import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
 import { passkeyWalletConfig, passkeyWalletOffered } from "@/lib/passkey-wallet";
@@ -28,6 +41,13 @@ import { PayeeSteps } from "./PayeeSteps";
  * A link may also let the payee choose where it is paid, before its address, and ask for its invoice, after it
  * (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P2, P4): the invoice is a step of its own, and the
  * screens after it say it was sent.
+ *
+ * The page moves on as soon as the payee's address, kept address or invoice is accepted, from the link's status the
+ * action answers with (docs/superpowers/specs/2026-10-20-payee-step-advance-design.md S3): that answer is shown until
+ * the page's own read, `status`, next changes, and the new step's heading takes the focus the pressed button had (S7).
+ * A refresh the page waited on after each step once left the payee on the step they had just finished. `status` is
+ * `payeeView`'s projection, as every answer is (S6). `today`, the UTC day the invoice's due date may start from, comes
+ * from the server, so the form and the check agree.
  */
 
 /** Only the page knows its link; the screens are the same for a screenshot, which has none. */
@@ -38,18 +58,43 @@ export const NO_SECRETS = "Vestiarion only needs your address. It never asks for
 
 const TONE: Record<PaymentTone, "neutral" | "agent" | "held" | "proof"> = { waiting: "neutral", progress: "agent", review: "held", done: "proof" };
 
-export function PayeeJourney({ token, status, refresh = true, simulated = false }: { token: string; status: PayeeLinkStatus; refresh?: boolean; simulated?: boolean }) {
+export function PayeeJourney({
+  token,
+  status: read,
+  refresh = true,
+  simulated = false,
+  today = new Date().toISOString().slice(0, 10),
+}: {
+  token: string;
+  status: PayeeLinkStatus;
+  refresh?: boolean;
+  simulated?: boolean;
+  today?: string;
+}) {
+  // The last answer, with the read it came over. The router runs a refresh and an action one after the other (its action
+  // queue, `dispatchAction` in next/dist/client/components/app-router-instance.js), so the next read was made after the
+  // submission was written: from then on the page's reads alone count (S3).
+  const [answered, setAnswered] = useState<{ status: PayeeLinkStatus; over: PayeeLinkStatus } | null>(null);
+  const status = answered?.over === read ? answered.status : read;
+  const onSent = useCallback((next: PayeeLinkStatus) => setAnswered({ status: next, over: read }), [read]);
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // Unless the payee put the focus somewhere else while the action ran (S7).
+    const active = document.activeElement;
+    if (!answered || (active && active !== document.body && !section.current?.contains(active))) return;
+    section.current?.querySelector<HTMLElement>("h1")?.focus();
+  }, [answered]);
   const stage = payeeStage(status);
   return (
-    <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
+    <section ref={section} className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
       <PayeeSteps stage={stage} withInvoice={status.asksInvoice === true} invoicePending={invoiceOpen(status)} />
       <div className="mt-5">
-        {stage === "address" && <AddressStep token={token} status={status} simulated={simulated} />}
-        {stage === "invoice" && <InvoiceStep token={token} status={status} />}
+        {stage === "address" && <AddressStep token={token} status={status} simulated={simulated} onSent={onSent} />}
+        {stage === "invoice" && <InvoiceStep token={token} status={status} today={today} onSent={onSent} />}
         {stage === "confirming" && <ConfirmingStep status={status} />}
         {stage === "paying" && <PayingStep status={status} simulated={simulated} />}
         {stage === "paid" && <PaidStep status={status} simulated={simulated} />}
-        {(stage === "paying" || stage === "paid") && <InvoiceStillOpen token={token} status={status} />}
+        {(stage === "paying" || stage === "paid") && <InvoiceStillOpen token={token} status={status} today={today} onSent={onSent} />}
       </div>
       {refresh && waitsOnSomeone(stage) && <AutoRefresh intervalMs={PAYEE_REFRESH_MS} />}
     </section>
@@ -59,15 +104,23 @@ export function PayeeJourney({ token, status, refresh = true, simulated = false 
 // The invoice step refreshes too, so a confirmation or a payment shows there as it happens; a half-typed form stays.
 const waitsOnSomeone = (stage: PayeeStage) => stage === "invoice" || stage === "confirming" || stage === "paying";
 
+// Focusable from code only, for the step an answer moves to (S7).
 function Heading({ children }: { children: ReactNode }) {
-  return <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink [overflow-wrap:anywhere]">{children}</h1>;
+  return (
+    <h1 tabIndex={-1} className="text-2xl font-semibold tracking-[-0.02em] text-ink outline-hidden [overflow-wrap:anywhere]">
+      {children}
+    </h1>
+  );
 }
 
 function Footnote({ children }: { children: ReactNode }) {
   return <p className="mt-5 border-t border-line pt-4 text-xs leading-5 text-ink-3">{children}</p>;
 }
 
-function AddressStep({ token, status, simulated }: { token: string; status: PayeeLinkStatus; simulated: boolean }) {
+/** Takes the link's status an accepted submission answers with, so the page moves on (S1, S3). */
+type OnSent = (status: PayeeLinkStatus) => void;
+
+function AddressStep({ token, status, simulated, onSent }: { token: string; status: PayeeLinkStatus; simulated: boolean; onSent: OnSent }) {
   const chain = chainById(status.chain).label;
   const owed = amountsLine(status.payments);
   const config = passkeyWalletConfig();
@@ -106,6 +159,7 @@ function AddressStep({ token, status, simulated }: { token: string; status: Paye
             ? { chains: choices, defaultChain: status.chain, passkeyChains: choices.filter((entry) => passkeyWalletOffered(entry.id, config)).map((entry) => entry.id) }
             : {})}
           {...(asksInvoice && status.address && !status.addressMirror ? { keep: { masked: maskAddress(status.address) } } : {})}
+          onSent={onSent}
           intro={
             <ol className="mb-2 grid gap-2 text-sm leading-6 text-ink-2">
               {steps.map((step, index) => (
@@ -128,8 +182,7 @@ function AddressStep({ token, status, simulated }: { token: string; status: Paye
  * The payee's invoice, on a link that asks for it (payee invoice link P4): after the address step, or alone once the
  * address on file was kept. It waits for a person at the business, who adds it as a bill or discards it.
  */
-function InvoiceStep({ token, status }: { token: string; status: PayeeLinkStatus }) {
-  const today = new Date().toISOString().slice(0, 10);
+function InvoiceStep({ token, status, today, onSent }: { token: string; status: PayeeLinkStatus; today: string; onSent: OnSent }) {
   return (
     <>
       <Heading>Send {status.orgName} your invoice</Heading>
@@ -142,7 +195,7 @@ function InvoiceStep({ token, status }: { token: string; status: PayeeLinkStatus
       </p>
       {status.payments.length > 0 && <PaymentList payments={status.payments} />}
       <div className="mt-5">
-        <PayeeInvoiceForm token={token} orgName={status.orgName} today={today} lastDay={yearAfter(today)} />
+        <PayeeInvoiceForm token={token} orgName={status.orgName} today={today} lastDay={yearAfter(today)} onSent={onSent} />
       </div>
       <Footnote>
         {NO_SECRETS} This link takes your invoice until {utcDay(status.statusUntil)}.
@@ -155,12 +208,11 @@ function InvoiceStep({ token, status }: { token: string; status: PayeeLinkStatus
  * Under a payment on its way or paid, on a link that still takes the payee's invoice: the form, folded, second to the
  * payment's state (P4).
  */
-function InvoiceStillOpen({ token, status }: { token: string; status: PayeeLinkStatus }) {
+function InvoiceStillOpen({ token, status, today, onSent }: { token: string; status: PayeeLinkStatus; today: string; onSent: OnSent }) {
   if (!invoiceOpen(status)) return null;
-  const today = new Date().toISOString().slice(0, 10);
   return (
     <Disclosure summary="You can still send your invoice" className="mt-5">
-      <PayeeInvoiceForm token={token} orgName={status.orgName} today={today} lastDay={yearAfter(today)} />
+      <PayeeInvoiceForm token={token} orgName={status.orgName} today={today} lastDay={yearAfter(today)} onSent={onSent} />
     </Disclosure>
   );
 }

@@ -71,6 +71,56 @@ export function payeeStage(status: PayeeLinkStatus): PayeeStage {
   return "paying";
 }
 
+/**
+ * After an accepted submission: the page moves on with the link's status the action answered with, or, without one,
+ * reads itself again (docs/superpowers/specs/2026-10-20-payee-step-advance-design.md S1, S2).
+ */
+export function moveOn(answer: { status?: PayeeLinkStatus }, onSent: ((status: PayeeLinkStatus) => void) | undefined, refresh: () => void): void {
+  if (answer.status && onSent) onSent(answer.status);
+  else refresh();
+}
+
+/** The payment states the payee's page tells apart; any other is the business's to discuss, and reads as under review (R3). */
+const PAYEE_PAYMENT_STATES: ReadonlySet<string> = new Set(["paid", "matched", "scheduled", "verified", "pending"]);
+
+/**
+ * What a payee link's page is given of its status (R1, R3, R4; payee step advance S6). The page is a client component,
+ * so all of it is in the page's HTML and in each action's answer, for anyone holding the link: the address masked, each
+ * payment's state one the page tells apart or `review`, a payment's transaction and dates only where the page shows them,
+ * and nothing else the status read returns, now or later. An unused link's address on file is given only when the payee
+ * may keep it: a mirror Vestiarion made in shadow mode is not theirs (P4), and the page says nothing of it. Every screen
+ * renders from it as it did from the full status.
+ */
+export function payeeView(status: PayeeLinkStatus): PayeeLinkStatus {
+  return {
+    orgName: status.orgName,
+    payeeName: status.payeeName,
+    chain: status.chain,
+    linkState: status.linkState,
+    expiresAt: status.expiresAt,
+    usedAt: status.usedAt,
+    statusUntil: status.statusUntil,
+    address: status.address && !(status.linkState === "open" && status.addressMirror === true) ? maskAddress(status.address) : null,
+    addressConfirmed: status.addressConfirmed,
+    payments: status.payments.map((payment) => {
+      const state = PAYEE_PAYMENT_STATES.has(payment.status) ? payment.status : "review";
+      return {
+        kind: payment.kind,
+        title: payment.title,
+        amount: payment.amount,
+        currency: payment.currency,
+        status: state,
+        txRef: state === "paid" ? payment.txRef : null,
+        settledAt: state === "paid" ? payment.settledAt : null,
+        scheduledFor: state === "scheduled" ? payment.scheduledFor : null,
+      };
+    }),
+    asksInvoice: status.asksInvoice === true,
+    invoiceSent: status.invoiceSent === true,
+    chainChoices: [...(status.chainChoices ?? [])],
+  };
+}
+
 export type PaymentTone = "waiting" | "progress" | "review" | "done";
 
 /** A payment the simulator made: its reference is the simulator's (`sim_…`), never a transaction on chain. */

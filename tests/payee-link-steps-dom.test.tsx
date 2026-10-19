@@ -3,19 +3,24 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PayeeAddressForm, { CHAIN_QUESTION, chainCheck, SEND_HINT_WITH_CHAIN } from "@/components/PayeeAddressForm";
+import { PayeeJourney } from "@/components/payee/PayeeJourney";
 import PayeeInvoiceForm from "@/components/payee/PayeeInvoiceForm";
+import type { PayeeLinkStatus } from "@/lib/payee-journey";
 
 /**
  * A payee link's new steps, rendered in a DOM (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P2, P4):
  * the chain chosen before the address, named in the field and in a fourth box, and sent with the address; the address
- * on file kept; and the invoice's fields sent, a refused field marked.
+ * on file kept; and the invoice's fields sent, a refused field marked. The page moves on to the next step as soon as an
+ * action answers with the link's status, with no reload (docs/superpowers/specs/2026-10-20-payee-step-advance-design.md).
  */
+
+type Answer = { ok: boolean; message: string; field?: string; status?: PayeeLinkStatus };
 
 const { actions } = vi.hoisted(() => ({
   actions: {
-    address: vi.fn(async () => ({ ok: false, message: "" })),
-    keep: vi.fn(async () => ({ ok: true, message: "Kept the address Acme has on file." })),
-    invoice: vi.fn(async (): Promise<{ ok: boolean; message: string; field?: string }> => ({ ok: false, message: "" })),
+    address: vi.fn(async (): Promise<Answer> => ({ ok: false, message: "" })),
+    keep: vi.fn(async (): Promise<Answer> => ({ ok: true, message: "Kept the address Acme has on file." })),
+    invoice: vi.fn(async (): Promise<Answer> => ({ ok: false, message: "" })),
   },
 }));
 const refresh = vi.fn();
@@ -170,6 +175,123 @@ describe("the invoice step (P4)", () => {
     fill();
     await press("Send my invoice");
     expect(container.textContent).toContain("Sent. Acme reviews your invoice before adding it.");
+    expect(refresh).toHaveBeenCalled();
+  });
+});
+
+describe("moving on as the action answers, with no reload", () => {
+  const link = (over: Partial<PayeeLinkStatus> = {}): PayeeLinkStatus => ({
+    orgName: "Acme",
+    payeeName: "Lena Ortiz",
+    chain: "ARC",
+    linkState: "open",
+    expiresAt: "2026-10-26T00:00:00Z",
+    usedAt: null,
+    statusUntil: "2026-10-26T00:00:00Z",
+    address: null,
+    addressConfirmed: false,
+    payments: [],
+    asksInvoice: true,
+    invoiceSent: false,
+    ...over,
+  });
+  const used = (over: Partial<PayeeLinkStatus> = {}) =>
+    link({ linkState: "used", usedAt: "2026-10-20T09:00:00Z", statusUntil: "2026-11-19T09:00:00Z", address: ADDRESS, ...over });
+  const steps = () => container.querySelector("p")?.textContent;
+  const journey = (status: PayeeLinkStatus) => <PayeeJourney token={TOKEN} status={status} refresh={false} today="2026-10-20" />;
+
+  async function sendAddress() {
+    type(container.querySelector<HTMLInputElement>('input[name="address"]') as HTMLInputElement, ADDRESS);
+    await press("Continue");
+    for (const box of [...container.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')]) {
+      await act(async () => {
+        box.click();
+      });
+    }
+    await press("Send my address");
+  }
+
+  it("shows the invoice step once the address is sent, from the status the action answers with", async () => {
+    actions.address.mockResolvedValueOnce({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: used() });
+    act(() => root.render(journey(link())));
+    expect(steps()).toBe("Step 1 of 4");
+    await sendAddress();
+    expect(steps()).toBe("Step 2 of 4");
+    expect(container.querySelector("h1")?.textContent).toBe("Send Acme your invoice");
+    expect(container.textContent).toContain("Address sent: 0x2222…2222. Acme confirms it before paying you.");
+    expect(container.textContent).toContain("This link takes your invoice until Nov 19, 2026.");
+    expect(container.querySelector('input[name="invoiceNumber"]')).not.toBeNull();
+    // No second round trip is needed to move on.
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps the step it moved on to until the page reads itself again, whose reads then alone count", async () => {
+    actions.address.mockResolvedValueOnce({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: used() });
+    const opened = link();
+    act(() => root.render(journey(opened)));
+    await sendAddress();
+    // The page drawn again from the read it had keeps the answer.
+    act(() => root.render(journey(opened)));
+    expect(steps()).toBe("Step 2 of 4");
+    // Its next read takes over, further along or not, as when the business changes the address it had confirmed.
+    act(() => root.render(journey(used({ invoiceSent: true, addressConfirmed: true }))));
+    expect(steps()).toBe("Step 4 of 4");
+    act(() => root.render(journey(used({ invoiceSent: true }))));
+    expect(steps()).toBe("Step 3 of 4");
+  });
+
+  it("puts the focus on the new step's heading, where the pressed button was (S7)", async () => {
+    actions.address.mockResolvedValueOnce({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: used() });
+    act(() => root.render(journey(link())));
+    await sendAddress();
+    expect(document.activeElement?.tagName).toBe("H1");
+    expect(document.activeElement?.textContent).toBe("Send Acme your invoice");
+  });
+
+  it("leaves the focus where the payee put it outside the card while the action ran", async () => {
+    let answer: (value: Answer) => void = () => {};
+    actions.address.mockImplementationOnce(() => new Promise<Answer>((resolve) => (answer = resolve)));
+    const elsewhere = document.createElement("a");
+    elsewhere.href = "/docs";
+    document.body.appendChild(elsewhere);
+    act(() => root.render(journey(link())));
+    await sendAddress();
+    elsewhere.focus();
+    await act(async () => {
+      answer({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: used() });
+    });
+    expect(steps()).toBe("Step 2 of 4");
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
+  it("shows the confirmation step once the invoice is sent, as the action answers", async () => {
+    actions.invoice.mockResolvedValueOnce({ ok: true, message: "Sent. Acme reviews your invoice before adding it.", status: used({ invoiceSent: true }) });
+    act(() => root.render(journey(used())));
+    expect(steps()).toBe("Step 2 of 4");
+    const field = (name: string) => container.querySelector<HTMLInputElement>(`[name="${name}"]`) as HTMLInputElement;
+    type(field("invoiceNumber"), "INV-7");
+    type(field("amount"), "1250.50");
+    type(field("dueDate"), "2026-11-02");
+    await press("Send my invoice");
+    expect(steps()).toBe("Step 3 of 4");
+    expect(container.querySelector("h1")?.textContent).toBe("Address sent. Acme confirms it next.");
+    expect(container.textContent).toContain("Invoice sent. Acme checks it before adding it.");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("moves on from the address kept, too", async () => {
+    actions.keep.mockResolvedValueOnce({ ok: true, message: "Kept the address Acme has on file.", status: used({ addressConfirmed: true }) });
+    act(() => root.render(journey(link({ address: ADDRESS, addressConfirmed: true }))));
+    await press("Keep this address");
+    expect(steps()).toBe("Step 2 of 4");
+    expect(container.textContent).toContain("Acme pays you at 0x2222…2222.");
+  });
+
+  it("refreshes the page instead when the action could not say where the link now stands", async () => {
+    actions.address.mockResolvedValueOnce({ ok: true, message: "Thanks. Acme will confirm your address before paying you." });
+    act(() => root.render(journey(link())));
+    await sendAddress();
+    expect(container.textContent).toContain("Thanks. Acme will confirm your address before paying you.");
     expect(refresh).toHaveBeenCalled();
   });
 });
