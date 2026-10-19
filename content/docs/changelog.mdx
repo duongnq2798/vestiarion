@@ -4,7 +4,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 - Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in domain `system`, actor `system`:
   - **`activation_nudge_sent`**, signed just before a setup reminder goes, with `stage` (`first_bill`: no real bill a day after the workspace was opened; `first_verdict`: in shadow mode, no verdict three days after the agent's first decision on a real bill), `recipients` (how many it goes to), and `days` and `shadow` for `first_bill`, or `waiting` (decisions still to give a verdict on) for `first_verdict`. Each stage goes once per workspace.
-  - **`activation_nudge_failed`**, when no email went after all, with `stage` and `failed`; the reminder is then tried again, up to three times.
+  - **`activation_nudge_failed`**, when no email went after all, with `stage` and `failed`; the reminder is then tried again, up to three tries in all.
 - Nothing else in `/api/v1` or the webhooks changes.
 
 ## 2026-10-19: Where an invitation came from

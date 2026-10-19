@@ -30,7 +30,7 @@ beforeEach(() => {
   deliverPendingWebhooks.mockReset();
   deliverPendingWebhooks.mockResolvedValue({ delivered: 0, failed: 0, retried: 0 });
   runActivationNudges.mockReset();
-  runActivationNudges.mockResolvedValue({ due: 0, reminded: 0, emails: 0, skipped: {}, left: 0 });
+  runActivationNudges.mockResolvedValue({ due: 0, reminded: 0, attempted: 0, emails: 0, skipped: {}, left: 0 });
 });
 
 afterEach(() => {
@@ -56,14 +56,14 @@ function post(): Promise<Response> {
 }
 
 describe("POST /api/agent/tick", () => {
-  it("sends setup reminders after the cycles, none started after 240 seconds, without changing the tick's body or status (activation nudge A5)", async () => {
+  it("sends setup reminders after the cycles, none started after 220 seconds and no email after 285, without changing the tick's body or status (activation nudge A5)", async () => {
     vi.useFakeTimers({ now: Date.parse("2026-10-19T00:17:00Z"), toFake: ["Date"] });
     runLiveOrganizations.mockResolvedValueOnce([{ slug: "a-corp", ok: true, result: { lines: [{}] } }]);
     runActivationNudges.mockRejectedValueOnce(new Error("down"));
 
     const response = await post();
 
-    expect(runActivationNudges).toHaveBeenCalledWith({ startBy: Date.parse("2026-10-19T00:17:00Z") + 240_000 });
+    expect(runActivationNudges).toHaveBeenCalledWith({ startBy: Date.parse("2026-10-19T00:17:00Z") + 220_000, sendBy: Date.parse("2026-10-19T00:17:00Z") + 285_000 });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ organizations: [{ slug: "a-corp", ok: true, lines: 1 }] });
   });
@@ -133,7 +133,7 @@ describe("POST /api/agent/tick", () => {
     });
     runActivationNudges.mockImplementationOnce(async () => {
       order.push("nudges");
-      return { due: 1, reminded: 1, emails: 1, skipped: {}, left: 0 };
+      return { due: 1, reminded: 1, attempted: 1, emails: 1, skipped: {}, left: 0 };
     });
     deliverPendingWebhooks.mockImplementationOnce(async () => {
       order.push("webhooks");

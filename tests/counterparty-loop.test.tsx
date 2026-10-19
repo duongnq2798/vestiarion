@@ -101,7 +101,7 @@ describe("an email's footer", () => {
     expect(source.split("actionEmailHtml({").length - 1).toBe(source.split(`loop: "${email}"`).length - 1);
   });
 
-  it.each(["decision-escalation", "payee-address", "payment-stuck", "collection-task", "customer-wrote"])("never from a member's %s email", (file) => {
+  it.each(["decision-escalation", "payee-address", "payment-stuck", "collection-task", "customer-wrote", "activation-nudge"])("never from a member's %s email", (file) => {
     expect(readFileSync(`src/lib/email/${file}.ts`, "utf8")).not.toContain("loop:");
   });
 });

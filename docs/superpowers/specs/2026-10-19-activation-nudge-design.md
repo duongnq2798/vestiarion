@@ -27,7 +27,8 @@ weekly brief run only in the scheduled cycle, and that cycle visits only `live` 
     before its due date, or hold and say why, each decision signed). It names the three ways in: **New**, then **Bill to
     pay** on Bills; importing a bill list; forwarding bills to the workspace's own address (Settings, under Invoices by
     email). In shadow mode it adds that the business keeps paying as it does. In a sandbox that can load sample data and
-    has none, it offers **Load sample data**. The button opens the console, where the checklist is.
+    has none, it offers **Load sample data**, linked to the console. The button, **Add your first bill**, opens Bills
+    with **Bill to pay** open (`/invoices?new=bill`).
   - First verdict: "{n} decisions wait for your verdict". It says how many decisions wait and since when, and why a
     verdict matters: the agreement rate is the record of how often the agent would have been right. The button opens
     Bills, where each decision has Agree and Disagree.
@@ -35,7 +36,10 @@ weekly brief run only in the scheduled cycle, and that cycle visits only `live` 
     wallet. The member email look (`actionEmailHtml`), no counterparty loop link.
 - **A5. Where it runs.** A pass in the agent tick (every 6 hours) after the live workspaces' cycles and before the
   webhook dispatch. It reads `growth_workspaces` for the last 30 days once, picks the due moments in code, and enters
-  each workspace's scope in turn. At most 20 workspaces a tick, and none started after 240 seconds into the tick.
+  each workspace's scope in turn, oldest first. At most 20 reminders are claimed a tick; a workspace whose reminder
+  went already, or that is no longer due, costs one ledger read and does not count, so it never crowds out a new one
+  (review of the pass). None starts after 220 seconds into the tick, and no email starts later than one send timeout
+  before the dispatch's 15-second margin; a workspace where not even one could go is not claimed.
   It runs when payments are switched off: it sends email only.
 - **A6. Claimed before it is sent.** In the workspace's scope:
   - The moment is skipped when an `activation_nudge_sent` for it is signed, or after 3 `activation_nudge_failed` for it.
@@ -62,4 +66,4 @@ weekly brief run only in the scheduled cycle, and that cycle visits only `live` 
 
 - If a moment is chosen badly, one extra email reaches a real person once. The ledger shows which moment and when.
 - If the pass is slow, the webhook dispatch after the tick gets less time. The 10-minute dispatch schedule picks up the
-  rest, and the pass stops starting workspaces after 240 seconds.
+  rest, and the pass stops starting workspaces after 220 seconds.

@@ -18,7 +18,8 @@ import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { firstBillNudgeEmail, firstVerdictNudgeEmail } from "../email/activation-nudge";
-import { emailSettingsFromEnv, IDEMPOTENCY_KEY_USED, sendEmail } from "../email/send";
+import { emailSettingsFromEnv, IDEMPOTENCY_KEY_USED, SEND_TIMEOUT_MS, sendEmail } from "../email/send";
+import type { NudgeRow as SentNudge } from "../growth/metrics";
 import { readWorkspaces } from "../growth/read";
 import { appendLedgerEntry } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
@@ -37,7 +38,7 @@ export interface NudgeOutcome {
   sent: number;
   failed: number;
   /** Why nothing went, when nothing did. */
-  skipped?: "sent_before" | "gave_up" | "not_due" | "no_email" | "nobody" | "failed";
+  skipped?: "sent_before" | "gave_up" | "not_due" | "no_email" | "nobody" | "out_of_time" | "failed";
 }
 
 const sha256 = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
@@ -47,22 +48,21 @@ export function nudgeKey(orgId: string, stage: NudgeStage, userId: string): stri
   return sha256(["activation_nudge", orgId, stage, userId].join("\n"));
 }
 
-/** The real bills of the workspace in scope, as `growth_workspaces` counts them: payables of counterparties not sample. */
-async function realBillCount(): Promise<number> {
-  const [invoices, samples] = await Promise.all([
-    db().from("invoices").select("counterparty_id").eq("direction", "payable").limit(1000),
-    db().from("counterparties").select("id").eq("sample", true).limit(1000),
-  ]);
-  const sample = new Set((unwrap(samples) as Array<{ id: string }>).map((row) => row.id));
-  return (unwrap(invoices) as Array<{ counterparty_id: string }>).filter((row) => !sample.has(row.counterparty_id)).length;
+/** Whether the workspace in scope has a real bill, as `growth_workspaces` counts them: a payable of a counterparty not sample. */
+async function hasRealBill(): Promise<boolean> {
+  const rows = unwrap(
+    await db().from("invoices").select("id, counterparties!inner(sample)").eq("direction", "payable").eq("counterparties.sample", false).limit(1)
+  ) as unknown[];
+  return rows.length > 0;
 }
 
 /**
  * Sends one workspace's reminder for `due.stage`, in that workspace's scope (A1-A4, A6): skipped when it went already,
  * failed too often, or is no longer due. Signs `activation_nudge_sent` before the emails go, and
- * `activation_nudge_failed` when none went.
+ * `activation_nudge_failed` when none went. With `sendBy` (ms since the epoch), no send starts that could still be
+ * waiting for Resend after it, and nothing is claimed when not even one could: the tick keeps its margin (A5).
  */
-export async function sendActivationNudge(due: DueNudge, options: { now?: number } = {}): Promise<NudgeOutcome> {
+export async function sendActivationNudge(due: DueNudge, options: { now?: number; sendBy?: number } = {}): Promise<NudgeOutcome> {
   const nowMs = options.now ?? Date.now();
   const outcome: NudgeOutcome = { sent: 0, failed: 0 };
   let orgId: string | undefined;
@@ -94,7 +94,7 @@ export async function sendActivationNudge(due: DueNudge, options: { now?: number
     let email: { subject: string; html: string; text: string };
     let figures: Record<string, unknown>;
     if (due.stage === "first_bill") {
-      if ((await realBillCount()) > 0) return { ...outcome, skipped: "not_due" };
+      if (await hasRealBill()) return { ...outcome, skipped: "not_due" };
       const shadow = await readShadowMode(orgDb);
       // Sample data only loads into a sandbox that simulates its payments (sample data S1), and only once.
       const simulated = org.mode === "sandbox" && networkOf(org.network) !== "arc-mainnet" && org.wallet_host === null && org.api_key_iv === null;
@@ -122,6 +122,9 @@ export async function sendActivationNudge(due: DueNudge, options: { now?: number
 
     const recipients = (await decidingRecipients(scopedOrgId)).slice(0, NUDGE_MAX_RECIPIENTS);
     if (recipients.length === 0) return { ...outcome, skipped: "nobody" };
+    // The last moment a send may start: one still waiting for Resend then would run into the tick's margin.
+    const lastStart = Math.min(Date.now() + DIGEST_SEND_DEADLINE_MS, (options.sendBy ?? Infinity) - SEND_TIMEOUT_MS);
+    if (Date.now() >= lastStart) return { ...outcome, skipped: "out_of_time" };
 
     // Claimed before the sends: a tick that starts while these go finds it claimed. A claim not signed sends nothing.
     await appendLedgerEntry({
@@ -135,9 +138,8 @@ export async function sendActivationNudge(due: DueNudge, options: { now?: number
       detail: { stage: due.stage, recipients: recipients.length, ...figures },
     });
 
-    const deadline = Date.now() + DIGEST_SEND_DEADLINE_MS;
     for (const [index, recipient] of recipients.entries()) {
-      if (Date.now() >= deadline) {
+      if (Date.now() >= lastStart) {
         outcome.failed += recipients.length - index;
         console.warn("activation nudge: send deadline passed, not sent", recipients.length - index, scopedOrgId);
         break;
@@ -176,40 +178,46 @@ export interface NudgePassResult {
   due: number;
   /** Workspaces at least one member of which got it. */
   reminded: number;
+  /** Workspaces whose reminder was claimed this tick: what `NUDGES_PER_TICK` counts. */
+  attempted: number;
   emails: number;
   skipped: Record<string, number>;
-  /** Due workspaces left to the next tick: past `startBy`, or over `NUDGES_PER_TICK`. */
+  /** Due workspaces not visited this tick: past `startBy`, or once `NUDGES_PER_TICK` were claimed. */
   left: number;
 }
 
 /**
  * The tick's pass (A5): reads `growth_workspaces` for the last 30 days once, picks the reminders due, and sends each in
- * its workspace's scope, one workspace after another, at most `NUDGES_PER_TICK`, none started after `startBy`.
- * Never throws.
+ * its workspace's scope, one workspace after another, oldest first. A workspace whose reminder went already, or that
+ * is no longer due, costs one ledger read and does not count: the pass stops once `NUDGES_PER_TICK` reminders were
+ * claimed, so the workspaces reminded before never crowd out a new one. None starts after `startBy`, and no send after
+ * `sendBy`. Never throws.
  */
-export async function runActivationNudges(options: { now?: number; startBy?: number; clock?: () => number } = {}): Promise<NudgePassResult> {
+export async function runActivationNudges(
+  options: { now?: number; startBy?: number; sendBy?: number; clock?: () => number } = {}
+): Promise<NudgePassResult> {
   const nowMs = options.now ?? Date.now();
   const clock = options.clock ?? Date.now;
-  const result: NudgePassResult = { due: 0, reminded: 0, emails: 0, skipped: {}, left: 0 };
+  const result: NudgePassResult = { due: 0, reminded: 0, attempted: 0, emails: 0, skipped: {}, left: 0 };
+  const late = () => options.startBy !== undefined && clock() > options.startBy;
   try {
-    if (!emailSettingsFromEnv()) return result;
+    if (!emailSettingsFromEnv() || late()) return result;
     const workspaces = await readWorkspaces(new Date(nowMs - NUDGE_WINDOW_MS));
     if (!workspaces) return result;
     const due = dueNudges(workspaces, nowMs);
     result.due = due.length;
-    const taken = due.slice(0, NUDGES_PER_TICK);
-    result.left = due.length - taken.length;
-    for (const [index, nudge] of taken.entries()) {
-      if (options.startBy !== undefined && clock() > options.startBy) {
-        result.left += taken.length - index;
-        console.warn("activation nudges left to the next tick: out of time", taken.length - index);
+    for (const [index, nudge] of due.entries()) {
+      if (result.attempted >= NUDGES_PER_TICK || late()) {
+        result.left = due.length - index;
+        if (late()) console.warn("activation nudges left to the next tick: out of time", due.length - index);
         break;
       }
-      const outcome = await withOrg(nudge.orgId, () => sendActivationNudge(nudge, { now: nowMs })).catch((error: unknown) => {
+      const outcome = await withOrg(nudge.orgId, () => sendActivationNudge(nudge, { now: nowMs, sendBy: options.sendBy })).catch((error: unknown) => {
         console.error("activation nudge: workspace not entered", nudge.slug, error instanceof Error ? error.message : String(error));
         return { sent: 0, failed: 0, skipped: "failed" } as NudgeOutcome;
       });
       result.emails += outcome.sent;
+      if (outcome.sent > 0 || outcome.failed > 0) result.attempted += 1;
       if (outcome.sent > 0) result.reminded += 1;
       else if (outcome.skipped) result.skipped[outcome.skipped] = (result.skipped[outcome.skipped] ?? 0) + 1;
     }
@@ -220,26 +228,19 @@ export async function runActivationNudges(options: { now?: number; startBy?: num
   }
 }
 
-/** A reminder that went, as `/admin/growth` counts it (A7). */
-export interface SentNudge {
-  orgId: string;
-  stage: NudgeStage;
-  /** When its claim was signed. */
-  at: string;
-  /** Someone gave a verdict after it (what a first-verdict reminder asked for). */
-  verdictAfter: boolean;
-}
-
-/** At most this many workspaces' ledgers are read for the tile. */
+/** At most this many workspaces' ledgers are read for the tile, and this many at once. */
 export const NUDGE_READ_LIMIT = 100;
+const NUDGE_READ_LANES = 8;
 
 /**
  * The reminders that went in these workspaces (A7), read from each one's ledger in its scope: a claim still standing
  * (not let go by a failure) counts. Best effort: a workspace that cannot be read counts as not reminded.
  */
 export async function readSentNudges(orgIds: readonly string[]): Promise<SentNudge[]> {
-  const found = await Promise.all(
-    orgIds.slice(0, NUDGE_READ_LIMIT).map((orgId) =>
+  const ids = orgIds.slice(0, NUDGE_READ_LIMIT);
+  const found: SentNudge[][] = new Array(ids.length);
+  let next = 0;
+  const readOne = (orgId: string) =>
       withOrg(orgId, async () => {
         const rows = unwrap(
           await db()
@@ -262,8 +263,14 @@ export async function readSentNudges(orgIds: readonly string[]): Promise<SentNud
           sent.push({ orgId, stage, at: claim.ts, verdictAfter: verdicts.length > 0 });
         }
         return sent;
-      }).catch(() => [] as SentNudge[])
-    )
+      }).catch(() => [] as SentNudge[]);
+  await Promise.all(
+    Array.from({ length: Math.min(NUDGE_READ_LANES, ids.length) }, async () => {
+      while (next < ids.length) {
+        const index = next++;
+        found[index] = await readOne(ids[index]);
+      }
+    })
   );
   return found.flat();
 }

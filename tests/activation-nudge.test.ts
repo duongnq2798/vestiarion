@@ -181,7 +181,11 @@ function world(w: World = {}) {
       return { body: { name: "Harbor Books", slug: "harbor-books", mode: "sandbox", network: "arc-testnet", wallet_host: null, api_key_iv: null, ...w.org } };
     }
     if (request.path === "/rest/v1/shadow_modes") return { body: w.shadow ? [{ currency: "USD", started_at: "2026-10-08T09:00:00Z", started_by: null }] : [] };
-    if (request.path === "/rest/v1/invoices") return { body: w.invoices ?? [] };
+    if (request.path === "/rest/v1/invoices") {
+      expect(request.params.get("counterparties.sample")).toBe("eq.false");
+      const samples = new Set(w.samples ?? []);
+      return { body: (w.invoices ?? []).filter((row) => !samples.has(row.counterparty_id)).map((row) => ({ id: "i", counterparties: { sample: false }, ...row })) };
+    }
     if (request.path === "/rest/v1/counterparties") return { body: (w.samples ?? []).map((id) => ({ id })) };
     if (request.path === "/rest/v1/ledger_entries") {
       if (request.params.get("action") === `in.(${ACTIVATION_NUDGE_SENT},${ACTIVATION_NUDGE_FAILED})`) return { body: (w.entries ?? []).map((action) => ({ action })) };
@@ -293,16 +297,45 @@ describe("the tick's pass (A5)", () => {
     workspacesMock.mockResolvedValue([workspace({ createdAt: ago(48) }), workspace({ orgId: "team", side: "ours" }), workspace({ orgId: "fresh", createdAt: ago(2) })]);
     const result = await run(world(), () => runActivationNudges({ now: NOW }));
     expect(workspacesMock).toHaveBeenCalledWith(new Date(NOW - 30 * 24 * HOUR));
-    expect(result).toEqual({ due: 1, reminded: 1, emails: 1, skipped: {}, left: 0 });
+    expect(result).toEqual({ due: 1, reminded: 1, attempted: 1, emails: 1, skipped: {}, left: 0 });
   });
 
-  it("reminds at most NUDGES_PER_TICK workspaces, and starts none after startBy", async () => {
+  it("claims at most NUDGES_PER_TICK reminders a tick, and starts none after startBy", async () => {
     workspacesMock.mockResolvedValue(Array.from({ length: NUDGES_PER_TICK + 3 }, (_, i) => workspace({ orgId: `o${i}`, slug: `o${i}`, createdAt: ago(48 + i) })));
     const capped = await run(world(), () => runActivationNudges({ now: NOW }));
-    expect(capped).toMatchObject({ due: NUDGES_PER_TICK + 3, reminded: NUDGES_PER_TICK, left: 3 });
+    expect(capped).toMatchObject({ due: NUDGES_PER_TICK + 3, reminded: NUDGES_PER_TICK, attempted: NUDGES_PER_TICK, left: 3 });
     sendMock.mockClear();
+    workspacesMock.mockClear();
     const late = await run(world(), () => runActivationNudges({ now: NOW, startBy: 10, clock: () => 11 }));
-    expect(late).toMatchObject({ reminded: 0, left: NUDGES_PER_TICK + 3 });
+    expect(late).toMatchObject({ reminded: 0, left: 0 });
+    // Past startBy before the list is read: growth_workspaces is not read at all.
+    expect(workspacesMock).not.toHaveBeenCalled();
+    let calls = 0;
+    const midway = await run(world(), () => runActivationNudges({ now: NOW, startBy: 10, clock: () => (calls++ < 3 ? 0 : 11) }));
+    expect(midway).toMatchObject({ reminded: 2, left: NUDGES_PER_TICK + 1 });
+  });
+
+  it("never lets workspaces reminded before crowd out a new one (review of the pass)", async () => {
+    // 25 old workspaces that got theirs already, then one opened yesterday.
+    const old = Array.from({ length: 25 }, (_, i) => workspace({ orgId: `old${i}`, slug: `old${i}`, createdAt: ago(200 + i) }));
+    workspacesMock.mockResolvedValue([...old, workspace({ orgId: "new", slug: "new", createdAt: ago(26) })]);
+    // The pass visits them oldest first: the first 25 reminder reads find a standing claim, the 26th none.
+    let reads = 0;
+    const client = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/ledger_entries") return { body: reads++ < 25 ? [{ action: ACTIVATION_NUDGE_SENT }] : [] };
+      if (request.path === "/rest/v1/orgs") return { body: { name: "New Co", slug: "new", mode: "sandbox", network: "arc-testnet", wallet_host: null, api_key_iv: null } };
+      return { body: [] };
+    });
+    const result = await run(client, () => runActivationNudges({ now: NOW }));
+    expect(result).toMatchObject({ due: 26, reminded: 1, attempted: 1, skipped: { sent_before: 25 }, left: 0 });
+    expect(sendMock.mock.calls[0][0].subject).toBe("Give your agent its first bill in New Co");
+  });
+
+  it("claims nothing when not even one email could go before sendBy", async () => {
+    workspacesMock.mockResolvedValue([workspace({ createdAt: ago(48) })]);
+    const result = await run(world(), () => runActivationNudges({ now: NOW, sendBy: Date.now() + 5_000 }));
+    expect(result).toMatchObject({ due: 1, attempted: 0, skipped: { out_of_time: 1 } });
+    expect(claimMock).not.toHaveBeenCalled();
     expect(sendMock).not.toHaveBeenCalled();
   });
 
@@ -320,7 +353,7 @@ describe("the tick's pass (A5)", () => {
   it("counts the reasons nothing went", async () => {
     workspacesMock.mockResolvedValue([workspace({ createdAt: ago(48) })]);
     const result = await run(world({ entries: [ACTIVATION_NUDGE_SENT] }), () => runActivationNudges({ now: NOW }));
-    expect(result).toEqual({ due: 1, reminded: 0, emails: 0, skipped: { sent_before: 1 }, left: 0 });
+    expect(result).toEqual({ due: 1, reminded: 0, attempted: 0, emails: 0, skipped: { sent_before: 1 }, left: 0 });
   });
 });
 

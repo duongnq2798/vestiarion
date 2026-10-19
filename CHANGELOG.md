@@ -21,7 +21,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   days on gets one email saying how many wait. Each goes once per workspace, to the owners, admins and approvers who
   keep its emails on, never about a workspace opened more than 30 days ago; the agent tick sends them, since its
   scheduled cycles reach only live workspaces and a new one is a sandbox. Signed as `activation_nudge_sent` (or
-  `activation_nudge_failed`, tried again up to three times). No migration.
+  `activation_nudge_failed`, up to three tries in all). No migration.
   [Guide](https://www.vestiarion.xyz/docs/guides/workspace#a-reminder-if-you-stop).
 
 - **Bring in a second person.** While one person runs a workspace, Treasury asks an owner or admin, once the agent has

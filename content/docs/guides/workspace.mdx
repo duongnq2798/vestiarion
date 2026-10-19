@@ -30,7 +30,7 @@ If you open a workspace and leave before the agent has anything to do, Vestiario
 - **No bill a day later.** One email, **Your agent has no bill to work on yet**, with the ways to give it one: **New**, then **Bill to pay** on **Bills & receivables**; **Import a list**; or forwarding bills to the workspace's own address, under **Invoices by email** in **Settings**. A sandbox that can load sample data, and has none, is also offered **Load sample data**.
 - **No verdict three days after the agent's first decision, in shadow mode.** One email saying how many of its decisions wait for you to agree or disagree, with a link to **Bills & receivables**.
 
-Each goes once per workspace, to the owners, admins and approvers who keep its emails on, and never about a workspace opened more than 30 days ago. Turn the emails off in **Settings**, under **Notifications**. The ledger records each as `activation_nudge_sent`, with which reminder it was (`stage`), just before it goes, or `activation_nudge_failed` when no email went after all; it is then tried again, up to three times.
+Each goes once per workspace, to the owners, admins and approvers who keep its emails on, and never about a workspace opened more than 30 days ago. Turn the emails off in **Settings**, under **Notifications**. The ledger records each as `activation_nudge_sent`, with which reminder it was (`stage`), just before it goes, or `activation_nudge_failed` when no email went after all; it is then tried again, up to three tries in all.
 
 ## Fold the sidebar
 
