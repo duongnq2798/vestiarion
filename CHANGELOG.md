@@ -131,6 +131,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   on one line, and a table wider than the screen scrolls inside its own frame. Across the 36 docs pages with tables,
   words split over two lines went from 54 to 3 on a laptop and from 126 to 8 on a phone, each of those at a hyphen.
 
+- **Get started sees the USDC in your own wallet at once.** Right after **Go live**, a workspace paying from the
+  owner's own wallet could read "Your wallet holds no USDC the agent can move" on the console's checklist while
+  **Settings** showed what the agent could move. The console stored that figure only after the agent's first cycle or
+  its balance read. While the stored figure is 0, **Fund it with USDC** now reads what the agent can move from the
+  chain, as **Settings** does: your wallet's USDC, or the approval if that is less.
+  [Guide](https://www.vestiarion.xyz/docs/guides/go-live#path-c-your-own-wallet).
+
 ## [0.1.0-beta.10] - 2026-10-18
 
 ### Added

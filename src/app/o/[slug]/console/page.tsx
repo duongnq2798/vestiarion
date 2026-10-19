@@ -43,6 +43,7 @@ import { readServiceBudget } from "@/lib/service-budget";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount, type GettingStarted as Checklist } from "@/lib/getting-started";
+import { agentMovableUsdc } from "@/lib/treasury/wallet-treasury";
 import { cookies } from "next/headers";
 import { InviteNudge } from "@/components/vx/InviteNudge";
 import { INVITE_LATER_COOKIE, inviteNudgeShown } from "@/lib/invite-nudge";
@@ -360,20 +361,38 @@ export default async function DashboardPage({
     // invitation lands them, and a viewer has none. Ticked from what happened: the rows above, this person's signed acts
     // and the marks of migration 0114, read best effort (before 0114 runs, no marks and no Don't show again).
     const checklistRole = checklistRoleOf(role);
-    const [marks, acts, limitsSet] =
+    const ownerChecklistShown = checklistRole === "owner" && can(role, "records.write");
+    // The owner's own wallet: its stored balance is written only by a cycle or the balance tile, so while it says 0 the
+    // step reads what the agent can move from the chain (own wallet fund step F1, F2), alongside the marks. Best effort:
+    // unread, the stored balance counts, as before (F4).
+    const ownOperating = accountsRows.find((account) => account.kind === "operating");
+    const movableRead =
+      ownerChecklistShown &&
+      walletHost === "external" &&
+      Boolean(ownOperating?.address) &&
+      Number(ownOperating?.balance ?? 0) <= 0 &&
+      !(access.membership.mode === "live" && dashboardStats.onchainTransfers > 0)
+        ? agentMovableUsdc().catch((error: unknown) => {
+            console.error("console: what the agent can move not read", access.membership.orgId, error instanceof Error ? error.message : error);
+            return null;
+          })
+        : Promise.resolve(null);
+    const [[marks, acts, limitsSet], movableUsdc] = await Promise.all([
       checklistRole === "owner" || checklistRole === "approver"
-        ? await Promise.all([
+        ? Promise.all([
             readOnboardingMarks(access.user.id),
             checklistRole === "approver" ? readPersonActs(access.user.id) : Promise.resolve(null),
             checklistRole === "owner" ? readLimitsSet() : Promise.resolve(false),
           ])
-        : [null, null, false];
+        : Promise.resolve([null, null, false] as const),
+      movableRead,
+    ]);
     // The owner's is computed from the rows above (getting-started design G1, G2), until the first payment on Arc testnet
     // (first-payment design §2). Owners and admins add records, and an owner takes the workspace live. In shadow mode it
     // has steps of its own: suppliers, real bills and a first verdict, from the shadow mode and verdicts read above. A
     // sandbox with no wallet starts with its first bill and the agent's decision on it, from the invoices read above. The
     // limits are the spending limit read above, set by a person or kept as they are.
-    const ownerChecklist = checklistRole === "owner" && can(role, "records.write")
+    const ownerChecklist = ownerChecklistShown
       ? gettingStarted({
           mode: access.membership.mode,
           accounts: accountsRows,
@@ -386,6 +405,7 @@ export default async function DashboardPage({
           network,
           walletHost,
           walletTreasuryAvailable: walletTreasuryAvailable(currentOrgConfig(), networkProfile(network)),
+          movableUsdc,
           shadow: shadow
             ? { currency: shadow.currency, verdictsGiven: (shadowSummary?.agreed ?? 0) + (shadowSummary?.disagreed ?? 0), billCount: ownBillCount(invoices, counterparties) }
             : null,

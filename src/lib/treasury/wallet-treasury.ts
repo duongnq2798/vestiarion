@@ -329,6 +329,26 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
   });
 }
 
+/**
+ * What the agent can move from the owner's own wallet now, in the current workspace's scope: the lesser of the wallet's
+ * USDC and its approval to the contract, as Settings shows it and the provider's balance counts it (W12); 0 before the
+ * contract is deployed. Null for a workspace not paying from its owner's own wallet, with no wallet chosen, or whose
+ * chain cannot be read. The console's Get started reads it while the stored balance says nothing is there, since only a
+ * cycle or the balance tile writes that (own wallet fund step F1, F2).
+ */
+export async function agentMovableUsdc(deps: WalletTreasuryDeps = {}): Promise<number | null> {
+  if (currentOrgConfig().chain.walletHost !== "external") return null;
+  const operating = await operatingAccount();
+  if (!operating?.address) return null;
+  const row = await contractRow();
+  if (!row?.address) return 0;
+  const chain = deps.chain ?? treasuryChain(workspaceNetwork());
+  const wallet = asAddress(operating.address);
+  const [balance, allowance] = await Promise.all([tolerant(() => chain.usdcBalance(wallet)), tolerant(() => chain.allowance(wallet, asAddress(row.address as string)))]);
+  if (balance === null || allowance === null) return null;
+  return usdcOf(balance < allowance ? balance : allowance);
+}
+
 /** A row's version: 2 only when it says so, so a row from before migration 0132 is version 1. */
 export function contractVersion(value: unknown): SpendingLimitVersion {
   return value === 2 || value === "2" ? 2 : 1;
