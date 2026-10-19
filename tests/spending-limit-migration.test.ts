@@ -69,3 +69,30 @@ describe("spending_limit_contracts (0062)", () => {
     expect(kept.rows).toEqual([{ address: ADDRESS }]);
   });
 });
+
+describe("spending_limit_contracts' version (0132, spending limit v2 V9)", () => {
+  it("reads every row so far as version 1, and takes only 1 or 2", async () => {
+    const orgId = await createOrg(db, "limit-version");
+    await db.query("delete from public.spending_limit_contracts where org_id = $1", [orgId]);
+    const row = (await db.query<{ version: number }>("insert into public.spending_limit_contracts (org_id, address) values ($1, $2) returning version", [orgId, ADDRESS])).rows[0];
+    expect(row.version).toBe(1);
+    await expect(db.query("update public.spending_limit_contracts set version = 3 where org_id = $1", [orgId])).rejects.toThrow(/spending_limit_contracts_version_check/);
+    await expect(db.query("update public.spending_limit_contracts set next_address = 'nope' where org_id = $1", [orgId])).rejects.toThrow(/spending_limit_contracts_next_address_check/);
+    await expect(db.query("update public.spending_limit_contracts set previous_address = '0x12' where org_id = $1", [orgId])).rejects.toThrow(
+      /spending_limit_contracts_previous_address_check/
+    );
+  });
+
+  it("keeps a version 2 to come only on version 1, and a replaced contract only on version 2", async () => {
+    const orgId = await createOrg(db, "limit-upgrade");
+    await db.query("delete from public.spending_limit_contracts where org_id = $1", [orgId]);
+    await db.query("insert into public.spending_limit_contracts (org_id, address) values ($1, $2)", [orgId, ADDRESS]);
+    await db.query("update public.spending_limit_contracts set next_address = $2 where org_id = $1", [orgId, AGENT]);
+    await expect(db.query("update public.spending_limit_contracts set version = 2 where org_id = $1", [orgId])).rejects.toThrow(/spending_limit_contracts_upgrade_check/);
+    await db.query("update public.spending_limit_contracts set version = 2, previous_address = address, address = next_address, next_address = null where org_id = $1", [orgId]);
+    await expect(db.query("update public.spending_limit_contracts set version = 1 where org_id = $1", [orgId])).rejects.toThrow(/spending_limit_contracts_upgrade_check/);
+    await applyMigrations(db);
+    const kept = await db.query("select version, address, previous_address from public.spending_limit_contracts where org_id = $1", [orgId]);
+    expect(kept.rows).toEqual([{ version: 2, address: AGENT, previous_address: ADDRESS }]);
+  });
+});

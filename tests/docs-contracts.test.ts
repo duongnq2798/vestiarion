@@ -47,7 +47,7 @@ describe("Contracts on Arc testnet", () => {
 
   it("names the compiler the contracts are built with", () => {
     const settings = JSON.parse(readFileSync(path.join(ROOT, "contracts", "solc-settings.json"), "utf8")) as { evmVersion: string; optimizer: { enabled: boolean; runs: number } };
-    for (const file of ["VestiarionEscrow.sol", "VestiarionSpendingLimit.sol"]) {
+    for (const file of ["VestiarionEscrow.sol", "VestiarionSpendingLimit.sol", "VestiarionSpendingLimitV2.sol"]) {
       expect(readFileSync(path.join(ROOT, "contracts", file), "utf8")).toContain("pragma solidity 0.8.37;");
     }
     expect(PAGE).toContain("Solidity 0.8.37");
@@ -61,5 +61,10 @@ describe("Contracts on Arc testnet", () => {
     const limit = readFileSync(path.join(ROOT, "contracts", "VestiarionSpendingLimit.sol"), "utf8");
     for (const name of ["function fund(", "function release(", "function refund(", "event Funded(", "event Released(", "event Refunded("]) expect(escrow).toContain(name);
     for (const name of ["function pay(", "function setLimits(", "function spentToday(", "function spentThisWeek(", "event Paid(", "event LimitsSet("]) expect(limit).toContain(name);
+    const v2 = readFileSync(path.join(ROOT, "contracts", "VestiarionSpendingLimitV2.sol"), "utf8");
+    for (const name of ["function pay(", "function payAcrossChains(", "function setLimits(", "event PaidAcrossChains(", "error DomainNotAllowed(", "error FeeTooHigh(", "error BalanceLeft("]) {
+      expect(v2).toContain(name);
+    }
+    for (const said of ["payAcrossChains(amount, maxFee, domain, recipient, ref)", "`DomainNotAllowed`", "`FeeTooHigh`", "`BalanceLeft`", "`PaidAcrossChains`"]) expect(PAGE).toContain(said);
   });
 });

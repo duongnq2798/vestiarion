@@ -550,7 +550,7 @@ export default function SecurityPage() {
         <ul>
           <li>Vestiarion holds no SOC 2 report or ISO 27001 certification, and has had no outside security audit or penetration test.</li>
           <li>
-            The contracts, <code>VestiarionSpendingLimit</code> and <code>VestiarionEscrow</code>, were written for Vestiarion and have not been audited.
+            The contracts, <code>VestiarionSpendingLimit</code>, its version 2 <code>VestiarionSpendingLimitV2</code> and <code>VestiarionEscrow</code>, were written for Vestiarion and have not been audited.
           </li>
           <li>Vestiarion is in beta. It changes every day and is provided as is, as the <LegalLink href="/terms">Terms</LegalLink> say.</li>
           <li>

@@ -702,8 +702,9 @@ phase 1b).
   payee chains are `ARC` (domain 26) and `BASE` (domain 6), and its `cctp` is domain 26, `iris-api.circle.com` and
   TokenMessengerV2 `0x28b5…cf5d`. The CCTP payout code is the testnet one, unchanged: from the operating EOA of a
   workspace on its own Circle account (`wallet_host = 'own'`). A workspace paying through its spending-limit contract
-  (`'external'`) still holds the agent's payout (`workspace.onchain_limit_route`), refuses a person's
-  (`ContractRefusal`) and the provider's (`WALLET_CONTRACT_ONLY`), since the contract only does `transferFrom` on Arc.
+  (`'external'`) pays it through version 2 of the contract (below); with version 1 it still holds the agent's payout
+  (`workspace.onchain_limit_route`) and refuses a person's (`ContractRefusal`), since version 1 only does `transferFrom`
+  on Arc.
   `counterparties_chain_check` allows `BASE` for a vendor; it is added in both 0044's rewrite list and 0078's constraint,
   since `db:migrate` re-runs both. 0044's rewrite now runs only before the check exists. A milestone is never paid
   across chains: `createMilestone` refuses a payee on another chain (`another_chain`), Contractors does not offer one, and
@@ -965,6 +966,39 @@ with no browser wallet:
   browser keeps a sent control until it is recorded (`src/lib/treasury/pending-control.ts`) and sends no other until
   then. Figures are read like every typed USDC figure (`src/lib/usdc-figure.ts`): never 0, and an empty field never
   removes one the contract holds.
+- **Version 2 of the contract** (`docs/superpowers/specs/2026-10-19-spending-limit-v2-cross-chain-design.md`).
+  `contracts/VestiarionSpendingLimitV2.sol` is version 1 plus `payAcrossChains(amount, maxFee, domain, recipient,
+  ref)`. The agent calls it to pay a vendor on another chain: the contract counts `amount + maxFee` against both figures
+  and the shared `paid` refs, draws the total from the treasury, approves the TokenMessengerV2 it was deployed with, and
+  burns it with `depositForBurnWithHook` (fast finality, the `cctp-forward` hook). It refuses a domain outside its
+  deployed bitmask (`DomainNotAllowed`) and a fee above 10% of the amount or 2 USDC (`FeeTooHigh`). It reverts if it
+  would keep any USDC or allowance (`BalanceLeft`). Version 1's source and bytecode never change, since deployed
+  contracts are checked against them.
+  - **Artifacts.** `src/lib/spending-limit/artifact.json` holds both under `v1` and `v2`
+    (`npm run spending-limit:compile`).
+  - **Deployment.** `deploymentData` builds either version: v2 with `spendingLimitTerms(network)`, the network's
+    messenger and its CCTP payee domains. Every path C setup deploys v2 where the network has CCTP, on both routes.
+    `verifyDeployedAt` asks a creation call for each version it accepts and says which one the code matched.
+  - **The row.** `spending_limit_contracts.version` records it (migration `0132`, default 1). The row is read with
+    `select('*')`, so code deployed before the migration still reads every row as version 1.
+  - **Paying.** `enforcedSpendingLimit` and `SpendingLimitPayment` carry the version.
+    - `onChainLimitGate` covers a payout to another chain for v2, and asks `spendingLimitCrossChainVerdict` (an
+      `eth_call` of the same `payAcrossChains` from the agent) with the fee the decision read.
+    - `personPaymentThroughContract`, and the early refusal in `approveAndPay`, refuse it only for v1.
+    - `executePayment` lets a contract payment take the `cctp` route only for v2.
+    - `LiveProvider.spendingLimitPay` sends v2's `payAcrossChains` from the agent's wallet under the attempt's key,
+      after reading the fee again and checking it against the payment's ceiling and the contract's cap. It is recorded
+      as a bridge's burn (`cctp:` id), so reconciliation reads the mint from Iris.
+  - **The upgrade** (`src/lib/treasury/contract-upgrade.ts`, `src/components/treasury/ContractUpgrade.tsx`) is open to
+    an owner or admin, live or not, while the row is v1 on a network with CCTP.
+    - A browser wallet deploys v2 with v1's figures, recorded as `next_address`. It then approves v2, which is the
+      switch: `address`, `version` 2 and `previous_address`, signed as `spending_limit_upgraded`. Last it revokes v1,
+      `approve(v1, 0)`, recorded from USDC's own `Approval` and a zero allowance (`previous_revoke_tx_hash`,
+      `spending_limit_revoked`).
+    - A passkey does all four calls in one user operation (`passkeyUpgradeCalls`), rebuilt and checked in the browser.
+    - The switch is refused while any payment intent is `submitting` or `pending` (`in_flight`), since v2's `paid` starts
+      empty. The page keeps what was sent and asks again. The panel stays mounted whatever the status, so its result
+      line outlives the revalidation that moves the status on.
 - **The recovery.** A recovery phrase made in the browser is registered as a recovery owner with
   Circle's `registerRecoveryAddress` (`treasury_recovery_registered`), or skipped knowingly
   (`treasury_recovery_skipped`). `goLive` refuses until one is recorded (`wallet_recovery_undecided`).
