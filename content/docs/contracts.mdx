@@ -1,8 +1,8 @@
-Vestiarion moves money on Arc through two contracts of its own, which each workspace deploys for itself, and through contracts Circle runs. The addresses below are on Arc testnet and open on its explorer; on Arc mainnet, a workspace that pays from its owner's wallet deploys its own spending limit contract, as [VestiarionSpendingLimit](#vestiarionspendinglimit) says.
+Vestiarion moves money on Arc through contracts of its own, its escrow and its spending limit in two versions, which each workspace deploys for itself, and through contracts Circle runs. The addresses below are on Arc testnet and open on its explorer; on Arc mainnet, a workspace that pays from its owner's wallet deploys its own spending limit contract, as [VestiarionSpendingLimit](#vestiarionspendinglimit) says.
 
 ## Vestiarion's contracts
 
-Both were written for Vestiarion and are not audited. Their source is in the repository's [`contracts/`](https://github.com/duongnq2798/vestiarion/tree/main/contracts) folder, compiled with Solidity 0.8.37, the optimizer on at 200 runs, for the `paris` EVM version. A workspace that uses one gets its own copy, deployed through Circle's Smart Contract Platform from a deployer wallet of its own. The app shows the copy's address: the escrow's on **Contractors** → **Milestone escrow**, and the spending limit's, with the agent's wallet, on **Treasury**, under the agent's spending limit, **On Arc**.
+They were written for Vestiarion and are not audited. Their source is in the repository's [`contracts/`](https://github.com/duongnq2798/vestiarion/tree/main/contracts) folder, compiled with Solidity 0.8.37, the optimizer on at 200 runs, for the `paris` EVM version. A workspace that uses one gets its own copy, deployed through Circle's Smart Contract Platform from a deployer wallet of its own. The app shows the copy's address: the escrow's on **Contractors** → **Milestone escrow**, and the spending limit's, with the agent's wallet, on **Treasury**, under the agent's spending limit, **On Arc**.
 
 ### VestiarionEscrow
 
@@ -24,6 +24,18 @@ Makes the agent's spending limit binding on Arc. See [Enforce the limit on Arc](
 - It emits `Paid` and `LimitsSet`. `spentToday()` and `spentThisWeek()` read what it paid.
 - An owner or admin deploys it with **Enforce on Arc**, signed in the ledger as `spending_limit_enforced`.
 - On Arc mainnet, a workspace that pays from its owner's own wallet gets its copy from that wallet instead, which deploys it as the treasury and the owner, and approves it. Every payment from that workspace leaves through `pay`, including the ones people approve. See [Path C: your own wallet](/docs/guides/go-live#path-c-your-own-wallet).
+
+### VestiarionSpendingLimitV2
+
+Version 2 of the spending limit contract, which a workspace paying from its owner's own wallet deploys since Oct 19, 2026. It does everything [VestiarionSpendingLimit](#vestiarionspendinglimit) does, with the same `pay`, figures, events and errors, and also pays a vendor on another chain. See [Pay a vendor on Base from Arc mainnet](/docs/guides/first-payment#pay-a-vendor-on-base-from-arc-mainnet).
+
+- `payAcrossChains(amount, maxFee, domain, recipient, ref)`, for the agent only, counts `amount + maxFee` against both figures and marks `ref` paid, as `pay` does: a `ref` is paid once by either function.
+- It draws `amount + maxFee` from the treasury, approves CCTP's TokenMessengerV2 for it, and calls `depositForBurnWithHook` with fast finality and the forwarding hook, so Circle's Forwarding Service mints on the payee's chain. The payee is minted `amount` and whatever of `maxFee` the transfer does not charge.
+- TokenMessengerV2 and the CCTP domains it may burn for are fixed when it is deployed: Base (domain 6) on Arc mainnet, and the CCTP testnets on Arc testnet. Any other domain is refused with `DomainNotAllowed`.
+- `maxFee` may be at most 10% of `amount` and at most 2 USDC; above either, it refuses with `FeeTooHigh`.
+- It holds nothing after a call: its USDC balance must be what it was before, and its approval of TokenMessengerV2 back at 0, or the whole call reverts with `BalanceLeft`.
+- It emits `PaidAcrossChains` too, and `VERSION()` returns 2.
+- An owner upgrades a version 1 contract to it from **Go live**. See [Upgrade your contract to pay other chains](/docs/guides/go-live#upgrade-your-contract-to-pay-other-chains).
 
 ### Deployed
 

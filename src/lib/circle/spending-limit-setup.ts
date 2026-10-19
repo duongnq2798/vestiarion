@@ -8,6 +8,7 @@ import { currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import artifact from "../spending-limit/artifact.json";
+import type { SpendingLimitVersion } from "../spending-limit/deployment";
 import { readSpendingLimit, SET_LIMITS_SIGNATURE, usdcUnits, type SpendingLimitReading } from "../spending-limit/onchain";
 import { circleCall, CircleCallFailed, createScaWallet, treasuryWalletSetId, walletIdempotencyKey } from "./provision";
 import { awaitSettlement } from "./settlement";
@@ -58,6 +59,8 @@ export interface SpendingLimitRow {
   agent_address: string | null;
   approve_tx_id: string | null;
   enforced: boolean;
+  /** Which version of the contract it is (spending limit v2 V9); absent before migration 0132, which is version 1. */
+  version?: number | null;
 }
 
 const COLUMNS =
@@ -88,7 +91,8 @@ const MISSING_TABLE = new Set(["PGRST205", "42P01"]);
  * they did. Any other failure to read it throws: paying past a limit no one could read is what this guards.
  */
 export async function readSpendingLimitContract(): Promise<SpendingLimitRow | null> {
-  const found = await db().from("spending_limit_contracts").select(COLUMNS).maybeSingle<SpendingLimitRow>();
+  // Whole, so a row reads the same before migration 0132 adds `version` as after (spending limit v2 V9).
+  const found = await db().from("spending_limit_contracts").select("*").maybeSingle<SpendingLimitRow>();
   if (found.error) {
     if (MISSING_TABLE.has(found.error.code ?? "")) return null;
     throw new Error(found.error.message);
@@ -101,12 +105,19 @@ export interface EnforcedSpendingLimit {
   contract: string;
   agentWalletId: string;
   agentAddress: string;
+  /** 2 pays a payee on another chain too (spending limit v2 V11); 1, or absent, pays on the workspace's own chain only. */
+  version?: SpendingLimitVersion;
 }
 
 export async function enforcedSpendingLimit(): Promise<EnforcedSpendingLimit | null> {
   const row = await readSpendingLimitContract();
   if (!row?.enforced || !row.address || !row.agent_wallet_id || !row.agent_address) return null;
-  return { contract: row.address, agentWalletId: row.agent_wallet_id, agentAddress: row.agent_address };
+  return { contract: row.address, agentWalletId: row.agent_wallet_id, agentAddress: row.agent_address, version: contractVersion(row.version) };
+}
+
+/** A row's version: 2 only when it says so, so a row from before migration 0132, or anything unexpected, is version 1. */
+export function contractVersion(value: unknown): SpendingLimitVersion {
+  return value === 2 || value === "2" ? 2 : 1;
 }
 
 /** What the console shows of the limit on Arc (R14): the contract's own figures and count, never the code's. */
@@ -296,8 +307,9 @@ export async function enforceSpendingLimit(input: { actorId: string }, options: 
             description: "Vestiarion agent spending limit",
             walletId: row!.deployer_wallet_id as string,
             blockchain: workspaceNetwork().circleBlockchain as never,
-            abiJson: JSON.stringify(artifact.abi),
-            bytecode: artifact.bytecode,
+            // The Circle-wallet route deploys version 1, as before (spending limit v2, what it does not do).
+            abiJson: JSON.stringify(artifact.v1.abi),
+            bytecode: artifact.v1.bytecode,
             constructorParameters: [workspaceNetwork().tokens.USDC, operating.address, row!.agent_address as string, ...figures(budget)],
             fee: { type: "level", config: { feeLevel: "MEDIUM" } },
             idempotencyKey: spendingLimitStepKey(`${orgId}/${row!.id}/deploy`),

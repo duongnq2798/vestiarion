@@ -1,8 +1,8 @@
 import { workspaceNetwork } from "../workspace-network";
 import { createHash } from "node:crypto";
-import { decodeErrorResult, decodeFunctionResult, encodeFunctionData, getAddress, type Abi, type Hex } from "viem";
+import { decodeErrorResult, decodeFunctionResult, encodeFunctionData, getAddress, type Hex } from "viem";
 import { networkRpcUrl } from "../circle/arcFees";
-import artifact from "./artifact.json";
+import { SPENDING_LIMIT_ARTIFACTS } from "./deployment";
 
 /**
  * Reading a workspace's spending limit contract without sending anything
@@ -11,9 +11,13 @@ import artifact from "./artifact.json";
  * paid. Nothing here can move money; a read that does not complete is `unreadable`, never "allowed".
  */
 
-export const SPENDING_LIMIT_ABI = artifact.abi as Abi;
-/** What the agent's wallet calls: the contract's only function that moves money. */
+export const SPENDING_LIMIT_ABI = SPENDING_LIMIT_ARTIFACTS[1].abi;
+/** Version 2's ABI (docs/superpowers/specs/2026-10-19-spending-limit-v2-cross-chain-design.md V2): version 1's and more. */
+export const SPENDING_LIMIT_V2_ABI = SPENDING_LIMIT_ARTIFACTS[2].abi;
+/** What the agent's wallet calls to pay on Arc: version 1's only function that moves money. */
 export const PAY_SIGNATURE = "pay(address,uint256,bytes32)";
+/** What the agent's wallet calls to pay a payee on another chain, on version 2 only (V2). */
+export const PAY_ACROSS_CHAINS_SIGNATURE = "payAcrossChains(uint256,uint256,uint32,bytes32,bytes32)";
 export const SET_LIMITS_SIGNATURE = "setLimits(uint256,uint256)";
 
 const UNITS = 1_000_000;
@@ -27,7 +31,7 @@ export interface SpendingLimitReadOptions {
 /** The contract's errors a verdict can name; the three that carry figures carry what was paid, the amount and the figure. */
 export type SpendingLimitRefusal =
   | { state: "refused"; error: "OverDailyLimit" | "OverWeeklyLimit"; spent: number; amount: number; limit: number }
-  | { state: "refused"; error: "AlreadyPaid" | "NotAgent" | "InvalidPayment" | "TransferFailed" | string };
+  | { state: "refused"; error: "AlreadyPaid" | "NotAgent" | "InvalidPayment" | "TransferFailed" | "DomainNotAllowed" | "FeeTooHigh" | "BalanceLeft" | string };
 
 export type SpendingLimitVerdict = { state: "allowed" } | SpendingLimitRefusal | { state: "unreadable"; reason: string };
 
@@ -102,9 +106,39 @@ export async function spendingLimitVerdict(
   input: { contract: string; agent: string; to: string; amount: number; ref: Hex },
   options: SpendingLimitReadOptions = {}
 ): Promise<SpendingLimitVerdict> {
+  return verdictOf(input, () => encodeFunctionData({ abi: SPENDING_LIMIT_ABI, functionName: "pay", args: [checksummed(input.to), usdcUnits(input.amount), input.ref] }), options);
+}
+
+/**
+ * What a version 2 contract would do with a payout to another chain now, asked as the agent (docs/superpowers/specs/
+ * 2026-10-19-spending-limit-v2-cross-chain-design.md V12): the same `payAcrossChains` the agent would send, run whole,
+ * the burn included. A figure's refusal counts the amount and the fee together, as the contract does. Sends nothing.
+ */
+export async function spendingLimitCrossChainVerdict(
+  input: { contract: string; agent: string; recipient: string; amount: number; maxFeeUnits: bigint; domain: number; ref: Hex },
+  options: SpendingLimitReadOptions = {}
+): Promise<SpendingLimitVerdict> {
+  return verdictOf(
+    input,
+    () =>
+      encodeFunctionData({
+        abi: SPENDING_LIMIT_V2_ABI,
+        functionName: "payAcrossChains",
+        args: [usdcUnits(input.amount), input.maxFeeUnits, input.domain, recipientBytes32(input.recipient), input.ref],
+      }),
+    options
+  );
+}
+
+/** An EVM address as the 32 bytes CCTP takes for a recipient. */
+export function recipientBytes32(address: string): Hex {
+  return `0x${"0".repeat(24)}${checksummed(address).slice(2).toLowerCase()}`;
+}
+
+async function verdictOf(input: { contract: string; agent: string }, encode: () => Hex, options: SpendingLimitReadOptions): Promise<SpendingLimitVerdict> {
   let data: Hex;
   try {
-    data = encodeFunctionData({ abi: SPENDING_LIMIT_ABI, functionName: "pay", args: [checksummed(input.to), usdcUnits(input.amount), input.ref] });
+    data = encode();
   } catch (error) {
     return { state: "unreadable", reason: `The payment could not be put to the contract: ${error instanceof Error ? error.message : String(error)}` };
   }
@@ -112,7 +146,8 @@ export async function spendingLimitVerdict(
   if (outcome.ok) return { state: "allowed" };
   if (!outcome.revert || outcome.revert === "0x") return { state: "unreadable", reason: outcome.reason };
   try {
-    const decoded = decodeErrorResult({ abi: SPENDING_LIMIT_ABI, data: outcome.revert });
+    // Version 2's errors are version 1's and more, so its ABI names either's.
+    const decoded = decodeErrorResult({ abi: SPENDING_LIMIT_V2_ABI, data: outcome.revert });
     if ((decoded.errorName === "OverDailyLimit" || decoded.errorName === "OverWeeklyLimit") && Array.isArray(decoded.args)) {
       const [spent, amount, limit] = decoded.args as [bigint, bigint, bigint];
       return { state: "refused", error: decoded.errorName, spent: usdc(spent), amount: usdc(amount), limit: usdc(limit) };

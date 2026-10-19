@@ -146,7 +146,7 @@ describe("the counterparty form's chain help (mainnet polish E2)", () => {
     const { chainHelp } = await import("@/components/intake/CounterpartyIntake");
     expect(chainHelp("arc-testnet")).toBe("Another chain is paid from Arc through CCTP, for a fee");
     expect(chainHelp("arc-mainnet")).toBe(
-      "Another chain is paid from Arc through CCTP, for a fee, from your own Circle account; a workspace paying from your own wallet holds it for now"
+      "Another chain is paid from Arc through CCTP, for a fee; from your own wallet, version 2 of its contract pays it"
     );
   });
 });

@@ -2,7 +2,7 @@ import { decodeEventLog, decodeFunctionResult, encodeFunctionData, parseAbiItem,
 import type { NetworkProfile } from "../network";
 import { SPENDING_LIMIT_ABI } from "../spending-limit/onchain";
 import { asAddress, type TreasuryChain, type TreasuryReceipt } from "./chain";
-import { deploymentData } from "../spending-limit/deployment";
+import { deploymentData, type SpendingLimitTerms, type SpendingLimitVersion } from "../spending-limit/deployment";
 
 export { deploymentData };
 
@@ -128,46 +128,61 @@ export type ChainCheck<T> = { state: "pending" } | { state: "refused"; reason: s
  * The owner's deployment of their contract (W8): mined, successful, from their wallet, creating a contract whose code is
  * exactly what Vestiarion's contract deployed with this USDC, wallet and agent leaves, as the network's RPC simulates it.
  * The token, treasury, owner and agent are immutables written into that code, so an equal code proves the wiring; the
- * figures, in storage, are read from the contract.
+ * figures, in storage, are read from the contract. Either version (spending limit v2 V8): `terms` are what version 2 is
+ * checked with, and without them only version 1 is.
  */
 export async function verifyDeployment(
   chain: TreasuryChain,
-  input: { txHash: Hex; usdc: string; treasury: string; agent: string }
-): Promise<ChainCheck<{ contract: Hex; dailyUnits: bigint; weeklyUnits: bigint }>> {
+  input: { txHash: Hex; usdc: string; treasury: string; agent: string; terms?: SpendingLimitTerms | null; versions?: readonly SpendingLimitVersion[] }
+): Promise<ChainCheck<DeployedContract>> {
   const receipt = await chain.receipt(input.txHash);
   if (!receipt) return { state: "pending" };
   if (receipt.status !== "success") return { state: "refused", reason: "The deployment failed on chain; nothing was deployed." };
   if (!same(receipt.from, input.treasury)) return { state: "refused", reason: "That deployment was not sent from this workspace's wallet." };
   if (!receipt.contractAddress) return { state: "refused", reason: "That transaction did not deploy a contract." };
-  return verifyDeployedAt(chain, { contract: receipt.contractAddress, usdc: input.usdc, treasury: input.treasury, agent: input.agent });
+  return verifyDeployedAt(chain, { ...input, contract: receipt.contractAddress });
+}
+
+/** A verified contract: its address, its version and the figures it holds, in units. */
+export interface DeployedContract {
+  contract: Hex;
+  version: SpendingLimitVersion;
+  dailyUnits: bigint;
+  weeklyUnits: bigint;
 }
 
 /**
  * Vestiarion's contract for this USDC, wallet and agent at `contract`, wherever it came from (passkey treasury K7): a
  * smart account deploys it through the bundler and the deterministic deployment proxy, so no receipt names it. CREATE2
- * ties the address to the code, and an equal code proves the wiring, as for a wallet's own deployment (W8).
+ * ties the address to the code, and an equal code proves the wiring, as for a wallet's own deployment (W8). The code of
+ * each version in `versions` (by default every version `terms` allow) is asked for, and the one it equals is its version.
  */
 export async function verifyDeployedAt(
   chain: TreasuryChain,
-  input: { contract: string; usdc: string; treasury: string; agent: string }
-): Promise<ChainCheck<{ contract: Hex; dailyUnits: bigint; weeklyUnits: bigint }>> {
+  input: { contract: string; usdc: string; treasury: string; agent: string; terms?: SpendingLimitTerms | null; versions?: readonly SpendingLimitVersion[] }
+): Promise<ChainCheck<DeployedContract>> {
   const contract = asAddress(input.contract);
-  const [code, expected] = await Promise.all([
-    chain.code(contract),
-    chain.simulateDeploy({ from: asAddress(input.treasury), data: deploymentData({ usdc: input.usdc, treasury: input.treasury, agent: input.agent, dailyUnits: 1n, weeklyUnits: 1n }) }),
-  ]);
+  const versions = (input.versions ?? [1, 2]).filter((version) => version === 1 || input.terms);
+  if (versions.length === 0) return { state: "refused", reason: "This network deploys no version of the contract that could be checked." };
+  const simulate = (version: SpendingLimitVersion) =>
+    chain.simulateDeploy({
+      from: asAddress(input.treasury),
+      data: deploymentData({ usdc: input.usdc, treasury: input.treasury, agent: input.agent, dailyUnits: 1n, weeklyUnits: 1n, terms: version === 2 ? input.terms : null }),
+    });
+  const [code, ...expected] = await Promise.all([chain.code(contract), ...versions.map(simulate)]);
   // A node with no creation calls cannot check a deployment: unreadable, so the owner's deployment is asked about again
   // once it can be, and never refused as someone else's after they paid its gas.
-  if (!expected || expected === "0x") throw new Error("The node gave no code for a creation call; it cannot check a deployment.");
+  if (expected.some((runtime) => !runtime || runtime === "0x")) throw new Error("The node gave no code for a creation call; it cannot check a deployment.");
   // A successful deployment whose code a node does not show yet is one it has not caught up with.
   if (code === "0x") return { state: "pending" };
-  if (!same(code, expected)) {
+  const matched = versions.find((_, index) => same(code, expected[index]));
+  if (!matched) {
     return { state: "refused", reason: "The contract it deployed is not Vestiarion's spending limit contract for this wallet and agent." };
   }
   const figure = async (functionName: "dailyLimit" | "weeklyLimit") =>
     decodeFunctionResult({ abi: SPENDING_LIMIT_ABI, functionName, data: await chain.read(contract, encodeFunctionData({ abi: SPENDING_LIMIT_ABI, functionName })) }) as bigint;
   const [dailyUnits, weeklyUnits] = await Promise.all([figure("dailyLimit"), figure("weeklyLimit")]);
-  return { state: "verified", contract, dailyUnits, weeklyUnits };
+  return { state: "verified", contract, version: matched, dailyUnits, weeklyUnits };
 }
 
 /**

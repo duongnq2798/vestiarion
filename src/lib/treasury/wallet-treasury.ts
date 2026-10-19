@@ -18,6 +18,7 @@ import { AGENT_WALLET_SET, createWallet, walletIdempotencyKey, walletSetIdNamed 
 import { withDeadline } from "../circle/settlement";
 import { MAX_ALLOWANCE } from "../circle/spending-limit-setup";
 import { SPENDING_LIMIT_ABI, usdcUnits } from "../spending-limit/onchain";
+import { spendingLimitTerms, type SpendingLimitVersion } from "../spending-limit/deployment";
 import { asAddress, treasuryChain, type TreasuryChain } from "./chain";
 import {
   approvalIn,
@@ -82,6 +83,14 @@ export interface WalletTreasuryStatus {
    * (review C1). False before the contract, or when the node did not answer: the figures can then not be changed here.
    */
   figuresRead: boolean;
+  /** The contract's version (docs/superpowers/specs/2026-10-19-spending-limit-v2-cross-chain-design.md V9): 2 also pays another chain. */
+  version: SpendingLimitVersion;
+  /**
+   * The upgrade to version 2 the owner can make or finish (V10): `offer` while version 1 carries the payments on a network
+   * with CCTP, `approve` once version 2 is deployed (`next`), `revoke` while version 1 (`previous`) is still approved;
+   * null when there is nothing to do.
+   */
+  upgrade: { state: "offer" | "approve" | "revoke"; next: string | null; previous: string | null } | null;
 }
 
 export type WalletTreasuryErrorCode =
@@ -93,7 +102,8 @@ export type WalletTreasuryErrorCode =
   | "invalid_figures"
   | "chain_refused"
   | "chain_unreadable"
-  | "agent_failed";
+  | "agent_failed"
+  | "in_flight";
 
 const MESSAGES: Record<WalletTreasuryErrorCode, string> = {
   unavailable: "Paying from your own wallet is not available for this workspace on this deployment.",
@@ -105,6 +115,7 @@ const MESSAGES: Record<WalletTreasuryErrorCode, string> = {
   chain_refused: "The chain does not show what was expected; nothing was recorded.",
   chain_unreadable: "The chain could not be read just now; nothing was recorded. Try again in a moment.",
   agent_failed: "Circle did not create the agent's wallet; nothing was recorded. Try again in a moment.",
+  in_flight: "A payment is in flight through your current contract. The new contract takes over once it settles: check again in a few minutes.",
 };
 
 export class WalletTreasuryError extends Error {
@@ -147,7 +158,7 @@ const AGENT_GAS_USDC = "0.5";
 /** How long the agent's account is given to make its notification subscription. */
 const SUBSCRIBE_DEADLINE_MS = 10_000;
 /** An allowance this large is unlimited for every purpose: half of uint256. */
-const UNLIMITED = 2n ** 255n;
+export const UNLIMITED = 2n ** 255n;
 const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
 
 interface OrgFacts {
@@ -182,15 +193,15 @@ function scopedOrgId(): string | null {
   }
 }
 
-function inScopeOf<T>(orgId: string, actorId: string | undefined, fn: () => Promise<T>): Promise<T> {
+export function inScopeOf<T>(orgId: string, actorId: string | undefined, fn: () => Promise<T>): Promise<T> {
   return scopedOrgId() === orgId ? fn() : withOrg(orgId, fn, { userId: actorId });
 }
 
-function record(orgId: string, actorId: string, entry: Omit<LedgerEntryInput, "actor" | "domain">): Promise<void> {
+export function record(orgId: string, actorId: string, entry: Omit<LedgerEntryInput, "actor" | "domain">): Promise<void> {
   return appendLedgerEntryBestEffort(orgId, { actor: "human", domain: "system", ...entry }, scopedOrgId() === orgId ? {} : { enterScope: { userId: actorId } });
 }
 
-interface ContractRow {
+export interface ContractRow {
   id: string;
   treasury_kind: string | null;
   treasury_address: string | null;
@@ -203,13 +214,17 @@ interface ContractRow {
   treasury_signer: TreasurySigner | null;
   recovery_address: string | null;
   recovery_skipped_at: string | null;
+  /** Absent before migration 0132 (spending limit v2 V9): the row is then version 1, with no upgrade. */
+  version?: number | null;
+  next_address?: string | null;
+  next_deploy_tx_hash?: string | null;
+  previous_address?: string | null;
+  previous_revoke_tx_hash?: string | null;
 }
 
-const CONTRACT_COLUMNS =
-  "id, treasury_kind, treasury_address, agent_wallet_id, agent_address, address, deploy_tx_hash, approve_tx_hash, enforced, treasury_signer, recovery_address, recovery_skipped_at";
-
-async function contractRow(): Promise<ContractRow | null> {
-  const found = await db().from("spending_limit_contracts").select(CONTRACT_COLUMNS).maybeSingle<ContractRow>();
+/** The workspace's contract row, whole, so it reads the same before migration 0132 as after (spending limit v2 V9). */
+export async function contractRow(): Promise<ContractRow | null> {
+  const found = await db().from("spending_limit_contracts").select("*").maybeSingle<ContractRow>();
   if (found.error) throw new Error(found.error.message);
   return found.data ?? null;
 }
@@ -221,7 +236,7 @@ async function operatingAccount(): Promise<{ id: string; address: string | null;
 }
 
 /** The owner's wallet, the agent and the contract, in scope, as each step needs them; `wrong_step` where one is missing. */
-async function setup(need: { agent?: boolean; contract?: boolean }): Promise<{ wallet: Hex; row: ContractRow | null; network: NetworkProfile }> {
+export async function setup(need: { agent?: boolean; contract?: boolean }): Promise<{ wallet: Hex; row: ContractRow | null; network: NetworkProfile }> {
   if (currentOrgConfig().chain.walletHost !== "external") throw new WalletTreasuryError("wrong_step", "Choose your own wallet first.");
   const operating = await operatingAccount();
   if (!operating?.address) throw new WalletTreasuryError("wrong_step", "Choose your own wallet first.");
@@ -231,7 +246,7 @@ async function setup(need: { agent?: boolean; contract?: boolean }): Promise<{ w
   return { wallet: asAddress(operating.address), row, network: workspaceNetwork() };
 }
 
-async function readOrRefuse<T>(read: () => Promise<T>): Promise<T> {
+export async function readOrRefuse<T>(read: () => Promise<T>): Promise<T> {
   try {
     return await read();
   } catch (error) {
@@ -240,7 +255,7 @@ async function readOrRefuse<T>(read: () => Promise<T>): Promise<T> {
   }
 }
 
-async function tolerant<T>(read: () => Promise<T>): Promise<T | null> {
+export async function tolerant<T>(read: () => Promise<T>): Promise<T | null> {
   try {
     return await read();
   } catch {
@@ -276,6 +291,8 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
       limitWeeklyUsdc: null,
       approval: null,
       figuresRead: false,
+      version: contractVersion(row?.version),
+      upgrade: null,
     };
     if (external) {
       const limit = await readOutflowBudget(db());
@@ -304,11 +321,51 @@ export async function walletTreasuryStatus(orgId: string, deps: WalletTreasuryDe
     status.spendableUsdc = balance === null || allowance === null ? null : usdcOf(balance < allowance ? balance : allowance);
     status.approval = allowance === null ? null : allowance === 0n ? "stopped" : allowance >= UNLIMITED ? "unlimited" : Number(allowance) / 1_000_000;
     if (!row?.enforced) return { ...status, step: "approve" };
+    status.upgrade = await upgradeState(row, { chain, wallet, network });
     if (network.gasReserveUsdc > 0 && (status.agentGasUsdc === null || status.agentGasUsdc < network.gasReserveUsdc)) return { ...status, step: "gas" };
     // A passkey treasury decides its recovery before it goes live (K8).
     if (status.signer === "passkey" && status.recovery === null) return { ...status, step: "recovery" };
     return { ...status, step: "ready" };
   });
+}
+
+/** A row's version: 2 only when it says so, so a row from before migration 0132 is version 1. */
+export function contractVersion(value: unknown): SpendingLimitVersion {
+  return value === 2 || value === "2" ? 2 : 1;
+}
+
+/**
+ * Whether migration 0132 has run (V9): a row read whole carries `version` once it has. Before it, nothing about version 2
+ * is written or offered: setups deploy version 1, as they did, and the upgrade waits, so no step the owner pays gas
+ * for is refused at its recording.
+ */
+export function versionsRecorded(row: ContractRow | null | undefined): boolean {
+  return Boolean(row) && Object.prototype.hasOwnProperty.call(row, "version");
+}
+
+/** The terms a setup deploys with: version 2's on a network with CCTP, once the row can record it; version 1's otherwise. */
+export function setupTerms(row: ContractRow | null | undefined, network: NetworkProfile) {
+  return versionsRecorded(row) ? spendingLimitTerms(network) : null;
+}
+
+/** The version to write with a recorded deployment: none before migration 0132, whose row has nowhere to keep it. */
+const versionField = (row: ContractRow | null | undefined, version: SpendingLimitVersion) => (versionsRecorded(row) ? { version } : {});
+
+/**
+ * Where an enforced contract's upgrade to version 2 stands (V10): offered while version 1 carries the payments on a
+ * network that deploys version 2; to approve once version 2 is deployed; to revoke while the version 1 it replaced is
+ * still approved, as USDC itself answers (one it does not answer for is asked for again rather than taken as done).
+ */
+async function upgradeState(row: ContractRow, read: { chain: TreasuryChain; wallet: Hex; network: NetworkProfile }): Promise<WalletTreasuryStatus["upgrade"]> {
+  if (!versionsRecorded(row)) return null;
+  if (contractVersion(row.version) === 1) {
+    if (!spendingLimitTerms(read.network)) return null;
+    return row.next_address ? { state: "approve", next: asAddress(row.next_address), previous: null } : { state: "offer", next: null, previous: null };
+  }
+  // Done once the revocation is recorded; until then asked for, even where the allowance reads 0 already (a revocation
+  // sent elsewhere, or not recorded yet), so its record and its entry are never skipped.
+  if (!row.previous_address || row.previous_revoke_tx_hash) return null;
+  return { state: "revoke", next: null, previous: asAddress(row.previous_address) };
 }
 
 /** The message the owner's wallet signs for this workspace now (W3). */
@@ -480,16 +537,18 @@ export async function prepareDeployment(input: { orgId: string; dailyUsdc: numbe
     const { wallet, row, network } = await setup({ agent: true });
     if (row?.approve_tx_hash) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
     const figures = await deploymentFigures(input.dailyUsdc, input.weeklyUsdc);
+    // Version 2 wherever the network has CCTP, once the row can record it (spending limit v2 V8, V9).
+    const terms = setupTerms(row, network);
     return {
       to: null,
-      data: deploymentData({ usdc: network.tokens.USDC, treasury: wallet, agent: row?.agent_address as string, dailyUnits: figures.daily, weeklyUnits: figures.weekly }),
+      data: deploymentData({ usdc: network.tokens.USDC, treasury: wallet, agent: row?.agent_address as string, dailyUnits: figures.daily, weeklyUnits: figures.weekly, terms }),
       value: "0",
       chainId: network.chainId,
     };
   });
 }
 
-function txHash(value: string): Hex {
+export function txHash(value: string): Hex {
   if (!TX_HASH.test(value.trim())) throw new WalletTreasuryError("chain_refused", "That is not a transaction hash.");
   return value.trim().toLowerCase() as Hex;
 }
@@ -507,16 +566,32 @@ export async function recordDeployment(input: { orgId: string; actorId: string; 
     if (row?.address && row.deploy_tx_hash === hash) return "verified";
     if (!row || row.approve_tx_hash) throw new WalletTreasuryError("wrong_step", "The contract is approved already; it cannot be replaced.");
     const chain = deps.chain ?? treasuryChain(network);
-    const check = await readOrRefuse(() => verifyDeployment(chain, { txHash: hash, usdc: network.tokens.USDC, treasury: wallet, agent: row.agent_address as string }));
+    // Either version: one sent before version 2 was deployed here is still recorded, as what it is (spending limit v2 V8).
+    const check = await readOrRefuse(() =>
+      verifyDeployment(chain, { txHash: hash, usdc: network.tokens.USDC, treasury: wallet, agent: row.agent_address as string, terms: spendingLimitTerms(network) })
+    );
     if (check.state === "pending") return "pending";
     if (check.state === "refused") throw new WalletTreasuryError("chain_refused", check.reason);
 
     const written = unwrap(
-      await db().from("spending_limit_contracts").update({ address: check.contract, deploy_tx_hash: hash }).eq("id", row.id).is("approve_tx_hash", null).select("id")
+      await db()
+        .from("spending_limit_contracts")
+        .update({ address: check.contract, deploy_tx_hash: hash, ...versionField(row, check.version) })
+        .eq("id", row.id)
+        .is("approve_tx_hash", null)
+        .select("id")
     ) as Array<{ id: string }>;
     if (written.length === 0) throw new WalletTreasuryError("wrong_step", "The contract is approved already; it cannot be replaced.");
 
-    await recordDeployedContract({ orgId: input.orgId, actorId: input.actorId, contract: check.contract, hash, dailyUnits: check.dailyUnits, weeklyUnits: check.weeklyUnits });
+    await recordDeployedContract({
+      orgId: input.orgId,
+      actorId: input.actorId,
+      contract: check.contract,
+      hash,
+      dailyUnits: check.dailyUnits,
+      weeklyUnits: check.weeklyUnits,
+      version: check.version,
+    });
     return "verified";
   });
 }
@@ -525,13 +600,16 @@ export async function recordDeployment(input: { orgId: string; actorId: string; 
  * What a deployment of the workspace's contract records, on either route (W8, K7): its figures become the agent's
  * spending limit, so the code's limit and the contract's agree, and the ledger says so; then `spending_limit_deployed`.
  */
-async function recordDeployedContract(input: {
+export async function recordDeployedContract(input: {
   orgId: string;
   actorId: string;
   contract: Hex;
   hash: Hex;
   dailyUnits: bigint;
   weeklyUnits: bigint;
+  /** Which version it is (spending limit v2 V9), and for an upgrade the contract it is to replace. */
+  version: SpendingLimitVersion;
+  replaces?: Hex;
 }): Promise<{ dailyUsdc: number | null; weeklyUsdc: number | null }> {
   const { contract, hash } = input;
   const to = { dailyUsdc: input.dailyUnits === 0n ? null : Number(input.dailyUnits) / 1_000_000, weeklyUsdc: input.weeklyUnits === 0n ? null : Number(input.weeklyUnits) / 1_000_000 };
@@ -549,8 +627,18 @@ async function recordDeployedContract(input: {
   }
   await record(input.orgId, input.actorId, {
     action: "spending_limit_deployed",
-    summary: `The owner's wallet deployed the workspace's spending limit contract ${contract}`,
-    detail: { by: input.actorId, contract, txHash: hash, dailyUsdc: to.dailyUsdc, weeklyUsdc: to.weeklyUsdc },
+    summary: input.replaces
+      ? `The owner's wallet deployed version ${input.version} of the workspace's spending limit contract, ${contract}, to replace ${input.replaces}`
+      : `The owner's wallet deployed the workspace's spending limit contract ${contract}`,
+    detail: {
+      by: input.actorId,
+      contract,
+      txHash: hash,
+      dailyUsdc: to.dailyUsdc,
+      weeklyUsdc: to.weeklyUsdc,
+      version: input.version,
+      ...(input.replaces ? { replaces: input.replaces } : {}),
+    },
   });
   return to;
 }
@@ -583,7 +671,9 @@ export async function recordPasskeySetup(
     if (receipt.status !== "success" || !userOperationSucceeded(receipt, wallet)) {
       throw new WalletTreasuryError("chain_refused", "The setup failed on chain; nothing was set up.");
     }
-    const check = await readOrRefuse(() => verifyDeployedAt(chain, { contract, usdc: network.tokens.USDC, treasury: wallet, agent: row.agent_address as string }));
+    const check = await readOrRefuse(() =>
+      verifyDeployedAt(chain, { contract, usdc: network.tokens.USDC, treasury: wallet, agent: row.agent_address as string, terms: spendingLimitTerms(network) })
+    );
     if (check.state === "pending") return "pending";
     if (check.state === "refused") throw new WalletTreasuryError("chain_refused", check.reason);
     const allowance = await readOrRefuse(() => chain.allowance(wallet, check.contract));
@@ -593,13 +683,21 @@ export async function recordPasskeySetup(
     const written = unwrap(
       await db()
         .from("spending_limit_contracts")
-        .update({ address: check.contract, deploy_tx_hash: hash, approve_tx_hash: hash, enforced: true })
+        .update({ address: check.contract, deploy_tx_hash: hash, approve_tx_hash: hash, enforced: true, ...versionField(row, check.version) })
         .eq("id", row.id)
         .is("approve_tx_hash", null)
         .select("id")
     ) as Array<{ id: string }>;
     if (written.length === 0) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
-    const figures = await recordDeployedContract({ orgId: input.orgId, actorId: input.actorId, contract: check.contract, hash, dailyUnits: check.dailyUnits, weeklyUnits: check.weeklyUnits });
+    const figures = await recordDeployedContract({
+      orgId: input.orgId,
+      actorId: input.actorId,
+      contract: check.contract,
+      hash,
+      dailyUnits: check.dailyUnits,
+      weeklyUnits: check.weeklyUnits,
+      version: check.version,
+    });
     await record(input.orgId, input.actorId, {
       action: "spending_limit_enforced",
       summary: "The owner's passkey wallet approved its spending limit contract, which now carries every payment",
@@ -760,6 +858,8 @@ export async function recordApproval(input: { orgId: string; actorId: string; tx
 export interface PreparedPasskeySetup {
   contract: Hex;
   salt: Hex;
+  /** The version it deploys (spending limit v2 V8): 2 on a network with CCTP once migration 0132 has run. */
+  version: SpendingLimitVersion;
   /** The contract is at its address already, from a setup whose recording was lost: the deploy call is left out. */
   deployed: boolean;
   /** The agent holds its gas minimum already: the gas call is left out, so a second setup never pays it twice. */
@@ -801,6 +901,9 @@ export async function preparePasskeySetup(
       capUnits,
       salt,
       gasWei: parseEther(AGENT_GAS_USDC),
+      // Version 2 wherever the network has CCTP, once the row can record it (spending limit v2 V8, V9); the server
+      // returns which, and the browser builds the same.
+      terms: setupTerms(row, network),
     };
     const chain = deps.chain ?? treasuryChain(network);
     const planned = passkeySetupCalls({ ...base, deployed: false, agentFunded: false });
@@ -812,6 +915,7 @@ export async function preparePasskeySetup(
     return {
       contract,
       salt,
+      version: base.terms ? 2 : 1,
       deployed,
       agentFunded,
       dailyUnits: figures.daily.toString(),

@@ -442,6 +442,7 @@ describe("GoLivePanel's props", () => {
       | keyof GoLiveStatus
       | keyof GoLiveStatus["wallets"][number]
       | keyof NonNullable<GoLiveStatus["walletTreasury"]>
+      | keyof NonNullable<NonNullable<GoLiveStatus["walletTreasury"]>["upgrade"]>
     >();
   });
 });
@@ -532,6 +533,8 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
     limitWeeklyUsdc: 150,
     approval: null,
     figuresRead: false,
+    version: 1,
+    upgrade: null,
     ...overrides,
   });
 
@@ -591,6 +594,37 @@ describe("GoLivePanel and the owner's own wallet (wallet treasury W1, W5-W10)", 
 
     it("shows a member who cannot administer the workspace no controls", () => {
       expect(text(panel(liveTreasury(), false))).not.toContain("Change what the agent may pay");
+    });
+
+    describe("the upgrade to version 2 (spending limit v2 V10)", () => {
+      const offer = { state: "offer" as const, next: null, previous: null };
+
+      it("offers a browser wallet's three steps, one at a time, and says the contract is not audited", () => {
+        const words = text(panel(liveTreasury({ signer: "wallet", upgrade: offer })));
+        expect(words).toContain("Pay vendors on other chains");
+        expect(words).toContain("The new version also pays a vendor on Base through CCTP");
+        expect(words).toContain("The contract is not audited.");
+        expect(words).toContain("Step 1 of 3");
+        expect(words).toContain("Deploy the new contract");
+        const approve = text(panel(liveTreasury({ signer: "wallet", upgrade: { state: "approve", next: `0x${"e6".repeat(20)}`, previous: null } })));
+        expect(approve).toContain("Step 2 of 3");
+        expect(approve).toContain("Approve the new contract");
+        const revoke = text(panel(liveTreasury({ signer: "wallet", version: 2, upgrade: { state: "revoke", next: null, previous: CONTRACT } })));
+        expect(revoke).toContain("Finish the upgrade");
+        expect(revoke).toContain("Revoke the old contract");
+      });
+
+      it("offers a passkey one confirmation for all of it", () => {
+        const words = text(panel(liveTreasury({ upgrade: offer })));
+        expect(words).toContain("Upgrade with your passkey");
+        expect(words).toContain("takes the old contract's approval back, so it can move none of your USDC.");
+        expect(words).not.toContain("Step 1 of 3");
+      });
+
+      it("says nothing once there is nothing to upgrade, and nothing to a member who cannot administer", () => {
+        expect(text(panel(liveTreasury({ version: 2, upgrade: null })))).not.toContain("Pay vendors on other chains");
+        expect(text(panel(liveTreasury({ upgrade: offer }), false))).not.toContain("Pay vendors on other chains");
+      });
     });
   });
 

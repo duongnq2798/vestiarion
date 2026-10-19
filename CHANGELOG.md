@@ -14,12 +14,22 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Pay a vendor on Base from your own wallet.** A workspace that pays from the owner's own wallet, through its
+  spending limit contract, can now pay a vendor on Base too. Version 2 of the contract adds `payAcrossChains`: the
+  agent's wallet asks it to take the payment and its CCTP fee from your wallet, count both against the daily and 7-day
+  figures, and burn them for Base, so the agent's wallet still never holds your USDC. The contract only burns for Base
+  on Arc mainnet, refuses a fee above 10% of the payment or 2 USDC, and keeps nothing after a call. It is not audited.
+  Every new setup deploys version 2. A workspace set up before keeps paying through version 1, and **Go live** offers
+  its owner the upgrade: deploy the new contract, approve it and revoke the old one from a browser wallet, or all of it
+  with one passkey confirmation. The upgrade waits for any payment in flight. Signed as `spending_limit_upgraded` and
+  `spending_limit_revoked`. Migration `0132_spending_limit_v2.sql` adds the contract's version to its row.
+  [Guide](https://www.vestiarion.xyz/docs/guides/go-live#upgrade-your-contract-to-pay-other-chains).
+
 - **Pay a vendor on Base from Arc mainnet.** A workspace on Arc mainnet can now pay a vendor's USDC address on Base,
   where most contractors who want USDC already hold it. The operating wallet burns the USDC on Arc through Circle's
   CCTP and Circle mints it to the vendor on Base; the fee, about 0.054 USDC when checked, comes on top of the invoice,
-  and the payment counts as paid once it is minted on Base. It runs from a workspace on its own Circle account; one
-  paying from your own wallet through its contract still holds such a bill for a person, since the contract pays on Arc
-  only. Choose **Base** under **Chain** on Counterparties. The database allows the new chain through edits to two
+  and the payment counts as paid once it is minted on Base. It runs from a workspace on its own Circle account, and from
+  your own wallet through version 2 of its contract (above). Choose **Base** under **Chain** on Counterparties. The database allows the new chain through edits to two
   existing migrations, which `db:migrate` re-runs. A vendor paid on another chain can no longer be given a milestone:
   milestones are released on the workspace's own chain, so its USDC would have gone to that address on Arc. A release
   of one made before is held. A live slice now carries a vendor on Base Sepolia as a vendor on Base, without the

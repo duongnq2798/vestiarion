@@ -873,8 +873,9 @@ async function sendClaimed(
     if (request.bank && route !== "bank") {
       throw new Error("This bill was first paid to an address; nothing was sent. Check that payment before paying it to the vendor's bank account.");
     }
-    // The contract carries USDC paid on Arc only: not a release from escrow, not a payout to another chain (R3, R4).
-    if (request.spendingLimit && route !== null) {
+    // The contract carries USDC paid on Arc, never a release from escrow (R3, R4); a payout to another chain only through
+    // CCTP and a version 2 contract (docs/superpowers/specs/2026-10-19-spending-limit-v2-cross-chain-design.md V11).
+    if (request.spendingLimit && route !== null && !(route === "cctp" && request.spendingLimit.version === 2)) {
       throw new Error("This payment cannot go through the spending limit contract; nothing was sent.");
     }
     if (route === "gateway" && !sameGatewayPayout(intent, request)) {

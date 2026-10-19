@@ -5,7 +5,8 @@
  * chain makes public anyway. It runs in the browser and holds no secret.
  */
 
-export type SentStep = "deploy" | "approve";
+/** A setup step, or one of the upgrade to version 2's (docs/superpowers/specs/2026-10-19-spending-limit-v2-cross-chain-design.md V10). */
+export type SentStep = "deploy" | "approve" | "upgrade-deploy" | "upgrade-approve" | "upgrade-revoke";
 
 /** The parts of `localStorage` used, so a test can stand in for it; null where the browser has none. */
 export type SentStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;

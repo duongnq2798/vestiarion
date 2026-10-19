@@ -171,8 +171,8 @@ describe("enforcing the spending limit on Arc", () => {
       name: "VestiarionSpendingLimit",
       walletId: "wallet-deployer",
       blockchain: "ARC-TESTNET",
-      bytecode: artifact.bytecode,
-      abiJson: JSON.stringify(artifact.abi),
+      bytecode: artifact.v1.bytecode,
+      abiJson: JSON.stringify(artifact.v1.abi),
       constructorParameters: [USDC, OPERATING.address, AGENT, "5000000", "20000000"],
       idempotencyKey: spendingLimitStepKey(`${ORG}/lim-1/deploy`),
     });

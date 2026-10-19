@@ -67,3 +67,54 @@ describe("onChainLimitGate", () => {
     expect(read).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("onChainLimitGate with a version 2 contract (spending limit v2 V12)", () => {
+  const V2 = { ...ENFORCED, version: 2 as const };
+  const FEE = { maxFeeUnits: 54_000n, domain: 6 };
+
+  it("covers a payout to another chain, asking the contract's payAcrossChains with the fee read for the decision", async () => {
+    const verdict = vi.fn();
+    const crossChainVerdict = vi.fn(async () => ({ state: "allowed" as const }));
+    const gate = onChainLimitGate({ read: async () => V2, verdict, crossChainVerdict });
+    const ref = spendingLimitRef("invoice", "inv-1");
+    const check = await gate.check({ sourceType: "invoice", sourceId: "inv-1", to: PAYEE, amount: 25, destinationChain: "BASE", bridgeFee: FEE });
+    expect(crossChainVerdict).toHaveBeenCalledWith({ contract: V2.contract, agent: V2.agentAddress, recipient: PAYEE, amount: 25, maxFeeUnits: 54_000n, domain: 6, ref });
+    expect(verdict).not.toHaveBeenCalled();
+    expect(check).toEqual({
+      contract: V2.contract,
+      agent: V2.agentAddress,
+      ref,
+      covered: true,
+      verdict: { state: "allowed" },
+      payment: { contract: V2.contract, agentWalletId: V2.agentWalletId, ref, version: 2 },
+    });
+  });
+
+  it("carries the contract's refusal past a figure, the fee counted, so the bill is held with its figures", async () => {
+    const refused = { state: "refused" as const, error: "OverDailyLimit", spent: 40, amount: 10.054, limit: 50 };
+    const gate = onChainLimitGate({ read: async () => V2, crossChainVerdict: vi.fn(async () => refused) });
+    expect(await gate.check({ sourceType: "invoice", sourceId: "inv-1", to: PAYEE, amount: 10, destinationChain: "BASE", bridgeFee: FEE })).toMatchObject({ covered: true, verdict: refused });
+  });
+
+  it("asks nothing without a fee, which the bridge guardrail holds, and still names what to send it through", async () => {
+    const crossChainVerdict = vi.fn();
+    const gate = onChainLimitGate({ read: async () => V2, crossChainVerdict });
+    expect(await gate.check({ sourceType: "invoice", sourceId: "inv-1", to: PAYEE, amount: 1, destinationChain: "BASE", bridgeFee: null })).toMatchObject({
+      covered: true,
+      verdict: null,
+      payment: { version: 2 },
+    });
+    expect(crossChainVerdict).not.toHaveBeenCalled();
+  });
+
+  it("still cannot carry EURC; version 1 still cannot carry another chain", async () => {
+    expect(await onChainLimitGate({ read: async () => V2 }).check({ sourceType: "invoice", sourceId: "inv-1", to: PAYEE, amount: 1, currency: "EURC", destinationChain: "BASE" })).toMatchObject({
+      covered: false,
+      uncoveredBecause: "eurc",
+    });
+    expect(await onChainLimitGate({ read: async () => ({ ...ENFORCED, version: 1 as const }) }).check({ sourceType: "invoice", sourceId: "inv-1", to: PAYEE, amount: 1, destinationChain: "BASE", bridgeFee: FEE })).toMatchObject({
+      covered: false,
+      uncoveredBecause: "another_chain",
+    });
+  });
+});

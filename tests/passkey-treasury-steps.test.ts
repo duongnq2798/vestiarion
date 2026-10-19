@@ -2,6 +2,8 @@ import { getAddress, parseEther } from "viem";
 import { describe, expect, it } from "vitest";
 import type { TreasuryChain } from "@/lib/treasury/chain";
 import { passkeySetupCalls, spendingLimitSalt } from "@/lib/passkey-treasury";
+import { ARC_MAINNET } from "@/lib/network";
+import { spendingLimitTerms } from "@/lib/spending-limit/deployment";
 import {
   choosePasskeyTreasury,
   chooseWalletTreasury,
@@ -134,6 +136,7 @@ describe("preparing a passkey wallet's setup (K6)", () => {
       deployed,
       agentFunded,
       gasWei: parseEther("0.5"),
+      terms: spendingLimitTerms(ARC_MAINNET),
     });
 
   it("builds the three calls with the workspace's figures, and says what it built them from", async () => {
@@ -141,6 +144,7 @@ describe("preparing a passkey wallet's setup (K6)", () => {
     expect(await prepared(world({ ...passkey, contract: passkeyRow() }), chain())).toEqual({
       contract: expected.contract,
       salt: spendingLimitSalt(ORG),
+      version: 2,
       deployed: false,
       agentFunded: false,
       dailyUnits: "50000000",

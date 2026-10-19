@@ -161,6 +161,9 @@ export function onChainRefusalClause(verdict: Extract<SpendingLimitVerdict, { st
   if (verdict.error === "OverDailyLimit" && "spent" in verdict) return `${verdict.spent} USDC already paid today against its ${verdict.limit} USDC daily limit`;
   if (verdict.error === "OverWeeklyLimit" && "spent" in verdict) return `${verdict.spent} USDC paid in the last 7 days against its ${verdict.limit} USDC 7-day limit`;
   if (verdict.error === "AlreadyPaid") return "this payment was already made through it";
+  // A version 2 contract's own bounds on a payout to another chain (spending limit v2 V3, V4).
+  if (verdict.error === "FeeTooHigh") return "the CCTP fee is above the most it lets a payout pay";
+  if (verdict.error === "DomainNotAllowed") return "it was not deployed to pay that chain";
   return `it answers ${verdict.error}`;
 }
 

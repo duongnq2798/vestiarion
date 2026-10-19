@@ -36,6 +36,7 @@ import type { GoLiveStatus } from "@/lib/platform/go-live";
 import AddUsdcFromChain from "@/components/treasury/AddUsdcFromChain";
 import PasskeyTreasurySteps from "@/components/treasury/PasskeyTreasurySteps";
 import TreasuryWalletControls from "@/components/treasury/TreasuryWalletControls";
+import ContractUpgrade from "@/components/treasury/ContractUpgrade";
 import { WalletTreasuryChoice } from "@/components/treasury/WalletTreasuryChoice";
 import WalletTreasurySteps, { WalletTreasurySummary } from "@/components/treasury/WalletTreasurySteps";
 import { DocsLink } from "@/components/DocsLink";
@@ -564,6 +565,8 @@ function LiveDetails({ orgSlug, status, canAdminister }: { orgSlug: string; stat
       {status.walletTreasury && <WalletTreasurySummary status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
       {/* The treasury's own wallet changes its contract's figures, or stops and resumes the agent (treasury wallet controls C1). */}
       {status.walletTreasury && canAdminister && <TreasuryWalletControls orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
+      {/* Mounted whatever the upgrade's state, so the line saying what was done outlives the status it changed (spending limit v2 V10). */}
+      {status.walletTreasury && canAdminister && <ContractUpgrade orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />}
       {/* "Your wallet" is the owner's: a member who cannot administer the workspace is not asked to fund it (review M5). */}
       {canAdminister && <AddUsdc status={status} />}
       <div className="space-y-1 text-sm text-ink-2">
@@ -660,6 +663,10 @@ export default function GoLivePanel({ orgSlug, status, canAdminister, sampleBala
       <SectionHeader id="go-live-title" title="Go live" meta={<StatusLine status={status} capability={capability} />} action={<DocsLink href="/docs/guides/go-live" topic="going live" />} />
       <div className="space-y-4">
         {body}
+        {/* A workspace set up on version 1 but not live yet can upgrade before it goes live (spending limit v2 V10). */}
+        {canAdminister && status.step === "go_live" && status.walletTreasury && !status.mainnetOff && (
+          <ContractUpgrade orgSlug={orgSlug} status={status.walletTreasury} network={status.network ?? "arc-mainnet"} />
+        )}
         {canReplace && <ReplaceCredentials orgSlug={orgSlug} status={status} />}
         {canAdminister && hosted && <HostedOwnAccount orgSlug={orgSlug} status={status} />}
       </div>

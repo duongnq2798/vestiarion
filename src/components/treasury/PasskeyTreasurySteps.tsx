@@ -45,6 +45,7 @@ import {
   type PasskeyTreasury,
 } from "@/lib/passkey-treasury";
 import { passkeyMark, passkeyName } from "@/lib/passkey-wallet";
+import { spendingLimitTerms } from "@/lib/spending-limit/deployment";
 import type { SendOutcome } from "@/lib/passkey-wallet-send";
 import type { WalletTreasuryStatus } from "@/lib/treasury/wallet-treasury";
 
@@ -350,6 +351,8 @@ function SetupStep({ orgSlug, status, label }: { orgSlug: string; status: Wallet
         deployed: setup.deployed,
         agentFunded,
         gasWei: AGENT_GAS_WEI,
+        // The version the server says it deploys; its terms are Arc mainnet's own, never the server's (spending limit v2 V8).
+        terms: setup.version === 2 ? spendingLimitTerms(ARC_MAINNET) : null,
       });
       checkPasskeySetup(setup, expected);
       say("Confirm the setup with your passkey.");

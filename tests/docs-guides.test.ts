@@ -1370,7 +1370,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Legal or trading name", COUNTERPARTY_FORM],
     ["Payment limit (USDC)", COUNTERPARTY_FORM],
     ["Another chain is paid from Arc through CCTP, for a fee", COUNTERPARTY_FORM],
-    ["Another chain is paid from Arc through CCTP, for a fee, from your own Circle account; a workspace paying from your own wallet holds it for now", COUNTERPARTY_FORM],
+    ["Another chain is paid from Arc through CCTP, for a fee; from your own wallet, version 2 of its contract pays it", COUNTERPARTY_FORM],
     ["Only USDC on Arc mainnet can be paid from your wallet's contract.", "src/lib/treasury/person-payment.ts", "can be paid from your wallet's contract."],
     ["Payment address", COUNTERPARTY_FORM],
     ["Optional until payment setup", COUNTERPARTY_FORM],

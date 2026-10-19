@@ -41,10 +41,11 @@ vi.mock("@/lib/agent/pay", () => ({
   syncOperatingBalance: syncOperatingBalanceMock,
 }));
 
-const { verdictMock } = vi.hoisted(() => ({ verdictMock: vi.fn() }));
+const { verdictMock, crossChainVerdictMock } = vi.hoisted(() => ({ verdictMock: vi.fn(), crossChainVerdictMock: vi.fn() }));
 vi.mock("@/lib/spending-limit/onchain", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/spending-limit/onchain")>()),
   spendingLimitVerdict: verdictMock,
+  spendingLimitCrossChainVerdict: crossChainVerdictMock,
 }));
 
 const { getChainProviderMock } = vi.hoisted(() => ({ getChainProviderMock: vi.fn() }));
@@ -3378,6 +3379,65 @@ describe("approveAndPay from a workspace paying from its owner's own wallet (wal
       expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/claim_invoice_decision")).toBe(false);
     }
     expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  describe("a vendor on Base (spending limit v2 V13)", () => {
+    const onBase = (version: number | undefined) => ({
+      ...external,
+      spendingLimit: { ...external.spendingLimit, ...(version === undefined ? {} : { version }) },
+      invoice: (request: RecordedRequest): FakeReply => {
+        const row = invoiceRow({ amount: "30", counterparties: { name: "Acme Supplies", risk_level: "medium", address: PAYEE_ON_BASE, chain: "BASE" } });
+        return request.params.get("id") ? { body: row } : { body: [row] };
+      },
+    });
+    const PAYEE_ON_BASE = "0x19801dAA2F1E5E5e707b7E57Ff664f3d27fFdd12";
+    const quotes = {
+      bridgeFee: vi.fn(async () => ({ feeUsdc: 0.054, maxFeeUnits: 54_000n, domain: 6 })),
+      gatewayQuote: vi.fn(async () => null),
+    };
+
+    beforeEach(() => {
+      crossChainVerdictMock.mockReset();
+      getChainProviderMock.mockReturnValue({ mode: "live", network: ARC_MAINNET, earnMode: "simulate", estimatedFeeUsd: 0.003 });
+      syncOperatingBalanceMock.mockResolvedValue(500);
+    });
+
+    it("pays through a version 2 contract's payAcrossChains, asked first with the fee just read", async () => {
+      crossChainVerdictMock.mockResolvedValue({ state: "allowed" });
+      payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xburn", execution: null, note: "", operatingBalance: 0 });
+      const { run } = approvalsFake(onBase(2));
+      await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, quotes));
+      expect(crossChainVerdictMock).toHaveBeenCalledWith(expect.objectContaining({ contract: CONTRACT, agent: AGENT, recipient: PAYEE_ON_BASE, amount: 30, maxFeeUnits: 54_000n, domain: 6 }));
+      expect(payInvoiceMock.mock.calls[0][0]).toMatchObject({
+        destinationChain: "BASE",
+        route: "cctp",
+        spendingLimit: { contract: CONTRACT, agentWalletId: "agent-wallet", version: 2 },
+      });
+    });
+
+    it("refuses past a version 2 contract's figure, the fee counted, and claims nothing", async () => {
+      crossChainVerdictMock.mockResolvedValue({ state: "refused", error: "OverDailyLimit", spent: 40, amount: 30.054, limit: 50 });
+      const { fake, run } = approvalsFake(onBase(2));
+      await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, quotes))).rejects.toThrow(
+        "Paying 30.054 USDC with its CCTP fee would pass the contract's daily limit of 50 USDC: 40 USDC paid so far."
+      );
+      expect(payInvoiceMock).not.toHaveBeenCalled();
+      expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/claim_invoice_decision")).toBe(false);
+    });
+
+    it("keeps refusing it by name for a version 1 contract, before any fee is asked for", async () => {
+      for (const version of [1, undefined]) {
+        quotes.bridgeFee.mockClear();
+        const { fake, run } = approvalsFake(onBase(version));
+        await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }, quotes))).rejects.toMatchObject({
+          code: "payments_off",
+          message: "Only USDC on Arc mainnet can be paid from your wallet's contract.",
+        });
+        expect(quotes.bridgeFee).not.toHaveBeenCalled();
+        expect(fake.requests.some((request) => request.path === "/rest/v1/rpc/claim_invoice_decision")).toBe(false);
+      }
+      expect(payInvoiceMock).not.toHaveBeenCalled();
+    });
   });
 });
 

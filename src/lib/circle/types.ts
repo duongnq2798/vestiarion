@@ -97,6 +97,11 @@ export interface SpendingLimitPayment {
   contract: string;
   agentWalletId: string;
   ref: string;
+  /**
+   * The contract's version (docs/superpowers/specs/2026-10-19-spending-limit-v2-cross-chain-design.md V11): 2 also pays
+   * a payee on another chain, through `payAcrossChains`; absent is 1, which pays on Arc only.
+   */
+  version?: 1 | 2;
 }
 
 /** One transfer in a batch (batch payouts R1): USDC on Arc testnet, to the payee's address. */

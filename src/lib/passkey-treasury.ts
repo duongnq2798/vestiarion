@@ -3,7 +3,7 @@ import { ARC_MAINNET } from "./network";
 import { browserReason, passkeySmartAccount, type PasskeySdk, type PasskeyWalletConfig } from "./passkey-wallet";
 import type { SendOutcome } from "./passkey-wallet-send";
 import type { WalletTreasuryStep } from "./treasury/wallet-treasury";
-import { deploymentData, setLimitsData } from "./spending-limit/deployment";
+import { deploymentData, setLimitsData, type SpendingLimitTerms } from "./spending-limit/deployment";
 
 /**
  * A passkey wallet as a workspace's treasury on Arc mainnet (docs/superpowers/specs/2026-10-07-passkey-treasury-
@@ -61,7 +61,7 @@ const DEPLOYED_FIGURE_UNITS = 1n;
  * A passkey wallet's setup as one user operation (K6): the contract deployed through the proxy (left out when it is at
  * its address already), its figures set, its approval on USDC (unlimited, or the cap), and the agent's gas in Arc's
  * native USDC (left out when the agent holds its own already). The server builds it, and the browser builds it again
- * from what it shows the owner before the passkey signs.
+ * from what it shows the owner before the passkey signs. With `terms`, the contract is version 2 (spending limit v2 V8).
  */
 export function passkeySetupCalls(input: {
   usdc: string;
@@ -74,6 +74,24 @@ export function passkeySetupCalls(input: {
   deployed: boolean;
   agentFunded: boolean;
   gasWei: bigint;
+  terms?: SpendingLimitTerms | null;
+}): { contract: Hex; calls: SetupCall[] } {
+  const { contract, calls } = deployAndApprove(input);
+  if (!input.agentFunded) calls.push({ to: checksummed(input.agent), data: "0x", value: input.gasWei });
+  return { contract, calls };
+}
+
+/** The contract at its CREATE2 address (deployed unless it is there already), its figures set, and approved on USDC. */
+function deployAndApprove(input: {
+  usdc: string;
+  treasury: string;
+  agent: string;
+  dailyUnits: bigint;
+  weeklyUnits: bigint;
+  capUnits: bigint | null;
+  salt: Hex;
+  deployed: boolean;
+  terms?: SpendingLimitTerms | null;
 }): { contract: Hex; calls: SetupCall[] } {
   const bytecode = deploymentData({
     usdc: input.usdc,
@@ -81,6 +99,7 @@ export function passkeySetupCalls(input: {
     agent: input.agent,
     dailyUnits: DEPLOYED_FIGURE_UNITS,
     weeklyUnits: DEPLOYED_FIGURE_UNITS,
+    terms: input.terms,
   });
   const contract = getContractAddress({ opcode: "CREATE2", from: DEPLOYMENT_PROXY, salt: input.salt, bytecode });
   const calls: SetupCall[] = [];
@@ -91,7 +110,33 @@ export function passkeySetupCalls(input: {
     data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract, input.capUnits ?? maxUint256] }),
     value: 0n,
   });
-  if (!input.agentFunded) calls.push({ to: checksummed(input.agent), data: "0x", value: input.gasWei });
+  return { contract, calls };
+}
+
+/**
+ * A passkey wallet's upgrade to version 2 as one user operation (docs/superpowers/specs/2026-10-19-spending-limit-v2-
+ * cross-chain-design.md V10): version 2 deployed through the proxy (left out when it is at its address already), the
+ * figures version 1 holds set on it, its approval on USDC, and version 1's approval taken back to 0, in that order.
+ * Built by the server and again by the browser, as the setup is.
+ */
+export function passkeyUpgradeCalls(input: {
+  usdc: string;
+  treasury: string;
+  agent: string;
+  dailyUnits: bigint;
+  weeklyUnits: bigint;
+  capUnits: bigint | null;
+  salt: Hex;
+  deployed: boolean;
+  terms: SpendingLimitTerms;
+  previous: string;
+}): { contract: Hex; calls: SetupCall[] } {
+  const { contract, calls } = deployAndApprove(input);
+  calls.push({
+    to: checksummed(input.usdc),
+    data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [checksummed(input.previous), 0n] }),
+    value: 0n,
+  });
   return { contract, calls };
 }
 

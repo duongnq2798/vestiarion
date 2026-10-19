@@ -17,6 +17,7 @@ import { counterpartyChainProblem } from "../intake-validation";
 import { workspaceNetwork } from "../workspace-network";
 import { bridgeFee, type BridgeFee } from "../circle/cctp";
 import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
+import { enforcedSpendingLimit } from "../circle/spending-limit-setup";
 import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../payout-route";
 import { bankAccountsOf, readPayoutPartner, type CounterpartyBankAccount } from "../bank-payouts/store";
 import type { BankPayoutShown } from "../bank-payouts/words";
@@ -1065,10 +1066,15 @@ export async function approveAndPay(
   // Only USDC crosses chains (CCTP payouts X6): refused before any claim.
   if (invoice.currency !== "USDC" && paidAcrossChains(invoice.destinationChain)) raise("bridge_unsupported_token");
 
-  // From the owner's own wallet, whose contract pays on its own chain only, a payout to another chain is refused by name
-  // here, before any approval is recorded, fee asked for or funds counted (mainnet Base payouts B3). Such a workspace
-  // never sent one: its provider refuses every one.
-  if (!invoice.bankAccount && paidAcrossChains(invoice.destinationChain) && currentOrgConfig().chain.walletHost === "external") {
+  // From the owner's own wallet, a version 1 contract pays on its own chain only: a payout to another chain is refused by
+  // name here, before any approval is recorded, fee asked for or funds counted (mainnet Base payouts B3). A version 2
+  // contract pays it through `payAcrossChains`, within its figures (spending limit v2 V13).
+  if (
+    !invoice.bankAccount &&
+    paidAcrossChains(invoice.destinationChain) &&
+    currentOrgConfig().chain.walletHost === "external" &&
+    (await enforcedSpendingLimit())?.version !== 2
+  ) {
     throw new ApprovalError("payments_off", `Only USDC on ${workspaceNetwork().label} can be paid from your wallet's contract.`);
   }
 
@@ -1183,6 +1189,9 @@ export async function approveAndPay(
       amount: amountToPay(invoice.amount, invoice.discount, new Date()).amountPaid,
       currency: invoice.currency,
       crossChain: paidAcrossChains(invoice.destinationChain),
+      // A version 2 contract is asked a payout to another chain with the fee read above (spending limit v2 V13).
+      bridgeFeeUsdc: quotes?.cctpFeeUsdc ?? null,
+      destinationChain: invoice.destinationChain ?? null,
       check: !mayExist,
     });
   } catch (error) {

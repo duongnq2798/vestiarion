@@ -43,8 +43,8 @@ In scope:
 
 - the hosted app and its public pages, at [www.vestiarion.xyz](https://www.vestiarion.xyz);
 - the REST API (`/api/v1`), the MCP server (`/api/mcp`) and the webhooks Vestiarion sends and receives;
-- the contracts in [`contracts/`](contracts): `VestiarionSpendingLimit` and `VestiarionEscrow`, which have not been
-  audited;
+- the contracts in [`contracts/`](contracts): `VestiarionSpendingLimit`, its version 2 `VestiarionSpendingLimitV2`
+  and `VestiarionEscrow`, which have not been audited;
 - the code in this repository, including [`sdk/`](sdk) and [`cli/`](cli), and the database migrations.
 
 Out of scope:

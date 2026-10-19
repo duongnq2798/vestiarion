@@ -10,6 +10,7 @@ import { SPENDING_LIMIT_ABI } from "@/lib/spending-limit/onchain";
 import type { TreasuryChain, TreasuryReceipt } from "@/lib/treasury/chain";
 import { deploymentData, walletProofMessage } from "@/lib/treasury/verify";
 import { ARC_MAINNET } from "@/lib/network";
+import { spendingLimitTerms } from "@/lib/spending-limit/deployment";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./fake-supabase";
 
@@ -66,9 +67,11 @@ export interface World {
   contract: Row | null;
   budget: Row | null;
   ledger: Array<{ action: string; detail: Record<string, unknown> }>;
+  /** The workspace's payment intents, which an upgrade's switch waits on while any is in flight (spending limit v2 V10). */
+  intents: Row[];
 }
 
-export function world(overrides: { org?: Row; operating?: Row; contract?: Row | null; budget?: Row | null } = {}): World {
+export function world(overrides: { org?: Row; operating?: Row; contract?: Row | null; budget?: Row | null; intents?: Row[] } = {}): World {
   return {
     org: {
       id: ORG,
@@ -88,10 +91,11 @@ export function world(overrides: { org?: Row; operating?: Row; contract?: Row | 
     contract: overrides.contract === undefined ? null : overrides.contract,
     budget: overrides.budget === undefined ? { daily_usdc: "50", weekly_usdc: "150" } : overrides.budget,
     ledger: [],
+    intents: overrides.intents ?? [],
   };
 }
 
-/** Whether a row passes PostgREST's filters as supabase-js writes them: eq., is.null, and or=(…). */
+/** Whether a row passes PostgREST's filters as supabase-js writes them: eq., is.null, in.(…), like. and or=(…). */
 export function matches(row: Row, params: URLSearchParams): boolean {
   for (const [key, value] of params) {
     // The scope adds org_id to every tenant request; these rows are all this workspace's.
@@ -107,6 +111,10 @@ export function matches(row: Row, params: URLSearchParams): boolean {
     if (value === "is.null" && cell !== null && cell !== undefined) return false;
     if (value.startsWith("eq.") && String(cell) !== value.slice(3)) return false;
     if (value.startsWith("in.(") && !value.slice(4, -1).split(",").includes(String(cell))) return false;
+    if (value.startsWith("like.")) {
+      const pattern = value.slice(5).split(/[%*]/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+      if (typeof cell !== "string" || !new RegExp(`^${pattern}$`, "s").test(cell)) return false;
+    }
   }
   return true;
 }
@@ -146,8 +154,9 @@ export function database(state: World) {
         approve_tx_id: null,
         approve_tx_hash: null,
         enforced: false,
-        // The columns' defaults (0083).
+        // The columns' defaults (0083, 0132).
         treasury_signer: "wallet",
+        version: 1,
         recovery_address: null,
         recovery_skipped_at: null,
         ...(request.body as Row),
@@ -159,6 +168,7 @@ export function database(state: World) {
       Object.assign(state.contract, request.body);
       return { body: [{ id: state.contract.id }] };
     }
+    if (path === "/rest/v1/payment_intents" && method === "GET") return { body: state.intents.filter((intent) => matches(intent, params)) };
     if (path === "/rest/v1/agent_budgets" && method === "GET") return { body: state.budget ? [state.budget] : [] };
     if (path === "/rest/v1/agent_budgets" && method === "POST") {
       state.budget = { ...(request.body as Row) };
@@ -205,6 +215,8 @@ export function chain(
     code?: Record<string, Hex>;
     usdc?: bigint;
     allowance?: bigint;
+    /** What each spender is allowed, by its address in lower case; any other spender has `allowance`. */
+    allowances?: Record<string, bigint>;
     gas?: bigint;
     head?: bigint;
     figures?: { daily: bigint; weekly: bigint } | "unreadable";
@@ -225,9 +237,9 @@ export function chain(
       return encodeAbiParameters([{ type: "uint256" }], [functionName === "dailyLimit" ? figures.daily : figures.weekly]);
     },
     usdcBalance: async () => input.usdc ?? 0n,
-    allowance: async (_owner, _spender, block) => {
+    allowance: async (_owner, spender, block) => {
       blocks.push(block);
-      return input.allowance ?? 0n;
+      return input.allowances?.[spender.toLowerCase()] ?? input.allowance ?? 0n;
     },
     nativeBalance: async () => input.gas ?? 0n,
   };
@@ -256,6 +268,8 @@ export function approvalLog(owner: string, spender: string, value: bigint, token
 }
 
 export const ourCode = keccak256(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 1n, weeklyUnits: 1n }));
+/** Version 2's code for this wallet and agent, with Arc mainnet's terms (spending limit v2 V3). */
+export const ourCodeV2 = keccak256(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 1n, weeklyUnits: 1n, terms: spendingLimitTerms(ARC_MAINNET) }));
 export const deployedAt = (contract: Hex): TreasuryReceipt => ({ status: "success", from: WALLET, to: null, contractAddress: contract });
 export const approvedOnUsdc: TreasuryReceipt = { status: "success", from: WALLET, to: USDC, contractAddress: null };
 
@@ -278,6 +292,8 @@ export const agentRow = (extra: Row = {}): Row => ({
   treasury_signer: "wallet",
   recovery_address: null,
   recovery_skipped_at: null,
+  // After migration 0132; a test of the row before it leaves `version` out.
+  version: 1,
   ...extra,
 });
 export const chosen = { org: { wallet_host: "external" }, operating: { address: WALLET } };
