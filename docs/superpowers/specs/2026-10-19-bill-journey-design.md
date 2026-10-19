@@ -105,3 +105,17 @@ Date: 2026-10-19. Status: direction C selected, with the four corrections below.
 [FACT] Before migration `0134_landing_team_journeys.sql` is released, only a missing-function error uses the already-whitelisted latest-team selector plus the same scoped real-data validation. This narrower selection can leave a route unknown; it never imports historical fixtures. All other read failures resolve unavailable. No production migration or payment was performed for the preview.
 
 [FACT] The existing historical safety case remains separate from the live bill journey and links to its committed source. It was not found in the founding scope during this audit, so no new live-verification claim is made for it.
+
+## Hero refinement — 2026-10-20
+
+[FACT] The partner requested three substantive steps in the existing HTML application frame: the agent's recorded schedule and condensed reason, the code's hold in ordinary words, and a human approval followed by the confirmed destination and recording time. Each step links to its own ledger entry; the Arc mainnet burn and Base mint links remain separate.
+
+[FACT] The audited Base bill's `ap_schedule` entry #4641 precedes its exact payment record #4643. Its recorded payment day is 2026-10-22 and its timing reason says there is no early-payment discount and the cash stays available until due. The hero's short sentence is a supported paraphrase, not a verbatim quotation. The confirmed intent fee is 0.055026 USDC; 0.055 is its rounded display, not the agent's earlier fee quote.
+
+[FACT] The server reads only the selected signed schedule entry within its existing team scope, matching sequence/action/actor/body hash. Only a validated day and constrained reason marker reach the page; arbitrary reasoning and names stay private. A different day changes the text; missing or unsupported evidence stays unknown. SQL migration 0134 is unchanged by this refinement.
+
+[FACT] With migration 0134 active, both direct and Base slots can contain real payments. Hero and the detailed journey use one shared selector over those two candidates. A full story needs a supported decision (including a schedule day when applicable), a hold with known words, approval, a payment entry and a recorded confirmation. Intake and the optional schedule reason may be missing. Complete Base wins a tie, then complete direct; only when neither is complete does direct take precedence over Base. All hero entry links stay on that selected bill. The dark “Another team payment” panel shows the remaining bill, with its own route, time, fee and proof links; it never repeats the selected payment. This selection does not search all historical bills within each route.
+
+[FACT] Hero navigation labels are read from the app's shared navigation data. Hero captions and labels use at least 12px, and step prose stacks in a 520px pane. Card links have 5rem scroll margin to keep reverse keyboard focus below the sticky public header. No screenshot of the app is used.
+
+[FACT] The desktop hero columns align at the top: growth when real evidence streams in must not vertically recenter the positioning copy and product frame. Separate desktop stream measurements remain distinct from the primary 520px LCP samples.

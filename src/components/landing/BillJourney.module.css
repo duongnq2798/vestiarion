@@ -18,12 +18,13 @@
 .entryNumber { padding-top: .25rem; font-family: var(--font-mono); font-size: .6875rem; color: var(--color-ink-3); }
 .checks { display: grid; gap: .375rem; margin-top: .75rem; font-size: .75rem; line-height: 1.5; color: var(--color-ink-2); }
 .checks > li { border-left: 2px solid var(--color-agent-line); padding-left: .625rem; }
-.base { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 2rem 4rem; margin-top: var(--spacing-section); padding: clamp(1.5rem, 4vw, 3rem); border-radius: var(--radius-2xl); background: var(--color-ink); color: var(--color-on-agent); }
-.baseAmount { margin-top: 1.5rem; font-size: clamp(2.5rem, 4vw, 4rem); line-height: 1; letter-spacing: -.05em; overflow-wrap: anywhere; }
-.baseAmount > span { display: inline-block; font-size: .875rem; font-family: var(--font-mono); letter-spacing: 0; color: var(--color-on-agent-muted); }
-.baseLinks { display: flex; flex-direction: column; justify-content: center; gap: 1rem; min-width: 0; }
-.baseLinks > a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3rem; padding-block: .875rem; border-bottom: 1px solid var(--color-on-agent-muted); color: var(--color-on-agent); font-size: .875rem; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
-.baseLinks > a > svg { flex-shrink: 0; }
+.other { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 2rem 4rem; margin-top: var(--spacing-section); padding: clamp(1.5rem, 4vw, 3rem); border-radius: var(--radius-2xl); background: var(--color-ink); color: var(--color-on-agent); }
+.otherEyebrow { font-size: .75rem; }
+.otherAmount { margin-top: 1.5rem; font-size: clamp(2.5rem, 4vw, 4rem); line-height: 1; letter-spacing: -.05em; overflow-wrap: anywhere; }
+.otherAmount > span { display: inline-block; font-size: .875rem; font-family: var(--font-mono); letter-spacing: 0; color: var(--color-on-agent-muted); }
+.otherLinks { display: flex; flex-direction: column; justify-content: center; gap: 1rem; min-width: 0; }
+.otherLinks > a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3rem; padding-block: .875rem; border-bottom: 1px solid var(--color-on-agent-muted); color: var(--color-on-agent); font-size: .875rem; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; scroll-margin-block: 5rem; }
+.otherLinks > a > svg { flex-shrink: 0; }
 .unavailable { margin-top: 3rem; padding-block: 2rem; border-block: 1px solid var(--color-line); font-size: .875rem; line-height: 1.65; color: var(--color-ink-2); }
 @media (prefers-reduced-motion: no-preference) {
   .process::before { animation: process-flow 1800ms var(--ease-standard) both; }
@@ -32,5 +33,5 @@
 }
 @media (max-width: 1000px) { .process { grid-template-columns: minmax(0, 1fr); gap: 2rem; } .process > li { padding-left: 1.5rem; } .process::before { top: 2rem; bottom: 2rem; width: 2px; height: auto; transform-origin: center top; } .intro { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; } .intro svg { display: none; } }
 @media (max-width: 1000px) and (prefers-reduced-motion: no-preference) { .process::before { animation-name: process-flow-down; } }
-@media (max-width: 700px) { .recordGrid { grid-template-columns: minmax(0, 1fr); } .billColumn { position: static; } .base { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .recordGrid { grid-template-columns: minmax(0, 1fr); } .billColumn { position: static; } .other { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 400px) { .process { grid-template-columns: minmax(0, 1fr); } .billBody { padding: 1.25rem; } .billTop, .billFoot { padding-inline: 1.25rem; } .entry { grid-template-columns: 1.5rem minmax(0, 1fr); gap: .5rem; } }

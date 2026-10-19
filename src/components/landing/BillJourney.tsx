@@ -4,7 +4,7 @@ import { EvidencePending } from "./EvidencePending";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Heading } from "@/components/ui/Heading";
 import { Section } from "@/components/ui/Section";
-import type { TeamJourney, TeamJourneys } from "@/lib/team-journey";
+import { selectTeamJourneys, type TeamJourney, type TeamJourneys } from "@/lib/team-journey";
 import { SignatureCheck } from "./SignatureCheck";
 import styles from "./BillJourney.module.css";
 
@@ -55,7 +55,7 @@ function RecordedBill({ bill }: { bill: TeamJourney }) {
             {bill.payment.destination.chain === "BASE" && <a href={bill.payment.destination.url} target="_blank" rel="noopener noreferrer" className={styles.proofLink}>Verify the mint on Base<ArrowUpRight aria-hidden size={16} /></a>}
             {bill.payment.feeUsdc !== null && <p className="mt-3 text-caption text-ink-2">Payment fee recorded: {amount.format(bill.payment.feeUsdc)} USDC</p>}
           </div>
-          <p className={styles.billFoot}>A payment from a workspace the Vestiarion team runs. Its private names and reasoning stay in the workspace.</p>
+          <p className={styles.billFoot}>A payment from a workspace the Vestiarion team runs. Its private names and full reasoning stay in the workspace.</p>
         </div>
       </aside>
       <div className="min-w-0">
@@ -88,21 +88,23 @@ function RecordedBill({ bill }: { bill: TeamJourney }) {
   );
 }
 
-function BasePayment({ bill }: { bill: TeamJourney }) {
+function AnotherPayment({ bill }: { bill: TeamJourney }) {
+  const crossChain = bill.payment.route === "cctp";
+  const destination = crossChain ? "Base" : "Arc mainnet";
   return (
-    <section className={`${styles.base} focus-inverse`} aria-labelledby="journey-base-title">
+    <section className={`${styles.other} focus-inverse`} aria-labelledby="journey-other-title">
       <div>
-        <Eyebrow inverse>Another team payment · Arc mainnet to Base</Eyebrow>
-        <h3 id="journey-base-title" className="mt-4 text-3xl font-semibold tracking-tight">Paid on Base</h3>
-        <p className="mt-4 max-w-md text-sm leading-relaxed text-on-agent-muted">Vestiarion team workspace. A confirmed cross-chain payment, with the Arc mainnet burn and the Base mint available to inspect separately.</p>
-        <p className={styles.baseAmount}>{amount.format(bill.amount)} <span>{bill.currency}</span></p>
+        <Eyebrow inverse className={styles.otherEyebrow}>Another team payment</Eyebrow>
+        <h3 id="journey-other-title" className="mt-4 text-3xl font-semibold tracking-tight">Paid on {destination}</h3>
+        <p className="mt-4 max-w-md text-sm leading-relaxed text-on-agent-muted">Vestiarion team workspace. A separate confirmed payment, with its own recorded confirmation and transaction evidence.</p>
+        <p className={styles.otherAmount}>{amount.format(bill.amount)} <span>{bill.currency}</span></p>
         {bill.payment.confirmationRecordedAt && <p className="mt-4 text-caption leading-relaxed text-on-agent-muted">Payment confirmation recorded<br /><RecordedTime at={bill.payment.confirmationRecordedAt} /></p>}
-        {bill.payment.feeUsdc !== null && <p className="mt-3 text-caption text-on-agent-muted">CCTP fee recorded: {amount.format(bill.payment.feeUsdc)} USDC</p>}
+        {crossChain && bill.payment.feeUsdc !== null && <p className="mt-3 text-caption text-on-agent-muted">CCTP fee recorded: {amount.format(bill.payment.feeUsdc)} USDC</p>}
       </div>
-      <div className={styles.baseLinks}>
-        <p className="flex items-center gap-4 text-xl font-semibold">Arc mainnet<ArrowRight aria-hidden size={20} />Base</p>
-        <a href={bill.payment.source.url} target="_blank" rel="noopener noreferrer">Verify the burn on Arc mainnet<ArrowUpRight aria-hidden size={19} /></a>
-        <a href={bill.payment.destination.url} target="_blank" rel="noopener noreferrer">Verify the mint on Base<ArrowUpRight aria-hidden size={19} /></a>
+      <div className={styles.otherLinks}>
+        <p className="flex items-center gap-4 text-xl font-semibold">Arc mainnet{crossChain && <><ArrowRight aria-hidden size={20} />Base</>}</p>
+        <a href={bill.payment.source.url} target="_blank" rel="noopener noreferrer">{crossChain ? "Verify the burn on Arc mainnet" : "Verify payment on Arc Explorer"}<ArrowUpRight aria-hidden size={19} /></a>
+        {crossChain && <a href={bill.payment.destination.url} target="_blank" rel="noopener noreferrer">Verify the mint on Base<ArrowUpRight aria-hidden size={19} /></a>}
       </div>
     </section>
   );
@@ -111,11 +113,10 @@ function BasePayment({ bill }: { bill: TeamJourney }) {
 async function RecordedJourney({ source }: { source: Promise<TeamJourneys | null> }) {
   const journeys = await source.catch(() => null);
   if (!journeys) return <p className={styles.unavailable}>The team&apos;s recorded evidence is unavailable right now.</p>;
-  const base = journeys.base?.payment.route === "cctp" && journeys.base.payment.destination.chain === "BASE" ? journeys.base : null;
-  const bill = journeys.direct ?? base;
+  const { primary: bill, secondary } = selectTeamJourneys(journeys);
   return <>
     {bill ? <RecordedBill bill={bill} /> : <p className={styles.unavailable}>No bill record is available right now.</p>}
-    {base && journeys.direct && <BasePayment bill={base} />}
+    {secondary && <AnotherPayment bill={secondary} />}
   </>;
 }
 

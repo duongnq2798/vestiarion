@@ -702,7 +702,8 @@ mainnet plan).
   created by the platform team or the founding workspace; customer/sample bills, simulated/failed/pending payments,
   Gateway routes and unconfirmed Base mints are excluded. Joins use both workspace and target identities.
   - `src/lib/platform/team-journeys.ts` caches successful reads for about one minute and discards failures. The private
-    workspace identity is used only inside `withOrg` to fetch signing public keys, then stripped. No landing read
+    workspace identity is used only inside `withOrg` to fetch signing public keys and, for a schedule, the selected
+    entry's detail matched by sequence, action, actor and signed body hash, then stripped. No landing read
     writes, creates a receipt link, sends a payment or changes a workspace.
   - Before the additive function is released, only a missing-function error may use the existing
     `latest_team_decision()` eligible-team selector, recheck its live/mainnet workspace and read payment/bill/ledger
@@ -710,12 +711,25 @@ mainnet plan).
   - `src/lib/team-journey.ts` validates the public projection and constructs explorer links from recorded chains.
     Amount/currency come from confirmed intents; Base requires both an Arc burn and a Base mint. Dates are recording
     instants, never invented execution/block times or elapsed durations. Missing intake, checks, hold, approval and
-    recording entries remain unknown, including capped reads. No private names, reasoning, purchase-order references,
-    person ids or source/workspace ids reach the rendered view; known rule codes and boolean observations are allowed.
-  - Hero and BillJourney prefer the direct payment, otherwise the validated Base payment. A second Base panel appears
-    only when it is a different payment. They explicitly identify the Vestiarion team workspace. Each available ledger
-    event has the existing browser signature check; it verifies the signed hash link, not the public description or
-    payment settlement. Arc/Base explorer links verify the respective transactions separately.
+    recording entries remain unknown, including capped reads. `teamJourneyDecision` condenses a recorded schedule to
+    its validated day and a known no-discount reason only when the recorded timing sentence and facts agree; otherwise
+    its reason stays unknown. Missing detail cannot hide an otherwise confirmed payment. No private names, raw
+    reasoning, purchase-order references, person ids or source/workspace ids reach the rendered view; known rule codes
+    and boolean observations are allowed.
+  - Hero and BillJourney share `selectTeamJourneys`, ranking the two validated RPC candidates by a complete story:
+    a supported decision (a schedule needs its day), a hold with known wording, approval, payment entry and recorded
+    confirmation. Missing intake and nullable schedule reasons do not disqualify it. Complete Base wins a tie, then
+    complete direct; only with neither complete does direct take precedence over Base. The hero's entry links always
+    resolve to that same bill's detailed evidence. The remaining payment appears in the dark “Another team payment”
+    panel, using its own route, confirmation, fee and explorer links. They explicitly identify the team workspace.
+    Each available ledger event has the existing browser signature check; it verifies the signed hash link, not the
+    public description or payment settlement. Arc/Base explorer links verify the respective transactions separately.
+  - The hero shows the recorded agent decision, the code's hold in plain words and a human approval followed by the
+    confirmed destination/time, each linked to its own entry. Its fee comes from the confirmed intent, rounded to three
+    decimals with exact precision in the title and full journey. Preview labels come from the app's shared navigation;
+    hero text is at least 12px and the three steps stack in narrow panes. Card links leave 5rem of scroll margin so
+    keyboard focus stays below the sticky site header. The desktop columns align at the top so streamed card growth
+    does not recenter the positioning copy. The frame is HTML, not a screenshot.
 - **The landing's proof**: independently streamed latest/recent team decisions and public measurements from every
   workspace, never the founding workspace alone. Historical `featured-proof.ts` is no longer imported by the landing.
   - The measurements are the open numbers, all time (`readAllTimeOrNull`), in three groups. Customer activity is
