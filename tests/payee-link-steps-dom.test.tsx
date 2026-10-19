@@ -248,6 +248,22 @@ describe("moving on as the action answers, with no reload", () => {
     expect(document.activeElement?.textContent).toBe("Send Acme your invoice");
   });
 
+  it("leaves the focus where the payee put it outside the card while the action ran", async () => {
+    let answer: (value: Answer) => void = () => {};
+    actions.address.mockImplementationOnce(() => new Promise<Answer>((resolve) => (answer = resolve)));
+    const elsewhere = document.createElement("a");
+    elsewhere.href = "/docs";
+    document.body.appendChild(elsewhere);
+    act(() => root.render(journey(link())));
+    await sendAddress();
+    elsewhere.focus();
+    await act(async () => {
+      answer({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: used() });
+    });
+    expect(steps()).toBe("Step 2 of 4");
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it("shows the confirmation step once the invoice is sent, as the action answers", async () => {
     actions.invoice.mockResolvedValueOnce({ ok: true, message: "Sent. Acme reviews your invoice before adding it.", status: used({ invoiceSent: true }) });
     act(() => root.render(journey(used())));

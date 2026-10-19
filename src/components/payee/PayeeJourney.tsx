@@ -71,14 +71,18 @@ export function PayeeJourney({
   simulated?: boolean;
   today?: string;
 }) {
-  // The last answer, with the read it came over. The router runs a refresh and an action one after the other, so the
-  // next read was made after the submission was written: from then on the page's reads alone count (S3).
+  // The last answer, with the read it came over. The router runs a refresh and an action one after the other (its action
+  // queue, `dispatchAction` in next/dist/client/components/app-router-instance.js), so the next read was made after the
+  // submission was written: from then on the page's reads alone count (S3).
   const [answered, setAnswered] = useState<{ status: PayeeLinkStatus; over: PayeeLinkStatus } | null>(null);
   const status = answered?.over === read ? answered.status : read;
   const onSent = useCallback((next: PayeeLinkStatus) => setAnswered({ status: next, over: read }), [read]);
   const section = useRef<HTMLElement>(null);
   useEffect(() => {
-    if (answered) section.current?.querySelector<HTMLElement>("h1")?.focus();
+    // Unless the payee put the focus somewhere else while the action ran (S7).
+    const active = document.activeElement;
+    if (!answered || (active && active !== document.body && !section.current?.contains(active))) return;
+    section.current?.querySelector<HTMLElement>("h1")?.focus();
   }, [answered]);
   const stage = payeeStage(status);
   return (

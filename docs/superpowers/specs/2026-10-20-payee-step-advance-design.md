@@ -31,9 +31,11 @@ waits on a second request.
   status the last accepted action answered with, together with the page's own read it came over, and shows the answer
   while the page still has that read, so the step changes in the same moment as the action's answer. The next read the
   page receives takes over, whether it is further along or goes back (a business that changes an address it had
-  confirmed): the router runs a refresh and a server action one after the other, so any read that reaches the page after
-  the answer was made after the submission was written. With no refresh after an answer, the page next reads itself when
-  its 30-second refresh runs, as before.
+  confirmed): the router runs a refresh and a server action one after the other (its action queue, `dispatchAction` in
+  `next/dist/client/components/app-router-instance.js`; re-check it after a Next upgrade), and an action that does not
+  revalidate leaves the page's read as it was, so any read that reaches the page after the answer was made after the
+  submission was written. With no refresh after an answer, the page next reads itself when its 30-second refresh runs,
+  as before.
 - **S4. Without JavaScript.** Nothing changes: a form posted without JavaScript renders the page again on the server,
   from the link's status as it now stands. `today`, the first day the invoice's due date may fall on, still comes from
   the server (the page passes it), so the form and the check agree.
@@ -43,9 +45,12 @@ waits on a second request.
   and every answer the same projection: the address masked as the page shows it (R4), each payment's state one the page
   tells apart (`paid`, `matched`, `scheduled`, `verified`, `pending`) or `review` for any other, so a hold's reason stays
   the business's (R3), a payment's transaction and dates only where the page shows them, and no field the read adds now or
-  later. Every screen renders from it exactly as it did from the full status.
+  later. An unused link's address on file is given only when the payee may keep it: a mirror Vestiarion made in shadow
+  mode is left out, so the page no longer learns that it is one. Every screen renders from it exactly as it did from the
+  full status.
 - **S7. Focus.** The button the payee pressed is gone once the page moves on, so the new step's heading takes the focus
-  (focusable from code only, with no outline), and a screen reader reads out where the payee now is.
+  (focusable from code only, with no outline), and a screen reader reads out where the payee now is; unless the payee
+  moved the focus out of the card while the action ran, as `useActionForm` leaves it.
 
 ## Considered and not done
 

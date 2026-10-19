@@ -87,7 +87,9 @@ const PAYEE_PAYMENT_STATES: ReadonlySet<string> = new Set(["paid", "matched", "s
  * What a payee link's page is given of its status (R1, R3, R4; payee step advance S6). The page is a client component,
  * so all of it is in the page's HTML and in each action's answer, for anyone holding the link: the address masked, each
  * payment's state one the page tells apart or `review`, a payment's transaction and dates only where the page shows them,
- * and nothing else the status read returns, now or later. Every screen renders from it as it did from the full status.
+ * and nothing else the status read returns, now or later. An unused link's address on file is given only when the payee
+ * may keep it: a mirror Vestiarion made in shadow mode is not theirs (P4), and the page says nothing of it. Every screen
+ * renders from it as it did from the full status.
  */
 export function payeeView(status: PayeeLinkStatus): PayeeLinkStatus {
   return {
@@ -98,7 +100,7 @@ export function payeeView(status: PayeeLinkStatus): PayeeLinkStatus {
     expiresAt: status.expiresAt,
     usedAt: status.usedAt,
     statusUntil: status.statusUntil,
-    address: status.address ? maskAddress(status.address) : null,
+    address: status.address && !(status.linkState === "open" && status.addressMirror === true) ? maskAddress(status.address) : null,
     addressConfirmed: status.addressConfirmed,
     payments: status.payments.map((payment) => {
       const state = PAYEE_PAYMENT_STATES.has(payment.status) ? payment.status : "review";
@@ -115,8 +117,6 @@ export function payeeView(status: PayeeLinkStatus): PayeeLinkStatus {
     }),
     asksInvoice: status.asksInvoice === true,
     invoiceSent: status.invoiceSent === true,
-    offersChain: status.offersChain === true,
-    addressMirror: status.addressMirror === true,
     chainChoices: [...(status.chainChoices ?? [])],
   };
 }

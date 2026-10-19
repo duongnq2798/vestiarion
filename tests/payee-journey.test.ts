@@ -64,9 +64,16 @@ describe("payeeView and moveOn (payee step advance S1, S2, S6)", () => {
   });
 
   it("keeps nothing else the status read returns", () => {
-    const read = { ...status(), chainOpen: true, counterpartyId: "cp-1" } as PayeeLinkStatus;
-    expect(Object.keys(payeeView(read))).not.toContain("chainOpen");
-    expect(Object.keys(payeeView(read))).not.toContain("counterpartyId");
+    const read = { ...status(), chainOpen: true, counterpartyId: "cp-1", offersChain: true, addressMirror: false } as PayeeLinkStatus;
+    for (const key of ["chainOpen", "counterpartyId", "offersChain", "addressMirror"]) expect(Object.keys(payeeView(read))).not.toContain(key);
+  });
+
+  it("gives an unused link's address on file only when the payee may keep it, never a shadow-mode mirror (P4)", () => {
+    const open = { linkState: "open" as const, asksInvoice: true, addressConfirmed: true };
+    expect(payeeView(status({ ...open, addressMirror: false })).address).toBe(maskAddress(ADDRESS));
+    expect(payeeView(status({ ...open, addressMirror: true })).address).toBeNull();
+    // Once the link is used, the address on file is the one its screens show, masked.
+    expect(payeeView(status({ addressMirror: true })).address).toBe(maskAddress(ADDRESS));
   });
 
   it("leaves every screen as the full status drew it: the same stage and the same words", () => {
