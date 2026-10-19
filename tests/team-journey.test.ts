@@ -53,4 +53,15 @@ describe("teamJourneyView", () => {
     }
     expect(teamJourneyView({ ...facts, record: { ...event, link: { ...link, signature: "broken" } } }, {})?.record).toBeNull();
   });
+
+  it("publishes only a calendar date and known summary for a recorded schedule, with malformed extras left unknown", () => {
+    const scheduled = { ...facts, check: { ...event, action: "ap_schedule" } };
+    expect(teamJourneyView({ ...scheduled, decision: { payOn: "2027-01-03", reason: "no_early_payment_discount", reasoning: "PRIVATE-TEXT" } }, {})?.decision)
+      .toEqual({ payOn: "2027-01-03", reason: "no_early_payment_discount" });
+    expect(teamJourneyView({ ...scheduled, decision: { payOn: "2027-02-30", reason: "no_early_payment_discount" } }, {})?.decision).toBeNull();
+    expect(teamJourneyView({ ...scheduled, decision: { payOn: "2027-01-03", reason: "PRIVATE-TEXT" } }, {})?.decision)
+      .toEqual({ payOn: "2027-01-03", reason: null });
+    expect(teamJourneyView({ ...facts, decision: { payOn: "2027-01-03", reason: "no_early_payment_discount" } }, {})?.decision).toBeNull();
+    expect(teamJourneyView(facts, {})?.decision).toBeNull();
+  });
 });

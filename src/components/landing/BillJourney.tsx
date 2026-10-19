@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, FileText } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Check, FileText } from "lucide-react";
 import { Suspense } from "react";
 import { EvidencePending } from "./EvidencePending";
 import { Eyebrow } from "@/components/ui/Eyebrow";
@@ -55,7 +55,7 @@ function RecordedBill({ bill }: { bill: TeamJourney }) {
             {bill.payment.destination.chain === "BASE" && <a href={bill.payment.destination.url} target="_blank" rel="noopener noreferrer" className={styles.proofLink}>Verify the mint on Base<ArrowUpRight aria-hidden size={16} /></a>}
             {bill.payment.feeUsdc !== null && <p className="mt-3 text-caption text-ink-2">Payment fee recorded: {amount.format(bill.payment.feeUsdc)} USDC</p>}
           </div>
-          <p className={styles.billFoot}>A payment from a workspace the Vestiarion team runs. Its private names and reasoning stay in the workspace.</p>
+          <p className={styles.billFoot}>A payment from a workspace the Vestiarion team runs. Its private names and full reasoning stay in the workspace.</p>
         </div>
       </aside>
       <div className="min-w-0">
@@ -88,35 +88,12 @@ function RecordedBill({ bill }: { bill: TeamJourney }) {
   );
 }
 
-function BasePayment({ bill }: { bill: TeamJourney }) {
-  return (
-    <section className={`${styles.base} focus-inverse`} aria-labelledby="journey-base-title">
-      <div>
-        <Eyebrow inverse>Another team payment · Arc mainnet to Base</Eyebrow>
-        <h3 id="journey-base-title" className="mt-4 text-3xl font-semibold tracking-tight">Paid on Base</h3>
-        <p className="mt-4 max-w-md text-sm leading-relaxed text-on-agent-muted">Vestiarion team workspace. A confirmed cross-chain payment, with the Arc mainnet burn and the Base mint available to inspect separately.</p>
-        <p className={styles.baseAmount}>{amount.format(bill.amount)} <span>{bill.currency}</span></p>
-        {bill.payment.confirmationRecordedAt && <p className="mt-4 text-caption leading-relaxed text-on-agent-muted">Payment confirmation recorded<br /><RecordedTime at={bill.payment.confirmationRecordedAt} /></p>}
-        {bill.payment.feeUsdc !== null && <p className="mt-3 text-caption text-on-agent-muted">CCTP fee recorded: {amount.format(bill.payment.feeUsdc)} USDC</p>}
-      </div>
-      <div className={styles.baseLinks}>
-        <p className="flex items-center gap-4 text-xl font-semibold">Arc mainnet<ArrowRight aria-hidden size={20} />Base</p>
-        <a href={bill.payment.source.url} target="_blank" rel="noopener noreferrer">Verify the burn on Arc mainnet<ArrowUpRight aria-hidden size={19} /></a>
-        <a href={bill.payment.destination.url} target="_blank" rel="noopener noreferrer">Verify the mint on Base<ArrowUpRight aria-hidden size={19} /></a>
-      </div>
-    </section>
-  );
-}
-
 async function RecordedJourney({ source }: { source: Promise<TeamJourneys | null> }) {
   const journeys = await source.catch(() => null);
   if (!journeys) return <p className={styles.unavailable}>The team&apos;s recorded evidence is unavailable right now.</p>;
   const base = journeys.base?.payment.route === "cctp" && journeys.base.payment.destination.chain === "BASE" ? journeys.base : null;
-  const bill = journeys.direct ?? base;
-  return <>
-    {bill ? <RecordedBill bill={bill} /> : <p className={styles.unavailable}>No bill record is available right now.</p>}
-    {base && journeys.direct && <BasePayment bill={base} />}
-  </>;
+  const bill = base ?? journeys.direct;
+  return bill ? <RecordedBill bill={bill} /> : <p className={styles.unavailable}>No bill record is available right now.</p>;
 }
 
 /** The fixed copy explains the process; the streamed records describe only the selected bill. */

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { db, platformDb } from "../dal";
 import { withOrg } from "../dal/scope";
 import { ledgerPublicKeyPems } from "../ledger";
-import { teamJourneyView, type TeamJourney, type TeamJourneys } from "../team-journey";
+import { teamJourneyDecision, teamJourneyView, type TeamJourney, type TeamJourneys } from "../team-journey";
 
 const row = z.object({ orgId: z.string().uuid() }).passthrough();
 const document = z.object({ direct: row.nullable(), base: row.nullable() });
@@ -17,9 +17,24 @@ async function fetchJourneys(): Promise<TeamJourneys> {
   if (result.error) throw new Error("Team journey read unavailable");
   const found = document.parse(result.data);
   async function shown(value: z.infer<typeof row> | null): Promise<TeamJourney | null> {
-    if (!value || !teamJourneyView(value, {})) return null;
-    const publicKeys = await withOrg(value.orgId, async () => ledgerPublicKeyPems());
-    return teamJourneyView(value, publicKeys);
+    if (!value) return null;
+    const bill = teamJourneyView(value, {});
+    if (!bill) return null;
+    return withOrg(value.orgId, async () => {
+      let decision: TeamJourney["decision"] = null;
+      // The additive RPC's signed selection stays authoritative; never substitute a newer decision about this bill.
+      if (bill.check?.action === "ap_schedule") {
+        try {
+          const selected = await db().from("ledger_entries").select("seq,actor,action,body_hash,detail")
+            .eq("seq", bill.check.seq).eq("actor", "agent").eq("action", bill.check.action).eq("body_hash", bill.check.link.body_hash).maybeSingle();
+          const entry = object(selected.data);
+          if (!selected.error && Number(entry.seq) === bill.check.seq && entry.actor === "agent" && entry.action === bill.check.action && entry.body_hash === bill.check.link.body_hash) {
+            decision = teamJourneyDecision(entry.detail, bill.currency);
+          }
+        } catch { /* Optional wording cannot hide a confirmed payment when its detail read is unavailable. */ }
+      }
+      return { ...bill, decision, publicKeys: ledgerPublicKeyPems() };
+    });
   }
   const [direct, base] = await Promise.all([shown(found.direct), shown(found.base)]);
   return { direct, base };
@@ -91,6 +106,7 @@ async function readSelectedTeamScope(): Promise<TeamJourneys> {
         observed: { hasPurchaseOrder: typeof observed.poReference === "string" ? observed.poReference.trim().length > 0 : null,
           goodsReceived: boolean(observed.goodsReceived), purchaseOrderRequired: boolean(observed.purchaseOrderRequired), riskLevel: observed.riskLevel },
         rule: hold?.detail.guardrailRule,
+        decision: check?.action === "ap_schedule" ? teamJourneyDecision(check.detail, intent.token) : null,
         payment: { route: base ? "cctp" : "direct", confirmationRecordedAt: intent.confirmed_at, txHash: intent.tx_hash,
           mintTxHash: base ? intent.mint_tx_hash : null, destinationChain: base ? "BASE" : "ARC", feeUsdc: base ? intent.bridge_fee : null },
       };

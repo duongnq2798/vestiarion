@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { chainById, txUrl } from "./payee-chains";
+import { utcDay } from "./copy";
 import { ruleWords } from "./rule-words";
 import type { SignedLink } from "./receipts/verify";
 
 /** Public facts only. Times describe when the workspace recorded evidence, never an inferred send/block time. */
 export interface TeamJourneyEvent { seq: number; recordedAt: string; action: string; link: SignedLink }
+export interface TeamJourneyDecision { payOn: string; reason: "no_early_payment_discount" | null }
 export interface TeamJourney {
   amount: number;
   currency: string;
@@ -17,6 +19,7 @@ export interface TeamJourney {
   record: TeamJourneyEvent | null;
   observed: { hasPurchaseOrder: boolean | null; goodsReceived: boolean | null; purchaseOrderRequired: boolean | null; riskLevel: "unscreened" | "clear" | "medium" | "high" | null };
   rule: string | null;
+  decision?: TeamJourneyDecision | null;
   payment: {
     route: "direct" | "cctp";
     confirmationRecordedAt: string | null;
@@ -40,11 +43,14 @@ const eventSchema = z.object({
 const event = z.unknown().transform(value => eventSchema.safeParse(value).data ?? null);
 const risk = z.unknown().transform(value => z.enum(["unscreened", "clear", "medium", "high"]).safeParse(value).data ?? null);
 const marker = z.unknown().transform(value => typeof value === "string" && /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(value) && ruleWords(value) ? value : null);
+const decisionSchema = z.object({ payOn: z.iso.date(), reason: z.unknown().transform(value => value === "no_early_payment_discount" ? value : null) });
+const decision = z.unknown().optional().transform(value => decisionSchema.safeParse(value).data ?? null);
 const factsSchema = z.object({
   amount: number.pipe(z.number().positive()), currency: z.enum(["USDC", "EURC"]), network: z.literal("arc-mainnet"), status: z.literal("paid"),
   received: event, check: event, hold: event, approval: event, record: event,
   observed: z.object({ hasPurchaseOrder: z.boolean().nullable(), goodsReceived: z.boolean().nullable(), purchaseOrderRequired: z.boolean().nullable(), riskLevel: risk }),
   rule: marker,
+  decision,
   payment: z.object({ route: z.enum(["direct", "cctp"]), confirmationRecordedAt: instant.nullable(), txHash: hash, mintTxHash: hash.nullable(), destinationChain: z.enum(["ARC", "BASE"]), feeUsdc: number.pipe(z.number().nonnegative()).nullable() }),
 });
 
@@ -60,6 +66,23 @@ export function teamJourneyView(value: unknown, publicKeys: Record<string, strin
     ...facts,
     observed: facts.check ? facts.observed : { hasPurchaseOrder: null, goodsReceived: null, purchaseOrderRequired: null, riskLevel: null },
     rule: facts.hold ? facts.rule : null,
+    decision: facts.check?.action === "ap_schedule" ? facts.decision : null,
     payment: { route: payment.route, confirmationRecordedAt: payment.confirmationRecordedAt, source, destination, feeUsdc: payment.feeUsdc }, publicKeys,
   };
+}
+
+/** Condenses a recorded schedule without publishing its free text. Unsupported explanations remain unknown. */
+export function teamJourneyDecision(value: unknown, currency: string): TeamJourneyDecision | null {
+  const object = (item: unknown): Record<string, unknown> => item !== null && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
+  const detail = object(value);
+  const recorded = object(detail.decision);
+  const payOn = z.iso.date().safeParse(recorded.payOn).data;
+  if (recorded.action !== "schedule" || !payOn) return null;
+  const timing = object(detail.timing);
+  const today = z.iso.date().safeParse(timing.today).data;
+  const amount = typeof timing.amountDueAtTarget === "number" && Number.isFinite(timing.amountDueAtTarget) && timing.amountDueAtTarget > 0 ? timing.amountDueAtTarget : null;
+  const noDiscount = today && payOn > today && timing.dueOn === payOn && timing.targetOn === payOn
+    && timing.discountValue === null && timing.shortfall === false && amount !== null && ["USDC", "EURC"].includes(currency)
+    && timing.reason === `No early-payment discount; paying on the due date, ${utcDay(payOn)}, keeps ${amount} ${currency} available until then.`;
+  return { payOn, reason: noDiscount ? "no_early_payment_discount" : null };
 }

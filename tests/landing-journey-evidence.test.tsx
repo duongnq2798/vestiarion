@@ -116,6 +116,17 @@ describe("the bill's process and observed evidence", () => {
     expect(text(markup)).not.toContain("32.71");
   });
 
+  it("uses the same Base bill as the hero when both routes have recorded payments", async () => {
+    const bill: TeamJourney = { ...base, received: event(21, "create_invoice"), check: event(22, "ap_schedule"),
+      hold: event(22, "ap_schedule"), approval: event(24, "approval_paid"), record: event(24, "approval_paid") };
+    const markup = await complete(<BillJourney source={Promise.resolve({ direct, base: bill })} />);
+    for (const anchor of ["check-22", "hold-22", "approval-24"]) expect(markup).toContain(`id="journey-entry-${anchor}"`);
+    expect(markup).not.toContain('id="journey-entry-approval-14"');
+    expect(markup.match(/Check its signature/g)).toHaveLength(5);
+    expect(text(markup)).not.toContain("17.42 USDC");
+    expect(markup.match(/Verify the mint on Base/g)).toHaveLength(1);
+  });
+
   it("keeps an explicit unavailable state and the process explanation when the read fails", async () => {
     const source = Promise.reject<TeamJourneys | null>(new Error("database unavailable"));
     void source.catch(() => {});

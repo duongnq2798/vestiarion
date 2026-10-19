@@ -14,6 +14,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- The landing hero explains the recorded schedule, coded hold and human approval beside their own entry links, with
+  the confirmed CCTP fee, actual app navigation labels and text of at least 12px in narrow panes. Hero and the detailed
+  journey use the same confirmed Base bill when available, with the direct payment as a fallback.
+
 - The landing follows one bill through the agent's checks, rules and payment, with a clearer application view and
   recorded evidence from the Vestiarion team's own workspace. Available ledger entries have signature checks and
   payments link to the relevant Arc or Base explorer; missing evidence stays unknown. Migration
