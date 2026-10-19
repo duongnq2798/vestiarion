@@ -188,6 +188,32 @@ describe("submitPayeeAddressAction — no session needed", () => {
     expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: false, message: "Where you are paid can no longer be chosen on this link. Reload the page." });
   });
 
+  it("answers with the link's status as it now stands, so the page moves on at once (payee step advance S1)", async () => {
+    const now = { orgName: "Acme", linkState: "used", asksInvoice: true, invoiceSent: false };
+    lib.submitPayeeAddress.mockResolvedValueOnce({ ok: true, orgName: "Acme", unchanged: false }).mockResolvedValueOnce({ ok: true, orgName: "Acme", unchanged: true });
+    lib.payeeLinkStatus.mockResolvedValue(now);
+    const fields = { token: TOKEN, address: "0x2222222222222222222222222222222222222222" };
+    expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: now });
+    expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: true, message: "That is already the address Acme has on file.", status: now });
+    expect(lib.payeeLinkStatus).toHaveBeenCalledWith(TOKEN);
+  });
+
+  it("still thanks the payee when the link's status cannot be read after the address is written (S2)", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    lib.submitPayeeAddress.mockResolvedValue({ ok: true, orgName: "Acme", unchanged: false });
+    lib.payeeLinkStatus.mockRejectedValueOnce(new Error("connection reset")).mockResolvedValueOnce(null);
+    const fields = { token: TOKEN, address: "0x2222222222222222222222222222222222222222" };
+    expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: true, message: "Thanks. Acme will confirm your address before paying you." });
+    expect(error).toHaveBeenCalledWith("payee link status after submission failed");
+    expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: true, message: "Thanks. Acme will confirm your address before paying you." });
+  });
+
+  it("reads no status for a refusal", async () => {
+    lib.submitPayeeAddress.mockResolvedValue({ ok: false, reason: "invalid_address" });
+    await submitPayeeAddressAction(empty, form({ token: TOKEN, address: "0x1" }));
+    expect(lib.payeeLinkStatus).not.toHaveBeenCalled();
+  });
+
   it("keeps any other failure's details out of the answer", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     lib.submitPayeeAddress.mockRejectedValue(new CounterpartyAddressError("conflict"));
@@ -205,6 +231,13 @@ describe("keepPayeeAddressAction (payee invoice link P4)", () => {
     expect(await keepPayeeAddressAction(empty, form({ token: TOKEN }))).toEqual({ ok: true, message: "Kept the address Acme has on file." });
     expect(lib.keepPayeeAddress).toHaveBeenCalledWith(TOKEN);
     expect(authorizeMock).not.toHaveBeenCalled();
+  });
+
+  it("answers with the link's status as it now stands (S1)", async () => {
+    const now = { orgName: "Acme", linkState: "used", asksInvoice: true, invoiceSent: false };
+    lib.keepPayeeAddress.mockResolvedValue({ ok: true, orgName: "Acme" });
+    lib.payeeLinkStatus.mockResolvedValue(now);
+    expect(await keepPayeeAddressAction(empty, form({ token: TOKEN }))).toEqual({ ok: true, message: "Kept the address Acme has on file.", status: now });
   });
 
   it("says when there is nothing to keep, when the link is no longer valid, and nothing else of a failure", async () => {
@@ -235,6 +268,16 @@ describe("submitPayeeInvoiceAction (payee invoice link P4)", () => {
     expect(input).toMatchObject({ invoiceNumber: "INV-7", amount: "1250.50", dueDate: "2026-11-02", note: "October" });
     expect(input.file).toBeInstanceOf(File);
     expect(authorizeMock).not.toHaveBeenCalled();
+  });
+
+  it("answers with the link's status as it now stands (S1), and reads none for a refusal", async () => {
+    const now = { orgName: "Acme", linkState: "used", asksInvoice: true, invoiceSent: true };
+    invoiceMock.mockResolvedValueOnce({ ok: true, orgName: "Acme" }).mockResolvedValueOnce({ ok: false, reason: "busy" });
+    lib.payeeLinkStatus.mockResolvedValue(now);
+    expect(await submitPayeeInvoiceAction(empty, invoiceForm())).toEqual({ ok: true, message: "Sent. Acme reviews your invoice before adding it.", status: now });
+    expect(lib.payeeLinkStatus).toHaveBeenCalledTimes(1);
+    expect(await submitPayeeInvoiceAction(empty, invoiceForm())).toEqual({ ok: false, message: "Wait a few seconds, then send it again." });
+    expect(lib.payeeLinkStatus).toHaveBeenCalledTimes(1);
   });
 
   it("sends no file for an empty file field", async () => {

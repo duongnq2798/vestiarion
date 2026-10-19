@@ -33,6 +33,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - Shared public typography and section spacing for the bill journey direction, with accessible blue and dark sections,
   a flat card elevation and reusable headings. The existing app, email and docs palette and control sizes are preserved.
 
+### Fixed
+
+- **A payee link moves on as soon as the payee sends its address.** On a link that asks for the invoice, sending the
+  address left the page on Step 1 with "Thanks. *business* will confirm your address before paying you." until the
+  payee reloaded it, so a payee could think they were done and never send the invoice. The page now shows **Send
+  *business* your invoice** as soon as the address is accepted, and keeping the address on file moves on the same way.
+  After **Send my invoice**, the next step shows as soon as the invoice is accepted, without waiting for the page to
+  load again. No migration.
+
 ## [0.1.0-beta.11] - 2026-10-19
 
 ### Added

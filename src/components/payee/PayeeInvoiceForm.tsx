@@ -12,6 +12,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { PAYEE_FILE_MAX_BYTES, PAYEE_FILE_MESSAGES, PAYEE_INVOICE_NOTE_MAX, PAYEE_INVOICE_NUMBER_MAX, type PayeeInvoiceField } from "@/lib/payee-invoice";
+import { moveOn, type PayeeLinkStatus } from "@/lib/payee-journey";
 
 const INITIAL: PayeeInvoiceResult = { ok: false, message: "" };
 
@@ -20,11 +21,24 @@ export const INVOICE_FILE_LINE = "A PDF or a text file, up to 4 MB. Only its tex
 
 /**
  * The payee's invoice, on a link that asks for it (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P4):
- * the invoice number, the amount in USDC, the due date, and optionally a note and the invoice as a file. Sending it
- * refreshes the page into the next step, which the link now shows. `today` and `lastDay` are the UTC days the due date
- * may fall between, from the server, so the form and the check agree.
+ * the invoice number, the amount in USDC, the due date, and optionally a note and the invoice as a file. Once it is
+ * sent, `onSent` gets the link's status the action answers with, and the page moves on to the next step with it; an
+ * answer without one refreshes the page instead (payee step advance S1, S2). `today` and `lastDay` are the UTC days the
+ * due date may fall between, from the server, so the form and the check agree.
  */
-export default function PayeeInvoiceForm({ token, orgName, today, lastDay }: { token: string; orgName: string; today: string; lastDay: string }) {
+export default function PayeeInvoiceForm({
+  token,
+  orgName,
+  today,
+  lastDay,
+  onSent,
+}: {
+  token: string;
+  orgName: string;
+  today: string;
+  lastDay: string;
+  onSent?: (status: PayeeLinkStatus) => void;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -40,7 +54,7 @@ export default function PayeeInvoiceForm({ token, orgName, today, lastDay }: { t
     },
     [letGo]
   );
-  const { state, formProps } = useActionForm(submitPayeeInvoiceAction, INITIAL, { onSuccess: () => router.refresh(), onResult });
+  const { state, formProps } = useActionForm(submitPayeeInvoiceAction, INITIAL, { onSuccess: (result) => moveOn(result, onSent, () => router.refresh()), onResult });
 
   if (state.ok) {
     return (

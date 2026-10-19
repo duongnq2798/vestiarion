@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { amountsLine, groupAddress, looksLikeAddress, maskAddress, payeeStage, paymentState, type PayeeLinkStatus, type PayeePayment } from "@/lib/payee-journey";
+import { describe, expect, it, vi } from "vitest";
+import { amountsLine, groupAddress, looksLikeAddress, maskAddress, moveOn, payeeProgress, payeeStage, paymentState, type PayeeLinkStatus, type PayeePayment } from "@/lib/payee-journey";
 
 /** The freelancer's side of a payment (docs/superpowers/specs/2026-10-02-freelancer-journey-design.md §2–§4). */
 
@@ -45,6 +45,39 @@ describe("payeeStage", () => {
     expect(payeeStage(status({ payments: [payment({ status: "paid", txRef: "0xabc" }), payment({ status: "held" })] }))).toBe("paying");
     expect(payeeStage(status({ payments: [payment({ status: "paid", txRef: "0xabc" })] }))).toBe("paid");
     expect(payeeStage(status({ payments: [] }))).toBe("paying");
+  });
+});
+
+describe("payeeProgress and moveOn (payee step advance S1-S3)", () => {
+  it("orders a link's reads by stage, then by whether its invoice arrived", () => {
+    const asked = { asksInvoice: true, invoiceSent: false, addressConfirmed: false, payments: [] };
+    const order = [
+      status({ ...asked, linkState: "open", address: null }),
+      status(asked),
+      status({ ...asked, invoiceSent: true }),
+      status({ ...asked, invoiceSent: true, addressConfirmed: true }),
+      status({ ...asked, invoiceSent: true, addressConfirmed: true, payments: [payment({ status: "paid", txRef: "0xabc" })] }),
+    ];
+    expect(order.map(payeeStage)).toEqual(["address", "invoice", "confirming", "paying", "paid"]);
+    const progress = order.map(payeeProgress);
+    expect([...progress].sort((a, b) => a - b)).toEqual(progress);
+    expect(new Set(progress).size).toBe(progress.length);
+    // Within a stage, the invoice sent counts: a payment under way with the invoice sent is further along than without.
+    const underway = { addressConfirmed: true, payments: [payment({ status: "matched" })], asksInvoice: true };
+    expect(payeeProgress(status({ ...underway, invoiceSent: true }))).toBeGreaterThan(payeeProgress(status({ ...underway, invoiceSent: false })));
+  });
+
+  it("moves on with the status an action answered with, or refreshes without one", () => {
+    const onSent = vi.fn();
+    const refresh = vi.fn();
+    const now = status();
+    moveOn({ status: now }, onSent, refresh);
+    expect(onSent).toHaveBeenCalledWith(now);
+    expect(refresh).not.toHaveBeenCalled();
+    moveOn({}, onSent, refresh);
+    moveOn({ status: now }, undefined, refresh);
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(onSent).toHaveBeenCalledTimes(1);
   });
 });
 

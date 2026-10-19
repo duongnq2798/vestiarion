@@ -71,6 +71,26 @@ export function payeeStage(status: PayeeLinkStatus): PayeeStage {
   return "paying";
 }
 
+const STAGE_ORDER: Record<PayeeStage, number> = { address: 0, invoice: 1, confirming: 2, paying: 3, paid: 4 };
+
+/**
+ * How far a link has come, to compare two reads of it: its stage, then, within a stage, whether its invoice arrived.
+ * The page shows an action's answer only while it is further along than the page's own read
+ * (docs/superpowers/specs/2026-10-20-payee-step-advance-design.md S3).
+ */
+export function payeeProgress(status: PayeeLinkStatus): number {
+  return STAGE_ORDER[payeeStage(status)] * 2 + (status.invoiceSent === true ? 1 : 0);
+}
+
+/**
+ * After an accepted submission: the page moves on with the link's status the action answered with (S1), or, without
+ * one, reads itself again (S2).
+ */
+export function moveOn(answer: { status?: PayeeLinkStatus }, onSent: ((status: PayeeLinkStatus) => void) | undefined, refresh: () => void): void {
+  if (answer.status && onSent) onSent(answer.status);
+  else refresh();
+}
+
 export type PaymentTone = "waiting" | "progress" | "review" | "done";
 
 /** A payment the simulator made: its reference is the simulator's (`sim_…`), never a transaction on chain. */

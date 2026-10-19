@@ -52,7 +52,7 @@ export default async function PayeePage({ params }: PayeePageProps) {
           ) : !status ? (
             <EmptyState icon={<Unlink />} titleAs="h1" title="This link is no longer valid. Ask the business that sent it for a new one." />
           ) : (
-            <PayeeJourney token={token} status={status} simulated={simulated} />
+            <PayeeJourney token={token} status={status} simulated={simulated} today={new Date().toISOString().slice(0, 10)} />
           )}
         </div>
       </main>
