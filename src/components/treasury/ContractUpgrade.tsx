@@ -13,7 +13,15 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
 import { sendPrepared, walletErrorMessage } from "@/lib/browser-wallet";
 import { ARC_MAINNET, networkProfile, type Network } from "@/lib/network";
-import { browserKeepingStore, checkPasskeySetup, passkeyTreasuryFailure, PasskeyTreasuryError, passkeyUpgradeCalls, pollRecord } from "@/lib/passkey-treasury";
+import {
+  browserKeepingStore,
+  checkPasskeySetup,
+  keptCredential,
+  passkeyTreasuryFailure,
+  PasskeyTreasuryError,
+  passkeyUpgradeCalls,
+  pollRecord,
+} from "@/lib/passkey-treasury";
 import type { SendOutcome } from "@/lib/passkey-wallet-send";
 import { spendingLimitTerms } from "@/lib/spending-limit/deployment";
 import { forgetSent, recordSent, rememberSent, sentHash, type SentStep } from "@/lib/treasury/sent-transaction";
@@ -226,10 +234,16 @@ export default function ContractUpgrade({ orgSlug, status, network }: { orgSlug:
     });
 
   /** What this browser sent before: asked about again, never sent again. */
-  const checkAgain = () =>
+  const checkAgain = (asked = false) =>
     run(async () => {
       const passkeyKept = keptPasskeyUpgrade(orgSlug);
       if (passkey && passkeyKept && status.wallet) {
+        // A user operation not in a transaction yet is read through the passkey wallet: only with a passkey this browser
+        // kept, so a page that loads never asks for one unasked.
+        if (!passkeyKept.txHash && !(asked || keptCredential(browserKeepingStore(), orgSlug))) {
+          say(`Your upgrade was sent from this browser and ${profile.label} has not confirmed it yet. Check again in a minute; it is not sent twice.`);
+          return;
+        }
         say("Checking the upgrade your passkey sent…");
         const outcome: SendOutcome = passkeyKept.txHash
           ? { kind: "sent", txHash: passkeyKept.txHash }
@@ -350,7 +364,7 @@ export default function ContractUpgrade({ orgSlug, status, network }: { orgSlug:
           {body}
           {kept && (
             <div>
-              <Button type="button" variant="secondary" size="sm" icon={<RefreshCw />} loading={busy} disabled={busy} onClick={() => void checkAgain()}>
+              <Button type="button" variant="secondary" size="sm" icon={<RefreshCw />} loading={busy} disabled={busy} onClick={() => void checkAgain(true)}>
                 Check again
               </Button>
             </div>

@@ -197,7 +197,7 @@ function apFake(options: {
   /** The chain provider; a `Chain` that records transfers when absent. */
   chain?: Chain;
   /** The CCTP fee to a payee's chain, and the Gateway quote, for a payout across chains; Iris and Gateway are never asked here. */
-  bridgeFee?: ApStageInput["bridgeFee"];
+  bridgeFee?: Parameters<typeof runApStage>[0]["bridgeFee"];
   /** The ledger's `ap_schedule` and `payment_rescheduled` entries, newest first (cash ahead A3); none when absent. */
   schedulings?: Array<{ action: string; detail: Record<string, unknown> }>;
   /** The latest AP decisions and payment plan moves on held and scheduled payables, newest first (cash priority P1). */
