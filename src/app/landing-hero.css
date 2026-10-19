@@ -123,9 +123,106 @@
   to { opacity: 1; }
 }
 
+/*
+ * The landing's sample bill prints itself once (`BillPreview`, landing motion M4), with the receipt's print: the bill,
+ * its reasoning, each check printed and then its tick drawn, the agent's proposal stamped once the checks are done, the
+ * wait for a person, then
+ * the next bill and the rule in code that held it, its shield turning amber last. Each part starts at its own `--d`
+ * (`BILL_PRINT_AT` in hero/scenarios.ts) and all of it is done by 2.5 s; the card's frame and title never wait. Where
+ * the card sits beside the headline, from 1024 px, it starts with the page's first paint, before the script runs and
+ * without it. Below that the card sits under the text, often below the fold, so nothing prints from the first paint (a
+ * page whose script never runs shows it whole) and `PrintOnView` prints each line as it comes into view. A part the
+ * reader cannot see when the page hydrates waits unseen (`data-print="wait"`), then prints once in view (`go`, its
+ * `--d` counted from then), or is shown whole if the reader jumped past it (`done`). One already on screen is marked
+ * as printing (`go`) or whole (`done`), so a window that later crosses 1024 px never prints it again. Each animation
+ * fills backwards only: its last frame is the part's own style, so once played it lets go, and nothing is left running
+ * or held. Under reduced motion the card is calm motion (`data-calm-motion`): each part fades in where it stands, in
+ * the same order, the ticks and the shield only turn colour, and the dot is still.
+ */
+.bill-print .bp-line {
+  animation: replay-print 420ms var(--ease-emphasized) var(--d, 0ms) backwards;
+}
+
+/* A decision lands: it settles from a little larger, with no turn, unlike the receipt's seal. */
+.bill-print .bp-stamp {
+  animation: bill-stamp 300ms var(--ease-emphasized) var(--d, 0ms) backwards;
+}
+
+/* A tick draws as a hand would, short stroke first (its path runs the other way, so the offset counts up from minus a
+   little over its length), then turns from grey to its own colour. */
+.bill-print .bp-check {
+  animation: check-draw 420ms var(--ease-standard) var(--d, 0ms) backwards;
+}
+
+/* The colour turns by a filter, which the compositor runs, rather than by `color`, which repaints every frame. */
+.bill-print .bp-turn {
+  animation: bill-turn 300ms var(--ease-standard) var(--d, 0ms) backwards;
+}
+
+/* The bill waits for a person: its dot breathes once, then rests, since nothing on the landing moves at rest, and it
+   is done before "Held for you" is stamped, so two parts of the card never move at once at its close. A breath
+   is a ring that grows out from the dot to 3 px around it, by scale rather than by a shadow, so the compositor runs it. */
+.bill-print .bp-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border: 3px solid color-mix(in srgb, var(--color-agent) 28%, transparent);
+  border-radius: inherit;
+  opacity: 0;
+  scale: 0.5;
+  animation: dot-breathe 400ms var(--ease-standard) var(--d, 0ms) 1;
+}
+
+/* Below 1024 px a part prints only once `PrintOnView` has seen it come into view. */
+@media (width < 64rem) {
+  .bill-print :is(.bp-line, .bp-stamp, .bp-check, .bp-turn):not([data-print="go"]),
+  .bill-print .bp-dot:not([data-print="go"])::after {
+    animation: none;
+  }
+
+  /* The proposal's row (`data-late`) sits above the checks but comes after them. Here nothing prints from the first
+     paint, so a card on screen at load would show the agent proposing before it has checked: the row is not there yet
+     at first, `PrintOnView` prints it after the checks, and if the script never runs it fades in on its own at 2.5 s. */
+  .bill-print [data-late]:not([data-print]) {
+    animation: replay-fade 300ms var(--ease-standard) 2500ms backwards;
+  }
+}
+
+/* A part that waits keeps still and is not there yet; one that is done (jumped past, or whole on screen) keeps still. */
+.bill-print :is(.bp-line, .bp-stamp, .bp-check, .bp-turn):is([data-print="wait"], [data-print="done"]),
+.bill-print .bp-dot:is([data-print="wait"], [data-print="done"])::after {
+  animation: none;
+}
+
+.bill-print :is(.bp-line, .bp-stamp)[data-print="wait"] {
+  opacity: 0;
+}
+
+@keyframes bill-stamp {
+  from { opacity: 0; scale: 1.12; }
+  to { opacity: 1; scale: 1; }
+}
+
+@keyframes check-draw {
+  0% { stroke-dasharray: 24; stroke-dashoffset: -24; filter: grayscale(1); }
+  60% { stroke-dasharray: 24; stroke-dashoffset: 0; filter: grayscale(1); }
+  100% { stroke-dasharray: 24; stroke-dashoffset: 0; }
+}
+
+@keyframes bill-turn {
+  from { filter: grayscale(1); }
+}
+
+@keyframes dot-breathe {
+  0%, 100% { opacity: 1; scale: 0.5; }
+  50% { opacity: 1; scale: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .replay .replay-print,
-  .replay .replay-stamp {
+  .replay .replay-stamp,
+  .bill-print .bp-line,
+  .bill-print .bp-stamp {
     animation-name: replay-fade;
   }
 
@@ -135,6 +232,14 @@
 
   .replay-scan {
     display: none;
+  }
+
+  .bill-print .bp-check {
+    animation-name: bill-turn;
+  }
+
+  .bill-print .bp-dot::after {
+    animation: none;
   }
 }
 
@@ -296,5 +401,30 @@
 @media (prefers-reduced-motion: reduce) {
   .pipeline-diagram .pl-pulse {
     display: none;
+  }
+}
+
+/*
+ * The landing's tab marker, "Who it's for" and the developer snippets (`useTabGlide`, landing motion M4): the chosen
+ * tab draws it, as the server does, and it starts from where the last tab's stood, its edges in `--glide-*`. It moves
+ * by its edges rather than by scale, so its border and corners stay true on the way, and under the other tabs' names
+ * rather than over them. Under reduced motion the global rule cuts it, and the marker moves at once.
+ */
+[data-tab-indicator][data-glide] {
+  animation: tab-glide 240ms var(--ease-standard);
+}
+
+/* Below the names, inside the list's own layer; a browser without `:has()` drops both and keeps the marker on top. */
+[role="tablist"]:has([data-tab-indicator][data-glide]) {
+  isolation: isolate;
+}
+
+[role="tablist"]:has([data-tab-indicator][data-glide]) [data-tab-indicator] {
+  z-index: -1;
+}
+
+@keyframes tab-glide {
+  from {
+    inset: var(--glide-top, 0) var(--glide-right, 0) var(--glide-bottom, 0) var(--glide-left, 0);
   }
 }

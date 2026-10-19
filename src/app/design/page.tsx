@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
-import { ArrowRight, ExternalLink, FileSpreadsheet, Inbox, PenLine, Play, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Check, ExternalLink, FileSpreadsheet, Inbox, PenLine, Play, Plus, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -424,6 +424,21 @@ export default function DesignPage() {
                 </Reveal>
               ))}
             </div>
+            <Reveal sequence stagger={140}>
+              <Card>
+                <CardContent>
+                  <Eyebrow className="text-agent">A sequence</Eyebrow>
+                  <ul className="mt-3 grid gap-2 text-sm text-ink-2">
+                    {["Purchase order on file", "Goods received", "Supplier screened clear", "Within its limit"].map((check) => (
+                      <li key={check} className="seq flex items-center gap-2">
+                        <Check aria-hidden className="size-3.5 text-proof" strokeWidth={3} />
+                        {check}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            </Reveal>
           </Section>
 
           <Section id="domain" title="Domain components" description="decisions, treasury, ledger and charts, from fixtures">

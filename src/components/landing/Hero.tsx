@@ -16,8 +16,10 @@ import { InvoiceCapture } from "./hero/InvoiceCapture";
 export function Hero() {
   return (
     <section aria-labelledby="hero-title" className="ledger-grid relative overflow-hidden border-b border-line bg-surface/30">
-      <div aria-hidden className="absolute -left-36 top-8 size-[28rem] rounded-full bg-proof-soft/80 blur-3xl motion-safe:animate-drift" />
-      <div aria-hidden className="absolute -right-28 bottom-0 size-[30rem] rounded-full bg-agent-soft/80 blur-3xl motion-safe:animate-drift" />
+      {/* Two still tints. Nothing on the landing moves at rest (landing motion M4): a drift this slight could not be
+          seen, and kept two large blurred layers painting for as long as the page was open. */}
+      <div aria-hidden className="absolute -left-36 top-8 size-[28rem] rounded-full bg-proof-soft/80 blur-3xl" />
+      <div aria-hidden className="absolute -right-28 bottom-0 size-[30rem] rounded-full bg-agent-soft/80 blur-3xl" />
       {/* One column that may shrink below its content on a phone, so nothing in it pushes past the right edge. */}
       <div className="relative mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 pb-14 pt-10 sm:px-6 sm:pb-20 sm:pt-14 lg:grid-cols-[minmax(0,1fr)_26rem] lg:items-center lg:gap-12 lg:py-20 xl:grid-cols-[minmax(0,1fr)_29rem] xl:gap-16">
         <div className="min-w-0">
@@ -53,7 +55,7 @@ export function Hero() {
           <p className="mt-1.5 flex max-w-xl flex-wrap items-center gap-x-5 gap-y-1 text-[0.8125rem] text-ink-3">
             <span>No wallet or funds needed.</span>
             <span>Email sign-in, no password.</span>
-            <Link href="/docs/guides/shadow-mode" className="inline-flex min-h-6 items-center gap-1 font-medium text-agent underline-offset-2 hover:underline">
+            <Link href="/docs/guides/shadow-mode" prefetch={false} className="inline-flex min-h-6 items-center gap-1 font-medium text-agent underline-offset-2 hover:underline">
               How shadow mode works
               <ArrowRight aria-hidden className="size-3.5" />
             </Link>

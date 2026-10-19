@@ -31,6 +31,10 @@ describe("design tokens shared with TypeScript", () => {
     expect(token(`ease-${name}`)).toBe(`cubic-bezier(${curve.join(", ")})`);
   });
 
+  it("the stagger between a sequence's items matches its CSS token", () => {
+    expect(token("stagger")).toBe(`${Math.round(MOTION.stagger * 1000)}ms`);
+  });
+
   it.each(["control", "surface", "raised", "overlay", "brand"])("defines the %s elevation", (name) => {
     expect(token(`shadow-${name}`)).toBeDefined();
   });

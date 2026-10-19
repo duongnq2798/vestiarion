@@ -1,4 +1,10 @@
+import type { CSSProperties } from "react";
 import type { EvidenceTone } from "../evidence/Evidence";
+
+/** A printed line's `--d`: when it prints, for the print utilities in landing-hero.css. Plain, so a server component may use it. */
+export function at(ms: number): CSSProperties {
+  return { "--d": `${ms}ms` } as CSSProperties;
+}
 
 /**
  * The hero's two replays. The counterparties, amounts and hashes are
@@ -75,3 +81,35 @@ export const PRINT_AT = {
 /** One replay prints for this long, then holds before the next begins. */
 export const REPLAY_MS = 4700;
 export const HOLD_MS = 3800;
+
+/**
+ * When each part of the landing's sample bill prints (`BillPreview`, landing motion M4), in ms from the moment it starts:
+ * the page's first paint, where the card sits beside the headline; for lines out of sight then, counted from the first
+ * of them to come into view (`PrintOnView`). In the order the agent works through the bill: it reads the bill, sets
+ * out its reasoning and ticks its four checks one by one, and only then proposes paying it and waits for a person's
+ * verdict, as the headline says ("Every bill checked before it's paid"); the next bill is held by a rule in code, and
+ * the shield saying so turns amber last. The card's frame and title are there
+ * from the start, so it is never an empty box, and every part has finished by 2.5 s (`tests/landing-bill-print.test.tsx`
+ * adds each part's length, read from the stylesheet). It never repeats.
+ */
+export const BILL_PRINT_AT = {
+  payee: 120,
+  amount: 200,
+  reasoning: 380,
+  reasoningText: 460,
+  checks: [560, 680, 800, 920],
+  proposal: 1480,
+  waiting: 1540,
+  breathe: 1560,
+  verdict: 1620,
+  next: 1720,
+  held: 1960,
+  blocked: 2060,
+  shield: 2160,
+} as const;
+
+/** A check's tick starts to draw this long after its row starts to print, as the next row starts. */
+export const BILL_TICK_AFTER = 140;
+
+/** The sample bill has finished printing by now. */
+export const BILL_PRINT_MS = 2500;

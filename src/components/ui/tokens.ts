@@ -48,5 +48,6 @@ export const MOTION = {
   },
   /** Shared-layout indicators: quick to settle, no bounce. */
   spring: { type: "spring", stiffness: 500, damping: 40 },
+  /** `--stagger`: the gap between one item of a sequence and the next. */
   stagger: 0.06,
 } as const;

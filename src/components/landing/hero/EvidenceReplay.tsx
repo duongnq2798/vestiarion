@@ -1,12 +1,12 @@
 "use client";
 
 import { Check, Pause, Play, X } from "lucide-react";
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { HashText, Receipt, Seal, Verdict } from "../evidence/Evidence";
 import { publishBeat } from "./replay-beat";
-import { HOLD_MS, PRINT_AT, REPLAY_MS, SCENARIOS, type ReplayScenario } from "./scenarios";
+import { at, HOLD_MS, PRINT_AT, REPLAY_MS, SCENARIOS, type ReplayScenario } from "./scenarios";
 
 /** The newest entries of the live ledger, newest first: only what the landing page may show. */
 export interface ChainHeadEntry {
@@ -27,10 +27,6 @@ function printStart(figure: HTMLElement | null): number {
   const animation = figure?.querySelector("[data-replay-current] .replay-print")?.getAnimations()[0];
   const start = animation?.startTime;
   return typeof start === "number" ? start : performance.now();
-}
-
-function at(ms: number): CSSProperties {
-  return { "--d": `${ms}ms` } as CSSProperties;
 }
 
 function Stage({ number, name, delay, children }: { number: string; name: string; delay: number; children: ReactNode }) {

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { cn } from "@/components/ui/cn";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
+import { landingPrefetch } from "../prefetch";
+import { useTabGlide } from "../tab-glide";
 import { highlight, type TokenKind } from "./highlight";
 import { SNIPPETS, type Snippet } from "./snippets";
 
@@ -57,9 +59,10 @@ function Code({ snippet }: { snippet: Snippet }) {
  * goes further. Static: nothing is fetched or typed out, and reduced motion changes nothing but the tab marker's glide.
  */
 export function CodeShowcase() {
+  const { root: glideRoot, onValueChange: glideFrom } = useTabGlide();
   return (
     <div className="overflow-hidden rounded-2xl border border-ink/10 bg-ink text-ground shadow-raised">
-      <Tabs defaultValue={SNIPPETS[0].id} className="gap-0">
+      <Tabs ref={glideRoot} defaultValue={SNIPPETS[0].id} onValueChange={glideFrom} className="gap-0">
         <div className="border-b border-ground/10 px-3 py-2.5 sm:px-4">
           <TabsList aria-label="Ways to build on Vestiarion" className="w-full border-ground/10 bg-ground/[0.06] sm:w-fit">
             {SNIPPETS.map((snippet) => (
@@ -93,6 +96,7 @@ export function CodeShowcase() {
                     <Link
                       key={link.href}
                       href={link.href}
+                      prefetch={landingPrefetch(link.href)}
                       className={cn(
                         "inline-flex min-h-8 items-center gap-1 font-mono text-xs font-semibold text-agent-line underline-offset-4 hover:underline",
                       )}

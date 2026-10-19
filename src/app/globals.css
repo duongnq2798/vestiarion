@@ -61,6 +61,9 @@
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 
+  /* The gap between one item of a sequence and the next (`Reveal sequence`). */
+  --stagger: 60ms;
+
   --animate-arrive: arrive 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
   --animate-sweep: sweep 1.4s ease-in-out infinite;
   --animate-drift: drift 12s ease-in-out infinite alternate;
@@ -213,8 +216,10 @@
 
 @layer components {
   /* `Reveal` (src/components/ui/Reveal.tsx) marks an element that started
-     below the fold. Nothing is hidden in the server's HTML. */
-  [data-reveal] {
+     below the fold. Nothing is hidden in the server's HTML. Only the arrival
+     is animated: the hiding, when the page hydrates, is at once, so a block
+     reached soon after does not first fade out on its own delay. */
+  [data-reveal="shown"] {
     transition:
       opacity 450ms var(--ease-emphasized) var(--reveal-delay, 0ms),
       translate 450ms var(--ease-emphasized) var(--reveal-delay, 0ms);
@@ -223,6 +228,29 @@
   [data-reveal="hidden"] {
     opacity: 0;
     translate: 0 12px;
+  }
+
+  /* `Reveal sequence` leaves the element in place and brings its children
+     marked `seq` in one by one, each `--stagger` after the one before. They
+     hide all at once, so they still arrive in order when reached early. */
+  [data-seq="shown"] .seq {
+    transition:
+      opacity 420ms var(--ease-emphasized) calc(var(--reveal-delay, 0ms) + var(--i, 0) * var(--stagger)),
+      translate 420ms var(--ease-emphasized) calc(var(--reveal-delay, 0ms) + var(--i, 0) * var(--stagger));
+  }
+
+  [data-seq="hidden"] .seq {
+    opacity: 0;
+    translate: 0 8px;
+  }
+
+  /* A figure that fades in where it stands rather than counting (`CountUp`), hidden at once as a revealed block is. */
+  [data-fade="shown"] {
+    transition: opacity 300ms var(--ease-standard);
+  }
+
+  [data-fade="hidden"] {
+    opacity: 0;
   }
 }
 
@@ -254,7 +282,7 @@
  * transitions keep their duration for opacity and colours only, so nothing travels, grows or slides; keyframe
  * animations are cut, except in an element that asks for calm motion (`data-calm-motion`) and everything inside it:
  * there, each animation changes opacity or colour only, and nothing flashes faster than once in 2 s. A revealed
- * element fades in where it stands.
+ * element, and each item of a revealed sequence in its turn, fades in where it stands.
  */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -271,7 +299,8 @@
     animation-iteration-count: 1 !important;
   }
 
-  [data-reveal="hidden"] {
+  [data-reveal="hidden"],
+  [data-seq="hidden"] .seq {
     translate: none;
   }
 }

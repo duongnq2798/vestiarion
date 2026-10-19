@@ -168,6 +168,7 @@ export function Safety() {
         <div className="mt-8 flex flex-col items-start gap-x-8 border-t border-ground/15 pt-5 text-[0.9375rem] sm:mt-10 sm:flex-row sm:flex-wrap sm:items-center">
           <Link
             href="/docs/guides/controls"
+            prefetch={false}
             className="inline-flex min-h-11 items-center gap-1 font-semibold text-agent-line underline-offset-4 hover:underline"
           >
             Explore all safety controls
@@ -182,6 +183,7 @@ export function Safety() {
           </Link>
           <Link
             href="/docs/research/model-vs-policy"
+            prefetch={false}
             className="inline-flex min-h-11 items-center gap-1 font-medium text-ground/80 underline-offset-4 hover:text-agent-line hover:underline"
           >
             When the model and the policy disagree

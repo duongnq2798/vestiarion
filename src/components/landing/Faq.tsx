@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { ISSUES_URL } from "@/lib/site-links";
+import { landingPrefetch } from "./prefetch";
 
 const link = "font-medium text-agent underline-offset-4 hover:underline";
 
@@ -12,7 +13,7 @@ function More({ href, children }: { href: string; children: ReactNode }) {
   return (
     <>
       {" "}
-      <Link href={href} className={link}>
+      <Link href={href} prefetch={landingPrefetch(href)} className={link}>
         {children}
       </Link>
     </>
@@ -127,7 +128,7 @@ export function Faq({ mainnetForEveryone }: { mainnetForEveryone: boolean }) {
             From your first bill to your first payment, here&apos;s how Vestiarion works.
           </p>
           <p className="mt-6">
-            <Link href="/docs" className={`inline-flex min-h-11 items-center gap-1 text-[0.9375rem] ${link}`}>
+            <Link href="/docs" prefetch={false} className={`inline-flex min-h-11 items-center gap-1 text-[0.9375rem] ${link}`}>
               Explore the docs
               <ArrowUpRight aria-hidden className="size-4" />
             </Link>

@@ -72,7 +72,7 @@ export function BuildOnIt() {
           </ul>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <Button asChild size="md">
-              <Link href={DEVELOPER_DOCS}>
+              <Link href={DEVELOPER_DOCS} prefetch={false}>
                 Read developer docs
                 <ArrowUpRight aria-hidden />
               </Link>
@@ -92,6 +92,7 @@ export function BuildOnIt() {
               <span key={item.href}>
                 <Link
                   href={item.href}
+                  prefetch={false}
                   className="font-medium text-ink-2 underline decoration-line-strong underline-offset-4 hover:text-agent hover:decoration-agent"
                 >
                   {item.label}

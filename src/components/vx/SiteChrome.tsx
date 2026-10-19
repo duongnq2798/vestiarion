@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { START_LABEL, TRY_HREF } from "@/components/landing/cta";
+import { landingPrefetch } from "@/components/landing/prefetch";
 import { LOOP_PAGE_LINE, LOOP_PAGE_LINK, loopCtaId, loopPageHref, type LoopPage } from "@/lib/growth/loop";
 import { ARC_URL, CIRCLE_URL, GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
@@ -96,7 +97,7 @@ export function SiteHeader({
                       {link.label}
                     </a>
                   ) : (
-                    <Link href={link.href} className={HEADER_LINK}>
+                    <Link href={link.href} prefetch={landingPrefetch(link.href)} className={HEADER_LINK}>
                       {link.label}
                     </Link>
                   )}
@@ -204,7 +205,7 @@ function FooterAnchor({ href, className, label, children }: { href: string; clas
     );
   }
   return (
-    <Link href={href} aria-label={label} className={className}>
+    <Link href={href} prefetch={landingPrefetch(href)} aria-label={label} className={className}>
       {children}
     </Link>
   );
