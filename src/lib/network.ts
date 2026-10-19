@@ -7,8 +7,9 @@
  *
  * Arc testnet's values are the ones every module used before this file existed; those modules now read them from here.
  * Arc mainnet's come from docs.arc.io and developers.circle.com as read on 2026-10-04; the dry run with a live Circle
- * key checks them again before any mainnet workspace goes live. A feature not verified there is null, and is off there: USYC (institutional only), Gateway, CCTP,
- * the Stablecoin Service's swap, and hosted wallets. Its wallets are EOAs that pay their own gas, and the per-workspace
+ * key checks them again before any mainnet workspace goes live. A feature not verified there is null, and is off there: USYC (institutional only), Gateway,
+ * the Stablecoin Service's swap, and hosted wallets. CCTP payouts from it, to Base only, were verified on 2026-10-19
+ * (docs/superpowers/specs/2026-10-19-mainnet-base-payouts-design.md B1). Its wallets are EOAs that pay their own gas, and the per-workspace
  * contracts (escrow, the spending limit) are off there too (docs/superpowers/specs/2026-10-06-mainnet-go-live-design.md
  * M6).
  */
@@ -243,7 +244,7 @@ export const ARC_MAINNET = {
     {
       id: "ARC",
       label: "Arc mainnet",
-      domain: null,
+      domain: 26,
       usdc: "0x3600000000000000000000000000000000000000",
       rpcUrl: "https://rpc.mainnet.arc.io",
       explorerTx: "https://explorer.arc.io/tx/",
@@ -251,8 +252,19 @@ export const ARC_MAINNET = {
       // events): a receipt reads a native transfer from it, as on Arc testnet (mainnet limits L5).
       nativeUsdc: "0xfffffffffffffffffffffffffffffffffffffffe",
     },
+    // Base alone for now, where contractors' USDC is (mainnet Base payouts B1): Circle's CCTP tables, and Iris's fast
+    // forwarded route from domain 26 to 6 on 2026-10-19 (0 bps, about 0.054 USDC to forward).
+    {
+      id: "BASE",
+      label: "Base",
+      domain: 6,
+      usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      rpcUrl: "https://mainnet.base.org",
+      explorerTx: "https://basescan.org/tx/",
+    },
   ],
-  cctp: null,
+  // TokenMessengerV2 is the same contract on Arc mainnet as on Base and every mainnet CCTP V2 serves.
+  cctp: { domain: 26, iris: "https://iris-api.circle.com", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d" },
   // Arc's CCTP domain is 26 on mainnet too; Iris quoted a fast forwarded route into it from each source on 2026-10-08.
   inbound: {
     domain: 26,

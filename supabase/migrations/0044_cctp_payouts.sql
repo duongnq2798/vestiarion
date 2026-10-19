@@ -14,10 +14,12 @@
 -- Only a vendor is paid on another chain: a contractor's milestones are
 -- released on Arc (review C1). Any chain written before this, when the field
 -- was free text, was always paid on Arc, so it is read as ARC-TESTNET. ARC,
--- Arc mainnet's chain (0078), is kept as written: db:migrate re-runs this file.
+-- Arc mainnet's chain (0078), and BASE, the chain Arc mainnet pays across to
+-- (docs/superpowers/specs/2026-10-19-mainnet-base-payouts-design.md B6), are
+-- kept as written: db:migrate re-runs this file.
 update public.counterparties
    set chain = 'ARC-TESTNET'
- where chain is not null and chain not in ('ARC-TESTNET', 'ARC', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA');
+ where chain is not null and chain not in ('ARC-TESTNET', 'ARC', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA', 'BASE');
 
 do $$
 begin

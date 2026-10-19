@@ -14,6 +14,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Pay a vendor on Base from Arc mainnet.** A workspace on Arc mainnet can now pay a vendor's USDC address on Base,
+  where most contractors who want USDC already hold it. The operating wallet burns the USDC on Arc through Circle's
+  CCTP and Circle mints it to the vendor on Base; the fee, about 0.054 USDC when checked, comes on top of the invoice,
+  and the payment counts as paid once it is minted on Base. It runs from a workspace on its own Circle account; one
+  paying from your own wallet through its contract still holds such a bill for a person, since the contract pays on Arc
+  only. Choose **Base** under **Chain** on Counterparties. The database allows the new chain through edits to two
+  existing migrations, which `db:migrate` re-runs.
+  [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#on-arc-mainnet-base).
+
 - **A reminder when a workspace stops.** A workspace opened by someone outside the team that has no real bill a day
   later gets one email, **Your agent has no bill to work on yet**: the ways to give the agent a bill (**New**, then
   **Bill to pay**; **Import a list**; forwarding bills to the workspace's own address), and **Load sample data** in a

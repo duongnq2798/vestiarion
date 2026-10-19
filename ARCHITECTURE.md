@@ -698,8 +698,16 @@ phase 1b).
   - Links are `txUrl(network, hash)` and `addressUrl(network, address)`.
 - **Wallets** (escrow, the spending limit, Gateway funding, a new workspace's accounts) are created on the profile's
   blockchain.
+- **Arc mainnet pays Base across chains** (docs/superpowers/specs/2026-10-19-mainnet-base-payouts-design.md): its
+  payee chains are `ARC` (domain 26) and `BASE` (domain 6), and its `cctp` is domain 26, `iris-api.circle.com` and
+  TokenMessengerV2 `0x28b5…cf5d`. The CCTP payout code is the testnet one, unchanged: from the operating EOA of a
+  workspace on its own Circle account (`wallet_host = 'own'`). A workspace paying through its spending-limit contract
+  (`'external'`) still holds the agent's payout (`workspace.onchain_limit_route`), refuses a person's
+  (`ContractRefusal`) and the provider's (`WALLET_CONTRACT_ONLY`), since the contract only does `transferFrom` on Arc.
+  `counterparties_chain_check` allows `BASE` for a vendor; it is added in both 0044's rewrite list and 0078's constraint,
+  since `db:migrate` re-runs both.
 - **A feature a network lacks** refuses by name (`FeatureOffError`: "… does not run on Arc mainnet yet") and never
-  falls back to testnet values. This covers CCTP, Gateway, the USYC reserve, the EURC swap and hosted wallets, which
+  falls back to testnet values. This covers Gateway, the USYC reserve, the EURC swap and hosted wallets, which
   the Go live panel leaves out there too. The agent's x402 buying is left out where Gateway does not run, without a
   line, so a mainnet cycle's log does not repeat it. Passkey wallets are simply not offered off Arc testnet.
 - **Display reads the record's chain; decisions read the workspace's.** A row, a list or a receipt labels a payee by its

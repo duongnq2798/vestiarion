@@ -75,7 +75,8 @@ describe("the Arc mainnet profile", () => {
       explorer: "https://explorer.arc.io",
       tokens: { USDC: "0x3600000000000000000000000000000000000000", EURC: "0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1" },
       payeeChains: ARC_MAINNET.payeeChains,
-      cctp: null,
+      // Verified on 2026-10-19 (mainnet Base payouts B1).
+      cctp: { domain: 26, iris: "https://iris-api.circle.com", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d" },
       // Bringing USDC in through CCTP runs on Arc mainnet, paying out through it does not yet.
       inbound: { domain: 26, iris: "https://iris-api.circle.com", sources: expect.any(Array) },
       gateway: null,

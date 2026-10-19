@@ -33,9 +33,25 @@ describe("CCTP and Gateway read the profile", () => {
   });
 
   it("refuse by name on a network without them, before any request", async () => {
-    expect(() => cctpOf(ARC_MAINNET)).toThrow("Paying through CCTP does not run on Arc mainnet yet");
     expect(() => gatewayOf(ARC_MAINNET)).toThrow("Paying through Gateway does not run on Arc mainnet yet");
-    await expect(bridgeFee(ARC_MAINNET, "BASE-SEPOLIA", 1, { fetch: noRequest })).rejects.toThrow("Paying through CCTP does not run on Arc mainnet yet");
+    expect(() => cctpOf({ ...ARC_MAINNET, cctp: null })).toThrow("Paying through CCTP does not run on Arc mainnet yet");
+    await expect(bridgeFee({ ...ARC_MAINNET, cctp: null }, "BASE", 1, { fetch: noRequest })).rejects.toThrow("Paying through CCTP does not run on Arc mainnet yet");
+  });
+
+  it("read Arc mainnet's own Iris and TokenMessenger for a payout to Base (mainnet Base payouts B1, B2)", async () => {
+    expect(cctpOf(ARC_MAINNET)).toEqual({ domain: 26, iris: "https://iris-api.circle.com", tokenMessenger: "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d" });
+    const asked: string[] = [];
+    const iris = (async (url: string) => {
+      asked.push(url);
+      return new Response(JSON.stringify([{ finalityThreshold: 1000, minimumFee: 0, forwardFee: { low: 53826, med: 53857, high: 54130 } }]), { status: 200 });
+    }) as unknown as typeof fetch;
+    const fee = await bridgeFee(ARC_MAINNET, "BASE", 20, { fetch: iris });
+    expect(asked).toEqual(["https://iris-api.circle.com/v2/burn/USDC/fees/26/6?forward=true"]);
+    expect(fee).toEqual({ feeUsdc: 0.05413, maxFeeUnits: 54130n, domain: 6 });
+    const [approve, burn] = burnCalls({ amount: 20, maxFeeUnits: fee.maxFeeUnits, domain: fee.domain, recipient: PAYEE, usdc: ARC_MAINNET.tokens.USDC, tokenMessenger: cctpOf(ARC_MAINNET).tokenMessenger });
+    expect(approve).toMatchObject({ contractAddress: ARC_MAINNET.tokens.USDC, abiParameters: ["0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d", "20054130"] });
+    expect(burn.contractAddress).toBe("0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d");
+    expect(burn.abiParameters.slice(0, 2)).toEqual(["20054130", "6"]);
   });
 
   it("burn and batch with the USDC they are given", () => {

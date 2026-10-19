@@ -25,18 +25,34 @@ describe("each network's payee chains (P3)", () => {
     ]);
   });
 
-  it("lists Arc mainnet's own chain alone, with no CCTP domain until it is verified there, and its native USDC emitter (mainnet limits L5)", () => {
+  it("lists Arc mainnet's own chain, with its CCTP domain and native USDC emitter (mainnet limits L5), then Base (mainnet Base payouts B1)", () => {
     expect(ARC_MAINNET.payeeChains).toEqual([
       {
         id: "ARC",
         label: "Arc mainnet",
-        domain: null,
+        domain: 26,
         usdc: "0x3600000000000000000000000000000000000000",
         rpcUrl: "https://rpc.mainnet.arc.io",
         explorerTx: "https://explorer.arc.io/tx/",
         nativeUsdc: "0xfffffffffffffffffffffffffffffffffffffffe",
       },
+      {
+        id: "BASE",
+        label: "Base",
+        domain: 6,
+        usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        rpcUrl: "https://mainnet.base.org",
+        explorerTx: "https://basescan.org/tx/",
+      },
     ]);
+  });
+
+  it("keeps Base's USDC and domain equal to what Arc mainnet already brings USDC in from (add USDC from another chain B1)", () => {
+    const base = ARC_MAINNET.inbound.sources.find((source) => source.id === "Base");
+    expect(chainOn("arc-mainnet", "BASE")).toMatchObject({ usdc: base?.usdc, domain: base?.domain, rpcUrl: base?.rpcUrl, explorerTx: base?.explorerTx });
+    expect(ARC_MAINNET.cctp.tokenMessenger).toBe(base?.tokenMessenger);
+    expect(paidAcrossChains("BASE")).toBe(true);
+    expect(networkOfChain("BASE")).toBe("arc-mainnet");
   });
 
   it("keeps the swap's adapter equal to Circle's App Kit, since it is the spender the swap approves (Review Focus 4)", () => {
@@ -56,7 +72,7 @@ describe("a chain on a network (P3)", () => {
     expect(chainOn("arc-testnet", null)).toBe(ARC_TESTNET.payeeChains[0]);
     expect(chainOn("arc-mainnet", undefined)).toBe(ARC_MAINNET.payeeChains[0]);
     expect(chainOn("arc-testnet", "BASE-SEPOLIA").domain).toBe(6);
-    expect(chainsOn("arc-mainnet").map((chain) => chain.id)).toEqual(["ARC"]);
+    expect(chainsOn("arc-mainnet").map((chain) => chain.id)).toEqual(["ARC", "BASE"]);
   });
 
   it("refuses a chain from another network, or one no network lists, in plain words (Review Focus 3)", () => {

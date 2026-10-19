@@ -16,10 +16,17 @@ import { networkProfile, type Network } from "@/lib/network";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 
-/** What the Chain field offers on the workspace's network (mainnet polish E2): other chains through CCTP, or its own only. */
+/**
+ * What the Chain field offers on the workspace's network (mainnet polish E2): other chains through CCTP, or its own only.
+ * Where a workspace may pay from the owner's own wallet, whose contract pays on Arc only, it says so (mainnet Base
+ * payouts B5).
+ */
 export function chainHelp(network: Network): string {
   const profile = networkProfile(network);
-  return profile.cctp ? "Another chain is paid from Arc through CCTP, for a fee" : `${profile.label} pays on its own chain only`;
+  if (!profile.cctp) return `${profile.label} pays on its own chain only`;
+  return profile.walletTreasury
+    ? "Another chain is paid from Arc through CCTP, for a fee, from your own Circle account; a workspace paying from your own wallet holds it for now"
+    : "Another chain is paid from Arc through CCTP, for a fee";
 }
 
 /**
