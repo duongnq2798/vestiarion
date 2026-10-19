@@ -23,7 +23,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   existing migrations, which `db:migrate` re-runs. A vendor paid on another chain can no longer be given a milestone:
   milestones are released on the workspace's own chain, so its USDC would have gone to that address on Arc. A release
   of one made before is held. A live slice now carries a vendor on Base Sepolia as a vendor on Base, without the
-  address.
+  address. The TypeScript SDK 0.3.5 accepts `BASE` for a counterparty's chain.
   [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#pay-a-vendor-on-base-from-arc-mainnet).
 
 - **A reminder when a workspace stops.** A workspace opened by someone outside the team that has no real bill a day
