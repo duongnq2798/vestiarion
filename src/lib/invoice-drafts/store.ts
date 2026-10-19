@@ -1,7 +1,7 @@
 import { db } from "../dal";
 import { CaptureNotSetUpError, isMissingRelation } from "../extension/tokens";
 import { draftDuplicates, type BillRow, type OtherDraft } from "./duplicates";
-import { DRAFT_COLUMNS, fieldsOfRow, REVIEW_LIMIT, startingMemo, type DraftFields, type DraftRow, type StoredRead } from "./model";
+import { DRAFT_COLUMNS, fieldsOfRow, REVIEW_LIMIT, startingMemo, type DraftFields, type DraftRow, type DraftSource, type StoredRead } from "./model";
 
 /**
  * Reading and writing captured drafts (invoice capture design C1, C5, C7), inside the workspace's scope. Before
@@ -44,6 +44,17 @@ export async function draftById(id: string): Promise<DraftRow | null> {
   const found = await db().from("invoice_drafts").select(DRAFT_COLUMNS).eq("id", id).maybeSingle<DraftRow>();
   if (found.error) raise(found.error);
   return found.data;
+}
+
+/**
+ * The payee link a payee's draft came through (0133), for the bill's entry; null when it names none. Read on its own,
+ * so every other read of a draft stays as it was before 0133 added the column.
+ */
+export async function draftPayeeLink(id: string): Promise<string | null> {
+  if (!isDraftId(id)) return null;
+  const found = await db().from("invoice_drafts").select("payee_link_id").eq("id", id).maybeSingle<{ payee_link_id: string | null }>();
+  if (found.error) raise(found.error);
+  return found.data?.payee_link_id ?? null;
 }
 
 /** A new draft, or `clash` when the same key arrived at the same moment, so the caller reads that one instead. */
@@ -124,7 +135,7 @@ export async function draftsNaming(invoiceNumbers: string[]): Promise<OtherDraft
 /** A draft to review on Bills & receivables (C5): everything a reviewer reads, and what it may repeat. */
 export interface CapturedDraftView {
   id: string;
-  source: "selection" | "file";
+  source: DraftSource;
   documentKind: DraftRow["document_kind"];
   fields: DraftFields;
   capturedAt: string;
@@ -137,6 +148,8 @@ export interface CapturedDraftView {
   extracted: StoredRead["extracted"] | null;
   reader: StoredRead["reader"];
   duplicates: string[];
+  /** The payee's note, on an invoice it sent through its payee link (P4). */
+  note?: string | null;
 }
 
 /** Every column the review list reads: all but the captured text, which is read when a person opens it. */
@@ -179,7 +192,12 @@ export async function capturedDraftsToReview(): Promise<{ available: true; draft
         modelNote: row.read?.modelNote ?? null,
         extracted: row.read?.extracted ?? null,
         reader: row.read?.reader ?? null,
-        duplicates: draftDuplicates({ id: row.id, counterpartyId: row.counterparty_id, ...fields, memo: startingMemo(fields.invoiceNumber, fields.memo) }, bills, others),
+        duplicates: draftDuplicates(
+          { id: row.id, counterpartyId: row.counterparty_id, ...fields, memo: startingMemo(fields.invoiceNumber, fields.memo ?? row.read?.note ?? null) },
+          bills,
+          others
+        ),
+        ...(row.source === "payee_link" ? { note: row.read?.note ?? null } : {}),
       };
     }),
   };

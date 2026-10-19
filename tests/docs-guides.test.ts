@@ -144,6 +144,9 @@ const PAYEE_JOURNEY = "src/components/payee/PayeeJourney.tsx";
 const PAYEE_STATES = "src/lib/payee-journey.ts";
 const PAYEE_PAGE = "src/app/payee/[token]/page.tsx";
 const PAYEE_ACTIONS = "src/app/payee/[token]/actions.ts";
+/** A payee's invoice through its payee link (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P4). */
+const PAYEE_INVOICE_FORM = "src/components/payee/PayeeInvoiceForm.tsx";
+const PAYEE_INVOICE_RULES = "src/lib/payee-invoice.ts";
 const PAYEE_EMAIL = "src/lib/email/payee-link.ts";
 const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
 const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
@@ -1239,6 +1242,14 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["The agent pays it once a person agrees, in shadow mode", REPLAY_READ],
   ],
   "guides/first-payment": [
+    // A payee link that asks for the payee's invoice, or lets it choose its chain (payee invoice link P1, P5).
+    ["Also ask for their invoice", PAYEE_LINK],
+    ["Let them choose where they are paid", PAYEE_LINK],
+    ["Waiting for review", "src/components/bills/BillsSummary.tsx"],
+    ["Invoice from", CAPTURE_MODEL],
+    ["sent it through their payee link", CAPTURE_REVIEW],
+    ["Review and add as bill", CAPTURE_REVIEW],
+    ["payee_invoice_submitted", "src/lib/platform/payee-invoices.ts"],
     // Ask every payee at once (ask every payee A1-A5).
     ["Ask every payee for an address", "src/components/intake/AskEveryPayee.tsx"],
     ["Ask N for an address", "src/components/intake/AskEveryPayee.tsx", "Ask {count} for an address"],
@@ -1596,8 +1607,29 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Already made one here? Use my passkey wallet", "src/components/payee/PasskeyWalletOption.tsx"],
     ["Your passkey wallet", PAYEE_FORM],
     ["Refresh", "src/components/wallet/PasskeyWallet.tsx"],
-    ["Your wallet address on Arc mainnet", PAYEE_FORM, "Your wallet address on ${chainLabel}"],
-    ["Your wallet address on Arc testnet", PAYEE_FORM, "Your wallet address on ${chainLabel}"],
+    ["Your wallet address on Arc mainnet", PAYEE_FORM, "Your wallet address on ${label}"],
+    ["Your wallet address on Arc testnet", PAYEE_FORM, "Your wallet address on ${label}"],
+    // Choosing where it is paid, keeping the address on file, and sending the invoice (payee invoice link P2, P4).
+    ["Your invoice", PAYEE_STEPS],
+    ["Where does your wallet receive USDC?", PAYEE_FORM],
+    ["Your wallet address on Base", PAYEE_FORM, "Your wallet address on ${label}"],
+    ["Choose another network", PAYEE_FORM],
+    ["Where you are paid can no longer be chosen on this link. Reload the page.", PAYEE_STATES],
+    ["Keep this address", PAYEE_FORM],
+    ["My wallet receives USDC on Base.", PAYEE_FORM, "My wallet receives USDC on ${chainLabel}."],
+    ["Before you send it, tick all four", PAYEE_FORM],
+    ["Tick all four boxes to send your address.", PAYEE_FORM],
+    ["Invoice number", PAYEE_INVOICE_FORM],
+    ["Amount (USDC)", PAYEE_INVOICE_FORM],
+    ["Due date", PAYEE_INVOICE_FORM],
+    ["Attach the invoice (optional)", PAYEE_INVOICE_FORM],
+    ["A PDF or a text file, up to 4 MB. Only its text is kept, never the file.", PAYEE_INVOICE_FORM],
+    ["Send my invoice", PAYEE_INVOICE_FORM],
+    ["Invoice sent", PAYEE_JOURNEY],
+    ["Choose a due date from today to a year from today.", PAYEE_INVOICE_RULES],
+    ["This PDF has no text to read; it may be a scan. Send your invoice without the file, or choose a PDF with text.", PAYEE_INVOICE_RULES],
+    ["This link already sent an invoice. To send another, ask the business for a new link.", PAYEE_ACTIONS],
+    ["Wait a few seconds, then send it again.", PAYEE_ACTIONS],
   ],
   "guides/import-bills": [
     ["Bills & receivables", APP_NAV],
@@ -1806,8 +1838,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Send draft", CAPTURE_POPUP],
     ["Sent for review", CAPTURE_POPUP],
     ["Open in Vestiarion", CAPTURE_POPUP],
-    ["Captured drafts", CAPTURE_REVIEW],
+    ["Captured drafts", CAPTURE_MODEL],
     ["What was captured", CAPTURE_REVIEW],
+    ["sent it through their payee link", CAPTURE_REVIEW],
     ["Review and add as bill", CAPTURE_REVIEW],
     ["Goods or services received", INVOICE_FORM],
     ["Add as bill", CAPTURE_REVIEW],

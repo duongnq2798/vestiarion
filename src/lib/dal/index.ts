@@ -135,6 +135,8 @@ export const PLATFORM_RPCS = [
   "open_numbers", "open_first_payments", "open_outcomes", "open_verdicts", "open_funnel", "set_platform_team_member", "platform_team_members",
   "latest_team_decision", "recent_team_decisions",
   "create_payee_link", "payee_link_preview", "payee_link_chain", "claim_payee_link", "release_payee_link", "revoke_payee_link", "payee_link_status",
+  // A payee link's options, and the invoice a payee sends through it (0133, payee invoice link P1, P4-P6).
+  "set_payee_link_options", "submit_payee_invoice",
   "payment_receipt_by_token", "report_share_by_token", "pay_link_preview", "enable_usyc_reserve", "payee_history",
   "telegram_claim_code", "telegram_activate", "slack_link_member",
   "growth_team_member", "growth_workspaces", "growth_update_lead", "growth_import_leads", "record_org_attribution",

@@ -35,6 +35,8 @@ import { inOrg } from "@/lib/dal/scope";
 import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks } from "@/lib/platform/payee-links";
+import { chainChoiceFits, choosablePayeeChains } from "@/lib/payee-chain-choice";
+import { homeChain } from "@/lib/payee-chains";
 import { askablePayees } from "@/lib/address-requests";
 import { simulatesPayments } from "@/lib/capability-read";
 import { plural } from "@/lib/copy";
@@ -85,6 +87,16 @@ export default async function CounterpartiesPage({
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
     // The payees with no address of their own to ask at once (ask every payee A1, A2).
     const askable = canWrite ? askablePayees(counterparties, payeeLinks) : null;
+    // The chains a vendor with no address may be let choose among on its link, when the workspace pays more than one
+    // (payee invoice link P1). Best effort: none when it cannot be read.
+    const choosableChains = canWrite
+      ? (
+          await choosablePayeeChains().catch((error: unknown) => {
+            console.error("counterparties: payee chains not read", error instanceof Error ? error.message : error);
+            return [];
+          })
+        ).map((chain) => chain.label)
+      : [];
     // Vendors paid to a bank account through BlindPay (bank payouts B4), on a deployment with it; best effort, none
     // before migration 0124.
     const bankPayoutsOn = blindpaySettingsFromEnv() !== null;
@@ -218,7 +230,7 @@ export default async function CounterpartiesPage({
                       </dl>
                       <CounterpartyAddress
                         orgSlug={slug}
-                        counterparty={{ id: counterparty.id, name: counterparty.name, address: counterparty.address }}
+                        counterparty={{ id: counterparty.id, name: counterparty.name, address: counterparty.address, chain: counterparty.chain ?? homeChain(network).id }}
                         unconfirmedSince={
                           addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at) ? counterparty.address_changed_at : null
                         }
@@ -248,6 +260,7 @@ export default async function CounterpartiesPage({
                             orgSlug={slug}
                             counterparty={{ id: counterparty.id, name: counterparty.name }}
                             activeLink={payeeLinks.get(counterparty.id) ?? null}
+                            offers={{ invoice: true, chains: chainChoiceFits(counterparty) ? choosableChains : [] }}
                           />
                         </div>
                       )}

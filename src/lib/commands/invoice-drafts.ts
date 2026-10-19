@@ -7,7 +7,7 @@ import type { InvoiceInput } from "../invoices/create";
 import { captureRequestHash, isPicture, readCapture, type CaptureInput } from "../invoice-drafts/capture";
 import { draftDuplicates } from "../invoice-drafts/duplicates";
 import { columnsOfEdit, type DraftEdit, type DraftRow } from "../invoice-drafts/model";
-import { billsOf, draftById, draftByKey, draftOfConnection, draftsNaming, insertDraft, invoiceExists, moveDraft, unsentDraftCount } from "../invoice-drafts/store";
+import { billsOf, draftById, draftByKey, draftOfConnection, draftPayeeLink, draftsNaming, insertDraft, invoiceExists, moveDraft, unsentDraftCount } from "../invoice-drafts/store";
 import { cycleEventOf, type Actor } from "./actor";
 import { addInvoice } from "./invoices";
 import { done, refused, TRY_AGAIN, type CommandOutcome } from "./outcome";
@@ -20,6 +20,10 @@ import { gate } from "./policy";
  * here pays, approves or adds an invoice from the extension: its surface may run `invoice_draft.capture`, `.edit` and
  * `.send` only. Every command runs inside the workspace's scope; before migration 0121 a draft command throws
  * `CaptureNotSetUpError`, which the extension's routes answer as not set up.
+ *
+ * An invoice a payee sent through its payee link (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P5)
+ * arrives sent, and is added or discarded here the same way: whoever adds it is the bill's maker, and its entry names
+ * the link it came through.
  */
 
 const ALREADY_DECIDED = "This draft was already decided.";
@@ -210,6 +214,11 @@ export async function confirmInvoiceDraft(
     }
   }
 
+  // A payee's invoice names the link it came through, read before the draft is claimed (0133).
+  const fromPayee = draft.source === "payee_link";
+  const payeeLinkId = fromPayee ? await draftPayeeLink(draft.id) : null;
+  const what = fromPayee ? "an invoice sent through a payee link" : "an invoice captured with the Chrome extension";
+
   const invoiceId = randomUUID();
   const claimed = await moveDraft(draft.id, "sent", {
     state: "confirmed",
@@ -223,10 +232,10 @@ export async function confirmInvoiceDraft(
     invoiceId,
     invoice: input.invoice,
     document: capturedProvenance(draft, input.invoice),
-    captured: { invoiceDraftId: draft.id, invoiceNumber: draft.invoice_number },
+    captured: { invoiceDraftId: draft.id, invoiceNumber: draft.invoice_number, ...(fromPayee ? { payeeLinkId } : {}) },
   });
   if (added.ok) {
-    await linkDraft(actor, draft.id, invoiceId, `Added an invoice captured with the Chrome extension as a bill for ${added.counterpartyName}`);
+    await linkDraft(actor, draft.id, invoiceId, `Added ${what} as a bill for ${added.counterpartyName}`);
     return done(`Added a bill for ${added.counterpartyName}. The agent usually decides within a minute.`, { invoiceId });
   }
   if (!NOTHING_WRITTEN.has(added.code)) {
@@ -239,7 +248,7 @@ export async function confirmInvoiceDraft(
     }
     if (exists) {
       // The bill was added; what failed after it was its ledger entry. It is linked, and never added a second time.
-      await linkDraft(actor, draft.id, invoiceId, "Added an invoice captured with the Chrome extension as a bill");
+      await linkDraft(actor, draft.id, invoiceId, `Added ${what} as a bill`);
       runCycleSoon(cycleEventOf(actor, "invoice_added"));
       return done("The bill was added, but its ledger entry was not recorded. The agent decides it within a minute.", { invoiceId });
     }

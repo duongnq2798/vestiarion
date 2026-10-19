@@ -1,5 +1,6 @@
 import { db, unwrap } from "../dal";
-import { createPayeeLink, PayeeLinkError } from "../platform/payee-links";
+import { chainChoiceFits, choosablePayeeChains } from "../payee-chain-choice";
+import { createPayeeLink, PayeeLinkError, type PayeeLinkOptions } from "../platform/payee-links";
 import { publicOrigin } from "../public-origin";
 import { provenanceOf, type Actor } from "./actor";
 import { done, refused, TRY_AGAIN, type CommandOutcome } from "./outcome";
@@ -11,19 +12,33 @@ import { gate } from "./policy";
  * client is never paid, and the public page would tell them otherwise. The address the payee enters waits for a
  * member's confirmation before the agent pays to it. The link's address is in the outcome only: just its hash is
  * stored, and the error log names nothing of it.
+ *
+ * `options` (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P1), from the console only: also ask for the
+ * payee's invoice, and let the payee choose where it is paid, which only a vendor with no address yet may be offered,
+ * in a workspace that can pay more than one chain. Every other surface makes a link with both off.
  */
 export async function issuePayeeLink(
   actor: Actor,
-  input: { counterpartyId: string }
+  input: { counterpartyId: string; options?: PayeeLinkOptions }
 ): Promise<CommandOutcome<{ linkId: string; counterpartyId: string; url: string; expiresAt: string }>> {
   const refusal = gate(actor, "payee_link.create");
   if (refusal) return refusal;
   try {
-    const found = unwrap(await db().from("counterparties").select("id, role").eq("id", input.counterpartyId).limit(1)) as Array<{ id: string; role: string }>;
+    const found = unwrap(await db().from("counterparties").select("id, role, address").eq("id", input.counterpartyId).limit(1)) as Array<{
+      id: string;
+      role: string;
+      address: string | null;
+    }>;
     if (found.length === 0) return refused("counterparty_not_found", "Counterparty not found.");
     if (found[0].role === "client") return refused("client", "A payee link is for a vendor or a contractor the agent pays.");
 
-    const { link, token } = await createPayeeLink({ orgId: actor.orgId, actorId: actor.userId, counterpartyId: input.counterpartyId, ...provenanceOf(actor) });
+    const asksInvoice = input.options?.asksInvoice === true;
+    const offersChain = input.options?.offersChain === true;
+    if (offersChain && !(chainChoiceFits(found[0]) && (await choosablePayeeChains()).length > 0)) {
+      return refused("chain_not_offered", "Only a vendor with no address yet can choose where it is paid, and only where this workspace pays more than one chain.");
+    }
+    const options = asksInvoice || offersChain ? { options: { ...(asksInvoice ? { asksInvoice } : {}), ...(offersChain ? { offersChain } : {}) } } : {};
+    const { link, token } = await createPayeeLink({ orgId: actor.orgId, actorId: actor.userId, counterpartyId: input.counterpartyId, ...provenanceOf(actor), ...options });
     return done("Link created. Copy it now: it is shown only once.", {
       linkId: link.id,
       counterpartyId: link.counterpartyId,

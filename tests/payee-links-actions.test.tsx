@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPayeeLinkAction, revokePayeeLinkAction } from "@/app/actions/payee-links";
-import { submitPayeeAddressAction } from "@/app/payee/[token]/actions";
+import { keepPayeeAddressAction, submitPayeeAddressAction, submitPayeeInvoiceAction } from "@/app/payee/[token]/actions";
 import PayeePage, { metadata } from "@/app/payee/[token]/page";
 import { requiresSession } from "@/lib/auth/routes";
 import { CounterpartyAddressError } from "@/lib/counterparty-address";
@@ -16,9 +16,17 @@ import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
  * session-less submit. The library is faked; tests/payee-links.test.ts covers it.
  */
 
-const { authorizeMock, lib } = vi.hoisted(() => ({
+const { authorizeMock, lib, invoiceMock } = vi.hoisted(() => ({
   authorizeMock: vi.fn(),
-  lib: { createPayeeLink: vi.fn(), revokePayeeLink: vi.fn(), payeeLinkStatus: vi.fn(), submitPayeeAddress: vi.fn(), payeeLinkSimulates: vi.fn(async () => false) },
+  lib: {
+    createPayeeLink: vi.fn(),
+    revokePayeeLink: vi.fn(),
+    payeeLinkStatus: vi.fn(),
+    submitPayeeAddress: vi.fn(),
+    keepPayeeAddress: vi.fn(),
+    payeeLinkSimulates: vi.fn(async () => false),
+  },
+  invoiceMock: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -33,6 +41,7 @@ vi.mock("@/lib/platform/payee-links", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/platform/payee-links")>()),
   ...lib,
 }));
+vi.mock("@/lib/platform/payee-invoices", () => ({ submitPayeeInvoice: invoiceMock }));
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1";
@@ -61,6 +70,7 @@ beforeEach(() => {
   fake = fakeSupabase(() => ({ body: role ? [{ id: PAYEE, role }] : [] }));
   authorizeMock.mockReset().mockResolvedValue(ACCESS);
   for (const mock of Object.values(lib)) mock.mockReset();
+  invoiceMock.mockReset();
 });
 
 describe("createPayeeLinkAction", () => {
@@ -96,6 +106,15 @@ describe("createPayeeLinkAction", () => {
     });
     expect(await createPayeeLinkAction(empty, form({ orgSlug: "acme", counterpartyId: "nope" }))).toEqual({ ok: false, message: "Counterparty not found." });
     expect(lib.createPayeeLink).not.toHaveBeenCalled();
+  });
+});
+
+describe("createPayeeLinkAction's options (payee invoice link P1)", () => {
+  it("passes the ticked boxes to the link, and says the link asks for an invoice", async () => {
+    lib.createPayeeLink.mockResolvedValue({ link: { id: LINK, counterpartyId: PAYEE, expiresAt: "2026-10-07T12:00:00+00:00" }, token: TOKEN });
+    const result = await createPayeeLinkAction(empty, form({ orgSlug: "acme", counterpartyId: PAYEE, asksInvoice: "on" }));
+    expect(lib.createPayeeLink).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, options: { asksInvoice: true } });
+    expect(result).toMatchObject({ ok: true, asksInvoice: true });
   });
 });
 
@@ -154,6 +173,14 @@ describe("submitPayeeAddressAction — no session needed", () => {
     });
   });
 
+  it("sends the chain chosen on a link that offered it, and says when it can no longer be chosen (payee invoice link P2)", async () => {
+    lib.submitPayeeAddress.mockResolvedValueOnce({ ok: true, orgName: "Acme", unchanged: false }).mockResolvedValueOnce({ ok: false, reason: "chain_closed" });
+    const fields = { token: TOKEN, address: "0x2222222222222222222222222222222222222222", chain: "BASE" };
+    expect(await submitPayeeAddressAction(empty, form(fields))).toMatchObject({ ok: true });
+    expect(lib.submitPayeeAddress).toHaveBeenCalledWith(TOKEN, "0x2222222222222222222222222222222222222222", { chain: "BASE" });
+    expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: false, message: "Where you are paid can no longer be chosen on this link. Reload the page." });
+  });
+
   it("keeps any other failure's details out of the answer", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     lib.submitPayeeAddress.mockRejectedValue(new CounterpartyAddressError("conflict"));
@@ -162,6 +189,69 @@ describe("submitPayeeAddressAction — no session needed", () => {
       message: "That did not work. Try again in a moment.",
     });
     expect(error).toHaveBeenCalledWith("payee address submission failed");
+  });
+});
+
+describe("keepPayeeAddressAction (payee invoice link P4)", () => {
+  it("keeps the address on file, naming the business, with no session", async () => {
+    lib.keepPayeeAddress.mockResolvedValue({ ok: true, orgName: "Acme" });
+    expect(await keepPayeeAddressAction(empty, form({ token: TOKEN }))).toEqual({ ok: true, message: "Kept the address Acme has on file." });
+    expect(lib.keepPayeeAddress).toHaveBeenCalledWith(TOKEN);
+    expect(authorizeMock).not.toHaveBeenCalled();
+  });
+
+  it("says when there is nothing to keep, when the link is no longer valid, and nothing else of a failure", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    lib.keepPayeeAddress
+      .mockResolvedValueOnce({ ok: false, reason: "no_address" })
+      .mockResolvedValueOnce({ ok: false, reason: "invalid_link" })
+      .mockRejectedValueOnce(new Error("connection reset"));
+    expect((await keepPayeeAddressAction(empty, form({ token: TOKEN }))).message).toBe("There is no address on file to keep. Enter your address instead.");
+    expect((await keepPayeeAddressAction(empty, form({ token: TOKEN }))).message).toBe("This link is no longer valid. Ask the business that sent it for a new one.");
+    expect((await keepPayeeAddressAction(empty, form({ token: TOKEN }))).message).toBe("That did not work. Try again in a moment.");
+  });
+});
+
+describe("submitPayeeInvoiceAction (payee invoice link P4)", () => {
+  const invoiceForm = (file?: File) => {
+    const data = form({ token: TOKEN, invoiceNumber: "INV-7", amount: "1250.50", dueDate: "2026-11-02", note: "October" });
+    if (file) data.set("file", file);
+    return data;
+  };
+
+  it("sends the fields and the file, with no session, and thanks the payee", async () => {
+    invoiceMock.mockResolvedValue({ ok: true, orgName: "Acme" });
+    const file = new File(["Invoice INV-7"], "invoice.txt", { type: "text/plain" });
+    expect(await submitPayeeInvoiceAction(empty, invoiceForm(file))).toEqual({ ok: true, message: "Sent. Acme reviews your invoice before adding it." });
+    const [token, input] = invoiceMock.mock.calls[0];
+    expect(token).toBe(TOKEN);
+    expect(input).toMatchObject({ invoiceNumber: "INV-7", amount: "1250.50", dueDate: "2026-11-02", note: "October" });
+    expect(input.file).toBeInstanceOf(File);
+    expect(authorizeMock).not.toHaveBeenCalled();
+  });
+
+  it("sends no file for an empty file field", async () => {
+    invoiceMock.mockResolvedValue({ ok: true, orgName: "Acme" });
+    await submitPayeeInvoiceAction(empty, invoiceForm(new File([], "", { type: "application/octet-stream" })));
+    expect(invoiceMock.mock.calls[0][1].file).toBeNull();
+  });
+
+  it.each([
+    [{ ok: false, reason: "invalid", field: "amount" }, { ok: false, message: "Enter the amount in USDC, more than 0 with at most 6 decimals, such as 1250.00.", field: "amount" }],
+    [{ ok: false, reason: "file", code: "scan" }, { ok: false, message: "This PDF has no text to read; it may be a scan. Send your invoice without the file, or choose a PDF with text.", field: "file" }],
+    [{ ok: false, reason: "busy" }, { ok: false, message: "Wait a few seconds, then send it again." }],
+    [{ ok: false, reason: "already_sent" }, { ok: false, message: "This link already sent an invoice. To send another, ask the business for a new link." }],
+    [{ ok: false, reason: "invalid_link" }, { ok: false, message: "This link is no longer valid. Ask the business that sent it for a new one." }],
+  ])("%# answers a refusal with a fixed sentence", async (refusal, answer) => {
+    invoiceMock.mockResolvedValue(refusal);
+    expect(await submitPayeeInvoiceAction(empty, invoiceForm())).toEqual(answer);
+  });
+
+  it("keeps any other failure's details out of the answer", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    invoiceMock.mockRejectedValue(new Error("relation does not exist"));
+    expect(await submitPayeeInvoiceAction(empty, invoiceForm())).toEqual({ ok: false, message: "That did not work. Try again in a moment." });
+    expect(error).toHaveBeenCalledWith("payee invoice submission failed");
   });
 });
 
@@ -267,6 +357,62 @@ describe("the payee's page", () => {
     expect(text(markup)).toContain("Signed decisions on Arc mainnet");
     expect(text(markup)).not.toContain("Arc testnet");
     expect(markup).toContain(`href="https://explorer.arc.io/tx/0x${"ab".repeat(32)}"`);
+  });
+
+  it("asks for the invoice as a step of its own after the address, on a link that asks for it (payee invoice link P4)", async () => {
+    lib.payeeLinkStatus.mockResolvedValue(status({ asksInvoice: true, invoiceSent: false }));
+    const open = text(await render());
+    expect(open).toContain("Step 1 of 4");
+    expect(open).toContain("Your invoice");
+    expect(open).toContain("Send your invoice. It waits for a person to check it.");
+
+    lib.payeeLinkStatus.mockResolvedValue(status({ asksInvoice: true, invoiceSent: false, linkState: "used", usedAt: "2026-10-02T09:00:00Z", statusUntil: "2026-11-01T09:00:00Z", address: ADDRESS }));
+    const markup = await render();
+    const page = text(markup);
+    expect(page).toContain("Step 2 of 4");
+    expect(page).toContain("Send Acme your invoice");
+    expect(page).toContain("Address sent: 0x2222…2222. Acme confirms it before paying you.");
+    expect(page).toContain("Send my invoice");
+    expect(page).toContain("Only its text is kept, never the file.");
+    expect(page).toContain("This link takes your invoice until Nov 1, 2026.");
+    for (const name of ["invoiceNumber", "amount", "dueDate", "note", "file"]) expect(markup).toMatch(new RegExp(`name="${name}"`));
+    expect(markup).toMatch(/<input[^>]*type="date"[^>]*min="\d{4}-\d{2}-\d{2}"/);
+    expect(markup).not.toMatch(/<input[^>]*name="address"/);
+  });
+
+  it("says the invoice was sent on the steps after it", async () => {
+    lib.payeeLinkStatus.mockResolvedValue(status({ asksInvoice: true, invoiceSent: true, linkState: "used", usedAt: "2026-10-02T09:00:00Z", statusUntil: "2026-11-01T09:00:00Z", address: ADDRESS }));
+    const page = text(await render());
+    expect(page).toContain("Step 3 of 4");
+    expect(page).toContain("Address sent. Acme confirms it next.");
+    expect(page).toContain("Invoice sent. Acme checks it before adding it.");
+  });
+
+  it("lets a payee with an address on file keep it and go on to the invoice", async () => {
+    lib.payeeLinkStatus.mockResolvedValue(status({ asksInvoice: true, address: ADDRESS, addressConfirmed: true }));
+    const page = text(await render());
+    expect(page).toContain("Acme already has an address for you: 0x2222…2222");
+    expect(page).toContain("Still yours?");
+    expect(page).not.toContain(ADDRESS);
+    expect(page).toContain("Keep this address");
+    // Not offered on a link that asks for the address alone.
+    lib.payeeLinkStatus.mockResolvedValue(status({ address: ADDRESS, addressConfirmed: true }));
+    expect(text(await render())).not.toContain("Keep this address");
+  });
+
+  it("asks where the wallet receives USDC first, on a link that lets the payee choose (payee invoice link P2)", async () => {
+    lib.payeeLinkStatus.mockResolvedValue(status({ chain: "ARC", offersChain: true, chainChoices: ["ARC", "BASE"] }));
+    const markup = await render();
+    const page = text(markup);
+    expect(page).toContain("For Northwind.");
+    expect(page).not.toContain("For Northwind, on");
+    expect(page).toContain("Where does your wallet receive USDC?");
+    expect(page).toContain("Arc mainnet");
+    expect(page).toContain("Base");
+    expect(page).toContain("Choose where your wallet receives USDC, then add its address.");
+    expect(page).toContain("You're paid on the network you chose");
+    // The address comes after the chain, on the next screen.
+    expect(markup).not.toMatch(/<input[^>]*name="address"/);
   });
 
   it("says the same neutral thing for any unusable link, naming no one", async () => {

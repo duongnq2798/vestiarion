@@ -757,6 +757,30 @@ describe("from draft to bill (C5-C7)", () => {
     expect(w.db.rows("invoices")).toHaveLength(1);
   });
 
+  it("adds an invoice a payee sent through its payee link as the member's bill, naming the link (payee invoice link P5)", async () => {
+    const w = world();
+    const draftId = crypto.randomUUID();
+    const link = crypto.randomUUID();
+    w.db.rows("invoice_drafts").push({
+      id: draftId, org_id: w.orgId, state: "sent", source: "payee_link", document_kind: null, document_sha256: null, supplier_name: "Northwind Hosting",
+      invoice_number: "INV-7", amount: "200.00", currency: "USDC", invoice_date: null, due_date: "2026-10-31", po_reference: null, memo: null,
+      read: { via: "payee_link", reader: null, warnings: [], documentNotes: [], modelNote: null, counterpartyName: "Northwind Hosting", note: "October hosting", extracted: {} },
+      raw_text: null, counterparty_id: COUNTERPARTY, connection_id: null, payee_link_id: link, idempotency_key: link, request_sha256: "a".repeat(64),
+      captured_by: null, captured_at: now(), updated_at: now(), sent_at: now(), decided_by: null, decided_at: null, claimed_invoice_id: null, invoice_id: null,
+    });
+    const outcome = await w.run(() => withOrg(w.orgId, () => confirmInvoiceDraft(asOwner(w), { draftId, invoice: bill({ memo: "INV-7 · October hosting", poReference: "" }), notDuplicate: false })));
+    expect(outcome).toMatchObject({ ok: true });
+    expect(vi.mocked(addInvoice).mock.calls[0][1]).toMatchObject({ captured: { invoiceDraftId: draftId, invoiceNumber: "INV-7", payeeLinkId: link }, document: null });
+    // Whoever adds it is its maker, so the agent's two-person rules treat it as theirs.
+    expect(w.db.rows("invoices")[0]).toMatchObject({ created_by: OWNER });
+    const created = w.ledger.find((entry) => entry.p_action === "create_invoice")!;
+    expect(created.p_detail).toMatchObject({ by: OWNER, via: "payee_link", invoiceDraftId: draftId, invoiceNumber: "INV-7", payeeLinkId: link });
+    expect(created.p_detail).not.toHaveProperty("document");
+    const confirmed = w.ledger.find((entry) => entry.p_action === "invoice_draft_confirmed")!;
+    expect(confirmed.p_summary).toBe("Added an invoice sent through a payee link as a bill for Northwind Hosting");
+    expect(w.db.rows("invoice_drafts")[0]).toMatchObject({ state: "confirmed", decided_by: OWNER });
+  });
+
   it("says a possible duplicate before adding, and adds it once the person ticks it is not one", async () => {
     const w = world();
     w.db.rows("invoices").push({ id: crypto.randomUUID(), org_id: w.orgId, direction: "payable", counterparty_id: COUNTERPARTY, amount: 200, currency: "USDC", memo: "INV-2207 hosting", po_reference: "PO-1042", due_date: "2026-10-31T12:00:00Z", status: "paid" });

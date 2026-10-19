@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import CapturedDrafts from "@/components/CapturedDrafts";
-import { capturedCountLabel } from "@/lib/invoice-drafts/model";
+import { capturedCountLabel, capturedTitle } from "@/lib/invoice-drafts/model";
 import ChromeExtensionPanel from "@/components/ChromeExtensionPanel";
 import { EXTENSION_CAN, EXTENSION_CANNOT, ExtensionConsentForm } from "@/components/extension/ExtensionConsentForm";
 import type { CapturedDraftView } from "@/lib/invoice-drafts/store";
@@ -35,6 +35,49 @@ const DRAFT: CapturedDraftView = {
   duplicates: ["Bills the same purchase order for the same 200 USDC as invoice due 2026-10-31 (already paid). Paying both would pay one obligation twice."],
 };
 const COUNTERPARTIES = [{ id: COUNTERPARTY, name: "Northwind Hosting", role: "vendor" }];
+
+describe("an invoice a payee sent through its payee link (payee invoice link P5)", () => {
+  const FROM_PAYEE: CapturedDraftView = {
+    ...DRAFT,
+    source: "payee_link",
+    documentKind: "pdf",
+    fields: { ...DRAFT.fields, supplierName: "Linh Tran", invoiceNumber: "INV-7", invoiceDate: null, poReference: null },
+    capturedBy: null,
+    counterpartyName: "Linh Tran",
+    warnings: [],
+    reader: null,
+    duplicates: [],
+    note: "Logo work, October",
+  };
+  const COUNTERPARTY_LINH = [{ id: COUNTERPARTY, name: "Linh Tran", role: "contractor" }];
+
+  it("names the payee and its payee link, its note, and that no model read it", () => {
+    const markup = renderToStaticMarkup(<CapturedDrafts orgSlug="northstar" drafts={[FROM_PAYEE]} canAdd counterparties={COUNTERPARTY_LINH} members={{}} />);
+    expect(markup).toContain("Invoices from payees");
+    expect(markup).toContain("1 to review · sent through payee links");
+    expect(markup).toContain("Linh Tran sent it through their payee link, with a PDF");
+    expect(markup).not.toContain("Chrome extension");
+    expect(markup).toContain("Their note");
+    expect(markup).toContain("Logo work, October");
+    expect(markup).toContain("The payee typed this in, and no model read it.");
+    expect(markup).toContain("The text of the file they sent");
+    expect(markup).toContain("Review and add as bill");
+  });
+
+  it("offers no text to read for an invoice sent without a file", () => {
+    const markup = renderToStaticMarkup(
+      <CapturedDrafts orgSlug="northstar" drafts={[{ ...FROM_PAYEE, documentKind: null }]} canAdd counterparties={COUNTERPARTY_LINH} members={{}} />
+    );
+    expect(markup).not.toContain("The text of the file they sent");
+    expect(markup).not.toContain(", with ");
+  });
+
+  it("lists both kinds under one title when both wait", () => {
+    const markup = renderToStaticMarkup(<CapturedDrafts orgSlug="northstar" drafts={[DRAFT, { ...FROM_PAYEE, id: "8c1d6a52-2f5b-4bb0-9c62-1f1f0d4b9a11" }]} canAdd counterparties={COUNTERPARTIES} members={{ "user-1": "linh@example.com" }} />);
+    expect(markup).toContain("Captured drafts and payee invoices");
+    expect(markup).toContain("captured with the Chrome extension or sent through payee links");
+  });
+});
 
 describe("Captured drafts", () => {
   it("shows what was read, who captured it and what it may repeat, and leaves the captured text to be read when opened", () => {
@@ -80,6 +123,14 @@ describe("Captured drafts", () => {
   it("counts at most 50, then says 50+", () => {
     expect(capturedCountLabel(3, false)).toBe("3 captured");
     expect(capturedCountLabel(50, true)).toBe("50+ captured");
+    // A payee's invoice is named by its payee (payee invoice link P5).
+    expect(capturedCountLabel(1, false, ["Linh Tran"])).toBe("Invoice from Linh Tran");
+    expect(capturedCountLabel(2, false, ["Linh Tran", "Minh Le"])).toBe("2 from payees");
+    expect(capturedCountLabel(3, false, ["Linh Tran"])).toBe("2 captured, invoice from Linh Tran");
+    expect(capturedCountLabel(50, true, ["Linh Tran"])).toBe("50+ to review");
+    expect(capturedTitle(["selection", "file"])).toBe("Captured drafts");
+    expect(capturedTitle(["payee_link"])).toBe("Invoices from payees");
+    expect(capturedTitle(["file", "payee_link"])).toBe("Captured drafts and payee invoices");
   });
 
   it("renders nothing when nothing waits", () => {

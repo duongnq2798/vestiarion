@@ -5,6 +5,7 @@ import { useState } from "react";
 import { createPayeeLinkAction, revokePayeeLinkAction, type PayeeLinkActionResult } from "@/app/actions/payee-links";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -22,14 +23,25 @@ export interface PayeeLinkControlProps {
   counterparty: { id: string; name: string };
   /** The payee's unused, unexpired link, if one is out. */
   activeLink: { id: string; expiresAt: string } | null;
+  /**
+   * What the link may also ask (payee invoice link P1): `invoice`, for any payee but a client; `chains`, the chains a
+   * vendor with no address may choose among, when the workspace pays more than one; none otherwise.
+   */
+  offers?: { invoice: boolean; chains: readonly string[] };
 }
+
+/** The two options under the dialog's text (P1): both off by default, so a link made without them works as before. */
+export const ASK_INVOICE = "Also ask for their invoice";
+export const OFFER_CHAIN = "Let them choose where they are paid";
 
 /**
  * Ask a payee for their own Arc address (spec 2026-09-30-payee-links-design.md):
  * a one-time link, shown once, that the payee opens without an account. Whatever
- * they enter waits for a member to confirm it before the agent pays there.
+ * they enter waits for a member to confirm it before the agent pays there. The
+ * link may also ask for their invoice, and let a vendor choose its chain
+ * (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P1).
  */
-export default function PayeeLinkControl({ orgSlug, counterparty, activeLink }: PayeeLinkControlProps) {
+export default function PayeeLinkControl({ orgSlug, counterparty, activeLink, offers }: PayeeLinkControlProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       {activeLink ? (
@@ -42,12 +54,12 @@ export default function PayeeLinkControl({ orgSlug, counterparty, activeLink }: 
       ) : (
         <span />
       )}
-      <AskForAddress orgSlug={orgSlug} counterparty={counterparty} />
+      <AskForAddress orgSlug={orgSlug} counterparty={counterparty} offers={offers} />
     </div>
   );
 }
 
-function AskForAddress({ orgSlug, counterparty }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty">) {
+function AskForAddress({ orgSlug, counterparty, offers }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty" | "offers">) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -61,7 +73,7 @@ function AskForAddress({ orgSlug, counterparty }: Pick<PayeeLinkControlProps, "o
         title={`Ask ${counterparty.name} for their address`}
         description="Send them a one-time link. They enter their own Arc address, with no account, and you confirm it before the agent pays there."
       >
-        <CreateLinkForm orgSlug={orgSlug} counterparty={counterparty} />
+        <CreateLinkForm orgSlug={orgSlug} counterparty={counterparty} offers={offers} />
       </DialogContent>
     </Dialog>
   );
@@ -72,17 +84,36 @@ function AskForAddress({ orgSlug, counterparty }: Pick<PayeeLinkControlProps, "o
  * dialog's content, which unmounts when the dialog closes: reopening always
  * starts at the form, never at a link that has since been used or revoked.
  */
-function CreateLinkForm({ orgSlug, counterparty }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty">) {
+function CreateLinkForm({ orgSlug, counterparty, offers }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty" | "offers">) {
   const { state, formProps } = useActionForm(createPayeeLinkAction, INITIAL);
+  const chains = offers?.chains ?? [];
 
   if (state.ok && state.url && state.expiresAt) {
-    return <CreatedPayeeLink url={state.url} expiresAt={state.expiresAt} payeeName={counterparty.name} />;
+    return <CreatedPayeeLink url={state.url} expiresAt={state.expiresAt} payeeName={counterparty.name} asksInvoice={state.asksInvoice === true} />;
   }
   return (
     <form {...formProps} className="grid gap-5">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <input type="hidden" name="counterpartyId" value={counterparty.id} />
       <p className="text-sm leading-6 text-ink-2">A new link replaces any unused one you sent {counterparty.name} before.</p>
+      {(offers?.invoice || chains.length > 1) && (
+        <div className="grid gap-3">
+          {offers?.invoice && (
+            <Checkbox
+              name="asksInvoice"
+              label={ASK_INVOICE}
+              description="It waits under Waiting for review on Bills until someone here adds it as a bill. Nothing is paid because it arrived."
+            />
+          )}
+          {chains.length > 1 && (
+            <Checkbox
+              name="offersChain"
+              label={OFFER_CHAIN}
+              description={`Where their wallet receives USDC: ${chains.slice(0, -1).join(", ")} or ${chains[chains.length - 1]}. You confirm the chain with the address.`}
+            />
+          )}
+        </div>
+      )}
       <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
       <DialogFooter>
         <DialogClose asChild>
@@ -97,7 +128,7 @@ function CreateLinkForm({ orgSlug, counterparty }: Pick<PayeeLinkControlProps, "
 }
 
 /** The link just made, shown this once: it is never stored in a form anyone can read again. */
-export function CreatedPayeeLink({ url, expiresAt, payeeName }: { url: string; expiresAt: string; payeeName: string }) {
+export function CreatedPayeeLink({ url, expiresAt, payeeName, asksInvoice = false }: { url: string; expiresAt: string; payeeName: string; asksInvoice?: boolean }) {
   return (
     <div className="grid gap-3">
       <div className="flex items-center gap-2">
@@ -109,6 +140,7 @@ export function CreatedPayeeLink({ url, expiresAt, payeeName }: { url: string; e
       <p className="text-sm leading-6 text-ink-2">
         Send it to {payeeName}. It works once and expires {utcDay(expiresAt)}. When they enter an address, the agent holds payments to {payeeName}{" "}
         until someone here confirms it on this page.
+        {asksInvoice && " Their invoice waits under Waiting for review on Bills until someone here adds it."}
       </p>
       <p className="text-xs text-ink-3">This link is shown only now. Create a new one if it is lost.</p>
     </div>

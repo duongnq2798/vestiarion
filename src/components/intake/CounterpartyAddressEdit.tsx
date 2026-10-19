@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { withSuccessToast } from "@/components/withSuccessToast";
+import { chainById } from "@/lib/payee-chains";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 const update = withSuccessToast(updateCounterpartyAddressAction);
@@ -24,7 +25,8 @@ const confirm = withSuccessToast(confirmCounterpartyAddressAction);
 
 export interface CounterpartyAddressProps {
   orgSlug: string;
-  counterparty: { id: string; name: string; address: string | null };
+  /** `chain`, the chain it is paid on (its own, or the workspace's when it has none), is shown beside the address. */
+  counterparty: { id: string; name: string; address: string | null; chain?: string };
   /** When the address was changed, while no one has confirmed it; null otherwise. */
   unconfirmedSince: string | null;
   canWrite: boolean;
@@ -35,15 +37,21 @@ export interface CounterpartyAddressProps {
  * A counterparty's payment address on its card: shown, edited by owners and
  * admins, and, after a change, confirmed by anyone who may approve payments
  * (spec 2026-09-30-counterparty-address-edit). Until then the agent holds
- * every payment to it for a person.
+ * every payment to it for a person. The chain is part of what a person
+ * confirms (payee invoice link P3): it is named beside the address, in the
+ * confirmation, and sent with it.
  */
 export default function CounterpartyAddress({ orgSlug, counterparty, unconfirmedSince, canWrite, canConfirm }: CounterpartyAddressProps) {
+  const chainLabel = counterparty.chain ? chainById(counterparty.chain).label : null;
   return (
     <div className="mt-3 space-y-2 border-t border-line pt-3">
       <div className="flex min-w-0 items-center justify-between gap-2">
         {counterparty.address ? (
-          <p className="min-w-0 truncate font-mono text-[0.7rem] text-ink-3" title={counterparty.address}>
-            {counterparty.address}
+          <p className="flex min-w-0 items-baseline gap-1.5 text-ink-3">
+            <span className="min-w-0 truncate font-mono text-[0.7rem]" title={counterparty.address}>
+              {counterparty.address}
+            </span>
+            {chainLabel && <span className="shrink-0 text-xs">on {chainLabel}</span>}
           </p>
         ) : (
           <p className="text-xs text-ink-3">No payment address</p>
@@ -108,6 +116,7 @@ function ConfirmAddress({ orgSlug, counterparty }: { orgSlug: string; counterpar
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <input type="hidden" name="counterpartyId" value={counterparty.id} />
         <input type="hidden" name="address" value={counterparty.address ?? ""} />
+        {counterparty.chain && <input type="hidden" name="chain" value={counterparty.chain} />}
       </form>
       <ConfirmDialog
         formId={formId}
@@ -120,7 +129,7 @@ function ConfirmAddress({ orgSlug, counterparty }: { orgSlug: string; counterpar
         title={`Confirm ${counterparty.name}'s new address?`}
         description={
           counterparty.address
-            ? `Payments go to ${counterparty.address} without waiting for a person. Check it with ${counterparty.name} first.`
+            ? `Payments go to ${counterparty.address}${counterparty.chain ? ` on ${chainById(counterparty.chain).label}` : ""} without waiting for a person. Check it with ${counterparty.name} first.`
             : "The counterparty has no address, so the agent cannot pay it until one is set."
         }
         confirmLabel="Confirm address"

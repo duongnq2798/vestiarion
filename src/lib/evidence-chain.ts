@@ -282,6 +282,9 @@ function via(detail: Record<string, unknown>): string {
       return " in the review of bills from Zoho Books";
     case "chrome":
       return " from a draft captured with the Chrome extension";
+    // A bill a member added from the invoice a payee sent through its link (payee invoice link P5).
+    case "payee_link":
+      return " from an invoice the payee sent through their payee link";
     default:
       return "";
   }

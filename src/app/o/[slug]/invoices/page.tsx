@@ -6,7 +6,7 @@ import { Fragment, type ReactNode } from "react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import InboxEmails from "@/components/InboxEmails";
 import CapturedDrafts from "@/components/CapturedDrafts";
-import { capturedCountLabel } from "@/lib/invoice-drafts/model";
+import { capturedCountLabel, capturedTitle } from "@/lib/invoice-drafts/model";
 import { capturedDraftsToReview } from "@/lib/invoice-drafts/store";
 import { AccountingBillsReview } from "@/components/AccountingBillsReview";
 import { AccountingBookings } from "@/components/AccountingBookings";
@@ -732,9 +732,11 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     }
     if (captured.available && captured.drafts.length > 0) {
       const capturers = await listMembers(access.membership.orgId).catch(() => []);
-      waitingItems.push({ key: "captured", review: "captured", label: capturedCountLabel(captured.drafts.length, captured.more) });
+      // A payee's invoice is named by its payee (payee invoice link P5).
+      const payees = captured.drafts.filter((draft) => draft.source === "payee_link").map((draft) => draft.counterpartyName ?? draft.fields.supplierName ?? "a payee");
+      waitingItems.push({ key: "captured", review: "captured", label: capturedCountLabel(captured.drafts.length, captured.more, payees) });
       reviews.captured = {
-        title: "Captured drafts",
+        title: capturedTitle(captured.drafts.map((draft) => draft.source)),
         node: (
           <CapturedDrafts
             orgSlug={slug}

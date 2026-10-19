@@ -387,3 +387,78 @@ describe("confirmCounterpartyAddress", () => {
     expect(patches(fake.requests)[0].params.get("address")).toBe("is.null");
   });
 });
+
+/**
+ * The chain a payee chose on its link is written with its address, in the same compare-and-set, and is part of what a
+ * person confirms (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P2, P3).
+ */
+describe("the chain beside the address", () => {
+  const LINK = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1";
+
+  it("writes the chain the payee chose with the address, guarded on the chain read, and records both chains", async () => {
+    const { fake, run } = addressFake({ row: counterpartyRow({ address: null, chain: null }) });
+
+    await run(() => changeCounterpartyAddress({ payeeLinkId: LINK, counterpartyId: COUNTERPARTY_ID, raw: NEW, chain: "BASE-SEPOLIA" }));
+
+    const read = fake.requests.find((r) => r.path === "/rest/v1/counterparties" && r.method === "GET");
+    expect(read?.params.get("select")).toContain("chain");
+    const [patch] = patches(fake.requests);
+    expect(patch.params.get("chain")).toBe("is.null");
+    expect(patch.params.get("address")).toBe("is.null");
+    const body = patch.body as Record<string, unknown>;
+    expect(body).toMatchObject({ address: NEW, chain: "BASE-SEPOLIA" });
+    expect(Number.isNaN(Date.parse(String(body.address_changed_at)))).toBe(false);
+    expect(ledgerBodies(fake.requests)[0].p_detail).toEqual({
+      by: null,
+      via: "payee_link",
+      linkId: LINK,
+      counterpartyId: COUNTERPARTY_ID,
+      from: null,
+      to: NEW,
+      chain: "BASE-SEPOLIA",
+      fromChain: null,
+    });
+  });
+
+  it("guards on a chain on file, and names no former chain when the payee chose the same one", async () => {
+    const { fake, run } = addressFake({ row: counterpartyRow({ address: null, chain: "BASE-SEPOLIA" }) });
+
+    await run(() => changeCounterpartyAddress({ payeeLinkId: LINK, counterpartyId: COUNTERPARTY_ID, raw: NEW, chain: "BASE-SEPOLIA" }));
+
+    expect(patches(fake.requests)[0].params.get("chain")).toBe("eq.BASE-SEPOLIA");
+    expect(ledgerBodies(fake.requests)[0].p_detail).toMatchObject({ chain: "BASE-SEPOLIA" });
+    expect(ledgerBodies(fake.requests)[0].p_detail).not.toHaveProperty("fromChain");
+  });
+
+  it("leaves the chain alone on any other change, and records the one on file", async () => {
+    const { fake, run } = addressFake({ row: counterpartyRow({ chain: "BASE-SEPOLIA" }) });
+
+    await run(() => changeCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, raw: NEW }));
+
+    const [patch] = patches(fake.requests);
+    expect(patch.params.has("chain")).toBe(false);
+    expect(Object.keys(patch.body as object).sort()).toEqual(["address", "address_changed_at"]);
+    expect(ledgerBodies(fake.requests)[0].p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, from: OLD, to: NEW, chain: "BASE-SEPOLIA" });
+  });
+
+  it("confirms the address on the chain the page showed, and records it", async () => {
+    const { fake, run } = addressFake({ row: counterpartyRow({ address: NEW, address_changed_at: CHANGED_AT, chain: "BASE-SEPOLIA" }) });
+
+    await run(() => confirmCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, shownAddress: NEW, shownChain: "BASE-SEPOLIA", via: "confirm" }));
+
+    expect(ledgerBodies(fake.requests)[0].p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: NEW, chain: "BASE-SEPOLIA", via: "confirm" });
+  });
+
+  it("reads no chain as the workspace's own, and refuses as stale a chain that is not the payee's", async () => {
+    const own = addressFake({ row: counterpartyRow({ address: NEW, address_changed_at: CHANGED_AT, chain: null }) });
+    expect(
+      await own.run(() => confirmCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, shownAddress: NEW, shownChain: "ARC-TESTNET", via: "confirm" }))
+    ).toBe(true);
+
+    const moved = addressFake({ row: counterpartyRow({ address: NEW, address_changed_at: CHANGED_AT, chain: "BASE-SEPOLIA" }) });
+    await expect(
+      moved.run(() => confirmCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, shownAddress: NEW, shownChain: "ARC-TESTNET", via: "confirm" }))
+    ).rejects.toMatchObject({ code: "stale" });
+    expect(patches(moved.fake.requests)).toHaveLength(0);
+  });
+});

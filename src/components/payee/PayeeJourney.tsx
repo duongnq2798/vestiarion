@@ -1,4 +1,4 @@
-import { ArrowUpRight, CircleCheck, Clock3 } from "lucide-react";
+import { ArrowUpRight, CircleCheck, Clock3, FileCheck2 } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -10,8 +10,10 @@ import { Hash, Money } from "@/components/vx/Primitives";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { SIMULATED_PAYMENT } from "@/lib/capability";
 import { amountsLine, maskAddress, payeeStage, paymentSimulated, paymentState, type PayeeLinkStatus, type PayeePayment, type PaymentTone, type PayeeStage } from "@/lib/payee-journey";
+import { yearAfter } from "@/lib/payee-invoice";
 import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
 import { passkeyWalletConfig, passkeyWalletOffered } from "@/lib/passkey-wallet";
+import PayeeInvoiceForm from "./PayeeInvoiceForm";
 import { PayeeSteps } from "./PayeeSteps";
 
 /**
@@ -21,6 +23,10 @@ import { PayeeSteps } from "./PayeeSteps";
  * refreshes itself (R5). A payment from a sandbox that simulates its payments is said to be simulated on every screen,
  * in the words the workspace's own pages use (capability and reasons R5): `simulated` from the workspace's capability,
  * and each paid payment's own reference besides.
+ *
+ * A link may also let the payee choose where it is paid, before its address, and ask for its invoice, after it
+ * (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P2, P4): the invoice is a step of its own, and the
+ * screens after it say it was sent.
  */
 
 /** Only the page knows its link; the screens are the same for a screenshot, which has none. */
@@ -35,9 +41,10 @@ export function PayeeJourney({ token, status, refresh = true, simulated = false 
   const stage = payeeStage(status);
   return (
     <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
-      <PayeeSteps stage={stage} />
+      <PayeeSteps stage={stage} withInvoice={status.asksInvoice === true} />
       <div className="mt-5">
         {stage === "address" && <AddressStep token={token} status={status} simulated={simulated} />}
+        {stage === "invoice" && <InvoiceStep token={token} status={status} />}
         {stage === "confirming" && <ConfirmingStep status={status} />}
         {stage === "paying" && <PayingStep status={status} simulated={simulated} />}
         {stage === "paid" && <PaidStep status={status} simulated={simulated} />}
@@ -60,14 +67,31 @@ function Footnote({ children }: { children: ReactNode }) {
 function AddressStep({ token, status, simulated }: { token: string; status: PayeeLinkStatus; simulated: boolean }) {
   const chain = chainById(status.chain).label;
   const owed = amountsLine(status.payments);
+  const config = passkeyWalletConfig();
   // A passkey wallet, the secondary way, for a payee paid on Arc testnet when Modular Wallets are set up (P1, P6).
-  const passkey = passkeyWalletOffered(status.chain, passkeyWalletConfig());
+  const passkey = passkeyWalletOffered(status.chain, config);
+  // The chains the payee may choose among, when the link lets it (payee invoice link P2).
+  const choices = (status.chainChoices ?? []).map((id) => ({ id, label: chainById(id).label }));
+  const choosing = choices.length > 1;
+  const asksInvoice = status.asksInvoice === true;
+  const steps = [
+    choosing ? "Choose where your wallet receives USDC, then add its address." : "Add the wallet address you want to be paid at.",
+    ...(asksInvoice ? ["Send your invoice. It waits for a person to check it."] : []),
+    `${status.orgName} confirms it. A person checks every new address before money is sent to it.`,
+    simulated
+      ? "You're paid, simulated, usually within a minute of that: no USDC is sent."
+      : choosing
+        ? "You're paid on the network you chose, usually within a minute of that."
+        : `You're paid on ${chain}, usually within a minute of that.`,
+  ];
   return (
     <>
       <Heading>
         {status.orgName} wants to pay you{owed ? ` ${owed}` : ""}
       </Heading>
-      <p className="mt-2 text-sm text-ink-2">{simulated ? `For ${status.payeeName}. ${SIMULATED_PAYMENT}` : `For ${status.payeeName}, on ${chain}.`}</p>
+      <p className="mt-2 text-sm text-ink-2">
+        {simulated ? `For ${status.payeeName}. ${SIMULATED_PAYMENT}` : choosing ? `For ${status.payeeName}.` : `For ${status.payeeName}, on ${chain}.`}
+      </p>
       {status.payments.length > 0 && <PaymentList payments={status.payments} />}
       <div className="mt-5">
         <PayeeAddressForm
@@ -75,11 +99,17 @@ function AddressStep({ token, status, simulated }: { token: string; status: Paye
           chainLabel={chain}
           orgName={status.orgName}
           passkey={passkey}
+          {...(choosing
+            ? { chains: choices, defaultChain: status.chain, passkeyChains: choices.filter((entry) => passkeyWalletOffered(entry.id, config)).map((entry) => entry.id) }
+            : {})}
+          {...(asksInvoice && status.address ? { keep: { masked: maskAddress(status.address) } } : {})}
           intro={
             <ol className="mb-2 grid gap-2 text-sm leading-6 text-ink-2">
-              <HowStep n={1}>Add the wallet address you want to be paid at.</HowStep>
-              <HowStep n={2}>{status.orgName} confirms it. A person checks every new address before money is sent to it.</HowStep>
-              <HowStep n={3}>{simulated ? "You're paid, simulated, usually within a minute of that: no USDC is sent." : `You're paid on ${chain}, usually within a minute of that.`}</HowStep>
+              {steps.map((step, index) => (
+                <HowStep key={index} n={index + 1}>
+                  {step}
+                </HowStep>
+              ))}
             </ol>
           }
         />
@@ -88,6 +118,44 @@ function AddressStep({ token, status, simulated }: { token: string; status: Paye
         No account or fee needed. {NO_SECRETS} This link expires on {utcDay(status.expiresAt)}.
       </Footnote>
     </>
+  );
+}
+
+/**
+ * The payee's invoice, on a link that asks for it (payee invoice link P4): after the address step, or alone once the
+ * address on file was kept. It waits for a person at the business, who adds it as a bill or discards it.
+ */
+function InvoiceStep({ token, status }: { token: string; status: PayeeLinkStatus }) {
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <>
+      <Heading>Send {status.orgName} your invoice</Heading>
+      <p className="mt-2 text-sm leading-6 text-ink-2">
+        {status.address
+          ? status.addressConfirmed
+            ? `${status.orgName} pays you at ${maskAddress(status.address)}.`
+            : `Address sent: ${maskAddress(status.address)}. ${status.orgName} confirms it before paying you.`
+          : `${status.orgName} has no address for you on file yet.`}
+      </p>
+      {status.payments.length > 0 && <PaymentList payments={status.payments} />}
+      <div className="mt-5">
+        <PayeeInvoiceForm token={token} orgName={status.orgName} today={today} lastDay={yearAfter(today)} />
+      </div>
+      <Footnote>
+        {NO_SECRETS} This link takes your invoice until {utcDay(status.statusUntil)}.
+      </Footnote>
+    </>
+  );
+}
+
+/** On the screens after the invoice step: it was sent, and waits for a person (P5). */
+function InvoiceSent({ status }: { status: PayeeLinkStatus }) {
+  if (!status.asksInvoice || !status.invoiceSent) return null;
+  return (
+    <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-ink-2">
+      <FileCheck2 aria-hidden className="mt-1 size-4 shrink-0 text-proof" />
+      <span>Invoice sent. {status.orgName} checks it before adding it.</span>
+    </p>
   );
 }
 
@@ -124,6 +192,7 @@ function ConfirmingStep({ status }: { status: PayeeLinkStatus }) {
       <p className="mt-4 text-sm leading-6 text-ink-2">
         A person at {status.orgName} checks every new address before any money is sent to it. Once they confirm yours, you&apos;re paid, usually within a minute.
       </p>
+      <InvoiceSent status={status} />
       {status.payments.length > 0 && <PaymentList payments={status.payments} />}
       <Footnote>
         Keep this link. It shows your payment&apos;s status until {utcDay(status.statusUntil)}, and this page updates by itself. {NO_SECRETS}
@@ -141,6 +210,7 @@ function PayingStep({ status, simulated }: { status: PayeeLinkStatus; simulated:
         {status.orgName} pays you at <span className="font-mono">{maskAddress(status.address ?? "")}</span>
         {simulated ? ", simulated: no USDC is sent." : ` on ${chainById(status.chain).label}.`}
       </p>
+      <InvoiceSent status={status} />
       {status.payments.length > 0 ? (
         <PaymentList payments={status.payments} orgName={status.orgName} withState />
       ) : (

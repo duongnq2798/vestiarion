@@ -1,4 +1,4 @@
-This guide is for the person being paid. A business that uses Vestiarion can pay you in USDC on Arc for work you delivered. Arc is Circle's blockchain for stablecoin payments, and the business pays on its own network: Arc mainnet, where USDC is real money, or Arc testnet, Arc's test network. The email and the page name which one. You need no account. You need two things: the link the business sent you, and a wallet address. The page behind the link takes you through three steps and tells you which one you are on: **Your address**, **Confirmation** and **Payment**.
+This guide is for the person being paid. A business that uses Vestiarion can pay you in USDC on Arc for work you delivered. Arc is Circle's blockchain for stablecoin payments, and the business pays on its own network: Arc mainnet, where USDC is real money, or Arc testnet, Arc's test network. The email and the page name which one. You need no account. You need two things: the link the business sent you, and a wallet address. The page behind the link takes you through three steps and tells you which one you are on: **Your address**, **Confirmation** and **Payment**. When the business also asks for your invoice, a fourth step, **Your invoice**, comes after your address.
 
 ## What you need
 
@@ -30,6 +30,16 @@ Copy your address from your wallet's receive screen rather than typing it. Paste
 
 If what you pasted is not an address, the page says "That doesn't look like a wallet address. It starts with 0x and has 42 characters in all." Copy it again, in full.
 
+### Choose where you are paid
+
+Some businesses let you choose the chain your wallet receives USDC on. Step 1 then asks first: **Where does your wallet receive USDC?** A business on Arc mainnet offers Arc mainnet and Base; one on Arc testnet offers Arc testnet and the Sepolia chains. Choose the one your wallet shows your USDC on, then **Continue**. The field then names it, such as **Your wallet address on Base**, and **Choose another network** goes back.
+
+You can choose only while the business has no address for you and has not paid you yet. Otherwise the page names the chain it pays you on, as above. If the business's records changed after you opened the page, it says "Where you are paid can no longer be chosen on this link. Reload the page."
+
+### Already gave them your address?
+
+When the business asks for your invoice and already has an address for you, step 1 shows it shortened, and **Keep this address** under the field keeps it and takes you to your invoice. The link is then used, as sending that same address would use it.
+
 ### No wallet yet?
 
 When the business pays you on Arc testnet, step 1 also has a second button under **Continue**: **No wallet yet? Create one with a passkey**. A passkey is the fingerprint, face or device PIN your phone or computer already uses to sign in. A business on Arc mainnet does not offer it: give the address of a wallet you hold, such as MetaMask.
@@ -52,6 +62,8 @@ The next screen, **Check your address**, shows the address back in groups of fou
 
 It is a checklist, not a choice: **Send my address** works once all three are ticked, and until then the page says "Tick all three boxes to send your address." **Edit address** takes you back to change it.
 
+If you chose where you are paid, there is a fourth box naming that chain, such as "My wallet receives USDC on Base.", under **Before you send it, tick all four**, and the page says "Tick all four boxes to send your address." until all four are ticked. The business sees the chain beside your address when it confirms it.
+
 <Screenshot
   src="/docs/guides/get-paid-check.png"
   alt="Step 1 of 3, Check your address. The address is shown in groups of four characters. Under Before you send it, tick all three, three ticked boxes: It's my own wallet, and I can open it. It's not an exchange deposit address. The first and last characters match my wallet. Below, Edit address and Send my address."
@@ -59,6 +71,20 @@ It is a checklist, not a choice: **Send my address** works once all three are ti
 />
 
 After you send it, the link cannot change the address. If you notice a mistake, tell the business at once and ask for a new link: they confirm every new address before paying, so a wrong one can still be replaced before any money moves.
+
+## Send your invoice, when asked
+
+When the business asks for your invoice, the step after your address is **Your invoice**: "Send *business* your invoice". Fill in:
+
+- **Invoice number**, up to 100 characters.
+- **Amount (USDC)**, more than 0, with at most 6 decimals, such as 1250.00.
+- **Due date**, from today to a year from today.
+- **Note**, optional, up to 500 characters.
+- **Attach the invoice (optional)**: "A PDF or a text file, up to 4 MB. Only its text is kept, never the file."
+
+Then choose **Send my invoice**. The link sends one invoice. A person at the business checks it before adding it as a bill; nothing is paid only because you sent it. The next screens say "Invoice sent", and the link takes your invoice until 30 days after you sent your address, or until it expires if you have not used it yet.
+
+If a field is not right, the page says which, such as "Choose a due date from today to a year from today." A scanned PDF has no text to read: send your invoice without the file, or attach a PDF with text.
 
 ## 3. Wait for the business to confirm
 
@@ -125,7 +151,7 @@ At the foot of the page a line says the business sent it with Vestiarion, and ea
 
 - [ ] I copied it from my wallet's receive screen, not typed it.
 - [ ] It is my own wallet, which I can open, not an exchange deposit address.
-- [ ] It is for the network the page names, such as Arc mainnet or Arc testnet.
+- [ ] It is for the network the page names, such as Arc mainnet or Arc testnet, or for the one I chose.
 - [ ] Its first and last characters match my wallet.
 - [ ] Nobody asked me for my recovery phrase or private key.
 
@@ -136,6 +162,10 @@ At the foot of the page a line says the business sent it with Vestiarion, and ea
 | That doesn't look like a wallet address. It starts with 0x and has 42 characters in all. | What you pasted is not an address, or it was cut short. | Copy the whole address again from your wallet. |
 | This link is no longer valid. Ask the business that sent it for a new one. | The link expired before you used it, the business made a newer one, or it is more than 30 days since you used it. | Ask the business for a new link. |
 | That is already the address *business* has on file. | The business already had this address. | Nothing; it is confirmed the usual way. |
+| Where you are paid can no longer be chosen on this link. Reload the page. | The business added an address for you, or paid you, after you opened the page. | Reload it: the page names the chain it pays you on. |
+| This link already sent an invoice. To send another, ask the business for a new link. | A link takes one invoice. | Ask the business for a new link. |
+| Wait a few seconds, then send it again. | The page sent the invoice several times in a row. | Wait a few seconds, then send it once. |
+| This PDF has no text to read; it may be a scan. Send your invoice without the file, or choose a PDF with text. | The PDF is a picture of the invoice. | Send it without the file; the business can ask you for the original. |
 | That did not work. Try again in a moment. | Something failed on the way; your address was not saved. | Try again. If it keeps happening, tell the business. |
 | This page could not load. Try again in a moment. | The page could not read the link's status. | Reload in a minute. |
 | Stuck on Waiting for *business* to confirm | Nobody at the business has confirmed it yet. | Ask them to confirm it on their Counterparties page. |

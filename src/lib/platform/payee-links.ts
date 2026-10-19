@@ -1,10 +1,12 @@
 import crypto from "node:crypto";
 import { simulatesPayments } from "../capability-read";
 import { changeCounterpartyAddress, CounterpartyAddressError, parseAddressInput } from "../counterparty-address";
-import { platformDb, unwrap } from "../dal";
+import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { notifyPayeeAddress } from "../notifications/payee-address";
+import { choosablePayeeChains } from "../payee-chain-choice";
+import { chainById } from "../payee-chains";
 import type { PayeeLinkStatus, PayeePayment } from "../payee-journey";
 import type { Provenance } from "../provenance";
 
@@ -19,6 +21,10 @@ import type { Provenance } from "../provenance";
  * A token is `vxp_` and 43 base64url characters (32 random bytes). Only the
  * SHA-256 of the secret is stored (migration 0039); it is shown once, when the
  * link is made. A link works once and expires after 7 days (R2).
+ *
+ * A member may also have the link ask for the payee's invoice, and let the payee
+ * choose the chain it is paid on (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md
+ * P1, migration 0133). Both are off unless asked for; neither pays anything.
  */
 
 export const PAYEE_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -51,9 +57,19 @@ export interface PayeeLink {
   expiresAt: string;
 }
 
+/** What a link asks of its payee beyond an address (payee invoice link P1): both off unless a member ticks them. */
+export interface PayeeLinkOptions {
+  /** Also ask for the payee's invoice. */
+  asksInvoice?: boolean;
+  /** Let the payee choose the chain its wallet receives USDC on. The caller has checked the payee may be offered it. */
+  offersChain?: boolean;
+}
+
 /**
  * Makes a link for a counterparty of the workspace in scope, revoking the payee's unused one, and records it.
- * `provenance` names the surface it came from in the entry (write API part 2, W3); the console passes none.
+ * `provenance` names the surface it came from in the entry (write API part 2, W3); the console passes none. `options`
+ * are set on the new link by their own function (0133); a link they could not be set on is revoked, and this throws:
+ * it is not the link the member asked for.
  */
 export async function createPayeeLink(input: {
   orgId: string;
@@ -61,6 +77,7 @@ export async function createPayeeLink(input: {
   counterpartyId: string;
   now?: number;
   provenance?: Provenance;
+  options?: PayeeLinkOptions;
 }): Promise<{ link: PayeeLink; token: string }> {
   const { token, secretHash } = generatePayeeLinkToken();
   const expiresAt = new Date((input.now ?? Date.now()) + PAYEE_LINK_TTL_MS).toISOString();
@@ -80,13 +97,40 @@ export async function createPayeeLink(input: {
   }
   const link = { id: result.data.id, counterpartyId: result.data.counterparty_id, expiresAt: result.data.expires_at };
 
+  const asksInvoice = input.options?.asksInvoice === true;
+  const offersChain = input.options?.offersChain === true;
+  if (asksInvoice || offersChain) {
+    const set = await platformDb().rpc("set_payee_link_options", {
+      p_org_id: input.orgId,
+      p_link_id: link.id,
+      p_asks_invoice: asksInvoice,
+      p_offers_chain: offersChain,
+    });
+    if (set.error || set.data !== true) {
+      // Best effort: a link nobody has seen yet, which would otherwise ask for less than the member chose.
+      const revoked = await platformDb().rpc("revoke_payee_link", { p_org_id: input.orgId, p_link_id: link.id, p_by: input.actorId });
+      if (revoked.error) console.error("payee link: not revoked after its options failed", link.id);
+      throw new Error(set.error?.message ?? "payee link options were not set");
+    }
+  }
+
   await appendLedgerEntryBestEffort(input.orgId, {
     actor: "human",
     domain: "compliance",
     action: "payee_link_created",
-    summary: "Created a one-time link for a payee to enter their own address",
+    summary: asksInvoice
+      ? "Created a one-time link for a payee to enter their own address and send their invoice"
+      : "Created a one-time link for a payee to enter their own address",
     // The surface first: a chat surface's own `linkId` never takes the place of this link's, which the new payee check reads.
-    detail: { ...input.provenance, by: input.actorId, counterpartyId: link.counterpartyId, linkId: link.id, expiresAt: link.expiresAt },
+    detail: {
+      ...input.provenance,
+      by: input.actorId,
+      counterpartyId: link.counterpartyId,
+      linkId: link.id,
+      expiresAt: link.expiresAt,
+      ...(asksInvoice ? { asksInvoice: true } : {}),
+      ...(offersChain ? { offersChain: true } : {}),
+    },
   });
   return { link, token };
 }
@@ -158,17 +202,38 @@ export async function previewPayeeLink(token: string, options: { withChain?: boo
 }
 
 /**
+ * The chains a link's payee may choose among (payee invoice link P2), read in the paying workspace's scope through the
+ * link's own row: the workspace's network and how it pays decide them. Empty when anything could not be read, and the
+ * page then names the chain on file, as before.
+ */
+async function chainChoicesFor(hash: string): Promise<string[]> {
+  try {
+    const row = await platformDb().from("payee_links").select("org_id").eq("token_hash", hash).limit(1);
+    const orgId = ((row.data ?? []) as Array<{ org_id?: string }>)[0]?.org_id;
+    if (row.error || !orgId) return [];
+    return await withOrg(orgId, async () => (await choosablePayeeChains()).map((chain) => chain.id));
+  } catch (error) {
+    console.error("payee link: chains to choose not read", error instanceof Error ? error.message : "unknown error");
+    return [];
+  }
+}
+
+/**
  * What a payee's link shows (freelancer journey R1, R2): for a usable link, or one used within 30
  * days, the business, the payee, the address and whether it is confirmed, and the payee's payments;
- * null for any other link. A read that fails throws, so the page can say it could not load.
+ * null for any other link. A read that fails throws, so the page can say it could not load. Since
+ * 0133 it also says whether the link asks for an invoice and whether it arrived, and the chains the
+ * payee may choose among (payee invoice link P2, P4): none unless the link offers the choice, its
+ * payee is a vendor with no address and no payment, and the workspace can pay more than one chain.
  */
 export async function payeeLinkStatus(token: string): Promise<PayeeLinkStatus | null> {
   const hash = payeeLinkHash(token);
   if (!hash) return null;
   const result = await platformDb().rpc("payee_link_status", { p_token_hash: hash });
   if (result.error) throw new Error(result.error.message);
-  const row = result.data as (Omit<PayeeLinkStatus, "payments"> & { payments: Array<Record<string, unknown>> }) | null;
-  if (!row) return null;
+  const found = result.data as (Omit<PayeeLinkStatus, "payments"> & { payments: Array<Record<string, unknown>>; chainOpen?: unknown }) | null;
+  if (!found) return null;
+  const { chainOpen, ...row } = found;
   const payments: PayeePayment[] = (row.payments ?? []).map((payment) => ({
     kind: payment.kind === "invoice" ? "invoice" : "milestone",
     title: String(payment.title ?? ""),
@@ -179,7 +244,15 @@ export async function payeeLinkStatus(token: string): Promise<PayeeLinkStatus | 
     settledAt: typeof payment.settledAt === "string" ? payment.settledAt : null,
     scheduledFor: typeof payment.scheduledFor === "string" ? payment.scheduledFor : null,
   }));
-  return { ...row, payments };
+  const chainChoices = chainOpen === true ? await chainChoicesFor(hash) : [];
+  return {
+    ...row,
+    asksInvoice: row.asksInvoice === true,
+    offersChain: row.offersChain === true,
+    invoiceSent: row.invoiceSent === true,
+    chainChoices: chainChoices.length > 1 ? chainChoices : [],
+    payments,
+  };
 }
 
 /**
@@ -206,15 +279,36 @@ export async function payeeLinkSimulates(token: string): Promise<boolean> {
 
 export type PayeeSubmission =
   | { ok: true; orgName: string; unchanged: boolean }
-  | { ok: false; reason: "invalid_address" | "checksum_address" | "invalid_link" };
+  | { ok: false; reason: "invalid_address" | "checksum_address" | "invalid_link" | "chain_closed" };
+
+/** The payee chose a chain the workspace no longer lets it choose: the link is put back, nothing is written. */
+class ChainClosedError extends Error {
+  constructor() {
+    super("The chain can no longer be chosen.");
+    this.name = "ChainClosedError";
+  }
+}
+
+/** Whether the link offers its payee the choice of chain, and the payee may still make it (0133's `chainOpen`). */
+async function chainOpenFor(hash: string): Promise<boolean> {
+  const result = await platformDb().rpc("payee_link_status", { p_token_hash: hash });
+  if (result.error) throw new Error(result.error.message);
+  return (result.data as { chainOpen?: unknown } | null)?.chainOpen === true;
+}
 
 /**
  * The payee's submission: the address is checked first, so a typo never uses
  * the link; then the link is claimed, once; then the address changes in the
  * workspace, as the link. The address already on file uses the link too. Any
  * other failure puts the link back and throws, so the payee can try again.
+ *
+ * `chain`, on a link that lets the payee choose where it is paid (payee invoice
+ * link P2), is checked before the link is used (the link offers it, its payee is
+ * a vendor with no address and no payment) and again in the workspace's scope
+ * (a chain it pays on, more than one to choose from), and is written with the
+ * address in one compare-and-set. A choice no longer open uses nothing.
  */
-export async function submitPayeeAddress(token: string, raw: string): Promise<PayeeSubmission> {
+export async function submitPayeeAddress(token: string, raw: string, options: { chain?: string } = {}): Promise<PayeeSubmission> {
   const hash = payeeLinkHash(token);
   if (!hash) return { ok: false, reason: "invalid_link" };
   const parsed = parseAddressInput(raw);
@@ -222,6 +316,57 @@ export async function submitPayeeAddress(token: string, raw: string): Promise<Pa
   if (parsed.address === null) return { ok: false, reason: "invalid_address" };
 
   // The submission needs the business's name, not the chain.
+  const preview = await previewPayeeLink(token, { withChain: false });
+  if (!preview) return { ok: false, reason: "invalid_link" };
+  const chain = options.chain;
+  if (chain !== undefined && !(await chainOpenFor(hash))) return { ok: false, reason: "chain_closed" };
+  const claimed = unwrap(await platformDb().rpc("claim_payee_link", { p_token_hash: hash })) as Array<{
+    link_id: string;
+    org_id: string;
+    counterparty_id: string;
+  }>;
+  const link = claimed[0];
+  if (!link) return { ok: false, reason: "invalid_link" };
+
+  try {
+    await withOrg(link.org_id, async () => {
+      if (chain !== undefined && !(await choosablePayeeChains()).some((entry) => entry.id === chain)) throw new ChainClosedError();
+      return changeCounterpartyAddress({
+        payeeLinkId: link.link_id,
+        counterpartyId: link.counterparty_id,
+        raw: parsed.address as string,
+        ...(chain !== undefined ? { chain } : {}),
+      });
+    });
+  } catch (error) {
+    if (error instanceof CounterpartyAddressError && error.code === "unchanged") return { ok: true, orgName: preview.orgName, unchanged: true };
+    await platformDb().rpc("release_payee_link", { p_link_id: link.link_id });
+    if (error instanceof ChainClosedError) return { ok: false, reason: "chain_closed" };
+    throw error;
+  }
+  // Nothing is paid to the new address until a member confirms it (R1), and
+  // until now nobody was told it had arrived (pay a freelancer R4). Best
+  // effort: it never throws.
+  await notifyPayeeAddress({
+    orgId: link.org_id,
+    orgName: preview.orgName,
+    payeeName: preview.counterpartyName,
+    address: parsed.address,
+    ...(chain !== undefined ? { chainLabel: chainById(chain).label } : {}),
+  });
+  return { ok: true, orgName: preview.orgName, unchanged: false };
+}
+
+export type PayeeKeep = { ok: true; orgName: string } | { ok: false; reason: "invalid_link" | "no_address" };
+
+/**
+ * The payee keeps the address the business has on file and moves on to its invoice (payee invoice link P4): the link
+ * is used, once, as sending that same address uses it, and nothing changes. A payee with no address on file has none
+ * to keep: the link is put back.
+ */
+export async function keepPayeeAddress(token: string): Promise<PayeeKeep> {
+  const hash = payeeLinkHash(token);
+  if (!hash) return { ok: false, reason: "invalid_link" };
   const preview = await previewPayeeLink(token, { withChain: false });
   if (!preview) return { ok: false, reason: "invalid_link" };
   const claimed = unwrap(await platformDb().rpc("claim_payee_link", { p_token_hash: hash })) as Array<{
@@ -232,18 +377,19 @@ export async function submitPayeeAddress(token: string, raw: string): Promise<Pa
   const link = claimed[0];
   if (!link) return { ok: false, reason: "invalid_link" };
 
+  let address: string | null;
   try {
-    await withOrg(link.org_id, () =>
-      changeCounterpartyAddress({ payeeLinkId: link.link_id, counterpartyId: link.counterparty_id, raw: parsed.address as string })
-    );
+    address = await withOrg(link.org_id, async () => {
+      const found = unwrap(await db().from("counterparties").select("address").eq("id", link.counterparty_id).limit(1)) as Array<{ address: string | null }>;
+      return found[0]?.address ?? null;
+    });
   } catch (error) {
-    if (error instanceof CounterpartyAddressError && error.code === "unchanged") return { ok: true, orgName: preview.orgName, unchanged: true };
     await platformDb().rpc("release_payee_link", { p_link_id: link.link_id });
     throw error;
   }
-  // Nothing is paid to the new address until a member confirms it (R1), and
-  // until now nobody was told it had arrived (pay a freelancer R4). Best
-  // effort: it never throws.
-  await notifyPayeeAddress({ orgId: link.org_id, orgName: preview.orgName, payeeName: preview.counterpartyName, address: parsed.address });
-  return { ok: true, orgName: preview.orgName, unchanged: false };
+  if (!address) {
+    await platformDb().rpc("release_payee_link", { p_link_id: link.link_id });
+    return { ok: false, reason: "no_address" };
+  }
+  return { ok: true, orgName: preview.orgName };
 }

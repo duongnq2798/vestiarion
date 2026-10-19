@@ -1,5 +1,6 @@
 import { platformDb, unwrap, type OrgDb } from "./dal";
 import { newPayeeCheck, type NewPayeeCheck } from "./new-payee";
+import { paidAcrossChains } from "./payee-chains";
 
 /**
  * What the new payee check reads (docs/superpowers/specs/2026-10-05-new-payee-check-design.md N1, N2), once per stage
@@ -8,7 +9,10 @@ import { newPayeeCheck, type NewPayeeCheck } from "./new-payee";
  *
  * A first payment is keyed on the payee and the address together (independent review, 2026-10-15): a confirmed payment
  * counts for the payee its invoice or milestone was for, so an address the workspace paid for someone else is still a
- * first payment for this payee.
+ * first payment for this payee. And on the chain (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P3): a
+ * payment counts only on the chain the payee is paid on now, so a first payment on Base to an address paid on Arc is
+ * still a first payment. A payment's chain is the one it was minted on (`payment_intents.destination_chain`), or the
+ * network's own when it has none; a payee's is its `chain`, or the network's own when it has none.
  *
  * Who asked the payee for an address they sent is read from the workspace's own signed entries, in the same read as the
  * address's: `payee_link_created` names who created a payee link, and `github_bounty_attached` the member a pull
@@ -16,7 +20,7 @@ import { newPayeeCheck, type NewPayeeCheck } from "./new-payee";
  * `created_by`), and set beside the entry as `linkCreatedBy`; the ledger's detail is left as written.
  */
 export interface NewPayeeFacts {
-  /** For each counterparty asked about, every address it has received a confirmed payment at, lowercase. */
+  /** For each counterparty asked about, every address it has received a confirmed payment at on its chain now, lowercase. */
   paidTo: Map<string, Set<string>>;
   /** Each counterparty's entries that set, confirmed or asked for its address, newest first. */
   entries: Map<string, Array<{ action: string; detail: Record<string, unknown>; linkCreatedBy?: string | null }>>;
@@ -120,7 +124,36 @@ async function addressEntries(db: OrgDb, ids: string[]): Promise<EntryRow[]> {
   }
 }
 
-type PaymentRow = { source_type: string; source_id: string; destination: string | null };
+type PaymentRow = { source_type: string; source_id: string; destination: string | null; destination_chain?: string | null };
+
+/** The network's own chain, however it is named, as the check compares chains. */
+const OWN_CHAIN = "own";
+
+/** A chain as the check compares it (P3): the network's own chain, named or not, is one; any other is itself. */
+export function chainKey(chain: string | null | undefined): string {
+  if (!chain) return OWN_CHAIN;
+  try {
+    return paidAcrossChains(chain) ? chain : OWN_CHAIN;
+  } catch {
+    // A chain no network lists is never the network's own.
+    return chain;
+  }
+}
+
+/**
+ * Each of these counterparties' chain now, as `chainKey` gives it, read by id in chunks. One not read is on its network's
+ * own: a payment minted on another chain then never counts for it, so the check errs towards a first payment.
+ */
+async function payeeChains(db: OrgDb, ids: string[]): Promise<Map<string, string>> {
+  const chains = new Map<string, string>();
+  for (let start = 0; start < ids.length; start += ID_CHUNK) {
+    const found = await db.from("counterparties").select("id, chain").in("id", ids.slice(start, start + ID_CHUNK));
+    if (found.error) throw new Error(found.error.message);
+    const rows = Array.isArray(found.data) ? (found.data as Array<{ id: string; chain?: string | null }>) : [];
+    for (const row of rows) chains.set(row.id, chainKey(row.chain));
+  }
+  return chains;
+}
 
 /** Every confirmed payment of the workspace, a page at a time in a stable order, so the row cap never drops one. */
 async function allConfirmedPayments(db: OrgDb): Promise<PaymentRow[]> {
@@ -129,7 +162,7 @@ async function allConfirmedPayments(db: OrgDb): Promise<PaymentRow[]> {
     const page = unwrap(
       await db
         .from("payment_intents")
-        .select("source_type, source_id, destination")
+        .select("source_type, source_id, destination, destination_chain")
         .eq("status", "confirmed")
         .order("id", { ascending: true })
         .range(from, from + PAYMENT_PAGE - 1)
@@ -153,8 +186,9 @@ async function payeesOf(db: OrgDb, table: "invoices" | "milestones", sourceIds: 
 }
 
 /**
- * Each confirmed payment to these counterparties, as `[counterpartyId, address]`, the address lowercase. A payment is
- * read as its invoice's or milestone's payee's. Which payee a payment was for is asked only when one was confirmed.
+ * Each confirmed payment to these counterparties on the chain each is paid on now, as `[counterpartyId, address]`, the
+ * address lowercase. A payment is read as its invoice's or milestone's payee's. Which payee a payment was for, and the
+ * chain each payee is paid on, are asked only when a payment was confirmed for one.
  */
 async function confirmedPayments(db: OrgDb, ids: string[]): Promise<Array<[string, string]>> {
   const withAddress = (await allConfirmedPayments(db)).filter((row) => typeof row.destination === "string" && row.destination.length > 0);
@@ -163,9 +197,12 @@ async function confirmedPayments(db: OrgDb, ids: string[]): Promise<Array<[strin
   const payeeOf = new Map<string, string>();
   for (const [id, payee] of await payeesOf(db, "invoices", sources("invoice"), ids)) payeeOf.set(`invoice:${id}`, payee);
   for (const [id, payee] of await payeesOf(db, "milestones", sources("milestone"), ids)) payeeOf.set(`milestone:${id}`, payee);
+  if (payeeOf.size === 0) return [];
+  const chains = await payeeChains(db, [...new Set(payeeOf.values())]);
   return withAddress.flatMap((row): Array<[string, string]> => {
     const payee = payeeOf.get(`${row.source_type}:${row.source_id}`);
-    return payee ? [[payee, (row.destination as string).toLowerCase()]] : [];
+    if (!payee || chainKey(row.destination_chain) !== (chains.get(payee) ?? OWN_CHAIN)) return [];
+    return [[payee, (row.destination as string).toLowerCase()]];
   });
 }
 

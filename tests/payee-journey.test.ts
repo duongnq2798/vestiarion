@@ -24,6 +24,13 @@ describe("payeeStage", () => {
     expect(payeeStage(status({ address: null, addressConfirmed: false }))).toBe("confirming");
   });
 
+  it("asks for the invoice after the address, on a link that asks for one not yet sent (payee invoice link P4)", () => {
+    expect(payeeStage(status({ linkState: "open", address: null, asksInvoice: true }))).toBe("address");
+    expect(payeeStage(status({ asksInvoice: true, invoiceSent: false, addressConfirmed: false }))).toBe("invoice");
+    expect(payeeStage(status({ asksInvoice: true, invoiceSent: true, addressConfirmed: false }))).toBe("confirming");
+    expect(payeeStage(status({ asksInvoice: false, invoiceSent: false }))).toBe("paying");
+  });
+
   it("follows the payments once the address is confirmed, and is paid when every one is", () => {
     expect(payeeStage(status())).toBe("paying");
     expect(payeeStage(status({ payments: [payment({ status: "paid", txRef: "0xabc" }), payment({ status: "held" })] }))).toBe("paying");

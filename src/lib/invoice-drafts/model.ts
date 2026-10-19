@@ -6,6 +6,9 @@ import type { DecisionMode } from "../agent/decide";
  * its fields, its states, what the extension is shown of it, and the rules its fields are held to. Pure and
  * browser-safe: the console's card and the server's commands read it alike. A draft is never an invoice; it becomes
  * one only when a person adds it in the console through the add-invoice command.
+ *
+ * A payee also sends one through its payee link (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P4, P5,
+ * migration 0133): source `payee_link`, with no extension connection, sent for review as it arrives.
  */
 
 export const DRAFT_STATES = ["draft", "sent", "confirmed", "discarded"] as const;
@@ -131,8 +134,12 @@ export function columnsOfEdit(edit: DraftEdit): Record<string, string | null> {
  * compares with what the person added.
  */
 export interface StoredRead {
-  /** Who read it; null for a picture, which is not read. */
+  /** Who read it; null for a picture, which is not read, and for an invoice a payee typed in. */
   reader: DecisionMode | null;
+  /** `payee_link` for an invoice a payee sent through its link (0133). */
+  via?: "payee_link";
+  /** The payee's own note, up to 500 characters, on an invoice it sent through its link. */
+  note?: string | null;
   /** Everything a reviewer should check, the counterparty match's warnings included. */
   warnings: string[];
   /** What the document alone says to check, which the extension is shown: never a counterparty's name or address. */
@@ -153,10 +160,13 @@ export interface StoredRead {
 }
 
 /** A draft as the database row holds it. */
+/** Where a draft came from: text selected or a file, in the extension, or a payee's link (0133). */
+export type DraftSource = "selection" | "file" | "payee_link";
+
 export interface DraftRow {
   id: string;
   state: DraftState;
-  source: "selection" | "file";
+  source: DraftSource;
   document_kind: "pdf" | "email" | "text" | "image" | null;
   document_sha256: string | null;
   supplier_name: string | null;
@@ -170,7 +180,8 @@ export interface DraftRow {
   read: StoredRead | null;
   raw_text: string | null;
   counterparty_id: string | null;
-  connection_id: string;
+  /** The extension's connection that captured it; null only for a payee's (0133). */
+  connection_id: string | null;
   idempotency_key: string;
   request_sha256: string;
   captured_by: string | null;
@@ -209,7 +220,7 @@ export function fieldsOfRow(row: Pick<DraftRow, "supplier_name" | "invoice_numbe
 export interface ExtensionDraftView {
   id: string;
   state: DraftState;
-  source: "selection" | "file";
+  source: DraftSource;
   document: { kind: string; sha256: string } | null;
   fields: DraftFields;
   missing: Array<{ field: NeededField; message: string }>;
@@ -250,7 +261,21 @@ export function startingMemo(invoiceNumber: string | null, memo: string | null):
 /** The most sent drafts Bills & receivables lists at once. */
 export const REVIEW_LIMIT = 50;
 
-/** What Waiting for review says of the sent drafts: their count, or "50+" past the list's limit. */
-export function capturedCountLabel(count: number, more: boolean): string {
-  return `${more ? `${REVIEW_LIMIT}+` : count} captured`;
+/**
+ * What Waiting for review says of the sent drafts: their count, or "50+" past the list's limit. `payees` names the
+ * payees whose invoices came through their payee links (P5): one is named, more are counted.
+ */
+export function capturedCountLabel(count: number, more: boolean, payees: readonly string[] = []): string {
+  if (payees.length === 0) return `${more ? `${REVIEW_LIMIT}+` : count} captured`;
+  if (more) return `${REVIEW_LIMIT}+ to review`;
+  const fromPayees = payees.length === 1 ? `invoice from ${payees[0]}` : `${payees.length} from payees`;
+  if (payees.length === count) return payees.length === 1 ? `Invoice from ${payees[0]}` : fromPayees;
+  return `${count - payees.length} captured, ${fromPayees}`;
+}
+
+/** The review list's title: the extension's drafts, the payees' invoices, or both (P5). */
+export function capturedTitle(sources: readonly DraftSource[]): string {
+  const fromPayees = sources.filter((source) => source === "payee_link").length;
+  if (fromPayees === 0) return "Captured drafts";
+  return fromPayees === sources.length ? "Invoices from payees" : "Captured drafts and payee invoices";
 }

@@ -3,6 +3,8 @@ import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { appendLedgerEntry } from "./ledger";
+import { homeChain } from "./payee-chains";
+import { workspaceNetwork } from "./workspace-network";
 
 /**
  * Changing and confirming a counterparty's Arc address (spec
@@ -20,6 +22,11 @@ import { appendLedgerEntry } from "./ledger";
  * the confirmation on the address the person was shown and the change it
  * confirms. So two edits cannot silently overwrite each other, and no one
  * confirms an address they did not see.
+ *
+ * A payee link that lets its payee choose where it is paid writes the chain with
+ * the address, in the same compare-and-set (payee invoice link P2): the chain is
+ * part of what a person confirms, and Counterparties shows it beside the address
+ * (P3).
  */
 
 /** An Arc (EVM) address: 0x and 40 hex characters (./address-checksum, shared with the console's forms). */
@@ -91,12 +98,14 @@ interface AddressRow {
   address_confirmed_at: string | null;
   /** Set while the address is a mirror Vestiarion made in shadow mode (0084); absent before it. */
   mirror_wallet_id?: string | null;
+  /** The chain it is paid on; none is the workspace's own (0044). */
+  chain?: string | null;
 }
 
 async function loadCounterparty(counterpartyId: string): Promise<AddressRow> {
   const result = await db()
     .from("counterparties")
-    .select("id, name, address, address_changed_at, address_confirmed_at, mirror_wallet_id")
+    .select("id, name, address, address_changed_at, address_confirmed_at, mirror_wallet_id, chain")
     .eq("id", counterpartyId)
     .maybeSingle();
   if (result.error) throw new Error(result.error.message);
@@ -108,7 +117,9 @@ async function loadCounterparty(counterpartyId: string): Promise<AddressRow> {
  * Who changed the address: a member (`actorId`), or the payee themselves, through
  * a one-time payee link (`payeeLinkId`, spec 2026-09-30-payee-links-design.md) or
  * with `/payto` on their pull request (`github`, bounties B9). Every way, the change
- * is stamped, so payments wait for a member to confirm it.
+ * is stamped, so payments wait for a member to confirm it. `chain`, the chain the
+ * payee chose on a link that offered it (payee invoice link P2), is written with
+ * the address; the caller has checked the payee may choose it.
  */
 export type AddressChangeInput = (
   | { actorId: string }
@@ -117,6 +128,7 @@ export type AddressChangeInput = (
 ) & {
   counterpartyId: string;
   raw: string;
+  chain?: string;
 };
 
 export async function changeCounterpartyAddress(
@@ -131,13 +143,20 @@ export async function changeCounterpartyAddress(
   const update = db()
     .from("counterparties")
     // An address a person gives is no longer the mirror Vestiarion made (shadow mode S7).
-    .update({ address: parsed.address, address_changed_at: new Date().toISOString(), ...(current.mirror_wallet_id ? { mirror_wallet_id: null } : {}) })
+    .update({
+      address: parsed.address,
+      address_changed_at: new Date().toISOString(),
+      ...(current.mirror_wallet_id ? { mirror_wallet_id: null } : {}),
+      ...(input.chain !== undefined ? { chain: input.chain } : {}),
+    })
     .eq("id", current.id);
   // Guarded on everything read, the change and the confirmation included: a
   // confirmation that lands between this read and this write would otherwise be
   // inherited by the new address (its timestamp later than this change's), and
-  // the agent would pay an address no one confirmed. Then this is a conflict.
-  const onAddress = current.address === null ? update.is("address", null) : update.eq("address", current.address);
+  // the agent would pay an address no one confirmed. Then this is a conflict. A
+  // chain written with the address is guarded on the chain read, too.
+  const onChain = input.chain === undefined ? update : current.chain ? update.eq("chain", current.chain) : update.is("chain", null);
+  const onAddress = current.address === null ? onChain.is("address", null) : onChain.eq("address", current.address);
   const onChange = current.address_changed_at === null ? onAddress.is("address_changed_at", null) : onAddress.eq("address_changed_at", current.address_changed_at);
   const guarded =
     current.address_confirmed_at === null ? onChange.is("address_confirmed_at", null) : onChange.eq("address_confirmed_at", current.address_confirmed_at);
@@ -146,6 +165,9 @@ export async function changeCounterpartyAddress(
 
   const byPayee = "payeeLinkId" in input;
   const onGitHub = "github" in input ? input.github : null;
+  // The chain the address is on, and the one it was on when the payee chose another (P3); none for a row from before 0044.
+  const chain = input.chain ?? current.chain ?? null;
+  const chainChanged = input.chain !== undefined && input.chain !== (current.chain ?? null);
   await appendLedgerEntryBestEffort(currentOrgId(), {
     actor: "human",
     domain: "compliance",
@@ -166,6 +188,8 @@ export async function changeCounterpartyAddress(
       counterpartyId: current.id,
       from: current.address,
       to: parsed.address,
+      ...(chain ? { chain } : {}),
+      ...(chainChanged ? { fromChain: current.chain ?? null } : {}),
     },
   });
 
@@ -177,16 +201,22 @@ export async function changeCounterpartyAddress(
  * whether anything was confirmed: `false` when the address needed no
  * confirmation. Refuses with `stale` when the shown address is no longer the
  * counterparty's, or another change landed between the read and the write.
+ * `shownChain`, when the page showed the chain beside the address (payee invoice
+ * link P3), must be the counterparty's chain too; none is the workspace's own.
  */
 export async function confirmCounterpartyAddress(input: {
   actorId: string;
   counterpartyId: string;
   shownAddress: string;
+  shownChain?: string;
   via: "approval" | "confirm";
 }): Promise<boolean> {
   const current = await loadCounterparty(input.counterpartyId);
   const shown = input.shownAddress.trim();
   if (!sameAddress(current.address, shown === "" ? null : shown)) throw new CounterpartyAddressError("stale");
+  if (input.shownChain !== undefined && input.shownChain !== (current.chain ?? homeChain(workspaceNetwork().id).id)) {
+    throw new CounterpartyAddressError("stale");
+  }
   if (!addressUnconfirmed(current.address_changed_at, current.address_confirmed_at)) return false;
 
   // Never earlier than the change it confirms, even if this server's clock runs behind the one that stamped the change.
@@ -205,7 +235,7 @@ export async function confirmCounterpartyAddress(input: {
       domain: "compliance",
       action: "counterparty_address_confirmed",
       summary: `Confirmed ${current.name}'s new payment address`,
-      detail: { by: input.actorId, counterpartyId: current.id, address: current.address, via: input.via },
+      detail: { by: input.actorId, counterpartyId: current.id, address: current.address, ...(current.chain ? { chain: current.chain } : {}), via: input.via },
     });
   } catch (error) {
     const undone = await db()

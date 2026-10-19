@@ -77,7 +77,7 @@ describe("loadNewPayeeFacts", () => {
     const requests = workspaceFake.requests;
     const intents = requests.find((request) => request.path === "/rest/v1/payment_intents");
     expect(intents?.params.get("status")).toBe("eq.confirmed");
-    expect(intents?.params.get("select")).toBe("source_type,source_id,destination");
+    expect(intents?.params.get("select")).toBe("source_type,source_id,destination,destination_chain");
     // Read a page at a time, in a stable order, so the row cap never drops a payment.
     expect(intents?.params.get("order")).toBe("id.asc");
     expect(intents?.params.get("offset")).toBe("0");
@@ -150,6 +150,47 @@ describe("loadNewPayeeFacts", () => {
     const facts = await load(quiet, ["cp-1"]);
     expect(facts.paidTo.size).toBe(0);
     expect(quiet.requests.some((request) => request.path === "/rest/v1/invoices" || request.path === "/rest/v1/milestones")).toBe(false);
+  });
+});
+
+/**
+ * A first payment is keyed on the chain too (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P3): a
+ * payment counts only on the chain the payee is paid on now, so a first payment on Base to an address paid on Arc is
+ * still a first payment. A payment with no destination chain was paid on the network's own; so is a payee with none.
+ */
+describe("loadNewPayeeFacts and the chain an address was paid on", () => {
+  const ADDRESS = "0x3333333333333333333333333333333333333333";
+  function onChains(payeeChain: string | null, paidOn: string | null) {
+    return fake((request) => {
+      if (request.path === "/rest/v1/payment_intents") return { body: [{ source_type: "invoice", source_id: "inv-1", destination: ADDRESS, destination_chain: paidOn }] };
+      if (request.path === "/rest/v1/invoices") return { body: [{ id: "inv-1", counterparty_id: "cp-1" }] };
+      if (request.path === "/rest/v1/counterparties") return { body: [{ id: "cp-1", chain: payeeChain }] };
+      return undefined;
+    });
+  }
+  const firstPayment = async (payeeChain: string | null, paidOn: string | null) =>
+    newPayeeCheckFor(await load(onChains(payeeChain, paidOn), ["cp-1"]), { id: "cp-1", address: ADDRESS })?.firstPayment;
+
+  it("counts an address paid on the payee's own chain, named or not", async () => {
+    expect(await firstPayment(null, null)).toBe(false);
+    expect(await firstPayment("ARC-TESTNET", null)).toBe(false);
+    expect(await firstPayment("BASE-SEPOLIA", "BASE-SEPOLIA")).toBe(false);
+    expect(await firstPayment("BASE", "BASE")).toBe(false);
+  });
+
+  it("still makes a first payment on Base to an address paid on Arc, and on Arc to one paid on Base", async () => {
+    expect(await firstPayment("BASE", null)).toBe(true);
+    expect(await firstPayment("BASE-SEPOLIA", null)).toBe(true);
+    expect(await firstPayment(null, "BASE-SEPOLIA")).toBe(true);
+    expect(await firstPayment("ARB-SEPOLIA", "BASE-SEPOLIA")).toBe(true);
+  });
+
+  it("reads the payees' chains by id, in the workspace in scope", async () => {
+    const workspaceFake = onChains("BASE", "BASE");
+    await load(workspaceFake, ["cp-1"]);
+    const read = workspaceFake.requests.find((request) => request.path === "/rest/v1/counterparties");
+    expect(read?.params.get("select")).toBe("id,chain");
+    expect(read?.params.get("id")).toBe("in.(cp-1)");
   });
 });
 

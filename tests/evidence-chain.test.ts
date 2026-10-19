@@ -866,6 +866,27 @@ describe("a bill imported from a list (import design B12)", () => {
   });
 });
 
+describe("a bill added from an invoice a payee sent through its payee link (payee invoice link P5)", () => {
+  it("says it came from the payee's invoice, added by a person", () => {
+    const base = paidInFull();
+    const fromPayee = entry(20, "09:30:00", "human", "create_invoice", {
+      by: ALICE,
+      invoiceId: INVOICE,
+      counterpartyId: CP,
+      amount: 12.5,
+      currency: "USDC",
+      poReference: null,
+      goodsReceived: true,
+      via: "payee_link",
+      invoiceDraftId: "7c1d6a52-2f5b-4bb0-9c62-1f1f0d4b9a10",
+      invoiceNumber: "INV-7",
+      payeeLinkId: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1",
+    });
+    const chain = buildEvidenceChain({ ...base, entries: [fromPayee], payment: null, receipt: null, checks: { entries: okChecks([fromPayee]), onChain: null } });
+    expect(step(chain, "bill").facts[0]).toMatchObject({ kind: "stated", text: "12.50 USDC, added from an invoice the payee sent through their payee link." });
+  });
+});
+
 describe("a bill brought in from Xero (Xero connector X11)", () => {
   it("says where it came from, by the number Xero gave it, and who marked its goods received", () => {
     const base = paidInFull();

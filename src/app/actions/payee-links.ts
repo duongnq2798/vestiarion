@@ -23,6 +23,8 @@ export interface PayeeLinkActionResult {
   /** Only when a link was just made: its address, never stored or shown again. */
   url?: string;
   expiresAt?: string;
+  /** Only when the link just made asks for the payee's invoice (payee invoice link P1). */
+  asksInvoice?: true;
 }
 
 const idSchema = z.string().uuid();
@@ -32,17 +34,23 @@ function formString(formData: FormData, key: string): string {
   return typeof value === "string" ? value : "";
 }
 
-/** Makes a link through the command every surface shares (`issuePayeeLink`, write API part 2 W4), and shows it once. */
+/**
+ * Makes a link through the command every surface shares (`issuePayeeLink`, write API part 2 W4), and shows it once. The
+ * two boxes under the dialog's text (payee invoice link P1) submit `asksInvoice` and `offersChain` when ticked.
+ */
 export async function createPayeeLinkAction(_previous: PayeeLinkActionResult, formData: FormData): Promise<PayeeLinkActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   const counterpartyId = idSchema.safeParse(formString(formData, "counterpartyId"));
   if (!counterpartyId.success) return { ok: false, message: "Counterparty not found." };
+  const asksInvoice = formString(formData, "asksInvoice") === "on";
+  const offersChain = formString(formData, "offersChain") === "on";
+  const options = asksInvoice || offersChain ? { options: { ...(asksInvoice ? { asksInvoice } : {}), ...(offersChain ? { offersChain } : {}) } } : {};
   return inOrg(auth, async () => {
-    const outcome = await issuePayeeLink(consoleActor(auth), { counterpartyId: counterpartyId.data });
+    const outcome = await issuePayeeLink(consoleActor(auth), { counterpartyId: counterpartyId.data, ...options });
     if (!outcome.ok) return { ok: false, message: outcome.message };
     revalidateOrgPages();
-    return { ok: true, message: outcome.message, url: outcome.url, expiresAt: outcome.expiresAt };
+    return { ok: true, message: outcome.message, url: outcome.url, expiresAt: outcome.expiresAt, ...(asksInvoice ? { asksInvoice: true as const } : {}) };
   });
 }
 

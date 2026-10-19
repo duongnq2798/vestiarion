@@ -253,7 +253,11 @@ export async function updateCounterpartyNoticeEmailAction(
   });
 }
 
-/** Confirms a changed address, as the page showed it, so payments to it are decided as usual again. */
+/**
+ * Confirms a changed address, as the page showed it, so payments to it are decided as usual again. The page shows the
+ * chain beside the address (payee invoice link P3), and sends it as `chain`: a chain that is no longer the payee's is
+ * refused as stale, like an address.
+ */
 export async function confirmCounterpartyAddressAction(
   _previous: IntakeActionResult,
   formData: FormData
@@ -263,11 +267,13 @@ export async function confirmCounterpartyAddressAction(
   return inOrg(auth, async () => {
     const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
     if (!id.success) return { ok: false, message: "Counterparty not found." };
+    const shownChain = formString(formData, "chain");
     try {
       const confirmed = await confirmCounterpartyAddress({
         actorId: auth.user.id,
         counterpartyId: id.data,
         shownAddress: formString(formData, "address"),
+        ...(shownChain ? { shownChain } : {}),
         via: "confirm",
       });
       revalidateOrgPages();

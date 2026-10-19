@@ -32,13 +32,27 @@ export interface PayeeLinkStatus {
   address: string | null;
   addressConfirmed: boolean;
   payments: PayeePayment[];
+  /**
+   * Whether the link asks for the payee's invoice, and whether it arrived
+   * (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P1, P4); absent before migration 0133.
+   */
+  asksInvoice?: boolean;
+  invoiceSent?: boolean;
+  /** Whether the link offers the payee to choose where it is paid (P1). */
+  offersChain?: boolean;
+  /** The chains the payee may choose among, its network's own first; empty or absent when it may not choose (P2). */
+  chainChoices?: string[];
 }
 
-/** Step 1 `address`, step 2 `confirming`, step 3 `paying`, and `paid` once every payment is. */
-export type PayeeStage = "address" | "confirming" | "paying" | "paid";
+/**
+ * Step 1 `address`, then `invoice` when the link asks for one not yet sent (P4), then `confirming`, `paying`, and
+ * `paid` once every payment is.
+ */
+export type PayeeStage = "address" | "invoice" | "confirming" | "paying" | "paid";
 
 export function payeeStage(status: PayeeLinkStatus): PayeeStage {
   if (status.linkState === "open") return "address";
+  if (status.asksInvoice && !status.invoiceSent) return "invoice";
   if (!status.address || !status.addressConfirmed) return "confirming";
   if (status.payments.length > 0 && status.payments.every((payment) => payment.status === "paid")) return "paid";
   return "paying";
@@ -79,6 +93,9 @@ export const NOT_AN_ADDRESS = "That doesn't look like a wallet address. It start
 
 /** What the payee reads when the address's capital letters do not match its checksum: a character is likely mistyped (payment safety A3). */
 export const ADDRESS_CHECKSUM = `${CHECKSUM_MISMATCH} Copy it again from your wallet.`;
+
+/** What the payee reads when the chain it chose can no longer be chosen: the page was opened before the business's records changed (P2). */
+export const CHAIN_CLOSED = "Where you are paid can no longer be chosen on this link. Reload the page.";
 
 /** Whether the text is an EVM address, as the payee's form checks it before the server does. */
 export function looksLikeAddress(raw: string): boolean {
