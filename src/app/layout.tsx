@@ -69,7 +69,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
       <body>
         <a
           href="#main"
-          className="sr-only rounded-lg bg-agent px-4 py-2.5 text-sm font-semibold text-on-agent focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100]"
+          className="focus-inverse sr-only rounded-lg bg-agent px-4 py-2.5 text-sm font-semibold text-on-agent focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus-visible:px-4 focus-visible:py-2.5 focus-visible:-outline-offset-4"
         >
           Skip to content
         </a>

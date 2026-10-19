@@ -8,7 +8,7 @@ import { useFieldControl } from "./Field";
 /** The frame every text-like control shares — inputs, text areas, select triggers — without a height. */
 export const controlBase = [
   "w-full min-w-0 border border-line-strong bg-surface text-base text-ink shadow-control outline-hidden sm:text-sm",
-  "transition-[border-color,box-shadow] duration-150 ease-standard placeholder:text-ink-3",
+  "transition-[border-color,box-shadow] duration-micro ease-standard placeholder:text-ink-3",
   "focus-visible:border-agent focus-visible:ring-4 focus-visible:ring-agent-soft",
   // An invalid field is refused-bordered already, so focus thickens that border instead of recolouring it.
   "aria-invalid:border-refused aria-invalid:focus-visible:ring-2 aria-invalid:focus-visible:ring-refused",

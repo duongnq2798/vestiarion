@@ -26,6 +26,8 @@
   --color-agent-soft: #e9edff;
   --color-agent-line: #aeb9f6;
   --color-on-agent: #ffffff;
+  /* Solid secondary text on blue or ink; never fade small text with opacity. */
+  --color-on-agent-muted: #e9edff;
 
   --color-proof: #11765a;
   --color-proof-soft: #e2f4ec;
@@ -46,8 +48,40 @@
   --text-reasoning: 1.0625rem;
   --text-reasoning--line-height: 1.65;
 
+  /* Public type hierarchy. Default Tailwind sizes stay unchanged for the app. */
+  --text-eyebrow: 0.6875rem;
+  --text-eyebrow--line-height: 1.5;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.5;
+  --text-ui: 0.875rem;
+  --text-ui--line-height: 1.5;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5;
+  --text-lede: clamp(1rem, 1.2vw, 1.125rem);
+  --text-lede--line-height: 1.65;
+  --text-positioning: clamp(2rem, 4.2vw, 3.75rem);
+  --text-positioning--line-height: 1.08;
+  --text-positioning--letter-spacing: -0.04em;
+  --text-section: clamp(2rem, 4.6vw, 4rem);
+  --text-section--line-height: 1.05;
+  --text-section--letter-spacing: -0.055em;
+  --text-display: clamp(3.5rem, 7.8vw, 7rem);
+  --text-display--line-height: 0.96;
+  --text-display--letter-spacing: -0.065em;
+
+  /* A 4px base rhythm remains Tailwind's default; public bands add fluid space. */
+  --spacing-page: clamp(1.25rem, 5vw, 4.5rem);
+  --spacing-section: clamp(3rem, 6vw, 6rem);
+
+  /* Make the existing curve scale explicit without resizing app controls. */
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+
   /* Elevation: `surface` rests, `raised` is a card being hovered because it
      can be clicked, `overlay` floats above the page — menus, dialogs, toasts. */
+  --shadow-flat: 0 1px 0 rgb(24 33 28 / 0.04);
   --shadow-control: 0 1px 2px rgb(24 33 28 / 0.05);
   --shadow-surface: 0 1px 0 rgb(24 33 28 / 0.04), 0 14px 40px rgb(43 54 47 / 0.07);
   --shadow-raised: 0 1px 0 rgb(24 33 28 / 0.05), 0 18px 48px rgb(43 54 47 / 0.12);
@@ -60,6 +94,12 @@
   --ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
   --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --transition-duration-micro: 150ms;
+  --transition-duration-overlay: 200ms;
+  --transition-duration-sheet: 300ms;
+  --transition-duration-page: 420ms;
+  --transition-duration-exit: 180ms;
+  --transition-duration-reveal: 450ms;
 
   /* The gap between one item of a sequence and the next (`Reveal sequence`). */
   --stagger: 60ms;
@@ -115,6 +155,11 @@
    agent-blue ring would disappear into the band. */
 @utility focus-inverse {
   --focus-ring: var(--color-on-agent);
+}
+
+/* A light region nested inside a dark one restores the normal outline. */
+@utility focus-default {
+  --focus-ring: var(--color-agent);
 }
 
 /* A loading placeholder: the raised colour with a slow band of light across it. */

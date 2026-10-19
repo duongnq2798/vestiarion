@@ -3736,6 +3736,19 @@ Monetary database values are `numeric(20,6)` and are converted to numbers only
 at the read boundary. Nullable measurements remain nullable; absence is not
 reported as zero.
 
+## Shared visual system
+
+`src/app/globals.css` owns the shared palette, type, spacing, radius, elevation and motion tokens;
+`src/components/ui/tokens.ts` mirrors the palette and motion values needed in TypeScript. The bill journey's public
+type and fluid page/section spacing are additive: default Tailwind typography, the existing radius values, colour
+values and control sizes stay intact for the app, docs and email. `cn.ts` registers the semantic font sizes and spacing
+so caller overrides keep working. `Heading` separates semantic heading level from visual size, while `Section` supplies
+a fluid gutter and a centred container; blue and ink tones carry `focus-inverse` automatically. `Card` keeps its default
+surface elevation and adds an optional flat edge. The primitives add no client boundary. The development-only,
+noindex `/design/visual-system` specimen demonstrates composition without payment evidence; production returns 404.
+Rules and rollout boundaries are in `docs/design/visual-system.md`; token equality, AA colour pairs, class merging and
+server-rendered primitive contracts are tested. The landing and public-page restyles are separate, subsequent PRs.
+
 ## Social previews
 
 Public links use Next.js file-based metadata routes: `src/app/opengraph-image.tsx`

@@ -13,7 +13,7 @@ import { Spinner } from "./Spinner";
 export const buttonVariants = cva(
   [
     "relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap font-semibold",
-    "transition duration-150 ease-standard",
+    "transition duration-micro ease-standard",
     "disabled:pointer-events-none disabled:opacity-60 aria-busy:cursor-progress",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
   ],

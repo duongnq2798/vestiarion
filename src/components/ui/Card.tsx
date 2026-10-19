@@ -3,8 +3,12 @@ import { Slot } from "radix-ui";
 import type { ComponentProps } from "react";
 import { cn } from "./cn";
 
-export const cardVariants = cva("rounded-2xl border bg-surface shadow-surface", {
+export const cardVariants = cva("rounded-2xl border bg-surface", {
   variants: {
+    elevation: {
+      surface: "shadow-surface",
+      flat: "shadow-flat",
+    },
     tone: {
       default: "border-line",
       agent: "border-agent-line",
@@ -13,19 +17,19 @@ export const cardVariants = cva("rounded-2xl border bg-surface shadow-surface", 
       simulated: "border-dashed border-line-strong",
     },
     interactive: {
-      true: "transition duration-150 ease-standard hover:-translate-y-0.5 hover:border-agent-line hover:shadow-raised active:translate-y-0",
+      true: "transition duration-micro ease-standard hover:-translate-y-0.5 hover:border-agent-line hover:shadow-raised active:translate-y-0",
       false: "",
     },
   },
-  defaultVariants: { tone: "default", interactive: false },
+  defaultVariants: { tone: "default", interactive: false, elevation: "surface" },
 });
 
 export type CardProps = ComponentProps<"div"> & VariantProps<typeof cardVariants> & { asChild?: boolean };
 
 /** A surface that holds one thing. `asChild` gives a `Link`, `article` or `li` the card’s look. */
-export function Card({ tone, interactive, asChild = false, className, ...props }: CardProps) {
+export function Card({ tone, interactive, elevation, asChild = false, className, ...props }: CardProps) {
   const Comp = asChild ? Slot.Root : "div";
-  return <Comp className={cn(cardVariants({ tone, interactive }), className)} {...props} />;
+  return <Comp className={cn(cardVariants({ tone, interactive, elevation }), className)} {...props} />;
 }
 
 export function CardHeader({ className, ...props }: ComponentProps<"div">) {
