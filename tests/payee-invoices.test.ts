@@ -32,7 +32,7 @@ vi.mock("@/lib/notifications/payee-invoice", async (importOriginal) => {
 });
 vi.mock("@/lib/rate-limit", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/rate-limit")>()), takePayeeInvoiceToken: takeMock }));
 vi.mock("@/lib/email/send", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/email/send")>()), sendEmail: sendMock }));
-vi.mock("@/lib/notifications/waiting", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/notifications/waiting")>()), decidingRecipients: recipientsMock }));
+vi.mock("@/lib/platform/members", () => ({ listMembers: recipientsMock }));
 vi.mock("@/lib/usage/record", () => ({ recordUsageFor: usageMock }));
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -77,6 +77,8 @@ beforeEach(() => {
   recipientsMock.mockReset().mockResolvedValue([
     { userId: "u1", email: "owner@acme.test", role: "owner" },
     { userId: "u2", email: "approver@acme.test", role: "approver" },
+    { userId: "u3", email: "admin@acme.test", role: "admin" },
+    { userId: "u4", email: "books@acme.test", role: "accountant" },
   ]);
   usageMock.mockReset().mockResolvedValue(undefined);
   process.env.SITE_URL = "https://www.vestiarion.xyz";
@@ -100,8 +102,21 @@ describe("readPayeeInvoice (P4)", () => {
     [{ dueDate: "2027-10-20" }, "dueDate"],
     [{ dueDate: "2026-02-30" }, "dueDate"],
     [{ note: "n".repeat(501) }, "note"],
+    // Plain text only: an invoice number on one line with no link, a note with nothing unseen but line breaks.
+    [{ invoiceNumber: "INV\u00007" }, "invoiceNumber"],
+    [{ invoiceNumber: "INV\t7" }, "invoiceNumber"],
+    [{ invoiceNumber: "INV\n7" }, "invoiceNumber"],
+    [{ invoiceNumber: "https://pay.example/inv7" }, "invoiceNumber"],
+    [{ invoiceNumber: "see www.example.com" }, "invoiceNumber"],
+    [{ note: "tab\there" }, "note"],
+    [{ note: "bell\u0007" }, "note"],
+    [{ note: "nul\u0000" }, "note"],
   ] as const)("%# refuses %j with a fixed sentence", (over, field) => {
     expect(readPayeeInvoice({ ...FIELDS, ...over }, TODAY)).toEqual({ ok: false, field, message: PAYEE_INVOICE_MESSAGES[field] });
+  });
+
+  it("keeps a note's line breaks, however the browser sent them", () => {
+    expect(readPayeeInvoice({ ...FIELDS, note: "Line one\r\nline two\rline three" }, TODAY)).toMatchObject({ ok: true, invoice: { note: "Line one\nline two\nline three" } });
   });
 
   it("adds a year as the database does, the 29th of February becoming the 28th", () => {
@@ -204,13 +219,19 @@ describe("submitPayeeInvoice", () => {
     expect(fake.requests.some((request) => rpc(request, "submit_payee_invoice"))).toBe(false);
   });
 
-  it("stops a page that sends too often, before the reader runs", async () => {
+  it("stops a page that sends too often, once the link is known to be live and before the reader runs", async () => {
     takeMock.mockReturnValueOnce(false);
     const file = textFile("Invoice");
     const { fake, result } = platform(() => submitPayeeInvoice(TOKEN, { ...FIELDS, file }, NOW));
     expect(await result).toEqual({ ok: false, reason: "busy" });
     expect(file.arrayBuffer).not.toHaveBeenCalled();
-    expect(fake.requests).toEqual([]);
+    expect(fake.requests.map((request) => request.path)).toEqual(["/rest/v1/rpc/payee_link_status"]);
+  });
+
+  it("takes no try for a link that is not live, so a made-up token adds nothing to the limit", async () => {
+    const { result } = platform(() => submitPayeeInvoice(TOKEN, { ...FIELDS, file: null }, NOW), live({ body: ANSWER }, { body: null }));
+    expect(await result).toEqual({ ok: false, reason: "invalid_link" });
+    expect(takeMock).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -261,7 +282,7 @@ describe("the members' email (P7)", () => {
     expect(email.html).not.toContain("utm_campaign=counterparty_loop");
   });
 
-  it("goes to each member who decides payments, opening Bills' review list, metered as payee_invoice", async () => {
+  it("goes to each owner and admin, who add or discard it, never an approver, opening Bills' review list, metered as payee_invoice", async () => {
     notifyMock.mockReset();
     const { result } = platform(
       () => notifyPayeeInvoice({ orgId: ORG, orgName: "Acme", payeeName: "Linh Tran", invoiceNumber: "INV-7", amount: "1250.50", dueDate: "2026-11-02" }),
@@ -269,7 +290,8 @@ describe("the members' email (P7)", () => {
     );
     expect(await result).toBe(2);
     expect(recipientsMock).toHaveBeenCalledWith(ORG);
-    expect(sendMock.mock.calls.map(([message]) => message.to)).toEqual(["owner@acme.test", "approver@acme.test"]);
+    expect(sendMock.mock.calls.map(([message]) => message.to)).toEqual(["owner@acme.test", "admin@acme.test"]);
+    expect(sendMock.mock.calls[0][0].html).toContain("Sent to the owners and admins of Acme, who add bills.");
     expect(sendMock.mock.calls[0][0].text).toContain("https://www.vestiarion.xyz/o/acme/invoices?review=captured");
     expect(usageMock).toHaveBeenCalledWith(ORG, { kind: "email", action: "payee_invoice", provider: "resend", quantity: 2 });
   });

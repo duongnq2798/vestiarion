@@ -2,7 +2,7 @@ import { escapeHtml } from "./html";
 import { actionEmailHtml } from "./layout";
 
 /**
- * The email the members who decide payments get when a payee sends its invoice through its payee link
+ * The email a workspace's owners and admins, who add bills, get when a payee sends its invoice through its payee link
  * (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P7): who sent which invoice, for how much and when it
  * is due, and that it waits on Bills until one of them adds it or discards it. A member's email: no counterparty link.
  */
@@ -28,7 +28,7 @@ export function payeeInvoiceEmail(input: {
     heading: subject,
     paragraphsHtml: [escapeHtml(lead), escapeHtml(hold)],
     button: { label: "Review it on Bills", link },
-    note: `Sent to the people in ${orgName} who decide payments.`,
+    note: `Sent to the owners and admins of ${orgName}, who add bills.`,
     origin,
   });
 

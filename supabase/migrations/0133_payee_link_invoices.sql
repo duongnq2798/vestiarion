@@ -3,34 +3,101 @@
 --
 -- 1. payee_links gains two options a member ticks when making a link, both off by default so a link made without them
 --    works as before: `asks_invoice` (the page asks for the payee's invoice) and `offers_chain` (the payee picks the
---    chain its wallet receives USDC on). `invoice_at` is when the link's one invoice arrived. 0039's create_payee_link
---    is re-run by every db:migrate with its signature, so the options are set by a function of their own,
---    set_payee_link_options, on a link not yet used or revoked.
--- 2. invoice_drafts, the review queue the Chrome extension fills (0121), takes a third source, `payee_link`: no extension
+--    chain its wallet receives USDC on). `invoice_at` is when the link's one invoice arrived, and `invoice_closed_at`
+--    when a member stopped a used link from taking one: with Revoke, or by making a newer link for the same payee.
+--    0039's create_payee_link is re-run by every db:migrate with its signature and is left as it is: a link with an
+--    option is made by create_payee_link_with_options, which revokes the payee's unused link, closes the invoice of any
+--    earlier used one, and inserts the new link with its options, in one transaction. close_payee_invoice_intake does
+--    the closing alone, for a link made by 0039's function.
+-- 2. revoke_payee_link (0039's) is redefined: an unused link is revoked as before, and a used link still waiting for its
+--    invoice stops taking one; the payee's status page stays.
+-- 3. invoice_drafts, the review queue the Chrome extension fills (0121), takes a third source, `payee_link`: no extension
 --    connection (`connection_id` is null only then), the link it came through (`payee_link_id`, one draft per link),
 --    and always sent for review. invoice_drafts_guard (0121's) keeps `payee_link_id` fixed with where a capture came
 --    from; this file redefines it after 0121's re-run.
--- 3. submit_payee_invoice: locks the link, checks it is live (unused and unexpired, or used within 30 days, and never
---    revoked), that it asks for an invoice and has none yet, then inserts the draft and stamps `invoice_at`, in one
---    transaction. The service role only. A draft is never an invoice: a member adds it from Bills, or discards it.
--- 4. payee_link_status (0078's) adds `asksInvoice`, `offersChain`, `invoiceSent` and `chainOpen`: whether the payee may
---    still choose its chain, which needs the link to offer it and be unused, and the payee to be a vendor with no
---    address and no payment. Which chains are offered, and whether the workspace's contract can pay them, is read in the
---    workspace's scope (src/lib/payee-chain-choice.ts).
+-- 4. submit_payee_invoice: locks the link, checks it is live (unused and unexpired, or used within 30 days, never
+--    revoked and its invoice not closed), that it asks for an invoice and has none yet, then inserts the draft and
+--    stamps `invoice_at`, in one transaction. The service role only. A draft is never an invoice: a member adds it from
+--    Bills, or discards it.
+-- 5. payee_link_status (0078's) adds `asksInvoice` (false once a member closed it), `offersChain`, `invoiceSent`,
+--    `addressMirror` (the address is a mirror Vestiarion made in shadow mode, not the payee's) and `chainOpen`: whether
+--    the payee may still choose its chain, which needs the link to offer it and be unused, and the payee to be a vendor
+--    with no address, no payment, no milestone not yet paid or closed, and no open bill in another currency than USDC.
+--    Which chains are offered, and whether the workspace's contract can pay them, is read in the workspace's scope
+--    (src/lib/payee-chain-choice.ts).
 --
--- Additive, and idempotent throughout: scripts/migrate.ts re-runs every migration each time.
+-- Additive, and idempotent throughout: scripts/migrate.ts re-runs every migration each time. 0039's create_payee_link
+-- and revoke_payee_link, 0078's payee_link_status and 0121's invoice_drafts_guard are redefined here, after their own
+-- files run.
 
 alter table public.payee_links add column if not exists asks_invoice boolean not null default false;
 alter table public.payee_links add column if not exists offers_chain boolean not null default false;
 alter table public.payee_links add column if not exists invoice_at timestamptz;
+alter table public.payee_links add column if not exists invoice_closed_at timestamptz;
 
--- The link's two options, on a link of the workspace not yet used or revoked; whether it set them.
-create or replace function public.set_payee_link_options(
-  p_org_id       uuid,
-  p_link_id      uuid,
-  p_asks_invoice boolean,
-  p_offers_chain boolean
-) returns boolean
+-- An earlier draft of this file set the options on a link after it was made; a link made in two steps could be left
+-- without them. Gone from any database that ran it.
+drop function if exists public.set_payee_link_options(uuid, uuid, boolean, boolean);
+
+-- Stops the payee's used links still waiting for their invoice from taking one; how many it stopped.
+create or replace function public.close_payee_invoice_intake(p_org_id uuid, p_counterparty_id uuid) returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_closed int;
+begin
+  update public.payee_links set invoice_closed_at = now()
+   where org_id = p_org_id and counterparty_id = p_counterparty_id
+     and used_at is not null and revoked_at is null
+     and asks_invoice and invoice_at is null and invoice_closed_at is null;
+  get diagnostics v_closed = row_count;
+  return v_closed;
+end;
+$$;
+
+revoke execute on function public.close_payee_invoice_intake(uuid, uuid) from public, anon, authenticated, vestiarion_tenant;
+grant execute on function public.close_payee_invoice_intake(uuid, uuid) to service_role;
+
+-- 0039's create_payee_link, with the link's options, and closing the invoice of the payee's earlier used links. The same
+-- advisory lock as 0039's serialises it with a link made there.
+create or replace function public.create_payee_link_with_options(
+  p_org_id          uuid,
+  p_counterparty_id uuid,
+  p_token_hash      text,
+  p_by              uuid,
+  p_expires_at      timestamptz,
+  p_asks_invoice    boolean,
+  p_offers_chain    boolean
+) returns public.payee_links
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_row public.payee_links;
+begin
+  perform pg_advisory_xact_lock(hashtext('vestiarion_payee_links:' || p_counterparty_id::text));
+  if not exists (select 1 from public.counterparties where org_id = p_org_id and id = p_counterparty_id) then
+    raise exception 'counterparty_not_found: no such counterparty in this workspace';
+  end if;
+  update public.payee_links set revoked_at = now()
+   where org_id = p_org_id and counterparty_id = p_counterparty_id and used_at is null and revoked_at is null;
+  perform public.close_payee_invoice_intake(p_org_id, p_counterparty_id);
+  insert into public.payee_links (org_id, counterparty_id, token_hash, created_by, expires_at, asks_invoice, offers_chain)
+  values (p_org_id, p_counterparty_id, p_token_hash, p_by, p_expires_at, coalesce(p_asks_invoice, false), coalesce(p_offers_chain, false))
+  returning * into v_row;
+  return v_row;
+end;
+$$;
+
+revoke execute on function public.create_payee_link_with_options(uuid, uuid, text, uuid, timestamptz, boolean, boolean) from public, anon, authenticated, vestiarion_tenant;
+grant execute on function public.create_payee_link_with_options(uuid, uuid, text, uuid, timestamptz, boolean, boolean) to service_role;
+
+-- 0039's revoke_payee_link: an unused link of the workspace is revoked, as before; a used link still waiting for its
+-- invoice, within its 30 days, stops taking one, and keeps showing the payee its payment's status. Whether it did either.
+create or replace function public.revoke_payee_link(p_org_id uuid, p_link_id uuid, p_by uuid) returns boolean
 language plpgsql
 security definer
 set search_path = ''
@@ -38,16 +105,23 @@ as $$
 declare
   v_changed int;
 begin
-  update public.payee_links
-     set asks_invoice = coalesce(p_asks_invoice, false), offers_chain = coalesce(p_offers_chain, false)
+  update public.payee_links set revoked_at = now()
    where id = p_link_id and org_id = p_org_id and used_at is null and revoked_at is null;
+  get diagnostics v_changed = row_count;
+  if v_changed > 0 then
+    return true;
+  end if;
+  update public.payee_links set invoice_closed_at = now()
+   where id = p_link_id and org_id = p_org_id and used_at is not null and revoked_at is null
+     and used_at > now() - interval '30 days'
+     and asks_invoice and invoice_at is null and invoice_closed_at is null;
   get diagnostics v_changed = row_count;
   return v_changed > 0;
 end;
 $$;
 
-revoke execute on function public.set_payee_link_options(uuid, uuid, boolean, boolean) from public, anon, authenticated, vestiarion_tenant;
-grant execute on function public.set_payee_link_options(uuid, uuid, boolean, boolean) to service_role;
+revoke execute on function public.revoke_payee_link(uuid, uuid, uuid) from public, anon, authenticated, vestiarion_tenant;
+grant execute on function public.revoke_payee_link(uuid, uuid, uuid) to service_role;
 
 -- An invoice a payee sent through its link: no extension connection, the link's id kept as an id (a link goes with its
 -- payee), one draft per link.
@@ -109,9 +183,10 @@ create trigger invoice_drafts_guard before update on public.invoice_drafts
   for each row execute function public.invoice_drafts_guard();
 
 -- The payee's invoice, as a draft sent for review in the link's workspace, for the link's payee. The fields are checked
--- here too: an invoice number of 1 to 100 characters, an amount above 0 with at most 6 decimals, a due day from today
--- (UTC) to a year ahead, a note of at most 500 characters. The document, when one was sent, is its kind, its SHA-256
--- and its text; the file itself is never stored. The note and the payee's name go in `read`, which never changes.
+-- here too: an invoice number of 1 to 100 characters with no control character and no link, an amount above 0 with at
+-- most 6 decimals, a due day from today (UTC) to a year ahead, a note of at most 500 characters with no control
+-- character but a line break. The document, when one was sent, is its kind, its SHA-256 and its text; the file itself
+-- is never stored. The note and the payee's name go in `read`, which never changes.
 create or replace function public.submit_payee_invoice(
   p_token_hash      text,
   p_invoice_number  text,
@@ -141,7 +216,7 @@ begin
      and ((l.used_at is null and l.expires_at > now())
           or (l.used_at is not null and l.used_at > now() - interval '30 days'))
    for update;
-  if not found then
+  if not found or v_link.invoice_closed_at is not null then
     raise exception 'payee_invoice_link_dead: this link no longer takes an invoice';
   end if;
   if not v_link.asks_invoice then
@@ -151,7 +226,8 @@ begin
     raise exception 'payee_invoice_sent: this link already sent its invoice';
   end if;
 
-  if p_invoice_number is null or char_length(btrim(p_invoice_number)) not between 1 and 100 then
+  if p_invoice_number is null or char_length(btrim(p_invoice_number)) not between 1 and 100
+     or p_invoice_number ~ '[[:cntrl:]]' or p_invoice_number ~* '(://|www\.)' then
     raise exception 'payee_invoice_invalid: the invoice number';
   end if;
   if p_amount is null or p_amount !~ '^(0|[1-9][0-9]{0,13})(\.[0-9]{1,6})?$' then
@@ -163,7 +239,7 @@ begin
   if p_due_date is null or p_due_date < v_today or p_due_date > (v_today + interval '1 year')::date then
     raise exception 'payee_invoice_invalid: the due date';
   end if;
-  if p_note is not null and char_length(p_note) > 500 then
+  if p_note is not null and (char_length(p_note) > 500 or replace(p_note, E'\n', '') ~ '[[:cntrl:]]') then
     raise exception 'payee_invoice_invalid: the note';
   end if;
 
@@ -215,8 +291,9 @@ $$;
 revoke execute on function public.submit_payee_invoice(text, text, text, date, text, text, text, text, text) from public, anon, authenticated, vestiarion_tenant;
 grant execute on function public.submit_payee_invoice(text, text, text, date, text, text, text, text, text) to service_role;
 
--- 0078's payee_link_status, with the link's options, whether its invoice arrived, and whether its payee may still choose
--- where it is paid.
+-- 0078's payee_link_status, with the link's options, whether its invoice arrived, whether the address on file is a
+-- mirror, and whether its payee may still choose where it is paid: not once anything owed to it, or paid, is on its
+-- current chain or in another currency than USDC, which a payment on another chain would strand.
 create or replace function public.payee_link_status(p_token_hash text)
 returns jsonb
 language sql
@@ -237,9 +314,10 @@ as $$
              c.address is not null
              and (c.address_changed_at is null
                   or (c.address_confirmed_at is not null and c.address_confirmed_at >= c.address_changed_at)),
-           'asksInvoice', l.asks_invoice,
+           'asksInvoice', l.asks_invoice and (l.invoice_at is not null or l.invoice_closed_at is null),
            'offersChain', l.offers_chain,
            'invoiceSent', l.invoice_at is not null,
+           'addressMirror', c.address is not null and c.mirror_wallet_id is not null,
            'chainOpen',
              l.offers_chain
              and l.used_at is null
@@ -254,7 +332,15 @@ as $$
                select 1
                  from public.milestones m
                  join public.payment_intents p on p.org_id = m.org_id and p.source_type = 'milestone' and p.source_id = m.id
-                where m.org_id = l.org_id and m.contractor_id = c.id),
+                where m.org_id = l.org_id and m.contractor_id = c.id)
+             -- A milestone is paid on the workspace's own chain only, and only USDC crosses chains.
+             and not exists (
+               select 1 from public.milestones m
+                where m.org_id = l.org_id and m.contractor_id = c.id and m.status not in ('paid', 'closed'))
+             and not exists (
+               select 1 from public.invoices i
+                where i.org_id = l.org_id and i.counterparty_id = c.id and i.direction = 'payable'
+                  and coalesce(i.currency, 'USDC') <> 'USDC' and i.status not in ('paid', 'rejected', 'received')),
            'payments', coalesce((
              select jsonb_agg(p.item order by p.created_at)
                from (
@@ -298,8 +384,9 @@ grant execute on function public.payee_link_status(text) to service_role;
 
 notify pgrst, 'reload schema';
 
--- Down (by hand, never by migrate.ts): restore 0078's payee_link_status and 0121's invoice_drafts_guard; delete the
--- drafts whose source is 'payee_link', then drop invoice_drafts_payee_link_key, invoice_drafts_payee_link_check and
--- invoice_drafts_connection_check, restore 0121's invoice_drafts_source_check and `connection_id ... not null`, and drop
--- invoice_drafts.payee_link_id; drop submit_payee_invoice and set_payee_link_options; drop payee_links.invoice_at,
+-- Down (by hand, never by migrate.ts): restore 0078's payee_link_status, 0039's revoke_payee_link and 0121's
+-- invoice_drafts_guard; delete the drafts whose source is 'payee_link', then drop invoice_drafts_payee_link_key,
+-- invoice_drafts_payee_link_check and invoice_drafts_connection_check, restore 0121's invoice_drafts_source_check and
+-- `connection_id ... not null`, and drop invoice_drafts.payee_link_id; drop submit_payee_invoice,
+-- create_payee_link_with_options and close_payee_invoice_intake; drop payee_links.invoice_closed_at, invoice_at,
 -- offers_chain and asks_invoice.

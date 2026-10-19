@@ -65,11 +65,15 @@ export interface PayeeLinkOptions {
   offersChain?: boolean;
 }
 
+/** PostgREST's "no such function" (PGRST202) or Postgres's (42883): migration 0133 has not run here yet. */
+const missingFunction = (error: { code?: string }) => error.code === "PGRST202" || error.code === "42883";
+
 /**
  * Makes a link for a counterparty of the workspace in scope, revoking the payee's unused one, and records it.
- * `provenance` names the surface it came from in the entry (write API part 2, W3); the console passes none. `options`
- * are set on the new link by their own function (0133); a link they could not be set on is revoked, and this throws:
- * it is not the link the member asked for.
+ * `provenance` names the surface it came from in the entry (write API part 2, W3); the console passes none. A link with
+ * `options` is made with them in one transaction (0133's create_payee_link_with_options); one without is made by 0039's
+ * function, as before. Either way, a used link of the payee still waiting for its invoice stops taking one (payee invoice
+ * link P6): only the newest link speaks for the payee.
  */
 export async function createPayeeLink(input: {
   orgId: string;
@@ -81,14 +85,18 @@ export async function createPayeeLink(input: {
 }): Promise<{ link: PayeeLink; token: string }> {
   const { token, secretHash } = generatePayeeLinkToken();
   const expiresAt = new Date((input.now ?? Date.now()) + PAYEE_LINK_TTL_MS).toISOString();
-  const result = await platformDb()
-    .rpc("create_payee_link", {
-      p_org_id: input.orgId,
-      p_counterparty_id: input.counterpartyId,
-      p_token_hash: secretHash,
-      p_by: input.actorId,
-      p_expires_at: expiresAt,
-    })
+  const asksInvoice = input.options?.asksInvoice === true;
+  const offersChain = input.options?.offersChain === true;
+  const made = { p_org_id: input.orgId, p_counterparty_id: input.counterpartyId, p_token_hash: secretHash, p_by: input.actorId, p_expires_at: expiresAt };
+  if (!asksInvoice && !offersChain) {
+    // Before 0133 no link takes an invoice, so there is nothing to close.
+    const closed = await platformDb().rpc("close_payee_invoice_intake", { p_org_id: input.orgId, p_counterparty_id: input.counterpartyId });
+    if (closed.error && !missingFunction(closed.error)) throw new Error(closed.error.message);
+  }
+  const result = await (asksInvoice || offersChain
+    ? platformDb().rpc("create_payee_link_with_options", { ...made, p_asks_invoice: asksInvoice, p_offers_chain: offersChain })
+    : platformDb().rpc("create_payee_link", made)
+  )
     .select("id, counterparty_id, expires_at")
     .single<{ id: string; counterparty_id: string; expires_at: string }>();
   if (result.error) {
@@ -96,23 +104,6 @@ export async function createPayeeLink(input: {
     throw new Error(result.error.message);
   }
   const link = { id: result.data.id, counterpartyId: result.data.counterparty_id, expiresAt: result.data.expires_at };
-
-  const asksInvoice = input.options?.asksInvoice === true;
-  const offersChain = input.options?.offersChain === true;
-  if (asksInvoice || offersChain) {
-    const set = await platformDb().rpc("set_payee_link_options", {
-      p_org_id: input.orgId,
-      p_link_id: link.id,
-      p_asks_invoice: asksInvoice,
-      p_offers_chain: offersChain,
-    });
-    if (set.error || set.data !== true) {
-      // Best effort: a link nobody has seen yet, which would otherwise ask for less than the member chose.
-      const revoked = await platformDb().rpc("revoke_payee_link", { p_org_id: input.orgId, p_link_id: link.id, p_by: input.actorId });
-      if (revoked.error) console.error("payee link: not revoked after its options failed", link.id);
-      throw new Error(set.error?.message ?? "payee link options were not set");
-    }
-  }
 
   await appendLedgerEntryBestEffort(input.orgId, {
     actor: "human",
@@ -149,24 +140,57 @@ export async function listActivePayeeLinks(orgId: string, now: number = Date.now
   return new Map(rows.map((row) => [row.counterparty_id, { id: row.id, expiresAt: row.expires_at }]));
 }
 
-/** Revokes an unused link of the workspace, and records it; false when there was nothing to revoke. */
-export async function revokePayeeLink(input: { orgId: string; actorId: string; linkId: string }): Promise<boolean> {
+/**
+ * The workspace's used links still waiting for their payee's invoice, by counterparty (payee invoice link P6): within the
+ * 30 days a used link takes one, neither sent nor closed. Revoke stops them. Empty before migration 0133, or when they
+ * cannot be read: Counterparties then shows what it did before.
+ */
+export async function listWaitingInvoiceLinks(orgId: string, now: number = Date.now()): Promise<Map<string, { id: string; until: string }>> {
+  try {
+    const rows = unwrap(
+      await platformDb()
+        .from("payee_links")
+        .select("id, counterparty_id, used_at")
+        .eq("org_id", orgId)
+        .eq("asks_invoice", true)
+        .is("revoked_at", null)
+        .is("invoice_at", null)
+        .is("invoice_closed_at", null)
+        .gt("used_at", new Date(now - INVOICE_DAYS_MS).toISOString())
+    ) as Array<{ id: string; counterparty_id: string; used_at: string }>;
+    return new Map(rows.map((row) => [row.counterparty_id, { id: row.id, until: new Date(Date.parse(row.used_at) + INVOICE_DAYS_MS).toISOString() }]));
+  } catch (error) {
+    console.error("payee links: links waiting for an invoice not read", error instanceof Error ? error.message : "unknown error");
+    return new Map();
+  }
+}
+
+/** How long a used link still takes its payee's invoice, as 0133's functions count it. */
+export const INVOICE_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Revokes an unused link of the workspace, or stops a used one still waiting for its invoice from taking it (payee
+ * invoice link P6), and records it; null when there was nothing to revoke. The used link keeps showing its payee the
+ * payment's status.
+ */
+export async function revokePayeeLink(input: { orgId: string; actorId: string; linkId: string }): Promise<"revoked" | "invoice_closed" | null> {
   const found = unwrap(
-    await platformDb().from("payee_links").select("counterparty_id").eq("org_id", input.orgId).eq("id", input.linkId).limit(1)
-  ) as Array<{ counterparty_id: string }>;
+    await platformDb().from("payee_links").select("counterparty_id, used_at").eq("org_id", input.orgId).eq("id", input.linkId).limit(1)
+  ) as Array<{ counterparty_id: string; used_at?: string | null }>;
   const revoked = unwrap(
     await platformDb().rpc("revoke_payee_link", { p_org_id: input.orgId, p_link_id: input.linkId, p_by: input.actorId })
   ) as boolean;
-  if (!revoked || found.length === 0) return false;
+  if (!revoked || found.length === 0) return null;
+  const invoiceOnly = typeof found[0].used_at === "string";
 
   await appendLedgerEntryBestEffort(input.orgId, {
     actor: "human",
     domain: "compliance",
     action: "payee_link_revoked",
-    summary: "Revoked a payee's address link",
-    detail: { by: input.actorId, counterpartyId: found[0].counterparty_id, linkId: input.linkId },
+    summary: invoiceOnly ? "Stopped a payee's link from taking their invoice" : "Revoked a payee's address link",
+    detail: { by: input.actorId, counterpartyId: found[0].counterparty_id, linkId: input.linkId, ...(invoiceOnly ? { invoiceOnly: true } : {}) },
   });
-  return true;
+  return invoiceOnly ? "invoice_closed" : "revoked";
 }
 
 export interface PayeeLinkPreview {
@@ -250,6 +274,7 @@ export async function payeeLinkStatus(token: string): Promise<PayeeLinkStatus | 
     asksInvoice: row.asksInvoice === true,
     offersChain: row.offersChain === true,
     invoiceSent: row.invoiceSent === true,
+    addressMirror: row.addressMirror === true,
     chainChoices: chainChoices.length > 1 ? chainChoices : [],
     payments,
   };
@@ -360,15 +385,18 @@ export async function submitPayeeAddress(token: string, raw: string, options: { 
 export type PayeeKeep = { ok: true; orgName: string } | { ok: false; reason: "invalid_link" | "no_address" };
 
 /**
- * The payee keeps the address the business has on file and moves on to its invoice (payee invoice link P4): the link
- * is used, once, as sending that same address uses it, and nothing changes. A payee with no address on file has none
- * to keep: the link is put back.
+ * The payee keeps the address the business has on file and moves on to its invoice (payee invoice link P4), on a link
+ * that asks for one: the link is used, once, as sending that same address uses it, nothing changes, and
+ * `counterparty_address_kept` is signed. A mirror address Vestiarion made in shadow mode is not the payee's to keep, and
+ * a payee with no address has none: the link is put back.
  */
 export async function keepPayeeAddress(token: string): Promise<PayeeKeep> {
   const hash = payeeLinkHash(token);
   if (!hash) return { ok: false, reason: "invalid_link" };
-  const preview = await previewPayeeLink(token, { withChain: false });
-  if (!preview) return { ok: false, reason: "invalid_link" };
+  const status = await platformDb().rpc("payee_link_status", { p_token_hash: hash });
+  if (status.error) throw new Error(status.error.message);
+  const open = status.data as { orgName?: unknown; asksInvoice?: unknown; linkState?: unknown } | null;
+  if (!open || open.asksInvoice !== true || open.linkState !== "open") return { ok: false, reason: "invalid_link" };
   const claimed = unwrap(await platformDb().rpc("claim_payee_link", { p_token_hash: hash })) as Array<{
     link_id: string;
     org_id: string;
@@ -377,19 +405,30 @@ export async function keepPayeeAddress(token: string): Promise<PayeeKeep> {
   const link = claimed[0];
   if (!link) return { ok: false, reason: "invalid_link" };
 
-  let address: string | null;
+  let kept: { name: string; address: string } | null;
   try {
-    address = await withOrg(link.org_id, async () => {
-      const found = unwrap(await db().from("counterparties").select("address").eq("id", link.counterparty_id).limit(1)) as Array<{ address: string | null }>;
-      return found[0]?.address ?? null;
+    kept = await withOrg(link.org_id, async () => {
+      const found = unwrap(
+        await db().from("counterparties").select("name, address, mirror_wallet_id").eq("id", link.counterparty_id).limit(1)
+      ) as Array<{ name: string; address: string | null; mirror_wallet_id?: string | null }>;
+      const row = found[0];
+      if (!row?.address || row.mirror_wallet_id) return null;
+      await appendLedgerEntryBestEffort(link.org_id, {
+        actor: "human",
+        domain: "compliance",
+        action: "counterparty_address_kept",
+        summary: `${row.name} kept the address on file through their payee link`,
+        detail: { by: null, via: "payee_link", linkId: link.link_id, counterpartyId: link.counterparty_id, address: row.address },
+      });
+      return { name: row.name, address: row.address };
     });
   } catch (error) {
     await platformDb().rpc("release_payee_link", { p_link_id: link.link_id });
     throw error;
   }
-  if (!address) {
+  if (!kept) {
     await platformDb().rpc("release_payee_link", { p_link_id: link.link_id });
     return { ok: false, reason: "no_address" };
   }
-  return { ok: true, orgName: preview.orgName };
+  return { ok: true, orgName: typeof open.orgName === "string" ? open.orgName : "" };
 }

@@ -1,17 +1,21 @@
 import { orgHref } from "../auth/org-paths";
+import { can } from "../auth/roles";
 import { billsHref } from "../bills-view";
 import { platformDb, unwrap } from "../dal";
 import { payeeInvoiceEmail } from "../email/payee-invoice";
 import { sendEmail } from "../email/send";
+import { listMembers } from "../platform/members";
 import { publicOrigin } from "../public-origin";
 import { recordUsageFor } from "../usage/record";
-import { decidingRecipients, DIGEST_MAX_RECIPIENTS } from "./waiting";
+
+/** Enough for any workspace's owners and admins; a bound so one invoice never fans out without limit. */
+const MAX_RECIPIENTS = 10;
 
 /**
- * Tells the members who decide payments that a payee sent its invoice through its payee link
- * (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P7): one email each, to those with email notices on,
- * opening Bills' review list. Metered as `payee_invoice`. Best effort: it never throws, logs any send that did not go
- * out, and returns how many did.
+ * Tells the members who add or discard a draft (`records.write`: owners and admins) that a payee sent its invoice through
+ * its payee link (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P7): one email each, opening Bills'
+ * review list. Metered as `payee_invoice`. Best effort: it never throws, logs any send that did not go out, and returns
+ * how many did.
  */
 export async function notifyPayeeInvoice(input: {
   orgId: string;
@@ -23,7 +27,7 @@ export async function notifyPayeeInvoice(input: {
 }): Promise<number> {
   try {
     const org = unwrap(await platformDb().from("orgs").select("slug").eq("id", input.orgId).single()) as { slug: string };
-    const recipients = (await decidingRecipients(input.orgId)).slice(0, DIGEST_MAX_RECIPIENTS);
+    const recipients = (await listMembers(input.orgId)).filter((member) => can(member.role, "records.write")).slice(0, MAX_RECIPIENTS);
     const origin = publicOrigin();
     const email = payeeInvoiceEmail({
       orgName: input.orgName,

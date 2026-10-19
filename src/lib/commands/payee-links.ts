@@ -1,5 +1,5 @@
 import { db, unwrap } from "../dal";
-import { chainChoiceFits, choosablePayeeChains } from "../payee-chain-choice";
+import { chainChoiceFits, choosablePayeeChains, payeesHeldToTheirChain } from "../payee-chain-choice";
 import { createPayeeLink, PayeeLinkError, type PayeeLinkOptions } from "../platform/payee-links";
 import { publicOrigin } from "../public-origin";
 import { provenanceOf, type Actor } from "./actor";
@@ -14,8 +14,9 @@ import { gate } from "./policy";
  * stored, and the error log names nothing of it.
  *
  * `options` (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P1), from the console only: also ask for the
- * payee's invoice, and let the payee choose where it is paid, which only a vendor with no address yet may be offered,
- * in a workspace that can pay more than one chain. Every other surface makes a link with both off.
+ * payee's invoice, and let the payee choose where it is paid, which only a vendor with no address yet, and nothing owed
+ * to it held to its chain, may be offered, in a workspace that can pay more than one chain. Every other surface makes a
+ * link with both off.
  */
 export async function issuePayeeLink(
   actor: Actor,
@@ -34,8 +35,14 @@ export async function issuePayeeLink(
 
     const asksInvoice = input.options?.asksInvoice === true;
     const offersChain = input.options?.offersChain === true;
-    if (offersChain && !(chainChoiceFits(found[0]) && (await choosablePayeeChains()).length > 0)) {
-      return refused("chain_not_offered", "Only a vendor with no address yet can choose where it is paid, and only where this workspace pays more than one chain.");
+    if (offersChain) {
+      const held = chainChoiceFits(found[0], new Set()) ? await payeesHeldToTheirChain([found[0].id]) : new Set([found[0].id]);
+      if (!chainChoiceFits(found[0], held) || (await choosablePayeeChains()).length === 0) {
+        return refused(
+          "chain_not_offered",
+          "Only a vendor with no address yet, and no milestone or bill in another currency than USDC still open, can choose where it is paid, and only where this workspace pays more than one chain."
+        );
+      }
     }
     const options = asksInvoice || offersChain ? { options: { ...(asksInvoice ? { asksInvoice } : {}), ...(offersChain ? { offersChain } : {}) } } : {};
     const { link, token } = await createPayeeLink({ orgId: actor.orgId, actorId: actor.userId, counterpartyId: input.counterpartyId, ...provenanceOf(actor), ...options });

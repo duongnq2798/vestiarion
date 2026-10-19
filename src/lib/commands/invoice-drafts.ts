@@ -283,7 +283,10 @@ async function linkDraft(actor: Actor, draftId: string, invoiceId: string, summa
   });
 }
 
-/** Discards a draft not yet decided (C5, C8); its captured text goes with the decision (C9). */
+/**
+ * Discards a draft not yet decided (C5, C8); its captured text goes with the decision (C9). The entry names where it
+ * came from, as the confirmation's does: the extension, or a payee's link (payee invoice link P5).
+ */
 export async function discardInvoiceDraft(actor: Actor, input: { draftId: string }): Promise<CommandOutcome> {
   const refusal = gate(actor, "invoice_draft.discard");
   if (refusal) return refusal;
@@ -298,7 +301,7 @@ export async function discardInvoiceDraft(actor: Actor, input: { draftId: string
     actor: "human",
     domain: "ap",
     action: "invoice_draft_discarded",
-    summary: "Discarded an invoice captured with the Chrome extension",
+    summary: discarded.source === "payee_link" ? "Discarded an invoice sent through a payee link" : "Discarded an invoice captured with the Chrome extension",
     detail: { by: actor.userId, draftId: discarded.id },
   });
   return done("Discarded.");

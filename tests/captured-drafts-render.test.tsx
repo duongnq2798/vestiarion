@@ -58,7 +58,11 @@ describe("an invoice a payee sent through its payee link (payee invoice link P5)
     expect(markup).toContain("Linh Tran sent it through their payee link, with a PDF");
     expect(markup).not.toContain("Chrome extension");
     expect(markup).toContain("Their note");
+    expect(markup).toContain("In the payee&#x27;s own words, not checked:");
     expect(markup).toContain("Logo work, October");
+    // The bill starts from the invoice number alone: the payee's words never reach its memo.
+    expect(markup).toMatch(/<textarea[^>]*name="memo"[^>]*>INV-7<\/textarea>|<input[^>]*name="memo"[^>]*value="INV-7"/);
+    expect(markup).not.toMatch(/name="memo"[^>]*value="[^"]*Logo work/);
     expect(markup).toContain("The payee typed this in, and no model read it.");
     expect(markup).toContain("The text of the file they sent");
     expect(markup).toContain("Review and add as bill");

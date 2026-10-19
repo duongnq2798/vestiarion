@@ -478,35 +478,50 @@ left, so its dialog keeps the links on screen after the page re-reads; the page 
 
 **A payee sends its invoice, and picks where it is paid, through its link**
 (`docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md`). Migration `0133` adds two options to `payee_links`,
-`asks_invoice` and `offers_chain`, both false unless a member ticks them in **Ask for address**, and `invoice_at`.
-`createPayeeLink` sets them with `set_payee_link_options` after `create_payee_link` (0039's, re-run by every migrate and
-never overloaded), revokes the link and throws if they cannot be set, and records them on `payee_link_created`.
-`issuePayeeLink` takes them from the console only; every other surface makes links with both off.
+`asks_invoice` and `offers_chain`, both false unless a member ticks them in **Ask for address**, `invoice_at` and
+`invoice_closed_at`. `createPayeeLink` makes a link with an option through `create_payee_link_with_options` (the payee's
+unused link revoked, its earlier used links' invoice closed, the new link inserted with its options, one transaction
+under 0039's advisory lock), and one without through 0039's `create_payee_link`, which is re-run by every migrate and
+left as it is, after `close_payee_invoice_intake`. `payee_link_created` records the options. `issuePayeeLink` takes them
+from the console only; every other surface makes links with both off. 0133 redefines `revoke_payee_link`: an unused
+link is revoked as before, and a used link still waiting for its invoice gets `invoice_closed_at` and keeps its status
+page; `revokePayeeLink` answers which (`payee_link_revoked` carries `invoiceOnly`), and Counterparties lists such links
+(`listWaitingInvoiceLinks`) with Revoke.
 - **Choosing the chain:** `choosablePayeeChains` (`src/lib/payee-chain-choice.ts`), in the workspace's scope, is the
   network's payee chains when there are more than one, and none for a workspace paying from the owner's wallet without
   an enforced version 2 contract (the same rule Approve and pay refuses by). Counterparties offers the box for a vendor
-  with no address; `payee_link_status` says `chainOpen` when the link offers it, is unused, and its payee is a vendor
-  with no address and no `payment_intents` row for any of its invoices or milestones. `payeeLinkStatus` turns that into
-  `chainChoices`, read in the paying workspace's scope. `submitPayeeAddress(token, raw, { chain })` reads `chainOpen`
-  before claiming the link, checks the chain against `choosablePayeeChains` after (releasing the link when it is not
-  one), and `changeCounterpartyAddress` writes `address` and `chain` in one compare-and-set guarded on the chain read.
-  `counterparty_address_changed` records `chain` and, for a chosen chain, `fromChain`; Counterparties shows the chain
-  beside the address, and `confirmCounterpartyAddress` refuses a `shownChain` that is no longer the payee's as stale.
+  with no address that no open milestone and no open bill in another currency than USDC holds to its chain
+  (`payeesHeldToTheirChain`, `chainChoiceFits`); `issuePayeeLink` checks the same. `payee_link_status` says
+  `chainOpen` when the link offers it, is unused, and its payee is a vendor with no address, no `payment_intents` row
+  for any of its invoices or milestones, no milestone not yet paid or closed and no open payable not in USDC.
+  `payeeLinkStatus` turns that into `chainChoices`, read in the paying workspace's scope. `submitPayeeAddress(token, raw,
+  { chain })` reads `chainOpen` before claiming the link, checks the chain against `choosablePayeeChains` after
+  (releasing the link when it is not one), and `changeCounterpartyAddress` writes `address` and, when it is another
+  than the effective one (none recorded is the network's own), `chain`, in one compare-and-set guarded on the chain
+  read. `counterparty_address_changed` records the effective `chain` and, for a real change, `fromChain`;
+  `counterparty_address_confirmed` records `chain`. Counterparties shows the chain beside the address, and
+  `confirmCounterpartyAddress` refuses a `shownChain` that is no longer the payee's as stale.
 - **The invoice:** `submitPayeeInvoice` (`src/lib/platform/payee-invoices.ts`) checks the fields (`readPayeeInvoice`,
-  `src/lib/payee-invoice.ts`), takes a per-link token (`takePayeeInvoiceToken`: three, then one every 20 seconds), looks
-  the link up with `payee_link_status` so a page with no live link asking for an invoice reads no file, reads an
-  optional file with `readDocument` (text and SHA-256 only, no model, the file dropped), and calls
-  `submit_payee_invoice`, which locks the link, checks it is unrevoked and unexpired or used within 30 days, asks for an
-  invoice and has none, inserts an `invoice_drafts` row (source `payee_link`, state `sent`, `connection_id` null,
-  `payee_link_id` unique, the note and the payee's name in `read`) and stamps `invoice_at`, in one transaction. It
-  signs `payee_invoice_submitted` (`by: null`) and emails `decidingRecipients` (`payeeInvoiceEmail`, a member email with
-  no loop, metered as `payee_invoice`), both best effort. Bills lists it among the captured drafts
-  (`capturedCountLabel`, `capturedTitle`), and `confirmInvoiceDraft` adds it through `addInvoice` as the member's bill,
-  its `create_invoice` naming `via: "payee_link"` and `payeeLinkId`.
-- **The page:** the steps gain **Your invoice** after the address when the link asks for one (`payeeStage` `invoice`);
-  a payee with an address on file can keep it (`keepPayeeAddress` claims the link and changes nothing). The address
-  form puts the chain first when `chainChoices` has more than one, and a fourth box names it. Every refusal is a fixed
-  sentence, and the page keeps `SiteFooter loop="payee_link"`.
+  `src/lib/payee-invoice.ts`: an invoice number on one line with no control character and no link, a note whose only
+  control character is a line break), looks the link up with `payee_link_status` so a page with no live link asking
+  for an invoice reads no file, only then takes a per-link token (`takePayeeInvoiceToken`: three, then one every 20
+  seconds; made-up tokens never get a bucket), reads an optional file with `readDocument` (text and SHA-256 only, no
+  model, the file dropped), and calls `submit_payee_invoice`, which locks the link, checks it is unrevoked, its invoice
+  not closed, and unexpired or used within 30 days, asks for an invoice and has none, checks the fields again, inserts an
+  `invoice_drafts` row (source `payee_link`, state `sent`, `connection_id` null, `payee_link_id` unique, the note and
+  the payee's name in `read`) and stamps `invoice_at`, in one transaction. It signs `payee_invoice_submitted`
+  (`by: null`) and emails the members with `records.write`, who add or discard it (`payeeInvoiceEmail`, a member email
+  with no loop, metered as `payee_invoice`), both best effort. Bills lists it among the captured drafts
+  (`capturedCountLabel`, `capturedTitle`) with the note shown as the payee's own words; the bill's memo starts from the
+  invoice number alone. `confirmInvoiceDraft` adds it through `addInvoice` as the member's bill, its `create_invoice`
+  naming `via: "payee_link"` and `payeeLinkId`, and `discardInvoiceDraft` names its source too.
+- **The page:** the steps gain **Your invoice** after the address when the link asks for one (`payeeStage` `invoice`),
+  which refreshes itself like the steps that wait on the business. Once the address is confirmed and a payment is on
+  its way or paid, that comes first and the invoice it can still take second (`invoiceOpen`). A payee with an address
+  of its own on file can keep it on a link that asks for an invoice (`keepPayeeAddress` claims the link, changes nothing
+  and signs `counterparty_address_kept`; a mirror address made in shadow mode, `addressMirror`, is not offered). The
+  address form puts the chain first when `chainChoices` has more than one, and a fourth box names it. Every refusal is
+  a fixed sentence, and the page keeps `SiteFooter loop="payee_link"`.
 
 **No address, nothing sent.** Wherever payments are real, a pay or schedule decision for a counterparty with no
 payment address is held by `counterparty.no_address` (`enforceApGuardrails`) before any limit is read or transfer tried,

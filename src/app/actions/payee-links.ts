@@ -85,6 +85,10 @@ export async function askEveryPayeeAction(_previous: AskEveryPayeeResult, formDa
   });
 }
 
+/**
+ * Revokes an unused link, or stops a used one still waiting for its payee's invoice from taking it (payee invoice link
+ * P6): the payee still sees their payment's status there.
+ */
 export async function revokePayeeLinkAction(_previous: PayeeLinkActionResult, formData: FormData): Promise<PayeeLinkActionResult> {
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
@@ -94,6 +98,7 @@ export async function revokePayeeLinkAction(_previous: PayeeLinkActionResult, fo
     try {
       const revoked = await revokePayeeLink({ orgId: auth.membership.orgId, actorId: auth.user.id, linkId: linkId.data });
       revalidateOrgPages();
+      if (revoked === "invoice_closed") return { ok: true, message: "Link revoked. It no longer takes their invoice." };
       return revoked ? { ok: true, message: "Link revoked. It no longer works." } : { ok: false, message: "That link was already used or revoked." };
     } catch {
       console.error("payee link revocation failed");

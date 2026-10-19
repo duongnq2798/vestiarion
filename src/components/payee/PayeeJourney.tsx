@@ -6,10 +6,11 @@ import PayeeAddressForm from "@/components/PayeeAddressForm";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Hash, Money } from "@/components/vx/Primitives";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { SIMULATED_PAYMENT } from "@/lib/capability";
-import { amountsLine, maskAddress, payeeStage, paymentSimulated, paymentState, type PayeeLinkStatus, type PayeePayment, type PaymentTone, type PayeeStage } from "@/lib/payee-journey";
+import { amountsLine, invoiceOpen, maskAddress, payeeStage, paymentSimulated, paymentState, type PayeeLinkStatus, type PayeePayment, type PaymentTone, type PayeeStage } from "@/lib/payee-journey";
 import { yearAfter } from "@/lib/payee-invoice";
 import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
 import { passkeyWalletConfig, passkeyWalletOffered } from "@/lib/passkey-wallet";
@@ -41,20 +42,22 @@ export function PayeeJourney({ token, status, refresh = true, simulated = false 
   const stage = payeeStage(status);
   return (
     <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
-      <PayeeSteps stage={stage} withInvoice={status.asksInvoice === true} />
+      <PayeeSteps stage={stage} withInvoice={status.asksInvoice === true} invoicePending={invoiceOpen(status)} />
       <div className="mt-5">
         {stage === "address" && <AddressStep token={token} status={status} simulated={simulated} />}
         {stage === "invoice" && <InvoiceStep token={token} status={status} />}
         {stage === "confirming" && <ConfirmingStep status={status} />}
         {stage === "paying" && <PayingStep status={status} simulated={simulated} />}
         {stage === "paid" && <PaidStep status={status} simulated={simulated} />}
+        {(stage === "paying" || stage === "paid") && <InvoiceStillOpen token={token} status={status} />}
       </div>
       {refresh && waitsOnSomeone(stage) && <AutoRefresh intervalMs={PAYEE_REFRESH_MS} />}
     </section>
   );
 }
 
-const waitsOnSomeone = (stage: PayeeStage) => stage === "confirming" || stage === "paying";
+// The invoice step refreshes too, so a confirmation or a payment shows there as it happens; a half-typed form stays.
+const waitsOnSomeone = (stage: PayeeStage) => stage === "invoice" || stage === "confirming" || stage === "paying";
 
 function Heading({ children }: { children: ReactNode }) {
   return <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink [overflow-wrap:anywhere]">{children}</h1>;
@@ -102,7 +105,7 @@ function AddressStep({ token, status, simulated }: { token: string; status: Paye
           {...(choosing
             ? { chains: choices, defaultChain: status.chain, passkeyChains: choices.filter((entry) => passkeyWalletOffered(entry.id, config)).map((entry) => entry.id) }
             : {})}
-          {...(asksInvoice && status.address ? { keep: { masked: maskAddress(status.address) } } : {})}
+          {...(asksInvoice && status.address && !status.addressMirror ? { keep: { masked: maskAddress(status.address) } } : {})}
           intro={
             <ol className="mb-2 grid gap-2 text-sm leading-6 text-ink-2">
               {steps.map((step, index) => (
@@ -145,6 +148,20 @@ function InvoiceStep({ token, status }: { token: string; status: PayeeLinkStatus
         {NO_SECRETS} This link takes your invoice until {utcDay(status.statusUntil)}.
       </Footnote>
     </>
+  );
+}
+
+/**
+ * Under a payment on its way or paid, on a link that still takes the payee's invoice: the form, folded, second to the
+ * payment's state (P4).
+ */
+function InvoiceStillOpen({ token, status }: { token: string; status: PayeeLinkStatus }) {
+  if (!invoiceOpen(status)) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <Disclosure summary="You can still send your invoice" className="mt-5">
+      <PayeeInvoiceForm token={token} orgName={status.orgName} today={today} lastDay={yearAfter(today)} />
+    </Disclosure>
   );
 }
 

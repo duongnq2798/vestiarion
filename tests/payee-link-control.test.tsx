@@ -36,6 +36,18 @@ describe("PayeeLinkControl", () => {
   });
 });
 
+describe("a used link still waiting for the payee's invoice (payee invoice link P6)", () => {
+  it("says so, until when, and offers Revoke, which stops it", () => {
+    const markup = render(
+      <PayeeLinkControl orgSlug="acme" counterparty={PAYEE} activeLink={null} waitingInvoice={{ id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e2", until: "2026-10-29T12:00:00.000Z" }} />
+    );
+    const page = text(markup);
+    expect(page).toContain("Waiting for their invoice · until Oct 29, 2026");
+    expect(page).toContain("Revoke");
+    expect(markup).toContain('value="0b6c1c9e-4a4f-4a7e-9b1e-0000000001e2"');
+  });
+});
+
 describe("the create form's options (payee invoice link P1)", () => {
   // The dialog's content renders only once it is open, so the form is read from its source here, and its boxes from
   // the component that draws them.

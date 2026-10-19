@@ -150,7 +150,11 @@ function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { org
         {draft.note && (
           <>
             <dt className="text-ink-3">Their note</dt>
-            <dd className="whitespace-pre-line text-ink [overflow-wrap:anywhere]">{draft.note}</dd>
+            <dd className="text-ink">
+              {/* The payee's own words, shown as text and kept out of the bill, which starts from the invoice number alone. */}
+              <span className="block text-xs text-ink-3">In the payee&apos;s own words, not checked:</span>
+              <span className="block whitespace-pre-line [overflow-wrap:anywhere]">{draft.note}</span>
+            </dd>
           </>
         )}
       </dl>
@@ -204,7 +208,7 @@ function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { org
                 dueDate: fields.dueDate,
                 earlyPayDiscountPct: draft.extracted?.earlyPayDiscountPct ?? null,
                 discountDeadline: draft.extracted?.discountDeadline ?? null,
-                memo: startingMemo(fields.invoiceNumber, fields.memo ?? draft.note ?? null),
+                memo: startingMemo(fields.invoiceNumber, fields.memo),
                 poReference: fields.poReference,
               }}
             />

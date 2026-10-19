@@ -40,19 +40,32 @@ export interface PayeeLinkStatus {
   invoiceSent?: boolean;
   /** Whether the link offers the payee to choose where it is paid (P1). */
   offersChain?: boolean;
+  /** Whether the address on file is a mirror Vestiarion made in shadow mode, which is not the payee's to keep (P4). */
+  addressMirror?: boolean;
   /** The chains the payee may choose among, its network's own first; empty or absent when it may not choose (P2). */
   chainChoices?: string[];
 }
 
 /**
  * Step 1 `address`, then `invoice` when the link asks for one not yet sent (P4), then `confirming`, `paying`, and
- * `paid` once every payment is.
+ * `paid` once every payment is. The invoice never outranks a payment under way: once the address is confirmed and a
+ * payment is on its way or paid, the page shows that, and the invoice it can still take comes second (`invoiceOpen`).
  */
 export type PayeeStage = "address" | "invoice" | "confirming" | "paying" | "paid";
 
+/** Whether the link still takes the payee's invoice: it asks for one, none was sent, and no member closed it (0133). */
+export function invoiceOpen(status: Pick<PayeeLinkStatus, "asksInvoice" | "invoiceSent">): boolean {
+  return status.asksInvoice === true && status.invoiceSent !== true;
+}
+
+/** A payment to a confirmed address that is on its way or paid. */
+function paymentUnderway(status: PayeeLinkStatus): boolean {
+  return Boolean(status.address) && status.addressConfirmed && status.payments.some((payment) => payment.status === "matched" || payment.status === "paid");
+}
+
 export function payeeStage(status: PayeeLinkStatus): PayeeStage {
   if (status.linkState === "open") return "address";
-  if (status.asksInvoice && !status.invoiceSent) return "invoice";
+  if (invoiceOpen(status) && !paymentUnderway(status)) return "invoice";
   if (!status.address || !status.addressConfirmed) return "confirming";
   if (status.payments.length > 0 && status.payments.every((payment) => payment.status === "paid")) return "paid";
   return "paying";

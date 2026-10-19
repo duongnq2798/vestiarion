@@ -23,15 +23,18 @@ acts:
   - **Also ask for their invoice** (`asks_invoice`): for any payee except a client.
   - **Let them choose where they are paid** (`offers_chain`): only for a vendor, and only on a network whose payee
     chains are more than one. On Arc mainnet those are Arc mainnet and Base; on Arc testnet, Arc testnet and the
-    Sepolia chains. The box is also hidden when the workspace pays through a version 1 spending-limit contract, which
-    pays on its own chain only.
+    Sepolia chains. The box is also hidden when the workspace pays from the owner's wallet without an enforced version 2
+    spending-limit contract (version 1 pays on its own chain only), and for a vendor with an address, a milestone not
+    yet paid or closed, or an open bill in another currency than USDC.
 
   Both are off by default, so a link made without them works as before. Pay a freelancer, **Ask every payee** and the
   API keep making links with both off; the API does not change in this version.
 - **P2. Choosing the chain.** On the link's page, when the link offers it, the payee picks where its wallet receives
   USDC, among the workspace network's payee chains, before giving the address. The chain can only be chosen when:
   - the counterparty has no address on file;
-  - and no payment to it exists.
+  - no payment to it exists;
+  - and nothing open for it must be paid on its current chain: no milestone not yet paid or closed (milestones are paid
+    on the workspace's own chain), and no open bill in another currency than USDC (only USDC crosses chains).
 
   Otherwise the page names the chain on file, as today. The address and the chain are written together, in one
   compare-and-set: the address is then new, so `address_changed_at` is stamped and every payment waits for a person
@@ -39,14 +42,23 @@ acts:
   chain.
 - **P3. The chain is part of what a person confirms.**
   - Confirming an address on **Counterparties** shows its chain beside it.
-  - `counterparty_address_changed` records `chain` (and `fromChain` when it changed).
+  - `counterparty_address_changed` records `chain`, the effective chain (none recorded is the network's own), and
+    `fromChain` only when it really changed: choosing the network's own chain where none is recorded writes nothing.
+    `counterparty_address_confirmed` records `chain` too.
   - The new-payee check counts an address as paid before only on the same chain: a first payment on Base to an address
     paid on Arc is still a first payment.
-- **P4. The invoice.** Asked after the address step, or alone when the address on file is kept. The payee gives:
-  - an invoice number (up to 100 characters);
+- **P4. The invoice.** Asked after the address step, or alone when the address on file is kept. Keeping it is only on
+  a link that asks for an invoice, never for a mirror address made in shadow mode, and is signed as
+  `counterparty_address_kept`. The payee gives:
+  - an invoice number (up to 100 characters, one line, no control character, no link);
   - the amount, in USDC, more than 0 with at most 6 decimals;
   - a due date, from today to a year ahead;
-  - optionally a note (up to 500 characters) and the invoice as a PDF or text file, up to 4 MB.
+  - optionally a note (up to 500 characters of plain text, line breaks allowed) and the invoice as a PDF or text file,
+    up to 4 MB.
+
+  The invoice step never outranks a payment under way: once the address is confirmed and a payment is on its way or
+  paid, the page shows that first, with the invoice form second while the link still takes one. The step refreshes
+  itself like the others.
 
   The file is read for its text only, with the same reader as **From a document**, with no model call. Its text and
   SHA-256 are kept on the draft; the file itself is never stored. One invoice per link.
@@ -54,18 +66,22 @@ acts:
   `source = 'payee_link'`, state `sent` and the link's counterparty. It shows on **Bills**, in **Waiting for review**,
   with the payee's name and "sent through their payee link".
   - A member adds it with the existing confirm, which runs the duplicate check and adds the bill as theirs, so whoever
-    adds it is "whoever entered it" and cannot approve it alone.
-  - A member can also discard it. Then the agent decides the bill like any other.
+    adds it is "whoever entered it" and cannot approve it alone. Once added, the agent decides the bill like any other.
+  - The bill's memo starts from the invoice number alone; the payee's note is shown in the review, as the payee's own
+    words, and never copied into the bill.
+  - A member can also discard it; the entry names where it came from.
 - **P6. Limits.**
   - Each link accepts one invoice, enforced in the database.
-  - A per-link limit in memory stops a page from hammering the reader.
+  - A per-link limit in memory stops a page from hammering the reader. It is taken only once the link is known to be
+    live, before any file is read, so made-up tokens add nothing to it.
   - The address step keeps its one-use claim. The invoice can be sent while the link is unexpired, or within 30 days
-    after its address step, and never after a member revokes it.
+    after its address step, and never after a member revokes it. **Revoke** on Counterparties stops a used link still
+    waiting for its invoice (its status page stays), and making a newer link for the same payee does too.
 - **P7. Recorded and told.**
   - `payee_invoice_submitted` is signed: actor human, `by: null`, domain compliance, with `via: "payee_link"`,
     `linkId`, `draftId`, `counterpartyId`, `amount`, `currency`, `invoiceNumber` and `documentSha256` (or null).
-  - The members who decide payments get one email, "{payee} sent an invoice through their payee link". It is a
-    member email, with no counterparty loop link, metered as `payee_invoice`.
+  - The members who add or discard it (`records.write`: owners and admins) get one email, "{payee} sent an invoice
+    through their payee link". It is a member email, with no counterparty loop link, metered as `payee_invoice`.
 - **P8. Nothing pays because of the link.**
   - An address still waits for a person's confirmation.
   - An invoice still waits for a member to add it.
@@ -74,8 +90,8 @@ acts:
 
 ## Database (0133, additive, idempotent)
 
-- `payee_links` gets `asks_invoice boolean not null default false`, `offers_chain boolean not null default false`, and
-  `invoice_at timestamptz`.
+- `payee_links` gets `asks_invoice boolean not null default false`, `offers_chain boolean not null default false`,
+  `invoice_at timestamptz` and `invoice_closed_at timestamptz`.
 - `invoice_drafts` changes:
   - `connection_id` becomes nullable;
   - a new `payee_link_id uuid` column;
@@ -84,10 +100,14 @@ acts:
   - a unique index on `payee_link_id` where it is present.
 - `submit_payee_invoice(...)`: definer, service role only. It locks the link and checks P6, inserts the draft (state
   `sent`) and stamps `invoice_at`, all in one transaction.
-- `payee_link_status` is redefined to add `asksInvoice`, `offersChain`, `invoiceSent` and the chains the payee may
-  choose.
-- A new options setter, since 0039's `create_payee_link` is re-run every time and is not overloaded. The new RPCs are
-  registered in `PLATFORM_RPCS`.
+- `payee_link_status` is redefined to add `asksInvoice` (false once a member closed it), `offersChain`, `invoiceSent`,
+  `addressMirror` and `chainOpen`, whether the payee may choose its chain by the database's facts (P2); which chains,
+  and whether the workspace can pay them, is read in its scope.
+- `create_payee_link_with_options` makes a link with its options in one transaction: it revokes the payee's unused
+  link, closes its earlier used links' invoice and inserts the new one, since 0039's `create_payee_link` is re-run
+  every time and is not overloaded or changed. `close_payee_invoice_intake` closes them alone, before a link 0039's
+  function makes. `revoke_payee_link` is redefined: an unused link is revoked as before; a used link still waiting for
+  its invoice gets `invoice_closed_at`. The new RPCs are registered in `PLATFORM_RPCS`.
 
 ## What it does not do
 

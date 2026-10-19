@@ -42,6 +42,8 @@ vi.mock("@/lib/platform/payee-links", async (importOriginal) => ({
   ...lib,
 }));
 vi.mock("@/lib/platform/payee-invoices", () => ({ submitPayeeInvoice: invoiceMock }));
+// Where the page refreshes itself, it says so in the markup.
+vi.mock("@/components/AutoRefresh", () => ({ AutoRefresh: () => <span data-auto-refresh="" /> }));
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1";
@@ -125,6 +127,11 @@ describe("revokePayeeLinkAction", () => {
     expect(authorizeMock).toHaveBeenCalledWith("acme", "records.write");
     expect(lib.revokePayeeLink).toHaveBeenCalledWith({ orgId: ORG, actorId: USER, linkId: LINK });
     expect(result).toEqual({ ok: true, message: "Link revoked. It no longer works." });
+  });
+
+  it("says a used link no longer takes the payee's invoice when that is what Revoke stopped (payee invoice link P6)", async () => {
+    lib.revokePayeeLink.mockResolvedValue("invoice_closed");
+    expect(await revokePayeeLinkAction(empty, form({ orgSlug: "acme", linkId: LINK }))).toEqual({ ok: true, message: "Link revoked. It no longer takes their invoice." });
   });
 
   it("says when the link was already used or gone", async () => {
@@ -395,9 +402,37 @@ describe("the payee's page", () => {
     expect(page).toContain("Still yours?");
     expect(page).not.toContain(ADDRESS);
     expect(page).toContain("Keep this address");
-    // Not offered on a link that asks for the address alone.
+    // Not offered on a link that asks for the address alone, nor for a mirror Vestiarion made, which is not theirs.
     lib.payeeLinkStatus.mockResolvedValue(status({ address: ADDRESS, addressConfirmed: true }));
     expect(text(await render())).not.toContain("Keep this address");
+    lib.payeeLinkStatus.mockResolvedValue(status({ asksInvoice: true, address: ADDRESS, addressConfirmed: true, addressMirror: true }));
+    expect(text(await render())).not.toContain("Keep this address");
+  });
+
+  it("refreshes itself on the invoice step, as on the steps that wait on the business", async () => {
+    const used = { linkState: "used", usedAt: "2026-10-02T09:00:00Z", statusUntil: "2026-11-01T09:00:00Z", address: ADDRESS };
+    lib.payeeLinkStatus.mockResolvedValue(status({ ...used, asksInvoice: true, invoiceSent: false }));
+    expect(await render()).toContain("data-auto-refresh");
+    lib.payeeLinkStatus.mockResolvedValue(status());
+    expect(await render()).not.toContain("data-auto-refresh");
+  });
+
+  it("puts a payment on its way first, and the invoice it can still take second (payee invoice link P4)", async () => {
+    lib.payeeLinkStatus.mockResolvedValue(
+      status({
+        linkState: "used", usedAt: "2026-10-02T09:00:00Z", statusUntil: "2026-11-01T09:00:00Z", address: ADDRESS, addressConfirmed: true, asksInvoice: true, invoiceSent: false,
+        payments: [{ kind: "invoice", title: "Logo", amount: 5, currency: "USDC", status: "matched", txRef: null, settledAt: null, scheduledFor: null }],
+      })
+    );
+    const markup = await render();
+    const page = text(markup);
+    expect(page).toContain("Step 4 of 4");
+    expect(page).toContain("Your address is confirmed");
+    expect(page).toContain("On its way");
+    expect(page).toContain("You can still send your invoice");
+    expect(page.indexOf("Your address is confirmed")).toBeLessThan(page.indexOf("You can still send your invoice"));
+    expect(markup).toMatch(/name="invoiceNumber"/);
+    expect(page).not.toContain("Send Acme your invoice");
   });
 
   it("asks where the wallet receives USDC first, on a link that lets the payee choose (payee invoice link P2)", async () => {

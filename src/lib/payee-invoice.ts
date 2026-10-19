@@ -22,10 +22,10 @@ export type PayeeInvoiceField = "invoiceNumber" | "amount" | "dueDate" | "note" 
 
 /** What the payee reads when a field is not right: fixed sentences, never what failed inside. */
 export const PAYEE_INVOICE_MESSAGES: Record<PayeeInvoiceField, string> = {
-  invoiceNumber: "Enter your invoice number, up to 100 characters.",
+  invoiceNumber: "Enter your invoice number: up to 100 characters on one line, with no link.",
   amount: "Enter the amount in USDC, more than 0 with at most 6 decimals, such as 1250.00.",
   dueDate: "Choose a due date from today to a year from today.",
-  note: "Keep the note to 500 characters.",
+  note: "Keep the note to 500 characters of plain text.",
   file: "Choose a PDF or a text file.",
 };
 
@@ -39,6 +39,12 @@ export const PAYEE_FILE_MESSAGES: Record<DocumentReadErrorCode, string> = {
 
 const AMOUNT = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
 const DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+/** Any control character: an invoice number is one line of plain text. */
+const CONTROL = /\p{Cc}/u;
+/** Any control character but a line break: a note may have lines, and nothing else unseen. */
+const CONTROL_BUT_LINE_BREAK = /(?!\n)\p{Cc}/u;
+/** A link, which an invoice number never needs and a reviewer might open. */
+const LINK = /:\/\/|\bwww\./i;
 
 /** A real `YYYY-MM-DD` day, or null. */
 function realDay(value: string): string | null {
@@ -62,19 +68,27 @@ export interface PayeeInvoice {
   note: string | null;
 }
 
-/** The fields as the page sends them, checked; `today` is the UTC day. */
+/**
+ * The fields as the page sends them, checked; `today` is the UTC day. The payee's words are plain text: an invoice
+ * number on one line with no control character and no link, a note whose only control character is a line break (a
+ * browser sends a text box's line breaks as CR LF, read here as one).
+ */
 export function readPayeeInvoice(
   raw: { invoiceNumber: string; amount: string; dueDate: string; note: string },
   today: string
 ): { ok: true; invoice: PayeeInvoice } | { ok: false; field: PayeeInvoiceField; message: string } {
   const refuse = (field: PayeeInvoiceField) => ({ ok: false as const, field, message: PAYEE_INVOICE_MESSAGES[field] });
+  // Checked as sent, before anything is dropped from it.
+  if (CONTROL.test(raw.invoiceNumber.trim()) || LINK.test(raw.invoiceNumber)) return refuse("invoiceNumber");
   const invoiceNumber = storableText(raw.invoiceNumber).trim();
   if (invoiceNumber === "" || [...invoiceNumber].length > PAYEE_INVOICE_NUMBER_MAX) return refuse("invoiceNumber");
   const amount = raw.amount.trim();
   if (!AMOUNT.test(amount) || !(Number(amount) > 0)) return refuse("amount");
   const dueDate = realDay(raw.dueDate.trim());
   if (!dueDate || dueDate < today || dueDate > yearAfter(today)) return refuse("dueDate");
-  const note = storableText(raw.note).trim();
+  const lines = raw.note.replace(/\r\n?/g, "\n").trim();
+  if (CONTROL_BUT_LINE_BREAK.test(lines)) return refuse("note");
+  const note = storableText(lines);
   if ([...note].length > PAYEE_INVOICE_NOTE_MAX) return refuse("note");
   return { ok: true, invoice: { invoiceNumber, amount, dueDate, note: note || null } };
 }

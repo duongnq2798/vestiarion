@@ -16,17 +16,19 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 - **A payee sends its invoice, and picks where it is paid, through its payee link.** Creating a payee link on
   **Counterparties** now offers two boxes, both off by default: **Also ask for their invoice**, and, for a vendor with
-  no address yet on a network that pays more than one chain, **Let them choose where they are paid**. The payee then
-  chooses the chain its wallet receives USDC on before giving its address (Arc mainnet or Base; Arc testnet or a
-  Sepolia chain); the chain is written with the address, waits for the same confirmation, and is named beside the
-  address on Counterparties. The invoice (its number, the amount in USDC, the due date, and optionally a note and a PDF
-  or text file, read for its text with no model and never stored) waits on Bills under **Waiting for review** as
-  "Invoice from *payee*" until a member adds it as a bill they entered, or discards it, and the members who decide
-  payments get one email. A link takes one invoice. The new payee check now counts an address as paid only on the same
-  chain. Signed as `payee_invoice_submitted`, and `counterparty_address_changed` records the chain. Ask every payee, Pay
-  a freelancer and the API make links as before. Migration `0133_payee_link_invoices.sql` adds the link's options and
-  the drafts' new source.
-  [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#ask-a-payee-for-their-address).
+  no address yet on a network that pays more than one chain, **Let them choose where they are paid** (not while a
+  milestone or a bill in another currency than USDC is open for it). The payee then chooses the chain its wallet
+  receives USDC on before giving its address (Arc mainnet or Base; Arc testnet or a Sepolia chain); the chain is
+  written with the address, waits for the same confirmation, and is named beside the address on Counterparties. A
+  payee with an address of its own on file can keep it instead. The invoice (its number, the amount in USDC, the due
+  date, and optionally a note of plain text and a PDF or text file, read for its text with no model and never stored)
+  waits on Bills under **Waiting for review** as "Invoice from *payee*" until a member adds it as a bill they entered,
+  or discards it, and the owners and admins get one email. A link takes one invoice; **Revoke** stops a used link
+  still waiting for it, and so does a newer link for the payee. The new payee check now counts an address as paid only
+  on the same chain. Signed as `payee_invoice_submitted` and `counterparty_address_kept`, and
+  `counterparty_address_changed` records the chain. Ask every payee, Pay a freelancer and the API make links as before.
+  Migration `0133_payee_link_invoices.sql` adds the link's options, the drafts' new source and the functions behind
+  them. [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#ask-a-payee-for-their-address).
 
 - Shared public typography and section spacing for the bill journey direction, with accessible blue and dark sections,
   a flat card elevation and reusable headings. The existing app, email and docs palette and control sizes are preserved.

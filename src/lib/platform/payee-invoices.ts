@@ -12,13 +12,12 @@ import { payeeLinkHash } from "./payee-links";
 
 /**
  * A payee's invoice, sent through its payee link (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P4-P7).
- * No session: the link is the payee's only credential. The fields are checked first, so a typo uses nothing; then one
- * of the link's tries (P6); then the link is looked up, so a page with no live link reads no file; then the file, when
- * one was sent, is read for its text with the reader of From a document,
- * with no model call, and dropped: only its text and SHA-256 are kept. Then 0133's submit_payee_invoice locks the link,
- * checks it still takes an invoice, and adds the draft, sent for review, in one transaction. Signed as
- * `payee_invoice_submitted` and told to the members who decide payments, both best effort: the draft is written already.
- * Nothing here pays, approves or adds a bill.
+ * No session: the link is the payee's only credential. The fields are checked first, so a typo uses nothing; then the
+ * link is looked up, so a page with no live link reads no file; then one of the live link's tries (P6); then the file,
+ * when one was sent, is read for its text with the reader of From a document, with no model call, and dropped: only its
+ * text and SHA-256 are kept. Then 0133's submit_payee_invoice locks the link, checks it still takes an invoice, and adds
+ * the draft, sent for review, in one transaction. Signed as `payee_invoice_submitted` and told to the owners and admins,
+ * who add or discard it, both best effort: the draft is written already. Nothing here pays, approves or adds a bill.
  */
 
 export type PayeeInvoiceSubmission =
@@ -53,9 +52,8 @@ export async function submitPayeeInvoice(token: string, input: PayeeInvoiceInput
   const read = readPayeeInvoice(input, new Date(now).toISOString().slice(0, 10));
   if (!read.ok) return { ok: false, reason: "invalid", field: read.field };
   const file = input.file && input.file.size > 0 ? input.file : null;
-  // The size is checked before the bytes are read, and the link's tries before the reader runs.
+  // The size is checked before the bytes are read.
   if (file && file.size > MAX_DOCUMENT_BYTES) return { ok: false, reason: "file", code: "too_large" };
-  if (!takePayeeInvoiceToken(hash, now)) return { ok: false, reason: "busy" };
   // The link is looked up before any file is read, so a page with no live link asking for an invoice reads nothing; the
   // database checks it again, under its lock, when the draft is added.
   const status = await platformDb().rpc("payee_link_status", { p_token_hash: hash });
@@ -63,6 +61,8 @@ export async function submitPayeeInvoice(token: string, input: PayeeInvoiceInput
   const live = status.data as { asksInvoice?: unknown; invoiceSent?: unknown } | null;
   if (!live || live.asksInvoice !== true) return { ok: false, reason: "invalid_link" };
   if (live.invoiceSent === true) return { ok: false, reason: "already_sent" };
+  // One of the live link's tries, before the reader runs: only a live link ever gets a bucket, so made-up tokens add none.
+  if (!takePayeeInvoiceToken(hash, now)) return { ok: false, reason: "busy" };
 
   let document: { kind: "pdf" | "email" | "text"; sha256: string; text: string } | null = null;
   if (file) {

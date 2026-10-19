@@ -193,7 +193,7 @@ export async function capturedDraftsToReview(): Promise<{ available: true; draft
         extracted: row.read?.extracted ?? null,
         reader: row.read?.reader ?? null,
         duplicates: draftDuplicates(
-          { id: row.id, counterpartyId: row.counterparty_id, ...fields, memo: startingMemo(fields.invoiceNumber, fields.memo ?? row.read?.note ?? null) },
+          { id: row.id, counterpartyId: row.counterparty_id, ...fields, memo: startingMemo(fields.invoiceNumber, fields.memo) },
           bills,
           others
         ),

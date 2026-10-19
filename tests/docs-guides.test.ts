@@ -1250,6 +1250,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["sent it through their payee link", CAPTURE_REVIEW],
     ["Review and add as bill", CAPTURE_REVIEW],
     ["payee_invoice_submitted", "src/lib/platform/payee-invoices.ts"],
+    ["counterparty_address_kept", PAYEE_LINKS_LIBRARY],
+    ["Waiting for their invoice", PAYEE_LINK],
     // Ask every payee at once (ask every payee A1-A5).
     ["Ask every payee for an address", "src/components/intake/AskEveryPayee.tsx"],
     ["Ask N for an address", "src/components/intake/AskEveryPayee.tsx", "Ask {count} for an address"],
@@ -1626,6 +1628,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["A PDF or a text file, up to 4 MB. Only its text is kept, never the file.", PAYEE_INVOICE_FORM],
     ["Send my invoice", PAYEE_INVOICE_FORM],
     ["Invoice sent", PAYEE_JOURNEY],
+    ["You can still send your invoice", PAYEE_JOURNEY],
     ["Choose a due date from today to a year from today.", PAYEE_INVOICE_RULES],
     ["This PDF has no text to read; it may be a scan. Send your invoice without the file, or choose a PDF with text.", PAYEE_INVOICE_RULES],
     ["This link already sent an invoice. To send another, ask the business for a new link.", PAYEE_ACTIONS],

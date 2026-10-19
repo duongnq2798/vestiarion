@@ -34,8 +34,8 @@ import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
-import { listActivePayeeLinks } from "@/lib/platform/payee-links";
-import { chainChoiceFits, choosablePayeeChains } from "@/lib/payee-chain-choice";
+import { listActivePayeeLinks, listWaitingInvoiceLinks } from "@/lib/platform/payee-links";
+import { chainChoiceFits, choosablePayeeChains, payeesHeldToTheirChain } from "@/lib/payee-chain-choice";
 import { homeChain } from "@/lib/payee-chains";
 import { askablePayees } from "@/lib/address-requests";
 import { simulatesPayments } from "@/lib/capability-read";
@@ -97,6 +97,18 @@ export default async function CounterpartiesPage({
           })
         ).map((chain) => chain.label)
       : [];
+    // Vendors with no address that a milestone or a bill in another currency than USDC still holds to their chain: the
+    // choice would strand it (P2). Read only when a choice could be offered; best effort, as if every one were held.
+    const vendorsWithoutAddress = counterparties.filter((counterparty) => chainChoiceFits(counterparty, new Set())).map((counterparty) => counterparty.id);
+    const heldToChain =
+      choosableChains.length > 1 && vendorsWithoutAddress.length > 0
+        ? await payeesHeldToTheirChain(vendorsWithoutAddress).catch((error: unknown) => {
+            console.error("counterparties: payees held to their chain not read", error instanceof Error ? error.message : error);
+            return new Set(vendorsWithoutAddress);
+          })
+        : new Set<string>();
+    // A used link still waiting for its payee's invoice, which Revoke stops (P6).
+    const waitingInvoices = canWrite ? await listWaitingInvoiceLinks(access.membership.orgId) : new Map<string, { id: string; until: string }>();
     // Vendors paid to a bank account through BlindPay (bank payouts B4), on a deployment with it; best effort, none
     // before migration 0124.
     const bankPayoutsOn = blindpaySettingsFromEnv() !== null;
@@ -260,7 +272,8 @@ export default async function CounterpartiesPage({
                             orgSlug={slug}
                             counterparty={{ id: counterparty.id, name: counterparty.name }}
                             activeLink={payeeLinks.get(counterparty.id) ?? null}
-                            offers={{ invoice: true, chains: chainChoiceFits(counterparty) ? choosableChains : [] }}
+                            offers={{ invoice: true, chains: chainChoiceFits(counterparty, heldToChain) ? choosableChains : [] }}
+                            waitingInvoice={waitingInvoices.get(counterparty.id) ?? null}
                           />
                         </div>
                       )}

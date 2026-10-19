@@ -781,6 +781,24 @@ describe("from draft to bill (C5-C7)", () => {
     expect(w.db.rows("invoice_drafts")[0]).toMatchObject({ state: "confirmed", decided_by: OWNER });
   });
 
+  it("discards an invoice a payee sent through its payee link, naming where it came from", async () => {
+    const w = world();
+    const draftId = crypto.randomUUID();
+    const link = crypto.randomUUID();
+    w.db.rows("invoice_drafts").push({
+      id: draftId, org_id: w.orgId, state: "sent", source: "payee_link", document_kind: null, document_sha256: null, supplier_name: "Northwind Hosting",
+      invoice_number: "INV-9", amount: "50.00", currency: "USDC", invoice_date: null, due_date: "2026-10-31", po_reference: null, memo: null,
+      read: { via: "payee_link", reader: null, warnings: [], documentNotes: [], modelNote: null, counterpartyName: "Northwind Hosting", note: null, extracted: {} },
+      raw_text: null, counterparty_id: COUNTERPARTY, connection_id: null, payee_link_id: link, idempotency_key: link, request_sha256: "b".repeat(64),
+      captured_by: null, captured_at: now(), updated_at: now(), sent_at: now(), decided_by: null, decided_at: null, claimed_invoice_id: null, invoice_id: null,
+    });
+    expect(await w.run(() => withOrg(w.orgId, () => discardInvoiceDraft(asOwner(w), { draftId })))).toMatchObject({ ok: true });
+    const discarded = w.ledger.find((entry) => entry.p_action === "invoice_draft_discarded")!;
+    expect(discarded.p_summary).toBe("Discarded an invoice sent through a payee link");
+    expect(discarded.p_detail).toEqual({ by: OWNER, draftId });
+    expect(w.db.rows("invoices")).toHaveLength(0);
+  });
+
   it("says a possible duplicate before adding, and adds it once the person ticks it is not one", async () => {
     const w = world();
     w.db.rows("invoices").push({ id: crypto.randomUUID(), org_id: w.orgId, direction: "payable", counterparty_id: COUNTERPARTY, amount: 200, currency: "USDC", memo: "INV-2207 hosting", po_reference: "PO-1042", due_date: "2026-10-31T12:00:00Z", status: "paid" });

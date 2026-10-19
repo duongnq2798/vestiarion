@@ -34,11 +34,11 @@ If what you pasted is not an address, the page says "That doesn't look like a wa
 
 Some businesses let you choose the chain your wallet receives USDC on. Step 1 then asks first: **Where does your wallet receive USDC?** A business on Arc mainnet offers Arc mainnet and Base; one on Arc testnet offers Arc testnet and the Sepolia chains. Choose the one your wallet shows your USDC on, then **Continue**. The field then names it, such as **Your wallet address on Base**, and **Choose another network** goes back.
 
-You can choose only while the business has no address for you and has not paid you yet. Otherwise the page names the chain it pays you on, as above. If the business's records changed after you opened the page, it says "Where you are paid can no longer be chosen on this link. Reload the page."
+You can choose only while the business has no address for you, has not paid you yet, and has nothing open for you that must be paid on its own chain, such as a milestone or a bill in another currency than USDC. Otherwise the page names the chain it pays you on, as above. If the business's records changed after you opened the page, it says "Where you are paid can no longer be chosen on this link. Reload the page."
 
 ### Already gave them your address?
 
-When the business asks for your invoice and already has an address for you, step 1 shows it shortened, and **Keep this address** under the field keeps it and takes you to your invoice. The link is then used, as sending that same address would use it.
+When the business asks for your invoice and already has an address of yours, step 1 shows it shortened, and **Keep this address** under the field keeps it and takes you to your invoice. The link is then used, as sending that same address would use it, and the business sees that you kept it.
 
 ### No wallet yet?
 
@@ -76,13 +76,13 @@ After you send it, the link cannot change the address. If you notice a mistake, 
 
 When the business asks for your invoice, the step after your address is **Your invoice**: "Send *business* your invoice". Fill in:
 
-- **Invoice number**, up to 100 characters.
+- **Invoice number**, up to 100 characters on one line, with no link.
 - **Amount (USDC)**, more than 0, with at most 6 decimals, such as 1250.00.
 - **Due date**, from today to a year from today.
-- **Note**, optional, up to 500 characters.
+- **Note**, optional: up to 500 characters of plain text, on as many lines as you like.
 - **Attach the invoice (optional)**: "A PDF or a text file, up to 4 MB. Only its text is kept, never the file."
 
-Then choose **Send my invoice**. The link sends one invoice. A person at the business checks it before adding it as a bill; nothing is paid only because you sent it. The next screens say "Invoice sent", and the link takes your invoice until 30 days after you sent your address, or until it expires if you have not used it yet.
+Then choose **Send my invoice**. The link sends one invoice. A person at the business checks it before adding it as a bill; nothing is paid only because you sent it. The next screens say "Invoice sent", and the link takes your invoice until 30 days after you sent your address, unless the business stops it or sends you a newer link. If a payment to you is already on its way, the page shows it first, with **You can still send your invoice** under it.
 
 If a field is not right, the page says which, such as "Choose a due date from today to a year from today." A scanned PDF has no text to read: send your invoice without the file, or attach a PDF with text.
 

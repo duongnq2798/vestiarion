@@ -28,6 +28,8 @@ export interface PayeeLinkControlProps {
    * vendor with no address may choose among, when the workspace pays more than one; none otherwise.
    */
   offers?: { invoice: boolean; chains: readonly string[] };
+  /** The payee's used link still waiting for their invoice, and until when it takes one (P6). */
+  waitingInvoice?: { id: string; until: string } | null;
 }
 
 /** The two options under the dialog's text (P1): both off by default, so a link made without them works as before. */
@@ -39,9 +41,11 @@ export const OFFER_CHAIN = "Let them choose where they are paid";
  * a one-time link, shown once, that the payee opens without an account. Whatever
  * they enter waits for a member to confirm it before the agent pays there. The
  * link may also ask for their invoice, and let a vendor choose its chain
- * (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P1).
+ * (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P1). Once the
+ * payee sent their address, a link still waiting for their invoice shows here
+ * too, and Revoke stops it taking one (P6).
  */
-export default function PayeeLinkControl({ orgSlug, counterparty, activeLink, offers }: PayeeLinkControlProps) {
+export default function PayeeLinkControl({ orgSlug, counterparty, activeLink, offers, waitingInvoice = null }: PayeeLinkControlProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       {activeLink ? (
@@ -50,6 +54,13 @@ export default function PayeeLinkControl({ orgSlug, counterparty, activeLink, of
             Address link sent · expires {utcDay(activeLink.expiresAt)}
           </Badge>
           <RevokeLink orgSlug={orgSlug} linkId={activeLink.id} />
+        </>
+      ) : waitingInvoice ? (
+        <>
+          <Badge size="sm" dot tone="agent">
+            Waiting for their invoice · until {utcDay(waitingInvoice.until)}
+          </Badge>
+          <RevokeLink orgSlug={orgSlug} linkId={waitingInvoice.id} />
         </>
       ) : (
         <span />

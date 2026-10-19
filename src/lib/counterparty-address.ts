@@ -139,6 +139,10 @@ export async function changeCounterpartyAddress(
 
   const current = await loadCounterparty(input.counterpartyId);
   if (sameAddress(current.address, parsed.address)) throw new CounterpartyAddressError("unchanged");
+  // The chain the address is on: the one recorded, or the workspace's own when none is. A chain the payee chose is a
+  // change only when it is another (P3): the workspace's own, chosen where none is recorded, writes nothing.
+  const onFile = current.chain ?? homeChain(workspaceNetwork().id).id;
+  const newChain = input.chain !== undefined && input.chain !== onFile ? input.chain : undefined;
 
   const update = db()
     .from("counterparties")
@@ -147,14 +151,14 @@ export async function changeCounterpartyAddress(
       address: parsed.address,
       address_changed_at: new Date().toISOString(),
       ...(current.mirror_wallet_id ? { mirror_wallet_id: null } : {}),
-      ...(input.chain !== undefined ? { chain: input.chain } : {}),
+      ...(newChain !== undefined ? { chain: newChain } : {}),
     })
     .eq("id", current.id);
   // Guarded on everything read, the change and the confirmation included: a
   // confirmation that lands between this read and this write would otherwise be
   // inherited by the new address (its timestamp later than this change's), and
   // the agent would pay an address no one confirmed. Then this is a conflict. A
-  // chain written with the address is guarded on the chain read, too.
+  // chain the payee chose is guarded on the chain read, whether or not it is written.
   const onChain = input.chain === undefined ? update : current.chain ? update.eq("chain", current.chain) : update.is("chain", null);
   const onAddress = current.address === null ? onChain.is("address", null) : onChain.eq("address", current.address);
   const onChange = current.address_changed_at === null ? onAddress.is("address_changed_at", null) : onAddress.eq("address_changed_at", current.address_changed_at);
@@ -165,9 +169,6 @@ export async function changeCounterpartyAddress(
 
   const byPayee = "payeeLinkId" in input;
   const onGitHub = "github" in input ? input.github : null;
-  // The chain the address is on, and the one it was on when the payee chose another (P3); none for a row from before 0044.
-  const chain = input.chain ?? current.chain ?? null;
-  const chainChanged = input.chain !== undefined && input.chain !== (current.chain ?? null);
   await appendLedgerEntryBestEffort(currentOrgId(), {
     actor: "human",
     domain: "compliance",
@@ -188,8 +189,9 @@ export async function changeCounterpartyAddress(
       counterpartyId: current.id,
       from: current.address,
       to: parsed.address,
-      ...(chain ? { chain } : {}),
-      ...(chainChanged ? { fromChain: current.chain ?? null } : {}),
+      // The chain the address is on, and, when the payee chose another, the one it was on (P3).
+      chain: newChain ?? onFile,
+      ...(newChain !== undefined ? { fromChain: onFile } : {}),
     },
   });
 
@@ -235,7 +237,7 @@ export async function confirmCounterpartyAddress(input: {
       domain: "compliance",
       action: "counterparty_address_confirmed",
       summary: `Confirmed ${current.name}'s new payment address`,
-      detail: { by: input.actorId, counterpartyId: current.id, address: current.address, ...(current.chain ? { chain: current.chain } : {}), via: input.via },
+      detail: { by: input.actorId, counterpartyId: current.id, address: current.address, chain: current.chain ?? homeChain(workspaceNetwork().id).id, via: input.via },
     });
   } catch (error) {
     const undone = await db()

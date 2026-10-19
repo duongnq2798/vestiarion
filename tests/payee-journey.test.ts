@@ -31,6 +31,15 @@ describe("payeeStage", () => {
     expect(payeeStage(status({ asksInvoice: false, invoiceSent: false }))).toBe("paying");
   });
 
+  it("never lets the invoice outrank a payment on its way or paid to a confirmed address", () => {
+    const asked = { asksInvoice: true, invoiceSent: false };
+    expect(payeeStage(status({ ...asked, payments: [payment({ kind: "invoice", status: "matched" })] }))).toBe("paying");
+    expect(payeeStage(status({ ...asked, payments: [payment({ status: "paid", txRef: "0xabc" })] }))).toBe("paid");
+    // A payment only being prepared, or an address not yet confirmed, leaves the invoice first.
+    expect(payeeStage(status({ ...asked, payments: [payment({ status: "verified" })] }))).toBe("invoice");
+    expect(payeeStage(status({ ...asked, addressConfirmed: false, payments: [payment({ status: "paid", txRef: "0xabc" })] }))).toBe("invoice");
+  });
+
   it("follows the payments once the address is confirmed, and is paid when every one is", () => {
     expect(payeeStage(status())).toBe("paying");
     expect(payeeStage(status({ payments: [payment({ status: "paid", txRef: "0xabc" }), payment({ status: "held" })] }))).toBe("paying");
