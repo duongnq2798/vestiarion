@@ -31,6 +31,19 @@ export interface TeamJourney {
 }
 export interface TeamJourneys { direct: TeamJourney | null; base: TeamJourney | null }
 
+/** Ranks the two validated RPC candidates by a complete, readable story; both views must use the same selection. */
+export function selectTeamJourneys(journeys: TeamJourneys | null | undefined): { primary: TeamJourney | null; secondary: TeamJourney | null } {
+  const direct = journeys?.direct?.payment.route === "direct" && journeys.direct.payment.destination.chain === "ARC" ? journeys.direct : null;
+  const base = journeys?.base?.payment.route === "cctp" && journeys.base.payment.destination.chain === "BASE" ? journeys.base : null;
+  function complete(bill: TeamJourney | null) {
+    if (!bill?.check || !bill.hold || !bill.approval || !bill.record || !ruleWords(bill.rule) || !bill.payment.confirmationRecordedAt) return false;
+    return bill.check.action === "ap_schedule" ? !!bill.decision
+      : ["ap_pay", "ap_hold", "ap_request_info", "ap_flag_fraud"].includes(bill.check.action);
+  }
+  const primary = complete(base) ? base : complete(direct) ? direct : direct ?? base;
+  return { primary, secondary: primary === base ? direct : primary ? base : null };
+}
+
 const instant = z.iso.datetime({ offset: true });
 const hex = (length: number) => z.string().regex(new RegExp(`^[a-f0-9]{${length}}$`, "i"));
 const hash = z.string().regex(/^0x[0-9a-f]{64}$/i);

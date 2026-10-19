@@ -1,10 +1,10 @@
-import { ArrowDownRight, ArrowUpRight, Check, FileText } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, FileText } from "lucide-react";
 import { Suspense } from "react";
 import { EvidencePending } from "./EvidencePending";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Heading } from "@/components/ui/Heading";
 import { Section } from "@/components/ui/Section";
-import type { TeamJourney, TeamJourneys } from "@/lib/team-journey";
+import { selectTeamJourneys, type TeamJourney, type TeamJourneys } from "@/lib/team-journey";
 import { SignatureCheck } from "./SignatureCheck";
 import styles from "./BillJourney.module.css";
 
@@ -88,12 +88,36 @@ function RecordedBill({ bill }: { bill: TeamJourney }) {
   );
 }
 
+function AnotherPayment({ bill }: { bill: TeamJourney }) {
+  const crossChain = bill.payment.route === "cctp";
+  const destination = crossChain ? "Base" : "Arc mainnet";
+  return (
+    <section className={`${styles.other} focus-inverse`} aria-labelledby="journey-other-title">
+      <div>
+        <Eyebrow inverse className={styles.otherEyebrow}>Another team payment</Eyebrow>
+        <h3 id="journey-other-title" className="mt-4 text-3xl font-semibold tracking-tight">Paid on {destination}</h3>
+        <p className="mt-4 max-w-md text-sm leading-relaxed text-on-agent-muted">Vestiarion team workspace. A separate confirmed payment, with its own recorded confirmation and transaction evidence.</p>
+        <p className={styles.otherAmount}>{amount.format(bill.amount)} <span>{bill.currency}</span></p>
+        {bill.payment.confirmationRecordedAt && <p className="mt-4 text-caption leading-relaxed text-on-agent-muted">Payment confirmation recorded<br /><RecordedTime at={bill.payment.confirmationRecordedAt} /></p>}
+        {crossChain && bill.payment.feeUsdc !== null && <p className="mt-3 text-caption text-on-agent-muted">CCTP fee recorded: {amount.format(bill.payment.feeUsdc)} USDC</p>}
+      </div>
+      <div className={styles.otherLinks}>
+        <p className="flex items-center gap-4 text-xl font-semibold">Arc mainnet{crossChain && <><ArrowRight aria-hidden size={20} />Base</>}</p>
+        <a href={bill.payment.source.url} target="_blank" rel="noopener noreferrer">{crossChain ? "Verify the burn on Arc mainnet" : "Verify payment on Arc Explorer"}<ArrowUpRight aria-hidden size={19} /></a>
+        {crossChain && <a href={bill.payment.destination.url} target="_blank" rel="noopener noreferrer">Verify the mint on Base<ArrowUpRight aria-hidden size={19} /></a>}
+      </div>
+    </section>
+  );
+}
+
 async function RecordedJourney({ source }: { source: Promise<TeamJourneys | null> }) {
   const journeys = await source.catch(() => null);
   if (!journeys) return <p className={styles.unavailable}>The team&apos;s recorded evidence is unavailable right now.</p>;
-  const base = journeys.base?.payment.route === "cctp" && journeys.base.payment.destination.chain === "BASE" ? journeys.base : null;
-  const bill = base ?? journeys.direct;
-  return bill ? <RecordedBill bill={bill} /> : <p className={styles.unavailable}>No bill record is available right now.</p>;
+  const { primary: bill, secondary } = selectTeamJourneys(journeys);
+  return <>
+    {bill ? <RecordedBill bill={bill} /> : <p className={styles.unavailable}>No bill record is available right now.</p>}
+    {secondary && <AnotherPayment bill={secondary} />}
+  </>;
 }
 
 /** The fixed copy explains the process; the streamed records describe only the selected bill. */

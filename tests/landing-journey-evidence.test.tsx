@@ -13,8 +13,8 @@ const event = (seq: number, action: string, recordedAt = "2026-10-18T07:08:09Z")
 });
 const direct: TeamJourney = {
   amount: 17.42, currency: "USDC", network: "arc-mainnet", status: "paid",
-  received: event(11, "create_invoice"), check: event(12, "ap_decision"), hold: event(13, "ap_decision"),
-  approval: event(14, "approval_given", "2026-10-18T07:08:19Z"), record: event(15, "payment_executed"),
+  received: event(11, "create_invoice"), check: event(12, "ap_pay"), hold: event(13, "ap_hold"),
+  approval: event(14, "approval_given", "2026-10-18T07:08:19Z"), record: event(15, "ap_pay"),
   observed: { hasPurchaseOrder: true, goodsReceived: false, purchaseOrderRequired: true, riskLevel: "clear" },
   rule: "counterparty.new_payee", publicKeys: {},
   payment: {
@@ -27,7 +27,7 @@ const direct: TeamJourney = {
 const base: TeamJourney = {
   ...direct,
   amount: 32.71,
-  payment: { ...direct.payment, route: "cctp", destination: { chain: "BASE", hash: `0x${"ef".repeat(32)}`, url: `https://basescan.org/tx/0x${"ef".repeat(32)}` } },
+  payment: { ...direct.payment, route: "cctp", source: { chain: "ARC", hash: `0x${"cd".repeat(32)}`, url: `https://explorer.arc.io/tx/0x${"cd".repeat(32)}` }, destination: { chain: "BASE", hash: `0x${"ef".repeat(32)}`, url: `https://basescan.org/tx/0x${"ef".repeat(32)}` } },
 };
 async function complete(node: ReactElement) {
   const stream = await renderToReadableStream(node);
@@ -118,13 +118,40 @@ describe("the bill's process and observed evidence", () => {
 
   it("uses the same Base bill as the hero when both routes have recorded payments", async () => {
     const bill: TeamJourney = { ...base, received: event(21, "create_invoice"), check: event(22, "ap_schedule"),
-      hold: event(22, "ap_schedule"), approval: event(24, "approval_paid"), record: event(24, "approval_paid") };
+      hold: event(22, "ap_schedule"), approval: event(24, "approval_paid"), record: event(24, "approval_paid"),
+      decision: { payOn: "2026-10-22", reason: null }, payment: { ...base.payment, feeUsdc: 0.055026 } };
     const markup = await complete(<BillJourney source={Promise.resolve({ direct, base: bill })} />);
     for (const anchor of ["check-22", "hold-22", "approval-24"]) expect(markup).toContain(`id="journey-entry-${anchor}"`);
     expect(markup).not.toContain('id="journey-entry-approval-14"');
     expect(markup.match(/Check its signature/g)).toHaveLength(5);
-    expect(text(markup)).not.toContain("17.42 USDC");
+    const secondary = markup.match(/<section\b[^>]*aria-labelledby="journey-other-title"[\s\S]*?<\/section>/)?.[0] ?? "";
+    expect(text(secondary)).toContain("Another team payment");
+    expect(text(secondary)).toContain("17.42 USDC");
+    expect(text(secondary)).toContain("Paid on Arc mainnet");
+    expect(secondary).toContain(`href="${direct.payment.source.url}"`);
+    expect(secondary).not.toContain(base.payment.source.url);
+    expect(secondary).not.toContain("basescan.org");
+    expect(text(secondary)).not.toMatch(/CCTP fee|0\.055026/);
+    expect(text(secondary)).toContain("18 Oct 2026, 07:08:10 UTC");
+    expect(secondary).toContain("focus-inverse");
     expect(markup.match(/Verify the mint on Base/g)).toHaveLength(1);
+  });
+
+  it("keeps a complete direct bill's anchors primary and puts the incomplete Base payment in the dark panel", async () => {
+    const incomplete: TeamJourney = { ...base, check: null, hold: null, approval: null, record: null, rule: null,
+      payment: { ...base.payment, confirmationRecordedAt: "2026-10-19T12:34:56Z", feeUsdc: 0.093 } };
+    const markup = await complete(<BillJourney source={Promise.resolve({ direct, base: incomplete })} />);
+    expect(markup).toContain('id="journey-entry-approval-14"');
+    const secondary = markup.match(/<section\b[^>]*aria-labelledby="journey-other-title"[\s\S]*?<\/section>/)?.[0] ?? "";
+    expect(text(secondary)).toContain("Another team payment");
+    expect(text(secondary)).toContain("32.71 USDC");
+    expect(text(secondary)).toContain("Paid on Base");
+    expect(secondary).toContain(`href="${base.payment.source.url}"`);
+    expect(secondary).toContain(`href="${base.payment.destination.url}"`);
+    expect(secondary).not.toContain(direct.payment.source.url);
+    expect(text(secondary)).toContain("19 Oct 2026, 12:34:56 UTC");
+    expect(text(secondary)).toContain("CCTP fee recorded: 0.093 USDC");
+    expect(secondary).toContain("focus-inverse");
   });
 
   it("keeps an explicit unavailable state and the process explanation when the read fails", async () => {

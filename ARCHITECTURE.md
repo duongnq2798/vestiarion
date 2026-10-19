@@ -716,15 +716,20 @@ mainnet plan).
     its reason stays unknown. Missing detail cannot hide an otherwise confirmed payment. No private names, raw
     reasoning, purchase-order references, person ids or source/workspace ids reach the rendered view; known rule codes
     and boolean observations are allowed.
-  - Hero and BillJourney prefer the validated Base payment, otherwise the direct payment, so the hero's entry links
-    always resolve to the same bill's detailed evidence. They explicitly identify the Vestiarion team workspace. Each
-    available ledger event has the existing browser signature check; it verifies the signed hash link, not the public description or
-    payment settlement. Arc/Base explorer links verify the respective transactions separately.
+  - Hero and BillJourney share `selectTeamJourneys`, ranking the two validated RPC candidates by a complete story:
+    a supported decision (a schedule needs its day), a hold with known wording, approval, payment entry and recorded
+    confirmation. Missing intake and nullable schedule reasons do not disqualify it. Complete Base wins a tie, then
+    complete direct; only with neither complete does direct take precedence over Base. The hero's entry links always
+    resolve to that same bill's detailed evidence. The remaining payment appears in the dark “Another team payment”
+    panel, using its own route, confirmation, fee and explorer links. They explicitly identify the team workspace.
+    Each available ledger event has the existing browser signature check; it verifies the signed hash link, not the
+    public description or payment settlement. Arc/Base explorer links verify the respective transactions separately.
   - The hero shows the recorded agent decision, the code's hold in plain words and a human approval followed by the
     confirmed destination/time, each linked to its own entry. Its fee comes from the confirmed intent, rounded to three
     decimals with exact precision in the title and full journey. Preview labels come from the app's shared navigation;
     hero text is at least 12px and the three steps stack in narrow panes. Card links leave 5rem of scroll margin so
-    keyboard focus stays below the sticky site header. The frame is HTML, not a screenshot.
+    keyboard focus stays below the sticky site header. The desktop columns align at the top so streamed card growth
+    does not recenter the positioning copy. The frame is HTML, not a screenshot.
 - **The landing's proof**: independently streamed latest/recent team decisions and public measurements from every
   workspace, never the founding workspace alone. Historical `featured-proof.ts` is no longer imported by the landing.
   - The measurements are the open numbers, all time (`readAllTimeOrNull`), in three groups. Customer activity is

@@ -97,7 +97,7 @@ describe("the bill journey hero", () => {
 
   it("prefers the Base bill's schedule, coded hold and human approval when both routes are available", async () => {
     const event = (seq: number, action: string): TeamJourneyEvent => ({ seq, action, recordedAt: "2026-10-18T07:08:09Z", link: { body_hash: "b".repeat(64), signature: "a".repeat(128), prev_hash: "c".repeat(64), hash: "d".repeat(64), signing_key_id: null } });
-    const bill: TeamJourney = { ...payment, check: event(41, "ap_schedule"), hold: event(41, "ap_schedule"), approval: event(42, "approval_paid"),
+    const bill: TeamJourney = { ...payment, check: event(41, "ap_schedule"), hold: event(41, "ap_schedule"), approval: event(42, "approval_paid"), record: event(42, "approval_paid"),
       decision: { payOn: "2026-10-22", reason: "no_early_payment_discount" }, rule: "counterparty.new_payee",
       payment: { ...payment.payment, route: "cctp", destination: { chain: "BASE", hash: `0x${"ef".repeat(32)}`, url: `https://basescan.org/tx/0x${"ef".repeat(32)}` }, feeUsdc: 0.055026 } };
     const markup = await complete(<Hero journey={Promise.resolve({ direct: payment, base: bill })} />);
@@ -106,6 +106,26 @@ describe("the bill journey hero", () => {
     for (const anchor of ["check-41", "hold-41", "approval-42"]) expect(markup).toContain(`href="#journey-entry-${anchor}"`);
     expect(markup).toContain("0.055026 USDC");
     expect(markup.match(/<figure\b[\s\S]*?<\/figure>/)?.[0]).not.toMatch(/<img\b|background-image/);
+    expect(words).not.toMatch(/Not available|unavailable/);
+  });
+
+  it("chooses a complete direct story over a Base payment whose stages are missing", async () => {
+    const event = (seq: number, action: string): TeamJourneyEvent => ({ seq, action, recordedAt: "2026-10-18T07:08:09Z", link: { body_hash: "b".repeat(64), signature: "a".repeat(128), prev_hash: "c".repeat(64), hash: "d".repeat(64), signing_key_id: null } });
+    const direct: TeamJourney = { ...payment, check: event(61, "ap_pay"), hold: event(61, "ap_pay"), approval: event(62, "approval_paid"), record: event(62, "approval_paid"), rule: "counterparty.new_payee" };
+    const base: TeamJourney = { ...payment, amount: 32.71, payment: { ...payment.payment, route: "cctp", destination: { chain: "BASE", hash: `0x${"ef".repeat(32)}`, url: `https://basescan.org/tx/0x${"ef".repeat(32)}` } } };
+    const markup = await complete(<Hero journey={Promise.resolve({ direct, base })} />);
+    const words = text(markup);
+    for (const phrase of ["17.42 USDC", "Agent decided", "Pay this bill.", "Code held it", "A person approved", "Paid on Arc mainnet"]) expect(words).toContain(phrase);
+    expect(words).not.toMatch(/Not available|unavailable|32\.71|Paid on Base/);
+    for (const anchor of ["check-61", "hold-61", "approval-62"]) expect(markup).toContain(`href="#journey-entry-${anchor}"`);
+  });
+
+  it("falls back to direct when neither candidate has a complete story", async () => {
+    const base: TeamJourney = { ...payment, amount: 32.71, payment: { ...payment.payment, route: "cctp", destination: { chain: "BASE", hash: `0x${"ef".repeat(32)}`, url: `https://basescan.org/tx/0x${"ef".repeat(32)}` } } };
+    const words = text(await complete(<Hero journey={Promise.resolve({ direct: payment, base })} />));
+    expect(words).toContain("17.42 USDC");
+    expect(words).toContain("Paid on Arc mainnet");
+    expect(words).not.toContain("32.71 USDC");
   });
 
   it("uses another recorded date and actual fee, and leaves an unavailable reason unknown", async () => {

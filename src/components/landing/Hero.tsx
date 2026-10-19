@@ -8,7 +8,7 @@ import { Heading } from "@/components/ui/Heading";
 import { Section } from "@/components/ui/Section";
 import { sectionTitle } from "@/components/vx/nav";
 import { ruleWords } from "@/lib/rule-words";
-import type { TeamJourney, TeamJourneys, TeamJourneyEvent } from "@/lib/team-journey";
+import { selectTeamJourneys, type TeamJourney, type TeamJourneys, type TeamJourneyEvent } from "@/lib/team-journey";
 import { TRY_HREF, TRY_LABEL } from "./cta";
 import { InvoiceCapture } from "./hero/InvoiceCapture";
 import styles from "./Hero.module.css";
@@ -40,8 +40,7 @@ function EntryLink({ stage, event }: { stage: string; event: TeamJourneyEvent | 
 
 async function HeroPayment({ source }: { source: Promise<TeamJourneys | null> }) {
   const journeys = await source.catch(() => null);
-  const base = journeys?.base?.payment.route === "cctp" && journeys.base.payment.destination.chain === "BASE" ? journeys.base : null;
-  const bill = base ?? journeys?.direct;
+  const { primary: bill } = selectTeamJourneys(journeys);
   if (!bill) {
     return <div className={styles.paymentState}><FileText aria-hidden size={28} /><p>This team&apos;s payment record is unavailable right now.</p><p className="mt-2 text-sm text-ink-2">The bill&apos;s recorded facts will appear here when they can be read.</p></div>;
   }

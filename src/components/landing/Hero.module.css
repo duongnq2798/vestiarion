@@ -1,6 +1,6 @@
 .container { padding-block: clamp(2.5rem, 5vw, 4.5rem) 1.5rem; }
 .eyebrow { font-size: .75rem; }
-.heroGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); align-items: center; gap: clamp(2rem, 4vw, 4rem); margin-top: 3rem; }
+.heroGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); align-items: start; gap: clamp(2rem, 4vw, 4rem); margin-top: 3rem; }
 .tagline { max-width: 11ch; font-weight: 500; text-wrap: balance; }
 .product { min-width: 0; overflow: hidden; border: 1px solid var(--color-agent-line); border-radius: var(--radius-2xl); background: var(--color-surface); box-shadow: var(--shadow-surface); }
 /* Keep keyboard focus clear of the sticky site header. */
