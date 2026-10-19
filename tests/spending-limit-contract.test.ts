@@ -11,7 +11,9 @@ import { address, bytes32, selector, TestChain, uint } from "./support/evm";
  * is the bytecode of this source, and it holds no PUSH0, which Arc testnet rejects.
  */
 
-const artifact = JSON.parse(readFileSync("src/lib/spending-limit/artifact.json", "utf8")) as { abi: unknown[]; bytecode: string; settings: { evmVersion: string } };
+type Artifact = { abi: unknown[]; bytecode: string; settings: { evmVersion: string } };
+const artifacts = JSON.parse(readFileSync("src/lib/spending-limit/artifact.json", "utf8")) as { v1: Artifact; v2: Artifact };
+const artifact = artifacts.v1;
 const token = compileSolidity("tests/fixtures/TestToken.sol", "TestToken");
 
 const TREASURY = `0x${"a1".repeat(20)}`;
@@ -193,20 +195,27 @@ describe("VestiarionSpendingLimit: the figures", () => {
   });
 });
 
-describe("the artifact the app deploys", () => {
-  it("is what contracts/VestiarionSpendingLimit.sol compiles to, with the pinned settings", () => {
-    const fresh = compileSolidity("contracts/VestiarionSpendingLimit.sol", "VestiarionSpendingLimit");
-    expect(artifact.bytecode).toBe(fresh.bytecode);
-    expect(artifact.abi).toEqual(fresh.abi);
-    expect(artifact.settings.evmVersion).toBe("paris");
-  });
+describe("the artifacts the app deploys", () => {
+  const sources = {
+    v1: ["contracts/VestiarionSpendingLimit.sol", "VestiarionSpendingLimit"],
+    v2: ["contracts/VestiarionSpendingLimitV2.sol", "VestiarionSpendingLimitV2"],
+  } as const;
 
-  it("holds no PUSH0, which Arc testnet rejects", () => {
-    const code = Buffer.from(artifact.bytecode.slice(2), "hex");
-    for (let pc = 0; pc < code.length; pc += 1) {
-      const op = code[pc];
-      expect(op, `PUSH0 at ${pc}`).not.toBe(0x5f);
-      if (op >= 0x60 && op <= 0x7f) pc += op - 0x5f; // skip PUSH1..PUSH32 data
-    }
-  });
+  for (const version of ["v1", "v2"] as const) {
+    it(`${version} is what its source compiles to, with the pinned settings`, () => {
+      const fresh = compileSolidity(...sources[version]);
+      expect(artifacts[version].bytecode).toBe(fresh.bytecode);
+      expect(artifacts[version].abi).toEqual(fresh.abi);
+      expect(artifacts[version].settings.evmVersion).toBe("paris");
+    });
+
+    it(`${version} holds no PUSH0, which Arc testnet rejects`, () => {
+      const code = Buffer.from(artifacts[version].bytecode.slice(2), "hex");
+      for (let pc = 0; pc < code.length; pc += 1) {
+        const op = code[pc];
+        expect(op, `PUSH0 at ${pc}`).not.toBe(0x5f);
+        if (op >= 0x60 && op <= 0x7f) pc += op - 0x5f; // skip PUSH1..PUSH32 data
+      }
+    });
+  }
 });
