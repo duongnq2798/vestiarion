@@ -53,6 +53,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   *business* your invoice** as soon as the address is accepted, and keeping the address on file moves on the same way.
   After **Send my invoice**, the next step shows as soon as the invoice is accepted, without waiting for the page to
   load again. No migration.
+- **A payee's page answers before the business's email goes out.** Sending an address or an invoice through a payee
+  link waited for the email to the owners and admins before the page moved on, about five seconds for an invoice. The
+  email now goes out just after the payee's answer.
+- **Ask for address names the payee's chain.** Its dialog said the payee enters their own Arc address, also for a
+  vendor paid on Base. It now names the chain the vendor is paid on.
 
 ## [0.1.0-beta.11] - 2026-10-19
 

@@ -18,8 +18,9 @@ import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
  * session-less submit. The library is faked; tests/payee-links.test.ts covers it.
  */
 
-const { authorizeMock, lib, invoiceMock } = vi.hoisted(() => ({
+const { authorizeMock, lib, invoiceMock, afterMock } = vi.hoisted(() => ({
   authorizeMock: vi.fn(),
+  afterMock: vi.fn(),
   lib: {
     createPayeeLink: vi.fn(),
     revokePayeeLink: vi.fn(),
@@ -34,6 +35,7 @@ const { authorizeMock, lib, invoiceMock } = vi.hoisted(() => ({
 vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/server", () => ({ after: afterMock }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 vi.mock("@/lib/dal/scope", () => ({
@@ -180,7 +182,7 @@ describe("submitPayeeAddressAction — no session needed", () => {
   it("thanks the payee, naming the business that will confirm the address", async () => {
     lib.submitPayeeAddress.mockResolvedValue({ ok: true, orgName: "Acme", unchanged: false });
     const result = await submitPayeeAddressAction(empty, form({ token: TOKEN, address: "0x2222222222222222222222222222222222222222" }));
-    expect(lib.submitPayeeAddress).toHaveBeenCalledWith(TOKEN, "0x2222222222222222222222222222222222222222");
+    expect(lib.submitPayeeAddress).toHaveBeenCalledWith(TOKEN, "0x2222222222222222222222222222222222222222", { defer: expect.any(Function) });
     expect(result).toEqual({ ok: true, message: "Thanks. Acme will confirm your address before paying you." });
     expect(authorizeMock).not.toHaveBeenCalled();
   });
@@ -217,7 +219,7 @@ describe("submitPayeeAddressAction — no session needed", () => {
     lib.submitPayeeAddress.mockResolvedValueOnce({ ok: true, orgName: "Acme", unchanged: false }).mockResolvedValueOnce({ ok: false, reason: "chain_closed" });
     const fields = { token: TOKEN, address: "0x2222222222222222222222222222222222222222", chain: "BASE" };
     expect(await submitPayeeAddressAction(empty, form(fields))).toMatchObject({ ok: true });
-    expect(lib.submitPayeeAddress).toHaveBeenCalledWith(TOKEN, "0x2222222222222222222222222222222222222222", { chain: "BASE" });
+    expect(lib.submitPayeeAddress).toHaveBeenCalledWith(TOKEN, "0x2222222222222222222222222222222222222222", { chain: "BASE", defer: expect.any(Function) });
     expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: false, message: "Where you are paid can no longer be chosen on this link. Reload the page." });
   });
 
@@ -304,6 +306,12 @@ describe("submitPayeeInvoiceAction (payee invoice link P4)", () => {
     expect(input).toMatchObject({ invoiceNumber: "INV-7", amount: "1250.50", dueDate: "2026-11-02", note: "October" });
     expect(input.file).toBeInstanceOf(File);
     expect(authorizeMock).not.toHaveBeenCalled();
+    // The members' email goes to `after`, so the payee's page moves on without waiting for it.
+    const options = invoiceMock.mock.calls[0][3];
+    const work = vi.fn(async () => 1);
+    options.defer(work);
+    expect(afterMock).toHaveBeenCalledWith(work);
+    expect(work).not.toHaveBeenCalled();
   });
 
   it("answers with the link's status as it now stands (S1, S6), and reads none for a refusal", async () => {

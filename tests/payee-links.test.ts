@@ -269,6 +269,28 @@ describe("submitPayeeAddress", () => {
     expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Northwind", address: ADDRESS });
   });
 
+  it("leaves that email to the caller's defer, so the payee's answer does not wait for it", async () => {
+    const deferred: Array<() => Promise<unknown>> = [];
+    const { result } = platform(() => submitPayeeAddress(TOKEN, ADDRESS, { defer: (work) => void deferred.push(work) }), usable());
+    expect(await result).toMatchObject({ ok: true, orgName: "Acme" });
+    expect(notifyMock).not.toHaveBeenCalled();
+    expect(deferred).toHaveLength(1);
+    await deferred[0]();
+    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Northwind", address: ADDRESS });
+  });
+
+  it("sends that email at once when it cannot be deferred, since the address is written already", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const defer = () => {
+      throw new Error("after() was called outside a request scope");
+    };
+    const { result } = platform(() => submitPayeeAddress(TOKEN, ADDRESS, { defer }), usable());
+    expect(await result).toMatchObject({ ok: true, orgName: "Acme" });
+    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Northwind", address: ADDRESS });
+    expect(logged).toHaveBeenCalledWith("payee email not deferred; sent at once");
+    logged.mockRestore();
+  });
+
   it("refuses a malformed or empty address without using the link", async () => {
     for (const raw of ["0x123", "", "   ", `${ADDRESS}0`]) {
       const { fake, result } = platform(() => submitPayeeAddress(TOKEN, raw), usable());

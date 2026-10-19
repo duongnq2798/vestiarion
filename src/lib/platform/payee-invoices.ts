@@ -8,7 +8,7 @@ import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { notifyPayeeInvoice } from "../notifications/payee-invoice";
 import { readPayeeInvoice, type PayeeInvoiceField } from "../payee-invoice";
 import { takePayeeInvoiceToken } from "../rate-limit";
-import { payeeLinkHash } from "./payee-links";
+import { payeeLinkHash, tellMembers, type PayeeSendOptions } from "./payee-links";
 
 /**
  * A payee's invoice, sent through its payee link (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P4-P7).
@@ -46,7 +46,12 @@ const submitted = z.object({
 
 const sha256hex = (value: string) => crypto.createHash("sha256").update(value, "utf8").digest("hex");
 
-export async function submitPayeeInvoice(token: string, input: PayeeInvoiceInput, now: number = Date.now()): Promise<PayeeInvoiceSubmission> {
+export async function submitPayeeInvoice(
+  token: string,
+  input: PayeeInvoiceInput,
+  now: number = Date.now(),
+  options: PayeeSendOptions = {}
+): Promise<PayeeInvoiceSubmission> {
   const hash = payeeLinkHash(token);
   if (!hash) return { ok: false, reason: "invalid_link" };
   const read = readPayeeInvoice(input, new Date(now).toISOString().slice(0, 10));
@@ -121,14 +126,18 @@ export async function submitPayeeInvoice(token: string, input: PayeeInvoiceInput
   } catch {
     console.error("ledger entry not recorded", "payee_invoice_submitted", done.orgId);
   }
-  // Best effort: it never throws.
-  await notifyPayeeInvoice({
-    orgId: done.orgId,
-    orgName: done.orgName,
-    payeeName: done.payeeName,
-    invoiceNumber: invoice.invoiceNumber,
-    amount: invoice.amount,
-    dueDate: invoice.dueDate,
-  });
+  // Best effort: it never throws. After the payee's answer when the caller defers it.
+  await tellMembers(
+    () =>
+      notifyPayeeInvoice({
+        orgId: done.orgId,
+        orgName: done.orgName,
+        payeeName: done.payeeName,
+        invoiceNumber: invoice.invoiceNumber,
+        amount: invoice.amount,
+        dueDate: invoice.dueDate,
+      }),
+    options
+  );
   return { ok: true, orgName: done.orgName };
 }

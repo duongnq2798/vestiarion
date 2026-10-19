@@ -333,6 +333,30 @@ async function chainOpenFor(hash: string): Promise<boolean> {
 }
 
 /**
+ * How the members' email about a payee's submission is sent: `defer` runs it after the payee has its answer (`after`
+ * in a Server Action), so the page moves on without waiting for the email; without it, the email is awaited.
+ */
+export interface PayeeSendOptions {
+  defer?: (work: () => Promise<unknown>) => void;
+}
+
+/**
+ * The members' email, after the answer when the caller defers it, or awaited. Best effort: the email never throws. The
+ * submission is written by now, so a `defer` that throws (no request to run after) sends the email at once instead.
+ */
+export async function tellMembers(work: () => Promise<unknown>, options: PayeeSendOptions): Promise<void> {
+  if (options.defer) {
+    try {
+      options.defer(work);
+      return;
+    } catch {
+      console.error("payee email not deferred; sent at once");
+    }
+  }
+  await work();
+}
+
+/**
  * The payee's submission: the address is checked first, so a typo never uses
  * the link; then the link is claimed, once; then the address changes in the
  * workspace, as the link. The address already on file uses the link too. Any
@@ -344,7 +368,7 @@ async function chainOpenFor(hash: string): Promise<boolean> {
  * (a chain it pays on, more than one to choose from), and is written with the
  * address in one compare-and-set. A choice no longer open uses nothing.
  */
-export async function submitPayeeAddress(token: string, raw: string, options: { chain?: string } = {}): Promise<PayeeSubmission> {
+export async function submitPayeeAddress(token: string, raw: string, options: { chain?: string } & PayeeSendOptions = {}): Promise<PayeeSubmission> {
   const hash = payeeLinkHash(token);
   if (!hash) return { ok: false, reason: "invalid_link" };
   const parsed = parseAddressInput(raw);
@@ -382,14 +406,15 @@ export async function submitPayeeAddress(token: string, raw: string, options: { 
   }
   // Nothing is paid to the new address until a member confirms it (R1), and
   // until now nobody was told it had arrived (pay a freelancer R4). Best
-  // effort: it never throws.
-  await notifyPayeeAddress({
+  // effort: it never throws. After the payee's answer when the caller defers it.
+  const notice = {
     orgId: link.org_id,
     orgName: preview.orgName,
     payeeName: preview.counterpartyName,
     address: parsed.address,
     ...(chain !== undefined ? { chainLabel: chainById(chain).label } : {}),
-  });
+  };
+  await tellMembers(() => notifyPayeeAddress(notice), options);
   return { ok: true, orgName: preview.orgName, unchanged: false };
 }
 

@@ -511,7 +511,9 @@ page; `revokePayeeLink` answers which (`payee_link_revoked` carries `invoiceOnly
   `invoice_drafts` row (source `payee_link`, state `sent`, `connection_id` null, `payee_link_id` unique, the note and
   the payee's name in `read`) and stamps `invoice_at`, in one transaction. It signs `payee_invoice_submitted`
   (`by: null`) and emails the members with `records.write`, who add or discard it (`payeeInvoiceEmail`, a member email
-  with no loop, metered as `payee_invoice`), both best effort. Bills lists it among the captured drafts
+  with no loop, metered as `payee_invoice`), both best effort. The payee's actions pass `defer: after`, so this email,
+  and the address one from `submitPayeeAddress`, go out after the payee's answer (`tellMembers`); other callers await
+  them. Bills lists it among the captured drafts
   (`capturedCountLabel`, `capturedTitle`) with the note shown as the payee's own words; the bill's memo starts from the
   invoice number alone. `confirmInvoiceDraft` adds it through `addInvoice` as the member's bill, its `create_invoice`
   naming `via: "payee_link"` and `payeeLinkId`, and `discardInvoiceDraft` names its source too.
