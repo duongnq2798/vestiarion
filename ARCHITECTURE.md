@@ -705,7 +705,10 @@ phase 1b).
   (`'external'`) still holds the agent's payout (`workspace.onchain_limit_route`), refuses a person's
   (`ContractRefusal`) and the provider's (`WALLET_CONTRACT_ONLY`), since the contract only does `transferFrom` on Arc.
   `counterparties_chain_check` allows `BASE` for a vendor; it is added in both 0044's rewrite list and 0078's constraint,
-  since `db:migrate` re-runs both.
+  since `db:migrate` re-runs both. 0044's rewrite now runs only before the check exists. A milestone is never paid
+  across chains: `createMilestone` refuses a payee on another chain (`another_chain`), Contractors does not offer one, and
+  `releaseMilestone` holds a release whose payee's chain is not the home chain (`milestonePayeeOnAnotherChain`; unreadable
+  counts as another). The live slice carries a `BASE-SEPOLIA` vendor as `BASE` with no address (`MAINNET_CHAIN_OF`).
 - **A feature a network lacks** refuses by name (`FeatureOffError`: "… does not run on Arc mainnet yet") and never
   falls back to testnet values. This covers Gateway, the USYC reserve, the EURC swap and hosted wallets, which
   the Go live panel leaves out there too. The agent's x402 buying is left out where Gateway does not run, without a

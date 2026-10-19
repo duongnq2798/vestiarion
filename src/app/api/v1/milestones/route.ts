@@ -81,6 +81,7 @@ const FORM_FIELDS = { evidence: "verificationSource" };
 const REFUSALS = {
   contractor_not_found: "contractorId: No counterparty with this id in this workspace.",
   client: "contractorId: A client is not paid for milestones. Use a contractor or a vendor.",
+  another_chain: "contractorId: This vendor is paid on another chain, and a milestone is paid on the workspace's own chain only. Add the work as an invoice instead.",
 };
 
 /**

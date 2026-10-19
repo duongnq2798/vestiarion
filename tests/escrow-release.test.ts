@@ -51,7 +51,10 @@ class Chain implements ChainProvider {
   }
 }
 
-function world(milestone: Record<string, unknown> | null, options: { milestoneRead?: () => { status: number; body: unknown }; intent?: Record<string, unknown> } = {}) {
+function world(
+  milestone: Record<string, unknown> | null,
+  options: { milestoneRead?: () => { status: number; body: unknown }; intent?: Record<string, unknown>; payeeChain?: { status?: number; body: unknown } } = {}
+) {
   const intents = paymentIntentsBackend(ORG);
   if (options.intent) {
     Object.assign(
@@ -61,6 +64,8 @@ function world(milestone: Record<string, unknown> | null, options: { milestoneRe
   }
   const fake = fakeSupabase((sent: RecordedRequest) => {
     if (sent.path === "/rest/v1/rpc/agent_paused") return { body: false };
+    // The payee's chain, read before any release (mainnet Base payouts B4): on Arc, the workspace's own.
+    if (sent.path === "/rest/v1/milestones" && sent.method === "GET" && sent.params.get("select") === "counterparties(chain)") return options.payeeChain ?? { body: { counterparties: { chain: null } } };
     if (sent.path === "/rest/v1/milestones" && sent.method === "GET") return options.milestoneRead ? options.milestoneRead() : { body: milestone };
     if (sent.path === "/rest/v1/milestones" && sent.method === "PATCH") return { body: [] };
     if (sent.path === "/rest/v1/escrow_contracts") return { body: { id: "esc-1", address: ESCROW } };
@@ -146,6 +151,15 @@ describe("releasing a milestone locked in escrow", () => {
     const outcome = await release();
     expect(outcome.status).toBe("paid");
     expect(chain.transfers[0].route).toBeUndefined();
+  });
+
+  it("holds a release whose payee is on another chain, and sends nothing (mainnet Base payouts B4)", async () => {
+    for (const read of [{ body: { counterparties: { chain: "BASE-SEPOLIA" } } }, { status: 500, body: { message: "connection reset" } }]) {
+      const { chain, release } = world(null, { payeeChain: read });
+      const outcome = await release();
+      expect(outcome.status, JSON.stringify(read)).toBe("held");
+      expect(chain.transfers).toHaveLength(0);
+    }
   });
 
   it("transfers as before for a milestone with no hold, or one refunded to the workspace", async () => {

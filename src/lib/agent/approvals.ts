@@ -1,4 +1,4 @@
-import { currentConfig, currentOrgId } from "../context";
+import { currentConfig, currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { chainModes, getChainProvider, type Stablecoin } from "../circle";
 import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address";
@@ -1119,6 +1119,11 @@ export async function approveAndPay(
   // A new payment to another chain (approval payout route P1): both routes' fees and the Gateway balance, read now, and
   // the route by the agent's rule, keeping the one an earlier attempt took. A transfer already sent is only reconciled:
   // its decision recorded them.
+  // From the owner's own wallet, whose contract pays on its own chain only, a payout to another chain is refused by name
+  // first, before any fee is asked for or the funds are counted (mainnet Base payouts B3).
+  if (!invoice.bankAccount && paidAcrossChains(invoice.destinationChain) && currentOrgConfig().chain.walletHost === "external") {
+    throw new ApprovalError("payments_off", `Only USDC on ${workspaceNetwork().label} can be paid from your wallet's contract.`);
+  }
   const crossChain = !alreadySent && !invoice.bankAccount && invoice.currency === "USDC" && paidAcrossChains(invoice.destinationChain);
   const quotes = crossChain
     ? await readPayoutQuotes(invoice.destinationChain as string, invoice.amount, {

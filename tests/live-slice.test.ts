@@ -162,6 +162,8 @@ describe("startLiveSlice", () => {
     ]);
     const calls = createCounterpartyMock.mock.calls.map((call) => call[0] as { counterparty: Record<string, unknown> });
     expect(calls.map((call) => call.counterparty.address)).toEqual([null, null]);
+    // A vendor on Base Sepolia goes over as a vendor on Base, so its Base address is paid on Base (mainnet Base payouts B7).
+    expect(calls.map((call) => call.counterparty.chain)).toEqual(["BASE", undefined]);
   });
 
   it("leaves behind, and names, a vendor the checks refuse or that fails to be added, and carries the rest", async () => {

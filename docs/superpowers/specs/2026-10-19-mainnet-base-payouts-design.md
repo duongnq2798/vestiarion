@@ -42,8 +42,15 @@ A Standard Transfer from Arc is free; the forwarding fee pays the mint on Base.
   - the wallet provider refuses it (`WALLET_CONTRACT_ONLY`).
 
   The agent wallet never carries customer USDC to burn it (wallet treasury W4). A contract version with
-  `payAcrossChains` is the follow-up.
-- **B4. Vendors only**, as on Arc testnet (CCTP payouts review C1): a contractor's milestones are released on Arc.
+  `payAcrossChains` is the follow-up. Approve and pay refuses it by name first, before any fee is asked for or the
+  funds are counted (review of this change).
+- **B4. Vendors only, and bills only**, as on Arc testnet (CCTP payouts review C1). A milestone is released on Arc,
+  so a milestone for a vendor on another chain would send USDC on Arc to that vendor's address on the other chain,
+  where it may never arrive. This was found in review. It was already true for Base Sepolia on Arc testnet, and with
+  Base on Arc mainnet it would be real money. So:
+  - such a milestone is refused when it is made (`another_chain`, on the console, the API and MCP);
+  - Contractors does not offer such a vendor;
+  - a release of one made earlier is held, and nothing is sent. An unreadable chain counts as another chain.
 - **B5. The Chain field says it.** On Arc mainnet its help reads: "Another chain is paid from Arc through CCTP, for a
   fee, from your own Circle account; a workspace paying from your own wallet holds it for now". On Arc testnet it
   stays: "Another chain is paid from Arc through CCTP, for a fee".
@@ -52,9 +59,12 @@ A Standard Transfer from Arc is free; the forwarding fee pays the mint on Base.
   - 0044 keeps `BASE` in its rewrite of unknown chains, which would otherwise turn a Base payee into ARC-TESTNET on
     every run;
   - 0078 adds it to the constraint, which would otherwise refuse the row on its next run.
-- **B7. The live slice is unchanged** (live slice L3). A shadow workspace's address on another chain is a testnet
-  address, so it is never carried. A Base address is entered again in the mainnet workspace and waits for a person's
-  confirmation, as any new address does.
+- **B7. The live slice keeps Base, never the address** (live slice L3). A shadow workspace's address on another chain
+  is a testnet address, so it is never carried. A vendor on Base Sepolia goes over as a vendor on Base with no address,
+  so the Base address a person adds later is paid on Base and never on Arc. Any other chain goes over as Arc mainnet's
+  own. The Base address waits for a person's confirmation, as any new address does.
+- **B8. 0044's rewrite runs once.** The rewrite of unknown chains now runs only on the first application, before the
+  check exists. A later run, even from an older branch's copy of the other files, never rewrites a chain added since.
 
 ## What it does not do
 

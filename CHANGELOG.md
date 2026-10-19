@@ -20,8 +20,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   and the payment counts as paid once it is minted on Base. It runs from a workspace on its own Circle account; one
   paying from your own wallet through its contract still holds such a bill for a person, since the contract pays on Arc
   only. Choose **Base** under **Chain** on Counterparties. The database allows the new chain through edits to two
-  existing migrations, which `db:migrate` re-runs.
-  [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#on-arc-mainnet-base).
+  existing migrations, which `db:migrate` re-runs. A vendor paid on another chain can no longer be given a milestone:
+  milestones are released on the workspace's own chain, so its USDC would have gone to that address on Arc. A release
+  of one made before is held. A live slice now carries a vendor on Base Sepolia as a vendor on Base, without the
+  address.
+  [Guide](https://www.vestiarion.xyz/docs/guides/first-payment#pay-a-vendor-on-base-from-arc-mainnet).
 
 - **A reminder when a workspace stops.** A workspace opened by someone outside the team that has no real bill a day
   later gets one email, **Your agent has no bill to work on yet**: the ways to give the agent a bill (**New**, then

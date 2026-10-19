@@ -399,7 +399,7 @@ export const CreateCounterpartyBodySchema = z
       .enum(ALL_PAYEE_CHAIN_IDS)
       .optional()
       .describe(
-        "The chain the address receives on. Defaults to the workspace's own chain: `ARC-TESTNET` on Arc testnet, `ARC` on Arc mainnet. Only a chain the workspace's network pays on is accepted (besides its own: `BASE-SEPOLIA`, `ARB-SEPOLIA` or `ETH-SEPOLIA` beside `ARC-TESTNET`, `BASE` beside `ARC`), and only a vendor can be paid on another chain than the workspace's own."
+        "The chain the address receives on. Defaults to the workspace's own chain: `ARC-TESTNET` on Arc testnet, `ARC` on Arc mainnet. Only a chain the workspace's network pays on is accepted (on Arc mainnet, `BASE` besides its own), and only a vendor can be paid on another chain than the workspace's own."
       ),
     jurisdiction: z.string().optional().describe("Where it is based, up to 80 characters; screening uses it."),
     paymentLimit: z

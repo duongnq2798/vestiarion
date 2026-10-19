@@ -28,9 +28,11 @@ const ENV = { NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABA
 const admin = (fields: Partial<Actor> = {}): Actor => ({ orgId: ORG, userId: USER, role: "admin", mode: "live", surface: { kind: "console" }, ...fields });
 const viaApi = admin({ surface: { kind: "api", apiKeyId: KEY_ID } });
 
+const BASE_VENDOR = "0b6c1c9e-4a4f-4a7e-9b1e-00000000ba5e";
 const COUNTERPARTIES = [
-  { id: CONTRACTOR, name: "Linh Design", role: "contractor" },
-  { id: CLIENT, name: "Lumen Retail", role: "client" },
+  { id: CONTRACTOR, name: "Linh Design", role: "contractor", chain: null },
+  { id: CLIENT, name: "Lumen Retail", role: "client", chain: null },
+  { id: BASE_VENDOR, name: "Harbor Print", role: "vendor", chain: "BASE" },
 ];
 
 function workspace(options: { githubToken?: string; insertFails?: boolean } = {}) {
@@ -58,6 +60,14 @@ beforeEach(() => {
 });
 
 describe("addMilestone", () => {
+  it("refuses a vendor paid on another chain, since a milestone is paid on the workspace's own chain (mainnet Base payouts B4)", async () => {
+    const { fake, run } = workspace();
+    const outcome = await run(() => addMilestone(admin(), { milestone: milestone({ contractorId: BASE_VENDOR }) }));
+    expect(outcome).toMatchObject({ ok: false, code: "another_chain" });
+    expect(inserts(fake.requests)).toHaveLength(0);
+    expect(ledgerMock).not.toHaveBeenCalled();
+  });
+
   it("adds it pending, as the actor's, in the workspace in scope, and records it", async () => {
     const { fake, run } = workspace();
     const outcome = await run(() => addMilestone(admin(), { milestone: milestone({ evidence: "https://www.canva.com/design/DAG123/view" }) }));

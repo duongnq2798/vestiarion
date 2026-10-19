@@ -17,16 +17,17 @@
 -- Arc mainnet's chain (0078), and BASE, the chain Arc mainnet pays across to
 -- (docs/superpowers/specs/2026-10-19-mainnet-base-payouts-design.md B6), are
 -- kept as written: db:migrate re-runs this file.
-update public.counterparties
-   set chain = 'ARC-TESTNET'
- where chain is not null and chain not in ('ARC-TESTNET', 'ARC', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA', 'BASE');
-
+-- The rewrite runs only on the first application, before the check exists, so a later run never rewrites a chain
+-- added since (0078 owns the check from then on).
 do $$
 begin
   if not exists (
     select 1 from pg_constraint
      where conrelid = 'public.counterparties'::regclass and conname = 'counterparties_chain_check'
   ) then
+    update public.counterparties
+       set chain = 'ARC-TESTNET'
+     where chain is not null and chain not in ('ARC-TESTNET', 'ARC', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA', 'BASE');
     alter table public.counterparties
       add constraint counterparties_chain_check
       check (chain in ('ARC-TESTNET', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA') and (chain = 'ARC-TESTNET' or role = 'vendor'));
