@@ -1065,6 +1065,13 @@ export async function approveAndPay(
   // Only USDC crosses chains (CCTP payouts X6): refused before any claim.
   if (invoice.currency !== "USDC" && paidAcrossChains(invoice.destinationChain)) raise("bridge_unsupported_token");
 
+  // From the owner's own wallet, whose contract pays on its own chain only, a payout to another chain is refused by name
+  // here, before any approval is recorded, fee asked for or funds counted (mainnet Base payouts B3). Such a workspace
+  // never sent one: its provider refuses every one.
+  if (!invoice.bankAccount && paidAcrossChains(invoice.destinationChain) && currentOrgConfig().chain.walletHost === "external") {
+    throw new ApprovalError("payments_off", `Only USDC on ${workspaceNetwork().label} can be paid from your wallet's contract.`);
+  }
+
   const operating = await operatingAccount();
   if (!operating) raise("no_operating_account");
 
@@ -1119,11 +1126,6 @@ export async function approveAndPay(
   // A new payment to another chain (approval payout route P1): both routes' fees and the Gateway balance, read now, and
   // the route by the agent's rule, keeping the one an earlier attempt took. A transfer already sent is only reconciled:
   // its decision recorded them.
-  // From the owner's own wallet, whose contract pays on its own chain only, a payout to another chain is refused by name
-  // first, before any fee is asked for or the funds are counted (mainnet Base payouts B3).
-  if (!invoice.bankAccount && paidAcrossChains(invoice.destinationChain) && currentOrgConfig().chain.walletHost === "external") {
-    throw new ApprovalError("payments_off", `Only USDC on ${workspaceNetwork().label} can be paid from your wallet's contract.`);
-  }
   const crossChain = !alreadySent && !invoice.bankAccount && invoice.currency === "USDC" && paidAcrossChains(invoice.destinationChain);
   const quotes = crossChain
     ? await readPayoutQuotes(invoice.destinationChain as string, invoice.amount, {

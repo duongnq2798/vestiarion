@@ -476,6 +476,16 @@ describe("Pay now", () => {
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
 
+  it("refuses, before any claim, a payee on another chain: a milestone is paid on the workspace's own chain only (mainnet Base payouts B4)", async () => {
+    for (const chain of ["BASE-SEPOLIA", "SOL-DEVNET"]) {
+      const { run, claimed } = world({ milestone: { counterparties: { ...milestoneRow().counterparties, chain } } });
+      const outcome = run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+      await expect(outcome, chain).rejects.toThrow("This payee is paid on another chain, and a milestone is paid on the workspace's own chain only.");
+      expect(claimed()).toBe(false);
+    }
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+  });
+
   describe("over a transfer Circle never answered (payment safety R1, payment exceptions review 2)", () => {
     const unknownSince = (minutesAgo: number) => ({
       status: "failed",

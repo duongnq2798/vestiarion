@@ -2723,6 +2723,11 @@ export async function releaseMilestones(
   const outcomes: PayStepOutcome[] = new Array(releases.length);
   const batchable: Array<{ index: number; release: (typeof releases)[number] }> = [];
   for (const [index, release] of releases.entries()) {
+    // Never batched across chains either: a batch is one transfer on Arc (mainnet Base payouts B4).
+    if (await milestonePayeeOnAnotherChain(release.milestoneId)) {
+      outcomes[index] = heldRelease(ANOTHER_CHAIN_HOLD);
+      continue;
+    }
     let escrow: Awaited<ReturnType<typeof escrowReleaseOf>>;
     try {
       escrow = await escrowReleaseOf(release.milestoneId, release.amount, release.destination);
@@ -3007,13 +3012,17 @@ async function lockedInEscrow(milestoneId: string): Promise<boolean> {
   return (found.data as { escrow_state?: string | null } | null)?.escrow_state === "funded";
 }
 
+/** Why a milestone whose payee is on another chain is held rather than released (mainnet Base payouts B4). */
+const ANOTHER_CHAIN_HOLD =
+  " [not paid: this payee is paid on another chain, and a milestone is released on the workspace's own chain only, which would send the USDC where the payee may never receive it — held; pay the work as a bill instead]";
+
 /**
  * Whether the milestone's payee is on another chain than the workspace's own. A milestone is released on Arc (CCTP
  * payouts review C1), so such a release would send USDC on Arc to the payee's address on that other chain. Creating one
  * is refused (mainnet Base payouts B4); this holds any that exists. Unreadable is treated as another chain: nothing is
  * sent on a guess.
  */
-async function milestonePayeeOnAnotherChain(milestoneId: string): Promise<boolean> {
+export async function milestonePayeeOnAnotherChain(milestoneId: string): Promise<boolean> {
   const found = await db().from("milestones").select("counterparties(chain)").eq("id", milestoneId).maybeSingle();
   if (found.error) return true;
   const payee = (found.data as { counterparties?: { chain?: string | null } | Array<{ chain?: string | null }> | null } | null)?.counterparties;
@@ -3042,11 +3051,7 @@ async function releaseMilestone(
     if (deps.onlyRead) {
       locked = await lockedInEscrow(input.milestoneId);
     } else {
-      if (await milestonePayeeOnAnotherChain(input.milestoneId)) {
-        return heldRelease(
-          " [not paid: this payee is paid on another chain, and a milestone is released on the workspace's own chain only, which would send the USDC where the payee may never receive it — held; pay the work as a bill instead]"
-        );
-      }
+      if (await milestonePayeeOnAnotherChain(input.milestoneId)) return heldRelease(ANOTHER_CHAIN_HOLD);
       const found = await escrowReleaseOf(input.milestoneId, input.amount, input.destination);
       if (found && "held" in found) {
         return { status: "held", txRef: null, paymentExecution: null, reasoningSuffix: found.held, heldBecausePaused: false, operatingBalance: null };

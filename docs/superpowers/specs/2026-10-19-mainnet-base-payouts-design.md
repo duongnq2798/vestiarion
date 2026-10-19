@@ -64,7 +64,9 @@ A Standard Transfer from Arc is free; the forwarding fee pays the mint on Base.
   so the Base address a person adds later is paid on Base and never on Arc. Any other chain goes over as Arc mainnet's
   own. The Base address waits for a person's confirmation, as any new address does.
 - **B8. 0044's rewrite runs once.** The rewrite of unknown chains now runs only on the first application, before the
-  check exists. A later run, even from an older branch's copy of the other files, never rewrites a chain added since.
+  check exists, so a later run of this file never rewrites a chain added since. A branch cut before this change still
+  carries the old 0044, which would turn a Base vendor into ARC-TESTNET. Once Base vendors exist, migrations run only
+  from origin/main, as `migrate-latest.ps1` does.
 
 ## What it does not do
 

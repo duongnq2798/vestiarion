@@ -62,9 +62,15 @@ function executed(over: Partial<PaymentExecution> = {}): PaymentExecution {
 }
 
 let paused = false;
+/** Milestones whose payee is on another chain than the workspace's (mainnet Base payouts B4). */
+let onBase = new Set<string>();
 function run(releases: typeof RELEASES, deps: { canBatch?: boolean; operatingBalance?: number | null } = {}) {
   const fake = fakeSupabase((sent: RecordedRequest) => {
     if (sent.path === "/rest/v1/rpc/agent_paused") return { body: paused };
+    if (sent.path === "/rest/v1/milestones" && sent.method === "GET" && sent.params.get("select") === "counterparties(chain)") {
+      const id = sent.params.get("id")?.replace(/^eq\./, "") ?? "";
+      return { body: { counterparties: { chain: onBase.has(id) ? "BASE-SEPOLIA" : null } } };
+    }
     if (sent.path === "/rest/v1/milestones" && sent.method === "GET") {
       return { body: sent.params.get("id") === `eq.${ESCROWED}` ? { escrow_state: "funded", escrow_amount: "2", escrow_payee: `0x${"2".repeat(40)}` } : null };
     }
@@ -78,12 +84,23 @@ function run(releases: typeof RELEASES, deps: { canBatch?: boolean; operatingBal
 
 beforeEach(() => {
   paused = false;
+  onBase = new Set();
   batchMock.mockReset().mockImplementation(async (requests: PaymentRequest[]) => requests.map(() => executed()));
   payMock.mockReset().mockImplementation(async (request: PaymentRequest) => executed({ providerTxId: `tx-${request.sourceId}`, batch: null }));
   syncMock.mockReset().mockResolvedValue(4);
 });
 
 describe("releaseMilestones", () => {
+  it("holds a release whose payee is on another chain, never batching or sending it, and batches the rest (mainnet Base payouts B4)", async () => {
+    onBase = new Set([RELEASES[1].milestoneId]);
+    const outcomes = await run(RELEASES);
+    expect(outcomes[1].status).toBe("held");
+    expect(outcomes[1].reasoningSuffix).toContain("this payee is paid on another chain");
+    expect(batchMock).toHaveBeenCalledTimes(1);
+    expect((batchMock.mock.calls[0][0] as PaymentRequest[]).map((request) => request.sourceId)).toEqual([RELEASES[0].milestoneId, RELEASES[2].milestoneId]);
+    expect(payMock).not.toHaveBeenCalled();
+  });
+
   it("sends releases that can share a transaction in one batch, and says so on each", async () => {
     const outcomes = await run(RELEASES);
     expect(batchMock).toHaveBeenCalledTimes(1);

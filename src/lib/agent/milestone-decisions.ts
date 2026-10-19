@@ -18,6 +18,7 @@ import {
   unknownSendMessage,
   type IntentState,
 } from "./approvals";
+import { paidAcrossChains } from "../payee-chains";
 import { releaseHeldMilestone } from "./orchestrator";
 import { HELD_FOR_BUDGET } from "./outflow-budget";
 import { payoutAddress, syncOperatingBalance } from "./pay";
@@ -169,6 +170,8 @@ export interface HeldFacts {
     address: string | null;
     addressChangedAt: string | null;
     addressConfirmedAt: string | null;
+    /** The chain the payee is paid on; none is the workspace's own (mainnet Base payouts B4). */
+    chain?: string | null;
   };
   intent: IntentState | null;
   /** The newest ledger entry about the milestone, if any. */
@@ -444,12 +447,21 @@ export function decisionEntryOf<Entry extends { action: string }>(entries: reado
 }
 
 const num = (value: unknown) => (typeof value === "number" ? value : Number(value ?? 0));
+
+/** Whether a payee's chain is another than the workspace's own; one no network lists counts as another. */
+function onAnotherChain(chain: string | null | undefined): boolean {
+  try {
+    return paidAcrossChains(chain ?? null);
+  } catch {
+    return true;
+  }
+}
 const numOrNull = (value: unknown) => (value == null ? null : num(value));
 
 async function loadMilestone(milestoneId: string, live: boolean): Promise<LoadedMilestone> {
   const found = await db()
     .from("milestones")
-    .select("*, counterparties(id, name, risk_level, risk_notes, payment_limit, baseline_payment_limit, address, address_changed_at, address_confirmed_at)")
+    .select("*, counterparties(id, name, risk_level, risk_notes, payment_limit, baseline_payment_limit, address, address_changed_at, address_confirmed_at, chain)")
     .eq("id", milestoneId)
     .maybeSingle();
   if (found.error) throw new Error(found.error.message);
@@ -495,6 +507,7 @@ async function loadMilestone(milestoneId: string, live: boolean): Promise<Loaded
         address: (contractor.address as string | null) ?? null,
         addressChangedAt: (contractor.address_changed_at as string | null) ?? null,
         addressConfirmedAt: (contractor.address_confirmed_at as string | null) ?? null,
+        chain: (contractor.chain as string | null) ?? null,
       },
       intent: (intentRead.data as IntentState | null) ?? null,
       lastEntry: last ? { action: last.action, detail: last.detail } : null,
@@ -687,6 +700,12 @@ export async function payHeldMilestone(input: {
     // leaves no approval behind, and the ledger entry is its record (T6).
     approvals = [{ by: other.by, at: other.at }, { by: input.actorId, at: new Date().toISOString() }];
     if (excluded.includes(other.by)) fewApprovers = true;
+  }
+
+  // A milestone is paid on the workspace's own chain only (mainnet Base payouts B4): one whose payee is on another chain
+  // is refused before anything is claimed, cash is brought back or an approval is used. One already sent is only read.
+  if (!alreadySent && !unknown && onAnotherChain(milestone.facts.contractor.chain)) {
+    raise("payments_off", "This payee is paid on another chain, and a milestone is paid on the workspace's own chain only. Pay the work as a bill instead.");
   }
 
   const operatingRead = await db().from("accounts").select("id, balance").eq("kind", "operating").maybeSingle();
