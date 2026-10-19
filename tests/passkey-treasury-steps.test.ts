@@ -144,6 +144,7 @@ describe("preparing a passkey wallet's setup (K6)", () => {
     expect(await prepared(world({ ...passkey, contract: passkeyRow() }), chain())).toEqual({
       contract: expected.contract,
       salt: spendingLimitSalt(ORG),
+      version: 2,
       deployed: false,
       agentFunded: false,
       dailyUnits: "50000000",

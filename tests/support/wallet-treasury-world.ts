@@ -95,7 +95,7 @@ export function world(overrides: { org?: Row; operating?: Row; contract?: Row | 
   };
 }
 
-/** Whether a row passes PostgREST's filters as supabase-js writes them: eq., is.null, and or=(…). */
+/** Whether a row passes PostgREST's filters as supabase-js writes them: eq., is.null, in.(…), like. and or=(…). */
 export function matches(row: Row, params: URLSearchParams): boolean {
   for (const [key, value] of params) {
     // The scope adds org_id to every tenant request; these rows are all this workspace's.
@@ -111,6 +111,10 @@ export function matches(row: Row, params: URLSearchParams): boolean {
     if (value === "is.null" && cell !== null && cell !== undefined) return false;
     if (value.startsWith("eq.") && String(cell) !== value.slice(3)) return false;
     if (value.startsWith("in.(") && !value.slice(4, -1).split(",").includes(String(cell))) return false;
+    if (value.startsWith("like.")) {
+      const pattern = value.slice(5).split(/[%*]/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+      if (typeof cell !== "string" || !new RegExp(`^${pattern}$`, "s").test(cell)) return false;
+    }
   }
   return true;
 }
@@ -150,8 +154,9 @@ export function database(state: World) {
         approve_tx_id: null,
         approve_tx_hash: null,
         enforced: false,
-        // The columns' defaults (0083).
+        // The columns' defaults (0083, 0132).
         treasury_signer: "wallet",
+        version: 1,
         recovery_address: null,
         recovery_skipped_at: null,
         ...(request.body as Row),
@@ -287,6 +292,8 @@ export const agentRow = (extra: Row = {}): Row => ({
   treasury_signer: "wallet",
   recovery_address: null,
   recovery_skipped_at: null,
+  // After migration 0132; a test of the row before it leaves `version` out.
+  version: 1,
   ...extra,
 });
 export const chosen = { org: { wallet_host: "external" }, operating: { address: WALLET } };

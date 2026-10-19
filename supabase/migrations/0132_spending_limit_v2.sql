@@ -5,7 +5,8 @@
 -- `next_deploy_tx_hash`), then approves it, which makes it the contract (`address`, `version` 2) and keeps the one it
 -- replaced (`previous_address`) until the owner's wallet takes its approval back (`previous_revoke_tx_hash`).
 --
--- Only new columns, with defaults: safe to run before or after the code that reads them, which reads rows whole.
+-- Only new columns, with defaults. Run it with the code that uses them: until it has run, that code reads rows whole
+-- as version 1, deploys version 1 for a new setup and does not offer the upgrade, so nothing waits on it.
 -- Idempotent throughout: scripts/migrate.ts re-runs every migration each time.
 
 alter table public.spending_limit_contracts add column if not exists version smallint not null default 1;

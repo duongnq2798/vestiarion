@@ -227,7 +227,7 @@ export default function ContractUpgrade({ orgSlug, status, network }: { orgSlug:
       const outcome = await treasury.send([call]);
       if (outcome.kind === "reverted") throw new PasskeyTreasuryError(`${profile.label} did not carry it out; only its network fee was spent.`);
       if (outcome.kind === "unconfirmed") {
-        say(`Sent. ${profile.label} has not confirmed it yet; reload this page in a minute.`);
+        say(`Sent. ${profile.label} has not confirmed it yet; reload this page in a minute, then revoke again: an approval of 0 sent twice costs only its fee.`);
         return;
       }
       await recordStep("upgrade-revoke", outcome.txHash, POLL_TRIES);

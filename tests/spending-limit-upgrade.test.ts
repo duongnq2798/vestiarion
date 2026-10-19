@@ -62,11 +62,16 @@ describe("the upgrade's place in the status", () => {
       inScope(state, () => walletTreasuryStatus(ORG, { chain: chain({ allowance: 1n, allowances, gas: 500_000_000_000_000_000n }) }));
     expect((await status(world({ ...live, contract: v1Row() }))).upgrade).toEqual({ state: "offer", next: null, previous: null });
     expect((await status(world({ ...live, contract: v1Row({ next_address: V2 }) }))).upgrade).toEqual({ state: "approve", next: V2, previous: null });
-    const switched = () => world({ ...live, contract: v1Row({ address: V2, version: 2, previous_address: CONTRACT }) });
+    const switched = (extra: Record<string, unknown> = {}) => world({ ...live, contract: v1Row({ address: V2, version: 2, previous_address: CONTRACT, ...extra }) });
     expect(await status(switched(), { [CONTRACT.toLowerCase()]: 5n })).toMatchObject({ version: 2, upgrade: { state: "revoke", previous: CONTRACT } });
-    expect(await status(switched(), { [CONTRACT.toLowerCase()]: 0n })).toMatchObject({ version: 2, upgrade: null });
-    // A row from before migration 0132, with no version at all, reads as version 1.
-    expect(await status(world({ ...live, contract: v1Row({ version: undefined }) }))).toMatchObject({ version: 1, upgrade: { state: "offer" } });
+    // Asked for until the revocation is recorded, even where the allowance reads 0 already, so its entry is never skipped.
+    expect(await status(switched(), { [CONTRACT.toLowerCase()]: 0n })).toMatchObject({ version: 2, upgrade: { state: "revoke" } });
+    expect(await status(switched({ previous_revoke_tx_hash: REVOKE_TX }))).toMatchObject({ version: 2, upgrade: null });
+    // A row from before migration 0132, with no version at all, reads as version 1, and offers no upgrade it could not record.
+    const before = v1Row();
+    delete before.version;
+    expect(await status(world({ ...live, contract: before }))).toMatchObject({ version: 1, upgrade: null });
+    await expect(inScope(world({ ...live, contract: before }), () => prepareUpgradeDeployment({ orgId: ORG }, { chain: chain() }))).rejects.toMatchObject({ code: "wrong_step" });
   });
 });
 
@@ -128,7 +133,14 @@ describe("a browser wallet's upgrade", () => {
       await expect(inScope(state, () => recordUpgradeApproval({ orgId: ORG, actorId: ACTOR, txHash: approved }, { chain: onChain }))).rejects.toMatchObject({ code: "in_flight" });
       expect(state.contract).toMatchObject({ address: CONTRACT, next_address: V2 });
     }
-    const settled = world({ ...live, contract: v1Row(), intents: [{ id: "pi-1", status: "confirmed" }] });
+    // A send Circle may hold, recorded as failed, is in flight too until it is settled.
+    const unknown = world({
+      ...live,
+      contract: v1Row(),
+      intents: [{ id: "pi-1", status: "failed", provider_tx_id: null, last_error: "Circle did not answer it; it may or may not have been accepted" }],
+    });
+    await expect(inScope(unknown, () => prepareUpgradeDeployment({ orgId: ORG }, { chain: chain() }))).rejects.toMatchObject({ code: "in_flight" });
+    const settled = world({ ...live, contract: v1Row(), intents: [{ id: "pi-1", status: "confirmed" }, { id: "pi-2", status: "failed", provider_tx_id: null, last_error: "refused" }] });
     await expect(inScope(settled, () => prepareUpgradeDeployment({ orgId: ORG }, { chain: chain() }))).resolves.toMatchObject({ to: null });
   });
 

@@ -351,8 +351,8 @@ function SetupStep({ orgSlug, status, label }: { orgSlug: string; status: Wallet
         deployed: setup.deployed,
         agentFunded,
         gasWei: AGENT_GAS_WEI,
-        // Version 2, as the server deploys on Arc mainnet (spending limit v2 V8).
-        terms: spendingLimitTerms(ARC_MAINNET),
+        // The version the server says it deploys; its terms are Arc mainnet's own, never the server's (spending limit v2 V8).
+        terms: setup.version === 2 ? spendingLimitTerms(ARC_MAINNET) : null,
       });
       checkPasskeySetup(setup, expected);
       say("Confirm the setup with your passkey.");

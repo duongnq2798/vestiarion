@@ -172,6 +172,19 @@ describe("deploying the contract from the owner's wallet", () => {
     expect(state.contract).toMatchObject({ address: SECOND_CONTRACT, deploy_tx_hash: REDEPLOY_TX });
   });
 
+  it("deploys version 1, and writes no version, while migration 0132 has not run (spending limit v2 V9)", async () => {
+    const before = agentRow();
+    delete before.version;
+    const state = world({ ...chosen, contract: before });
+    const { inScope } = database(state);
+    const prepared = await inScope(() => prepareDeployment({ orgId: ORG, dailyUsdc: null, weeklyUsdc: null }));
+    expect(prepared.data).toBe(deploymentData({ usdc: USDC, treasury: WALLET, agent: AGENT, dailyUnits: 50_000_000n, weeklyUnits: 150_000_000n }));
+    const onChain = chain({ receipts: { [DEPLOY_TX]: deployedAt(CONTRACT) }, code: { [CONTRACT.toLowerCase()]: ourCode } });
+    expect(await inScope(() => recordDeployment({ orgId: ORG, actorId: ACTOR, txHash: DEPLOY_TX }, { chain: onChain }))).toBe("verified");
+    expect(state.contract).not.toHaveProperty("version");
+    expect(state.contract).toMatchObject({ address: CONTRACT });
+  });
+
   it("records a version 2 deployment as version 2 (spending limit v2 V8, V9)", async () => {
     const state = world({ ...chosen, contract: agentRow() });
     const onChain = chain({ receipts: { [DEPLOY_TX]: deployedAt(CONTRACT) }, code: { [CONTRACT.toLowerCase()]: ourCodeV2 } });

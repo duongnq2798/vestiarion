@@ -1,4 +1,5 @@
 import { decodeFunctionResult, encodeFunctionData, erc20Abi, maxUint256, type Hex } from "viem";
+import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
 import { db, unwrap } from "../dal";
 import { readOutflowBudget } from "../agent/outflow-budget";
 import type { NetworkProfile } from "../network";
@@ -16,6 +17,7 @@ import {
   setup,
   txHash,
   UNLIMITED,
+  versionsRecorded,
   WalletTreasuryError,
   type ContractRow,
   type PreparedTransaction,
@@ -35,6 +37,7 @@ import {
 async function upgrading(): Promise<{ wallet: Hex; row: ContractRow; network: NetworkProfile; terms: SpendingLimitTerms; current: Hex }> {
   const { wallet, row, network } = await setup({ agent: true, contract: true });
   if (!row?.enforced || !row.address) throw new WalletTreasuryError("wrong_step", "Set up the wallet first.");
+  if (!versionsRecorded(row)) throw new WalletTreasuryError("wrong_step", "The upgrade is not open on this deployment yet.");
   const terms = spendingLimitTerms(network);
   if (!terms) throw new WalletTreasuryError("wrong_step", `${network.label} has no CCTP to pay other chains through.`);
   return { wallet, row, network, terms, current: asAddress(row.address) };
@@ -49,11 +52,15 @@ async function heldFigures(chain: TreasuryChain, contract: Hex): Promise<{ daily
 
 /**
  * Refused while any payment is in flight (V10): version 2's `paid` starts empty, so a payment sent through version 1 and
- * sent again through version 2 under its key would be two payments. The switch waits until it settles.
+ * sent again through version 2 under its key would be two payments. The switch waits until it settles: one submitting
+ * or pending, and one recorded as failed whose send Circle may still hold (payment safety R1), until it is settled.
  */
 async function refuseWhilePaymentsInFlight(): Promise<void> {
-  const found = unwrap(await db().from("payment_intents").select("id").in("status", ["submitting", "pending"]).limit(1)) as Array<{ id: string }>;
-  if (found.length > 0) throw new WalletTreasuryError("in_flight");
+  const [sending, unknown] = await Promise.all([
+    db().from("payment_intents").select("id").in("status", ["submitting", "pending"]).limit(1),
+    db().from("payment_intents").select("id").eq("status", "failed").is("provider_tx_id", null).like("last_error", `%${MAY_HAVE_BEEN_ACCEPTED}%`).limit(1),
+  ]);
+  if ((unwrap(sending) as unknown[]).length > 0 || (unwrap(unknown) as unknown[]).length > 0) throw new WalletTreasuryError("in_flight");
 }
 
 const capUnitsOf = (capUsdc: number | null): bigint => {

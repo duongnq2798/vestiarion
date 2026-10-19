@@ -221,7 +221,7 @@ On either route, once the workspace is live, these points differ from [What chan
 - **Keep the agent's gas topped up.** The agent cannot pay without it. Send USDC on Arc mainnet to the agent's wallet, shown in **Go live**, before it runs out.
 - **Money coming in is not read yet.** A client's payment into your wallet reaches you, but Vestiarion does not match it to its receivable yet, so the receivable stays open. Leave payment reminders off for this workspace's receivables until it does.
 
-#### Upgrade your contract to pay other chains
+### Upgrade your contract to pay other chains
 
 A contract deployed before Oct 19, 2026 is version 1 of Vestiarion's spending limit contract, which pays on Arc mainnet only. Version 2 does everything version 1 does, with the same figures, and also pays a vendor on Base through CCTP. While your contract is version 1, **Go live** shows **Pay vendors on other chains** to an owner or admin, before the workspace goes live and after. Version 2 is not audited, as version 1 is not.
 

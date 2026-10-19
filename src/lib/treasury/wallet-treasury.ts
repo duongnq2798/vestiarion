@@ -335,19 +335,37 @@ export function contractVersion(value: unknown): SpendingLimitVersion {
 }
 
 /**
+ * Whether migration 0132 has run (V9): a row read whole carries `version` once it has. Before it, nothing about version 2
+ * is written or offered: setups deploy version 1, as they did, and the upgrade waits, so no step the owner pays gas
+ * for is refused at its recording.
+ */
+export function versionsRecorded(row: ContractRow | null | undefined): boolean {
+  return Boolean(row) && Object.prototype.hasOwnProperty.call(row, "version");
+}
+
+/** The terms a setup deploys with: version 2's on a network with CCTP, once the row can record it; version 1's otherwise. */
+export function setupTerms(row: ContractRow | null | undefined, network: NetworkProfile) {
+  return versionsRecorded(row) ? spendingLimitTerms(network) : null;
+}
+
+/** The version to write with a recorded deployment: none before migration 0132, whose row has nowhere to keep it. */
+const versionField = (row: ContractRow | null | undefined, version: SpendingLimitVersion) => (versionsRecorded(row) ? { version } : {});
+
+/**
  * Where an enforced contract's upgrade to version 2 stands (V10): offered while version 1 carries the payments on a
  * network that deploys version 2; to approve once version 2 is deployed; to revoke while the version 1 it replaced is
  * still approved, as USDC itself answers (one it does not answer for is asked for again rather than taken as done).
  */
 async function upgradeState(row: ContractRow, read: { chain: TreasuryChain; wallet: Hex; network: NetworkProfile }): Promise<WalletTreasuryStatus["upgrade"]> {
+  if (!versionsRecorded(row)) return null;
   if (contractVersion(row.version) === 1) {
     if (!spendingLimitTerms(read.network)) return null;
     return row.next_address ? { state: "approve", next: asAddress(row.next_address), previous: null } : { state: "offer", next: null, previous: null };
   }
-  if (!row.previous_address) return null;
-  const previous = asAddress(row.previous_address);
-  const left = await tolerant(() => read.chain.allowance(read.wallet, previous));
-  return left === 0n ? null : { state: "revoke", next: null, previous };
+  // Done once the revocation is recorded; until then asked for, even where the allowance reads 0 already (a revocation
+  // sent elsewhere, or not recorded yet), so its record and its entry are never skipped.
+  if (!row.previous_address || row.previous_revoke_tx_hash) return null;
+  return { state: "revoke", next: null, previous: asAddress(row.previous_address) };
 }
 
 /** The message the owner's wallet signs for this workspace now (W3). */
@@ -519,8 +537,8 @@ export async function prepareDeployment(input: { orgId: string; dailyUsdc: numbe
     const { wallet, row, network } = await setup({ agent: true });
     if (row?.approve_tx_hash) throw new WalletTreasuryError("wrong_step", "The contract is approved already.");
     const figures = await deploymentFigures(input.dailyUsdc, input.weeklyUsdc);
-    // Version 2 wherever the network has CCTP (spending limit v2 V8).
-    const terms = spendingLimitTerms(network);
+    // Version 2 wherever the network has CCTP, once the row can record it (spending limit v2 V8, V9).
+    const terms = setupTerms(row, network);
     return {
       to: null,
       data: deploymentData({ usdc: network.tokens.USDC, treasury: wallet, agent: row?.agent_address as string, dailyUnits: figures.daily, weeklyUnits: figures.weekly, terms }),
@@ -558,7 +576,7 @@ export async function recordDeployment(input: { orgId: string; actorId: string; 
     const written = unwrap(
       await db()
         .from("spending_limit_contracts")
-        .update({ address: check.contract, deploy_tx_hash: hash, version: check.version })
+        .update({ address: check.contract, deploy_tx_hash: hash, ...versionField(row, check.version) })
         .eq("id", row.id)
         .is("approve_tx_hash", null)
         .select("id")
@@ -665,7 +683,7 @@ export async function recordPasskeySetup(
     const written = unwrap(
       await db()
         .from("spending_limit_contracts")
-        .update({ address: check.contract, deploy_tx_hash: hash, approve_tx_hash: hash, enforced: true, version: check.version })
+        .update({ address: check.contract, deploy_tx_hash: hash, approve_tx_hash: hash, enforced: true, ...versionField(row, check.version) })
         .eq("id", row.id)
         .is("approve_tx_hash", null)
         .select("id")
@@ -840,6 +858,8 @@ export async function recordApproval(input: { orgId: string; actorId: string; tx
 export interface PreparedPasskeySetup {
   contract: Hex;
   salt: Hex;
+  /** The version it deploys (spending limit v2 V8): 2 on a network with CCTP once migration 0132 has run. */
+  version: SpendingLimitVersion;
   /** The contract is at its address already, from a setup whose recording was lost: the deploy call is left out. */
   deployed: boolean;
   /** The agent holds its gas minimum already: the gas call is left out, so a second setup never pays it twice. */
@@ -881,8 +901,9 @@ export async function preparePasskeySetup(
       capUnits,
       salt,
       gasWei: parseEther(AGENT_GAS_USDC),
-      // Version 2 wherever the network has CCTP (spending limit v2 V8); the browser builds the same.
-      terms: spendingLimitTerms(network),
+      // Version 2 wherever the network has CCTP, once the row can record it (spending limit v2 V8, V9); the server
+      // returns which, and the browser builds the same.
+      terms: setupTerms(row, network),
     };
     const chain = deps.chain ?? treasuryChain(network);
     const planned = passkeySetupCalls({ ...base, deployed: false, agentFunded: false });
@@ -894,6 +915,7 @@ export async function preparePasskeySetup(
     return {
       contract,
       salt,
+      version: base.terms ? 2 : 1,
       deployed,
       agentFunded,
       dailyUnits: figures.daily.toString(),
