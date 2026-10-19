@@ -1,8 +1,10 @@
+import { isValidElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPayeeLinkAction, revokePayeeLinkAction } from "@/app/actions/payee-links";
 import { keepPayeeAddressAction, submitPayeeAddressAction, submitPayeeInvoiceAction } from "@/app/payee/[token]/actions";
 import PayeePage, { metadata } from "@/app/payee/[token]/page";
+import { PayeeJourney } from "@/components/payee/PayeeJourney";
 import { requiresSession } from "@/lib/auth/routes";
 import { CounterpartyAddressError } from "@/lib/counterparty-address";
 import { configFromEnv } from "@/lib/config";
@@ -57,6 +59,20 @@ const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase
 let role: string | null = "vendor";
 let fake = fakeSupabase(() => ({ body: role ? [{ id: PAYEE, role }] : [] }));
 
+/** The first element of `type` in a rendered tree, as React will serialize its props for the browser. */
+function findElement(node: unknown, type: unknown): { props: Record<string, unknown> } | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findElement(child, type);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!isValidElement(node)) return null;
+  if (node.type === type) return node as { props: Record<string, unknown> };
+  return findElement((node.props as { children?: unknown }).children, type);
+}
+
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/\s+/g, " ").trim();
 
 function form(fields: Record<string, string>): FormData {
@@ -66,6 +82,23 @@ function form(fields: Record<string, string>): FormData {
 }
 
 const empty = { ok: false, message: "" };
+
+const FULL_ADDRESS = "0x2222222222222222222222222222222222222222";
+/** The link's status as the read returns it, with a payment held for a reason the payee never reads (R3). */
+const linkNow = (over: Record<string, unknown> = {}) => ({
+  orgName: "Acme", payeeName: "Northwind", chain: "ARC-TESTNET", linkState: "used", expiresAt: "2026-10-07T12:00:00+00:00",
+  usedAt: "2026-10-02T09:00:00Z", statusUntil: "2026-11-01T09:00:00Z", address: FULL_ADDRESS, addressConfirmed: false,
+  payments: [{ kind: "invoice", title: "Logo", amount: 5, currency: "USDC", status: "flagged", txRef: null, settledAt: null, scheduledFor: null }],
+  asksInvoice: true, invoiceSent: false, chainOpen: false,
+  ...over,
+});
+/** What a payee's browser may receive of it (S6): the address masked, no hold's reason, nothing else of the read. */
+function expectPayeeView(answer: unknown) {
+  const sent = JSON.stringify(answer);
+  expect(sent).toContain("0x2222…2222");
+  expect(sent).not.toContain(FULL_ADDRESS);
+  expect(sent).not.toMatch(/flag|chainOpen/i);
+}
 
 beforeEach(() => {
   role = "vendor";
@@ -188,13 +221,15 @@ describe("submitPayeeAddressAction — no session needed", () => {
     expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: false, message: "Where you are paid can no longer be chosen on this link. Reload the page." });
   });
 
-  it("answers with the link's status as it now stands, so the page moves on at once (payee step advance S1)", async () => {
-    const now = { orgName: "Acme", linkState: "used", asksInvoice: true, invoiceSent: false };
+  it("answers with the link's status as it now stands, as the page is given it (payee step advance S1, S6)", async () => {
     lib.submitPayeeAddress.mockResolvedValueOnce({ ok: true, orgName: "Acme", unchanged: false }).mockResolvedValueOnce({ ok: true, orgName: "Acme", unchanged: true });
-    lib.payeeLinkStatus.mockResolvedValue(now);
-    const fields = { token: TOKEN, address: "0x2222222222222222222222222222222222222222" };
-    expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: now });
-    expect(await submitPayeeAddressAction(empty, form(fields))).toEqual({ ok: true, message: "That is already the address Acme has on file.", status: now });
+    lib.payeeLinkStatus.mockResolvedValue(linkNow());
+    const fields = { token: TOKEN, address: FULL_ADDRESS };
+    const sent = await submitPayeeAddressAction(empty, form(fields));
+    expect(sent).toMatchObject({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: { linkState: "used", address: "0x2222…2222" } });
+    expect(sent.status?.payments[0].status).toBe("review");
+    expectPayeeView(sent);
+    expect(await submitPayeeAddressAction(empty, form(fields))).toMatchObject({ ok: true, message: "That is already the address Acme has on file.", status: { linkState: "used" } });
     expect(lib.payeeLinkStatus).toHaveBeenCalledWith(TOKEN);
   });
 
@@ -233,11 +268,12 @@ describe("keepPayeeAddressAction (payee invoice link P4)", () => {
     expect(authorizeMock).not.toHaveBeenCalled();
   });
 
-  it("answers with the link's status as it now stands (S1)", async () => {
-    const now = { orgName: "Acme", linkState: "used", asksInvoice: true, invoiceSent: false };
+  it("answers with the link's status as it now stands, as the page is given it (S1, S6)", async () => {
     lib.keepPayeeAddress.mockResolvedValue({ ok: true, orgName: "Acme" });
-    lib.payeeLinkStatus.mockResolvedValue(now);
-    expect(await keepPayeeAddressAction(empty, form({ token: TOKEN }))).toEqual({ ok: true, message: "Kept the address Acme has on file.", status: now });
+    lib.payeeLinkStatus.mockResolvedValue(linkNow({ addressConfirmed: true }));
+    const kept = await keepPayeeAddressAction(empty, form({ token: TOKEN }));
+    expect(kept).toMatchObject({ ok: true, message: "Kept the address Acme has on file.", status: { linkState: "used", addressConfirmed: true } });
+    expectPayeeView(kept);
   });
 
   it("says when there is nothing to keep, when the link is no longer valid, and nothing else of a failure", async () => {
@@ -270,11 +306,12 @@ describe("submitPayeeInvoiceAction (payee invoice link P4)", () => {
     expect(authorizeMock).not.toHaveBeenCalled();
   });
 
-  it("answers with the link's status as it now stands (S1), and reads none for a refusal", async () => {
-    const now = { orgName: "Acme", linkState: "used", asksInvoice: true, invoiceSent: true };
+  it("answers with the link's status as it now stands (S1, S6), and reads none for a refusal", async () => {
     invoiceMock.mockResolvedValueOnce({ ok: true, orgName: "Acme" }).mockResolvedValueOnce({ ok: false, reason: "busy" });
-    lib.payeeLinkStatus.mockResolvedValue(now);
-    expect(await submitPayeeInvoiceAction(empty, invoiceForm())).toEqual({ ok: true, message: "Sent. Acme reviews your invoice before adding it.", status: now });
+    lib.payeeLinkStatus.mockResolvedValue(linkNow({ invoiceSent: true }));
+    const sent = await submitPayeeInvoiceAction(empty, invoiceForm());
+    expect(sent).toMatchObject({ ok: true, message: "Sent. Acme reviews your invoice before adding it.", status: { invoiceSent: true } });
+    expectPayeeView(sent);
     expect(lib.payeeLinkStatus).toHaveBeenCalledTimes(1);
     expect(await submitPayeeInvoiceAction(empty, invoiceForm())).toEqual({ ok: false, message: "Wait a few seconds, then send it again." });
     expect(lib.payeeLinkStatus).toHaveBeenCalledTimes(1);
@@ -355,6 +392,20 @@ describe("the payee's page", () => {
     expect(page).not.toContain(ADDRESS);
     expect(page).toContain("It shows your payment's status until Nov 1, 2026");
     expect(markup).not.toMatch(/<input[^>]*name="address"/);
+  });
+
+  it("gives its client part the address masked and no hold's reason, as they end up in the page's HTML (S6)", async () => {
+    lib.payeeLinkStatus.mockResolvedValue(
+      status({
+        linkState: "used", address: ADDRESS, addressConfirmed: true, chainOpen: true,
+        payments: [{ kind: "invoice", title: "Logo", amount: 5, currency: "USDC", status: "flagged", txRef: "0xdead", settledAt: null, scheduledFor: null }],
+      })
+    );
+    const journey = findElement(await PayeePage({ params: Promise.resolve({ token: TOKEN }) }), PayeeJourney);
+    const props = JSON.stringify(journey?.props);
+    expect(props).toContain("0x2222…2222");
+    expect(props).not.toContain(ADDRESS);
+    expect(props).not.toMatch(/flag|chainOpen|0xdead/i);
   });
 
   it("step 3: once confirmed, each payment in plain words, never why one is held (R3)", async () => {

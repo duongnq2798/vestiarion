@@ -1,6 +1,6 @@
 # A payee link moves on as the action answers
 
-Date: 2026-10-20. Status: built. Branch `claude/gracious-raman-b15c14`. No migration. Follows
+Date: 2026-10-20. Status: built. Branch `fix/payee-step-advance`. No migration. Follows
 [2026-10-19-payee-invoice-link-design.md](2026-10-19-payee-invoice-link-design.md) (P4) and the freelancer journey
 ([2026-10-02-freelancer-journey-design.md](2026-10-02-freelancer-journey-design.md) §4).
 
@@ -24,19 +24,28 @@ waits on a second request.
 
 - **S1. The action answers with where the link now stands.** `submitPayeeAddressAction`, `keepPayeeAddressAction` and
   `submitPayeeInvoiceAction` read the link's status once the submission is accepted (`payeeLinkStatus`, the read the
-  page itself makes) and return it as `status` beside the message. A refusal reads nothing.
+  page itself makes) and return it as `status` beside the message, projected as S6 says. A refusal reads nothing.
 - **S2. Best effort.** What was sent is kept whatever the read does. A read that fails, or finds no link, answers
-  without `status` and logs one fixed line; the form then refreshes the page, as it did before.
-- **S3. The page shows the further of two reads.** `PayeeJourney` is now a client component. It keeps the status the
-  last accepted action answered with, and shows it while it is further along than the page's own read
-  (`payeeProgress`: the stage, then whether the invoice arrived), so the step changes in the same moment as the action's
-  answer. Once the page's own read catches up, the answer is dropped, and the page's reads alone say where the link
-  stands, including one that goes back (a business that changes an address it had confirmed). With no refresh after an
-  answer, the page next reads itself when its 30-second refresh runs, as before.
+  without `status`; one that fails also logs one fixed line. The form then refreshes the page, as it did before.
+- **S3. The answer holds until the page reads itself again.** `PayeeJourney` is now a client component. It keeps the
+  status the last accepted action answered with, together with the page's own read it came over, and shows the answer
+  while the page still has that read, so the step changes in the same moment as the action's answer. The next read the
+  page receives takes over, whether it is further along or goes back (a business that changes an address it had
+  confirmed): the router runs a refresh and a server action one after the other, so any read that reaches the page after
+  the answer was made after the submission was written. With no refresh after an answer, the page next reads itself when
+  its 30-second refresh runs, as before.
 - **S4. Without JavaScript.** Nothing changes: a form posted without JavaScript renders the page again on the server,
   from the link's status as it now stands. `today`, the first day the invoice's due date may fall on, still comes from
   the server (the page passes it), so the form and the check agree.
 - **S5. Copy.** No visible text changes. The thanks line still shows, for the moment before the next step replaces it.
+- **S6. What the browser receives.** A client component's props are written into the page's HTML, and an action's
+  answer goes to whoever holds the link, so neither carries the status as the read returns it. `payeeView` gives the page
+  and every answer the same projection: the address masked as the page shows it (R4), each payment's state one the page
+  tells apart (`paid`, `matched`, `scheduled`, `verified`, `pending`) or `review` for any other, so a hold's reason stays
+  the business's (R3), a payment's transaction and dates only where the page shows them, and no field the read adds now or
+  later. Every screen renders from it exactly as it did from the full status.
+- **S7. Focus.** The button the payee pressed is gone once the page moves on, so the new step's heading takes the focus
+  (focusable from code only, with no outline), and a screen reader reads out where the payee now is.
 
 ## Considered and not done
 
@@ -44,17 +53,26 @@ waits on a second request.
   second request too, but the step would still come from the router applying a new page, the part that did not show in
   production; and the form that answered would unmount in the same render as its answer (the repo's known pattern for a
   client component gated on a server prop).
-- Keeping `router.refresh()` after an answer. It costs a request that renders the same step, and a read that arrives
-  stale could not move the page back anyway (S3); the 30-second refresh already keeps the page current.
+- Keeping `router.refresh()` after an answer. It costs a request that renders the same step; the 30-second refresh
+  already keeps the page current.
+- Showing whichever of the answer and the page's read is further along. It would also hide a read that rightly goes
+  back, such as an address the business changed after confirming it, until the page caught up again (S3 instead).
 - Building the next status on the client from what the payee sent. The link's dates (30 days after use) and the
   confirmation state are the server's; reading them back keeps one source.
+
+A lead on the cause, not verified: while the journey was rendered on the server, the invoice form's client code was
+first named by the refresh that showed the invoice step, so the browser had to load it before showing that step, and the
+refresh from the invoice to the confirmation, which needed no new client code, did show. The journey now ships every
+step's client code with the page, which would cover that too.
 
 ## Tests
 
 - `tests/payee-link-steps-dom.test.tsx`: in a DOM, sending the address through the page shows Step 2 of 4, "Send Acme
-  your invoice", the masked address and the new date, with no refresh; the page keeps that step while its own read is
-  behind, then follows its reads; sending the invoice shows Step 3 of 4 and "Invoice sent."; keeping the address moves
-  on; an answer without `status` refreshes.
-- `tests/payee-links-actions.test.tsx`: each action returns the status read after an accepted submission, none for a
-  refusal, and still thanks the payee when the read fails.
-- `tests/payee-journey.test.ts`: `payeeProgress` orders the stages and counts the invoice within one; `moveOn`.
+  your invoice", the masked address and the new date, with no refresh, and focuses that heading; the page keeps the step
+  until its next read, which then counts, further along or not; sending the invoice shows Step 3 of 4 and "Invoice
+  sent."; keeping the address moves on; an answer without `status` refreshes.
+- `tests/payee-links-actions.test.tsx`: each action returns the projected status read after an accepted submission
+  (masked address, no hold's reason, no other field of the read), none for a refusal, and still thanks the payee when
+  the read fails; the page gives `PayeeJourney` the projection, read from the props the browser receives.
+- `tests/payee-journey.test.ts`: `payeeView` masks, maps and drops as S6 says and leaves every screen's stage and words
+  as they were; `moveOn`.

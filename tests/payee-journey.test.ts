@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { amountsLine, groupAddress, looksLikeAddress, maskAddress, moveOn, payeeProgress, payeeStage, paymentState, type PayeeLinkStatus, type PayeePayment } from "@/lib/payee-journey";
+import { amountsLine, groupAddress, looksLikeAddress, maskAddress, moveOn, payeeStage, payeeView, paymentState, type PayeeLinkStatus, type PayeePayment } from "@/lib/payee-journey";
 
 /** The freelancer's side of a payment (docs/superpowers/specs/2026-10-02-freelancer-journey-design.md §2–§4). */
 
@@ -48,23 +48,42 @@ describe("payeeStage", () => {
   });
 });
 
-describe("payeeProgress and moveOn (payee step advance S1-S3)", () => {
-  it("orders a link's reads by stage, then by whether its invoice arrived", () => {
-    const asked = { asksInvoice: true, invoiceSent: false, addressConfirmed: false, payments: [] };
-    const order = [
-      status({ ...asked, linkState: "open", address: null }),
-      status(asked),
-      status({ ...asked, invoiceSent: true }),
-      status({ ...asked, invoiceSent: true, addressConfirmed: true }),
-      status({ ...asked, invoiceSent: true, addressConfirmed: true, payments: [payment({ status: "paid", txRef: "0xabc" })] }),
+describe("payeeView and moveOn (payee step advance S1, S2, S6)", () => {
+  const held = payment({ kind: "invoice", title: "Logo", status: "flagged", txRef: "0xdead", settledAt: "2026-10-03T00:00:00Z", scheduledFor: "2026-10-04" });
+
+  it("gives the page the address masked, and each payment's state as one the page tells apart or review (R1, R3, R4)", () => {
+    const view = payeeView(status({ payments: [payment(), held, payment({ status: "paid", txRef: "0xabc", settledAt: "2026-10-05T00:00:00Z" })] }));
+    expect(view.address).toBe(maskAddress(ADDRESS));
+    expect(view.payments.map((entry) => entry.status)).toEqual(["verified", "review", "paid"]);
+    expect(JSON.stringify(view)).not.toContain(ADDRESS);
+    expect(JSON.stringify(view)).not.toMatch(/flag/i);
+    // A transaction and its dates only where the page shows them.
+    expect(view.payments[1]).toMatchObject({ txRef: null, settledAt: null, scheduledFor: null });
+    expect(view.payments[2]).toMatchObject({ txRef: "0xabc", settledAt: "2026-10-05T00:00:00Z" });
+    expect(payeeView(status({ payments: [payment({ status: "scheduled", scheduledFor: "2026-10-09" })] })).payments[0].scheduledFor).toBe("2026-10-09");
+  });
+
+  it("keeps nothing else the status read returns", () => {
+    const read = { ...status(), chainOpen: true, counterpartyId: "cp-1" } as PayeeLinkStatus;
+    expect(Object.keys(payeeView(read))).not.toContain("chainOpen");
+    expect(Object.keys(payeeView(read))).not.toContain("counterpartyId");
+  });
+
+  it("leaves every screen as the full status drew it: the same stage and the same words", () => {
+    const reads = [
+      status({ linkState: "open", address: null, addressConfirmed: false }),
+      status({ asksInvoice: true, invoiceSent: false, addressConfirmed: false }),
+      status({ addressConfirmed: false, payments: [held] }),
+      status({ payments: [payment({ status: "matched" }), held, payment({ status: "pending", kind: "invoice" })] }),
+      status({ payments: [payment({ status: "paid", txRef: "sim_1" })] }),
+      status({ address: null, addressConfirmed: false }),
     ];
-    expect(order.map(payeeStage)).toEqual(["address", "invoice", "confirming", "paying", "paid"]);
-    const progress = order.map(payeeProgress);
-    expect([...progress].sort((a, b) => a - b)).toEqual(progress);
-    expect(new Set(progress).size).toBe(progress.length);
-    // Within a stage, the invoice sent counts: a payment under way with the invoice sent is further along than without.
-    const underway = { addressConfirmed: true, payments: [payment({ status: "matched" })], asksInvoice: true };
-    expect(payeeProgress(status({ ...underway, invoiceSent: true }))).toBeGreaterThan(payeeProgress(status({ ...underway, invoiceSent: false })));
+    for (const read of reads) {
+      const view = payeeView(read);
+      expect(payeeStage(view)).toBe(payeeStage(read));
+      expect(view.payments.map((entry) => paymentState(entry, "Northstar"))).toEqual(read.payments.map((entry) => paymentState(entry, "Northstar")));
+      if (read.address) expect(maskAddress(view.address as string)).toBe(maskAddress(read.address));
+    }
   });
 
   it("moves on with the status an action answered with, or refreshes without one", () => {

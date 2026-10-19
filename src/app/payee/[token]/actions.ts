@@ -2,7 +2,7 @@
 
 import "server-only";
 
-import { ADDRESS_CHECKSUM, CHAIN_CLOSED, NOT_AN_ADDRESS, type PayeeLinkStatus } from "@/lib/payee-journey";
+import { ADDRESS_CHECKSUM, CHAIN_CLOSED, NOT_AN_ADDRESS, payeeView, type PayeeLinkStatus } from "@/lib/payee-journey";
 import { PAYEE_FILE_MESSAGES, PAYEE_INVOICE_MESSAGES, type PayeeInvoiceField } from "@/lib/payee-invoice";
 import { submitPayeeInvoice } from "@/lib/platform/payee-invoices";
 import { keepPayeeAddress, payeeLinkStatus, submitPayeeAddress } from "@/lib/platform/payee-links";
@@ -45,13 +45,14 @@ function formString(formData: FormData, key: string): string {
 }
 
 /**
- * The link's status after an accepted submission, read as the page reads it (S1). Best effort (S2): what was sent is
- * kept whatever this read does, so a failure only leaves the page to refresh itself, as it did before.
+ * The link's status after an accepted submission, read as the page reads it and given as the page is given it,
+ * `payeeView` (S1, S6). Best effort (S2): what was sent is kept whatever this read does, so a read that fails or finds
+ * no link only leaves the page to refresh itself, as it did before.
  */
 async function statusNow(token: string): Promise<{ status?: PayeeLinkStatus }> {
   try {
     const status = await payeeLinkStatus(token);
-    return status ? { status } : {};
+    return status ? { status: payeeView(status) } : {};
   } catch {
     console.error("payee link status after submission failed");
     return {};

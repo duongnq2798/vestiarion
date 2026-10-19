@@ -225,18 +225,27 @@ describe("moving on as the action answers, with no reload", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it("keeps the step it moved on to while the page's own read still has the address step", async () => {
+  it("keeps the step it moved on to until the page reads itself again, whose reads then alone count", async () => {
+    actions.address.mockResolvedValueOnce({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: used() });
+    const opened = link();
+    act(() => root.render(journey(opened)));
+    await sendAddress();
+    // The page drawn again from the read it had keeps the answer.
+    act(() => root.render(journey(opened)));
+    expect(steps()).toBe("Step 2 of 4");
+    // Its next read takes over, further along or not, as when the business changes the address it had confirmed.
+    act(() => root.render(journey(used({ invoiceSent: true, addressConfirmed: true }))));
+    expect(steps()).toBe("Step 4 of 4");
+    act(() => root.render(journey(used({ invoiceSent: true }))));
+    expect(steps()).toBe("Step 3 of 4");
+  });
+
+  it("puts the focus on the new step's heading, where the pressed button was (S7)", async () => {
     actions.address.mockResolvedValueOnce({ ok: true, message: "Thanks. Acme will confirm your address before paying you.", status: used() });
     act(() => root.render(journey(link())));
     await sendAddress();
-    act(() => root.render(journey(link())));
-    expect(steps()).toBe("Step 2 of 4");
-    // A read that has moved further is shown, as the page refreshes itself; from then on the page's reads alone count,
-    // even one that goes back, as when the business changes the address it had confirmed.
-    act(() => root.render(journey(used({ invoiceSent: true, addressConfirmed: true }))));
-    expect(steps()).toBe("Step 4 of 4");
-    act(() => root.render(journey(used())));
-    expect(steps()).toBe("Step 2 of 4");
+    expect(document.activeElement?.tagName).toBe("H1");
+    expect(document.activeElement?.textContent).toBe("Send Acme your invoice");
   });
 
   it("shows the confirmation step once the invoice is sent, as the action answers", async () => {

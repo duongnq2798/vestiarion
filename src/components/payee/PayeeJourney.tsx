@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, CircleCheck, Clock3, FileCheck2 } from "lucide-react";
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import PayeeAddressForm from "@/components/PayeeAddressForm";
 import { Badge } from "@/components/ui/Badge";
@@ -16,7 +16,6 @@ import {
   amountsLine,
   invoiceOpen,
   maskAddress,
-  payeeProgress,
   payeeStage,
   paymentSimulated,
   paymentState,
@@ -44,10 +43,11 @@ import { PayeeSteps } from "./PayeeSteps";
  * screens after it say it was sent.
  *
  * The page moves on as soon as the payee's address, kept address or invoice is accepted, from the link's status the
- * action answers with (docs/superpowers/specs/2026-10-20-payee-step-advance-design.md S3): that answer is shown while it
- * is further along than the page's own read, `status`, which takes over again once it catches up. A refresh the page
- * waited on after each step once left the payee on the step they had just finished. `today`, the UTC day the invoice's
- * due date may start from, comes from the server, so the form and the check agree.
+ * action answers with (docs/superpowers/specs/2026-10-20-payee-step-advance-design.md S3): that answer is shown until
+ * the page's own read, `status`, next changes, and the new step's heading takes the focus the pressed button had (S7).
+ * A refresh the page waited on after each step once left the payee on the step they had just finished. `status` is
+ * `payeeView`'s projection, as every answer is (S6). `today`, the UTC day the invoice's due date may start from, comes
+ * from the server, so the form and the check agree.
  */
 
 /** Only the page knows its link; the screens are the same for a screenshot, which has none. */
@@ -71,21 +71,26 @@ export function PayeeJourney({
   simulated?: boolean;
   today?: string;
 }) {
-  const [answered, setAnswered] = useState<PayeeLinkStatus | null>(null);
-  // Once the page's own read has caught up with the answer, it alone says where the link stands (S3).
-  if (answered && payeeProgress(read) >= payeeProgress(answered)) setAnswered(null);
-  const status = answered && payeeProgress(answered) > payeeProgress(read) ? answered : read;
+  // The last answer, with the read it came over. The router runs a refresh and an action one after the other, so the
+  // next read was made after the submission was written: from then on the page's reads alone count (S3).
+  const [answered, setAnswered] = useState<{ status: PayeeLinkStatus; over: PayeeLinkStatus } | null>(null);
+  const status = answered?.over === read ? answered.status : read;
+  const onSent = useCallback((next: PayeeLinkStatus) => setAnswered({ status: next, over: read }), [read]);
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (answered) section.current?.querySelector<HTMLElement>("h1")?.focus();
+  }, [answered]);
   const stage = payeeStage(status);
   return (
-    <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
+    <section ref={section} className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
       <PayeeSteps stage={stage} withInvoice={status.asksInvoice === true} invoicePending={invoiceOpen(status)} />
       <div className="mt-5">
-        {stage === "address" && <AddressStep token={token} status={status} simulated={simulated} onSent={setAnswered} />}
-        {stage === "invoice" && <InvoiceStep token={token} status={status} today={today} onSent={setAnswered} />}
+        {stage === "address" && <AddressStep token={token} status={status} simulated={simulated} onSent={onSent} />}
+        {stage === "invoice" && <InvoiceStep token={token} status={status} today={today} onSent={onSent} />}
         {stage === "confirming" && <ConfirmingStep status={status} />}
         {stage === "paying" && <PayingStep status={status} simulated={simulated} />}
         {stage === "paid" && <PaidStep status={status} simulated={simulated} />}
-        {(stage === "paying" || stage === "paid") && <InvoiceStillOpen token={token} status={status} today={today} onSent={setAnswered} />}
+        {(stage === "paying" || stage === "paid") && <InvoiceStillOpen token={token} status={status} today={today} onSent={onSent} />}
       </div>
       {refresh && waitsOnSomeone(stage) && <AutoRefresh intervalMs={PAYEE_REFRESH_MS} />}
     </section>
@@ -95,15 +100,20 @@ export function PayeeJourney({
 // The invoice step refreshes too, so a confirmation or a payment shows there as it happens; a half-typed form stays.
 const waitsOnSomeone = (stage: PayeeStage) => stage === "invoice" || stage === "confirming" || stage === "paying";
 
+// Focusable from code only, for the step an answer moves to (S7).
 function Heading({ children }: { children: ReactNode }) {
-  return <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink [overflow-wrap:anywhere]">{children}</h1>;
+  return (
+    <h1 tabIndex={-1} className="text-2xl font-semibold tracking-[-0.02em] text-ink outline-hidden [overflow-wrap:anywhere]">
+      {children}
+    </h1>
+  );
 }
 
 function Footnote({ children }: { children: ReactNode }) {
   return <p className="mt-5 border-t border-line pt-4 text-xs leading-5 text-ink-3">{children}</p>;
 }
 
-/** Takes the link's status an accepted submission answers with, so the page moves on (S3). */
+/** Takes the link's status an accepted submission answers with, so the page moves on (S1, S3). */
 type OnSent = (status: PayeeLinkStatus) => void;
 
 function AddressStep({ token, status, simulated, onSent }: { token: string; status: PayeeLinkStatus; simulated: boolean; onSent: OnSent }) {
