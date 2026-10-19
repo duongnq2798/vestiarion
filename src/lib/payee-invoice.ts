@@ -44,7 +44,7 @@ const CONTROL = /\p{Cc}/u;
 /** Any control character but a line break: a note may have lines, and nothing else unseen. */
 const CONTROL_BUT_LINE_BREAK = /(?!\n)\p{Cc}/u;
 /** A link, which an invoice number never needs and a reviewer might open. */
-const LINK = /:\/\/|\bwww\./i;
+const LINK = /:\/\/|www\./i;
 
 /** A real `YYYY-MM-DD` day, or null. */
 function realDay(value: string): string | null {

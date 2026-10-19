@@ -169,7 +169,7 @@ describe("revokePayeeLink", () => {
     const { result } = platform(
       () => revokePayeeLink({ orgId: ORG, actorId: USER, linkId: LINK }),
       (request) => {
-        if (request.path === "/rest/v1/payee_links") return { body: [{ counterparty_id: PAYEE }] };
+        if (request.path === "/rest/v1/payee_links") return { body: [{ counterparty_id: PAYEE, revoked_at: "2026-09-30T12:00:00Z" }] };
         if (rpc(request, "revoke_payee_link")) return { body: true };
         return { body: [] };
       }
@@ -324,11 +324,12 @@ describe("createPayeeLink's options (payee invoice link P1, P6)", () => {
     return { body: [] };
   };
 
-  it("makes a link without them with 0039's function, as every other surface does, first closing the payee's earlier invoice", async () => {
+  it("makes a link without them with 0039's function, as every other surface does, then closes the payee's earlier invoice and records it", async () => {
     const { fake, result } = platform(() => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }), made);
     await result;
-    expect(fake.requests.map((request) => request.path)).toEqual(["/rest/v1/rpc/close_payee_invoice_intake", "/rest/v1/rpc/create_payee_link"]);
-    expect(fake.requests[0].body).toEqual({ p_org_id: ORG, p_counterparty_id: PAYEE });
+    expect(fake.requests.map((request) => request.path)).toEqual(["/rest/v1/rpc/create_payee_link", "/rest/v1/rpc/close_payee_invoice_intake"]);
+    expect(fake.requests[1].body).toEqual({ p_org_id: ORG, p_counterparty_id: PAYEE });
+    expect(ledgerMock).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "payee_link_created", detail: expect.objectContaining({ closedInvoiceLinks: 1 }) }));
   });
 
   it("still makes it before migration 0133, which has nothing to close", async () => {
@@ -340,14 +341,19 @@ describe("createPayeeLink's options (payee invoice link P1, P6)", () => {
     expect(fake.requests.some((request) => rpc(request, "create_payee_link"))).toBe(true);
   });
 
-  it("makes nothing when the earlier invoice cannot be closed", async () => {
-    const { fake, result } = platform(
+  it("keeps the new link when the earlier invoice cannot be closed, and closes nothing when the link is not made", async () => {
+    const closeFails = platform(
       () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }),
       (request) => (rpc(request, "close_payee_invoice_intake") ? { status: 500, body: { message: "connection reset" } } : made(request))
     );
-    await expect(result).rejects.toThrow(/connection reset/);
-    expect(fake.requests.some((request) => rpc(request, "create_payee_link"))).toBe(false);
-    expect(ledgerMock).not.toHaveBeenCalled();
+    expect((await closeFails.result).link.id).toBe(LINK);
+    expect(ledgerMock).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "payee_link_created", detail: expect.not.objectContaining({ closedInvoiceLinks: expect.anything() }) }));
+    const createFails = platform(
+      () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }),
+      (request) => (rpc(request, "create_payee_link") ? { status: 500, body: { message: "connection reset" } } : made(request))
+    );
+    await expect(createFails.result).rejects.toThrow(/connection reset/);
+    expect(createFails.fake.requests.some((request) => rpc(request, "close_payee_invoice_intake"))).toBe(false);
   });
 
   it("makes a link with them in one call, which closes the earlier invoice itself, and records them in its entry", async () => {

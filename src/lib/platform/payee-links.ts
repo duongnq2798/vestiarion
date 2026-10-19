@@ -88,11 +88,6 @@ export async function createPayeeLink(input: {
   const asksInvoice = input.options?.asksInvoice === true;
   const offersChain = input.options?.offersChain === true;
   const made = { p_org_id: input.orgId, p_counterparty_id: input.counterpartyId, p_token_hash: secretHash, p_by: input.actorId, p_expires_at: expiresAt };
-  if (!asksInvoice && !offersChain) {
-    // Before 0133 no link takes an invoice, so there is nothing to close.
-    const closed = await platformDb().rpc("close_payee_invoice_intake", { p_org_id: input.orgId, p_counterparty_id: input.counterpartyId });
-    if (closed.error && !missingFunction(closed.error)) throw new Error(closed.error.message);
-  }
   const result = await (asksInvoice || offersChain
     ? platformDb().rpc("create_payee_link_with_options", { ...made, p_asks_invoice: asksInvoice, p_offers_chain: offersChain })
     : platformDb().rpc("create_payee_link", made)
@@ -104,6 +99,18 @@ export async function createPayeeLink(input: {
     throw new Error(result.error.message);
   }
   const link = { id: result.data.id, counterpartyId: result.data.counterparty_id, expiresAt: result.data.expires_at };
+  // A link made without options closes the payee's earlier invoice intake once it exists, so a failed create closes
+  // nothing (review of the payee invoice link); one with options did it in its own transaction. Before 0133 no link
+  // takes an invoice, so there is nothing to close. A close that fails leaves the new link standing and is logged.
+  let closedInvoiceLinks = 0;
+  if (!asksInvoice && !offersChain) {
+    const closed = await platformDb().rpc("close_payee_invoice_intake", { p_org_id: input.orgId, p_counterparty_id: input.counterpartyId });
+    if (closed.error && !missingFunction(closed.error)) {
+      console.error("payee links: earlier invoice intake not closed", input.counterpartyId, closed.error.message);
+    } else if (typeof closed.data === "number") {
+      closedInvoiceLinks = closed.data;
+    }
+  }
 
   await appendLedgerEntryBestEffort(input.orgId, {
     actor: "human",
@@ -121,6 +128,7 @@ export async function createPayeeLink(input: {
       expiresAt: link.expiresAt,
       ...(asksInvoice ? { asksInvoice: true } : {}),
       ...(offersChain ? { offersChain: true } : {}),
+      ...(closedInvoiceLinks > 0 ? { closedInvoiceLinks } : {}),
     },
   });
   return { link, token };
@@ -174,14 +182,17 @@ export const INVOICE_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
  * payment's status.
  */
 export async function revokePayeeLink(input: { orgId: string; actorId: string; linkId: string }): Promise<"revoked" | "invoice_closed" | null> {
-  const found = unwrap(
-    await platformDb().from("payee_links").select("counterparty_id, used_at").eq("org_id", input.orgId).eq("id", input.linkId).limit(1)
-  ) as Array<{ counterparty_id: string; used_at?: string | null }>;
   const revoked = unwrap(
     await platformDb().rpc("revoke_payee_link", { p_org_id: input.orgId, p_link_id: input.linkId, p_by: input.actorId })
   ) as boolean;
-  if (!revoked || found.length === 0) return null;
-  const invoiceOnly = typeof found[0].used_at === "string";
+  if (!revoked) return null;
+  // Read after the revoke, so a payee who used the link a moment before is recorded as what the database did: a link
+  // still unrevoked had only its invoice intake closed (review of the payee invoice link).
+  const found = unwrap(
+    await platformDb().from("payee_links").select("counterparty_id, revoked_at").eq("org_id", input.orgId).eq("id", input.linkId).limit(1)
+  ) as Array<{ counterparty_id: string; revoked_at?: string | null }>;
+  if (found.length === 0) return null;
+  const invoiceOnly = !found[0].revoked_at;
 
   await appendLedgerEntryBestEffort(input.orgId, {
     actor: "human",
