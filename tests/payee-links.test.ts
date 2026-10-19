@@ -6,7 +6,9 @@ import { CounterpartyAddressError } from "@/lib/counterparty-address";
 import {
   createPayeeLink,
   generatePayeeLinkToken,
+  keepPayeeAddress,
   listActivePayeeLinks,
+  listWaitingInvoiceLinks,
   PayeeLinkError,
   payeeLinkHash,
   payeeLinkStatus,
@@ -14,7 +16,8 @@ import {
   revokePayeeLink,
   submitPayeeAddress,
 } from "@/lib/platform/payee-links";
-import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { ARC_MAINNET } from "@/lib/network";
+import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
  * Payee links (docs/superpowers/specs/2026-09-30-payee-links-design.md): the
@@ -23,13 +26,15 @@ import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fa
  * workspace scope and the ledger are faked here.
  */
 
-const { changeMock, withOrgMock, ledgerMock, notifyMock } = vi.hoisted(() => ({
+const { changeMock, withOrgMock, ledgerMock, notifyMock, choosableMock } = vi.hoisted(() => ({
   changeMock: vi.fn(),
   withOrgMock: vi.fn(),
   ledgerMock: vi.fn(),
   notifyMock: vi.fn(),
+  choosableMock: vi.fn(),
 }));
 vi.mock("@/lib/notifications/payee-address", () => ({ notifyPayeeAddress: notifyMock }));
+vi.mock("@/lib/payee-chain-choice", () => ({ choosablePayeeChains: choosableMock }));
 vi.mock("@/lib/counterparty-address", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/counterparty-address")>()),
   changeCounterpartyAddress: changeMock,
@@ -59,6 +64,7 @@ beforeEach(() => {
   withOrgMock.mockReset().mockImplementation(async (_orgId: string, fn: () => Promise<unknown>) => fn());
   ledgerMock.mockReset().mockResolvedValue(undefined);
   notifyMock.mockReset().mockResolvedValue(1);
+  choosableMock.mockReset().mockResolvedValue(ARC_MAINNET.payeeChains);
 });
 
 describe("tokens", () => {
@@ -132,7 +138,10 @@ describe("createPayeeLink", () => {
   it("says not found for a counterparty the workspace does not hold", async () => {
     const { result } = platform(
       () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }),
-      () => ({ status: 400, body: { code: "P0001", message: "counterparty_not_found: no such counterparty in this workspace" } })
+      (request) =>
+        rpc(request, "close_payee_invoice_intake")
+          ? { body: 0 }
+          : { status: 400, body: { code: "P0001", message: "counterparty_not_found: no such counterparty in this workspace" } }
     );
     await expect(result).rejects.toBeInstanceOf(PayeeLinkError);
     expect(ledgerMock).not.toHaveBeenCalled();
@@ -160,12 +169,12 @@ describe("revokePayeeLink", () => {
     const { result } = platform(
       () => revokePayeeLink({ orgId: ORG, actorId: USER, linkId: LINK }),
       (request) => {
-        if (request.path === "/rest/v1/payee_links") return { body: [{ counterparty_id: PAYEE }] };
+        if (request.path === "/rest/v1/payee_links") return { body: [{ counterparty_id: PAYEE, revoked_at: "2026-09-30T12:00:00Z" }] };
         if (rpc(request, "revoke_payee_link")) return { body: true };
         return { body: [] };
       }
     );
-    expect(await result).toBe(true);
+    expect(await result).toBe("revoked");
     expect(ledgerMock).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "payee_link_revoked", detail: { by: USER, counterpartyId: PAYEE, linkId: LINK } }));
   });
 
@@ -174,7 +183,7 @@ describe("revokePayeeLink", () => {
       () => revokePayeeLink({ orgId: ORG, actorId: USER, linkId: LINK }),
       (request) => (rpc(request, "revoke_payee_link") ? { body: false } : { body: [{ counterparty_id: PAYEE }] })
     );
-    expect(await result).toBe(false);
+    expect(await result).toBeNull();
     expect(ledgerMock).not.toHaveBeenCalled();
   });
 });
@@ -216,7 +225,8 @@ describe("payeeLinkStatus (freelancer journey R1, R2)", () => {
 
   it("reads the link's status by its hash", async () => {
     const { fake, result } = platform(() => payeeLinkStatus(TOKEN), () => ({ body: STATUS }));
-    expect(await result).toEqual(STATUS);
+    // Before 0133 the status names no option: the link asks for an address only, and offers no chain.
+    expect(await result).toEqual({ ...STATUS, asksInvoice: false, offersChain: false, invoiceSent: false, addressMirror: false, chainChoices: [] });
     expect(fake.requests[0].path).toBe("/rest/v1/rpc/payee_link_status");
     expect(fake.requests[0].body).toEqual({ p_token_hash: HASH });
   });
@@ -302,5 +312,269 @@ describe("submitPayeeAddress", () => {
     const release = fake.requests.find((request) => rpc(request, "release_payee_link"));
     expect(release?.body).toEqual({ p_link_id: LINK });
     expect(notifyMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("createPayeeLink's options (payee invoice link P1, P6)", () => {
+  const made = (request: RecordedRequest): FakeReply => {
+    if (rpc(request, "create_payee_link") || rpc(request, "create_payee_link_with_options")) {
+      return { body: { id: LINK, counterparty_id: PAYEE, expires_at: "2026-10-07T12:00:00+00:00" } };
+    }
+    if (rpc(request, "close_payee_invoice_intake")) return { body: 1 };
+    return { body: [] };
+  };
+
+  it("makes a link without them with 0039's function, as every other surface does, then closes the payee's earlier invoice and records it", async () => {
+    const { fake, result } = platform(() => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }), made);
+    await result;
+    expect(fake.requests.map((request) => request.path)).toEqual(["/rest/v1/rpc/create_payee_link", "/rest/v1/rpc/close_payee_invoice_intake"]);
+    expect(fake.requests[1].body).toEqual({ p_org_id: ORG, p_counterparty_id: PAYEE });
+    expect(ledgerMock).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "payee_link_created", detail: expect.objectContaining({ closedInvoiceLinks: 1 }) }));
+  });
+
+  it("still makes it before migration 0133, which has nothing to close", async () => {
+    const { fake, result } = platform(
+      () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }),
+      (request) => (rpc(request, "close_payee_invoice_intake") ? { status: 404, body: { code: "PGRST202", message: "Could not find the function" } } : made(request))
+    );
+    expect((await result).link.id).toBe(LINK);
+    expect(fake.requests.some((request) => rpc(request, "create_payee_link"))).toBe(true);
+  });
+
+  it("keeps the new link when the earlier invoice cannot be closed, and closes nothing when the link is not made", async () => {
+    const closeFails = platform(
+      () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }),
+      (request) => (rpc(request, "close_payee_invoice_intake") ? { status: 500, body: { message: "connection reset" } } : made(request))
+    );
+    expect((await closeFails.result).link.id).toBe(LINK);
+    expect(ledgerMock).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "payee_link_created", detail: expect.not.objectContaining({ closedInvoiceLinks: expect.anything() }) }));
+    const createFails = platform(
+      () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW }),
+      (request) => (rpc(request, "create_payee_link") ? { status: 500, body: { message: "connection reset" } } : made(request))
+    );
+    await expect(createFails.result).rejects.toThrow(/connection reset/);
+    expect(createFails.fake.requests.some((request) => rpc(request, "close_payee_invoice_intake"))).toBe(false);
+  });
+
+  it("makes a link with them in one call, which closes the earlier invoice itself, and records them in its entry", async () => {
+    const { fake, result } = platform(
+      () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW, options: { asksInvoice: true, offersChain: true } }),
+      made
+    );
+    const { token } = await result;
+    expect(fake.requests.map((request) => request.path)).toEqual(["/rest/v1/rpc/create_payee_link_with_options"]);
+    expect(fake.requests[0].body).toEqual({
+      p_org_id: ORG,
+      p_counterparty_id: PAYEE,
+      p_token_hash: payeeLinkHash(token),
+      p_by: USER,
+      p_expires_at: "2026-10-07T12:00:00.000Z",
+      p_asks_invoice: true,
+      p_offers_chain: true,
+    });
+    expect(ledgerMock).toHaveBeenCalledWith(ORG, {
+      actor: "human",
+      domain: "compliance",
+      action: "payee_link_created",
+      summary: "Created a one-time link for a payee to enter their own address and send their invoice",
+      detail: { by: USER, counterpartyId: PAYEE, linkId: LINK, expiresAt: "2026-10-07T12:00:00+00:00", asksInvoice: true, offersChain: true },
+    });
+  });
+
+  it("leaves no link and records nothing when the link with its options cannot be made", async () => {
+    const { result } = platform(
+      () => createPayeeLink({ orgId: ORG, actorId: USER, counterpartyId: PAYEE, now: NOW, options: { asksInvoice: true } }),
+      () => ({ status: 400, body: { code: "P0001", message: "counterparty_not_found: no such counterparty in this workspace" } })
+    );
+    await expect(result).rejects.toBeInstanceOf(PayeeLinkError);
+    expect(ledgerMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("revokePayeeLink and a link waiting for its invoice (payee invoice link P6)", () => {
+  it("stops a used link from taking its invoice, and records that it was the invoice alone", async () => {
+    const { result } = platform(
+      () => revokePayeeLink({ orgId: ORG, actorId: USER, linkId: LINK }),
+      (request) => {
+        if (request.path === "/rest/v1/payee_links") return { body: [{ counterparty_id: PAYEE, used_at: "2026-09-29T12:00:00+00:00" }] };
+        if (rpc(request, "revoke_payee_link")) return { body: true };
+        return { body: [] };
+      }
+    );
+    expect(await result).toBe("invoice_closed");
+    expect(ledgerMock).toHaveBeenCalledWith(ORG, {
+      actor: "human",
+      domain: "compliance",
+      action: "payee_link_revoked",
+      summary: "Stopped a payee's link from taking their invoice",
+      detail: { by: USER, counterpartyId: PAYEE, linkId: LINK, invoiceOnly: true },
+    });
+  });
+
+  it("lists the used links still waiting for an invoice, until their 30 days end, and none when they cannot be read", async () => {
+    const { fake, result } = platform(
+      () => listWaitingInvoiceLinks(ORG, NOW),
+      () => ({ body: [{ id: LINK, counterparty_id: PAYEE, used_at: "2026-09-29T12:00:00+00:00" }] })
+    );
+    expect(await result).toEqual(new Map([[PAYEE, { id: LINK, until: "2026-10-29T12:00:00.000Z" }]]));
+    const read = fake.requests[0];
+    expect(read.path).toBe("/rest/v1/payee_links");
+    expect(read.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(read.params.get("asks_invoice")).toBe("eq.true");
+    expect(read.params.get("revoked_at")).toBe("is.null");
+    expect(read.params.get("invoice_at")).toBe("is.null");
+    expect(read.params.get("invoice_closed_at")).toBe("is.null");
+    expect(read.params.get("used_at")).toBe("gt.2026-08-31T12:00:00.000Z");
+
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const before = platform(() => listWaitingInvoiceLinks(ORG, NOW), () => ({ status: 400, body: { code: "42703", message: "column payee_links.asks_invoice does not exist" } }));
+    expect(await before.result).toEqual(new Map());
+  });
+});
+
+describe("payeeLinkStatus and the link's options (payee invoice link P2, P4)", () => {
+  const STATUS = {
+    orgName: "Acme", payeeName: "Northwind", chain: "ARC", linkState: "open", expiresAt: "2026-10-07T12:00:00+00:00", usedAt: null,
+    statusUntil: "2026-10-07T12:00:00+00:00", address: null, addressConfirmed: false, payments: [],
+    asksInvoice: true, offersChain: true, invoiceSent: false,
+  };
+
+  it("names the chains the payee may choose, read in the paying workspace's scope, when the choice is open", async () => {
+    const { fake, result } = platform(
+      () => payeeLinkStatus(TOKEN),
+      (request) => (rpc(request, "payee_link_status") ? { body: { ...STATUS, chainOpen: true } } : request.path === "/rest/v1/payee_links" ? { body: [{ org_id: ORG }] } : { body: [] })
+    );
+    const status = await result;
+    expect(status).toMatchObject({ asksInvoice: true, offersChain: true, invoiceSent: false, chainChoices: ["ARC", "BASE"] });
+    expect(status).not.toHaveProperty("chainOpen");
+    expect(withOrgMock).toHaveBeenCalledWith(ORG, expect.any(Function));
+    expect(fake.requests.find((request) => request.path === "/rest/v1/payee_links")?.params.get("token_hash")).toBe(`eq.${HASH}`);
+  });
+
+  it("names none, and reads nothing more, when the choice is not open", async () => {
+    const { fake, result } = platform(() => payeeLinkStatus(TOKEN), () => ({ body: { ...STATUS, chainOpen: false } }));
+    expect((await result)?.chainChoices).toEqual([]);
+    expect(fake.requests.map((request) => request.path)).toEqual(["/rest/v1/rpc/payee_link_status"]);
+    expect(choosableMock).not.toHaveBeenCalled();
+  });
+
+  it("names none when the workspace pays one chain only, or its chains cannot be read", async () => {
+    const respond = (request: RecordedRequest): FakeReply =>
+      rpc(request, "payee_link_status") ? { body: { ...STATUS, chainOpen: true } } : { body: [{ org_id: ORG }] };
+    choosableMock.mockResolvedValueOnce([]);
+    expect((await platform(() => payeeLinkStatus(TOKEN), respond).result)?.chainChoices).toEqual([]);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    choosableMock.mockRejectedValueOnce(new Error("spending limit unreadable"));
+    expect((await platform(() => payeeLinkStatus(TOKEN), respond).result)?.chainChoices).toEqual([]);
+  });
+});
+
+describe("submitPayeeAddress with a chain (payee invoice link P2)", () => {
+  const BASE_ADDRESS = "0x3333333333333333333333333333333333333333";
+  const respond = (chainOpen: boolean) => (request: RecordedRequest): FakeReply => {
+    if (rpc(request, "payee_link_preview")) return { body: [{ org_name: "Acme", counterparty_name: "Northwind", expires_at: "2026-10-07T12:00:00+00:00" }] };
+    if (rpc(request, "payee_link_status")) return { body: { chainOpen } };
+    if (rpc(request, "claim_payee_link")) return { body: [{ link_id: LINK, org_id: ORG, counterparty_id: PAYEE }] };
+    return { body: null };
+  };
+
+  it("checks the choice is open, uses the link, and writes the chain with the address", async () => {
+    const { fake, result } = platform(() => submitPayeeAddress(TOKEN, BASE_ADDRESS, { chain: "BASE" }), respond(true));
+    expect(await result).toEqual({ ok: true, orgName: "Acme", unchanged: false });
+    expect(fake.requests.map((request) => request.path)).toEqual([
+      "/rest/v1/rpc/payee_link_preview",
+      "/rest/v1/rpc/payee_link_status",
+      "/rest/v1/rpc/claim_payee_link",
+    ]);
+    expect(changeMock).toHaveBeenCalledWith({ payeeLinkId: LINK, counterpartyId: PAYEE, raw: BASE_ADDRESS, chain: "BASE" });
+    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Northwind", address: BASE_ADDRESS, chainLabel: "Base" });
+  });
+
+  it("uses nothing when the link no longer lets its payee choose", async () => {
+    const { fake, result } = platform(() => submitPayeeAddress(TOKEN, BASE_ADDRESS, { chain: "BASE" }), respond(false));
+    expect(await result).toEqual({ ok: false, reason: "chain_closed" });
+    expect(fake.requests.some((request) => rpc(request, "claim_payee_link"))).toBe(false);
+    expect(changeMock).not.toHaveBeenCalled();
+  });
+
+  it("puts the link back, writing nothing, for a chain the workspace does not let it choose", async () => {
+    choosableMock.mockResolvedValueOnce([]);
+    const { fake, result } = platform(() => submitPayeeAddress(TOKEN, BASE_ADDRESS, { chain: "BASE" }), respond(true));
+    expect(await result).toEqual({ ok: false, reason: "chain_closed" });
+    expect(fake.requests.find((request) => rpc(request, "release_payee_link"))?.body).toEqual({ p_link_id: LINK });
+    expect(changeMock).not.toHaveBeenCalled();
+    expect(notifyMock).not.toHaveBeenCalled();
+
+    const elsewhere = platform(() => submitPayeeAddress(TOKEN, BASE_ADDRESS, { chain: "BASE-SEPOLIA" }), respond(true));
+    expect(await elsewhere.result).toEqual({ ok: false, reason: "chain_closed" });
+    expect(changeMock).not.toHaveBeenCalled();
+  });
+
+  it("puts the link back when the chain and address write loses its compare-and-set after the claim", async () => {
+    changeMock.mockRejectedValueOnce(new CounterpartyAddressError("conflict"));
+    const { fake, result } = platform(() => submitPayeeAddress(TOKEN, BASE_ADDRESS, { chain: "BASE" }), respond(true));
+    await expect(result).rejects.toMatchObject({ code: "conflict" });
+    expect(changeMock).toHaveBeenCalledWith({ payeeLinkId: LINK, counterpartyId: PAYEE, raw: BASE_ADDRESS, chain: "BASE" });
+    expect(fake.requests.find((request) => rpc(request, "release_payee_link"))?.body).toEqual({ p_link_id: LINK });
+    expect(notifyMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("keepPayeeAddress (payee invoice link P4)", () => {
+  const OPEN = { orgName: "Acme", asksInvoice: true, linkState: "open" };
+  function keep(
+    row: { address: string | null; mirror_wallet_id?: string | null },
+    options: { claimRows?: unknown[]; status?: Record<string, unknown> | null } = {}
+  ) {
+    const fake = fakeSupabase((request) => {
+      if (rpc(request, "payee_link_status")) return { body: options.status === undefined ? OPEN : options.status };
+      if (rpc(request, "claim_payee_link")) return { body: options.claimRows ?? [{ link_id: LINK, org_id: ORG, counterparty_id: PAYEE }] };
+      if (request.path === "/rest/v1/counterparties") return { body: [{ name: "Northwind", ...row }] };
+      return { body: null };
+    });
+    withOrgMock.mockImplementation(async (orgId: string, fn: () => Promise<unknown>) => runWith(orgTestContext({ config, client: fake.client, orgId }), fn));
+    return { fake, result: runWith({ config, db: fake.client }, () => keepPayeeAddress(TOKEN)) };
+  }
+
+  it("uses the link, keeps the address on file, changing nothing, and signs it", async () => {
+    const { fake, result } = keep({ address: ADDRESS });
+    expect(await result).toEqual({ ok: true, orgName: "Acme" });
+    const read = fake.requests.find((request) => request.path === "/rest/v1/counterparties");
+    expect(read?.params.get("id")).toBe(`eq.${PAYEE}`);
+    expect(fake.requests.some((request) => request.method === "PATCH" || rpc(request, "release_payee_link"))).toBe(false);
+    expect(changeMock).not.toHaveBeenCalled();
+    expect(notifyMock).not.toHaveBeenCalled();
+    expect(ledgerMock).toHaveBeenCalledWith(ORG, {
+      actor: "human",
+      domain: "compliance",
+      action: "counterparty_address_kept",
+      summary: "Northwind kept the address on file through their payee link",
+      detail: { by: null, via: "payee_link", linkId: LINK, counterpartyId: PAYEE, address: ADDRESS },
+    });
+  });
+
+  it("puts the link back when there is no address on file, or only a mirror Vestiarion made, to keep", async () => {
+    for (const row of [{ address: null }, { address: ADDRESS, mirror_wallet_id: "wallet-mirror-1" }]) {
+      ledgerMock.mockClear();
+      const { fake, result } = keep(row);
+      expect(await result).toEqual({ ok: false, reason: "no_address" });
+      expect(fake.requests.find((request) => rpc(request, "release_payee_link"))?.body).toEqual({ p_link_id: LINK });
+      expect(ledgerMock).not.toHaveBeenCalled();
+    }
+  });
+
+  it("uses nothing on a link that does not ask for an invoice, or was used already", async () => {
+    for (const status of [{ ...OPEN, asksInvoice: false }, { ...OPEN, linkState: "used" }, null]) {
+      const { fake, result } = keep({ address: ADDRESS }, { status });
+      expect(await result).toEqual({ ok: false, reason: "invalid_link" });
+      expect(fake.requests.some((request) => rpc(request, "claim_payee_link"))).toBe(false);
+    }
+  });
+
+  it("says the link is invalid when it cannot be claimed, or the token is malformed", async () => {
+    expect(await keep({ address: ADDRESS }, { claimRows: [] }).result).toEqual({ ok: false, reason: "invalid_link" });
+    const malformed = fakeSupabase(() => ({ body: [] }));
+    expect(await runWith({ config, db: malformed.client }, () => keepPayeeAddress("vxp_nope"))).toEqual({ ok: false, reason: "invalid_link" });
+    expect(malformed.requests).toEqual([]);
   });
 });

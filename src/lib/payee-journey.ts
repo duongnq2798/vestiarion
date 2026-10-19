@@ -32,13 +32,40 @@ export interface PayeeLinkStatus {
   address: string | null;
   addressConfirmed: boolean;
   payments: PayeePayment[];
+  /**
+   * Whether the link asks for the payee's invoice, and whether it arrived
+   * (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P1, P4); absent before migration 0133.
+   */
+  asksInvoice?: boolean;
+  invoiceSent?: boolean;
+  /** Whether the link offers the payee to choose where it is paid (P1). */
+  offersChain?: boolean;
+  /** Whether the address on file is a mirror Vestiarion made in shadow mode, which is not the payee's to keep (P4). */
+  addressMirror?: boolean;
+  /** The chains the payee may choose among, its network's own first; empty or absent when it may not choose (P2). */
+  chainChoices?: string[];
 }
 
-/** Step 1 `address`, step 2 `confirming`, step 3 `paying`, and `paid` once every payment is. */
-export type PayeeStage = "address" | "confirming" | "paying" | "paid";
+/**
+ * Step 1 `address`, then `invoice` when the link asks for one not yet sent (P4), then `confirming`, `paying`, and
+ * `paid` once every payment is. The invoice never outranks a payment under way: once the address is confirmed and a
+ * payment is on its way or paid, the page shows that, and the invoice it can still take comes second (`invoiceOpen`).
+ */
+export type PayeeStage = "address" | "invoice" | "confirming" | "paying" | "paid";
+
+/** Whether the link still takes the payee's invoice: it asks for one, none was sent, and no member closed it (0133). */
+export function invoiceOpen(status: Pick<PayeeLinkStatus, "asksInvoice" | "invoiceSent">): boolean {
+  return status.asksInvoice === true && status.invoiceSent !== true;
+}
+
+/** A payment to a confirmed address that is on its way or paid. */
+function paymentUnderway(status: PayeeLinkStatus): boolean {
+  return Boolean(status.address) && status.addressConfirmed && status.payments.some((payment) => payment.status === "matched" || payment.status === "paid");
+}
 
 export function payeeStage(status: PayeeLinkStatus): PayeeStage {
   if (status.linkState === "open") return "address";
+  if (invoiceOpen(status) && !paymentUnderway(status)) return "invoice";
   if (!status.address || !status.addressConfirmed) return "confirming";
   if (status.payments.length > 0 && status.payments.every((payment) => payment.status === "paid")) return "paid";
   return "paying";
@@ -79,6 +106,9 @@ export const NOT_AN_ADDRESS = "That doesn't look like a wallet address. It start
 
 /** What the payee reads when the address's capital letters do not match its checksum: a character is likely mistyped (payment safety A3). */
 export const ADDRESS_CHECKSUM = `${CHECKSUM_MISMATCH} Copy it again from your wallet.`;
+
+/** What the payee reads when the chain it chose can no longer be chosen: the page was opened before the business's records changed (P2). */
+export const CHAIN_CLOSED = "Where you are paid can no longer be chosen on this link. Reload the page.";
 
 /** Whether the text is an EVM address, as the payee's form checks it before the server does. */
 export function looksLikeAddress(raw: string): boolean {

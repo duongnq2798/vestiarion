@@ -38,10 +38,15 @@ export interface ExternalSource {
   ids: { tenantId: string; billId: string; contactId: string | null; invoiceNumber: string | null };
 }
 
-/** The draft the Chrome extension captured that a person added as this bill (invoice capture design C6). */
+/**
+ * The draft the Chrome extension captured that a person added as this bill (invoice capture design C6), or the invoice a
+ * payee sent through its payee link (payee invoice link P5): then `payeeLinkId` names the link, or is null when it could
+ * not be read.
+ */
 export interface CapturedDraft {
   invoiceDraftId: string;
   invoiceNumber: string | null;
+  payeeLinkId?: string | null;
 }
 
 /**
@@ -61,7 +66,7 @@ export async function createInvoice(input: {
   actorId: string | null;
   invoice: InvoiceInput;
   document: DocumentProvenance | null;
-  via?: "telegram" | "slack" | "email" | "api" | "import" | "chrome";
+  via?: "telegram" | "slack" | "email" | "api" | "import" | "chrome" | "payee_link";
   /** The key that sent it, when it came through the API. */
   apiKeyId?: string;
   /** The member's Slack link, when it was added from Slack (Slack design S15). */
@@ -76,7 +81,7 @@ export async function createInvoice(input: {
   deal?: DealRelease;
   /** The accounting tool's bill it was brought in from (Xero connector X11): `via` is the provider's name. */
   external?: ExternalSource;
-  /** The draft the Chrome extension captured, which a person added from the console (invoice capture design C6). */
+  /** The draft the Chrome extension captured, or a payee sent, which a person added from the console (invoice capture design C6). */
   captured?: CapturedDraft;
 }): Promise<{ id: string; counterpartyName: string } | null> {
   const { id, actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, deal, external, captured } = input;
@@ -141,7 +146,13 @@ export async function createInvoice(input: {
       ...(imported ? { importFile: imported.file, importRow: imported.row, ...(imported.invoiceNumber ? { invoiceNumber: imported.invoiceNumber } : {}) } : {}),
       ...(deal ? { via: "deal", deal } : {}),
       ...(external ? { via: external.provider, [external.provider]: external.ids } : {}),
-      ...(captured ? { invoiceDraftId: captured.invoiceDraftId, ...(captured.invoiceNumber ? { invoiceNumber: captured.invoiceNumber } : {}) } : {}),
+      ...(captured
+        ? {
+            invoiceDraftId: captured.invoiceDraftId,
+            ...(captured.invoiceNumber ? { invoiceNumber: captured.invoiceNumber } : {}),
+            ...(captured.payeeLinkId !== undefined ? { payeeLinkId: captured.payeeLinkId } : {}),
+          }
+        : {}),
     },
   });
   return { id: row.id, counterpartyName: counterparty.name };

@@ -45,6 +45,7 @@ export const ACTION_LABELS: Record<string, string> = {
   payment_notice: "Payment notices",
   freelancer: "Freelancer setup",
   payee_address: "Payee address requests",
+  payee_invoice: "Invoices from payee links",
   address_request: "Address links to payees",
   customer_wrote: "Customer messages",
   collection_task: "Collection tasks",

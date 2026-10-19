@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import PayeeLinkControl, { CreatedPayeeLink } from "@/components/intake/PayeeLinkControl";
+import PayeeLinkControl, { ASK_INVOICE, CreatedPayeeLink, OFFER_CHAIN } from "@/components/intake/PayeeLinkControl";
 import { counterpartiesRefreshMs } from "@/lib/counterparties-refresh";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 
@@ -33,6 +33,45 @@ describe("PayeeLinkControl", () => {
     expect(page).toContain("Address link sent · expires Oct 7, 2026");
     expect(page).toContain("Revoke");
     expect(markup).toContain('value="0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1"');
+  });
+});
+
+describe("a used link still waiting for the payee's invoice (payee invoice link P6)", () => {
+  it("says so, until when, and offers Revoke, which stops it", () => {
+    const markup = render(
+      <PayeeLinkControl orgSlug="acme" counterparty={PAYEE} activeLink={null} waitingInvoice={{ id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e2", until: "2026-10-29T12:00:00.000Z" }} />
+    );
+    const page = text(markup);
+    expect(page).toContain("Waiting for their invoice · until Oct 29, 2026");
+    expect(page).toContain("Revoke");
+    expect(markup).toContain('value="0b6c1c9e-4a4f-4a7e-9b1e-0000000001e2"');
+  });
+});
+
+describe("the create form's options (payee invoice link P1)", () => {
+  // The dialog's content renders only once it is open, so the form is read from its source here, and its boxes from
+  // the component that draws them.
+  const source = readFileSync(path.join(process.cwd(), "src/components/intake/PayeeLinkControl.tsx"), "utf8");
+
+  it("offers both boxes, off by default, named as the spec names them", () => {
+    expect(ASK_INVOICE).toBe("Also ask for their invoice");
+    expect(OFFER_CHAIN).toBe("Let them choose where they are paid");
+    expect(source).toMatch(/<Checkbox\s+name="asksInvoice"/);
+    expect(source).toMatch(/<Checkbox\s+name="offersChain"/);
+    expect(source).not.toMatch(/defaultChecked/);
+  });
+
+  it("draws the chain box only with more than one chain to choose among", () => {
+    expect(source).toContain("chains.length > 1 && (");
+    expect(source).toContain("{offers?.invoice && (");
+  });
+
+  it("says, once made, that the payee's invoice waits on Bills", () => {
+    const url = `https://www.vestiarion.xyz/payee/vxp_${"A".repeat(43)}`;
+    expect(text(render(<CreatedPayeeLink url={url} expiresAt="2026-10-07T12:00:00+00:00" payeeName="Northwind" asksInvoice />))).toContain(
+      "Their invoice waits under Waiting for review on Bills until someone here adds it."
+    );
+    expect(text(render(<CreatedPayeeLink url={url} expiresAt="2026-10-07T12:00:00+00:00" payeeName="Northwind" />))).not.toContain("Their invoice");
   });
 });
 

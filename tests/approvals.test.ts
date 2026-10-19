@@ -2472,7 +2472,7 @@ describe("approveAndPay and the address the person was shown", () => {
     const [patch] = counterpartyPatches(fake.requests);
     expect(Object.keys(patch.body as object)).toEqual(["address_confirmed_at"]);
     const confirmed = rpcBodies(fake.requests, "append_ledger_entry").find((body) => body.p_action === "counterparty_address_confirmed");
-    expect(confirmed?.p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead", via: "approval" });
+    expect(confirmed?.p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: "0xdead", chain: "ARC-TESTNET", via: "approval" });
   });
 
   it("does not confirm the address when the approval only records a transfer that was already sent", async () => {

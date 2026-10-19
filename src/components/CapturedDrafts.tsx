@@ -13,7 +13,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { orgHref } from "@/lib/auth/org-paths";
-import { startingMemo } from "@/lib/invoice-drafts/model";
+import { capturedTitle, startingMemo } from "@/lib/invoice-drafts/model";
 import type { CapturedDraftView } from "@/lib/invoice-drafts/store";
 
 const INITIAL: DraftActionResult = { ok: false, message: "" };
@@ -38,6 +38,22 @@ function sourceWords(draft: CapturedDraftView): string {
   return draft.documentKind ? (SOURCE_WORDS[draft.documentKind] ?? "a file") : "a file";
 }
 
+/** Who sent a draft and how: the extension and the member who captured it, or the payee through its link (P5). */
+function sentBy(draft: CapturedDraftView, capturedBy: string | null): string {
+  if (draft.source === "payee_link") {
+    const payee = draft.counterpartyName ?? draft.fields.supplierName ?? "The payee";
+    return `${payee} sent it through their payee link${draft.documentKind ? `, with ${sourceWords(draft)}` : ""}`;
+  }
+  return `Captured from ${sourceWords(draft)} with the Chrome extension${capturedBy ? ` by ${capturedBy}` : ""}`;
+}
+
+/** Where the drafts listed came from, for the list's header (P5). */
+function sourcesLine(drafts: CapturedDraftView[]): string {
+  const fromPayees = drafts.filter((draft) => draft.source === "payee_link").length;
+  if (fromPayees === 0) return "captured with the Chrome extension";
+  return fromPayees === drafts.length ? "sent through payee links" : "captured with the Chrome extension or sent through payee links";
+}
+
 function Discard({ orgSlug, draftId }: { orgSlug: string; draftId: string }) {
   const discard = useActionForm(discardInvoiceDraftAction, INITIAL, { toastOnSuccess: true });
   return (
@@ -56,7 +72,7 @@ function Discard({ orgSlug, draftId }: { orgSlug: string; draftId: string }) {
  * What was captured, read when it is opened (C9): the text is not part of the page, which every refresh sends again.
  * Shown as text, whatever it holds.
  */
-function CapturedText({ orgSlug, draftId }: { orgSlug: string; draftId: string }) {
+function CapturedText({ orgSlug, draftId, fromPayee }: { orgSlug: string; draftId: string; fromPayee: boolean }) {
   const [state, setState] = useState<{ status: "idle" | "loading" | "done"; text?: string | null; message?: string }>({ status: "idle" });
   return (
     <details
@@ -71,14 +87,17 @@ function CapturedText({ orgSlug, draftId }: { orgSlug: string; draftId: string }
     >
       <summary className="flex cursor-pointer list-none select-none items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink [&::-webkit-details-marker]:hidden">
         <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3 transition-transform duration-200 ease-standard group-open/disclosure:rotate-90" />
-        What was captured
+        {fromPayee ? "The text of the file they sent" : "What was captured"}
       </summary>
       <div className="px-4 pb-4" aria-live="polite">
         {state.status === "loading" && <p className="text-xs text-ink-3">Reading…</p>}
         {state.status === "done" && state.message && <p className="text-xs text-refused">{state.message}</p>}
         {state.status === "done" && !state.message && (
           <pre className={cn("max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-2 p-3 font-mono text-xs text-ink-2", !state.text && "font-sans")}>
-            {state.text ?? "The captured text was removed: it is kept until the draft is decided, and at most 30 days."}
+            {state.text ??
+              (fromPayee
+                ? "The file's text was removed: it is kept until the invoice is decided, and at most 30 days."
+                : "The captured text was removed: it is kept until the draft is decided, and at most 30 days.")}
           </pre>
         )}
         <p className="mt-2 text-xs text-ink-3">Kept until this draft is added or discarded, and at most 30 days.</p>
@@ -89,6 +108,7 @@ function CapturedText({ orgSlug, draftId }: { orgSlug: string; draftId: string }
 
 function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { orgSlug: string; draft: CapturedDraftView; canAdd: boolean; counterparties: IntakeCounterparty[]; capturedBy: string | null }) {
   const { fields } = draft;
+  const fromPayee = draft.source === "payee_link";
   const supplier = fields.supplierName;
   const matched = draft.counterpartyId && counterparties.some((counterparty) => counterparty.id === draft.counterpartyId) ? draft.counterpartyName : null;
   // The supplier's name, often a person's, stays out of the address: Counterparties reads it from the draft.
@@ -101,7 +121,7 @@ function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { org
           {fields.invoiceNumber ? ` · ${fields.invoiceNumber}` : ""}
         </p>
         <p className="text-xs text-ink-3">
-          Captured from {sourceWords(draft)} with the Chrome extension{capturedBy ? ` by ${capturedBy}` : ""} · {capturedOn(draft.sentAt ?? draft.capturedAt)}
+          {sentBy(draft, capturedBy)} · {capturedOn(draft.sentAt ?? draft.capturedAt)}
         </p>
       </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
@@ -127,7 +147,23 @@ function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { org
             <dd className="text-ink">{fields.memo}</dd>
           </>
         )}
+        {draft.note && (
+          <>
+            <dt className="text-ink-3">Their note</dt>
+            <dd className="text-ink">
+              {/* The payee's own words, shown as text and kept out of the bill, which starts from the invoice number alone. */}
+              <span className="block text-xs text-ink-3">In the payee&apos;s own words, not checked:</span>
+              <span className="block whitespace-pre-line [overflow-wrap:anywhere]">{draft.note}</span>
+            </dd>
+          </>
+        )}
       </dl>
+      {fromPayee && (
+        <p className="text-xs text-ink-2">
+          The payee typed this in, and no model read it. Check it against what you agreed before adding it: whoever adds it counts as having
+          entered it, and cannot approve it alone.
+        </p>
+      )}
       {draft.duplicates.length > 0 && (
         <div className="rounded-lg border border-refused/40 bg-refused/5 p-3 text-sm text-ink-2">
           <p className="font-medium text-refused">This may be a duplicate</p>
@@ -144,7 +180,7 @@ function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { org
         </p>
       ))}
       {draft.modelNote && <p className="text-xs italic text-ink-3">The model&apos;s note: {draft.modelNote}</p>}
-      <CapturedText orgSlug={orgSlug} draftId={draft.id} />
+      {(!fromPayee || draft.documentKind) && <CapturedText orgSlug={orgSlug} draftId={draft.id} fromPayee={fromPayee} />}
       {canAdd ? (
         <>
           {!matched && (
@@ -190,7 +226,9 @@ function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { org
  * The invoices captured with the Chrome extension and sent for review, on Bills & receivables
  * (docs/superpowers/specs/2026-10-15-invoice-capture-design.md C5-C7): what was read, what it may repeat and the text
  * it came from; for an owner or admin, Review and add as bill (the invoice form, through the add-invoice command) and
- * Discard. Nothing here is added by itself. Renders nothing when nothing waits.
+ * Discard. Nothing here is added by itself. Renders nothing when nothing waits. The invoices payees sent through their
+ * payee links wait here too, each with the payee's name and "sent it through their payee link", its note, and the
+ * text of the file it came with, if any (docs/superpowers/specs/2026-10-19-payee-invoice-link-design.md P5).
  */
 export default function CapturedDrafts({
   orgSlug,
@@ -209,7 +247,7 @@ export default function CapturedDrafts({
   if (drafts.length === 0) return null;
   return (
     <section aria-labelledby="captured-drafts-title" id="captured-drafts" className="mb-8">
-      <SectionHeader id="captured-drafts-title" title="Captured drafts" meta={`${drafts.length} to review · captured with the Chrome extension`} />
+      <SectionHeader id="captured-drafts-title" title={capturedTitle(drafts.map((draft) => draft.source))} meta={`${drafts.length} to review · ${sourcesLine(drafts)}`} />
       <div className="space-y-3">
         {drafts.map((draft) => (
           <DraftCard

@@ -121,6 +121,17 @@ export function takePortalActionToken(key: string, now = Date.now()): boolean {
   return take(portalActionBuckets, key, 5, 12_000, now);
 }
 
+const payeeInvoiceBuckets = new Map<string, Bucket>();
+
+/**
+ * What a payee link's invoice step sends (payee invoice link P6): three tries at once, then one every 20 s, per link,
+ * so a page cannot make the document reader read without end. Single-instance, like the others; the database takes
+ * one invoice per link (0133) across instances.
+ */
+export function takePayeeInvoiceToken(key: string, now = Date.now()): boolean {
+  return take(payeeInvoiceBuckets, key, 3, 20_000, now);
+}
+
 const extensionTokenBuckets = new Map<string, Bucket>();
 
 /**

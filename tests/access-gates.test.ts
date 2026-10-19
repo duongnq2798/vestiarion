@@ -108,21 +108,28 @@ describe("every server action", () => {
   });
 });
 
-describe("the payee's address action", () => {
+describe("the payee's actions", () => {
   // A payee has no account: the one-time link is the credential, and whatever they
-  // enter waits for a member's confirmation (payee links spec R1). So its gate is the
-  // link itself — checked, claimed once, before anything else — never a session.
+  // enter waits for a member's confirmation (payee links spec R1). So each action's gate is
+  // the link itself — checked before anything else, by the function it awaits first — never a
+  // session. Keeping the address on file and sending the invoice (payee invoice link P4) are
+  // gated the same way; an invoice waits for a member to add it.
   const PAYEE_ACTIONS = path.join(ROOT, "src", "app", "payee", "[token]", "actions.ts");
   const actions = exportedAsyncFunctions(read(PAYEE_ACTIONS));
 
-  it("is the one submit action", () => {
-    expect(actions.map((action) => action.name)).toEqual(["submitPayeeAddressAction"]);
+  it("are the address, keeping the address on file, and the invoice", () => {
+    expect(actions.map((action) => action.name)).toEqual(["submitPayeeAddressAction", "keepPayeeAddressAction", "submitPayeeInvoiceAction"]);
   });
 
-  it("awaits the link check first, and enters no workspace itself", () => {
-    const [action] = actions;
-    expect(awaitedNames(action.body)[0]).toBe("submitPayeeAddress");
-    expect(action.body).not.toMatch(/inOrg|withOrg|authorize/);
+  it.each([
+    ["submitPayeeAddressAction", "submitPayeeAddress"],
+    ["keepPayeeAddressAction", "keepPayeeAddress"],
+    ["submitPayeeInvoiceAction", "submitPayeeInvoice"],
+  ])("%s awaits its link check first, and enters no workspace itself", (name, check) => {
+    const action = actions.find((candidate) => candidate.name === name);
+    expect(action, name).toBeDefined();
+    expect(awaitedNames(action!.body)[0]).toBe(check);
+    expect(action!.body).not.toMatch(/inOrg|withOrg|authorize/);
   });
 });
 

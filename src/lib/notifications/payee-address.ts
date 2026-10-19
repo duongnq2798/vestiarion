@@ -14,9 +14,10 @@ const MAX_RECIPIENTS = 10;
  * through a link (docs/superpowers/specs/2026-10-01-pay-a-freelancer-design.md
  * §2, R4): until one of them confirms it, nothing is paid to it, and before
  * this nobody knew it had arrived. Best effort (R7): it never throws, logs any
- * send that did not go out, and returns how many did.
+ * send that did not go out, and returns how many did. `chainLabel` names the
+ * chain the payee chose, on a link that let it choose (payee invoice link P3).
  */
-export async function notifyPayeeAddress(input: { orgId: string; orgName: string; payeeName: string; address: string }): Promise<number> {
+export async function notifyPayeeAddress(input: { orgId: string; orgName: string; payeeName: string; address: string; chainLabel?: string }): Promise<number> {
   try {
     const org = unwrap(await platformDb().from("orgs").select("slug").eq("id", input.orgId).single()) as { slug: string };
     const recipients = (await listMembers(input.orgId)).filter((member) => can(member.role, "approval.decide")).slice(0, MAX_RECIPIENTS);
@@ -25,6 +26,7 @@ export async function notifyPayeeAddress(input: { orgId: string; orgName: string
       orgName: input.orgName,
       payeeName: input.payeeName,
       address: input.address,
+      ...(input.chainLabel ? { chainLabel: input.chainLabel } : {}),
       link: `${origin}/o/${org.slug}/counterparties`,
       origin,
     });

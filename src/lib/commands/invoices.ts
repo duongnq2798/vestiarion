@@ -25,7 +25,7 @@ export async function addInvoice(
     imported?: ImportedRow;
     /** The accounting tool's bill it was brought in from (Xero connector X11). */
     external?: ExternalSource;
-    /** The draft the Chrome extension captured, added from the console (invoice capture design C6). */
+    /** The draft the Chrome extension captured, or a payee sent through its link, added from the console (invoice capture design C6). */
     captured?: CapturedDraft;
     /** The id the invoice is added with, chosen by the caller so it can look for it after a failure (invoice capture I1). */
     invoiceId?: string;
@@ -52,6 +52,8 @@ export async function addInvoice(
       ...(input.external ? { external: input.external } : {}),
       // A draft the Chrome extension captured, named by its id and its invoice number (invoice capture design C6).
       ...(input.captured ? { via: "chrome" as const, captured: input.captured } : {}),
+      // An invoice a payee sent through its payee link, named by its link too (payee invoice link P5).
+      ...(input.captured?.payeeLinkId !== undefined ? { via: "payee_link" as const } : {}),
     });
   } catch (error) {
     console.error("adding an invoice failed", actor.orgId, error instanceof Error ? error.message : "unknown error");

@@ -5,18 +5,22 @@ import { actionEmailHtml } from "./layout";
  * The email a workspace's approvers get when a payee adds their address
  * through a link (docs/superpowers/specs/2026-10-01-pay-a-freelancer-design.md
  * §2, R4): the address, and that nothing is paid to it until one of them
- * confirms it on Counterparties.
+ * confirms it on Counterparties. The chain, when the payee chose it on its link
+ * (payee invoice link P3), is named beside the address.
  */
 export function payeeAddressEmail(input: {
   orgName: string;
   payeeName: string;
   address: string;
+  chainLabel?: string;
   link: string;
   origin: string;
 }): { subject: string; html: string; text: string } {
-  const { orgName, payeeName, address, link, origin } = input;
+  const { orgName, payeeName, address, chainLabel, link, origin } = input;
   const subject = `${payeeName} added an address to be paid at`;
-  const lead = `${payeeName} added the address they want ${orgName} to pay them at:`;
+  const lead = chainLabel
+    ? `${payeeName} added the address they want ${orgName} to pay them at, on ${chainLabel}:`
+    : `${payeeName} added the address they want ${orgName} to pay them at:`;
   const hold =
     "Nothing is paid to it until someone confirms it. Check it with them if you can, then confirm it on Counterparties; the agent pays within a minute.";
 

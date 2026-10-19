@@ -62,6 +62,12 @@ describe("CounterpartyAddress", () => {
     expect(markup).toMatch(new RegExp(`<input type="hidden" name="address" value="${ADDRESS}"/>`));
   });
 
+  it("names the chain beside the address, and posts it with a confirmation (payee invoice link P3)", () => {
+    const markup = render({ counterparty: { id: "x", name: "Acme", address: ADDRESS, chain: "BASE" }, canConfirm: true, unconfirmedSince: "2026-09-30T12:00:00Z" });
+    expect(markup).toContain("on Base");
+    expect(markup).toMatch(/<input type="hidden" name="chain" value="BASE"\/>/);
+  });
+
   it("shows nothing about confirming for an address that was never changed", () => {
     const markup = render({ canWrite: true, canConfirm: true });
     expect(markup).not.toContain("not yet confirmed");

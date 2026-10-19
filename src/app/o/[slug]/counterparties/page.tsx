@@ -34,7 +34,9 @@ import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
-import { listActivePayeeLinks } from "@/lib/platform/payee-links";
+import { listActivePayeeLinks, listWaitingInvoiceLinks } from "@/lib/platform/payee-links";
+import { chainChoiceFits, choosablePayeeChains, payeesHeldToTheirChain } from "@/lib/payee-chain-choice";
+import { homeChain } from "@/lib/payee-chains";
 import { askablePayees } from "@/lib/address-requests";
 import { simulatesPayments } from "@/lib/capability-read";
 import { plural } from "@/lib/copy";
@@ -85,6 +87,28 @@ export default async function CounterpartiesPage({
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
     // The payees with no address of their own to ask at once (ask every payee A1, A2).
     const askable = canWrite ? askablePayees(counterparties, payeeLinks) : null;
+    // The chains a vendor with no address may be let choose among on its link, when the workspace pays more than one
+    // (payee invoice link P1). Best effort: none when it cannot be read.
+    const choosableChains = canWrite
+      ? (
+          await choosablePayeeChains().catch((error: unknown) => {
+            console.error("counterparties: payee chains not read", error instanceof Error ? error.message : error);
+            return [];
+          })
+        ).map((chain) => chain.label)
+      : [];
+    // Vendors with no address that a milestone or a bill in another currency than USDC still holds to their chain: the
+    // choice would strand it (P2). Read only when a choice could be offered; best effort, as if every one were held.
+    const vendorsWithoutAddress = counterparties.filter((counterparty) => chainChoiceFits(counterparty, new Set())).map((counterparty) => counterparty.id);
+    const heldToChain =
+      choosableChains.length > 1 && vendorsWithoutAddress.length > 0
+        ? await payeesHeldToTheirChain(vendorsWithoutAddress).catch((error: unknown) => {
+            console.error("counterparties: payees held to their chain not read", error instanceof Error ? error.message : error);
+            return new Set(vendorsWithoutAddress);
+          })
+        : new Set<string>();
+    // A used link still waiting for its payee's invoice, which Revoke stops (P6).
+    const waitingInvoices = canWrite ? await listWaitingInvoiceLinks(access.membership.orgId) : new Map<string, { id: string; until: string }>();
     // Vendors paid to a bank account through BlindPay (bank payouts B4), on a deployment with it; best effort, none
     // before migration 0124.
     const bankPayoutsOn = blindpaySettingsFromEnv() !== null;
@@ -218,7 +242,7 @@ export default async function CounterpartiesPage({
                       </dl>
                       <CounterpartyAddress
                         orgSlug={slug}
-                        counterparty={{ id: counterparty.id, name: counterparty.name, address: counterparty.address }}
+                        counterparty={{ id: counterparty.id, name: counterparty.name, address: counterparty.address, chain: counterparty.chain ?? homeChain(network).id }}
                         unconfirmedSince={
                           addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at) ? counterparty.address_changed_at : null
                         }
@@ -248,6 +272,8 @@ export default async function CounterpartiesPage({
                             orgSlug={slug}
                             counterparty={{ id: counterparty.id, name: counterparty.name }}
                             activeLink={payeeLinks.get(counterparty.id) ?? null}
+                            offers={{ invoice: true, chains: chainChoiceFits(counterparty, heldToChain) ? choosableChains : [] }}
+                            waitingInvoice={waitingInvoices.get(counterparty.id) ?? null}
                           />
                         </div>
                       )}
