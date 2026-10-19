@@ -72,10 +72,11 @@ describe("the create form's options (payee invoice link P1)", () => {
     expect(source).not.toMatch(/defaultChecked/);
   });
 
-  it("names the chain the payee is paid on now, never Arc for a payee on Base, and what choosing replaces", () => {
+  it("names the chain the payee is paid on now, never Arc for a payee on Base", () => {
     expect(source).toContain("They enter their own address on ${chainLabel}, with no account");
-    expect(source).toContain("instead of ${chainLabel}. You confirm the chain with the address.");
     expect(source).not.toMatch(/own Arc address/);
+    // The chains to choose among already list the payee's own chain first, so the box names no chain twice.
+    expect(source).not.toContain("instead of ${chainLabel}");
   });
 
   it("draws the chain box only with more than one chain to choose among", () => {

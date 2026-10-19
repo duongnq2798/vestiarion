@@ -56,7 +56,9 @@ waits on a second request.
   members' email (reading the workspace and its members, sending, metering) before it answered. The address and invoice
   actions now pass `defer: after` (as the statement page does), so `submitPayeeAddress` and `submitPayeeInvoice` hand
   that email to `after()` and answer first. The ledger entry stays awaited: it is the record. Callers that pass no
-  `defer` (the API, scripts, tests) await the email as before.
+  `defer` (today only tests) await the email as before. The chain's label is read before the email is handed over,
+  so the deferred work is only the notify call, which never throws; a `defer` that throws (no request to run after)
+  sends the email at once instead of failing a submission already written.
 
 ## Considered and not done
 

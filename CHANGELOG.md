@@ -57,8 +57,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   link waited for the email to the owners and admins before the page moved on, about five seconds for an invoice. The
   email now goes out just after the payee's answer.
 - **Ask for address names the payee's chain.** Its dialog said the payee enters their own Arc address, also for a
-  vendor paid on Base. It now names the chain the vendor is paid on, and **Let them choose where they are paid** says
-  which chain choosing replaces.
+  vendor paid on Base. It now names the chain the vendor is paid on.
 
 ## [0.1.0-beta.11] - 2026-10-19
 

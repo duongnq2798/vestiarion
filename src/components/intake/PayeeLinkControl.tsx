@@ -86,7 +86,7 @@ function AskForAddress({ orgSlug, counterparty, chainLabel, offers }: Pick<Payee
         title={`Ask ${counterparty.name} for their address`}
         description={`Send them a one-time link. They enter their own address on ${chainLabel}, with no account, and you confirm it before the agent pays there.`}
       >
-        <CreateLinkForm orgSlug={orgSlug} counterparty={counterparty} chainLabel={chainLabel} offers={offers} />
+        <CreateLinkForm orgSlug={orgSlug} counterparty={counterparty} offers={offers} />
       </DialogContent>
     </Dialog>
   );
@@ -97,7 +97,7 @@ function AskForAddress({ orgSlug, counterparty, chainLabel, offers }: Pick<Payee
  * dialog's content, which unmounts when the dialog closes: reopening always
  * starts at the form, never at a link that has since been used or revoked.
  */
-function CreateLinkForm({ orgSlug, counterparty, chainLabel, offers }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty" | "chainLabel" | "offers">) {
+function CreateLinkForm({ orgSlug, counterparty, offers }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty" | "offers">) {
   const { state, formProps } = useActionForm(createPayeeLinkAction, INITIAL);
   const chains = offers?.chains ?? [];
 
@@ -122,7 +122,7 @@ function CreateLinkForm({ orgSlug, counterparty, chainLabel, offers }: Pick<Paye
             <Checkbox
               name="offersChain"
               label={OFFER_CHAIN}
-              description={`Where their wallet receives USDC: ${chains.slice(0, -1).join(", ")} or ${chains[chains.length - 1]}, instead of ${chainLabel}. You confirm the chain with the address.`}
+              description={`Where their wallet receives USDC: ${chains.slice(0, -1).join(", ")} or ${chains[chains.length - 1]}. You confirm the chain with the address.`}
             />
           )}
         </div>

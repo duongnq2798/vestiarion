@@ -340,10 +340,20 @@ export interface PayeeSendOptions {
   defer?: (work: () => Promise<unknown>) => void;
 }
 
-/** The members' email, after the answer when the caller defers it, or awaited. Best effort: the email never throws. */
+/**
+ * The members' email, after the answer when the caller defers it, or awaited. Best effort: the email never throws. The
+ * submission is written by now, so a `defer` that throws (no request to run after) sends the email at once instead.
+ */
 export async function tellMembers(work: () => Promise<unknown>, options: PayeeSendOptions): Promise<void> {
-  if (options.defer) options.defer(work);
-  else await work();
+  if (options.defer) {
+    try {
+      options.defer(work);
+      return;
+    } catch {
+      console.error("payee email not deferred; sent at once");
+    }
+  }
+  await work();
 }
 
 /**
@@ -397,18 +407,14 @@ export async function submitPayeeAddress(token: string, raw: string, options: { 
   // Nothing is paid to the new address until a member confirms it (R1), and
   // until now nobody was told it had arrived (pay a freelancer R4). Best
   // effort: it never throws. After the payee's answer when the caller defers it.
-  const address = parsed.address;
-  await tellMembers(
-    () =>
-      notifyPayeeAddress({
-        orgId: link.org_id,
-        orgName: preview.orgName,
-        payeeName: preview.counterpartyName,
-        address,
-        ...(chain !== undefined ? { chainLabel: chainById(chain).label } : {}),
-      }),
-    options
-  );
+  const notice = {
+    orgId: link.org_id,
+    orgName: preview.orgName,
+    payeeName: preview.counterpartyName,
+    address: parsed.address,
+    ...(chain !== undefined ? { chainLabel: chainById(chain).label } : {}),
+  };
+  await tellMembers(() => notifyPayeeAddress(notice), options);
   return { ok: true, orgName: preview.orgName, unchanged: false };
 }
 
