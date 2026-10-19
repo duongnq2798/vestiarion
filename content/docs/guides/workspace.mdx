@@ -23,6 +23,15 @@ While you run a workspace alone, **Treasury** asks you to bring in a second pers
 
 Type an email and choose **Invite**: it is the same invitation as on **Members**, emailed to them, or with a link to share when email is not set up. Each person you invite gets their own role's checklist. **Not now** hides the card in this browser for 30 days. It goes once a second member joins or an invitation is open. While you are alone, with no invitation open, the weekly summary email ends with a link to invite them too, which opens **Members** with the approver role chosen. The ledger records each invitation as `member_invited`; one sent from the card, or from that link, says so with `via`.
 
+## A reminder if you stop
+
+If you open a workspace and leave before the agent has anything to do, Vestiarion emails you once, so the workspace does not sit empty:
+
+- **No bill a day later.** One email, **Your agent has no bill to work on yet**, with the ways to give it one: **New**, then **Bill to pay** on **Bills & receivables**; **Import a list**; or forwarding bills to the workspace's own address, under **Invoices by email** in **Settings**. A sandbox that can load sample data, and has none, is also offered **Load sample data**.
+- **No verdict three days after the agent's first decision, in shadow mode.** One email saying how many of its decisions wait for you to agree or disagree, with a link to **Bills & receivables**.
+
+Each goes once per workspace, to the owners, admins and approvers who keep its emails on, and never about a workspace opened more than 30 days ago. Turn the emails off in **Settings**, under **Notifications**. The ledger records each as `activation_nudge_sent`, with which reminder it was (`stage`), just before it goes, or `activation_nudge_failed` when no email went after all; it is then tried again, up to three tries in all.
+
 ## Fold the sidebar
 
 On a screen 1024 pixels wide or more, the first button in the header, **Collapse sidebar**, folds the sidebar to a column of icons and gives the page the room. Hover over an icon, or move to it with the keyboard, to see its name. **Expand sidebar** unfolds it. The `[` key does the same from anywhere except a field you are typing in.

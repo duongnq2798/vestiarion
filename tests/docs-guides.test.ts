@@ -564,6 +564,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Once an approver joins, a first payment to an address you gave needs their approval, not yours alone.", "src/components/vx/InviteNudge.tsx"],
     ["Not now", "src/components/vx/InviteNudge.tsx"],
     ["member_invited", "src/lib/platform/members.ts"],
+    // A reminder if you stop (activation nudge A1, A4, A6).
+    ["Your agent has no bill to work on yet", "src/lib/email/activation-nudge.ts"],
+    ["Bill to pay", "src/components/bills/new-items.ts"],
+    ["Import a list", "src/components/bills/new-items.ts"],
+    ["Load sample data", "src/components/SampleDataPanel.tsx"],
+    ["activation_nudge_sent", "src/lib/activation-nudge.ts"],
+    ["activation_nudge_failed", "src/lib/activation-nudge.ts"],
     ["Treasury", APP_NAV],
     ["Approvals", APP_NAV],
     ["Operations", APP_NAV],

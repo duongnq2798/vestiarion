@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runLiveOrganizations, runScheduledCycle } from "@/lib/agent/cron";
 import { hasValidAgentBearer } from "@/lib/agent-security";
+import { runActivationNudges } from "@/lib/notifications/activation-nudge";
 import { takeAgentCycleToken } from "@/lib/rate-limit";
 import { deliverPendingWebhooks } from "@/lib/webhooks/deliver";
 import { withoutDispatchSoon } from "@/lib/webhooks/dispatch-soon";
@@ -13,6 +14,8 @@ const WEBHOOK_DISPATCH_MS = 30_000;
 const WEBHOOK_DISPATCH_MARGIN_MS = 15_000;
 /** No workspace's cycle starts later than this into the tick: what is left of `maxDuration` is for it to finish. */
 const LAST_START_S = 180;
+/** No workspace's setup reminder starts later than this into the tick (activation nudge A5). */
+const LAST_NUDGE_S = 220;
 
 function clientIp(request: Request): string {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
@@ -56,6 +59,17 @@ export async function POST(request: Request) {
     // queued within the tick's own budget, and one scheduled after the
     // response could run into `maxDuration` when that budget is spent.
     const results = await withoutDispatchSoon(() => runLiveOrganizations(runScheduledCycle, { startBy: startedAt + LAST_START_S * 1000 }));
+
+    // Setup reminders for customer workspaces that stopped before their first bill or first verdict
+    // (docs/superpowers/specs/2026-10-19-activation-nudge-design.md A5). The cycles above visit only live
+    // workspaces, and a new one is a sandbox, so this pass reads its own list. Email only: it runs with
+    // payments switched off too, never throws, and never changes the tick's status or body.
+    const nudges = await withoutDispatchSoon(() => runActivationNudges({
+      startBy: startedAt + LAST_NUDGE_S * 1000,
+      // No reminder email is still waiting for Resend once the dispatch's margin begins.
+      sendBy: startedAt + maxDuration * 1000 - WEBHOOK_DISPATCH_MARGIN_MS,
+    })).catch(() => null);
+    if (nudges && nudges.due > 0) console.info("activation nudges", JSON.stringify(nudges));
 
     // The cycles' ledger entries go out to webhook endpoints right away
     // (webhooks design W3), within what is left of this invocation: at most

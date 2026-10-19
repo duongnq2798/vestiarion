@@ -11,6 +11,8 @@ const { runLiveOrganizations, runScheduledCycle } = vi.hoisted(() => ({ runLiveO
 vi.mock("@/lib/agent/cron", () => ({ runLiveOrganizations, runScheduledCycle }));
 const { deliverPendingWebhooks } = vi.hoisted(() => ({ deliverPendingWebhooks: vi.fn() }));
 vi.mock("@/lib/webhooks/deliver", () => ({ deliverPendingWebhooks }));
+const { runActivationNudges } = vi.hoisted(() => ({ runActivationNudges: vi.fn() }));
+vi.mock("@/lib/notifications/activation-nudge", () => ({ runActivationNudges }));
 
 const { afterTasks } = vi.hoisted(() => ({ afterTasks: [] as Array<() => unknown> }));
 vi.mock("next/server", async (importOriginal) => {
@@ -27,6 +29,8 @@ const previousToken = process.env.AGENT_API_TOKEN;
 beforeEach(() => {
   deliverPendingWebhooks.mockReset();
   deliverPendingWebhooks.mockResolvedValue({ delivered: 0, failed: 0, retried: 0 });
+  runActivationNudges.mockReset();
+  runActivationNudges.mockResolvedValue({ due: 0, reminded: 0, attempted: 0, emails: 0, skipped: {}, left: 0 });
 });
 
 afterEach(() => {
@@ -52,6 +56,18 @@ function post(): Promise<Response> {
 }
 
 describe("POST /api/agent/tick", () => {
+  it("sends setup reminders after the cycles, none started after 220 seconds and no email after 285, without changing the tick's body or status (activation nudge A5)", async () => {
+    vi.useFakeTimers({ now: Date.parse("2026-10-19T00:17:00Z"), toFake: ["Date"] });
+    runLiveOrganizations.mockResolvedValueOnce([{ slug: "a-corp", ok: true, result: { lines: [{}] } }]);
+    runActivationNudges.mockRejectedValueOnce(new Error("down"));
+
+    const response = await post();
+
+    expect(runActivationNudges).toHaveBeenCalledWith({ startBy: Date.parse("2026-10-19T00:17:00Z") + 220_000, sendBy: Date.parse("2026-10-19T00:17:00Z") + 285_000 });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ organizations: [{ slug: "a-corp", ok: true, lines: 1 }] });
+  });
+
   it("runs its cycles with dispatch-soon off, since it dispatches within its own budget", async () => {
     afterTasks.length = 0;
     resetDispatchSoonForTests();
@@ -115,6 +131,10 @@ describe("POST /api/agent/tick", () => {
       order.push("cycles");
       return [{ slug: "a-corp", ok: true, result: { lines: [{}] } }];
     });
+    runActivationNudges.mockImplementationOnce(async () => {
+      order.push("nudges");
+      return { due: 1, reminded: 1, attempted: 1, emails: 1, skipped: {}, left: 0 };
+    });
     deliverPendingWebhooks.mockImplementationOnce(async () => {
       order.push("webhooks");
       return { delivered: 1, failed: 0, retried: 0 };
@@ -122,7 +142,8 @@ describe("POST /api/agent/tick", () => {
 
     const response = await post();
 
-    expect(order).toEqual(["cycles", "webhooks"]);
+    // The setup reminders go after the cycles and before the dispatch, so their entries go out with the cycles' (A5).
+    expect(order).toEqual(["cycles", "nudges", "webhooks"]);
     expect(deliverPendingWebhooks).toHaveBeenCalledWith({ deadlineMs: 30_000 });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ organizations: [{ slug: "a-corp", ok: true, lines: 1 }] });

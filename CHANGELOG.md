@@ -14,6 +14,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A reminder when a workspace stops.** A workspace opened by someone outside the team that has no real bill a day
+  later gets one email, **Your agent has no bill to work on yet**: the ways to give the agent a bill (**New**, then
+  **Bill to pay**; **Import a list**; forwarding bills to the workspace's own address), and **Load sample data** in a
+  sandbox that can load it. A workspace in shadow mode whose agent's decisions still wait for a first verdict three
+  days on gets one email saying how many wait. Each goes once per workspace, to the owners, admins and approvers who
+  keep its emails on, never about a workspace opened more than 30 days ago; the agent tick sends them, since its
+  scheduled cycles reach only live workspaces and a new one is a sandbox. Signed as `activation_nudge_sent` (or
+  `activation_nudge_failed`, up to three tries in all). No migration.
+  [Guide](https://www.vestiarion.xyz/docs/guides/workspace#a-reminder-if-you-stop).
+
 - **Bring in a second person.** While one person runs a workspace, Treasury asks an owner or admin, once the agent has
   decided a real bill, to invite an approver (so a first payment to an address they gave goes to someone else) and
   their accountant, each from one email field, through the usual invitation. **Not now** hides it for 30 days in that

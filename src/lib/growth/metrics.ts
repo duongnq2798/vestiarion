@@ -200,6 +200,19 @@ export interface GrowthMetrics {
   costPerActivated: { spendUsd: number; activated: number; value: number | null };
   /** Customer workspaces whose first touch was a page or email a business sent a counterparty (counterparty loop C4). */
   fromLoop: { workspaces: number; activated: number };
+  /**
+   * Customer workspaces that got a setup reminder, and how many came back: a real bill after a first-bill reminder, or a
+   * verdict after a first-verdict one (docs/superpowers/specs/2026-10-19-activation-nudge-design.md A7).
+   */
+  nudged: { workspaces: number; cameBack: number };
+}
+
+/** A setup reminder that went, as read from its workspace's ledger (activation nudge A7). */
+export interface NudgeRow {
+  orgId: string;
+  stage: "first_bill" | "first_verdict";
+  at: string;
+  verdictAfter: boolean;
 }
 
 export interface MetricsInput {
@@ -209,9 +222,11 @@ export interface MetricsInput {
   spend: SpendRow[];
   revenue: RevenueRow[];
   now: Date;
+  /** The setup reminders that went in the window's workspaces; none when not read. */
+  nudges?: NudgeRow[];
 }
 
-export function growthMetrics({ leads, events, workspaces, spend, revenue, now }: MetricsInput): GrowthMetrics {
+export function growthMetrics({ leads, events, workspaces, spend, revenue, now, nudges = [] }: MetricsInput): GrowthMetrics {
   const furthest = furthestStages(leads, events);
   const funnel = leadFunnel(leads, furthest);
   const reachedCount = (stage: OrderedStage) => leads.filter((lead) => reached(furthest, lead.id, stage)).length;
@@ -228,6 +243,14 @@ export function growthMetrics({ leads, events, workspaces, spend, revenue, now }
   const cashSpendUsd = sumMoney(spend.map((row) => row.usd));
   const activated = reachedCount("real_invoice_reviewed");
   const fromLoop = customers.filter((workspace) => workspace.attribution?.utmCampaign === LOOP_CAMPAIGN);
+  const nudgedWorkspaces = customers.filter((workspace) => nudges.some((nudge) => nudge.orgId === workspace.orgId));
+  const cameBack = nudgedWorkspaces.filter((workspace) =>
+    nudges.some(
+      (nudge) =>
+        nudge.orgId === workspace.orgId &&
+        (nudge.stage === "first_bill" ? workspace.firstRealBillAt !== null && Date.parse(workspace.firstRealBillAt) > Date.parse(nudge.at) : nudge.verdictAfter)
+    )
+  );
 
   return {
     leadsSourced: funnel.sourced,
@@ -252,5 +275,6 @@ export function growthMetrics({ leads, events, workspaces, spend, revenue, now }
     founderHours: Math.round(spend.reduce((total, row) => total + row.founder_hours * 10, 0)) / 10,
     costPerActivated: { spendUsd: cashSpendUsd, activated, value: activated > 0 ? Math.round((cashSpendUsd / activated) * 100) / 100 : null },
     fromLoop: { workspaces: fromLoop.length, activated: fromLoop.filter((workspace) => workspace.firstDecisionAt !== null).length },
+    nudged: { workspaces: nudgedWorkspaces.length, cameBack: cameBack.length },
   };
 }
