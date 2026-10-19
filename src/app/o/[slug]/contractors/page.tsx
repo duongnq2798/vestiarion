@@ -130,9 +130,10 @@ export default async function ContractorsPage({ params, searchParams }: { params
     const defaultRefundDate = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
     const minRefundDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
     const maxRefundDate = new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10);
-    // Clients pay the business; contractors are listed first, then vendors.
+    // Clients pay the business; contractors are listed first, then vendors. A vendor paid on another chain is not
+    // offered: a milestone is released on the workspace's own chain (mainnet Base payouts B4).
     const payees = counterparties
-      .filter((counterparty) => counterparty.role !== "client")
+      .filter((counterparty) => counterparty.role !== "client" && !paidAcrossChains(counterparty.chain))
       .sort((a, b) => Number(b.role === "contractor") - Number(a.role === "contractor"))
       .map(({ id, name, role }) => ({ id, name, role }));
     // The projects a new milestone may go in, and whether milestones take a purchase order yet (project budgets P3, P9).

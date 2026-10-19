@@ -112,6 +112,13 @@ function addressOf(row: AddressRow): SliceAddress {
   return "own";
 }
 
+/**
+ * The chain on Arc mainnet a vendor paid across chains in shadow mode keeps (mainnet Base payouts B7): one on Base
+ * Sepolia is a vendor on Base, so its Base address, once given, is paid on Base and never on Arc. Its testnet address is
+ * not carried. Any other chain is not one Arc mainnet pays, so the vendor goes over on Arc mainnet's own chain.
+ */
+const MAINNET_CHAIN_OF: Readonly<Record<string, string>> = { "BASE-SEPOLIA": "BASE" };
+
 const limitOf = (row: Pick<VendorRow, "baseline_payment_limit">): number | null =>
   row.baseline_payment_limit === null || !(Number(row.baseline_payment_limit) > 0) ? null : Number(row.baseline_payment_limit);
 
@@ -205,6 +212,7 @@ export async function startLiveSlice(input: {
       jurisdiction: row.jurisdiction ?? "",
       paymentLimit: String(limit),
       noticeEmail: row.notice_email ?? undefined,
+      ...(row.chain && MAINNET_CHAIN_OF[row.chain] ? { chain: MAINNET_CHAIN_OF[row.chain] } : {}),
     });
     if (parsed.success) carry.push({ row, address, counterparty: parsed.data, limit });
     else skipped.push({ counterpartyId: row.id, name: row.name, reason: "not_valid" });

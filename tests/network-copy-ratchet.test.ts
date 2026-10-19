@@ -91,14 +91,14 @@ const ALLOWED: Record<string, number> = {
   // CCTP, Gateway, the spending-limit contract and the USDC/EURC swap, only on Arc testnet: their refusals and reasons.
   // The live provider's faucet clause is its branch for a network with a faucet, and its refusal to mint BlindPay's test
   // token anywhere but Arc testnet (bank payouts B13).
-  "src/lib/circle/liveProvider.ts": 7,
+  "src/lib/circle/liveProvider.ts": 6,
   // BlindPay's test token, USDB, which bank payouts take on Arc testnet only, minted to the operating wallet there
   // (bank payouts B13): the Bank payouts card's line and its button, and the refusals where there is none to mint.
   "src/components/BankPayoutsPanel.tsx": 2,
   "src/lib/bank-payouts/test-token.ts": 3,
   "src/lib/circle/simulateProvider.ts": 1,
   // And the model's instruction that a bank payout on Arc testnet is weighed against the wallet's USDB (bank payouts B13).
-  "src/lib/agent/orchestrator.ts": 2,
+  "src/lib/agent/orchestrator.ts": 1,
   "src/lib/spending-limit/onchain.ts": 3,
   "src/lib/fx/errors.ts": 1,
   "src/lib/fx/swap-service.ts": 1,

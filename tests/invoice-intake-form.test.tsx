@@ -142,10 +142,12 @@ describe("InvoiceIntake with no counterparty yet", () => {
 });
 
 describe("the counterparty form's chain help (mainnet polish E2)", () => {
-  it("says another chain is paid through CCTP where the network has it, and that Arc mainnet pays on its own chain only", async () => {
+  it("says another chain is paid through CCTP, and on Arc mainnet only from the workspace's own Circle account (mainnet Base payouts B5)", async () => {
     const { chainHelp } = await import("@/components/intake/CounterpartyIntake");
     expect(chainHelp("arc-testnet")).toBe("Another chain is paid from Arc through CCTP, for a fee");
-    expect(chainHelp("arc-mainnet")).toBe("Arc mainnet pays on its own chain only");
+    expect(chainHelp("arc-mainnet")).toBe(
+      "Another chain is paid from Arc through CCTP, for a fee, from your own Circle account; a workspace paying from your own wallet holds it for now"
+    );
   });
 });
 

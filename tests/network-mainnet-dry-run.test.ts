@@ -47,9 +47,10 @@ describe("a workspace on Arc mainnet", () => {
     expect(runWithConfig(BASE, () => networkRpcUrl(ARC_MAINNET))).toBe("https://rpc.mainnet.arc.io");
   });
 
-  it("pays its own chain, ARC, and no Sepolia chain", () => {
+  it("pays its own chain, ARC, and Base across chains (mainnet Base payouts B1), and no Sepolia chain", () => {
     expect(homeChain("arc-mainnet").id).toBe("ARC");
-    expect(chainsOn("arc-mainnet").map((chain) => chain.id)).toEqual(["ARC"]);
+    expect(chainsOn("arc-mainnet").map((chain) => chain.id)).toEqual(["ARC", "BASE"]);
+    expect(chainOn("arc-mainnet", "BASE").domain).toBe(6);
     for (const chain of ["BASE-SEPOLIA", "ARB-SEPOLIA", "ETH-SEPOLIA", "ARC-TESTNET"]) {
       expect(() => chainOn("arc-mainnet", chain)).toThrow(`${chain} is not a chain this workspace pays on`);
       expect(counterpartyChainProblem("arc-mainnet", chain)).toBe(`${chain} is not a chain this workspace pays on`);
@@ -66,10 +67,11 @@ describe("a workspace on Arc mainnet", () => {
   });
 
   it("refuses by name what mainnet does not offer yet, before any request", async () => {
-    expect(() => cctpOf(ARC_MAINNET)).toThrow("Paying through CCTP does not run on Arc mainnet yet");
     expect(() => gatewayOf(ARC_MAINNET)).toThrow("Paying through Gateway does not run on Arc mainnet yet");
     expect(() => usycOf(ARC_MAINNET)).toThrow("The USYC reserve does not run on Arc mainnet yet");
-    await expect(bridgeFee(ARC_MAINNET, "ARC", 1, { fetch: noRequest })).rejects.toThrow("Paying through CCTP does not run on Arc mainnet yet");
+    // CCTP runs, to Base only (mainnet Base payouts B1): a Sepolia chain, or its own, is refused before any request.
+    await expect(bridgeFee(ARC_MAINNET, "ARC", 1, { fetch: noRequest })).rejects.toThrow("A payee on Arc mainnet is not paid across chains");
+    await expect(bridgeFee(ARC_MAINNET, "BASE-SEPOLIA", 1, { fetch: noRequest })).rejects.toThrow("BASE-SEPOLIA is not a chain this workspace pays on");
     await expect(estimateGateway(ARC_MAINNET, { depositor: PAYEE, signer: PAYEE, recipient: PAYEE, chain: "ARC", amount: 1, salt: HASH as `0x${string}` }, { fetch: noRequest })).rejects.toThrow(
       "Paying through Gateway does not run on Arc mainnet yet"
     );

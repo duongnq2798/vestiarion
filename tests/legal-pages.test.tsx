@@ -120,13 +120,15 @@ describe("the terms", () => {
     expect(ARC_MAINNET.usyc).toBeNull();
     expect(ARC_MAINNET.escrow).toBe(false);
     expect(ARC_MAINNET.swapAdapter).toBeNull();
-    expect(ARC_MAINNET.cctp).toBeNull();
+    // CCTP payouts run on Arc mainnet to Base, from a workspace's own Circle account (mainnet Base payouts B1, B3).
+    expect(ARC_MAINNET.cctp).not.toBeNull();
     expect(ARC_MAINNET.faucet).toBeNull();
     expect(ARC_MAINNET.walletTreasury).toBe(true);
     const testnet = text(renderToStaticMarkup(<TermsPage />).split('id="networks"')[1]?.split('id="custody"')[0] ?? "");
-    for (const feature of ["hosted wallets", "the USYC reserve", "milestone escrow", "the EURC swap", "payouts to other chains", "Circle's faucet"]) {
+    for (const feature of ["hosted wallets", "the USYC reserve", "milestone escrow", "the EURC swap", "Circle's faucet"]) {
       expect(testnet, feature).toContain(feature);
     }
+    expect(testnet).toContain("Payouts to other chains run here, and on Arc mainnet to Base from a workspace's own Circle account.");
   });
 });
 

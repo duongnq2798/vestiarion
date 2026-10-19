@@ -543,7 +543,7 @@ export class LiveProvider implements ChainProvider {
    */
   private async bridge(params: TransferParams, account: AccountRow & { walletId: string }): Promise<TransferResult> {
     if ((params.token ?? "USDC") !== "USDC") {
-      throw new Error("Only USDC crosses chains through CCTP; a EURC payment is paid on Arc testnet only.");
+      throw new Error(`Only USDC crosses chains through CCTP; a EURC payment is paid on ${this.network.label} only.`);
     }
     const chain = chainOn(this.network.id, params.destinationChain);
     const fee = await bridgeFee(this.network, chain.id, params.amount, { fetch: this.fetch });

@@ -1,4 +1,4 @@
-import { currentConfig, currentOrgId } from "../context";
+import { currentConfig, currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { chainModes, getChainProvider, type Stablecoin } from "../circle";
 import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address";
@@ -1064,6 +1064,13 @@ export async function approveAndPay(
 
   // Only USDC crosses chains (CCTP payouts X6): refused before any claim.
   if (invoice.currency !== "USDC" && paidAcrossChains(invoice.destinationChain)) raise("bridge_unsupported_token");
+
+  // From the owner's own wallet, whose contract pays on its own chain only, a payout to another chain is refused by name
+  // here, before any approval is recorded, fee asked for or funds counted (mainnet Base payouts B3). Such a workspace
+  // never sent one: its provider refuses every one.
+  if (!invoice.bankAccount && paidAcrossChains(invoice.destinationChain) && currentOrgConfig().chain.walletHost === "external") {
+    throw new ApprovalError("payments_off", `Only USDC on ${workspaceNetwork().label} can be paid from your wallet's contract.`);
+  }
 
   const operating = await operatingAccount();
   if (!operating) raise("no_operating_account");

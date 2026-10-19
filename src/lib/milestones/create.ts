@@ -2,11 +2,12 @@ import { db, unwrap } from "../dal";
 import { parseGitHubPullRequestUrl } from "../github-verification";
 import type { MilestoneInput } from "../intake-validation";
 import { appendLedgerEntry } from "../ledger";
+import { paidAcrossChains } from "../payee-chains";
 import type { Provenance } from "../provenance";
 
 export type CreatedMilestone =
   | { ok: true; id: string; contractorName: string; pullRequest: boolean }
-  | { ok: false; reason: "not_found" | "client" };
+  | { ok: false; reason: "not_found" | "client" | "another_chain" };
 
 /**
  * Records work a contractor is to be paid for, as a pending milestone of the workspace in scope (write API part 2,
@@ -31,13 +32,16 @@ export async function createMilestone(input: {
   // Scoped to the organization: another organization's counterparty id is answered exactly like one that does not exist.
   const lookup = await db()
     .from("counterparties")
-    .select("id, name, role")
+    .select("id, name, role, chain")
     .eq("id", milestone.contractorId)
-    .maybeSingle<{ id: string; name: string; role: string }>();
+    .maybeSingle<{ id: string; name: string; role: string; chain: string | null }>();
   if (lookup.error) throw new Error(lookup.error.message);
   const contractor = lookup.data;
   if (!contractor) return { ok: false, reason: "not_found" };
   if (contractor.role === "client") return { ok: false, reason: "client" };
+  // A milestone is released on the workspace's own chain (CCTP payouts review C1): a vendor paid on another chain would
+  // be sent USDC on Arc at its address there, which it may never reach (mainnet Base payouts B4).
+  if (paidAcrossChains(contractor.chain)) return { ok: false, reason: "another_chain" };
 
   const pullRequest = parseGitHubPullRequestUrl(milestone.evidence);
   const verificationSource = pullRequest?.url ?? milestone.evidence;

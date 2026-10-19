@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-19: Pay a vendor on Base from Arc mainnet
+
+- `chain` on a counterparty (`POST /api/v1/counterparties` and every response that carries it) may now be **`BASE`**: a vendor's address on Base, in a workspace on Arc mainnet. As on Arc testnet, only a vendor can be on another chain, and only a chain the workspace's network pays on is accepted (`BASE` on Arc mainnet; `BASE-SEPOLIA`, `ARB-SEPOLIA` or `ETH-SEPOLIA` on Arc testnet).
+- `POST /api/v1/milestones` now refuses a `contractorId` whose counterparty is paid on another chain, on either network, with `invalid_request` and "contractorId: This vendor is paid on another chain, and a milestone is paid on the workspace's own chain only. Add the work as an invoice instead." A milestone is released on the workspace's own chain, so such a payee would have been sent USDC there.
+- Such a payout is recorded like one from Arc testnet: `ap_pay` carries `payout: { chain: "BASE", route: "cctp", domain: 6, feeUsdc, quotes }`, and the payment's reconcile entry carries `execution.destinationChain: "BASE"` and `mintTxHash`, the mint on Base. It is paid only from a workspace on its own Circle account; a workspace paying from its own wallet holds it for a person, as before.
+- The TypeScript SDK 0.3.5 accepts `BASE` for a counterparty's `chain`. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-19: A reminder when a workspace stops
 
 - Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in domain `system`, actor `system`:

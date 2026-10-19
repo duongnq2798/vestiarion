@@ -83,9 +83,11 @@ export async function addMilestone(
     return refused("failed", "The milestone could not be added. Try again in a moment.");
   }
   if (!created.ok) {
-    return created.reason === "client"
-      ? refused("client", "A client is not paid for milestones. Choose a contractor or vendor.")
-      : refused("contractor_not_found", "Contractor not found.");
+    if (created.reason === "client") return refused("client", "A client is not paid for milestones. Choose a contractor or vendor.");
+    if (created.reason === "another_chain") {
+      return refused("another_chain", "This vendor is paid on another chain, and a milestone is paid on the workspace's own chain only. Add the work as a bill to pay instead.");
+    }
+    return refused("contractor_not_found", "Contractor not found.");
   }
   const added = { milestoneId: created.id, contractorName: created.contractorName };
   if (created.pullRequest && currentConfig().githubToken) {
