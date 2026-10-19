@@ -1,9 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LiveProof, NetworkPanels } from "@/components/landing/LiveProof";
-import { FEATURED_PAYMENT, featuredTxUrl } from "@/components/landing/featured-proof";
 import { CustomerFigures, DecisionFigures, LatestLine, LatestPanel, PaymentFigures, Proof } from "@/components/landing/Proof";
-import { ARC_MAINNET } from "@/lib/network";
 import { landingProvenance, RESERVE_PROOF_HREF } from "@/components/landing/provenance";
 import { ProvenanceBar, ProvenanceList } from "@/components/vx/Provenance";
 import type { OpenNumbers, SideNumbers } from "@/lib/platform/open-numbers";
@@ -226,15 +224,14 @@ describe("the hero's live legs", () => {
     expect(text(markup)).toContain("Screening · OpenSanctions Live");
   });
 
-  it("sit in the landing's proof, which leads with one real payment on Arc mainnet and its explorer link", () => {
+  it("show the live proof shell without substituting a historical payment while reads are pending", () => {
     // Every read still pending: the section's words, the featured payment and the links are drawn, each read waits.
     const markup = renderToStaticMarkup(<Proof numbers={new Promise(() => {})} facts={new Promise(() => {})} />);
     const words = text(markup);
     expect(words).toContain("Proof, not promises");
     expect(words).toContain("Don't take our word for it.");
     expect(words).toContain("Real agent decisions. Onchain payment receipts. Publicly verifiable records.");
-    expect(words).toContain("A real payment, with a verifiable trail.");
-    expect(markup).toMatch(new RegExp(`<a[^>]*href="${featuredTxUrl}"[^>]*target="_blank"[^>]*rel="noopener noreferrer"[^>]*>Verify on Arc Explorer`));
+    expect(words).not.toContain("A real payment, with a verifiable trail.");
     expect(markup).toMatch(/<a[^>]*href="\/open"[^>]*>Explore the public proof/);
     expect(markup).toMatch(/<a[^>]*href="\/docs\/guides\/audit-export"/);
     expect(words).toContain("Loading customer activity");
@@ -242,16 +239,10 @@ describe("the hero's live legs", () => {
     expect(words).toContain("Loading the payments settled");
   });
 
-  it("tell the featured payment as it happened: decided, held by code, approved by a second person, settled on Arc mainnet", () => {
-    expect(FEATURED_PAYMENT.network).toBe(ARC_MAINNET);
-    expect(featuredTxUrl).toBe(`https://explorer.arc.io/tx/${FEATURED_PAYMENT.txHash}`);
-    expect(FEATURED_PAYMENT.txHash).toMatch(/^0x[0-9a-f]{64}$/);
-    expect(FEATURED_PAYMENT.steps.map((step) => step.kind)).toEqual(["Decision", "Rules in code", "Approval", "Settlement"]);
+  it("does not import a historical journey as a fallback for unread production evidence", () => {
     const words = text(renderToStaticMarkup(<Proof numbers={new Promise(() => {})} facts={new Promise(() => {})} />));
-    expect(words).toContain("Code held it before anything was sent.");
-    expect(words).toContain("counterparty.new_payee");
-    expect(words).toContain("A second member read the reasons and approved it.");
-    expect(words).toContain("Arc mainnet · Real USDC");
+    expect(words).not.toContain("counterparty.new_payee");
+    expect(words).not.toContain("A second member read the reasons and approved it.");
   });
 
   it("show the team's latest decision when there is one, and nothing when there is none", () => {

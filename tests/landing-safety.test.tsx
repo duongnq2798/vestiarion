@@ -18,8 +18,8 @@ describe("the landing's safety section", () => {
   it("keeps its heading, with the rules' half set apart", () => {
     expect(markup).toContain('id="safety"');
     expect(markup).toContain("Safety and control");
-    expect(text(markup)).toContain("The AI suggests. Your rules decide.");
-    expect(markup).toMatch(/<span class="[^"]*italic[^"]*">Your rules decide\.<\/span>/);
+    expect(text(markup)).toContain("The AI suggests. Your rules in code decide.");
+    expect(markup).toMatch(/<span class="[^"]*italic[^"]*">Your rules in code decide\.<\/span>/);
   });
 
   it("states three principles, each saying what holds it: the team, code and a contract, or the ledger", () => {
@@ -47,7 +47,10 @@ describe("the landing's safety section", () => {
     const all = text(markup);
     expect(all).toContain("What happens when a rule fails?");
     expect(SAFETY_EXAMPLE.network).toBe(ARC_TESTNET);
-    expect(all).toContain(`A real decision · ${ARC_TESTNET.label} · shadow mode`);
+    expect(all).toContain(`A historical team decision · ${ARC_TESTNET.label} · shadow mode`);
+    expect(all).toContain("Vestiarion team workspace");
+    expect(markup).toContain('/blob/main/src/components/landing/safety-example.ts');
+    expect(all).toContain("View the historical case source");
     expect(markup).toContain(`dateTime="${SAFETY_EXAMPLE.at}"`);
     expect(markup.match(/<ol\b[\s\S]*?<\/ol>/)?.[0].match(/<li\b/g)).toHaveLength(3);
     expect(all).toContain("workspace.outflow_budget");

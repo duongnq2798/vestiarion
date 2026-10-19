@@ -642,17 +642,18 @@ mainnet plan).
     the workspaces opened in the period and how many reached each step: a real bill, the agent's decision on one, a
     confirmed live payment, payments on two UTC days, a verdict, two people. `npm run numbers` prints it per network
     (`src/lib/platform/funnel.ts`); /open does not show it.
-- **The landing, for a business owner first** (`docs/superpowers/specs/2026-10-11-landing-clarity-design.md`): the hero
-  says what Vestiarion is and who it is for, beside two sample bills in the product's own words; then how it works in
-  three steps, who it is for (one tab per kind of team, every panel in the HTML), safety and control in plain words,
-  the proof, the developers' way in, the questions and the close.
+- **The landing, the bill's journey** (`docs/superpowers/specs/2026-10-19-bill-journey-design.md`): the sole h1 is
+  "Your AI agent for bills and payments", with "Every bill. A clear way through." as a large display paragraph. The
+  hero has an application frame (workspace sidebar, bill status and verification actions), followed by a five-stage
+  process explanation and the same actual team bill's recorded evidence. How to start, small-business examples, safety,
+  public figures, integrations, developer entry, questions and the close retain their actions and claims.
   - One call to action everywhere (`src/components/landing/cta.ts`): `/onboarding?shadow=1`, which opens a workspace
     with shadow mode ticked; the sign-in page says what follows the link when that is where it leads.
   - Each call to action carries `data-cta`; Google Analytics, where it runs, sends `cta_click` with that name and the
     redacted path, nothing else. Activation itself is read from the database (`/admin/growth`).
   - Safety and control (`src/components/landing/Safety.tsx`): three principles, each saying what holds it (the team,
     rules in code and Arc mainnet's spending-limit contract, the signed ledger), then one past refusal step by step
-    (`safety-example.ts`: ledger entry #3710 in a demo workspace in shadow mode on Arc testnet, refused by
+    (`safety-example.ts`: historical ledger entry #3710 in a team workspace in shadow mode on Arc testnet, refused by
     `workspace.outflow_budget`). A past decision's facts do not change, so they are written there rather than read.
   - Integrations (`src/components/landing/Integrations.tsx`): Xero and QuickBooks Online first, each with what comes in
     and what goes back; Xero's loop in four steps, labelled as the supported workflow rather than one payment; the nine
@@ -668,9 +669,12 @@ mainnet plan).
     head, the decision loop step by step, and the claims with the receipts behind them.
   - The questions' answer about Arc mainnet says it is open to anyone only while `MAINNET_ALLOWLIST` holds `*`
     (`mainnetOpenToEveryone`).
-  - Nothing above the proof waits for a read (landing stream S1): `LandingPage` is not async. It starts the reads (both
-    networks' open numbers and the latest decision) and hands them to `Proof` as promises; each group of figures and
-    the latest decision stream in behind their own fallback, so the hero arrives with the first bytes.
+  - `LandingPage` remains synchronous. It starts both networks' open numbers, latest/recent decisions and one shared
+    team-journey read; Hero and BillJourney consume that same promise inside evidence-only Suspense boundaries.
+    Positioning, calls to action, application frame and process explanations arrive in the first HTML. Unavailable
+    evidence is labelled, never substituted with the historical featured payment. `EvidencePending` offers a noscript
+    link to `/open`, whose page awaits its reads on the server, and hides permanent loading placeholders without
+    JavaScript. The static story remains visible; live landing facts and browser signature checks require JavaScript.
 - **The landing's latest decision** (`docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md`): the newest
   decision the agent made in one of the team's own live workspaces, in the landing's proof (a band of its own on
   /studios).
@@ -684,8 +688,8 @@ mainnet plan).
     the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
   - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the
     receipt verifier's half that needs no body. Until 0087 runs, or when the read fails, there is no band.
-  - The landing shows it as a line under the agent's decisions (`LatestLine`, in the proof). `LatestPanel` sets it
-    with the decisions before it, for a page that shows them in full: (`docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md`):
+  - The landing shows it as a line under the agent's decisions (`LatestLine`, in the proof), with an independently
+    read list of earlier decisions. `LatestPanel` also remains available for pages that show the full card: (`docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md`):
     `recent_team_decisions()` (0100), the service role's alone, reads the same workspaces on the same terms (and never
     a simulated payment's decision), one decision per bill (its newest) out of the newest 500, and counts each
     network's decisions in the past 7 days apart.
@@ -693,14 +697,27 @@ mainnet plan).
     minute; `recentDecisionView` says what came of each (paid, held, refused by code...) and why, and links a
     transaction only when one went out. The list shows rows strictly older than the latest decision. Until 0100 runs,
     or when the read fails, the latest decision stands alone.
-- **The landing's proof** (`docs/superpowers/specs/2026-10-08-landing-proof-design.md`, and landing clarity P1-P3):
-  one real payment told as a story, then the measurements, which come from every workspace, never from the founding one
-  alone.
-  - The featured payment (`src/components/landing/featured-proof.ts`) is the first payment a team workspace made on Arc
-    mainnet, on Oct 7, 2026: the model's decision to pay, code holding it as a first payment to a new address
-    (`counterparty.new_payee`), a second member's approval, and the transfer through the owner's
-    `VestiarionSpendingLimit`. A past payment's facts do not change, so they are written there, each with where it was
-    read (the workspace's ledger entries and the Arc mainnet explorer); "Verify on Arc Explorer" opens its transaction.
+- **The landing's team journey**: `landing_team_journeys()` (0134) is a stable, read-only, service-role-only
+  function. It selects the newest eligible direct and Base payments independently from live Arc mainnet workspaces
+  created by the platform team or the founding workspace; customer/sample bills, simulated/failed/pending payments,
+  Gateway routes and unconfirmed Base mints are excluded. Joins use both workspace and target identities.
+  - `src/lib/platform/team-journeys.ts` caches successful reads for about one minute and discards failures. The private
+    workspace identity is used only inside `withOrg` to fetch signing public keys, then stripped. No landing read
+    writes, creates a receipt link, sends a payment or changes a workspace.
+  - Before the additive function is released, only a missing-function error may use the existing
+    `latest_team_decision()` eligible-team selector, recheck its live/mainnet workspace and read payment/bill/ledger
+    facts through `withOrg`/`db()`. This narrower selection may leave a route unavailable. Other errors resolve null.
+  - `src/lib/team-journey.ts` validates the public projection and constructs explorer links from recorded chains.
+    Amount/currency come from confirmed intents; Base requires both an Arc burn and a Base mint. Dates are recording
+    instants, never invented execution/block times or elapsed durations. Missing intake, checks, hold, approval and
+    recording entries remain unknown, including capped reads. No private names, reasoning, purchase-order references,
+    person ids or source/workspace ids reach the rendered view; known rule codes and boolean observations are allowed.
+  - Hero and BillJourney prefer the direct payment, otherwise the validated Base payment. A second Base panel appears
+    only when it is a different payment. They explicitly identify the Vestiarion team workspace. Each available ledger
+    event has the existing browser signature check; it verifies the signed hash link, not the public description or
+    payment settlement. Arc/Base explorer links verify the respective transactions separately.
+- **The landing's proof**: independently streamed latest/recent team decisions and public measurements from every
+  workspace, never the founding workspace alone. Historical `featured-proof.ts` is no longer imported by the landing.
   - The measurements are the open numbers, all time (`readAllTimeOrNull`), in three groups. Customer activity is
     customers' own figures alone, on Arc testnet, with where customers stand on Arc mainnet. Agent decisions gives
     each network's model decisions and code refusals beside their sum, and customers' shadow-mode verdicts; a verdict
@@ -3798,7 +3815,7 @@ a fluid gutter and a centred container; blue and ink tones carry `focus-inverse`
 surface elevation and adds an optional flat edge. The primitives add no client boundary. The development-only,
 noindex `/design/visual-system` specimen demonstrates composition without payment evidence; production returns 404.
 Rules and rollout boundaries are in `docs/design/visual-system.md`; token equality, AA colour pairs, class merging and
-server-rendered primitive contracts are tested. The landing and public-page restyles are separate, subsequent PRs.
+server-rendered primitive contracts are tested. The landing uses these primitives in PR2; the remaining public-page migration stays in PR3.
 
 ## Social previews
 

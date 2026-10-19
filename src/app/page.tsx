@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BuildOnIt } from "@/components/landing/BuildOnIt";
+import { BillJourney } from "@/components/landing/BillJourney";
 import { Faq } from "@/components/landing/Faq";
 import { FinalCta } from "@/components/landing/FinalCta";
 import { Hero } from "@/components/landing/Hero";
@@ -13,6 +14,8 @@ import { currentConfig } from "@/lib/context";
 import { mainnetOpenToEveryone } from "@/lib/mainnet";
 import { readLatestDecision } from "@/lib/platform/latest-decision";
 import { readAllTimeOrNull } from "@/lib/platform/open-numbers";
+import { readRecentDecisions } from "@/lib/platform/recent-decisions";
+import { readTeamJourneys } from "@/lib/platform/team-journeys";
 import { publicOrigin } from "@/lib/public-origin";
 import { X_HANDLE } from "@/lib/site-links";
 
@@ -64,19 +67,18 @@ async function proofFacts(): Promise<ProofFacts> {
 }
 
 /**
- * The landing page (docs/superpowers/specs/2026-10-11-landing-clarity-design.md): what Vestiarion is and how to try it
- * first, who it is for, how it is kept safe, then the proof, the tools it connects to, the developer's way in, the
- * questions and the close. The technical showcase, the decision loop step by step and the receipts behind each claim, is
- * /how-it-decides.
+ * The bill's journey: a clear application view and the same team's recorded bill through its checks, decision and
+ * payment, followed by how to start, the controls, public measurements, integrations, developer entry and questions.
  *
- * Nothing above the proof waits for a read (landing stream S1): the reads start here and the proof streams each of them
- * in behind its own fallback, so the hero arrives with the first bytes. The measurements are the open numbers, every
- * workspace's, read through the aggregate functions one network at a time (landing proof P3).
+ * The synchronous shell never waits for evidence. Hero and journey share one sanitized read; independent boundaries
+ * stream the numbers, latest signed decision and recent decisions without delaying the positioning or calls to action.
  */
 export default function LandingPage() {
   const mainnet = readAllTimeOrNull("arc-mainnet");
   const testnet = readAllTimeOrNull("arc-testnet");
   const numbers = Promise.all([mainnet, testnet]).then(([mainnetNumbers, testnetNumbers]) => ({ mainnet: mainnetNumbers, testnet: testnetNumbers }));
+  const journey = readTeamJourneys();
+  const recent = readRecentDecisions();
 
   return (
     <div className="min-h-dvh overflow-x-clip bg-transparent">
@@ -84,11 +86,12 @@ export default function LandingPage() {
       <SiteHeader landing />
 
       <main id="main">
-        <Hero />
+        <Hero journey={journey} />
+        <BillJourney source={journey} />
         <Steps />
         <UseCases />
         <Safety />
-        <Proof numbers={numbers} facts={proofFacts()} />
+        <Proof numbers={numbers} facts={proofFacts()} recent={recent} />
         <Integrations />
         <BuildOnIt />
         <Faq mainnetForEveryone={mainnetOpenToEveryone(currentConfig())} />

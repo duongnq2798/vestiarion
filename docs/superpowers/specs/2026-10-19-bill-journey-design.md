@@ -97,3 +97,11 @@ Date: 2026-10-19. Status: direction C selected, with the four corrections below.
 [RECOMMENDATION] Record baseline and candidate source commit, same-browser cold-load LCP (three runs and median), CLS, transferred/decoded JavaScript bytes, stylesheet bytes, total page/section heights and horizontal overflow. Hold viewport, network and CPU throttling constant and record their exact settings. PR1 adds zero client boundaries or client imports; report any client-JavaScript delta and preserve production route rendering. PR2/PR3 investigate a median LCP regression above 10%, a compressed script increase above 30KB, any new horizontal overflow or CLS above 0.1 before merge. These are review budgets, not measurements already achieved.
 
 [FACT] There are no analytics or verified conversion results for the selected production direction yet. This design claims clearer product positioning, accessible surfaces and traceable evidence as acceptance requirements, not a measured increase in conversion.
+
+## PR2 implementation evidence
+
+[FACT] The read-only audit found a confirmed 1 USDC Arc-to-Base payment in an eligible team workspace, with all five recorded events, but no direct payment in that one selected scope. Approval recording follows payment confirmation recording. The public view labels recording times and never infers elapsed duration.
+
+[FACT] Before migration `0134_landing_team_journeys.sql` is released, only a missing-function error uses the already-whitelisted latest-team selector plus the same scoped real-data validation. This narrower selection can leave a route unknown; it never imports historical fixtures. All other read failures resolve unavailable. No production migration or payment was performed for the preview.
+
+[FACT] The existing historical safety case remains separate from the live bill journey and links to its committed source. It was not found in the founding scope during this audit, so no new live-verification claim is made for it.

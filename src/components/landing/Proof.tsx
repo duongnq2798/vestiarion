@@ -2,10 +2,10 @@ import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import { formatFigure, formatRatio } from "@/components/open/OpenNumbersTable";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Heading } from "@/components/ui/Heading";
+import { Section } from "@/components/ui/Section";
 import { Reveal } from "@/components/ui/Reveal";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Hash } from "@/components/vx/Primitives";
@@ -16,7 +16,7 @@ import type { OpenNumbers } from "@/lib/platform/open-numbers";
 import { earlierThan, type RecentDecisions } from "@/lib/platform/recent-decisions";
 import { GITHUB_URL } from "@/lib/site-links";
 import { CountUp } from "./CountUp";
-import { FEATURED_PAYMENT, featuredContractUrl, featuredTxUrl } from "./featured-proof";
+import { EvidencePending } from "./EvidencePending";
 import { LatestDecisionCard } from "./LatestDecision";
 import type { LandingNumbers } from "./LiveProof";
 import { landingPrefetch } from "./prefetch";
@@ -24,12 +24,7 @@ import { latestOwnPaymentUrl } from "./provenance";
 import { RecentDecisionList } from "./RecentDecisions";
 import { SignatureCheck } from "./SignatureCheck";
 
-/**
- * The landing's proof (docs/superpowers/specs/2026-10-11-landing-clarity-design.md P1-P3), told as one story: a real
- * payment on Arc mainnet from the agent's decision through the rule that held it and the person who approved it to the
- * transaction anyone can check, then the open numbers in three groups (customers, the agent's decisions, payments
- * settled), customers apart from the team and each network on its own, and where to check every figure without us.
- */
+/** Public measurements and signed team decisions, independently streamed after the bill journey. */
 
 /** Where to check the rest without us, after the public numbers. */
 const CHECK_IT: ReadonlyArray<{
@@ -54,28 +49,27 @@ export interface ProofFacts {
 }
 
 /**
- * The section's words, the featured payment and the links are drawn at once; each part read from production streams in
+ * The section's words and links are drawn at once; each part read from production streams in
  * behind its own fallback (landing stream S1), so no read holds back the page above it, the hero included.
  */
-export function Proof({ numbers, facts }: { numbers: Promise<LandingNumbers>; facts: Promise<ProofFacts> }) {
+export function Proof({ numbers, facts, recent }: { numbers: Promise<LandingNumbers>; facts: Promise<ProofFacts>; recent?: Promise<RecentDecisions | null> }) {
   return (
-    <section id="proof" aria-labelledby="proof-title" className="scroll-mt-16 border-b border-line bg-ground">
-      <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
+    <Section id="proof" tone="ground" aria-labelledby="proof-title" className="scroll-mt-16 border-b border-line">
         <Reveal>
           <div className="max-w-3xl">
             <Eyebrow className="text-agent">Proof, not promises</Eyebrow>
-            <h2 id="proof-title" className="mt-3 text-balance text-3xl font-semibold leading-tight tracking-[-0.04em] text-ink sm:text-5xl">
+            <Heading id="proof-title" className="mt-3 max-w-4xl text-balance">
               Don&apos;t take our word for it.
-            </h2>
+            </Heading>
             <p className="mt-4 max-w-2xl text-pretty text-[0.9375rem] leading-relaxed text-ink-2 sm:text-lg">
               Real agent decisions. Onchain payment receipts. Publicly verifiable records.
             </p>
           </div>
         </Reveal>
 
-        <FeaturedPayment />
+        {recent && <Suspense fallback={null}><Earlier source={recent} latest={facts} /></Suspense>}
 
-        <div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           <Group id="proof-customers" title="Customer activity" lede="Businesses outside our team, never mixed with our own.">
             <Suspense fallback={<GroupFallback what="customer activity" />}>
               <Customers source={numbers} />
@@ -131,149 +125,10 @@ export function Proof({ numbers, facts }: { numbers: Promise<LandingNumbers>; fa
         <Suspense fallback={null}>
           <ReadAt source={numbers} />
         </Suspense>
-      </div>
-    </section>
+    </Section>
   );
 }
 
-/** "09:43 UTC", from an instant. */
-const utcTime = (iso: string) => `${iso.slice(11, 16)} UTC`;
-
-/**
- * One payment on Arc mainnet, told step by step beside the transaction that settled it (featured-proof.ts): what the
- * agent decided, the rule in code that held it, the person who approved it, and the contract it was paid through.
- */
-function FeaturedPayment() {
-  const p = FEATURED_PAYMENT;
-  return (
-    <article aria-labelledby="featured-payment-title" className="mt-8 overflow-hidden rounded-2xl border border-line bg-surface">
-      {/* Real money's evidence carries the proof colour's thin rule, as Arc mainnet's figures do. */}
-      <span aria-hidden className="block h-0.5 bg-proof" />
-      <div className="grid md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <div className="min-w-0 p-5 sm:p-6">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <Badge tone="proof" size="sm" className="font-mono uppercase tracking-[0.08em]">
-              {`${p.network.label} · Real USDC`}
-            </Badge>
-            <time dateTime={p.confirmedAt} className="font-mono text-xs text-ink-3">
-              Oct 7, 2026
-            </time>
-          </div>
-          <h3 id="featured-payment-title" className="mt-3 text-balance text-xl font-semibold tracking-[-0.02em] text-ink sm:text-2xl">
-            A real payment, with a verifiable trail.
-          </h3>
-          <p className="mt-1.5 max-w-xl text-pretty text-sm leading-relaxed text-ink-2">
-            {`A workspace our team runs, paying its first bill on ${p.network.label}: ${p.amount} USDC to a supplier it had never paid.`}
-          </p>
-          <ol className="mt-5 grid">
-            {p.steps.map((step, index) => (
-              <li key={step.kind} className="relative grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3 pb-4 last:pb-0">
-                {/* The rail that joins one step to the next; the last step has nothing after it. */}
-                {index < p.steps.length - 1 && <span aria-hidden className="absolute bottom-0 left-[0.8125rem] top-7 w-px bg-line" />}
-                <span
-                  aria-hidden
-                  className="mt-0.5 grid size-7 place-items-center rounded-full border border-line-strong bg-surface font-mono text-xs font-semibold text-ink-2"
-                >
-                  {index + 1}
-                </span>
-                <div className="min-w-0">
-                  <p className="flex flex-wrap items-baseline gap-x-2 font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3">
-                    <span>{step.kind}</span>
-                    <span aria-hidden>·</span>
-                    <time dateTime={step.at} className="normal-case tracking-normal">
-                      {utcTime(step.at)}
-                    </time>
-                  </p>
-                  <p className="mt-1 text-[0.9375rem] font-semibold leading-snug text-ink">{step.title}</p>
-                  {"detail" in step && (
-                    <p className="mt-0.5 max-w-xl text-pretty text-sm leading-relaxed text-ink-2">
-                      {step.detail}
-                      {"rule" in step && (
-                        <>
-                          {" "}
-                          <code className="whitespace-nowrap rounded-md border border-refused-line bg-refused-soft px-1.5 py-0.5 font-mono text-xs text-refused">
-                            {step.rule}
-                          </code>
-                        </>
-                      )}
-                    </p>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-        <div className="flex min-w-0 flex-col border-t border-line bg-ground/50 p-5 sm:p-6 md:border-l md:border-t-0">
-          <p className="font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-3">On the {p.network.label} explorer</p>
-          <dl className="mt-3 grid gap-2.5 text-sm">
-            <Fact label="Amount">
-              <span className="font-semibold text-ink tabular-nums">{p.amount} USDC</span>
-            </Fact>
-            <Fact label="Status">
-              <Badge tone="proof" size="sm" dot>
-                Confirmed
-              </Badge>
-            </Fact>
-            <Fact label="Paid through">
-              <a
-                href={featuredContractUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 font-medium text-agent underline-offset-4 hover:underline"
-              >
-                VestiarionSpendingLimit
-                <ArrowUpRight aria-hidden className="size-3.5" />
-                <span className="sr-only">{`, the contract on the ${p.network.label} explorer (opens in a new tab)`}</span>
-              </a>
-            </Fact>
-            <Fact label="Confirmed">
-              <time dateTime={p.confirmedAt} className="font-mono text-xs text-ink-2">
-                {utcMinute(p.confirmedAt)}
-              </time>
-            </Fact>
-            <Fact label="Network fee">
-              <span className="font-mono text-xs text-ink-2 tabular-nums">{p.feeUsdc} USDC</span>
-            </Fact>
-            <Fact label="Transaction">
-              <Hash value={p.txHash} href={featuredTxUrl} className="text-sm" />
-            </Fact>
-          </dl>
-          <div className="mt-5 flex flex-col gap-1 md:mt-auto md:pt-5">
-            <Button asChild size="lg" className="w-full justify-center">
-              <a href={featuredTxUrl} target="_blank" rel="noopener noreferrer" data-cta="proof-featured-explorer">
-                Verify on Arc Explorer
-                <ArrowUpRight aria-hidden />
-                <span className="sr-only">{`: the ${p.amount} USDC payment on ${p.network.label} (opens in a new tab)`}</span>
-              </a>
-            </Button>
-            <a
-              href={`${GITHUB_URL}#mainnet-proof`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center justify-center gap-1 text-sm font-medium text-agent underline-offset-4 hover:underline"
-            >
-              Read the whole trail
-              <ArrowUpRight aria-hidden className="size-3.5" />
-              <span className="sr-only"> (opens in a new tab)</span>
-            </a>
-          </div>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-/** A fact about the featured transaction: its name on the left, its value on the right. */
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 items-center justify-between gap-4 border-b border-line/70 pb-2.5 last:border-b-0 last:pb-0">
-      <dt className="shrink-0 text-ink-3">{label}</dt>
-      <dd className="min-w-0 truncate text-right">{children}</dd>
-    </div>
-  );
-}
-
-/** One of the three groups of figures: a heading and what it counts, then its figures. */
 function Group({ id, title, lede, className, children }: { id: string; title: string; lede: string; className?: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className={cn("flex min-w-0 flex-col rounded-2xl border border-line bg-surface p-5 sm:p-6", className)}>
@@ -462,6 +317,12 @@ export function LatestLine({ latest }: { latest: LatestDecisionShown | null }) {
   );
 }
 
+async function Earlier({ source, latest }: { source: Promise<RecentDecisions | null>; latest: Promise<ProofFacts> }) {
+  const [recent, facts] = await Promise.all([source, latest]);
+  if (!recent) return null;
+  return <RecentDecisionList recent={{ ...recent, decisions: facts.latest ? earlierThan(recent.decisions, facts.latest.seq) : recent.decisions.slice(0, 3) }} />;
+}
+
 async function Latest({ source }: { source: Promise<ProofFacts> }) {
   const { latest } = await source;
   return <LatestLine latest={latest} />;
@@ -490,19 +351,19 @@ export function LatestPanel({ latest, recent = null }: { latest: LatestDecisionS
 
 function GroupFallback({ what }: { what: string }) {
   return (
-    <div aria-busy="true" className="mt-4">
+    <EvidencePending className="mt-4">
       <p className="sr-only">{`Loading ${what}`}</p>
       {/* As tall as three figures, so nothing below moves when they stream in. */}
       <Skeleton className="h-[13.5rem] rounded-xl" />
-    </div>
+    </EvidencePending>
   );
 }
 
 function LatestFallback() {
   return (
-    <div aria-busy="true" className="mt-4">
+    <EvidencePending className="mt-4">
       <p className="sr-only">Loading the agent&apos;s latest decision</p>
       <Skeleton className="h-[7.5rem] rounded-xl" />
-    </div>
+    </EvidencePending>
   );
 }
