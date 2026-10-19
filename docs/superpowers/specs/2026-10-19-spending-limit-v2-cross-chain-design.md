@@ -66,6 +66,8 @@ against its code.
   - `previous_revoke_tx_hash`: the owner's revocation of that v1.
 
   The rows are read with `select('*')`, so code deployed before the migration runs still reads every row, as v1.
+  Until the row carries `version`, nothing of v2 is written or offered: setups deploy v1 and the upgrade is not shown,
+  so no step the owner pays gas for is refused when it is recorded (review finding 1).
 - **V10. The Go live panel offers an owner the upgrade** while the contract is v1 and the network has CCTP. It shows
   for a live workspace too, beside the wallet controls. It is owner or admin only, and every result is read from the
   chain (W7):
@@ -78,11 +80,12 @@ against its code.
     v1's figures, approve v2, and `approve(v1, 0)`. Recorded when the EntryPoint shows the operation succeeded, v2 is
     at its address with the right code, v2 is approved, and v1's allowance is 0. The browser builds the calls itself
     and refuses a server reply that differs (K6).
-  - **The switch waits for payments in flight.** While any payment intent is `submitting` or `pending`, the switch is
-    refused. A payment sent through v1 and sent again through v2 under its key would be two payments, since v2's
+  - **The switch waits for payments in flight.** While any payment intent is `submitting` or `pending`, or recorded
+    as `failed` with a send Circle may still hold (review finding 2), the switch is refused. A payment sent through v1 and sent again through v2 under its key would be two payments, since v2's
     `paid` starts empty.
   - **Ledger entries.** `spending_limit_upgraded` names both contracts, the version, the figures and the transactions.
-    `spending_limit_revoked` names v1 and the revocation.
+    `spending_limit_revoked` names v1 and the revocation. The panel asks for the revocation until it is recorded, even
+    where v1's allowance reads 0 already, so the entry is never skipped (review finding 3).
   - **The panel keeps its own result.** A recorded step re-renders the page with the new status, which can unmount
     the step that sent it. So the success line is held in state above the steps, not in the step (the revalidate
     unmount pattern).
@@ -137,5 +140,8 @@ Money is moved only by the partner.
   still cannot move USDC outside the contract. The owner stops it from Go live (approval to 0).
 - **An unaudited path.** The forwarding hook is a fixed constant, the fee is capped, the domains are fixed, and the
   balance check reverts any call that leaves USDC behind.
+- **A fee that moves between the decision and the burn.** The verdict is asked with the fee the decision read, and
+  the burn reads it again. A payout close to a figure can then be allowed by the verdict and refused on chain
+  (`OverDailyLimit`): the agent's transaction fails, its gas is spent, and no USDC moves (review finding 4).
 - **The upgrade stopped halfway.** Before the switch, v1 keeps paying. Between the switch and the revocation, both
   contracts are approved; only v2 is used, and the panel asks for the revocation until it reads 0.
