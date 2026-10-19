@@ -21,6 +21,8 @@ const revoke = withSuccessToast(revokePayeeLinkAction);
 export interface PayeeLinkControlProps {
   orgSlug: string;
   counterparty: { id: string; name: string };
+  /** The label of the chain the payee is paid on now, which the dialog names: Base, or the workspace's own chain. */
+  chainLabel: string;
   /** The payee's unused, unexpired link, if one is out. */
   activeLink: { id: string; expiresAt: string } | null;
   /**
@@ -37,7 +39,7 @@ export const ASK_INVOICE = "Also ask for their invoice";
 export const OFFER_CHAIN = "Let them choose where they are paid";
 
 /**
- * Ask a payee for their own Arc address (spec 2026-09-30-payee-links-design.md):
+ * Ask a payee for their own address on the chain they are paid on (spec 2026-09-30-payee-links-design.md):
  * a one-time link, shown once, that the payee opens without an account. Whatever
  * they enter waits for a member to confirm it before the agent pays there. The
  * link may also ask for their invoice, and let a vendor choose its chain
@@ -45,7 +47,7 @@ export const OFFER_CHAIN = "Let them choose where they are paid";
  * payee sent their address, a link still waiting for their invoice shows here
  * too, and Revoke stops it taking one (P6).
  */
-export default function PayeeLinkControl({ orgSlug, counterparty, activeLink, offers, waitingInvoice = null }: PayeeLinkControlProps) {
+export default function PayeeLinkControl({ orgSlug, counterparty, chainLabel, activeLink, offers, waitingInvoice = null }: PayeeLinkControlProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       {activeLink ? (
@@ -65,12 +67,12 @@ export default function PayeeLinkControl({ orgSlug, counterparty, activeLink, of
       ) : (
         <span />
       )}
-      <AskForAddress orgSlug={orgSlug} counterparty={counterparty} offers={offers} />
+      <AskForAddress orgSlug={orgSlug} counterparty={counterparty} chainLabel={chainLabel} offers={offers} />
     </div>
   );
 }
 
-function AskForAddress({ orgSlug, counterparty, offers }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty" | "offers">) {
+function AskForAddress({ orgSlug, counterparty, chainLabel, offers }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty" | "chainLabel" | "offers">) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -82,9 +84,9 @@ function AskForAddress({ orgSlug, counterparty, offers }: Pick<PayeeLinkControlP
       </DialogTrigger>
       <DialogContent
         title={`Ask ${counterparty.name} for their address`}
-        description="Send them a one-time link. They enter their own Arc address, with no account, and you confirm it before the agent pays there."
+        description={`Send them a one-time link. They enter their own address on ${chainLabel}, with no account, and you confirm it before the agent pays there.`}
       >
-        <CreateLinkForm orgSlug={orgSlug} counterparty={counterparty} offers={offers} />
+        <CreateLinkForm orgSlug={orgSlug} counterparty={counterparty} chainLabel={chainLabel} offers={offers} />
       </DialogContent>
     </Dialog>
   );
@@ -95,7 +97,7 @@ function AskForAddress({ orgSlug, counterparty, offers }: Pick<PayeeLinkControlP
  * dialog's content, which unmounts when the dialog closes: reopening always
  * starts at the form, never at a link that has since been used or revoked.
  */
-function CreateLinkForm({ orgSlug, counterparty, offers }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty" | "offers">) {
+function CreateLinkForm({ orgSlug, counterparty, chainLabel, offers }: Pick<PayeeLinkControlProps, "orgSlug" | "counterparty" | "chainLabel" | "offers">) {
   const { state, formProps } = useActionForm(createPayeeLinkAction, INITIAL);
   const chains = offers?.chains ?? [];
 
@@ -120,7 +122,7 @@ function CreateLinkForm({ orgSlug, counterparty, offers }: Pick<PayeeLinkControl
             <Checkbox
               name="offersChain"
               label={OFFER_CHAIN}
-              description={`Where their wallet receives USDC: ${chains.slice(0, -1).join(", ")} or ${chains[chains.length - 1]}. You confirm the chain with the address.`}
+              description={`Where their wallet receives USDC: ${chains.slice(0, -1).join(", ")} or ${chains[chains.length - 1]}, instead of ${chainLabel}. You confirm the chain with the address.`}
             />
           )}
         </div>

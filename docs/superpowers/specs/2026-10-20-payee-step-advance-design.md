@@ -51,6 +51,12 @@ waits on a second request.
 - **S7. Focus.** The button the payee pressed is gone once the page moves on, so the new step's heading takes the focus
   (focusable from code only, with no outline), and a screen reader reads out where the payee now is; unless the payee
   moved the focus out of the card while the action ran, as `useActionForm` leaves it.
+- **S8. The members' email after the answer (added 2026-10-20, after the production check).** With S1 to S3 live, the
+  invoice step still showed **Sending…** for about five seconds on production before Step 3: the action awaited the
+  members' email (reading the workspace and its members, sending, metering) before it answered. The address and invoice
+  actions now pass `defer: after` (as the statement page does), so `submitPayeeAddress` and `submitPayeeInvoice` hand
+  that email to `after()` and answer first. The ledger entry stays awaited: it is the record. Callers that pass no
+  `defer` (the API, scripts, tests) await the email as before.
 
 ## Considered and not done
 

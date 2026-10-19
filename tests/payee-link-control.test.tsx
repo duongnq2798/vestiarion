@@ -20,14 +20,19 @@ const render = (node: React.ReactNode) => renderToStaticMarkup(<TooltipProvider>
 
 describe("PayeeLinkControl", () => {
   it("offers to ask the payee for their address when no link is out", () => {
-    const page = text(render(<PayeeLinkControl orgSlug="acme" counterparty={PAYEE} activeLink={null} />));
+    const page = text(render(<PayeeLinkControl orgSlug="acme" counterparty={PAYEE} chainLabel="Base" activeLink={null} />));
     expect(page).toContain("Ask for address");
     expect(page).not.toContain("Address link sent");
   });
 
   it("says a link is out, until when, and offers to revoke it", () => {
     const markup = render(
-      <PayeeLinkControl orgSlug="acme" counterparty={PAYEE} activeLink={{ id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1", expiresAt: "2026-10-07T12:00:00+00:00" }} />
+      <PayeeLinkControl
+        orgSlug="acme"
+        counterparty={PAYEE}
+        chainLabel="Base"
+        activeLink={{ id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1", expiresAt: "2026-10-07T12:00:00+00:00" }}
+      />
     );
     const page = text(markup);
     expect(page).toContain("Address link sent · expires Oct 7, 2026");
@@ -39,7 +44,13 @@ describe("PayeeLinkControl", () => {
 describe("a used link still waiting for the payee's invoice (payee invoice link P6)", () => {
   it("says so, until when, and offers Revoke, which stops it", () => {
     const markup = render(
-      <PayeeLinkControl orgSlug="acme" counterparty={PAYEE} activeLink={null} waitingInvoice={{ id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e2", until: "2026-10-29T12:00:00.000Z" }} />
+      <PayeeLinkControl
+        orgSlug="acme"
+        counterparty={PAYEE}
+        chainLabel="Base"
+        activeLink={null}
+        waitingInvoice={{ id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e2", until: "2026-10-29T12:00:00.000Z" }}
+      />
     );
     const page = text(markup);
     expect(page).toContain("Waiting for their invoice · until Oct 29, 2026");
@@ -59,6 +70,12 @@ describe("the create form's options (payee invoice link P1)", () => {
     expect(source).toMatch(/<Checkbox\s+name="asksInvoice"/);
     expect(source).toMatch(/<Checkbox\s+name="offersChain"/);
     expect(source).not.toMatch(/defaultChecked/);
+  });
+
+  it("names the chain the payee is paid on now, never Arc for a payee on Base, and what choosing replaces", () => {
+    expect(source).toContain("They enter their own address on ${chainLabel}, with no account");
+    expect(source).toContain("instead of ${chainLabel}. You confirm the chain with the address.");
+    expect(source).not.toMatch(/own Arc address/);
   });
 
   it("draws the chain box only with more than one chain to choose among", () => {

@@ -36,7 +36,7 @@ import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks, listWaitingInvoiceLinks } from "@/lib/platform/payee-links";
 import { chainChoiceFits, choosablePayeeChains, payeesHeldToTheirChain } from "@/lib/payee-chain-choice";
-import { homeChain } from "@/lib/payee-chains";
+import { chainById, homeChain } from "@/lib/payee-chains";
 import { askablePayees } from "@/lib/address-requests";
 import { simulatesPayments } from "@/lib/capability-read";
 import { plural } from "@/lib/copy";
@@ -271,6 +271,7 @@ export default async function CounterpartiesPage({
                           <PayeeLinkControl
                             orgSlug={slug}
                             counterparty={{ id: counterparty.id, name: counterparty.name }}
+                            chainLabel={chainById(counterparty.chain ?? homeChain(network).id).label}
                             activeLink={payeeLinks.get(counterparty.id) ?? null}
                             offers={{ invoice: true, chains: chainChoiceFits(counterparty, heldToChain) ? choosableChains : [] }}
                             waitingInvoice={waitingInvoices.get(counterparty.id) ?? null}

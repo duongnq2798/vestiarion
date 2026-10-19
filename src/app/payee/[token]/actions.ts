@@ -2,10 +2,11 @@
 
 import "server-only";
 
+import { after } from "next/server";
 import { ADDRESS_CHECKSUM, CHAIN_CLOSED, NOT_AN_ADDRESS, payeeView, type PayeeLinkStatus } from "@/lib/payee-journey";
 import { PAYEE_FILE_MESSAGES, PAYEE_INVOICE_MESSAGES, type PayeeInvoiceField } from "@/lib/payee-invoice";
 import { submitPayeeInvoice } from "@/lib/platform/payee-invoices";
-import { keepPayeeAddress, payeeLinkStatus, submitPayeeAddress } from "@/lib/platform/payee-links";
+import { keepPayeeAddress, payeeLinkStatus, submitPayeeAddress, type PayeeSendOptions } from "@/lib/platform/payee-links";
 
 /**
  * The payee's submission from a payee link (spec 2026-09-30-payee-links-design.md
@@ -37,6 +38,9 @@ export interface PayeeInvoiceResult {
 }
 
 const INVALID_LINK = "This link is no longer valid. Ask the business that sent it for a new one.";
+
+/** The members' email waits until the payee has its answer, so the page moves on without waiting for it. */
+const SEND: PayeeSendOptions = { defer: (work) => after(work) };
 const TRY_AGAIN = "That did not work. Try again in a moment.";
 
 function formString(formData: FormData, key: string): string {
@@ -65,7 +69,7 @@ export async function submitPayeeAddressAction(_previous: PayeeAddressResult, fo
     const chain = formString(formData, "chain");
     const token = formString(formData, "token");
     const address = formString(formData, "address");
-    const result = chain ? await submitPayeeAddress(token, address, { chain }) : await submitPayeeAddress(token, address);
+    const result = await submitPayeeAddress(token, address, chain ? { chain, ...SEND } : SEND);
     if (result.ok) {
       const message = result.unchanged
         ? `That is already the address ${result.orgName} has on file.`
@@ -106,7 +110,7 @@ export async function submitPayeeInvoiceAction(_previous: PayeeInvoiceResult, fo
       dueDate: formString(formData, "dueDate"),
       note: formString(formData, "note"),
       file: file instanceof File && file.size > 0 ? file : null,
-    });
+    }, Date.now(), SEND);
     if (result.ok) return { ok: true, message: `Sent. ${result.orgName} reviews your invoice before adding it.`, ...(await statusNow(token)) };
     switch (result.reason) {
       case "invalid":

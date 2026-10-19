@@ -181,6 +181,16 @@ describe("submitPayeeInvoice", () => {
     expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Linh Tran", invoiceNumber: "INV-7", amount: "1250.50", dueDate: "2026-11-02" });
   });
 
+  it("leaves the members' email to the caller's defer, so the payee's answer does not wait for it", async () => {
+    const deferred: Array<() => Promise<unknown>> = [];
+    const answer = await platform(() => submitPayeeInvoice(TOKEN, { ...FIELDS, file: null }, NOW, { defer: (work) => void deferred.push(work) })).result;
+    expect(answer).toEqual({ ok: true, orgName: "Acme" });
+    expect(notifyMock).not.toHaveBeenCalled();
+    expect(deferred).toHaveLength(1);
+    await deferred[0]();
+    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Linh Tran", invoiceNumber: "INV-7", amount: "1250.50", dueDate: "2026-11-02" });
+  });
+
   it("records documentSha256 as null with no file", async () => {
     await platform(() => submitPayeeInvoice(TOKEN, { ...FIELDS, file: null }, NOW)).result;
     expect(ledgerMock.mock.calls[0][1].detail.documentSha256).toBeNull();
