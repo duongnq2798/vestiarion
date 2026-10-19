@@ -18,6 +18,7 @@ import { ALL_STAGES, REVENUE_WORDS, REVIEW_STATUSES, REVIEW_WORDS, STAGE_WORDS, 
 import { growthTeamUser } from "@/lib/growth/gate";
 import { breakdown, furthestStages, growthMetrics, NOT_ENOUGH_DATA } from "@/lib/growth/metrics";
 import { readGrowth, readGrowthReasons } from "@/lib/growth/read";
+import { readSentNudges } from "@/lib/notifications/activation-nudge";
 import { REASON_SOURCES, SURFACE_WORDS, type ReasonSource } from "@/lib/decision-reasons";
 import { growthHref, parseGrowthView } from "@/lib/growth/view";
 import { NETWORK_IDS, networkOf, networkProfile } from "@/lib/network";
@@ -48,6 +49,9 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
   const view = parseGrowthView(await searchParams, now);
   const [data, reasons] = await Promise.all([readGrowth(view.sinceAt), readGrowthReasons(view.sinceAt)]);
 
+  // The setup reminders that went (activation nudge A7): read from each customer workspace's own ledger.
+  const nudges = await readSentNudges((data.workspaces ?? []).filter((workspace) => workspace.side === "customers").map((workspace) => workspace.orgId)).catch(() => []);
+
   const inWindow = <T,>(rows: T[], day: (row: T) => string) => rows.filter((row) => day(row).slice(0, 10) >= view.since);
   const windowLeads = inWindow(data.leads, (lead) => lead.created_at);
   const metrics = growthMetrics({
@@ -57,6 +61,7 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
     spend: inWindow(data.spend, (row) => row.spent_on),
     revenue: inWindow(data.revenue, (row) => row.occurred_on),
     now,
+    nudges,
   });
   const furthest = furthestStages(data.leads, data.events);
   const campaignName = new Map(data.campaigns.map((campaign) => [campaign.id, campaign.name]));
@@ -128,6 +133,11 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
             label="From counterparty pages"
             value={metrics.fromLoop.workspaces}
             detail={`Customer workspaces first reached from a page or email a business sent its supplier, payee or customer; ${metrics.fromLoop.activated} had a decision on a real bill.`}
+          />
+          <Tile
+            label="Nudged to finish setup"
+            value={metrics.nudged.workspaces}
+            detail={`Customer workspaces emailed once for their first bill or first verdict; ${metrics.nudged.cameBack} came back and did it after the email.`}
           />
           <Tile
             label="Verified software revenue"

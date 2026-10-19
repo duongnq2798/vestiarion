@@ -2591,6 +2591,28 @@ address via `sendWeeklyBrief({ only })`, signed with `preview: true` and `by`, a
 `PREVIEW_EVERY_MS` (5 minutes); the button is `SendBriefNow` in `NotificationsPanel`. Its emails
 are metered as `weekly_brief`.
 
+## Setup reminders for workspaces that stop
+
+docs/superpowers/specs/2026-10-19-activation-nudge-design.md. Pure rules in `src/lib/activation-nudge.ts` (`dueNudge`,
+`dueNudges`, `nudgeOpen`, `nudgeWent`), sending in `src/lib/notifications/activation-nudge.ts`, emails in
+`src/lib/email/activation-nudge.ts` (`actionEmailHtml`, no `loop`). The scheduled cycle visits only `mode = 'live'`
+workspaces and every new workspace is a sandbox, so `POST /api/agent/tick` runs its own pass after
+`runLiveOrganizations` and before the webhook dispatch: `runActivationNudges` reads `growth_workspaces` once for the
+last 30 days (`readWorkspaces`, service role), keeps the `customers` side, and picks `first_bill` (no real bill, opened
+24 hours ago or more) or `first_verdict` (shadow mode, `firstDecisionAt` 72 hours ago or more, no verdict). At most
+`NUDGES_PER_TICK` (20) workspaces a tick, oldest first, one after another under `withOrg`, none started after 240
+seconds into the tick; it runs with payments switched off, never throws, and never changes the tick's body or status
+(a summary is logged when any is due). `sendActivationNudge`, in the workspace's scope, reads that stage's
+`activation_nudge_sent`/`activation_nudge_failed` entries (a claim stands while there are more sent than failed; three
+failures end it), re-reads the facts (real bills, with sample counterparties' left out; `readShadowSummary` for a
+verdict still waiting), offers sample data only to a simulated testnet sandbox without it, and sends to
+`decidingRecipients` (at most 5). The claim is signed with the throwing `appendLedgerEntry` before the sends; each send
+carries a Resend idempotency key of SHA-256(workspace, stage, user id), and a key already taken counts as sent; when
+none went, `activation_nudge_failed` lets the claim go. Emails are metered as `activation_nudge`. `/admin/growth`
+shows **Nudged to finish setup** from `readSentNudges` (each customer workspace's ledger, at most 100) and
+`growthMetrics.nudged`: came back means a real bill after a `first_bill` reminder, or a `decision_verdict` after a
+`first_verdict` one.
+
 ## Bank payouts (BlindPay)
 
 A vendor's bills paid to its bank account in Mexico, in pesos over SPEI, from the workspace's USDC

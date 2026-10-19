@@ -40,6 +40,7 @@ export const ACTION_LABELS: Record<string, string> = {
   invitation: "Invitations",
   digest: "Waiting decisions",
   escalation: "Escalations",
+  activation_nudge: "Setup reminders",
   stuck_payment: "Stuck payment alerts",
   payment_notice: "Payment notices",
   freelancer: "Freelancer setup",
