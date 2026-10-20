@@ -38,6 +38,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   records, consistent headings and spacing, and larger touch areas on phones. Sign-in, open numbers and the docs'
   header and footer use the same foundation. Existing forms, payment checks, quoted labels, numbers and redirects
   keep their behaviour; a payee's accepted answer still moves directly to the next step and focuses its heading.
+  The sign-in card ends at its button: the empty line kept under it for a message is gone until there is one.
 
 - **Pages and actions answer sooner.** The app's server now runs in Tokyo, beside its database, instead of in
   Washington. Every database call used to cross the Pacific and back, and a page or an action makes many of them one
