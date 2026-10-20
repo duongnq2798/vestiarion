@@ -32,8 +32,11 @@ import { paysSimulated } from "@/lib/capability";
 import { readCapability } from "@/lib/capability-read";
 import { shellModes } from "@/lib/circle";
 import { readEscrowContract } from "@/lib/circle/escrow-setup";
-import { addressUnconfirmed, payeeNotReady } from "@/lib/counterparty-address";
+import { addressUnconfirmed } from "@/lib/counterparty-address";
+import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { milestoneWaiting } from "@/lib/milestone-waiting";
+import { PAYEE_LOCK_OFF, readPayeeLock } from "@/lib/payee-lock";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { orgHref } from "@/lib/auth/org-paths";
 import { utcDay } from "@/lib/copy";
@@ -65,7 +68,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
     // What paying a contractor does now, in the header's words: simulated, on chain, or nothing and why (capability and
     // reasons R5). Not the workspace's mode: a sandbox connected to Circle pays for real.
     const capability = await readCapability();
-    const [milestones, counterparties, headEntries, dashboardStats, canWrite, canManageTreasury, canDecide, escrow] = await Promise.all([
+    const [milestones, counterparties, headEntries, dashboardStats, canWrite, canManageTreasury, canDecide, escrow, payeeLock] = await Promise.all([
       listMilestones(),
       listCounterparties(),
       listLedgerEntries(1),
@@ -81,6 +84,12 @@ export default async function ContractorsPage({ params, searchParams }: { params
             return undefined;
           })
         : Promise.resolve(undefined),
+      // The payee lock, for a verified milestone sitting out its wait (payee lock PL5). Only what the card says depends
+      // on it, so a read that fails shows no wait; the agent and Pay now read the lock themselves and fail closed.
+      readPayeeLock(db()).catch((error: unknown) => {
+        console.error("contractors: payee lock not read", error instanceof Error ? error.message : error);
+        return PAYEE_LOCK_OFF;
+      }),
     ]);
     const held = milestones.filter((milestone) => milestone.status === "held");
     const [entries, intents, soleApprover] = await Promise.all([
@@ -100,11 +109,14 @@ export default async function ContractorsPage({ params, searchParams }: { params
             (await listMembers(access.membership.orgId)).filter((member) => approverIds.has(member.userId)).map((member) => [member.userId, member.email])
           )
         : {};
-    // What a verified milestone waits for before the agent pays it: an address to confirm, or one to add.
-    const waitingOf = (milestone: MilestoneRow) => {
-      const contractor = contractorsById.get(milestone.contractor_id);
-      return milestone.status === "verified" && contractor ? payeeNotReady(contractor, live) : null;
-    };
+    // What a verified milestone waits for before the agent pays it, in the contractor stage's order: an address to
+    // confirm, or one to add; then the payee lock's wait after the address changed. A release already sent never waits.
+    const now = Date.now();
+    const waits = new Map(
+      milestones.map((milestone) => [milestone.id, milestoneWaiting(milestone, contractorsById.get(milestone.contractor_id), { live, lock: payeeLock, now })])
+    );
+    const waitingOf = (milestone: MilestoneRow) => waits.get(milestone.id)?.waiting ?? null;
+    const waitsUntil = (milestone: MilestoneRow) => waits.get(milestone.id)?.waitsUntil ?? null;
     // The Asana tasks the milestones are linked to, and whether Asana is connected (Asana acceptance A16): best effort,
     // and nothing where Asana is not configured or migration 0115 has not run.
     const asana = await asanaOnContractors(milestones.map((milestone) => milestone.id));
@@ -123,7 +135,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
       return new Map<string, LinkAccess>();
     });
     const decisions = milestones.map((milestone) =>
-      milestoneDecision(milestone, entries, { network, riskLevel: contractorsById.get(milestone.contractor_id)?.risk_level ?? null, waiting: waitingOf(milestone), links })
+      milestoneDecision(milestone, entries, { network, riskLevel: contractorsById.get(milestone.contractor_id)?.risk_level ?? null, waiting: waitingOf(milestone), waitsUntil: waitsUntil(milestone), links })
     );
     const milestonesById = new Map(milestones.map((milestone) => [milestone.id, milestone]));
     // Made here, not in the browser, so the server's markup and the browser's agree (as the Gateway form's id is).
@@ -230,6 +242,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
         return { ...item, hint: asanaLink.state === "ready" ? "Ready for acceptance" : "Held for review" };
       }
       if (waiting === "no_address") return { ...item, hint: "Waiting for an address" };
+      if (waiting === "cooling_off") return { ...item, hint: "Payee lock wait" };
       if (waiting === "unconfirmed") {
         return {
           ...item,

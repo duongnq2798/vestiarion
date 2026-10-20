@@ -78,7 +78,10 @@ Confirm address opens a form instead of a yes/no:
 - A payment to a counterparty whose address changed less than the set hours ago is not made, whether or not the address
   is confirmed:
   - the agent's guardrail holds it as `counterparty.cooling_off`, naming the UTC time from which it can be paid;
-  - Approve and pay refuses with the same time.
+  - Approve and pay refuses with the same time;
+  - a verified milestone stays verified, and its card on Contractors reads "Payee lock wait" with the same time (added
+    after the lock first shipped: the card said "Being decided" through the wait). A release already sent never
+    waits, for the lock or for its address, so its card reads "Payment in flight".
 - Only an address change counts (`address_changed_at`). An address typed in when the counterparty was added never
   waits.
 - The follow-up stage decides a held payable again once the time has passed. It is held, not refused, so nothing is

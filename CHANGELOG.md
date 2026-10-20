@@ -22,13 +22,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
     - whoever entered or asked for the address cannot confirm it while someone else can;
     - approving a payment no longer confirms its address;
     - an optional wait of 4 to 72 hours keeps a changed address from being paid, confirmed or not. The agent holds the
-      payment, then decides it again when the wait ends.
+      payment, then decides it again when the wait ends. A verified milestone waits too, and its card on
+      **Contractors** reads "Payee lock wait" with the time the wait ends.
   - Counterparties now warns about an address that is the same as another payee's, or that looks like it (the same
     first 6 and last 4 characters). It also warns about a changed address that looks like one the same payee had or was
     paid at before, which is how address poisoning usually works.
   - Each check is signed with the confirmation. Migration `0135_payee_lock.sql`.
 
 ### Changed
+
+- A milestone whose release was already sent reads "Payment in flight" on **Contractors**, not "Address to confirm",
+  if its contractor's address changed meanwhile: the agent completes a sent release whatever the address now is.
 
 - Public payee, supplier, payment, receipt and statement pages share the landing's visual system: readable paper
   records, consistent headings and spacing, and larger touch areas on phones. Sign-in, open numbers and the docs'

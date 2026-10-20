@@ -77,7 +77,7 @@ Each cycle asks GitHub whether the pull request was merged.
 
 [Webhooks](/docs/webhooks) push each of these entries as it is written.
 
-If the contributor has not yet added an address, the verified milestone waits on Contractors, reading "Waiting for an address". Once they have added one that nobody has confirmed, it reads "Address to confirm". Either way, the agent pays once the address is confirmed.
+If the contributor has not yet added an address, the verified milestone waits on Contractors, reading "Waiting for an address". Once they have added one that nobody has confirmed, it reads "Address to confirm". Either way, the agent pays once the address is confirmed. If your workspace turned on the [Payee lock](/docs/guides/first-payment#payee-lock) with a wait after an address changes, the milestone then reads "Payee lock wait" until the wait ends.
 
 Vestiarion reads the pull request with its own GitHub access, so the repository must be public, unless your workspace [connected GitHub](/docs/guides/github) with the app installed on it: then private repositories verify too, and the pull request gets a comment saying it was paid. For work that is not a pull request, any other `https` link is kept as evidence. A person checks the work and chooses **Verify manually** on the milestone's card.
 
