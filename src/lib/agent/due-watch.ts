@@ -3,6 +3,7 @@ import { coolingOffUntil, readPayeeLock, type PayeeLock } from "../payee-lock";
 import { runLiveOrganizations, runScheduledCycle, type CronRunResult } from "./cron";
 import type { CycleEventKind } from "./cycle-soon";
 import { runAgentCycle } from "./orchestrator";
+import { TICK_EVERY_HOURS, TICK_MINUTE } from "./tick-schedule";
 
 /**
  * The due-work watch (docs/superpowers/specs/2026-10-21-due-work-watch-design.md): every 5 minutes
@@ -17,9 +18,7 @@ import { runAgentCycle } from "./orchestrator";
  * running, a failure and the time budget behave as they do in the tick (DW2, DW7).
  */
 
-/** The tick's schedule in `supabase/cron/watches.sql`: 17 minutes past every sixth hour, UTC. */
-export const TICK_MINUTE = 17;
-export const TICK_EVERY_HOURS = 6;
+export { TICK_EVERY_HOURS, TICK_MINUTE } from "./tick-schedule";
 /** How long after a tick its cycles are left to the tick itself, which starts its last one within 180 seconds (DW4). */
 export const TICK_GRACE_MS = 15 * 60_000;
 /** No workspace's check or cycle starts later than this into a run; one left over waits for the next run (DW7). */
@@ -71,7 +70,7 @@ export function waitsEnded(changes: readonly AddressChange[], lock: PayeeLock, s
     .map((change) => change.id);
 }
 
-/** How many of the workspace's counterparties had a wait end since `since` with a payable still open or a verified milestone unsent (DW5). */
+/** How many of the workspace's counterparties had a wait end since `since` with a payable held or a verified milestone unsent (DW5). */
 async function lockWaitsEnded(orgDb: OrgDb, lock: PayeeLock, since: number | null, now: number): Promise<number> {
   if (!lock.on || lock.coolingHours <= 0) return 0;
   const waitMs = lock.coolingHours * HOUR_MS;
@@ -85,7 +84,8 @@ async function lockWaitsEnded(orgDb: OrgDb, lock: PayeeLock, since: number | nul
   if (ids.length === 0) return 0;
 
   const [payables, milestones] = await Promise.all([
-    orgDb.from("invoices").select("counterparty_id").eq("direction", "payable").in("counterparty_id", ids).not("status", "in", "(paid,received,rejected)"),
+    // The statuses the follow-up stage reopens from: a cooling-off hold lands as `held`.
+    orgDb.from("invoices").select("counterparty_id").eq("direction", "payable").in("counterparty_id", ids).in("status", ["held", "flagged", "awaiting_info"]),
     orgDb.from("milestones").select("contractor_id").in("contractor_id", ids).eq("status", "verified").is("tx_ref", null),
   ]);
   const held = new Set([
@@ -103,8 +103,10 @@ async function checkWorkspace(now: number): Promise<DueWatchOutcome> {
   ) as Array<{ started_at: string }>;
   const since = latest[0] ? Date.parse(latest[0].started_at) : null;
 
-  // The scheduled cycle does everything an event's would, so it goes first (DW6).
-  if (missedSchedule(since, now)) {
+  // The scheduled cycle does everything an event's would, so it goes first (DW6). While the tick's own 15 minutes run
+  // and it has not reached the workspace yet, nothing else starts there either, so no event cycle takes its place.
+  if (since === null || since < lastScheduledTick(now)) {
+    if (!missedSchedule(since, now)) return { due: "none" };
     await runScheduledCycle();
     return { due: "missed_schedule" };
   }

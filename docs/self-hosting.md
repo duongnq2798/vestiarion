@@ -380,6 +380,8 @@ waiting. Supabase Cron runs them from the database instead:
 - `POST /api/agent/due-watch`, every 5 minutes: a cycle where work became due only because time passed. That is a
   scheduled cycle the tick missed in a workspace, 15 minutes after the tick's time, or the end of a payee lock's wait on
   a confirmed address that holds a payable or a verified milestone back. A run with nothing due starts no cycle.
+  It takes the tick to run at 17 minutes past every sixth hour (`src/lib/agent/tick-schedule.ts`): if you schedule the
+  tick at another time, change that file to match, or the watch runs a second scheduled cycle every period.
 - `POST /api/agent/fx-watch`, every 5 minutes: a EURC payable held because Circle quoted no rate or
   no swap, or one above its swap cap or limit, is decided again once a fresh quote clears it, with no
   one pressing anything. A run with nothing to re-check starts no cycle.

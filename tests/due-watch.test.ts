@@ -151,7 +151,7 @@ describe("watchDueWork", () => {
     expect(changes?.params.getAll("address_changed_at")).toEqual(["lte.2026-10-20T11:16:00.000Z", "gt.2026-10-20T08:17:20.000Z"]);
     const invoices = fake.requests.find((request) => request.path === "/rest/v1/invoices");
     expect(invoices?.params.get("direction")).toBe("eq.payable");
-    expect(invoices?.params.get("status")).toBe("not.in.(paid,received,rejected)");
+    expect(invoices?.params.get("status")).toBe("in.(held,flagged,awaiting_info)");
     expect(invoices?.params.get("counterparty_id")).toBe("in.(cp-northwind)");
     expect(fake.requests.filter((request) => request.method !== "GET")).toEqual([]);
   });
@@ -199,6 +199,15 @@ describe("watchDueWork", () => {
     expect(runScheduledCycleMock).not.toHaveBeenCalled();
   });
 
+  it("starts no event cycle while the tick's own 15 minutes run, so none takes the scheduled cycle's place (DW4, DW6)", async () => {
+    // The latest cycle was the 12:17 tick's; a wait ended at 18:18, and the 18:17 tick has not reached the workspace by 18:20.
+    const fake = workspace({ changes: [{ ...northwind, address_changed_at: "2026-10-20T14:18:00.000Z" }] });
+    expect(await watch(fake, at("2026-10-20T18:20:00.000Z"))).toEqual([{ slug: "pinecrest-studio", ok: true, result: { due: "none" } }]);
+    expect(runAgentCycleMock).not.toHaveBeenCalled();
+    expect(runScheduledCycleMock).not.toHaveBeenCalled();
+    expect(fake.requests.some((request) => request.path === "/rest/v1/counterparties")).toBe(false);
+  });
+
   it("reports a cycle already running as running, so the next run finds the work still due", async () => {
     runAgentCycleMock.mockRejectedValue(new CycleRunningError());
     expect(await watch(workspace({}))).toEqual([{ slug: "pinecrest-studio", ok: true, skipped: "running" }]);
@@ -221,6 +230,59 @@ describe("watchDueWork", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const results = await watch(workspace({ lockRefused: true }));
     expect(results).toEqual([{ slug: "pinecrest-studio", ok: false, error: "approval_policies not read: permission denied" }]);
+    expect(runAgentCycleMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("watchDueWork across workspaces (DW6, DW7)", () => {
+  const B = "5d0f3a2e-8c1b-4f7a-9e6d-00000000b000";
+  const orgs = [
+    { id: A, slug: "pinecrest-studio" },
+    { id: B, slug: "testnet-2" },
+  ];
+  const orgRow = (id: string) => {
+    const org = orgs.find((candidate) => candidate.id === id) ?? orgs[0];
+    return { ...org, name: org.slug, mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null };
+  };
+
+  function two() {
+    return fakeSupabase((request: RecordedRequest) => {
+      if (request.path === "/rest/v1/orgs" && request.params.get("mode") === "eq.live") return { body: orgs.map((org) => ({ ...org, agent_paused_at: null })) };
+      if (request.path === "/rest/v1/orgs") return { body: orgRow(String(request.params.get("id") ?? "").replace("eq.", "")) };
+      const orgId = String(request.params.get("org_id") ?? "").replace("eq.", "");
+      if (request.path === "/rest/v1/cycle_runs") return { body: [{ started_at: "2026-10-20T12:17:20.000Z" }] };
+      if (request.path === "/rest/v1/approval_policies") return { body: [{ payee_lock: orgId === A, payee_lock_cooling_hours: 4 }] };
+      if (request.path === "/rest/v1/counterparties") return { body: [northwind] };
+      if (request.path === "/rest/v1/invoices") return { body: [{ counterparty_id: "cp-northwind" }] };
+      return { body: [] };
+    });
+  }
+
+  it("runs a cycle only in the workspace with work due, in its own scope, and reports each", async () => {
+    const scopes: string[] = [];
+    runAgentCycleMock.mockImplementation(async () => {
+      scopes.push(currentOrgId());
+      return { ok: true };
+    });
+    expect(await watch(two())).toEqual([
+      { slug: "pinecrest-studio", ok: true, result: { due: "payee_lock_wait_ended", counterparties: 1 } },
+      { slug: "testnet-2", ok: true, result: { due: "none" } },
+    ]);
+    expect(scopes).toEqual([A]);
+  });
+
+  it("leaves every workspace to the next run once 180 seconds have passed, starting nothing", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const fake = two();
+    let calls = 0;
+    // The run starts at NOW; every later reading of the clock is past its start budget.
+    const clock = () => (calls++ === 0 ? NOW : NOW + 181_000);
+    const results = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => watchDueWork({ now: clock }));
+    expect(results).toEqual([
+      { slug: "pinecrest-studio", ok: true, skipped: "out_of_time" },
+      { slug: "testnet-2", ok: true, skipped: "out_of_time" },
+    ]);
+    expect(fake.requests.some((request) => request.path === "/rest/v1/cycle_runs")).toBe(false);
     expect(runAgentCycleMock).not.toHaveBeenCalled();
   });
 });

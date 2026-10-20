@@ -48,6 +48,11 @@ describe("supabase/cron/watches.sql", () => {
     expect(job?.command).toContain(`url := 'https://www.vestiarion.xyz${route}'`);
   });
 
+  it("runs the tick at the time the due-work watch takes it to run, so the watch never repeats a scheduled cycle", async () => {
+    const { TICK_MINUTE, TICK_EVERY_HOURS } = await import("@/lib/agent/tick-schedule");
+    expect(scheduled("vestiarion-agent-tick")?.schedule).toBe(`${TICK_MINUTE} */${TICK_EVERY_HOURS} * * *`);
+  });
+
   it("schedules nothing else", () => {
     expect(statements.match(/cron\.schedule\(/g) ?? []).toHaveLength(JOBS.length);
   });

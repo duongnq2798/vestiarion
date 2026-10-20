@@ -232,10 +232,14 @@ compares due times with the start of the latest cycle (`cycle_runs.started_at`, 
 after a due time has covered it and the watch never repeats one:
 - **a missed tick** (DW4): no cycle since the latest tick (`lastScheduledTick`, 17 past hour 0, 6, 12 or 18 UTC) once
   15 minutes have passed, which leaves the tick its own start window. It runs `runScheduledCycle`, the digest and
-  escalations included, exactly as the tick would;
+  escalations included, exactly as the tick would. Inside those 15 minutes a workspace the tick has not reached gets
+  nothing at all, so no event cycle takes the scheduled one's place. The tick's time is `src/lib/agent/tick-schedule.ts`,
+  which `tests/supabase-cron.test.ts` holds equal to the job;
 - **a payee lock wait that ended** (DW5): the lock on with hours above 0, a confirmed address change whose wait ended
-  after that start and by now, and a payable still open or a verified milestone unsent for that counterparty. It runs
-  one cycle with the event `payee_lock_wait_ended`; the follow-up stage reopens the held payables (`coolingOff`).
+  after that start and by now, and a payable `held`, `flagged` or `awaiting_info` or a verified milestone unsent for
+  that counterparty. It runs one cycle with the event `payee_lock_wait_ended`; the follow-up stage reopens the held
+  payables (`coolingOff`). An owner turning the lock off or shortening its wait starts a cycle at once instead
+  (`payee_lock_eased`, `lockEased`), since a wait that ends in the past under the new hours never counts as newly ended.
 
 One cycle per workspace per run, the scheduled one first. With nothing due it runs no cycle, writes nothing and calls
 no model. The response names each workspace's outcome and only that a workspace failed, never the error.

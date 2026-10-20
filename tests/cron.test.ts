@@ -230,7 +230,7 @@ describe("runLiveOrganizations", () => {
       { slug: "c-corp", ok: true, skipped: "out_of_time" },
     ]);
     expect(seen).toEqual([A, B]);
-    expect(warn).toHaveBeenCalledWith("scheduled cycle left to the next tick: out of time", "c-corp");
+    expect(warn).toHaveBeenCalledWith("cycle left to the next run: out of time", "c-corp");
   });
 });
 

@@ -11,6 +11,7 @@ import {
   coolingOffUntil,
   earlierLookalike,
   inCoolingOff,
+  lockEased,
   lookalikes,
   parseVerification,
   payeeLockRefusal,
@@ -172,6 +173,17 @@ describe("the cooling-off (PL5)", () => {
   it("holds until the time, then lets it through", () => {
     expect(inCoolingOff(CHANGED_AT, lock, Date.parse("2026-10-01T11:59:00Z"))).not.toBeNull();
     expect(inCoolingOff(CHANGED_AT, lock, Date.parse("2026-10-01T12:00:00Z"))).toBeNull();
+  });
+
+  it("calls a change easing when it shortens the wait in force, so the action starts a cycle (due-work watch DW8)", () => {
+    expect(lockEased({ on: true, coolingHours: 24 }, { on: false, coolingHours: 24 })).toBe(true);
+    expect(lockEased({ on: true, coolingHours: 24 }, { on: true, coolingHours: 4 })).toBe(true);
+    expect(lockEased({ on: true, coolingHours: 24 }, { on: true, coolingHours: 0 })).toBe(true);
+    // Turning it on, lengthening the wait, or changing a lock with no wait frees nothing.
+    expect(lockEased({ on: false, coolingHours: 0 }, { on: true, coolingHours: 24 })).toBe(false);
+    expect(lockEased({ on: true, coolingHours: 4 }, { on: true, coolingHours: 24 })).toBe(false);
+    expect(lockEased({ on: true, coolingHours: 0 }, { on: false, coolingHours: 0 })).toBe(false);
+    expect(lockEased({ on: false, coolingHours: 24 }, { on: false, coolingHours: 4 })).toBe(false);
   });
 
   it("holds a payment to a recently changed, confirmed address as counterparty.cooling_off, naming when it can be paid", () => {

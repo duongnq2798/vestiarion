@@ -46,13 +46,19 @@ same work.
   and the Monday brief, exactly as the tick does.
 - The 15 minutes leave the tick its own start window (180 seconds) with room to spare, so the watch never races the
   tick.
+- Inside those 15 minutes, a workspace the tick has not reached yet gets nothing from the watch, not even an event
+  cycle (DW5). An event cycle there would start after the tick's time and so count as the period's cycle, and the
+  workspace would lose that period's digest and escalations.
+- The tick's time lives in `src/lib/agent/tick-schedule.ts`, and `tests/supabase-cron.test.ts` holds it equal to the
+  job. A tick run at another time would otherwise make the watch run a second scheduled cycle every period.
 
 **DW5. A payee lock wait that ended.** It is due when all of these hold:
 - the workspace's payee lock is on, with a wait of more than 0 hours;
 - a counterparty's address change was confirmed (`address_confirmed_at` at or after `address_changed_at`);
 - that change's wait ended (`address_changed_at` plus the hours) after the reference point and at or before now;
 - the counterparty has something the wait held back:
-  - a payable still open (not `paid`, `received` or `rejected`), or
+  - a payable the follow-up stage reopens from (`held`, `flagged` or `awaiting_info`; a cooling-off hold lands as
+    `held`), or
   - a verified milestone with no transfer yet.
 
 The watch then runs one cycle with the event `payee_lock_wait_ended`. The cycle's follow-up stage reopens the held
@@ -76,6 +82,9 @@ An unconfirmed address is left out: it cannot be paid yet, and confirming it sta
   "Payee lock wait" line says "within five minutes after that".
 - The guide says the same.
 - A `cycle_complete` entry's `events` can include `payee_lock_wait_ended`.
+- Turning the lock off, or choosing a shorter wait, starts a cycle at once with the event `payee_lock_eased`. A wait
+  that the new hours end in the past would otherwise never count as newly ended, since its end is before the latest
+  cycle.
 
 ## Not in this change
 
@@ -83,6 +92,10 @@ An unconfirmed address is left out: it cannot be paid yet, and confirming it sta
   - the first cycle of the day makes or pays them;
   - DW4 covers a tick that missed.
 - No change to the tick's own period or to the event-driven cycles.
+- A payment whose first send lost Circle's answer, and that was then not sent again because of the wait
+  (`ap_reconcile` with `notResubmittedBecause: "counterparty.cooling_off"`), is not reopened when the wait ends. That
+  entry carries no `observed`, so the follow-up never marks it as held for the wait. This predates the watch and is
+  left to its own change.
 
 ## Tests
 
@@ -91,8 +104,11 @@ An unconfirmed address is left out: it cannot be paid yet, and confirming it sta
 - a missed tick before and after the 15 minutes;
 - a lock wait that ended before or after the latest cycle, unconfirmed, with nothing open, or with the lock off or
   set to 0 hours;
-- precedence when both are due;
+- precedence when both are due, and nothing during the tick's 15 minutes;
+- two workspaces, each in its own scope;
 - running, paused, payments off, a failure in one workspace, the time budget.
+
+`tests/payee-lock.test.ts` covers `lockEased`.
 
 `tests/supabase-cron.test.ts` covers the new job. `tests/due-watch-route.test.ts` covers the bearer, the rate limit and
 the response.
