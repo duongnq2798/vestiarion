@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CalendarX2, CloudOff, EyeOff, Unlink } from "lucide-react";
 import { SupplierStatusView } from "@/components/supplier/SupplierStatusView";
+import { PublicMain } from "@/components/public/PublicMain";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { utcDay } from "@/lib/copy";
@@ -42,8 +43,7 @@ export default async function SupplierStatusPage({ params }: SupplierStatusPageP
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
-      <main id="main" className="flex flex-1 justify-center px-4 py-8 sm:py-14">
-        <div className="w-full max-w-2xl">
+      <PublicMain width="record">
           {failed ? (
             <EmptyState icon={<CloudOff />} titleAs="h1" title="Your payments could not load. Try again in a moment." />
           ) : read.state === "expired" ? (
@@ -65,8 +65,7 @@ export default async function SupplierStatusPage({ params }: SupplierStatusPageP
           ) : (
             <SupplierStatusView view={read.view} />
           )}
-        </div>
-      </main>
+      </PublicMain>
       <SiteFooter compact loop="supplier_status" networkLabel={read.state === "live" ? networkProfile(read.network).label : undefined} />
     </div>
   );

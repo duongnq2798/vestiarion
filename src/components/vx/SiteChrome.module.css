@@ -1,0 +1,2 @@
+.header :where(a, button) { min-height: 2.75rem; min-width: 2.75rem; scroll-margin-block: 5rem; }
+.compactFooter :where(a) { display: inline-flex; min-height: 2.75rem; min-width: 2.75rem; max-width: 100%; align-items: center; justify-content: center; scroll-margin-block: 5rem; }

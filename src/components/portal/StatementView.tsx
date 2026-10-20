@@ -34,7 +34,7 @@ export function StatementView({ view, token, openForm }: { view: View; token: st
 
       <section aria-label="What you owe" className="grid gap-3 sm:grid-cols-2">
         {view.totals.length === 0 ? (
-          <div className="rounded-2xl border border-line bg-surface p-5 shadow-surface sm:col-span-2">
+          <div className="rounded-2xl border border-line bg-surface p-5 shadow-flat sm:col-span-2">
             <p className="flex items-center gap-2 text-sm font-medium text-proof">
               <CircleCheck aria-hidden className="size-4" />
               Nothing is owed. Thank you.
@@ -42,7 +42,7 @@ export function StatementView({ view, token, openForm }: { view: View; token: st
           </div>
         ) : (
           view.totals.map((total) => (
-            <div key={total.currency} className="rounded-2xl border border-line bg-surface p-5 shadow-surface">
+            <div key={total.currency} className="rounded-2xl border border-line bg-surface p-5 shadow-flat">
               <Eyebrow>You owe</Eyebrow>
               <p className="mt-1 text-3xl font-semibold tabular-nums tracking-[-0.02em] text-ink">
                 {FIGURE.format(total.owed)} <span className="text-base font-medium text-ink-2">{total.currency}</span>
@@ -76,7 +76,7 @@ export function StatementView({ view, token, openForm }: { view: View; token: st
           <h2 id="paid-invoices" className="text-lg font-semibold text-ink">
             Paid recently
           </h2>
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-surface">
+          <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface shadow-flat">
             {view.paid.map((line) => (
               <li key={line.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3">
                 <span className="min-w-0 break-words text-sm font-medium text-ink">{line.label}</span>
@@ -116,7 +116,7 @@ function OpenInvoice({
 }) {
   const askedPayLink = line.requests.some((request) => request.kind === "pay_link" && request.status === "open");
   return (
-    <article aria-labelledby={`invoice-${line.id}`} className="rounded-2xl border border-line bg-surface p-4 shadow-surface sm:p-5">
+    <article aria-labelledby={`invoice-${line.id}`} className="rounded-2xl border border-line bg-surface p-5 shadow-flat sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 id={`invoice-${line.id}`} className="min-w-0 break-words text-base font-semibold text-ink">
           {line.label}
@@ -180,7 +180,7 @@ function RequestItem({ request, line, view, token }: { request: CustomerRequest;
   const words = customerRequestWords(request, { orgName: view.orgName, currency: line.currency, today: view.today, payUrl: line.payUrl });
   const open = request.status === "open";
   return (
-    <div className={open ? "space-y-2" : "space-y-1 opacity-80"}>
+    <div className={open ? "space-y-2" : "space-y-1"}>
       <p className="text-sm font-medium text-ink">{words.title}</p>
       {words.detail && <p className="break-words text-xs text-ink-3">{words.detail}</p>}
       <p className="text-sm text-ink-2">{words.status}</p>

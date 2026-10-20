@@ -19,16 +19,16 @@ export function PayeeSteps({ stage, withInvoice = false, invoicePending = false 
   const steps: readonly string[] = withInvoice ? [PAYEE_STEPS[0], INVOICE_STEP, PAYEE_STEPS[1], PAYEE_STEPS[2]] : PAYEE_STEPS;
   const current = withInvoice && stage !== "address" && stage !== "invoice" ? CURRENT[stage] + 1 : CURRENT[stage];
   return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-3">{stage === "paid" ? "All done" : `Step ${current + 1} of ${steps.length}`}</p>
-      <ol aria-label="Payment steps" className={cn("mt-2 grid gap-2", withInvoice ? "grid-cols-4" : "grid-cols-3")}>
+    <div className="border-b border-line pb-5">
+      <p className="font-mono text-xs font-semibold uppercase tracking-[0.08em] text-ink-2">{stage === "paid" ? "All done" : `Step ${current + 1} of ${steps.length}`}</p>
+      <ol aria-label="Payment steps" className={cn("mt-2 grid gap-x-2 gap-y-3", withInvoice ? "grid-cols-2 min-[520px]:grid-cols-4" : "grid-cols-3")}>
         {steps.map((label, index) => {
           const state = withInvoice && invoicePending && index === 1 && index < current ? "next" : index < current ? "done" : index === current ? "current" : "next";
           return (
-            <li key={label} aria-current={state === "current" ? "step" : undefined} className="grid gap-1.5">
+            <li key={label} aria-current={state === "current" ? "step" : undefined} className="grid min-w-0 content-start gap-2">
               <span aria-hidden className={cn("h-1 rounded-full", state === "done" ? "bg-proof" : state === "current" ? "bg-agent" : "bg-line")} />
-              <span className={cn("flex items-center gap-1 text-xs", state === "next" ? "text-ink-3" : "font-medium text-ink")}>
-                {state === "done" && <Check aria-hidden className="size-3 text-proof" />}
+              <span className={cn("flex items-start gap-1 text-xs leading-5 [overflow-wrap:anywhere]", state === "next" ? "text-ink-3" : "font-medium text-ink")}>
+                {state === "done" && <Check aria-hidden className="mt-1 size-3 shrink-0 text-proof" />}
                 {label}
                 {state === "done" && <span className="sr-only"> (done)</span>}
               </span>

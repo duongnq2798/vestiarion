@@ -37,7 +37,7 @@ export function NetworkNumbers({ numbers, period, network }: { numbers: OpenNumb
         <SectionHead id={`customers-${id}`} eyebrow="Customers" title={`Customers on ${network.label}`}>
           Workspaces opened on {network.label} by people outside the Vestiarion team. Each figure has the total with our own workspaces beneath it.
         </SectionHead>
-        <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-3">
+        <div className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-line bg-line min-[520px]:grid-cols-2 lg:grid-cols-3">
           <Kpi label="Customer workspaces opened" value={milestone(customers.workspacesOpened, period)} total={formatFigure(total.workspacesOpened, "count")}>
             Each one opened by someone outside the team.
           </Kpi>
@@ -300,7 +300,7 @@ export function Headline({ numbers, period, network }: { numbers: OpenNumbers; p
       <h2 id="headline" className="font-mono text-xs font-semibold uppercase tracking-[0.11em] text-ink-3">
         {network.label} · {period.label}
       </h2>
-      <dl className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-4">
+      <dl className="mt-3 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-line bg-line min-[520px]:grid-cols-2 lg:grid-cols-4">
         <HeadlineFigure label="Customer workspaces" value={milestone(customers.workspacesOpened, period)}>
           {customers.workspacesOpened === 0
             ? `None opened by anyone outside the team ${period.key === "all" ? "yet" : "in this period"}`

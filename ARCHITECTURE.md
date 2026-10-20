@@ -3846,7 +3846,19 @@ a fluid gutter and a centred container; blue and ink tones carry `focus-inverse`
 surface elevation and adds an optional flat edge. The primitives add no client boundary. The development-only,
 noindex `/design/visual-system` specimen demonstrates composition without payment evidence; production returns 404.
 Rules and rollout boundaries are in `docs/design/visual-system.md`; token equality, AA colour pairs, class merging and
-server-rendered primitive contracts are tested. The landing uses these primitives in PR2; the remaining public-page migration stays in PR3.
+server-rendered primitive contracts are tested. The landing uses these primitives for the bill's journey.
+
+The public token pages and sign-in use the server-rendered `src/components/public/PublicMain.tsx` and its scoped CSS
+for reading widths, gutters, compact headings, wrapping and 44px touch areas. Checkbox/radio labels provide the large
+equivalent target while their visual controls retain the shared primitive's size. These presentation rules do not
+change workspace controls. The payee page still sends only `payeeView(status)` to its client journey; action answers,
+`answered`/`over`, refresh fallback and heading focus remain owned by that existing journey and its forms. `/signup`
+still redirects to the existing sign-in form. `/open` composes `Section` and `Heading` around its unchanged readers and
+number formatting, with a single column for figures on narrow phones. `SiteChrome` retains its header height and
+public navigation, supplies larger chrome targets and a quiet compact footer, and is shared by the docs shell; docs
+MDX, article layout, sidebar, search and page controls stay intact. This phase introduces no client boundary,
+dependency, authentication change or migration. Its scope is in
+`docs/superpowers/specs/2026-10-20-public-visual-system-design.md`.
 
 ## Social previews
 

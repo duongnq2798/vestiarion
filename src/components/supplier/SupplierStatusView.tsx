@@ -39,7 +39,7 @@ export function SupplierStatusView({ view }: { view: View }) {
 
       <section aria-label="Still to be paid" className="grid gap-3 sm:grid-cols-2">
         {view.stillToBePaid.length === 0 ? (
-          <div className="rounded-2xl border border-line bg-surface p-5 shadow-surface sm:col-span-2">
+          <div className="rounded-2xl border border-line bg-surface p-5 shadow-flat sm:col-span-2">
             <p className="flex items-center gap-2 text-sm font-medium text-proof">
               <CircleCheck aria-hidden className="size-4" />
               Nothing is waiting to be paid.
@@ -47,7 +47,7 @@ export function SupplierStatusView({ view }: { view: View }) {
           </div>
         ) : (
           view.stillToBePaid.map((total) => (
-            <div key={total} className="rounded-2xl border border-line bg-surface p-5 shadow-surface">
+            <div key={total} className="rounded-2xl border border-line bg-surface p-5 shadow-flat">
               <Eyebrow>Still to be paid</Eyebrow>
               <p className="mt-1 text-3xl font-semibold tabular-nums tracking-[-0.02em] text-ink">{total}</p>
             </div>
@@ -104,7 +104,7 @@ export function SupplierStatusView({ view }: { view: View }) {
 
 function Bill({ bill, headingId }: { bill: SupplierBillView; headingId: string }) {
   return (
-    <article aria-labelledby={headingId} className="rounded-2xl border border-line bg-surface p-4 shadow-surface sm:p-5">
+    <article aria-labelledby={headingId} className="rounded-2xl border border-line bg-surface p-5 shadow-flat sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h3 id={headingId} className="min-w-0 break-words text-base font-semibold text-ink">
           {bill.reference}

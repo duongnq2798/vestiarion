@@ -1,0 +1,16 @@
+.main { display: flex; flex: 1; justify-content: center; padding: clamp(3rem, 6vw, 5rem) var(--spacing-page); background: var(--color-ground); }
+.content { width: 100%; max-width: 34rem; min-width: 0; }
+.record { max-width: 46rem; }
+.content :where(h1) { font-size: clamp(2rem, 3.3vw, 2.5rem); line-height: 1.15; letter-spacing: -.035em; text-wrap: balance; }
+.content :where(h1, h2, h3, a, button, input, select, textarea, summary, [tabindex]) { scroll-margin-block: 5rem; }
+.content h1:focus-visible { outline: 2px solid var(--color-agent); outline-offset: 4px; }
+.content :where(form, fieldset, dl, ol, ul) { min-width: 0; }
+.content :where(button:not([role="checkbox"]):not([role="radio"]), [role="button"], summary) { min-height: 2.75rem; min-width: 2.75rem; }
+.content :where(button) { white-space: normal; }
+.content :where(a) { display: inline-flex; min-height: 2.75rem; min-width: 2.75rem; max-width: 100%; align-items: center; overflow-wrap: anywhere; }
+.content :where(label:has(input[type="checkbox"]), label:has(input[type="radio"])) { min-height: 2.75rem; padding-block: .5rem; }
+.content :where(div:has(> [role="checkbox"]), div:has(> [role="radio"])) > div > label { display: block; min-height: 2.75rem; min-width: 2.75rem; padding-block: .625rem; }
+.content :where([role="checkbox"], [role="radio"]) { margin-top: .75rem; }
+.content :where(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select, textarea) { min-height: 2.75rem; font-size: 1rem; }
+.content :where(pre) { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .main { padding-block: 2.5rem; } }

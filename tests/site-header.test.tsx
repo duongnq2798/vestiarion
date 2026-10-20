@@ -20,10 +20,10 @@ function boxes(markup: string): { header: string; inner: string } {
 const classes = (value: string) => value.split(/\s+/);
 
 describe("SiteHeader's width", () => {
-  it("keeps the page width by default, with its own gutter", () => {
+  it("uses the visual-system page width and gutter by default, without doubling the gutter", () => {
     const { header, inner } = boxes(renderToStaticMarkup(<SiteHeader />));
-    expect(classes(inner)).toEqual(expect.arrayContaining(["mx-auto", "max-w-6xl", "px-4", "sm:px-6"]));
-    expect(classes(header)).not.toContain("px-4");
+    expect(classes(inner)).toEqual(expect.arrayContaining(["mx-auto", "max-w-7xl", "px-page"]));
+    expect(classes(header).filter((name) => /(^|:)px-/.test(name))).toEqual([]);
   });
 
   it("is wider for the docs", () => {

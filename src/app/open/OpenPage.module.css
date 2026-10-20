@@ -1,0 +1,4 @@
+.page { flex: 1; }
+.page :where(a, button, summary) { min-height: 2.75rem; scroll-margin-block: 5rem; }
+.page :where(a) { display: inline-flex; align-items: center; }
+.page :where(dd, td, th) { overflow-wrap: anywhere; }

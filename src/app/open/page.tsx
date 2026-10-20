@@ -7,11 +7,14 @@ import { Callout } from "@/components/ui/Callout";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { Heading } from "@/components/ui/Heading";
+import { Section } from "@/components/ui/Section";
 import { BrandMark } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { utcMinute } from "@/lib/copy";
 import { ARC_MAINNET, ARC_TESTNET, type NetworkProfile } from "@/lib/network";
 import { parsePeriod, readOpenNumbers, type OpenNumbers, type Period } from "@/lib/platform/open-numbers";
+import styles from "./OpenPage.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -77,8 +80,8 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
-      <main id="main" className="flex-1 px-4 py-12 sm:px-6 sm:py-16">
-        <div className="mx-auto w-full max-w-6xl">
+      <main id="main" className={styles.page}>
+        <Section>
           <header className="max-w-3xl">
             <p className="flex flex-wrap items-center gap-3">
               <Eyebrow className="text-agent">Open numbers</Eyebrow>
@@ -89,8 +92,8 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
                 </Badge>
               )}
             </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-[-0.035em] text-ink sm:text-5xl">Vestiarion, in production</h1>
-            <p className="mt-5 text-lg leading-8 text-ink-2">
+            <Heading as="h1" size="section" className="mt-3 text-ink">Vestiarion, in production</Heading>
+            <p className="mt-5 text-lede leading-relaxed text-ink-2">
               Who uses Vestiarion, what its agent decided, what stopped it, and what settled. Every figure is read from Vestiarion&apos;s production
               database when this page loads, with nothing entered by hand.
             </p>
@@ -217,7 +220,7 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
               </Method>
             </div>
           </section>
-        </div>
+        </Section>
       </main>
       <SiteFooter compact />
     </div>

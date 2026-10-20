@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CloudOff, Unlink } from "lucide-react";
 import { ReceiptView } from "@/components/receipt/ReceiptView";
+import { PublicMain } from "@/components/public/PublicMain";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { homeChain, networkOfChain } from "@/lib/payee-chains";
@@ -39,8 +40,7 @@ export default async function ReceiptPage({ params }: ReceiptPageProps) {
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
-      <main id="main" className="flex flex-1 justify-center px-4 py-12 sm:py-16">
-        <div className="w-full max-w-2xl">
+      <PublicMain width="record">
           {failed ? (
             <EmptyState icon={<CloudOff />} titleAs="h1" title="This receipt could not load. Try again in a moment." />
           ) : !view ? (
@@ -48,8 +48,7 @@ export default async function ReceiptPage({ params }: ReceiptPageProps) {
           ) : (
             <ReceiptView view={view} />
           )}
-        </div>
-      </main>
+      </PublicMain>
       <SiteFooter compact loop="receipt" networkLabel={view ? homeChain(networkOfChain(view.facts.chain)).label : undefined} />
     </div>
   );

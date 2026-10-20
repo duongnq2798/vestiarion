@@ -37,7 +37,7 @@ export function PayInvoice({
   // A discount is only ever on an invoice nothing was applied to (C2), so it never meets a balance.
   const owed = balance ? balance.owed : discount ? discount.owed : preview.amount;
   return (
-    <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
+    <section className="rounded-2xl border border-line bg-surface p-6 shadow-flat sm:p-8">
       <p>
         <Eyebrow className="text-agent">Invoice</Eyebrow>
       </p>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import LoginForm from "@/components/auth/LoginForm";
+import { PublicMain } from "@/components/public/PublicMain";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { SubmitButton } from "@/components/ui/SubmitButton";
@@ -27,10 +28,10 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
-      <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
-        <div className="w-full max-w-sm">
+      <PublicMain>
+        <div className="mx-auto w-full max-w-sm">
           <h1 className="text-2xl font-semibold tracking-[-0.02em] text-ink">Sign in to Vestiarion</h1>
-          <p className="mt-2 text-sm text-ink-3">We email you a link. No password to remember or leak.</p>
+          <p className="mt-3 text-base leading-relaxed text-ink-2">We email you a link. No password to remember or leak.</p>
           {/* Coming from the landing page's call to action (shadow mode ticked): say what follows the link, so signing in reads as a step. */}
           {next.startsWith("/onboarding?") && new URLSearchParams(next.slice(next.indexOf("?") + 1)).get("shadow") === "1" && (
             <p className="mt-3 rounded-xl border border-agent-line/60 bg-agent-soft/50 px-3.5 py-2.5 text-sm leading-relaxed text-ink-2">
@@ -42,7 +43,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
               {error}
             </Callout>
           )}
-          <Card className="mt-6 p-5 sm:p-6">
+          <Card elevation="flat" className="mt-6 p-6 sm:p-8">
             <LoginForm next={next} />
             {googleSignInEnabled() && (
               <form action={signInWithGoogle} className="mt-4 border-t border-line pt-4">
@@ -55,7 +56,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </Card>
           <p className="mt-5 text-center text-xs leading-relaxed text-ink-3">No account yet? The same link creates one.</p>
         </div>
-      </main>
+      </PublicMain>
       <SiteFooter compact />
     </div>
   );

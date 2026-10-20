@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CircleCheck, CloudOff, Unlink } from "lucide-react";
 import { PayInvoice } from "@/components/PayInvoice";
+import { PublicMain } from "@/components/public/PublicMain";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
@@ -67,14 +68,13 @@ export default async function PayPage({ params }: PayPageProps) {
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
-      <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
-        <div className="w-full max-w-md">
+      <PublicMain>
           {failed ? (
             <EmptyState icon={<CloudOff />} titleAs="h1" title="This page could not load. Try again in a moment." />
           ) : !preview ? (
             <EmptyState icon={<Unlink />} titleAs="h1" title="This link is no longer valid. Ask the business that sent it for a new one." />
           ) : preview.status === "received" ? (
-            <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
+            <section className="rounded-2xl border border-line bg-surface p-6 shadow-flat sm:p-8">
               <p className="flex items-center gap-2">
                 <CircleCheck aria-hidden className="size-4 text-proof" />
                 <Eyebrow className="text-proof">Paid</Eyebrow>
@@ -113,8 +113,7 @@ export default async function PayPage({ params }: PayPageProps) {
           ) : (
             <PayInvoice preview={preview} balance={balance} token={token} discount={discount} />
           )}
-        </div>
-      </main>
+      </PublicMain>
       <SiteFooter compact loop="pay_link" networkLabel={preview ? homeChain(networkOfChain(preview.chain)).label : undefined} />
     </div>
   );
