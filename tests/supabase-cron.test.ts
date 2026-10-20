@@ -24,6 +24,8 @@ const JOBS = [
   { name: "vestiarion-webhooks", schedule: "*/10 * * * *", route: "/api/platform/webhooks", source: "src/app/api/platform/webhooks/route.ts", workflow: "webhooks.yml" },
   // At 17 minutes past every sixth hour, as GitHub's schedule was meant to run it.
   { name: "vestiarion-agent-tick", schedule: "17 */6 * * *", route: "/api/agent/tick", source: "src/app/api/agent/tick/route.ts", workflow: "agent-cycle.yml" },
+  // Work due only because time passed: a tick a workspace missed, or a payee lock's wait ending (due-work watch DW1).
+  { name: "vestiarion-due-watch", schedule: "*/5 * * * *", route: "/api/agent/due-watch", source: "src/app/api/agent/due-watch/route.ts", workflow: "due-watch.yml" },
   // Bills from connected Xero organisations, every 15 minutes (Xero connector X7).
   { name: "vestiarion-accounting-sync", schedule: "*/15 * * * *", route: "/api/platform/accounting-sync", source: "src/app/api/platform/accounting-sync/route.ts", workflow: "accounting-sync.yml" },
   // The day's reference rates and the FX variance on paid bills, every hour (currency provenance M5, M6).
@@ -44,6 +46,11 @@ describe("supabase/cron/watches.sql", () => {
     expect(job?.schedule).toBe(schedule);
     expect(job?.command).toContain("select net.http_post(");
     expect(job?.command).toContain(`url := 'https://www.vestiarion.xyz${route}'`);
+  });
+
+  it("runs the tick at the time the due-work watch takes it to run, so the watch never repeats a scheduled cycle", async () => {
+    const { TICK_MINUTE, TICK_EVERY_HOURS } = await import("@/lib/agent/tick-schedule");
+    expect(scheduled("vestiarion-agent-tick")?.schedule).toBe(`${TICK_MINUTE} */${TICK_EVERY_HOURS} * * *`);
   });
 
   it("schedules nothing else", () => {

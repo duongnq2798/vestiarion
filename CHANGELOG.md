@@ -12,6 +12,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Work that comes due with nobody acting no longer waits up to 6 hours.** A watch runs every 5 minutes. It starts
+  a cycle in a live workspace when the payee lock's wait on a confirmed address ends while a payment is held back by
+  it, so the payment is decided within about five minutes. It also runs the scheduled cycle the six-hourly schedule
+  missed in a workspace, within about 20 minutes of its time. With nothing due it runs no cycle. The Contractors
+  card for a milestone in the wait now says the agent decides within five minutes after it. Turning the payee lock
+  off, or choosing a shorter wait, decides what it held back at once.
+
 ## [0.1.0-beta.12] - 2026-10-20
 
 ### Added

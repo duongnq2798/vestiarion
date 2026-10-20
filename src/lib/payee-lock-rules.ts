@@ -39,6 +39,15 @@ export function inCoolingOff(changedAt: string | null | undefined, lock: PayeeLo
   return until && until.getTime() > now ? until : null;
 }
 
+/**
+ * Whether a change to the lock shortens the wait in force, turned off or set to fewer hours, so a payment it held may
+ * be paid now (due-work watch DW8). Turning it on, or lengthening the wait, frees nothing.
+ */
+export function lockEased(from: PayeeLock, to: PayeeLock): boolean {
+  if (!from.on || from.coolingHours <= 0) return false;
+  return !to.on || to.coolingHours < from.coolingHours;
+}
+
 /** A UTC time as people read it: "Oct 21, 2026, 14:05 UTC". */
 export function coolingOffLabel(until: Date): string {
   const day = until.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });

@@ -371,12 +371,17 @@ for when a cycle ran.
 Sandbox workspaces are never in this list; their cycles run from the console, one **Run cycle**
 click at a time, up to the daily cap above.
 
-Five jobs must run on time, which GitHub's schedules do not do: they started a 5-minute schedule
+Seven jobs must run on time, which GitHub's schedules do not do: they started a 5-minute schedule
 only a few times a day, and the six-hourly tick 2 to 4 times a day at uneven hours. A daily
 recurring payment's invoice is made by the first cycle of its due day, so a skipped tick left it
 waiting. Supabase Cron runs them from the database instead:
 
 - `POST /api/agent/tick`, at 17 minutes past every sixth hour: a cycle for every live workspace.
+- `POST /api/agent/due-watch`, every 5 minutes: a cycle where work became due only because time passed. That is a
+  scheduled cycle the tick missed in a workspace, 15 minutes after the tick's time, or the end of a payee lock's wait on
+  a confirmed address that holds a payable or a verified milestone back. A run with nothing due starts no cycle.
+  It takes the tick to run at 17 minutes past every sixth hour (`src/lib/agent/tick-schedule.ts`): if you schedule the
+  tick at another time, change that file to match, or the watch runs a second scheduled cycle every period.
 - `POST /api/agent/fx-watch`, every 5 minutes: a EURC payable held because Circle quoted no rate or
   no swap, or one above its swap cap or limit, is decided again once a fresh quote clears it, with no
   one pressing anything. A run with nothing to re-check starts no cycle.
@@ -387,12 +392,14 @@ waiting. Supabase Cron runs them from the database instead:
 - `POST /api/platform/accounting-sync`, every 15 minutes: bills from the Xero organisations, QuickBooks companies and
   Zoho Books organizations workspaces connected, deals from the HubSpot accounts, Pipedrive companies and Zoho CRM
   organizations they connected, and the connections nobody finished choosing an organisation for, revoked and deleted.
+- `POST /api/platform/fx-rates`, every hour at 41 minutes past: the day's reference rates for each workspace that
+  reports or plans in another currency, and the FX variance of each paid bill whose payment-day rate is then recorded.
 
 To set them up, run `supabase/cron/watches.sql` once in the Supabase SQL editor, with your
 deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists what comes first:
 enable `pg_cron` and `pg_net`, and add `AGENT_API_TOKEN` to Vault as `agent_api_token`. Each job's
-workflow (`agent-cycle.yml`, `fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`, `accounting-sync.yml`) stays for a
-manual run.
+workflow (`agent-cycle.yml`, `due-watch.yml`, `fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`,
+`accounting-sync.yml`, `fx-rates.yml`) stays for a manual run.
 
 Circle also tells the deployment when a transfer settles, at `POST /api/circle/notifications`. On a
 subscribed account, while the agent runs, a payment confirmed after the agent stopped waiting for it

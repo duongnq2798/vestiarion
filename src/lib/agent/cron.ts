@@ -73,7 +73,7 @@ export async function runLiveOrganizations<T>(run: () => Promise<T>, options: Cr
     if (off) return { slug: org.slug, ok: true, skipped: "payments_off" };
     if (org.agent_paused_at) return { slug: org.slug, ok: true, skipped: "paused" };
     if (options.startBy !== undefined && now() > options.startBy) {
-      console.warn("scheduled cycle left to the next tick: out of time", org.slug);
+      console.warn("cycle left to the next run: out of time", org.slug);
       return { slug: org.slug, ok: true, skipped: "out_of_time" };
     }
     try {
