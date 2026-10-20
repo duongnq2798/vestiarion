@@ -21,15 +21,34 @@ Measured from Vietnam on Oct 20 before the change (median of 9, after a warm-up)
 | The landing | 383 ms | 636 ms |
 | A prerendered docs page (no function, for comparison) | 88 ms | 113 ms |
 
+Signed-in workspace pages (`base-payout-test`, median of 5, after a warm-up):
+
+| Page | First byte | Last byte |
+| --- | --- | --- |
+| Treasury (`/console`) | 1,211 ms | 4,435 ms |
+| Bills & receivables | 1,371 ms | 6,336 ms |
+| Counterparties | 1,685 ms | 3,391 ms |
+| Approvals | 1,452 ms | 1,737 ms |
+
 ## What
 
 `vercel.json` sets `"regions": ["hnd1"]`, so every function runs in Tokyo, beside the database.
 - **Region setting.** The route-level `preferredRegion` is deprecated in this Next.js version, so the setting is
   project-wide.
-- **The scheduled jobs** are GitHub Actions workflows that call the API (`agent-cycle`, `fx-watch`, `transfer-watch`,
-  `webhooks`, `sandbox-cleanup`). They are not Vercel crons, so they are unaffected.
-- **Calls to services in the US get one ocean crossing longer:** Circle, the model provider, Resend. These calls are
-  few per action, and a model call takes seconds anyway.
+- **The scheduled routes are not Vercel crons**, so they are unaffected:
+  - Supabase Cron (pg_cron and pg_net, `supabase/cron/watches.sql`) calls six of them from the Tokyo database: the
+    transfer watch, the FX watch, webhooks, the agent tick, the accounting sync and FX rates. They now reach a function
+    next door.
+  - GitHub's schedule calls only the sandbox cleanup. The other workflows stay for manual runs.
+- **Calls to services in the US get one ocean crossing longer:** Circle (Wallets, Iris, Gateway), the Arc RPC, the
+  model providers, Resend, BlindPay, the accounting and CRM connectors, and customers' webhook endpoints.
+  - **A user's action makes few of them.** A model call takes seconds anyway.
+  - **A scheduled run makes more.** The tick's start cutoff, the Circle waits and the connector sweep's budget are
+    wall-clock limits, so a slower call means less work in a run, never a run past its limit.
+  - **For the tick**, the review estimated about 8 to 12 calls to US services for each paid bill, which add 1.2 to
+    1.8 seconds, against 20 to 40 database calls in a row, which save 3 to 6 seconds.
+- **`vercel.json` holds only the region.** The security page's test now allows the file but checks that it sends no
+  header, so the page's line about the Content Security Policy stays true.
 - **No IP allowlist.** No service the app calls holds an allowlist of Vercel's addresses, which change anyway. Redis
   is not used.
 - `tests/vercel-region.test.ts` pins the region, so removing it fails a test. `ARCHITECTURE.md` has a section on where

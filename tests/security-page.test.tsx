@@ -804,7 +804,9 @@ describe("what it does not claim, still true of the code", () => {
     // The one policy is frame-ancestors 'none', on the Chrome extension's sign-in page.
     expect(config.match(/Content-Security-Policy[^\n]*/gi)).toEqual([`Content-Security-Policy", value: "frame-ancestors 'none'" },`]);
     expect(config.split('source: "/extension/:path*"')[1]?.split("source:")[0]).toContain("frame-ancestors 'none'");
-    expect(existsSync(path.join(process.cwd(), "vercel.json"))).toBe(false);
+    // vercel.json sets only where the functions run (ARCHITECTURE.md, "Where it runs"): no header, so no policy there.
+    const vercel = existsSync(path.join(process.cwd(), "vercel.json")) ? (JSON.parse(source("vercel.json")) as Record<string, unknown>) : {};
+    expect(Object.keys(vercel).filter((key) => key !== "$schema" && key !== "regions")).toEqual([]);
     expect(notClaimed).toContain(
       "does not send a Content Security Policy yet, except frame-ancestors 'none' on the Chrome extension's sign-in page, so that page cannot be framed"
     );

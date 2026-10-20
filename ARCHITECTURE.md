@@ -68,9 +68,13 @@ for the whole project, beside the Supabase project in `ap-northeast-1`. A page o
 after another, so the distance between the two counts once per call. From Vercel's default, `iad1`, each call crossed
 the Pacific, and a payee's **Keep this address** took about 4.4 seconds
 (`docs/superpowers/specs/2026-10-20-functions-beside-database-design.md`). The route-level `preferredRegion` is
-deprecated in this Next.js version, so the setting is not per route. `tests/vercel-region.test.ts` pins it. The
-scheduled jobs are GitHub Actions workflows that call the API, so they are unaffected. Calls to Circle, the model
-provider and Resend leave from Tokyo.
+deprecated in this Next.js version, so the setting is not per route. `tests/vercel-region.test.ts` pins it, and
+`vercel.json` holds nothing else (no header: see the security page's test). The scheduled routes are called by Supabase
+Cron from the database itself (`supabase/cron/watches.sql`), and GitHub's schedule calls only the sandbox cleanup, so
+none is a Vercel cron. Calls to services in the US now leave from Tokyo: Circle (Wallets, Iris, Gateway), the Arc RPC,
+the model providers, Resend, BlindPay, the accounting and CRM connectors, and customers' webhook endpoints. Their time
+limits (the tick's start cutoff, Circle waits, the connector sweep's budget) are wall-clock, so a slower call means
+less work in a run, never a run past its limit.
 
 ## Workspaces, roles and the cron
 
