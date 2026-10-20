@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CloudOff, Unlink } from "lucide-react";
 import { PayeeJourney } from "@/components/payee/PayeeJourney";
+import { PublicMain } from "@/components/public/PublicMain";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { homeChain, networkOfChain } from "@/lib/payee-chains";
@@ -47,17 +48,15 @@ export default async function PayeePage({ params }: PayeePageProps) {
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
-      <main id="main" className="flex flex-1 items-center justify-center px-4 py-12 sm:py-16">
-        <div className="w-full max-w-md">
-          {failed ? (
-            <EmptyState icon={<CloudOff />} titleAs="h1" title="This page could not load. Try again in a moment." />
-          ) : !status ? (
-            <EmptyState icon={<Unlink />} titleAs="h1" title="This link is no longer valid. Ask the business that sent it for a new one." />
-          ) : (
-            <PayeeJourney token={token} status={payeeView(status)} simulated={simulated} today={new Date().toISOString().slice(0, 10)} />
-          )}
-        </div>
-      </main>
+      <PublicMain>
+        {failed ? (
+          <EmptyState icon={<CloudOff />} titleAs="h1" title="This page could not load. Try again in a moment." />
+        ) : !status ? (
+          <EmptyState icon={<Unlink />} titleAs="h1" title="This link is no longer valid. Ask the business that sent it for a new one." />
+        ) : (
+          <PayeeJourney token={token} status={payeeView(status)} simulated={simulated} today={new Date().toISOString().slice(0, 10)} />
+        )}
+      </PublicMain>
       <SiteFooter compact loop="payee_link" networkLabel={status ? homeChain(networkOfChain(status.chain)).label : undefined} />
     </div>
   );

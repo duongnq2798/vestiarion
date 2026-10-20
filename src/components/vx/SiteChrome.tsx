@@ -9,6 +9,7 @@ import { LOOP_PAGE_LINE, LOOP_PAGE_LINK, loopCtaId, loopPageHref, type LoopPage 
 import { ARC_URL, CIRCLE_URL, GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
 import { SiteMenu } from "./SiteMenu";
+import styles from "./SiteChrome.module.css";
 
 /**
  * The header and footer of the pages outside a workspace: the landing page,
@@ -27,7 +28,7 @@ export const LANDING_SECTIONS = [
 /** The landing header's links, in its bar and its menu: its own sections, then the developer docs. */
 export const LANDING_LINKS = [...LANDING_SECTIONS, { href: "/docs", label: "Docs" }] as const;
 
-const HEADER_LINK = "whitespace-nowrap rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink";
+const HEADER_LINK = "inline-flex min-h-11 items-center whitespace-nowrap rounded-lg px-3 py-2 text-sm text-ink-2 transition-colors duration-150 ease-standard hover:bg-raised/70 hover:text-ink";
 
 /** A plain text link in a header's right side, as the landing page's section links. */
 export function SiteHeaderLink({ href, children }: { href: string; children: ReactNode }) {
@@ -69,20 +70,20 @@ export function SiteHeader({
   children?: ReactNode;
 }) {
   return (
-    <header className={cn("sticky top-0 z-50 border-b border-line/60 bg-surface/88 backdrop-blur-xl", width === "column" && "px-4")}>
+    <header className={cn("sticky top-0 z-50 border-b border-line bg-surface focus-default", styles.header, width === "column" && "px-4")}>
       <div
         className={cn(
           "mx-auto flex h-16 items-center gap-3",
-          width === "column" ? cn("w-full", SITE_COLUMN) : "px-4 sm:px-6",
+          width === "column" ? cn("w-full", SITE_COLUMN) : "px-page",
           width === "wide" && "max-w-[88rem]",
-          width === "page" && "max-w-6xl"
+          width === "page" && "max-w-7xl"
         )}
       >
         <Wordmark />
         {section && (
           <Link
             href={section.href}
-            className="border-l border-line pl-3 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-agent transition-colors duration-150 ease-standard hover:text-ink"
+            className="inline-flex min-h-11 items-center border-l border-line pl-3 font-mono text-[0.8125rem] font-semibold uppercase tracking-[0.2em] text-agent transition-colors duration-150 ease-standard hover:text-ink"
           >
             {section.label}
           </Link>
@@ -249,7 +250,7 @@ const COPYRIGHT = "© 2026 Vestiarion contributors";
 export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { compact?: boolean; networkLabel?: string; loop?: LoopPage }) {
   if (compact) {
     return (
-      <footer className="border-t border-line/80 px-4 py-6 font-mono text-xs text-ink-3">
+      <footer className={cn(styles.compactFooter, "border-t border-line bg-ground px-page py-6 font-mono text-caption text-ink-3 focus-default")}>
         {loop && (
           <p className="mx-auto mb-4 max-w-6xl text-center font-sans text-sm text-ink-2">
             {LOOP_PAGE_LINE}{" "}
@@ -264,8 +265,8 @@ export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { co
           <p className="[&>span]:whitespace-nowrap">
             <span>{COPYRIGHT} ·</span> <span>MIT License ·</span> <span>Signed decisions on {networkLabel}</span>
           </p>
-          <nav aria-label="Footer">
-            <ul className="flex flex-wrap justify-center gap-x-4">
+          <nav aria-label="Footer" className="font-sans text-ui">
+            <ul className="flex flex-wrap justify-center gap-x-2">
               {COMPACT_FOOTER_LINKS.map((link) => (
                 <li key={link.href}>
                   <FooterAnchor href={link.href} className={COMPACT_LINK}>

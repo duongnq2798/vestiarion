@@ -86,9 +86,9 @@ export function PayeeJourney({
   }, [answered]);
   const stage = payeeStage(status);
   return (
-    <section ref={section} className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
+    <section ref={section} className="rounded-2xl border border-line bg-surface p-5 shadow-flat sm:p-8">
       <PayeeSteps stage={stage} withInvoice={status.asksInvoice === true} invoicePending={invoiceOpen(status)} />
-      <div className="mt-5">
+      <div className="mt-6">
         {stage === "address" && <AddressStep token={token} status={status} simulated={simulated} onSent={onSent} />}
         {stage === "invoice" && <InvoiceStep token={token} status={status} today={today} onSent={onSent} />}
         {stage === "confirming" && <ConfirmingStep status={status} />}
@@ -114,7 +114,7 @@ function Heading({ children }: { children: ReactNode }) {
 }
 
 function Footnote({ children }: { children: ReactNode }) {
-  return <p className="mt-5 border-t border-line pt-4 text-xs leading-5 text-ink-3">{children}</p>;
+  return <p className="mt-6 border-t border-line pt-5 text-xs leading-5 text-ink-3">{children}</p>;
 }
 
 /** Takes the link's status an accepted submission answers with, so the page moves on (S1, S3). */
@@ -145,7 +145,7 @@ function AddressStep({ token, status, simulated, onSent }: { token: string; stat
       <Heading>
         {status.orgName} wants to pay you{owed ? ` ${owed}` : ""}
       </Heading>
-      <p className="mt-2 text-sm text-ink-2">
+      <p className="mt-3 text-sm leading-6 text-ink-2">
         {simulated ? `For ${status.payeeName}. ${SIMULATED_PAYMENT}` : choosing ? `For ${status.payeeName}.` : `For ${status.payeeName}, on ${chain}.`}
       </p>
       {status.payments.length > 0 && <PaymentList payments={status.payments} />}
@@ -252,10 +252,10 @@ function ConfirmingStep({ status }: { status: PayeeLinkStatus }) {
     <>
       <Heading>Address sent. {status.orgName} confirms it next.</Heading>
       <div role="status" className="mt-4 flex items-start gap-3 rounded-xl border border-line bg-raised px-4 py-3">
-        <Clock3 aria-hidden className="mt-0.5 size-4 shrink-0 text-ink-3" />
+        <Clock3 aria-hidden className="mt-0.5 size-4 shrink-0 text-ink-2" />
         <div className="text-sm">
           <p className="font-medium text-ink">Waiting for {status.orgName} to confirm</p>
-          <p className="mt-0.5 font-mono text-xs text-ink-3">{maskAddress(status.address)}</p>
+          <p className="mt-0.5 font-mono text-xs text-ink-2">{maskAddress(status.address)}</p>
         </div>
       </div>
       <p className="mt-4 text-sm leading-6 text-ink-2">

@@ -67,7 +67,7 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
 
   return (
     <article className="space-y-6">
-      <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
+      <section className="rounded-2xl border border-line bg-surface p-6 shadow-flat sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Eyebrow className="text-agent">Payment receipt</Eyebrow>
           <Badge tone={headline.tone} dot>
@@ -103,7 +103,7 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
         </dl>
       </section>
 
-      <section className="rounded-2xl border border-line bg-surface p-6 shadow-surface">
+      <section className="rounded-2xl border border-line bg-surface p-6 shadow-flat sm:p-8">
         <h2 className="text-base font-semibold text-ink">The checks</h2>
         <ol className="mt-4 space-y-5">
           <CheckItem title="Signed by the paying workspace" passed={checks.signed.ok}>
