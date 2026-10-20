@@ -120,6 +120,6 @@ describe("the contractor stage and the spending limit enforced on Arc (onchain s
     expect(cycle.indexOf("const onChainLimit = onChainLimitGate();")).toBeLessThan(cycle.indexOf('await stage("ap"'));
     expect(cycle.slice(cycle.indexOf('await stage("ap"'), cycle.indexOf('await stage("contractors"'))).toContain("onChainLimit,");
     // With the stage's two-approvals figure since payment integrity I4, and its new payee check (new payee check N3).
-    expect(stage).toContain("{ db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove, newPayee: firstReleaseTo }");
+    expect(stage).toContain("{ db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove, newPayee: firstReleaseTo, payeeLock }");
   });
 });
