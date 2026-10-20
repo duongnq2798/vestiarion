@@ -1471,6 +1471,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Called them on a number we had before", "src/lib/payee-lock-rules.ts"],
     ["Messaged them on a channel we used before", "src/lib/payee-lock-rules.ts"],
     ["You entered or asked for this address, so someone else confirms it.", ADDRESS_LIBRARY],
+    ["Contractors", APP_NAV],
+    ["Payee lock wait", MAP],
     ["Approve and pay", APPROVAL_CARD],
     ["Pay now", APPROVAL_CARD],
     ["Reject", APPROVAL_CARD],
@@ -1977,6 +1979,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["verify_milestone_github", GITHUB_CHECK],
     ["Waiting for an address", CONTRACTORS_PAGE],
     ["Address to confirm", CONTRACTORS_PAGE],
+    ["Payee lock wait", CONTRACTORS_PAGE],
     ["Verify manually", MILESTONE_CHECK],
   ],
   "guides/hubspot": [

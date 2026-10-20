@@ -15,6 +15,7 @@ import type { CounterpartyRow, InvoiceRow, MilestoneRow, TreasuryActionRow } fro
 import type { Decision, Evidence, Guardrail, Outcome } from "./types";
 import { fmt } from "./Primitives";
 import { BRIDGE_FEE_CAP_PERCENT, chainById, homeChain, paidAcrossChains } from "@/lib/payee-chains";
+import { coolingOffLabel } from "@/lib/payee-lock-rules";
 import { networkProfile, type Network } from "@/lib/network";
 import { SWAP_COST_CAP_PERCENT } from "@/lib/fx/swap-limits";
 import { TWO_APPROVALS_RULE } from "@/lib/two-approvals";
@@ -690,13 +691,16 @@ function milestoneEvidenceLink(source: string | null, githubSource: string | und
 /**
  * What the card knows of the contractor now, beyond the decision's own record: its screening, for a milestone
  * the agent has not decided yet, and what a verified milestone waits for before the agent pays it (the
- * contractor stage's payeeNotReady): an address someone must confirm, or one the payee has still to add.
+ * contractor stage's payeeNotReady): an address someone must confirm, or one the payee has still to add; or, once
+ * neither, the payee lock's wait after the address changed (payee lock PL5).
  */
 export interface MilestoneContext {
   /** The workspace's network, for the decision's links. */
   network: Network;
   riskLevel?: string | null;
-  waiting?: "unconfirmed" | "no_address" | null;
+  waiting?: "unconfirmed" | "no_address" | "cooling_off" | null;
+  /** With `waiting: "cooling_off"`, when the payee lock's wait ends (`inCoolingOff`). */
+  waitsUntil?: Date | null;
   /**
    * Whether each milestone's evidence link can be opened, by its address (evidence access E1, `checkEvidenceLinks`).
    * Absent, the card links its evidence as before any check; present, it never offers a link that can't be opened, and
@@ -724,7 +728,7 @@ function linkChips(base: Evidence, href: string, access: LinkAccess | undefined,
 }
 
 /** A milestone not yet decided, or decided and on its way, as its card says it (never "Scheduled"). */
-function milestoneProgress(milestone: MilestoneRow, waiting: MilestoneContext["waiting"]): { label: string; line: string } | null {
+function milestoneProgress(milestone: MilestoneRow, waiting: MilestoneContext["waiting"], waitsUntil?: Date | null): { label: string; line: string } | null {
   const name = milestone.contractor_name;
   if (milestone.status === "pending") return { label: "Awaiting verification", line: "The agent is waiting for milestone verification." };
   if (milestone.status !== "verified") return null;
@@ -732,6 +736,11 @@ function milestoneProgress(milestone: MilestoneRow, waiting: MilestoneContext["w
     return { label: "Address to confirm", line: `Verified. ${name}'s address changed and no one has confirmed it yet: confirm it on Counterparties, and the agent decides on pay within a minute.` };
   }
   if (waiting === "no_address") return { label: "Waiting for an address", line: `Verified. ${name} has not added an address yet: the agent pays once they add one through their payee link.` };
+  // Nothing for a person to do: the agent decides it on the first cycle after the wait, as the contractor stage does.
+  if (waiting === "cooling_off") {
+    const until = waitsUntil ? `until ${coolingOffLabel(waitsUntil)}` : "for a while";
+    return { label: "Payee lock wait", line: `Verified. ${name}'s address changed recently, and the payee lock makes it wait ${until}. The agent decides on pay within a minute after that.` };
+  }
   if (milestone.tx_ref) return { label: "Payment in flight", line: "Verified. The payment was submitted and is waiting for Circle to confirm it." };
   return { label: "Being decided", line: "Verified. The agent decides on pay within a minute." };
 }
@@ -751,7 +760,7 @@ function decideMilestone(milestone: MilestoneRow, entries: LedgerEntry[], contex
   const limit = numberValue(observed?.paymentLimit) ?? 0;
   // The screening the agent decided on, or, before any decision, the contractor's own.
   const risk = stringValue(observed?.riskLevel) ?? context.riskLevel ?? "unscreened";
-  const progress = closed ? null : milestoneProgress(milestone, context.waiting);
+  const progress = closed ? null : milestoneProgress(milestone, context.waiting, context.waitsUntil);
   // A verified milestone held back for a person to confirm an address waits on someone, as a held one does.
   const waitsOnPerson = milestone.status === "verified" && context.waiting === "unconfirmed";
   const presented = presentReasoning(milestone.agent_reasoning, explainMilestone({ name: milestone.contractor_name, amount: milestone.amount, entry: decided ? { detail: decided.detail } : null }));
