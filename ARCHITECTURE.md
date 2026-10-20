@@ -61,6 +61,17 @@ code, and holds its subprocessors (`src/lib/subprocessors.ts`) to the privacy
 page's services, name for name. `SECURITY.md` is the policy for reporting a
 vulnerability.
 
+## Where it runs
+
+The app is one Next.js deployment on Vercel. Its functions run in Vercel's Tokyo region, `hnd1`, which `vercel.json` sets
+for the whole project, beside the Supabase project in `ap-northeast-1`. A page or an action makes its database calls one
+after another, so the distance between the two counts once per call. From Vercel's default, `iad1`, each call crossed
+the Pacific, and a payee's **Keep this address** took about 4.4 seconds
+(`docs/superpowers/specs/2026-10-20-functions-beside-database-design.md`). The route-level `preferredRegion` is
+deprecated in this Next.js version, so the setting is not per route. `tests/vercel-region.test.ts` pins it. The
+scheduled jobs are GitHub Actions workflows that call the API, so they are unaffected. Calls to Circle, the model
+provider and Resend leave from Tokyo.
+
 ## Workspaces, roles and the cron
 
 A person creates their own workspace at `/onboarding` (`createWorkspaceAction` ->

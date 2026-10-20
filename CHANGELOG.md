@@ -14,6 +14,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **Pages and actions answer sooner.** The app's server now runs in Tokyo, beside its database, instead of in
+  Washington. Every database call used to cross the Pacific and back, and a page or an action makes many of them one
+  after another, so a payee link's step or a workspace page waited seconds for it.
+
 - The landing hero explains the recorded schedule, coded hold and human approval beside their own entry links, with
   the confirmed CCTP fee, actual app navigation labels and text of at least 12px in narrow panes. Hero and the detailed
   journey choose the same bill with a complete decision, hold, approval and payment story; direct is the fallback
