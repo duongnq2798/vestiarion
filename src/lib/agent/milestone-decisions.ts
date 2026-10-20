@@ -26,6 +26,7 @@ import { HELD_BECAUSE_PAUSED } from "./pause";
 import { isSoleApprover } from "./sole-approver";
 import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
+import { payeeLockRefusal } from "../payee-lock";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { personPaymentNote, SECOND_OF_TWO_NOTE } from "./approvals";
 import { bringCashForApproval, CashBackError, cashShortMessage, HELD_FOR_CASH, reserveCover, type ReserveCover } from "./liquidity";
@@ -82,7 +83,9 @@ export type MilestoneDecisionErrorCode =
   | "payments_off"
   | "payment_unknown"
   | "already_approved"
-  | "needs_second_approver";
+  | "needs_second_approver"
+  // The payee lock refused it (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL5); its text names why.
+  | "payee_locked";
 
 const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   milestone_not_found: "That milestone is not in this workspace.",
@@ -105,6 +108,7 @@ const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   already_approved: "You approved this already. Another person who can approve payments must approve it to pay.",
   needs_second_approver:
     "Payments above the workspace's figure need two approvals, and only one person in this workspace can approve payments. Raise the figure in Settings, or add an approver on Members.",
+  payee_locked: "The payee lock makes this contractor's new address wait before it is paid.",
 };
 
 export class MilestoneDecisionError extends Error {
@@ -640,6 +644,9 @@ export async function payHeldMilestone(input: {
     };
     const code = blocked[blocking.kind];
     if (code) raise(code);
+    // The payee lock (PL5): a changed address waits out its cooling-off before anyone pays it.
+    const locked = await payeeLockRefusal(milestone.contractorId, milestone.facts.contractor.name);
+    if (locked) raise("payee_locked", locked);
     if (twoNeeded) {
       // No approval is taken while someone is deciding it.
       if (milestone.decisionClaimedAt && Date.parse(milestone.decisionClaimedAt) > Date.now() - 10 * 60_000) raise("already_claimed");

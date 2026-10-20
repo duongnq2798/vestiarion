@@ -480,6 +480,35 @@ payment to an address.
 - **Afterwards:** the follow-up (`newPayeeFollowUp`) reopens a payable held this way once that payee has been paid at
   its address, or two parties stand behind it.
 
+**The payee lock** (`docs/superpowers/specs/2026-10-20-payee-lock-design.md`, `src/lib/payee-lock.ts`). Migration `0135`
+adds two columns to `approval_policies`: `payee_lock` (off by default) and `payee_lock_cooling_hours` (0 to 168).
+- **Setting:** an owner changes it on Settings (`changePayeeLock`), signed as `payee_lock_changed`, and refused while a
+  cycle runs. `readPayeeLockStatus` reads missing columns, before 0135, as off and not ready. Any other failure throws.
+- **Confirming:** Confirm address posts a record, `{ method, contact, contactOnFileBefore, note }`. `parseVerification`
+  makes it optional with the lock off and required with it on (a call or a message names a contact that was on file
+  before the change). `confirmCounterpartyAddress` reads the lock itself and, with it on:
+  - refuses `via: "approval"` (`lock_requires_confirm`);
+  - refuses a record that falls short (`verification_required`);
+  - refuses the member `addressGiver` names while `approversBesides([giver]) > 0` (`giver_confirms`). Otherwise it
+    records `soloConfirmation`.
+
+  With the lock off it records `byGiver`. Either way it records `lookalikeOf`, best effort.
+- **Paying:** `approveAndPay` and `payHeldMilestone` ask `payeeLockRefusal` before any claim (`payee_locked`): an
+  unconfirmed address, or a confirmed one inside its wait, is refused with the time it can be paid. The AP stage reads
+  the lock once and passes it to `enforceApGuardrails`, which holds a payment inside the wait as
+  `counterparty.cooling_off`, right after `counterparty.address_unconfirmed`. The follow-up (`coolingOffHeld`,
+  `coolingOff`) reopens it once the wait ends. The milestone stage leaves a verified milestone waiting, as it does for a
+  confirmation.
+- **Resubmission:** a payment that never reached the network is not sent again inside the wait. `resubmissionBlocker`
+  returns `counterparty.cooling_off`: a payable is held for a person (`notResubmittedBecause`), and a milestone waits,
+  still verified.
+- **Lookalikes:** `lookalikes` buckets the payees' addresses by chain and by their first 6 and last 4 hex digits.
+  `earlierLookalike` compares a changed address with the same payee's earlier addresses and the ones it was paid at,
+  which is the usual address poisoning. Counterparties shows the matches and Confirm address repeats them; they never
+  refuse anything. The confirmation records `lookalikeOf`, `looksLikeEarlier` and, when no giver can be named,
+  `giverUnknown`.
+- **Fails closed:** only the codes 42703 and PGRST204 read as "before 0135"; any other failure throws.
+
 **Ask every payee at once** (`docs/superpowers/specs/2026-10-18-ask-every-payee-design.md`). `askablePayees`
 (`src/lib/address-requests.ts`) lists, for an owner or admin on Counterparties, the vendors and contractors with no
 address of their own (a mirror address counts as none), no unused link out and no sample flag, 25 at most by name.

@@ -192,6 +192,8 @@ function apFake(options: {
   newPayee?: NewPayeeFacts;
   /** The workspace's figure above which a payment needs two approvals (two approvals T1); none when absent. */
   twoApprovals?: number;
+  /** The workspace's payee lock (payee lock PL1); off by default. */
+  payeeLock?: { on: boolean; hours?: number };
   /** The business's currency when the workspace is in shadow mode (shadow mode S1); off when absent. */
   shadow?: string;
   /** The chain provider; a `Chain` that records transfers when absent. */
@@ -215,7 +217,18 @@ function apFake(options: {
     }
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
     if (request.path === "/rest/v1/agent_budgets") return { body: options.budget ? [options.budget] : [] };
-    if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
+    if (request.path === "/rest/v1/approval_policies") {
+      if (!options.twoApprovals && !options.payeeLock) return { body: [] };
+      return {
+        body: [
+          {
+            two_approvals_above: options.twoApprovals ? String(options.twoApprovals) : null,
+            payee_lock: options.payeeLock?.on ?? false,
+            payee_lock_cooling_hours: options.payeeLock?.hours ?? 0,
+          },
+        ],
+      };
+    }
     if (request.path === "/rest/v1/shadow_modes") return { body: options.shadow ? [{ currency: options.shadow, started_at: "2026-10-01T00:00:00Z", started_by: null }] : [] };
     // The spending limit's read of the agent's payments (filtered by actor), not the ledger's own head read.
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.has("actor")) return { body: options.agentPayments ?? [] };
@@ -609,6 +622,24 @@ describe("the AP stage and a scheduled invoice", () => {
       observed: { addressUnconfirmed: true },
       execution: { txRef: null, resultingStatus: "held" },
     });
+  });
+
+  it("holds it while the payee lock keeps a changed, confirmed address waiting, and moves nothing (payee lock PL5)", async () => {
+    today("2026-10-11T06:00:00.000Z");
+    model(() => ({ action: "pay", reasoning: "Scheduled for today; paying at the discount.", confidence: 0.9 }));
+    const changed = counterparty({ address: "0xredirected", address_changed_at: "2026-10-10T14:00:00+00:00", address_confirmed_at: "2026-10-10T15:00:00+00:00" });
+    const { fake, chain, stage } = apFake({ book: [scheduledPayable({ counterparties: changed })], payeeLock: { on: true, hours: 24 } });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held", tx_ref: null });
+    expect((patch.body as Record<string, string>).agent_reasoning).toContain("it can be paid from Oct 11, 2026, 14:00 UTC; held until then");
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "counterparty.cooling_off" });
+    // The figure and the lock in one read for the stage.
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/approval_policies")).toHaveLength(1);
   });
 
   it("flags it on its day when the counterparty turned high risk since, and moves nothing", async () => {

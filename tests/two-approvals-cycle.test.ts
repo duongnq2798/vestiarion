@@ -15,7 +15,9 @@ describe("the contractor stage and two approvals", () => {
   const contractors = source.slice(source.indexOf('await stage("contractors"'), source.indexOf('await stage("treasury"'));
 
   it("reads the figure once for the stage, when there is a milestone to decide", () => {
-    expect(contractors).toContain("const twoApprovalsAbove = milestones.length > 0 ? await readTwoApprovalsAbove(db) : null;");
+    // In one read with the payee lock (payee lock PL5).
+    expect(contractors).toContain("const policies = milestones.length > 0 ? await readPaymentPolicies(db) : null;");
+    expect(contractors).toContain("const twoApprovalsAbove = policies?.twoApprovalsAbove ?? null;");
   });
 
   it("holds a release above it, after the new payee check and before the spending limit and the contract on Arc", () => {

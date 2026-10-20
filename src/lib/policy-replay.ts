@@ -132,6 +132,7 @@ export const BILL_STAGES: readonly string[] = [
   "counterparty.client_payable",
   "counterparty.no_address",
   "counterparty.address_unconfirmed",
+  "counterparty.cooling_off",
   "invoice.match_incomplete",
   "counterparty.new_payee",
   "fx.rate_unavailable",

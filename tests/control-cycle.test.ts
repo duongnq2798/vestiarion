@@ -667,6 +667,32 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.address_unconfirmed", execution: { resultingStatus: "held" } });
   });
 
+  it("does not resubmit to a changed address the payee lock keeps waiting, confirmed or not (payee lock PL5)", async () => {
+    const changed = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const confirmed = new Date(Date.now() - 3_600_000).toISOString();
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: changed, address_confirmed_at: confirmed } };
+      }
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileApInvoice(
+        { ...invoice, txRef: null },
+        { providerTxId: null, status: "submitting" },
+        { db: db(), provider, operating: { id: ACCOUNT_ID }, payeeLock: { on: true, coolingHours: 24 } }
+      )
+    );
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    expect(outcome.line.message).toBe("Acme Supplies: not resubmitted, the payee lock keeps the counterparty's changed address waiting (150 USDC)");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.cooling_off", execution: { resultingStatus: "held" } });
+  });
+
   it("resubmits through payInvoice when the counterparty is not high risk and the agent is not paused", async () => {
     payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 200 });
     const { run } = cycleFake((r) => {

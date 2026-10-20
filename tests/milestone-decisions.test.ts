@@ -293,6 +293,8 @@ function world(options: {
   spendingLimit?: Record<string, unknown> | null;
   /** No operating account at all; one by default. */
   noOperatingAccount?: boolean;
+  /** The workspace's payee lock (payee lock PL1), and the contractor's address times it reads; off by default. */
+  payeeLock?: { on: boolean; hours?: number; contractor?: Record<string, unknown> };
 } = {}) {
   let intentRow: Record<string, unknown> | null = options.intent === undefined ? FAILED_INTENT : options.intent;
   const fake = fakeSupabase((request: RecordedRequest) => {
@@ -319,7 +321,19 @@ function world(options: {
     if (request.path === "/rest/v1/accounts") return { body: options.noOperatingAccount ? null : { id: "acct-1", balance: options.balance ?? "8" } };
     if (request.path === "/rest/v1/rpc/claim_milestone_decision") return options.claim ? options.claim() : { body: milestoneRow() };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
-    if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
+    if (request.path === "/rest/v1/approval_policies") {
+      if (!options.twoApprovals && !options.payeeLock) return { body: [] };
+      return {
+        body: [
+          {
+            two_approvals_above: options.twoApprovals ? String(options.twoApprovals) : null,
+            payee_lock: options.payeeLock?.on ?? false,
+            payee_lock_cooling_hours: options.payeeLock?.hours ?? 0,
+          },
+        ],
+      };
+    }
+    if (request.path === "/rest/v1/counterparties" && request.method === "GET" && options.payeeLock?.contractor) return { body: options.payeeLock.contractor };
     if (request.path === "/rest/v1/payment_approvals" && request.method === "GET") return { body: options.approvals ?? [] };
     if (request.path === "/rest/v1/payment_approvals" && request.method === "POST") {
       const body = request.body as Record<string, unknown>;
@@ -473,6 +487,20 @@ describe("Pay now", () => {
       expect(await refusal(run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }))), code).toBe(code);
       expect(claimed()).toBe(false);
     }
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses, before any claim, a contractor's changed address inside the payee lock's wait, confirmed or not (payee lock PL5)", async () => {
+    const changed = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const confirmed = new Date(Date.now() - 3_600_000).toISOString();
+    const { run, claimed } = world({
+      milestone: { counterparties: { ...milestoneRow().counterparties, address_changed_at: changed, address_confirmed_at: confirmed } },
+      payeeLock: { on: true, hours: 24, contractor: { address_changed_at: changed, address_confirmed_at: confirmed } },
+    });
+    const attempt = run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+    expect(await refusal(attempt)).toBe("payee_locked");
+    await expect(attempt).rejects.toThrow(/address changed recently, and the payee lock makes it wait: it can be paid from .+ UTC\./);
+    expect(claimed()).toBe(false);
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
 

@@ -36,6 +36,7 @@ import { isReclaimable } from "./claim-age";
 import type { Provenance } from "../provenance";
 import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, cctpFeeCushion, reserveCover, type ReserveCover } from "./liquidity";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
+import { payeeLockRefusal } from "../payee-lock";
 import { needsSecondApprover, needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
 import {
   clearApprovals,
@@ -123,13 +124,15 @@ export type ApprovalErrorCode =
   | "verdict_needed"
   | "verdict_disagreed"
   | "bank_not_set_up"
-  | "bank_unsupported_token";
+  | "bank_unsupported_token"
+  // The payee lock refused it (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL4, PL5); its text names why.
+  | "payee_locked";
 
 /**
  * Every message except `insufficient_funds` and `needs_second_approver`, whose texts name the balance and the figure,
  * and `chain_off_network`, whose text names the chain.
  */
-const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network">, string> = {
+const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network" | "payee_locked">, string> = {
   already_decided: "Someone else decided this invoice a moment ago.",
   self_approval: "You created this invoice, so someone else must approve it.",
   beneficiary_approval: "This payable pays your own commission, so someone else must approve it.",
@@ -163,7 +166,7 @@ export class ApprovalError extends Error {
   }
 }
 
-function raise(code: Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network">): never {
+function raise(code: Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network" | "payee_locked">): never {
   throw new ApprovalError(code, MESSAGES[code]);
 }
 
@@ -1055,6 +1058,13 @@ export async function approveAndPay(
   const shownAddress = input.shownAddress?.trim();
   if (!invoice.bankAccount && shownAddress !== undefined && !sameAddress(invoice.address, shownAddress === "" ? null : shownAddress)) {
     raise("address_changed");
+  }
+  // The payee lock (PL4, PL5): with it on, an address waiting for confirmation is confirmed on Counterparties with a
+  // record of how it was checked, never by this approval, and a changed address waits out its cooling-off. A transfer
+  // already sent is only recorded; a bank payout pays no address.
+  if (!alreadySent && !invoice.bankAccount) {
+    const locked = await payeeLockRefusal(invoice.counterpartyId, invoice.counterpartyName);
+    if (locked) throw new ApprovalError("payee_locked", locked);
   }
   const bank = invoice.bankAccount && !alreadySent ? await bankRouteFor(invoice) : null;
 

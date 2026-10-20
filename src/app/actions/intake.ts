@@ -34,6 +34,8 @@ import { createInvoice } from "@/lib/invoices/create";
 import { consoleActor } from "@/lib/commands/actor";
 import { assignToProjectCommand } from "@/lib/commands/projects";
 import { workspaceNetwork } from "@/lib/workspace-network";
+import { db } from "@/lib/dal";
+import { parseVerification, readPayeeLock } from "@/lib/payee-lock";
 import { FxRateError } from "@/lib/fx/usd-rates";
 import { shadowBill, ShadowBillError, type OriginalBill } from "@/lib/shadow-bills";
 
@@ -256,7 +258,8 @@ export async function updateCounterpartyNoticeEmailAction(
 /**
  * Confirms a changed address, as the page showed it, so payments to it are decided as usual again. The page shows the
  * chain beside the address (payee invoice link P3), and sends it as `chain`: a chain that is no longer the payee's is
- * refused as stale, like an address.
+ * refused as stale, like an address. The form's record of how the address was checked (payee lock PL2) is read here,
+ * required when the workspace's payee lock is on, and signed with the confirmation.
  */
 export async function confirmCounterpartyAddressAction(
   _previous: IntakeActionResult,
@@ -269,12 +272,24 @@ export async function confirmCounterpartyAddressAction(
     if (!id.success) return { ok: false, message: "Counterparty not found." };
     const shownChain = formString(formData, "chain");
     try {
+      const lock = await readPayeeLock(db());
+      const record = parseVerification(
+        {
+          method: formString(formData, "method"),
+          contact: formString(formData, "contact"),
+          contactOnFileBefore: formString(formData, "contactOnFileBefore"),
+          note: formString(formData, "note"),
+        },
+        lock.on
+      );
+      if (!record.ok) return { ok: false, message: record.message };
       const confirmed = await confirmCounterpartyAddress({
         actorId: auth.user.id,
         counterpartyId: id.data,
         shownAddress: formString(formData, "address"),
         ...(shownChain ? { shownChain } : {}),
         via: "confirm",
+        verification: record.verification,
       });
       revalidateOrgPages();
       if (confirmed) raiseCycleEvent(auth, "address_confirmed");

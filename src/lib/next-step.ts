@@ -83,6 +83,12 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
         sentence: `${counterparty.name}'s payment address changed and no one has confirmed it. Confirm it, or pay it in Approvals.`,
         fix: { label: "Confirm address", path: row },
       };
+    case "counterparty.cooling_off":
+      // The payee lock's wait after an address change (payee lock PL5): it ends on its own, and the agent decides it again.
+      return {
+        sentence: `${counterparty.name}'s payment address changed recently, and the payee lock makes it wait before it is paid. The agent decides it again once the wait ends.`,
+        fix: { label: "Open counterparty", path: row },
+      };
     case "counterparty.unscreened":
       return {
         sentence: `${counterparty.name} has not been screened yet. Screening runs again at every cycle, and the agent decides it again once there is a verdict; you can also pay it in Approvals.`,
@@ -215,6 +221,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "it is above the counterparty's payment limit";
     case "counterparty.address_unconfirmed":
       return "the payment address changed and is not confirmed";
+    case "counterparty.cooling_off":
+      return "the payment address changed recently, and the payee lock makes it wait";
     case "counterparty.no_address":
       return "the counterparty has no payment address yet";
     case "counterparty.unscreened":

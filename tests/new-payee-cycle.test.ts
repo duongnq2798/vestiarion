@@ -42,13 +42,13 @@ describe("the cycle and the first payment to a new payee", () => {
     const start = source.indexOf("export async function runApStage(");
     const ap = source.slice(start, source.indexOf("\n/**\n", start));
     expect(ap).toContain("const newPayeeOf: NewPayeeCheckOf = (counterparty) => (newPayeeFacts ? newPayeeCheckFor(newPayeeFacts, counterparty) : null);");
-    expect(ap).toContain("{ db, provider, operating, onChainLimit, twoApprovalsAbove, newPayee: newPayeeOf }");
+    expect(ap).toContain("{ db, provider, operating, onChainLimit, twoApprovalsAbove, newPayee: newPayeeOf, payeeLock }");
     expect(ap).toContain("newPayee: newPayeeOf,");
   });
 
   it("asks the contractor stage's check before releasing again a release never sent", () => {
     const contractors = source.slice(source.indexOf('await stage("contractors"'), source.indexOf('await stage("treasury"'));
-    expect(contractors).toContain("{ db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove, newPayee: firstReleaseTo }");
+    expect(contractors).toContain("{ db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove, newPayee: firstReleaseTo, payeeLock }");
   });
 });
 

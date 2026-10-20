@@ -65,6 +65,8 @@ export interface FrozenInvoice {
   cash?: { operating: number; reserve: number; dueBefore?: number };
   /** Whether the counterparty's address changed and no one has confirmed it, now. Absent when it was not read. */
   addressUnconfirmed?: boolean;
+  /** Whether the payee lock still keeps its changed address waiting, now (payee lock PL5). Absent when it was not read. */
+  coolingOff?: boolean;
   /** Whether the counterparty has no payment address, now. Absent when it was not read. */
   addressMissing?: boolean;
   /** Whether the counterparty needs a purchase order, now (three-way match design M5). Absent when it was not read. */
@@ -133,6 +135,8 @@ export interface DecisionFacts {
   addressUnconfirmed?: boolean;
   /** Whether the counterparty had no payment address (`observed.addressMissing`), so the guardrail held it. */
   addressMissing?: boolean;
+  /** Held for the payee lock's wait after an address change (`guardrailRule: "counterparty.cooling_off"`, payee lock PL5). */
+  coolingOffHeld?: boolean;
   /**
    * Whether the counterparty needed a purchase order (`observed.purchaseOrderRequired`). Absent for a decision recorded
    * before the setting existed, when every counterparty needed one.
@@ -341,6 +345,8 @@ export function planFollowUp(
   const cashChange = atDecision.heldForCash ? cashChangeSince(invoice.cash, atDecision.heldForCash) : null;
   if (cashChange) changes.push(cashChange);
   // A first payment held for want of a second person: decided again once the address was paid, or two parties stand behind it.
+  // Held for the payee lock's wait: decided again once it has passed (payee lock PL5).
+  if (atDecision.coolingOffHeld && invoice.coolingOff === false) changes.push("the payee lock's wait for the new address has ended");
   if (atDecision.newPayeeHeld && invoice.newPayee?.addressPaid) changes.push("the payee's address has received a confirmed payment since");
   else if (atDecision.newPayeeHeld && invoice.newPayee?.twoParties) changes.push("a second person now stands behind the payee's address");
   // A payment held for two approvals: decided again once the figure no longer covers it.

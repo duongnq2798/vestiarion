@@ -173,8 +173,8 @@ Owners and admins change a counterparty's address with **Edit address** in its r
 
 Changing where a counterparty is paid is how payments get redirected to the wrong wallet. So after a change, the row reads **Confirm address** and says "not yet confirmed", and the agent holds every payment to that counterparty, whatever the amount, until a person confirms the new address. There are two ways to confirm it:
 
-- **Approve and pay** on a held payment to it. The approval card shows where the money goes, after "Pays to". If the address changed after the page loaded, the approval is refused with "This counterparty's address changed after this page loaded. Check the new address and try again."
-- **Confirm address** in the counterparty's row. Owners, admins and approvers see it. The row and the confirmation name the chain the address is on, and a chain that changed after the page loaded is refused like a changed address. A payment the agent held for the change goes back to it, and it decides that payment again, with every check, in the cycle the confirmation starts.
+- **Approve and pay** on a held payment to it. The approval card shows where the money goes, after "Pays to". If the address changed after the page loaded, the approval is refused with "This counterparty's address changed after this page loaded. Check the new address and try again." With the [payee lock](#payee-lock) on, approving no longer confirms the address.
+- **Confirm address** in the counterparty's row. Owners, admins and approvers see it. It asks how you checked the address, as [Payee lock](#payee-lock) describes. The row and the confirmation name the chain the address is on, and a chain that changed after the page loaded is refused like a changed address. A payment the agent held for the change goes back to it, and it decides that payment again, with every check, in the cycle the confirmation starts.
 
 <Screenshot
   src="/docs/guides/first-payment-address.png"
@@ -183,6 +183,38 @@ Changing where a counterparty is paid is how payments get redirected to the wron
 />
 
 Before you confirm an address, check it with the counterparty through a different channel from the one the change came through. The ledger records who changed the address, from what to what, and who confirmed it. A contractor's verified milestone waits the same way: it stays verified, and the first cycle after someone confirms the address decides it.
+
+### Payee lock
+
+The payee lock turns confirming a changed address into a recorded check by a second person. It is off until an owner turns it on in **Settings**, under **Payee lock**, with **Turn on the payee lock**.
+
+**Confirm address** always asks **How did you check it?**:
+- **Called them on a number we had before**;
+- **Messaged them on a channel we used before**;
+- **In person**;
+- **Another way**.
+
+It also asks for the **Contact used** and a **Note**, and whether **This contact was on file before the new address arrived**. With the lock off the answers are optional, and whatever you give is signed with the confirmation.
+
+With the lock on:
+- **Confirm address needs that record.** A call or a message names its contact, and ticks that the contact was on file before the new address arrived. A number or a channel that came with the change is the one a fraudster controls.
+- **Someone else confirms it.** Whoever entered the address, or asked the payee for it, cannot confirm it while another member can: "You entered or asked for this address, so someone else confirms it." Where no one else can, they confirm it alone, and the record says so.
+- **Approve and pay no longer confirms an address.** It is refused until someone confirms the address on Counterparties.
+- **Wait after an address changes** keeps a changed address from being paid for 4, 24, 48 or 72 hours after the change, confirmed or not, which gives the real payee time to notice a change they did not make.
+  - The agent holds a payment to that address until then, and decides it again once the wait ends.
+  - **Approve and pay** and **Pay now** say when it can be paid.
+
+Whether the lock is on or off, a counterparty's row warns about an address that is the same as another counterparty's, or that looks like it:
+- "Same address as" the other counterparty;
+- "Looks like" the other counterparty's address, when the two share their first 6 and last 4 characters after `0x`. That is the pattern address poisoning uses.
+
+When a changed address looks like an address the same payee had or was paid at before, but is a different one, the row and **Confirm address** say so too: "Looks like an earlier address of this payee". A real new wallet almost never shares both ends with the old one; an address made to look like it does.
+
+**Confirm address** repeats the warning before anyone confirms. It never blocks, since two counterparties can share a wallet on purpose.
+
+The payee lock covers addresses on Arc and the chains it pays. A payout to a vendor's bank account already waits for a person every time, so the lock adds nothing there.
+
+The ledger records each change to the lock as `payee_lock_changed`, and the check behind each confirmation in its `counterparty_address_confirmed` entry.
 
 Anyone who may not add records sees "Only an owner or admin of this workspace can add counterparties." instead of the form.
 
