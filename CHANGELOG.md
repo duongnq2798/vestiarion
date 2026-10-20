@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.12] - 2026-10-20
+
 ### Added
 
 - **Payee lock.** An owner turns it on in **Settings**, under **Payee lock**, to make confirming a changed payout
@@ -1104,7 +1106,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.11...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.12...HEAD
+[0.1.0-beta.12]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.12
 [0.1.0-beta.11]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.11
 [0.1.0-beta.10]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.10
 [0.1.0-beta.9]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.9
