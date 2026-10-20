@@ -32,10 +32,11 @@ import { paysSimulated } from "@/lib/capability";
 import { readCapability } from "@/lib/capability-read";
 import { shellModes } from "@/lib/circle";
 import { readEscrowContract } from "@/lib/circle/escrow-setup";
-import { addressUnconfirmed, payeeNotReady } from "@/lib/counterparty-address";
+import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
-import { inCoolingOff, PAYEE_LOCK_OFF, readPayeeLock } from "@/lib/payee-lock";
+import { milestoneWaiting } from "@/lib/milestone-waiting";
+import { PAYEE_LOCK_OFF, readPayeeLock } from "@/lib/payee-lock";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { orgHref } from "@/lib/auth/org-paths";
 import { utcDay } from "@/lib/copy";
@@ -109,17 +110,13 @@ export default async function ContractorsPage({ params, searchParams }: { params
           )
         : {};
     // What a verified milestone waits for before the agent pays it, in the contractor stage's order: an address to
-    // confirm, or one to add; then the payee lock's wait after the address changed, unless its transfer is already sent.
+    // confirm, or one to add; then the payee lock's wait after the address changed. A release already sent never waits.
     const now = Date.now();
-    const waitsUntil = (milestone: MilestoneRow) => {
-      const contractor = contractorsById.get(milestone.contractor_id);
-      return milestone.status === "verified" && !milestone.tx_ref && contractor ? inCoolingOff(contractor.address_changed_at, payeeLock, now) : null;
-    };
-    const waitingOf = (milestone: MilestoneRow) => {
-      const contractor = contractorsById.get(milestone.contractor_id);
-      if (milestone.status !== "verified" || !contractor) return null;
-      return payeeNotReady(contractor, live) ?? (waitsUntil(milestone) ? ("cooling_off" as const) : null);
-    };
+    const waits = new Map(
+      milestones.map((milestone) => [milestone.id, milestoneWaiting(milestone, contractorsById.get(milestone.contractor_id), { live, lock: payeeLock, now })])
+    );
+    const waitingOf = (milestone: MilestoneRow) => waits.get(milestone.id)?.waiting ?? null;
+    const waitsUntil = (milestone: MilestoneRow) => waits.get(milestone.id)?.waitsUntil ?? null;
     // The Asana tasks the milestones are linked to, and whether Asana is connected (Asana acceptance A16): best effort,
     // and nothing where Asana is not configured or migration 0115 has not run.
     const asana = await asanaOnContractors(milestones.map((milestone) => milestone.id));

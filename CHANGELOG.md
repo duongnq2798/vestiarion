@@ -31,6 +31,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- A milestone whose release was already sent reads "Payment in flight" on **Contractors**, not "Address to confirm",
+  if its contractor's address changed meanwhile: the agent completes a sent release whatever the address now is.
+
 - Public payee, supplier, payment, receipt and statement pages share the landing's visual system: readable paper
   records, consistent headings and spacing, and larger touch areas on phones. Sign-in, open numbers and the docs'
   header and footer use the same foundation. Existing forms, payment checks, quoted labels, numbers and redirects
