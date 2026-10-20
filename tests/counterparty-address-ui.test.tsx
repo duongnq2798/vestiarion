@@ -3,7 +3,7 @@ import path from "node:path";
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import CounterpartyAddress, { type CounterpartyAddressProps } from "@/components/intake/CounterpartyAddressEdit";
+import CounterpartyAddress, { ConfirmAddressFields, type CounterpartyAddressProps } from "@/components/intake/CounterpartyAddressEdit";
 import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
 
 /**
@@ -36,6 +36,19 @@ function render(props: Partial<CounterpartyAddressProps> = {}) {
   );
 }
 
+function fields(props: Partial<Parameters<typeof ConfirmAddressFields>[0]> = {}) {
+  return html(
+    <ConfirmAddressFields
+      orgSlug="acme"
+      counterparty={{ id: "1b6c1c9e-4a4f-4a7e-9b1e-0000000000c7", name: "Acme", address: ADDRESS }}
+      payeeLockOn={false}
+      lookalikes={[]}
+      idPrefix="confirm-address-test"
+      {...props}
+    />
+  );
+}
+
 describe("CounterpartyAddress", () => {
   it("shows the address, and no controls, to someone who may do neither", () => {
     const markup = render({ unconfirmedSince: "2026-09-30T12:00:00Z" });
@@ -59,13 +72,37 @@ describe("CounterpartyAddress", () => {
 
     const markup = render({ canConfirm: true, unconfirmedSince: "2026-09-30T12:00:00Z" });
     expect(markup).toContain("Confirm address");
-    expect(markup).toMatch(new RegExp(`<input type="hidden" name="address" value="${ADDRESS}"/>`));
+    // The dialog's form posts the address the page showed.
+    expect(fields()).toMatch(new RegExp(`<input type="hidden" name="address" value="${ADDRESS}"/>`));
   });
 
   it("names the chain beside the address, and posts it with a confirmation (payee invoice link P3)", () => {
     const markup = render({ counterparty: { id: "x", name: "Acme", address: ADDRESS, chain: "BASE" }, canConfirm: true, unconfirmedSince: "2026-09-30T12:00:00Z" });
     expect(markup).toContain("on Base");
-    expect(markup).toMatch(/<input type="hidden" name="chain" value="BASE"\/>/);
+    expect(fields({ counterparty: { id: "x", name: "Acme", address: ADDRESS, chain: "BASE" } })).toMatch(/<input type="hidden" name="chain" value="BASE"\/>/);
+  });
+
+  it("asks how the address was checked: optional with the payee lock off, required with it on (payee lock PL2)", () => {
+    const off = fields();
+    expect(off).toContain("How did you check it? (optional)");
+    expect(off).toContain("Called them on a number we had before");
+    expect(off).toContain("This contact was on file before the new address arrived");
+    expect(off).toContain('name="contact"');
+    expect(off).toContain('name="note"');
+
+    const on = fields({ payeeLockOn: true });
+    expect(on).toContain("How did you check it?");
+    expect(on).not.toContain("How did you check it? (optional)");
+    expect(on).toContain("The payee lock needs a record of how you checked it.");
+  });
+
+  it("names a lookalike address on the card and before anyone confirms it (PL6)", () => {
+    const lookalikes = [{ kind: "alike" as const, id: "c2", name: "Northwind" }, { kind: "same" as const, id: "c3", name: "Orbit" }];
+    const card = render({ lookalikes });
+    expect(card).toContain("Looks like Northwind&#x27;s address");
+    expect(card).toContain("Same address as Orbit");
+    const form = fields({ lookalikes });
+    expect(form).toContain("Check this address twice");
   });
 
   it("shows nothing about confirming for an address that was never changed", () => {

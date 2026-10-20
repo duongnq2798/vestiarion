@@ -111,6 +111,7 @@ import { HELD_FOR_VERDICT, SHADOW_HELD_NOTE } from "./shadow-hold";
 import { transferUnknown } from "./approvals";
 import { plural, utcDay } from "../copy";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
+import { coolingOffLabel, inCoolingOff, PAYEE_LOCK_OFF, readPayeeLock, type PayeeLock } from "../payee-lock";
 
 // Moved to ./treasury-moves.ts, shared with the liquidity step and a person's cash back; still exported from here for existing callers.
 export { moveTreasuryIfNotPaused } from "./treasury-moves";
@@ -1510,6 +1511,8 @@ async function decideApPayable(
     newPayee?: NewPayeeCheckOf;
     /** The figure above which a payment needs two people's approval, null when none is set (two approvals T3). */
     twoApprovalsAbove?: number | null;
+    /** The workspace's payee lock (payee lock PL5), read once per stage: a changed address waits its cooling-off. */
+    payeeLock?: PayeeLock;
     /** The workspace's shadow mode, null when it is off (shadow mode S2): a payment then waits for a person to agree. */
     shadow?: ShadowMode | null;
     /** The checks after the guardrails (project budgets P5, P9): the same work as a milestone, and the project's budget. */
@@ -1932,6 +1935,7 @@ async function decideApPayable(
     addressMissing,
     addressChangedAt: counterparty.address_changed_at,
     addressConfirmedAt: counterparty.address_confirmed_at,
+    payeeLock: ctx.payeeLock,
     match: { poReference: invoice.po_reference, goodsReceived: invoice.goods_received, purchaseOrderRequired },
     newPayee: firstPayment ? { twoParties: firstPayment.twoParties, ...(firstPayment.unanswered ? { unanswered: true } : {}) } : null,
     currency,
@@ -2298,6 +2302,8 @@ export interface ApStageInput {
   newPayee?: { load: (counterpartyIds: string[]) => Promise<NewPayeeFacts> };
   /** The figure above which a payment needs two people's approval (two approvals T3); read from the workspace when absent. */
   twoApprovalsAbove?: number | null;
+  /** The workspace's payee lock (payee lock PL5); read from the workspace when absent. */
+  payeeLock?: PayeeLock;
   /** The workspace's shadow mode (shadow mode S2); read from the workspace when absent. */
   shadow?: ShadowMode | null;
   /** The checks after the guardrails (project budgets P5, P9); read from the workspace when absent. */
@@ -2488,6 +2494,9 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const newPayeeOf: NewPayeeCheckOf = (counterparty) => (newPayeeFacts ? newPayeeCheckFor(newPayeeFacts, counterparty) : null);
   // The figure above which a payment needs two people (two approvals T3): read once for the stage, when anything is decided.
   const twoApprovalsAbove = input.twoApprovalsAbove !== undefined ? input.twoApprovalsAbove : payables.length > 0 ? await readTwoApprovalsAbove(db) : null;
+  // The payee lock (payee lock PL5): read once for the stage, when anything is decided. A lock that cannot be read stops
+  // the stage, as the figure does.
+  const payeeLock = input.payeeLock !== undefined ? input.payeeLock : payables.length > 0 ? await readPayeeLock(db) : PAYEE_LOCK_OFF;
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
   const shadow = input.shadow !== undefined ? input.shadow : payables.length > 0 ? await shadowOnce() : null;
 
@@ -2642,6 +2651,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           : null,
       newPayee: newPayeeOf,
       twoApprovalsAbove,
+      payeeLock,
       shadow,
       obligations,
     });
@@ -3805,6 +3815,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         fxHold: fxHoldOf({ seq: entry.seq, detail: entry.detail }),
         // Held as the first payment to an address one party alone stood behind (new payee check N7).
         newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
+        // Held for the payee lock's wait after an address change (payee lock PL5): decided again once it has passed.
+        coolingOffHeld: entry.detail.guardrailRule === "counterparty.cooling_off",
         // Held for two approvals: the value and the figure it was weighed at (two approvals T3).
         heldForTwoApprovals: twoApprovalsHeldValue(entry),
         // Held for its project's budget: the project and what it needed (project budgets P6).
@@ -3817,6 +3829,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     // The figure for two approvals now, read only when a payable waits on it (T3).
     const twoApprovalsHeldIds = frozenRows.filter((row) => factsByInvoice.get(row.id)?.heldForTwoApprovals).map((row) => row.id);
     const twoApprovalsNow = twoApprovalsHeldIds.length > 0 ? await readTwoApprovalsAbove(db) : undefined;
+    // The payee lock now, read only when a payable waits out its cooling-off (PL5).
+    const lockNow = [...factsByInvoice.values()].some((facts) => facts.coolingOffHeld) ? await readPayeeLock(db) : null;
     // Who stands behind those addresses now, read once, wherever payments are real (N5, N7).
     const newPayeeHeldIds = [
       ...new Set(frozenRows.filter((row) => factsByInvoice.get(row.id)?.newPayeeHeld && row.counterparty_id).map((row) => row.counterparty_id as string)),
@@ -3879,6 +3893,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),
           addressMissing: !row.counterparties.address,
           purchaseOrderRequired: row.counterparties.purchase_order_required,
+          ...(lockNow && factsByInvoice.get(row.id)?.coolingOffHeld ? { coolingOff: inCoolingOff(row.counterparties.address_changed_at, lockNow, now) !== null } : {}),
           ...(fxNow.has(row.id) ? { fx: fxNow.get(row.id) } : {}),
           ...(newPayeeNow.has(row.id) ? { newPayee: newPayeeNow.get(row.id) } : {}),
           ...(twoApprovalsNow !== undefined ? { twoApprovalsAbove: twoApprovalsNow } : {}),
@@ -4066,6 +4081,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     provider.mode === "live" && milestones.length > 0 ? await loadNewPayeeFacts(db, [...new Set(milestones.map((m) => m.contractor_id))]) : null;
   // The figure above which a release needs two people (two approvals T3): read once for the stage, when anything is decided.
   const twoApprovalsAbove = milestones.length > 0 ? await readTwoApprovalsAbove(db) : null;
+  // The payee lock (payee lock PL5): read once for the stage, when anything is decided.
+  const payeeLock = milestones.length > 0 ? await readPayeeLock(db) : PAYEE_LOCK_OFF;
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
   const shadow = milestones.length > 0 ? await readShadowMode(db) : null;
   // The bills a milestone may repeat, and its project's reservations (project budgets P5, P9): read once, when anything is decided.
@@ -4252,6 +4269,16 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           waiting === "no_address"
             ? `${contractor.name}: "${milestone.title}" waiting for its payee to add an address`
             : `${contractor.name}: "${milestone.title}" waiting for someone to confirm its new address`,
+      });
+      continue;
+    }
+    // The payee lock's wait after an address change (PL5): the milestone stays verified and waits, as it does for a
+    // confirmation, and the first cycle after the wait decides it as usual.
+    const coolingUntil = inCoolingOff(contractor.address_changed_at, payeeLock);
+    if (coolingUntil) {
+      lines.push({
+        domain: "contractor",
+        message: `${contractor.name}: "${milestone.title}" waiting out the payee lock's wait on its new address, until ${coolingOffLabel(coolingUntil)}`,
       });
       continue;
     }

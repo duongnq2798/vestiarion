@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeCheck, PencilLine } from "lucide-react";
+import { BadgeCheck, PencilLine, TriangleAlert } from "lucide-react";
 import { useCallback, useState } from "react";
 import {
   confirmCounterpartyAddressAction,
@@ -9,15 +9,25 @@ import {
 } from "@/app/actions/intake";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Callout } from "@/components/ui/Callout";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
-import { Input } from "@/components/ui/Input";
+import { Input, Textarea } from "@/components/ui/Input";
+import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import { chainById } from "@/lib/payee-chains";
+import {
+  lookalikeWords,
+  VERIFICATION_CONTACT_MAX,
+  VERIFICATION_LABELS,
+  VERIFICATION_METHODS,
+  VERIFICATION_NOTE_MAX,
+  type Lookalike,
+} from "@/lib/payee-lock";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 const update = withSuccessToast(updateCounterpartyAddressAction);
@@ -31,6 +41,10 @@ export interface CounterpartyAddressProps {
   unconfirmedSince: string | null;
   canWrite: boolean;
   canConfirm: boolean;
+  /** Whether the workspace's payee lock is on (payee lock PL2): the confirm form's record is then required. */
+  payeeLockOn?: boolean;
+  /** Other counterparties whose address is this one, or made to look like it (PL6). */
+  lookalikes?: readonly Lookalike[];
 }
 
 /**
@@ -41,7 +55,15 @@ export interface CounterpartyAddressProps {
  * confirms (payee invoice link P3): it is named beside the address, in the
  * confirmation, and sent with it.
  */
-export default function CounterpartyAddress({ orgSlug, counterparty, unconfirmedSince, canWrite, canConfirm }: CounterpartyAddressProps) {
+export default function CounterpartyAddress({
+  orgSlug,
+  counterparty,
+  unconfirmedSince,
+  canWrite,
+  canConfirm,
+  payeeLockOn = false,
+  lookalikes = [],
+}: CounterpartyAddressProps) {
   const chainLabel = counterparty.chain ? chainById(counterparty.chain).label : null;
   return (
     <div className="mt-3 space-y-2 border-t border-line pt-3">
@@ -58,12 +80,23 @@ export default function CounterpartyAddress({ orgSlug, counterparty, unconfirmed
         )}
         {canWrite && <EditAddress orgSlug={orgSlug} counterparty={counterparty} />}
       </div>
+      {lookalikes.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5" aria-label="Lookalike addresses">
+          {lookalikes.map((match) => (
+            <li key={match.id}>
+              <Badge size="sm" tone="refused" icon={<TriangleAlert aria-hidden />}>
+                {lookalikeWords(match)}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
       {unconfirmedSince && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Badge size="sm" dot tone="held">
             Changed {unconfirmedSince.slice(0, 10)} · not yet confirmed
           </Badge>
-          {canConfirm && <ConfirmAddress orgSlug={orgSlug} counterparty={counterparty} />}
+          {canConfirm && <ConfirmAddress orgSlug={orgSlug} counterparty={counterparty} payeeLockOn={payeeLockOn} lookalikes={lookalikes} />}
         </div>
       )}
     </div>
@@ -106,35 +139,108 @@ function EditAddress({ orgSlug, counterparty }: { orgSlug: string; counterparty:
   );
 }
 
-function ConfirmAddress({ orgSlug, counterparty }: { orgSlug: string; counterparty: CounterpartyAddressProps["counterparty"] }) {
-  const { state, formProps, pending } = useActionForm(confirm, INITIAL);
+/**
+ * Confirm address, with the record of how the address was checked (payee lock PL2): the method, the contact used and
+ * whether it was on file before the new address arrived, and a note. Optional with the payee lock off; required with it
+ * on, as the action checks again. Lookalike addresses are named here before anyone confirms (PL6).
+ */
+function ConfirmAddress({
+  orgSlug,
+  counterparty,
+  payeeLockOn,
+  lookalikes,
+}: {
+  orgSlug: string;
+  counterparty: CounterpartyAddressProps["counterparty"];
+  payeeLockOn: boolean;
+  lookalikes: readonly Lookalike[];
+}) {
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const { state, formProps } = useActionForm(confirm, INITIAL, { onSuccess: close });
   const formId = `confirm-address-${counterparty.id}`;
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <form id={formId} className="contents" {...formProps}>
-        <input type="hidden" name="orgSlug" value={orgSlug} />
-        <input type="hidden" name="counterpartyId" value={counterparty.id} />
-        <input type="hidden" name="address" value={counterparty.address ?? ""} />
-        {counterparty.chain && <input type="hidden" name="chain" value={counterparty.chain} />}
-      </form>
-      <ConfirmDialog
-        formId={formId}
-        tone="primary"
-        trigger={
-          <Button size="sm" variant="secondary" icon={<BadgeCheck />} loading={pending}>
-            Confirm address
-          </Button>
-        }
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="secondary" icon={<BadgeCheck />}>
+          Confirm address
+        </Button>
+      </DialogTrigger>
+      <DialogContent
         title={`Confirm ${counterparty.name}'s new address?`}
         description={
           counterparty.address
             ? `Payments go to ${counterparty.address}${counterparty.chain ? ` on ${chainById(counterparty.chain).label}` : ""} without waiting for a person. Check it with ${counterparty.name} first.`
             : "The counterparty has no address, so the agent cannot pay it until one is set."
         }
-        confirmLabel="Confirm address"
+      >
+        <form id={formId} className="grid gap-4" {...formProps}>
+          <ConfirmAddressFields orgSlug={orgSlug} counterparty={counterparty} payeeLockOn={payeeLockOn} lookalikes={lookalikes} idPrefix={formId} />
+          <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="secondary">Cancel</Button>
+            </DialogClose>
+            <SubmitButton pendingLabel="Confirming…" icon={<BadgeCheck />}>
+              Confirm address
+            </SubmitButton>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * What Confirm address posts (payee lock PL2): the address and chain the page showed, and the record of how the address
+ * was checked, with any lookalike named above it (PL6). Exported for its tests: the dialog renders it only when open.
+ */
+export function ConfirmAddressFields({
+  orgSlug,
+  counterparty,
+  payeeLockOn,
+  lookalikes,
+  idPrefix,
+}: {
+  orgSlug: string;
+  counterparty: CounterpartyAddressProps["counterparty"];
+  payeeLockOn: boolean;
+  lookalikes: readonly Lookalike[];
+  idPrefix: string;
+}) {
+  // With the lock off every field is optional; with it on, a call or a message names its contact (the action checks).
+  const contactOptional = !payeeLockOn;
+  const formId = idPrefix;
+  return (
+    <>
+      <input type="hidden" name="orgSlug" value={orgSlug} />
+      <input type="hidden" name="counterpartyId" value={counterparty.id} />
+      <input type="hidden" name="address" value={counterparty.address ?? ""} />
+      {counterparty.chain && <input type="hidden" name="chain" value={counterparty.chain} />}
+      {lookalikes.length > 0 && (
+        <Callout tone="refused" title="Check this address twice">
+          {lookalikes.map(lookalikeWords).join(". ")}. A fraudster may have made it look like an address you know.
+        </Callout>
+      )}
+      <p className="text-sm text-ink-2">
+        {payeeLockOn
+          ? "The payee lock needs a record of how you checked it. Use a contact you had before the new address arrived, never one that came with it."
+          : "Record how you checked it, so the ledger shows it later. Use a contact you had before the new address arrived, never one that came with it."}
+      </p>
+      <RadioGroup
+        name="method"
+        legend={payeeLockOn ? "How did you check it?" : "How did you check it? (optional)"}
+        options={VERIFICATION_METHODS.map((method) => ({ value: method, label: VERIFICATION_LABELS[method] }))}
+        required={payeeLockOn}
       />
-      {state.message && !state.ok && <FormMessage tone="error">{state.message}</FormMessage>}
-    </div>
+      <Field id={`${formId}-contact`} label="Contact used" description="The number or channel, and where you had it from." optional={contactOptional}>
+        <Input name="contact" maxLength={VERIFICATION_CONTACT_MAX} placeholder="+44 20 7946 0000, from our contract" />
+      </Field>
+      <Checkbox name="contactOnFileBefore" label="This contact was on file before the new address arrived" />
+      <Field id={`${formId}-note`} label="Note" description="Plain text, no links." optional>
+        <Textarea name="note" rows={2} maxLength={VERIFICATION_NOTE_MAX} />
+      </Field>
+    </>
   );
 }

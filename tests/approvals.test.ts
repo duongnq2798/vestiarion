@@ -189,6 +189,8 @@ function approvalsFake(options: {
   payeeLinks?: Array<{ id: string; created_by: string | null }>;
   /** The workspace's figure above which a payment needs two approvals (two approvals T1); none by default. */
   twoApprovals?: number;
+  /** The workspace's payee lock (payee lock PL1); off by default. */
+  payeeLock?: { on: boolean; hours?: number };
   /** The invoice's open approvals (two approvals T4); none by default. */
   approvals?: Array<Record<string, unknown>>;
   /** Who of those named may approve payments now (`approvers_among`); everyone named by default. */
@@ -311,7 +313,18 @@ function approvalsFake(options: {
     if (request.path === "/rest/v1/shadow_modes" && request.method === "GET") return { body: options.shadow ? [options.shadow] : [] };
     if (request.path === "/rest/v1/rpc/sole_approver" && options.soleApprover) return options.soleApprover;
     if (request.path === "/rest/v1/rpc/commission_partner_members" && options.commissionPartners) return options.commissionPartners;
-    if (request.path === "/rest/v1/approval_policies") return { body: options.twoApprovals ? [{ two_approvals_above: String(options.twoApprovals) }] : [] };
+    if (request.path === "/rest/v1/approval_policies") {
+      if (!options.twoApprovals && !options.payeeLock) return { body: [] };
+      return {
+        body: [
+          {
+            two_approvals_above: options.twoApprovals ? String(options.twoApprovals) : null,
+            payee_lock: options.payeeLock?.on ?? false,
+            payee_lock_cooling_hours: options.payeeLock?.hours ?? 0,
+          },
+        ],
+      };
+    }
     if (request.path === "/rest/v1/payment_approvals" && request.method === "GET") return { body: options.approvals ?? [] };
     if (request.path === "/rest/v1/payment_approvals" && request.method === "POST") {
       const body = request.body as Record<string, unknown>;
@@ -2502,6 +2515,55 @@ describe("approveAndPay and the address the person was shown", () => {
     });
 
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "" }))).resolves.toMatchObject({ status: "paid" });
+  });
+});
+
+describe("approveAndPay under the payee lock (payee lock PL4, PL5)", () => {
+  const paid = () => payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
+
+  it("refuses an address waiting for confirmation before any claim: it is confirmed on Counterparties, never by approving", async () => {
+    const { fake, run } = approvalsFake({
+      counterparty: { id: COUNTERPARTY_ID, name: "Acme Supplies", address: "0xdead", address_changed_at: "2026-09-30T12:00:00+00:00", address_confirmed_at: null },
+      payeeLock: { on: true },
+    });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
+
+    await expect(attempt).rejects.toMatchObject({ code: "payee_locked" });
+    await expect(attempt).rejects.toThrow("Confirm Acme Supplies's address on Counterparties first, and record how you checked it.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a confirmed address still inside its cooling-off, naming when it can be paid", async () => {
+    const changed = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const confirmed = new Date(Date.now() - 3_600_000).toISOString();
+    const { fake, run } = approvalsFake({
+      counterparty: { id: COUNTERPARTY_ID, name: "Acme Supplies", address: "0xdead", address_changed_at: changed, address_confirmed_at: confirmed },
+      payeeLock: { on: true, hours: 24 },
+    });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
+
+    await expect(attempt).rejects.toMatchObject({ code: "payee_locked" });
+    await expect(attempt).rejects.toThrow(/Acme Supplies's address changed recently, and the payee lock makes it wait: it can be paid from .+ UTC\./);
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+  });
+
+  it("pays a confirmed address once its cooling-off has passed", async () => {
+    paid();
+    const { run } = approvalsFake({
+      counterparty: {
+        id: COUNTERPARTY_ID,
+        name: "Acme Supplies",
+        address: "0xdead",
+        address_changed_at: "2026-09-30T12:00:00+00:00",
+        address_confirmed_at: "2026-09-30T13:00:00+00:00",
+      },
+      payeeLock: { on: true, hours: 24 },
+    });
+
+    await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }))).resolves.toMatchObject({ status: "paid" });
   });
 });
 

@@ -72,11 +72,13 @@ function allow(role: "owner" | "admin" | "approver") {
   });
 }
 
-function run<T>(fn: () => Promise<T>): Promise<T> {
+function run<T>(fn: () => Promise<T>, lock: { on: boolean; hours?: number } = { on: false }): Promise<T> {
   const fake = fakeSupabase((request) =>
     request.path === "/rest/v1/orgs"
       ? { body: { id: ORG, slug: "northstar", name: "Northstar", mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null } }
-      : { body: [] }
+      : request.path === "/rest/v1/approval_policies"
+        ? { body: lock.on ? [{ payee_lock: true, payee_lock_cooling_hours: lock.hours ?? 0 }] : [] }
+        : { body: [] }
   );
   return runWith({ config, db: fake.client, fetch: fake.fetch }, fn);
 }
@@ -168,9 +170,54 @@ describe("confirmCounterpartyAddressAction", () => {
 
     const result = await run(() => confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS })));
 
-    expect(confirmMock).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY_ID, shownAddress: ADDRESS, via: "confirm" });
+    expect(confirmMock).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY_ID, shownAddress: ADDRESS, via: "confirm", verification: null });
     expect(result).toEqual({ ok: true, message: "Address confirmed. Payments to it are decided as usual again." });
     expect(revalidatePathMock).toHaveBeenCalled();
+  });
+
+  it("signs the record of how the address was checked with it (payee lock PL2)", async () => {
+    allow("approver");
+    confirmMock.mockResolvedValueOnce(true);
+    const fields = { counterpartyId: COUNTERPARTY_ID, address: ADDRESS, method: "call", contact: "+44 20 7946 0000, from our contract", contactOnFileBefore: "on", note: "" };
+
+    await run(() => confirmCounterpartyAddressAction(INITIAL, form(fields)));
+
+    expect(confirmMock).toHaveBeenCalledWith(
+      expect.objectContaining({ verification: { method: "call", contact: "+44 20 7946 0000, from our contract", contactOnFileBefore: true, note: null } })
+    );
+  });
+
+  it("with the payee lock on, refuses a confirmation with no record, or with a contact not on file before, and confirms nothing", async () => {
+    allow("approver");
+    const bare = await run(() => confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS })), { on: true });
+    expect(bare).toEqual({ ok: false, message: "Choose how you checked the address." });
+
+    allow("approver");
+    const fresh = await run(
+      () => confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS, method: "call", contact: "+1 555 0100" })),
+      { on: true }
+    );
+    expect(fresh).toEqual({ ok: false, message: "Check it with a contact you had before the new address arrived, not one that came with it." });
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a record with a link in it", async () => {
+    allow("approver");
+    const result = await run(() =>
+      confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS, method: "message", contact: "https://evil.example/pay" }))
+    );
+    expect(result).toEqual({ ok: false, message: "Use plain text, without links, and keep it short." });
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("says what the payee lock refused, in its own words", async () => {
+    allow("approver");
+    confirmMock.mockRejectedValueOnce(new CounterpartyAddressError("giver_confirms"));
+    const result = await run(
+      () => confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS, method: "in_person" })),
+      { on: true }
+    );
+    expect(result).toEqual({ ok: false, message: "You entered or asked for this address, so someone else confirms it." });
   });
 
   it("says when there was nothing to confirm", async () => {

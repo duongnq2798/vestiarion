@@ -1,6 +1,7 @@
 import type { DuplicateMatch } from "./duplicates";
 import { blockingDuplicate } from "./duplicates";
 import { addressUnconfirmed } from "../counterparty-address";
+import { coolingOffLabel, inCoolingOff, type PayeeLock } from "../payee-lock";
 import { BRIDGE_FEE_CAP_PERCENT } from "../payee-chains";
 import { SWAP_COST_CAP_PERCENT } from "../fx/swap-limits";
 import { exceedsBudget, type BudgetRoom } from "./outflow-budget";
@@ -24,6 +25,13 @@ export interface ApGuardrailInput {
   addressChangedAt?: string | null;
   /** When a person last confirmed the counterparty's address. */
   addressConfirmedAt?: string | null;
+  /**
+   * The workspace's payee lock (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL5), read once per cycle: a
+   * payment to an address changed less than its cooling-off ago waits, confirmed or not. Absent or off, nothing waits.
+   */
+  payeeLock?: PayeeLock;
+  /** When the cooling-off is measured; now when absent. */
+  now?: number;
   /**
    * The invoice's currency (EURC invoices design). For EURC, `amount` is its
    * USDC value at the quoted rate, which is what counts against the limit;
@@ -105,6 +113,7 @@ export type ApGuardrailRule =
   | "counterparty.client_payable"
   | "counterparty.payment_limit"
   | "counterparty.address_unconfirmed"
+  | "counterparty.cooling_off"
   | "counterparty.no_address"
   | "invoice.duplicate_of_settled"
   | "invoice.match_incomplete"
@@ -264,6 +273,18 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "held",
       rule: "counterparty.address_unconfirmed",
       reasoning: `${input.reasoning} [guardrail override: the counterparty's address changed on ${(changedAt as string).slice(0, 10)} and no one has confirmed it — held for a person to approve]`,
+    };
+  }
+  // The payee lock's cooling-off (PL5): a changed address waits its hours before it is paid, confirmed or not, so a
+  // change slipped past a confirmation still has time to be noticed. Held, not refused: the follow-up decides it again
+  // once the time has passed.
+  const coolingUntil = input.payeeLock ? inCoolingOff(changedAt, input.payeeLock, input.now ?? Date.now()) : null;
+  if (coolingUntil && input.payeeLock) {
+    return {
+      blocked: true,
+      status: "held",
+      rule: "counterparty.cooling_off",
+      reasoning: `${input.reasoning} [guardrail override: the payee lock keeps a changed address waiting ${input.payeeLock.coolingHours} hours — it can be paid from ${coolingOffLabel(coolingUntil)}; held until then]`,
     };
   }
   // The three-way match (three-way match design M1, M3): the goods received and, for a counterparty that needs one, a

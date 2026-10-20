@@ -12,6 +12,21 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Payee lock.** An owner turns it on in **Settings**, under **Payee lock**, to make confirming a changed payout
+  address a recorded check by a second person.
+  - **Confirm address** asks how the address was checked, the contact used, and whether that contact was on file before
+    the new address arrived. This is optional with the lock off and required with it on.
+  - With the lock on:
+    - whoever entered or asked for the address cannot confirm it while someone else can;
+    - approving a payment no longer confirms its address;
+    - an optional wait of 4 to 72 hours keeps a changed address from being paid, confirmed or not. The agent holds the
+      payment, then decides it again when the wait ends.
+  - Counterparties now warns about an address that is the same as another payee's, or that looks like it (the same
+    first 6 and last 4 characters).
+  - Each check is signed with the confirmation. Migration `0135_payee_lock.sql`.
+
 ### Changed
 
 - Public payee, supplier, payment, receipt and statement pages share the landing's visual system: readable paper

@@ -42,6 +42,7 @@ import { simulatesPayments } from "@/lib/capability-read";
 import { plural } from "@/lib/copy";
 import { listCounterparties, stats } from "@/lib/queries";
 import { readShadowMode } from "@/lib/shadow-mode";
+import { lookalikes, PAYEE_LOCK_OFF, readPayeeLock } from "@/lib/payee-lock";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
 
@@ -83,6 +84,17 @@ export default async function CounterpartiesPage({
         return null;
       }),
     ]);
+    // The payee lock (payee lock PL2), for the confirm form, best effort; and the payees whose address is another's, or
+    // made to look like it (PL6), compared on the chain each is paid on.
+    const payeeLock = canConfirm
+      ? await readPayeeLock(db()).catch((error: unknown) => {
+          console.error("counterparties: payee lock not read", error instanceof Error ? error.message : error);
+          return PAYEE_LOCK_OFF;
+        })
+      : PAYEE_LOCK_OFF;
+    const alike = lookalikes(
+      counterparties.map((counterparty) => ({ id: counterparty.id, name: counterparty.name, address: counterparty.address, chain: counterparty.chain ?? homeChain(network).id }))
+    );
     // Only those who may send a payee link see which ones are out.
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
     // The payees with no address of their own to ask at once (ask every payee A1, A2).
@@ -248,6 +260,8 @@ export default async function CounterpartiesPage({
                         }
                         canWrite={canWrite}
                         canConfirm={canConfirm}
+                        payeeLockOn={payeeLock.on}
+                        lookalikes={alike.get(counterparty.id) ?? []}
                       />
                       {bankPayoutsOn && counterparty.role === "vendor" && (
                         <CounterpartyBankAccount

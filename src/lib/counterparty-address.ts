@@ -1,9 +1,13 @@
 import { CHECKSUM_MISMATCH, addressProblem, ARC_ADDRESS, NOT_AN_ARC_ADDRESS } from "./address-checksum";
+import { approversBesides } from "./approval-policy";
 import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { appendLedgerEntry } from "./ledger";
+import { addressGiver } from "./new-payee";
+import { loadNewPayeeFacts, newPayeeCheckFor } from "./new-payee-facts";
 import { homeChain } from "./payee-chains";
+import { lookalikes, readPayeeLock, type Verification } from "./payee-lock";
 import { workspaceNetwork } from "./workspace-network";
 
 /**
@@ -32,7 +36,17 @@ import { workspaceNetwork } from "./workspace-network";
 /** An Arc (EVM) address: 0x and 40 hex characters (./address-checksum, shared with the console's forms). */
 export { ARC_ADDRESS };
 
-export type CounterpartyAddressErrorCode = "invalid" | "checksum" | "unchanged" | "conflict" | "not_found" | "stale";
+export type CounterpartyAddressErrorCode =
+  | "invalid"
+  | "checksum"
+  | "unchanged"
+  | "conflict"
+  | "not_found"
+  | "stale"
+  // The payee lock's (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL2–PL4).
+  | "verification_required"
+  | "giver_confirms"
+  | "lock_requires_confirm";
 
 const MESSAGES: Record<CounterpartyAddressErrorCode, string> = {
   invalid: NOT_AN_ARC_ADDRESS,
@@ -42,6 +56,9 @@ const MESSAGES: Record<CounterpartyAddressErrorCode, string> = {
   conflict: "Someone else changed this address a moment ago.",
   not_found: "Counterparty not found.",
   stale: "This counterparty's address changed after this page loaded. Check the new address and try again.",
+  verification_required: "Record how you checked this address: the payee lock needs it.",
+  giver_confirms: "You entered or asked for this address, so someone else confirms it.",
+  lock_requires_confirm: "Confirm this address on Counterparties first, and record how you checked it.",
 };
 
 export class CounterpartyAddressError extends Error {
@@ -205,6 +222,13 @@ export async function changeCounterpartyAddress(
  * counterparty's, or another change landed between the read and the write.
  * `shownChain`, when the page showed the chain beside the address (payee invoice
  * link P3), must be the counterparty's chain too; none is the workspace's own.
+ *
+ * `verification` is the person's record of how they checked the address (payee lock PL2), signed with the confirmation.
+ * With the workspace's payee lock on: a confirmation needs it, and a call or a message one names its contact and says it
+ * was on file before the address arrived (`verification_required`); whoever entered or asked for the address may not
+ * confirm it while another member may (`giver_confirms`, PL3), and if no one else may, it is recorded as a solo
+ * confirmation; and approving a payment no longer confirms its address (`lock_requires_confirm`, PL4). Lookalike
+ * addresses are recorded with it, lock or not (PL6).
  */
 export async function confirmCounterpartyAddress(input: {
   actorId: string;
@@ -212,6 +236,7 @@ export async function confirmCounterpartyAddress(input: {
   shownAddress: string;
   shownChain?: string;
   via: "approval" | "confirm";
+  verification?: Verification | null;
 }): Promise<boolean> {
   const current = await loadCounterparty(input.counterpartyId);
   const shown = input.shownAddress.trim();
@@ -220,6 +245,30 @@ export async function confirmCounterpartyAddress(input: {
     throw new CounterpartyAddressError("stale");
   }
   if (!addressUnconfirmed(current.address_changed_at, current.address_confirmed_at)) return false;
+
+  // The payee lock (PL2–PL4), read before anything is written; a lock that cannot be read refuses the confirmation.
+  const lock = await readPayeeLock(db());
+  const verification = input.verification ?? null;
+  let soloConfirmation = false;
+  let byGiver = false;
+  if (lock.on) {
+    if (input.via === "approval") throw new CounterpartyAddressError("lock_requires_confirm");
+    if (!meetsLock(verification)) throw new CounterpartyAddressError("verification_required");
+    // Whoever entered the address or asked the payee for it: another member confirms it, unless no one else may.
+    const giver = await giverOf(current);
+    if (giver !== null && giver === input.actorId) {
+      if ((await approversBesides([giver])) > 0) throw new CounterpartyAddressError("giver_confirms");
+      soloConfirmation = true;
+    }
+  } else if (input.via === "confirm") {
+    // Recorded, not refused, with the lock off: best effort, since nothing waits on it.
+    try {
+      byGiver = (await giverOf(current)) === input.actorId;
+    } catch (error) {
+      console.error("address confirmation: giver not read", current.id, error instanceof Error ? error.message : error);
+    }
+  }
+  const alike = await lookalikesOf(current);
 
   // Never earlier than the change it confirms, even if this server's clock runs behind the one that stamped the change.
   const confirmedAt = new Date(Math.max(Date.now(), Date.parse(current.address_changed_at as string) + 1)).toISOString();
@@ -237,7 +286,18 @@ export async function confirmCounterpartyAddress(input: {
       domain: "compliance",
       action: "counterparty_address_confirmed",
       summary: `Confirmed ${current.name}'s new payment address`,
-      detail: { by: input.actorId, counterpartyId: current.id, address: current.address, chain: current.chain ?? homeChain(workspaceNetwork().id).id, via: input.via },
+      detail: {
+        by: input.actorId,
+        counterpartyId: current.id,
+        address: current.address,
+        chain: current.chain ?? homeChain(workspaceNetwork().id).id,
+        via: input.via,
+        ...(verification ? { verification } : {}),
+        ...(lock.on ? { payeeLock: { coolingHours: lock.coolingHours } } : {}),
+        ...(soloConfirmation ? { soloConfirmation: true } : {}),
+        ...(byGiver ? { byGiver: true } : {}),
+        ...(alike.length > 0 ? { lookalikeOf: alike } : {}),
+      },
     });
   } catch (error) {
     const undone = await db()
@@ -251,4 +311,40 @@ export async function confirmCounterpartyAddress(input: {
     throw error;
   }
   return true;
+}
+
+/** Whether a record of how an address was checked is enough for the payee lock (PL2). */
+function meetsLock(verification: Verification | null): boolean {
+  if (!verification) return false;
+  if (verification.method === "call" || verification.method === "message") return Boolean(verification.contact) && verification.contactOnFileBefore;
+  if (verification.method === "other") return Boolean(verification.note);
+  return true;
+}
+
+/** The member who answers for the counterparty's address: who typed it, or who asked the payee for it (new payee check N4). */
+async function giverOf(current: AddressRow): Promise<string | null> {
+  const facts = await loadNewPayeeFacts(db(), [current.id]);
+  return addressGiver(newPayeeCheckFor(facts, { id: current.id, address: current.address }));
+}
+
+/**
+ * The other counterparties whose address is this one, or made to look like it (PL6), by id. Best effort: a read that
+ * fails records none, since a lookalike never refuses anything.
+ */
+async function lookalikesOf(current: AddressRow): Promise<string[]> {
+  if (!current.address) return [];
+  try {
+    const home = homeChain(workspaceNetwork().id).id;
+    const rows = unwrap(await db().from("counterparties").select("id, name, address, chain")) as Array<{
+      id: string;
+      name: string;
+      address: string | null;
+      chain?: string | null;
+    }>;
+    const found = lookalikes(rows.map((row) => ({ id: row.id, name: row.name, address: row.address, chain: row.chain ?? home })));
+    return (found.get(current.id) ?? []).map((match) => match.id);
+  } catch (error) {
+    console.error("address confirmation: lookalikes not read", current.id, error instanceof Error ? error.message : error);
+    return [];
+  }
 }
