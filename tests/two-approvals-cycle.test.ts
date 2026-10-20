@@ -10,6 +10,9 @@ import { describe, expect, it } from "vitest";
  */
 
 const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
+// The facts of each frozen payable's decision, which the follow-up stage reads through `payableDecisionFacts`.
+const decisionFactsAt = source.indexOf("export function payableDecisionFacts(");
+const decisionFacts = source.slice(decisionFactsAt, source.indexOf("\n}\n", decisionFactsAt));
 
 describe("the contractor stage and two approvals", () => {
   const contractors = source.slice(source.indexOf('await stage("contractors"'), source.indexOf('await stage("treasury"'));
@@ -44,7 +47,7 @@ describe("the follow-up and a payment held for two approvals", () => {
   const followUp = source.slice(source.indexOf("const frozenRows = unwrap("), source.indexOf("followUpHeldMilestones(db, budget)"));
 
   it("knows which decisions held a payable for two approvals, at what value, and reads the figure only then", () => {
-    expect(followUp).toContain("heldForTwoApprovals: twoApprovalsHeldValue(entry),");
+    expect(decisionFacts).toContain("heldForTwoApprovals: twoApprovalsHeldValue(entry),");
     expect(followUp).toContain("const twoApprovalsNow = twoApprovalsHeldIds.length > 0 ? await readTwoApprovalsAbove(db) : undefined;");
     expect(followUp).toContain("...(twoApprovalsNow !== undefined ? { twoApprovalsAbove: twoApprovalsNow } : {}),");
   });

@@ -10,6 +10,9 @@ import { describe, expect, it } from "vitest";
  */
 
 const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
+// The facts of each frozen payable's decision, which the follow-up stage reads through `payableDecisionFacts`.
+const decisionFactsAt = source.indexOf("export function payableDecisionFacts(");
+const decisionFacts = source.slice(decisionFactsAt, source.indexOf("\n}\n", decisionFactsAt));
 
 describe("the cycle and the three-way match", () => {
   it("reads whether a purchase order is needed with every counterparty the AP stage pays", () => {
@@ -27,7 +30,7 @@ describe("the cycle and the three-way match", () => {
     // decision's facts carry the setting it was taken under, absent for a decision recorded before the setting existed.
     const followUp = source.slice(source.indexOf("const frozenRows = unwrap("), source.indexOf("followUpHeldMilestones(db, budget)"));
     expect(followUp).toMatch(/counterparties\([^)]*purchase_order_required[^)]*\)/);
-    expect(followUp).toContain('purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,');
+    expect(decisionFacts).toContain('purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,');
     expect(followUp).toContain("purchaseOrderRequired: row.counterparties.purchase_order_required,");
   });
 });

@@ -12,6 +12,9 @@ import { describe, expect, it } from "vitest";
  */
 
 const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
+// The facts of each frozen payable's decision, which the follow-up stage reads through `payableDecisionFacts`.
+const decisionFactsAt = source.indexOf("export function payableDecisionFacts(");
+const decisionFacts = source.slice(decisionFactsAt, source.indexOf("\n}\n", decisionFactsAt));
 
 describe("the cycle and an unconfirmed address", () => {
   it("reads both address timestamps with every counterparty it pays", () => {
@@ -31,7 +34,8 @@ describe("the cycle and an unconfirmed address", () => {
     // timestamps, and each decision's facts carry whether the address waited for a person when it was taken.
     const followUp = source.slice(source.indexOf("const frozenRows = unwrap("), source.indexOf("followUpHeldMilestones(db, budget)"));
     expect(followUp).toContain("counterparties(risk_level, payment_limit, address, address_changed_at, address_confirmed_at");
-    expect(followUp).toContain("addressUnconfirmed: observed.addressUnconfirmed === true,");
+    expect(followUp).toContain("const factsByInvoice = payableDecisionFacts(priorEntries);");
+    expect(decisionFacts).toContain("addressUnconfirmed: observed.addressUnconfirmed === true,");
     expect(followUp).toContain("addressUnconfirmed: addressUnconfirmed(row.counterparties.address_changed_at, row.counterparties.address_confirmed_at),");
   });
 

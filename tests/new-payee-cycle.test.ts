@@ -18,6 +18,9 @@ import { fakeSupabase } from "./support/fake-supabase";
  */
 
 const source = readFileSync(path.join(process.cwd(), "src", "lib", "agent", "orchestrator.ts"), "utf8");
+// The facts of each frozen payable's decision, which the follow-up stage reads through `payableDecisionFacts`.
+const decisionFactsAt = source.indexOf("export function payableDecisionFacts(");
+const decisionFacts = source.slice(decisionFactsAt, source.indexOf("\n}\n", decisionFactsAt));
 
 describe("the cycle and the first payment to a new payee", () => {
   it("gives the AP stage the check wherever payments are real", () => {
@@ -57,7 +60,7 @@ describe("the follow-up and a payable held as a new payee (new payee check N7)",
 
   it("reads the payee's address with each frozen payable, and which decisions held it as a new payee", () => {
     expect(followUp).toMatch(/"id, status, amount, currency, due_date, decided_at, escalated_at, po_reference, goods_received, counterparty_id, counterparties\([^)]*address,/);
-    expect(followUp).toContain('newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",');
+    expect(decisionFacts).toContain('newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",');
   });
 
   it("asks who stands behind those addresses now, wherever payments are real, and hands it to the plan", () => {

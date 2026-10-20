@@ -3428,6 +3428,56 @@ function heldForCashFacts(
   return Number.isFinite(amountDue) && amountDue > 0 && targetOn ? { ...facts, amountDue, targetOn } : facts;
 }
 
+/**
+ * The facts each frozen payable's latest decision rested on, by invoice id, for the follow-up stage to compare with the
+ * payable as it is now. `entries` are the payables' AP ledger entries, newest first; the facts are the newest entry's
+ * that recorded `observed`. Exported to be tested without a full cycle.
+ */
+export function payableDecisionFacts(entries: Array<{ seq: number; action: string; detail: Record<string, unknown> }>): Map<string, DecisionFacts> {
+  const factsByInvoice = new Map<string, DecisionFacts>();
+  for (const entry of entries) {
+    const invoiceId = entry.detail.invoiceId as string | undefined;
+    const observed = entry.detail.observed as Record<string, unknown> | undefined;
+    if (!invoiceId || !observed || factsByInvoice.has(invoiceId)) continue;
+    const execution = entry.detail.execution as Record<string, unknown> | undefined;
+    factsByInvoice.set(invoiceId, {
+      poReference: (observed.poReference as string | null) ?? null,
+      goodsReceived: observed.goodsReceived === true,
+      riskLevel: String(observed.riskLevel ?? "unscreened"),
+      paymentLimit: observed.paymentLimit == null ? null : num(observed.paymentLimit),
+      // Held only for the spending limit: the USDC it was weighed at (R6).
+      heldForBudgetUsdc:
+        execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
+      // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4), and its own amount and
+      // day, so what falls due before it is measured again now (cash ahead, review of #418).
+      heldForCash:
+        execution?.heldBecause === HELD_FOR_CASH
+          ? heldForCashFacts(execution, (entry.detail.cashPriority as Record<string, unknown> | undefined)?.waits === true ? undefined : entry.detail.timing)
+          : null,
+      // Held in shadow mode for a person to agree: only a person ends it (shadow mode S2).
+      heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
+      // Decided while the counterparty's new address waited for a person: once confirmed, it is decided again.
+      addressUnconfirmed: observed.addressUnconfirmed === true,
+      // Decided with no address to pay: once one is added and confirmed, it is decided again.
+      addressMissing: observed.addressMissing === true,
+      // Decided while the counterparty needed a purchase order: once paid without them, decided again (three-way
+      // match design M5). Absent for a decision recorded before the setting, when every counterparty needed one.
+      purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,
+      // Held for a EURC rate, a swap, the swap's cost or the value at the rate: a fresh quote may clear it (F1).
+      fxHold: fxHoldOf({ seq: entry.seq, detail: entry.detail }),
+      // Held as the first payment to an address one party alone stood behind (new payee check N7).
+      newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
+      // Held for the payee lock's wait after an address change (payee lock PL5): decided again once it has passed.
+      coolingOffHeld: entry.detail.guardrailRule === "counterparty.cooling_off",
+      // Held for two approvals: the value and the figure it was weighed at (two approvals T3).
+      heldForTwoApprovals: twoApprovalsHeldValue(entry),
+      // Held for its project's budget: the project and what it needed (project budgets P6).
+      heldForProject: heldForProjectFacts(entry.detail),
+    });
+  }
+  return factsByInvoice;
+}
+
 /** What the operating wallet and the reserve hold now, as the cycle's reconcile left them. */
 async function cashNow(db: OrgDb): Promise<{ operating: number; reserve: number }> {
   const rows = unwrap(await db.from("accounts").select("kind, balance").in("kind", ["operating", "reserve"])) as Array<{ kind: string; balance: string }>;
@@ -3810,47 +3860,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       else entriesByInvoice.set(invoiceId, [entry]);
     }
 
-    const factsByInvoice = new Map<string, DecisionFacts>();
-    for (const entry of priorEntries) {
-      const invoiceId = entry.detail.invoiceId as string | undefined;
-      const observed = entry.detail.observed as Record<string, unknown> | undefined;
-      if (!invoiceId || !observed || factsByInvoice.has(invoiceId)) continue;
-      const execution = entry.detail.execution as Record<string, unknown> | undefined;
-      factsByInvoice.set(invoiceId, {
-        poReference: (observed.poReference as string | null) ?? null,
-        goodsReceived: observed.goodsReceived === true,
-        riskLevel: String(observed.riskLevel ?? "unscreened"),
-        paymentLimit: observed.paymentLimit == null ? null : num(observed.paymentLimit),
-        // Held only for the spending limit: the USDC it was weighed at (R6).
-        heldForBudgetUsdc:
-          execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
-        // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4), and its own amount and
-        // day, so what falls due before it is measured again now (cash ahead, review of #418).
-        heldForCash:
-          execution?.heldBecause === HELD_FOR_CASH
-            ? heldForCashFacts(execution, (entry.detail.cashPriority as Record<string, unknown> | undefined)?.waits === true ? undefined : entry.detail.timing)
-            : null,
-        // Held in shadow mode for a person to agree: only a person ends it (shadow mode S2).
-        heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
-        // Decided while the counterparty's new address waited for a person: once confirmed, it is decided again.
-        addressUnconfirmed: observed.addressUnconfirmed === true,
-        // Decided with no address to pay: once one is added and confirmed, it is decided again.
-        addressMissing: observed.addressMissing === true,
-        // Decided while the counterparty needed a purchase order: once paid without them, decided again (three-way
-        // match design M5). Absent for a decision recorded before the setting, when every counterparty needed one.
-        purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,
-        // Held for a EURC rate, a swap, the swap's cost or the value at the rate: a fresh quote may clear it (F1).
-        fxHold: fxHoldOf({ seq: entry.seq, detail: entry.detail }),
-        // Held as the first payment to an address one party alone stood behind (new payee check N7).
-        newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
-        // Held for the payee lock's wait after an address change (payee lock PL5): decided again once it has passed.
-        coolingOffHeld: entry.detail.guardrailRule === "counterparty.cooling_off",
-        // Held for two approvals: the value and the figure it was weighed at (two approvals T3).
-        heldForTwoApprovals: twoApprovalsHeldValue(entry),
-        // Held for its project's budget: the project and what it needed (project budgets P6).
-        heldForProject: heldForProjectFacts(entry.detail),
-      });
-    }
+    const factsByInvoice = payableDecisionFacts(priorEntries);
     // Each project's room now, read only when a payable waits on it (P6).
     const projectHeldIds = frozenRows.filter((row) => factsByInvoice.get(row.id)?.heldForProject).map((row) => row.id);
     const projectRooms = projectHeldIds.length > 0 ? await projectRoomsFor(db, "invoices", projectHeldIds) : undefined;
