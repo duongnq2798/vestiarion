@@ -134,6 +134,23 @@ describe("payableDecisionFacts — what a payment not sent again rests on", () =
     expect(factsOf([heldAgain, reopened, notResent("counterparty.cooling_off"), paid])).toMatchObject({ coolingOffHeld: false, addressUnconfirmed: true });
   });
 
+  it("leaves for a person, as before, one whose earlier send could not be looked up: Circle may still hold it", () => {
+    // A payout to another chain, asked for again only under its first key: to the new address, that would be refused.
+    const unlooked = notResent("counterparty.cooling_off");
+    unlooked.detail.earlierSendNotLookedUp = true;
+    const facts = factsOf([unlooked, paid]);
+    expect(facts).toMatchObject({ coolingOffHeld: false, addressUnconfirmed: false, newPayeeHeld: false });
+    expect(planFollowUp(held({ coolingOff: false }), facts, NOW, config).action).toBe("wait");
+  });
+
+  it("leaves for a person a payment agreed to in shadow mode, as only a person ends that (shadow mode S2)", () => {
+    const heldForVerdict: Entry = { seq: 8, action: "ap_hold", detail: { ...paid.detail, execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } } };
+    const agreed: Entry = { seq: 10, action: "invoice_approved", detail: { invoiceId: INVOICE } };
+    const facts = factsOf([notResent("counterparty.cooling_off"), agreed, heldForVerdict]);
+    expect(facts).toMatchObject({ coolingOffHeld: true, heldForVerdict: true });
+    expect(planFollowUp(held({ coolingOff: false }), facts, NOW, config).action).not.toBe("reopen");
+  });
+
   it("decides again, as before, a payment not sent again to a payee now screened high risk, whose risk moved since the decision", () => {
     const facts = factsOf([notResent("counterparty.high_risk"), paid]);
     expect(facts).toMatchObject({ riskLevel: "low", coolingOffHeld: false, addressUnconfirmed: false, newPayeeHeld: false });

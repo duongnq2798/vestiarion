@@ -706,8 +706,36 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(outcome.line.message).toBe("Acme Supplies: not resubmitted, the payee lock keeps the counterparty's changed address waiting (150 USDC)");
     const [append] = rpcBodies(fake.requests, "append_ledger_entry");
     expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.cooling_off", execution: { resultingStatus: "held" } });
+    expect(append.p_detail).not.toHaveProperty("earlierSendNotLookedUp");
     // The follow-up reads it as held for the wait, and decides it again once the wait has ended.
     expect(followUpFactsAfter(append)).toMatchObject({ coolingOffHeld: true, addressUnconfirmed: false });
+  });
+
+  it("says so when the earlier send was a payout to another chain that could not be looked up, which a person then checks", async () => {
+    settleMock.mockResolvedValue({ answer: "undecided", retryAt: null, unlookable: true });
+    const changed = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: changed, address_confirmed_at: changed } };
+      }
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileApInvoice(
+        { ...invoice, txRef: null, destinationChain: "BASE-SEPOLIA" },
+        { providerTxId: null, status: "submitting" },
+        { db: db(), provider, operating: { id: ACCOUNT_ID }, payeeLock: { on: true, coolingHours: 24 } }
+      )
+    );
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.cooling_off", earlierSendNotLookedUp: true });
+    // Circle may hold that transfer, and asking for it again at the new address would be refused: the follow-up leaves
+    // it for a person, as before.
+    expect(followUpFactsAfter(append)).toMatchObject({ coolingOffHeld: false, addressUnconfirmed: false, newPayeeHeld: false });
   });
 
   it("resubmits through payInvoice when the counterparty is not high risk and the agent is not paused", async () => {

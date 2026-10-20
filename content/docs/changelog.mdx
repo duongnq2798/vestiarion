@@ -4,6 +4,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 - A payable whose `ap_reconcile` entry carries `notResubmittedBecause` `"counterparty.cooling_off"`, `"counterparty.address_unconfirmed"` or `"counterparty.new_payee"` is no longer held until a person acts. Once the payee lock's wait ends, someone confirms the address, or a second person stands behind it, the follow-up reopens it: an `invoice_reopened` entry follows, with `followUp.changes` reading "the payee lock's wait for the new address has ended", "the counterparty's new address has since been confirmed" or "a second person now stands behind the payee's address", then a new decision (`ap_pay` and the other `ap_*` actions). A webhook endpoint receives each as `ledger.appended`.
 - The payment the new decision makes is sent under the same payment key as the send that never reached Circle, so it is paid once.
+- Such an `ap_reconcile` entry can now carry `earlierSendNotLookedUp: true`: the earlier send was a payout to another chain, which cannot be looked up, so Circle may still hold it. That payable still waits for a person, as do payables agreed to in shadow mode.
 - Nothing in `/api/v1` request bodies or the webhooks' shapes changes.
 
 ## 2026-10-21: A cycle when a payee lock's wait ends, and when the schedule missed a workspace

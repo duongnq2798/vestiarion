@@ -712,17 +712,19 @@ async function twoApprovalsResendBlocker(
  * - `sent`: Circle has it, now recorded; it is reconciled as any transfer that exists. So is one another lookup recorded
  *   since the stage read it, such as a lost batch's other member, found while looking for the first.
  * - `not_sent`: Circle never took it, now recorded; only then is it weighed as a new send. So is a payout to another
- *   chain, which cannot be looked up this way and is asked for again under its own key, which Circle takes only once.
+ *   chain, which cannot be looked up this way and is asked for again under its own key, which Circle takes only once
+ *   (`unlookable`: Circle may still hold it).
  * - `waiting`: Circle has not listed it yet, could not be asked, or another request is settling it right now. Nothing is
  *   written, and it is looked for again next cycle.
  */
 async function earlierSend(
   source: { type: PaymentSourceType; id: string },
   deps: { provider: ChainProvider; operating: { id: string } }
-): Promise<{ answer: "sent" | "not_sent" } | { answer: "waiting"; reason: string }> {
+): Promise<{ answer: "sent" } | { answer: "not_sent"; unlookable?: true } | { answer: "waiting"; reason: string }> {
   const looked = await settleUnknownSend(source, { provider: deps.provider, fromAccountId: deps.operating.id });
   if (looked.answer === "found" || (looked.answer === "known" && looked.recorded)) return { answer: "sent" };
-  if (looked.answer === "not_sent" || (looked.answer === "undecided" && looked.unlookable)) return { answer: "not_sent" };
+  if (looked.answer === "not_sent") return { answer: "not_sent" };
+  if (looked.answer === "undecided" && looked.unlookable) return { answer: "not_sent", unlookable: true };
   if (looked.answer === "known" || (looked.answer === "undecided" && looked.settling)) {
     return { answer: "waiting", reason: "another request is settling this payment's send right now; it is reconciled next cycle" };
   }
@@ -1109,6 +1111,9 @@ export async function reconcileApInvoice(
       reconciled: true,
       previousStatus: "matched",
       ...(notResubmitted ? { notResubmittedBecause: notResubmitted } : {}),
+      // Its earlier send, a payout to another chain, could not be looked up, so Circle may still hold it: a person
+      // checks it before it is paid, and the follow-up does not decide it again on its own (payableDecisionFacts).
+      ...(notResubmitted && earlier?.answer === "not_sent" && earlier.unlookable ? { earlierSendNotLookedUp: true } : {}),
       ...newPayeeHoldDetail(notResubmitted === "counterparty.new_payee" ? newPayeeHeld : null),
       execution: {
         txRef,
@@ -3439,18 +3444,19 @@ function heldForCashFacts(
  * whatever held the decision before it no longer does: the payment was sent after it. When such an entry is newer than
  * the decision, the payable keeps the facts the decision rested on, but only the reason it was not sent again holds
  * it. So the follow-up decides it again once that ends: the payee lock's wait (payee lock PL5), a person's
- * confirmation of the address, or a second person behind it (new payee check N7).
+ * confirmation of the address, or a second person behind it (new payee check N7). Not when its earlier send could not
+ * be looked up (`earlierSendNotLookedUp`): Circle may still hold that transfer, so a person checks it first, as before.
  */
 export function payableDecisionFacts(entries: Array<{ seq: number; action: string; detail: Record<string, unknown> }>): Map<string, DecisionFacts> {
   const factsByInvoice = new Map<string, DecisionFacts>();
-  // The reason a payment was not sent again, by invoice id, when no decision came after it.
-  const notResent = new Map<string, string>();
+  // Why a payment was not sent again, by invoice id, when no decision came after it; null when a person checks it.
+  const notResent = new Map<string, string | null>();
   for (const entry of entries) {
     const invoiceId = entry.detail.invoiceId as string | undefined;
     if (!invoiceId || factsByInvoice.has(invoiceId)) continue;
     const reason = entry.action === "ap_reconcile" ? entry.detail.notResubmittedBecause : undefined;
     if (typeof reason === "string") {
-      if (!notResent.has(invoiceId)) notResent.set(invoiceId, reason);
+      if (!notResent.has(invoiceId)) notResent.set(invoiceId, entry.detail.earlierSendNotLookedUp === true ? null : reason);
       continue;
     }
     const observed = entry.detail.observed as Record<string, unknown> | undefined;
@@ -3490,17 +3496,18 @@ export function payableDecisionFacts(entries: Array<{ seq: number; action: strin
       // Held for its project's budget: the project and what it needed (project budgets P6).
       heldForProject: heldForProjectFacts(entry.detail),
     };
-    const notResentBecause = notResent.get(invoiceId);
-    factsByInvoice.set(invoiceId, notResentBecause ? notResentFacts(decided, notResentBecause) : decided);
+    factsByInvoice.set(invoiceId, notResent.has(invoiceId) ? notResentFacts(decided, notResent.get(invoiceId) ?? null) : decided);
   }
   return factsByInvoice;
 }
 
 /**
  * The facts of a payment not sent again: its decision's, with what held the decision dropped, since the payment was
- * sent after it, and what holds it now taken from the reason it was not sent again.
+ * sent after it, and what holds it now taken from the reason it was not sent again (none the follow-up watches when
+ * `reason` is null). A payment agreed to in shadow mode stays for a person, as only a person ends that (shadow mode
+ * S2).
  */
-function notResentFacts(decided: DecisionFacts, reason: string): DecisionFacts {
+function notResentFacts(decided: DecisionFacts, reason: string | null): DecisionFacts {
   return {
     poReference: decided.poReference,
     goodsReceived: decided.goodsReceived,
@@ -3513,7 +3520,7 @@ function notResentFacts(decided: DecisionFacts, reason: string): DecisionFacts {
     newPayeeHeld: reason === "counterparty.new_payee",
     heldForBudgetUsdc: null,
     heldForCash: null,
-    heldForVerdict: false,
+    heldForVerdict: decided.heldForVerdict,
     fxHold: null,
     heldForTwoApprovals: null,
     heldForProject: null,

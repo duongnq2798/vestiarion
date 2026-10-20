@@ -209,5 +209,20 @@ describe("fxRecheckCandidates: which held payables a re-check asks about (F3, F5
     ]);
     expect(fxRecheckCandidates(rows, byInvoice, at, 5)).toEqual([]);
   });
+
+  it("skips one a person paid since, whose payment the reconcile then held rather than send again", () => {
+    // Held for FX, approved and paid by a person, its send lost, and not sent again inside the payee lock's wait.
+    const notResent = {
+      seq: 16,
+      ts: "2026-10-05T01:40:00.000Z",
+      action: "ap_reconcile",
+      detail: { reconciled: true, notResubmittedBecause: "counterparty.cooling_off", execution: { resultingStatus: "held" } },
+    };
+    const approved = { ts: "2026-10-05T01:20:00.000Z", action: "invoice_approved", detail: {} };
+    expect(fxRecheckCandidates([held("a", "2026-10-05T01:00:00.000Z")], new Map([["a", entries(15, [notResent, approved])]]), at, 5)).toEqual([]);
+    // A reconcile that held it for another cause, such as a transfer Circle reported failed, leaves the decision's hold.
+    const failed = { ...notResent, detail: { reconciled: true, execution: { resultingStatus: "held" } } };
+    expect(fxRecheckCandidates([held("a", "2026-10-05T01:00:00.000Z")], new Map([["a", entries(15, [failed])]]), at, 5)).toHaveLength(1);
+  });
 });
 

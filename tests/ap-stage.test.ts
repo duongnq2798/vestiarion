@@ -2010,13 +2010,14 @@ describe("the AP stage and a payable reopened after a payment not sent again", (
       book: [payable({ ...dueToday, decided_at: "2026-10-20T08:00:00+00:00", counterparties: counterparty(changed) })],
       payeeLock: { on: true, hours: 24 },
     });
-    const row = world.intents.insert({ source_type: "invoice", source_id: INVOICE_ID, idempotency_key: KEY, provider: "circle", provider_mode: "live", amount: 400, destination: "0xnorth" });
+    // The first send went to Northwind's old address, before it changed.
+    const row = world.intents.insert({ source_type: "invoice", source_id: INVOICE_ID, idempotency_key: KEY, provider: "circle", provider_mode: "live", amount: 400, destination: "0xnorth-old" });
     Object.assign(row, { status: "failed", attempt_count: 1, last_error: NO_EARLIER_SEND, updated_at: "2026-10-20T08:00:05.000Z" });
     return { ...world, row };
   }
   const payNow = () => model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
 
-  it("pays it once the wait has ended, on the same intent and under the payment's own key, which Circle takes only once", async () => {
+  it("pays it once the wait has ended, to the confirmed address, on the same intent and under the payment's own key", async () => {
     today("2026-10-21T10:00:00.000Z");
     payNow();
     const { chain, row, intents, stage } = reopened();
@@ -2026,7 +2027,8 @@ describe("the AP stage and a payable reopened after a payment not sent again", (
     expect(chain.transfers).toHaveLength(1);
     expect(chain.transfers[0]).toMatchObject({ amount: 400, toAddress: "0xnorth", idempotencyKey: KEY });
     expect(intents.rows).toHaveLength(1);
-    expect(row).toMatchObject({ idempotency_key: KEY, transfer_attempt: 1, status: "confirmed", provider_tx_id: "circle-tx-1" });
+    // The new address is recorded on the intent before the send, so the transfer is confirmed where it went.
+    expect(row).toMatchObject({ idempotency_key: KEY, transfer_attempt: 1, destination: "0xnorth", status: "confirmed", provider_tx_id: "circle-tx-1" });
   });
 
   it("sends nothing more when it is decided again after that", async () => {
@@ -2050,7 +2052,7 @@ describe("the AP stage and a payable reopened after a payment not sent again", (
     await stage();
 
     expect(chain.transfers).toEqual([]);
-    expect(row).toMatchObject({ status: "failed", last_error: NO_EARLIER_SEND, provider_tx_id: null });
+    expect(row).toMatchObject({ status: "failed", last_error: NO_EARLIER_SEND, provider_tx_id: null, destination: "0xnorth-old" });
     expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "counterparty.cooling_off", execution: { resultingStatus: "held" } });
   });
 });

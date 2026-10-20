@@ -95,6 +95,10 @@ Confirm address opens a form instead of a yes/no:
   (`notResubmittedBecause: "counterparty.address_unconfirmed"`), and for a first payment to an address one person
   alone stood behind, once a second person does (`"counterparty.new_payee"`). Decided again, it is paid on its
   payment intent, under the payment's own key, so it is never paid twice.
+- Two such payables still wait for a person:
+  - a payout to another chain whose earlier send could not be looked up (`earlierSendNotLookedUp: true`). Circle may
+    still hold that send, and asking for it again under its key at the new address would be refused;
+  - one agreed to in shadow mode, since only a person ends that hold.
 
 **PL6. Lookalike addresses.**
 - Two addresses look alike when they differ but share the first 6 and the last 4 hex digits after `0x`, the pattern

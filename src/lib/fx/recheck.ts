@@ -152,10 +152,14 @@ export function lastFxReopenAt(entries: ReadonlyArray<{ ts: string; action: stri
 /** An invoice's ledger entries as a re-check reads them, newest first. */
 export type RecheckEntry = { seq?: number; ts: string; action: string; detail: Record<string, unknown> };
 
+/** A reconcile that held a payment rather than send it again. */
+const notResubmitted = (entry: RecheckEntry) => entry.action === "ap_reconcile" && typeof entry.detail.notResubmittedBecause === "string";
+
 /**
  * The held EURC payables a re-check asks about (F3, F5, F9): each still `held`, held for FX by its latest decision (the
  * newest entry recording `observed`), and not reopened for FX within the last 30 minutes; the oldest decided first, at
- * most `max`.
+ * most `max`. A payment the reconcile did not send again since that decision (`notResubmittedBecause`) is held for that
+ * reason, never for FX: the follow-up reads it the same way (`payableDecisionFacts`).
  */
 export function fxRecheckCandidates(
   rows: ReadonlyArray<{ id: string; status: string; decidedAt: string | null }>,
@@ -167,8 +171,8 @@ export function fxRecheckCandidates(
   for (const row of rows) {
     if (row.status !== "held") continue;
     const entries = entriesByInvoice.get(row.id) ?? [];
-    const latest = entries.find((entry) => entry.detail.observed !== undefined && typeof entry.seq === "number");
-    if (!latest) continue;
+    const latest = entries.find((entry) => (entry.detail.observed !== undefined || notResubmitted(entry)) && typeof entry.seq === "number");
+    if (!latest || notResubmitted(latest)) continue;
     const hold = fxHoldOf({ seq: latest.seq as number, detail: latest.detail });
     if (!hold || !fxRecheckDue(lastFxReopenAt(entries), now)) continue;
     candidates.push({ id: row.id, hold, decidedAt: row.decidedAt ?? "" });

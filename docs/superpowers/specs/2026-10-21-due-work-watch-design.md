@@ -64,6 +64,13 @@ same work.
 The watch then runs one cycle with the event `payee_lock_wait_ended`. The cycle's follow-up stage reopens the held
 payables (`coolingOff` turns false), and the contractor stage decides the milestones.
 
+That includes a payable whose first send lost Circle's answer and that the reconcile then did not send again inside the
+wait (`ap_reconcile` with `notResubmittedBecause: "counterparty.cooling_off"`). Its entry carries no `observed`, so the
+follow-up used to take the facts of the decision that sent it, which held nothing, and never reopened it.
+`payableDecisionFacts` now reads that entry as held for the wait (added after the watch first shipped; payee lock
+spec PL5). A payout to another chain whose earlier send could not be looked up (`earlierSendNotLookedUp`) still waits
+for a person, so the cycle the watch starts for it decides nothing.
+
 An unconfirmed address is left out: it cannot be paid yet, and confirming it starts a cycle of its own.
 
 **DW6. One cycle per workspace per run.**
@@ -92,10 +99,6 @@ An unconfirmed address is left out: it cannot be paid yet, and confirming it sta
   - the first cycle of the day makes or pays them;
   - DW4 covers a tick that missed.
 - No change to the tick's own period or to the event-driven cycles.
-- A payment whose first send lost Circle's answer, and that was then not sent again because of the wait
-  (`ap_reconcile` with `notResubmittedBecause: "counterparty.cooling_off"`), is not reopened when the wait ends. That
-  entry carries no `observed`, so the follow-up never marks it as held for the wait. This predates the watch and is
-  left to its own change.
 
 ## Tests
 
