@@ -51,6 +51,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **Pay early for a discount shows in a workspace with no reserve.** Bills & receivables could not read its early-payment
+  offers there, so the section never showed and each load logged an error. Such a workspace earns nothing by keeping
+  the cash, so each bill now suggests the 0.5% floor, and the line saying what it is worth names no reserve. No
+  migration.
 - **A payee link moves on as soon as the payee sends its address.** On a link that asks for the invoice, sending the
   address left the page on Step 1 with "Thanks. *business* will confirm your address before paying you." until the
   payee reloaded it, so a payee could think they were done and never send the invoice. The page now shows **Send
