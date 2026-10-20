@@ -13,11 +13,16 @@ const INITIAL: LoginState = { ok: false, message: "" };
 /**
  * The address stays in the field after sending, so a mistyped one is visible
  * next to the confirmation that names it.
+ *
+ * Until there is a message, its live region is visually hidden rather than
+ * removed: it stays in the page for a screen reader to announce the first one,
+ * and leaves no empty line under the button. In a flex column, a hidden region
+ * takes no gap either.
  */
 export default function LoginForm({ next }: { next: string }) {
   const { state, formProps } = useActionForm(signInWithEmail, INITIAL);
   return (
-    <form {...formProps} className="space-y-4">
+    <form {...formProps} className="flex flex-col gap-4">
       <input type="hidden" name="next" value={next} />
       <Field id="email" label="Work email">
         <Input name="email" type="email" autoComplete="email" required placeholder="name@company.com" />
@@ -25,7 +30,9 @@ export default function LoginForm({ next }: { next: string }) {
       <SubmitButton icon={<Mail />} pendingLabel="Sending…" className="w-full">
         Email me a sign-in link
       </SubmitButton>
-      <FormMessage tone={state.message ? (state.ok ? "success" : "error") : "neutral"}>{state.message}</FormMessage>
+      <FormMessage tone={state.message ? (state.ok ? "success" : "error") : "neutral"} className="empty:sr-only">
+        {state.message}
+      </FormMessage>
     </form>
   );
 }
