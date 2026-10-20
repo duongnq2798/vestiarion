@@ -10,7 +10,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm, type ActionResult } from "@/components/ui/useActionForm";
 import { withSuccessToast } from "@/components/withSuccessToast";
-import { COOLING_HOURS_CHOICES, type PayeeLock } from "@/lib/payee-lock";
+import { COOLING_HOURS_CHOICES, type PayeeLock } from "@/lib/payee-lock-rules";
 
 /**
  * The "Payee lock" section of Settings (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL1): whether a changed

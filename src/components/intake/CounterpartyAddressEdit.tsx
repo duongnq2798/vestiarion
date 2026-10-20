@@ -28,7 +28,7 @@ import {
   VERIFICATION_METHODS,
   VERIFICATION_NOTE_MAX,
   type Lookalike,
-} from "@/lib/payee-lock";
+} from "@/lib/payee-lock-rules";
 
 const INITIAL: IntakeActionResult = { ok: false, message: "" };
 const update = withSuccessToast(updateCounterpartyAddressAction);
