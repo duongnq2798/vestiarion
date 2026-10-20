@@ -72,13 +72,15 @@ function allow(role: "owner" | "admin" | "approver") {
   });
 }
 
-function run<T>(fn: () => Promise<T>, lock: { on: boolean; hours?: number } = { on: false }): Promise<T> {
+function run<T>(fn: () => Promise<T>, lock: { on: boolean; hours?: number; changedAt?: string } = { on: false }): Promise<T> {
   const fake = fakeSupabase((request) =>
     request.path === "/rest/v1/orgs"
       ? { body: { id: ORG, slug: "northstar", name: "Northstar", mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null } }
       : request.path === "/rest/v1/approval_policies"
         ? { body: lock.on ? [{ payee_lock: true, payee_lock_cooling_hours: lock.hours ?? 0 }] : [] }
-        : { body: [] }
+        : request.path === "/rest/v1/counterparties" && lock.changedAt
+          ? { body: { address_changed_at: lock.changedAt } }
+          : { body: [] }
   );
   return runWith({ config, db: fake.client, fetch: fake.fetch }, fn);
 }
@@ -208,6 +210,18 @@ describe("confirmCounterpartyAddressAction", () => {
     );
     expect(result).toEqual({ ok: false, message: "Use plain text, without links, and keep it short." });
     expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("says, inside the payee lock's wait, until when payments to the confirmed address still wait (PL5)", async () => {
+    allow("approver");
+    confirmMock.mockResolvedValueOnce(true);
+    const changedAt = new Date(Date.now() - 3_600_000).toISOString();
+    const result = await run(
+      () => confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS, method: "in_person" })),
+      { on: true, hours: 24, changedAt }
+    );
+    expect(result.ok).toBe(true);
+    expect(result.message).toMatch(/^Address confirmed\. The payee lock keeps payments to it waiting until .+ UTC\.$/);
   });
 
   it("says what the payee lock refused, in its own words", async () => {
