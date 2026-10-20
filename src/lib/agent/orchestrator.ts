@@ -882,7 +882,9 @@ function withNote(reasoning: string | null, note: string): string {
  * applied as of now — records its own.
  * The ledger entry is `ap_reconcile` — `detail.reconciled: true`, or `false`
  * with `reconcileError` when it did not complete — and no `observed` facts,
- * so the follow-up stage keeps comparing against the decision itself.
+ * so the follow-up stage keeps comparing against the decision itself. A
+ * payable held with `notResubmittedBecause` is held, for the follow-up, for
+ * that reason alone (`payableDecisionFacts`), and decided again once it ends.
  */
 export async function reconcileApInvoice(
   invoice: {
@@ -3432,15 +3434,29 @@ function heldForCashFacts(
  * The facts each frozen payable's latest decision rested on, by invoice id, for the follow-up stage to compare with the
  * payable as it is now. `entries` are the payables' AP ledger entries, newest first; the facts are the newest entry's
  * that recorded `observed`. Exported to be tested without a full cycle.
+ *
+ * A payment the reconcile did not send again (`ap_reconcile` with `notResubmittedBecause`) records no `observed`, and
+ * whatever held the decision before it no longer does: the payment was sent after it. When such an entry is newer than
+ * the decision, the payable keeps the facts the decision rested on, but only the reason it was not sent again holds
+ * it. So the follow-up decides it again once that ends: the payee lock's wait (payee lock PL5), a person's
+ * confirmation of the address, or a second person behind it (new payee check N7).
  */
 export function payableDecisionFacts(entries: Array<{ seq: number; action: string; detail: Record<string, unknown> }>): Map<string, DecisionFacts> {
   const factsByInvoice = new Map<string, DecisionFacts>();
+  // The reason a payment was not sent again, by invoice id, when no decision came after it.
+  const notResent = new Map<string, string>();
   for (const entry of entries) {
     const invoiceId = entry.detail.invoiceId as string | undefined;
+    if (!invoiceId || factsByInvoice.has(invoiceId)) continue;
+    const reason = entry.action === "ap_reconcile" ? entry.detail.notResubmittedBecause : undefined;
+    if (typeof reason === "string") {
+      if (!notResent.has(invoiceId)) notResent.set(invoiceId, reason);
+      continue;
+    }
     const observed = entry.detail.observed as Record<string, unknown> | undefined;
-    if (!invoiceId || !observed || factsByInvoice.has(invoiceId)) continue;
+    if (!observed) continue;
     const execution = entry.detail.execution as Record<string, unknown> | undefined;
-    factsByInvoice.set(invoiceId, {
+    const decided: DecisionFacts = {
       poReference: (observed.poReference as string | null) ?? null,
       goodsReceived: observed.goodsReceived === true,
       riskLevel: String(observed.riskLevel ?? "unscreened"),
@@ -3473,9 +3489,35 @@ export function payableDecisionFacts(entries: Array<{ seq: number; action: strin
       heldForTwoApprovals: twoApprovalsHeldValue(entry),
       // Held for its project's budget: the project and what it needed (project budgets P6).
       heldForProject: heldForProjectFacts(entry.detail),
-    });
+    };
+    const notResentBecause = notResent.get(invoiceId);
+    factsByInvoice.set(invoiceId, notResentBecause ? notResentFacts(decided, notResentBecause) : decided);
   }
   return factsByInvoice;
+}
+
+/**
+ * The facts of a payment not sent again: its decision's, with what held the decision dropped, since the payment was
+ * sent after it, and what holds it now taken from the reason it was not sent again.
+ */
+function notResentFacts(decided: DecisionFacts, reason: string): DecisionFacts {
+  return {
+    poReference: decided.poReference,
+    goodsReceived: decided.goodsReceived,
+    riskLevel: decided.riskLevel,
+    paymentLimit: decided.paymentLimit,
+    purchaseOrderRequired: decided.purchaseOrderRequired,
+    addressUnconfirmed: reason === "counterparty.address_unconfirmed",
+    addressMissing: false,
+    coolingOffHeld: reason === "counterparty.cooling_off",
+    newPayeeHeld: reason === "counterparty.new_payee",
+    heldForBudgetUsdc: null,
+    heldForCash: null,
+    heldForVerdict: false,
+    fxHold: null,
+    heldForTwoApprovals: null,
+    heldForProject: null,
+  };
 }
 
 /** What the operating wallet and the reserve hold now, as the cycle's reconcile left them. */

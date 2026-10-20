@@ -21,6 +21,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   card for a milestone in the wait now says the agent decides within five minutes after it. Turning the payee lock
   off, or choosing a shorter wait, decides what it held back at once.
 
+### Fixed
+
+- A payment whose first send never reached Circle, and that the agent then did not send again because the payee
+  lock's wait was running, is now decided again once the wait ends. Before, it stayed held until a person approved it.
+  The same goes for one not sent again because its payee's new address was not confirmed, once someone confirms it,
+  and for a first payment to an address only one person stood behind, once a second person does. It is paid on the
+  same payment record, under the same key, so it is never paid twice.
+
 ## [0.1.0-beta.12] - 2026-10-20
 
 ### Added
