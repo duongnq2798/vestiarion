@@ -19,7 +19,7 @@ import { paymentIntentsBackend } from "./support/payment-intents";
 import { ARC_TESTNET } from "@/lib/network";
 import type { NewPayeeFacts } from "@/lib/new-payee-facts";
 import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
-import { paymentIdempotencyKey } from "@/lib/payments";
+import { NO_EARLIER_SEND, paymentIdempotencyKey } from "@/lib/payments";
 
 /**
  * The AP stage (`runApStage`, src/lib/agent/orchestrator.ts) deciding *when*
@@ -1991,6 +1991,69 @@ describe("the AP stage and a payment whose send Circle never answered", () => {
     expect(invoicePatches(fake.requests)).toHaveLength(0);
     expect(row.status).toBe("failed");
     expect(ledger(fake.requests)[0].p_detail).toMatchObject({ reconciled: false, execution: { resultingStatus: "matched" } });
+  });
+});
+
+/**
+ * A payment the reconcile did not send again (`notResubmittedBecause`), which the follow-up reopened once what held it
+ * ended (tests/reconcile-hold-follow-up.test.ts): its first send never reached Circle, and the lookup recorded that on
+ * its intent. Decided again, it is paid on that intent, under the payment's own key, so it is never paid twice.
+ */
+describe("the AP stage and a payable reopened after a payment not sent again", () => {
+  const dueToday = { due_date: "2026-10-21T12:00:00+00:00", early_pay_discount_pct: null, discount_due_date: null };
+  // Northwind's address changed on Oct 20 at 09:00 and another member confirmed it at 11:00; the lock waits 24 hours.
+  const changed = { address_changed_at: "2026-10-20T09:00:00+00:00", address_confirmed_at: "2026-10-20T11:00:00+00:00" };
+  const KEY = paymentIdempotencyKey("invoice", INVOICE_ID);
+
+  function reopened() {
+    const world = apFake({
+      book: [payable({ ...dueToday, decided_at: "2026-10-20T08:00:00+00:00", counterparties: counterparty(changed) })],
+      payeeLock: { on: true, hours: 24 },
+    });
+    // The first send went to Northwind's old address, before it changed.
+    const row = world.intents.insert({ source_type: "invoice", source_id: INVOICE_ID, idempotency_key: KEY, provider: "circle", provider_mode: "live", amount: 400, destination: "0xnorth-old" });
+    Object.assign(row, { status: "failed", attempt_count: 1, last_error: NO_EARLIER_SEND, updated_at: "2026-10-20T08:00:05.000Z" });
+    return { ...world, row };
+  }
+  const payNow = () => model(() => ({ action: "pay", payOn: null, reasoning: "Due today and within the limit; paying it.", confidence: 0.9 }));
+
+  it("pays it once the wait has ended, to the confirmed address, on the same intent and under the payment's own key", async () => {
+    today("2026-10-21T10:00:00.000Z");
+    payNow();
+    const { chain, row, intents, stage } = reopened();
+
+    await stage();
+
+    expect(chain.transfers).toHaveLength(1);
+    expect(chain.transfers[0]).toMatchObject({ amount: 400, toAddress: "0xnorth", idempotencyKey: KEY });
+    expect(intents.rows).toHaveLength(1);
+    // The new address is recorded on the intent before the send, so the transfer is confirmed where it went.
+    expect(row).toMatchObject({ idempotency_key: KEY, transfer_attempt: 1, destination: "0xnorth", status: "confirmed", provider_tx_id: "circle-tx-1" });
+  });
+
+  it("sends nothing more when it is decided again after that", async () => {
+    today("2026-10-21T10:00:00.000Z");
+    payNow();
+    const { chain, row, stage } = reopened();
+
+    await stage();
+    await stage();
+
+    expect(decideMock).toHaveBeenCalledTimes(2);
+    expect(chain.transfers).toHaveLength(1);
+    expect(row).toMatchObject({ status: "confirmed", provider_tx_id: "circle-tx-1" });
+  });
+
+  it("holds it again, sending nothing, if it is decided again inside the wait", async () => {
+    today("2026-10-20T20:00:00.000Z");
+    payNow();
+    const { fake, chain, row, stage } = reopened();
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(row).toMatchObject({ status: "failed", last_error: NO_EARLIER_SEND, provider_tx_id: null, destination: "0xnorth-old" });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "counterparty.cooling_off", execution: { resultingStatus: "held" } });
   });
 });
 

@@ -4,7 +4,7 @@ import { configFromEnv, type FollowUpConfig } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { applyFollowUp, existingPaymentIntents, followUpHeldMilestones, reconcileApInvoice } from "@/lib/agent/orchestrator";
+import { applyFollowUp, existingPaymentIntents, followUpHeldMilestones, payableDecisionFacts, reconcileApInvoice } from "@/lib/agent/orchestrator";
 import type { ChainProvider } from "@/lib/circle";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
@@ -111,6 +111,19 @@ function invoicePatches(requests: RecordedRequest[]) {
 }
 
 const FOLLOW_UP_CONFIG: FollowUpConfig = { staleAfterDays: 7, reEscalateAfterDays: 3 };
+
+/**
+ * The facts the follow-up stage reads for the invoice once a reconcile appended `append`, after the decision that sent
+ * the payment (tests/reconcile-hold-follow-up.test.ts runs them through the plan).
+ */
+function followUpFactsAfter(append: Record<string, unknown>) {
+  const decision = {
+    seq: 1,
+    action: "ap_pay",
+    detail: { invoiceId: INVOICE_ID, observed: { amount: 150, paymentLimit: 500, riskLevel: "low", poReference: null, goodsReceived: true, addressUnconfirmed: false } },
+  };
+  return payableDecisionFacts([{ seq: 2, action: append.p_action as string, detail: append.p_detail as Record<string, unknown> }, decision]).get(INVOICE_ID);
+}
 
 describe("applyFollowUp — the follow-up stage's write is a compare-and-set", () => {
   const reopen = { action: "reopen" as const, reason: "The purchase order arrived.", changes: ["PO added"], ageDays: 2, pastDue: false };
@@ -665,6 +678,8 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(body.agent_reasoning).toBe(`${invoice.reasoning} [not resubmitted: the counterparty's address changed and no one has confirmed it]`);
     const [append] = rpcBodies(fake.requests, "append_ledger_entry");
     expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.address_unconfirmed", execution: { resultingStatus: "held" } });
+    // The follow-up reads it as held for the address, and decides it again once someone confirms it.
+    expect(followUpFactsAfter(append)).toMatchObject({ addressUnconfirmed: true, coolingOffHeld: false });
   });
 
   it("does not resubmit to a changed address the payee lock keeps waiting, confirmed or not (payee lock PL5)", async () => {
@@ -691,6 +706,36 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(outcome.line.message).toBe("Acme Supplies: not resubmitted, the payee lock keeps the counterparty's changed address waiting (150 USDC)");
     const [append] = rpcBodies(fake.requests, "append_ledger_entry");
     expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.cooling_off", execution: { resultingStatus: "held" } });
+    expect(append.p_detail).not.toHaveProperty("earlierSendNotLookedUp");
+    // The follow-up reads it as held for the wait, and decides it again once the wait has ended.
+    expect(followUpFactsAfter(append)).toMatchObject({ coolingOffHeld: true, addressUnconfirmed: false });
+  });
+
+  it("says so when the earlier send was a payout to another chain that could not be looked up, which a person then checks", async () => {
+    settleMock.mockResolvedValue({ answer: "undecided", retryAt: null, unlookable: true });
+    const changed = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: changed, address_confirmed_at: changed } };
+      }
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileApInvoice(
+        { ...invoice, txRef: null, destinationChain: "BASE-SEPOLIA" },
+        { providerTxId: null, status: "submitting" },
+        { db: db(), provider, operating: { id: ACCOUNT_ID }, payeeLock: { on: true, coolingHours: 24 } }
+      )
+    );
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "counterparty.cooling_off", earlierSendNotLookedUp: true });
+    // Circle may hold that transfer, and asking for it again at the new address would be refused: the follow-up leaves
+    // it for a person, as before.
+    expect(followUpFactsAfter(append)).toMatchObject({ coolingOffHeld: false, addressUnconfirmed: false, newPayeeHeld: false });
   });
 
   it("resubmits through payInvoice when the counterparty is not high risk and the agent is not paused", async () => {

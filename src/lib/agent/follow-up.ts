@@ -129,13 +129,16 @@ export interface DecisionFacts {
    */
   heldForCash?: { needed: number; operating: number; reserve: number; amountDue?: number; targetOn?: string } | null;
   /**
-   * Whether the counterparty's address waited for a person's confirmation (`observed.addressUnconfirmed`). False for a
-   * decision recorded before the address was observed.
+   * Whether the counterparty's address waited for a person's confirmation (`observed.addressUnconfirmed`, or a payment
+   * not sent again for it: `notResubmittedBecause`). False for a decision recorded before the address was observed.
    */
   addressUnconfirmed?: boolean;
   /** Whether the counterparty had no payment address (`observed.addressMissing`), so the guardrail held it. */
   addressMissing?: boolean;
-  /** Held for the payee lock's wait after an address change (`guardrailRule: "counterparty.cooling_off"`, payee lock PL5). */
+  /**
+   * Held for the payee lock's wait after an address change (`"counterparty.cooling_off"`, payee lock PL5): its
+   * `guardrailRule`, or `notResubmittedBecause` for a payment not sent again.
+   */
   coolingOffHeld?: boolean;
   /**
    * Whether the counterparty needed a purchase order (`observed.purchaseOrderRequired`). Absent for a decision recorded
@@ -144,7 +147,10 @@ export interface DecisionFacts {
   purchaseOrderRequired?: boolean;
   /** What held a EURC payable that a fresh quote can change (FX re-evaluation F1); null or absent otherwise. */
   fxHold?: FxHold | null;
-  /** Held by code as the first payment to an address one party alone stood behind (`counterparty.new_payee`, N7). */
+  /**
+   * Held by code as the first payment to an address one party alone stood behind (`counterparty.new_payee`, N7), as a
+   * decision or as a payment not sent again.
+   */
   newPayeeHeld?: boolean;
   /** Held by code for two approvals (`workspace.two_approvals`): the USDC it was weighed at, and the figure then. Null otherwise. */
   heldForTwoApprovals?: { value: number; above: number } | null;

@@ -712,17 +712,19 @@ async function twoApprovalsResendBlocker(
  * - `sent`: Circle has it, now recorded; it is reconciled as any transfer that exists. So is one another lookup recorded
  *   since the stage read it, such as a lost batch's other member, found while looking for the first.
  * - `not_sent`: Circle never took it, now recorded; only then is it weighed as a new send. So is a payout to another
- *   chain, which cannot be looked up this way and is asked for again under its own key, which Circle takes only once.
+ *   chain, which cannot be looked up this way and is asked for again under its own key, which Circle takes only once
+ *   (`unlookable`: Circle may still hold it).
  * - `waiting`: Circle has not listed it yet, could not be asked, or another request is settling it right now. Nothing is
  *   written, and it is looked for again next cycle.
  */
 async function earlierSend(
   source: { type: PaymentSourceType; id: string },
   deps: { provider: ChainProvider; operating: { id: string } }
-): Promise<{ answer: "sent" | "not_sent" } | { answer: "waiting"; reason: string }> {
+): Promise<{ answer: "sent" } | { answer: "not_sent"; unlookable?: true } | { answer: "waiting"; reason: string }> {
   const looked = await settleUnknownSend(source, { provider: deps.provider, fromAccountId: deps.operating.id });
   if (looked.answer === "found" || (looked.answer === "known" && looked.recorded)) return { answer: "sent" };
-  if (looked.answer === "not_sent" || (looked.answer === "undecided" && looked.unlookable)) return { answer: "not_sent" };
+  if (looked.answer === "not_sent") return { answer: "not_sent" };
+  if (looked.answer === "undecided" && looked.unlookable) return { answer: "not_sent", unlookable: true };
   if (looked.answer === "known" || (looked.answer === "undecided" && looked.settling)) {
     return { answer: "waiting", reason: "another request is settling this payment's send right now; it is reconciled next cycle" };
   }
@@ -882,7 +884,9 @@ function withNote(reasoning: string | null, note: string): string {
  * applied as of now — records its own.
  * The ledger entry is `ap_reconcile` — `detail.reconciled: true`, or `false`
  * with `reconcileError` when it did not complete — and no `observed` facts,
- * so the follow-up stage keeps comparing against the decision itself.
+ * so the follow-up stage keeps comparing against the decision itself. A
+ * payable held with `notResubmittedBecause` is held, for the follow-up, for
+ * that reason alone (`payableDecisionFacts`), and decided again once it ends.
  */
 export async function reconcileApInvoice(
   invoice: {
@@ -1107,6 +1111,9 @@ export async function reconcileApInvoice(
       reconciled: true,
       previousStatus: "matched",
       ...(notResubmitted ? { notResubmittedBecause: notResubmitted } : {}),
+      // Its earlier send, a payout to another chain, could not be looked up, so Circle may still hold it: a person
+      // checks it before it is paid, and the follow-up does not decide it again on its own (payableDecisionFacts).
+      ...(notResubmitted && earlier?.answer === "not_sent" && earlier.unlookable ? { earlierSendNotLookedUp: true } : {}),
       ...newPayeeHoldDetail(notResubmitted === "counterparty.new_payee" ? newPayeeHeld : null),
       execution: {
         txRef,
@@ -3428,6 +3435,98 @@ function heldForCashFacts(
   return Number.isFinite(amountDue) && amountDue > 0 && targetOn ? { ...facts, amountDue, targetOn } : facts;
 }
 
+/**
+ * The facts each frozen payable's latest decision rested on, by invoice id, for the follow-up stage to compare with the
+ * payable as it is now. `entries` are the payables' AP ledger entries, newest first; the facts are the newest entry's
+ * that recorded `observed`. Exported to be tested without a full cycle.
+ *
+ * A payment the reconcile did not send again (`ap_reconcile` with `notResubmittedBecause`) records no `observed`, and
+ * whatever held the decision before it no longer does: the payment was sent after it. When such an entry is newer than
+ * the decision, the payable keeps the facts the decision rested on, but only the reason it was not sent again holds
+ * it. So the follow-up decides it again once that ends: the payee lock's wait (payee lock PL5), a person's
+ * confirmation of the address, or a second person behind it (new payee check N7). Not when its earlier send could not
+ * be looked up (`earlierSendNotLookedUp`): Circle may still hold that transfer, so a person checks it first, as before.
+ */
+export function payableDecisionFacts(entries: Array<{ seq: number; action: string; detail: Record<string, unknown> }>): Map<string, DecisionFacts> {
+  const factsByInvoice = new Map<string, DecisionFacts>();
+  // Why a payment was not sent again, by invoice id, when no decision came after it; null when a person checks it.
+  const notResent = new Map<string, string | null>();
+  for (const entry of entries) {
+    const invoiceId = entry.detail.invoiceId as string | undefined;
+    if (!invoiceId || factsByInvoice.has(invoiceId)) continue;
+    const reason = entry.action === "ap_reconcile" ? entry.detail.notResubmittedBecause : undefined;
+    if (typeof reason === "string") {
+      if (!notResent.has(invoiceId)) notResent.set(invoiceId, entry.detail.earlierSendNotLookedUp === true ? null : reason);
+      continue;
+    }
+    const observed = entry.detail.observed as Record<string, unknown> | undefined;
+    if (!observed) continue;
+    const execution = entry.detail.execution as Record<string, unknown> | undefined;
+    const decided: DecisionFacts = {
+      poReference: (observed.poReference as string | null) ?? null,
+      goodsReceived: observed.goodsReceived === true,
+      riskLevel: String(observed.riskLevel ?? "unscreened"),
+      paymentLimit: observed.paymentLimit == null ? null : num(observed.paymentLimit),
+      // Held only for the spending limit: the USDC it was weighed at (R6).
+      heldForBudgetUsdc:
+        execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
+      // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4), and its own amount and
+      // day, so what falls due before it is measured again now (cash ahead, review of #418).
+      heldForCash:
+        execution?.heldBecause === HELD_FOR_CASH
+          ? heldForCashFacts(execution, (entry.detail.cashPriority as Record<string, unknown> | undefined)?.waits === true ? undefined : entry.detail.timing)
+          : null,
+      // Held in shadow mode for a person to agree: only a person ends it (shadow mode S2).
+      heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
+      // Decided while the counterparty's new address waited for a person: once confirmed, it is decided again.
+      addressUnconfirmed: observed.addressUnconfirmed === true,
+      // Decided with no address to pay: once one is added and confirmed, it is decided again.
+      addressMissing: observed.addressMissing === true,
+      // Decided while the counterparty needed a purchase order: once paid without them, decided again (three-way
+      // match design M5). Absent for a decision recorded before the setting, when every counterparty needed one.
+      purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,
+      // Held for a EURC rate, a swap, the swap's cost or the value at the rate: a fresh quote may clear it (F1).
+      fxHold: fxHoldOf({ seq: entry.seq, detail: entry.detail }),
+      // Held as the first payment to an address one party alone stood behind (new payee check N7).
+      newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
+      // Held for the payee lock's wait after an address change (payee lock PL5): decided again once it has passed.
+      coolingOffHeld: entry.detail.guardrailRule === "counterparty.cooling_off",
+      // Held for two approvals: the value and the figure it was weighed at (two approvals T3).
+      heldForTwoApprovals: twoApprovalsHeldValue(entry),
+      // Held for its project's budget: the project and what it needed (project budgets P6).
+      heldForProject: heldForProjectFacts(entry.detail),
+    };
+    factsByInvoice.set(invoiceId, notResent.has(invoiceId) ? notResentFacts(decided, notResent.get(invoiceId) ?? null) : decided);
+  }
+  return factsByInvoice;
+}
+
+/**
+ * The facts of a payment not sent again: its decision's, with what held the decision dropped, since the payment was
+ * sent after it, and what holds it now taken from the reason it was not sent again (none the follow-up watches when
+ * `reason` is null). A payment agreed to in shadow mode stays for a person, as only a person ends that (shadow mode
+ * S2).
+ */
+function notResentFacts(decided: DecisionFacts, reason: string | null): DecisionFacts {
+  return {
+    poReference: decided.poReference,
+    goodsReceived: decided.goodsReceived,
+    riskLevel: decided.riskLevel,
+    paymentLimit: decided.paymentLimit,
+    purchaseOrderRequired: decided.purchaseOrderRequired,
+    addressUnconfirmed: reason === "counterparty.address_unconfirmed",
+    addressMissing: false,
+    coolingOffHeld: reason === "counterparty.cooling_off",
+    newPayeeHeld: reason === "counterparty.new_payee",
+    heldForBudgetUsdc: null,
+    heldForCash: null,
+    heldForVerdict: decided.heldForVerdict,
+    fxHold: null,
+    heldForTwoApprovals: null,
+    heldForProject: null,
+  };
+}
+
 /** What the operating wallet and the reserve hold now, as the cycle's reconcile left them. */
 async function cashNow(db: OrgDb): Promise<{ operating: number; reserve: number }> {
   const rows = unwrap(await db.from("accounts").select("kind, balance").in("kind", ["operating", "reserve"])) as Array<{ kind: string; balance: string }>;
@@ -3810,47 +3909,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       else entriesByInvoice.set(invoiceId, [entry]);
     }
 
-    const factsByInvoice = new Map<string, DecisionFacts>();
-    for (const entry of priorEntries) {
-      const invoiceId = entry.detail.invoiceId as string | undefined;
-      const observed = entry.detail.observed as Record<string, unknown> | undefined;
-      if (!invoiceId || !observed || factsByInvoice.has(invoiceId)) continue;
-      const execution = entry.detail.execution as Record<string, unknown> | undefined;
-      factsByInvoice.set(invoiceId, {
-        poReference: (observed.poReference as string | null) ?? null,
-        goodsReceived: observed.goodsReceived === true,
-        riskLevel: String(observed.riskLevel ?? "unscreened"),
-        paymentLimit: observed.paymentLimit == null ? null : num(observed.paymentLimit),
-        // Held only for the spending limit: the USDC it was weighed at (R6).
-        heldForBudgetUsdc:
-          execution?.heldBecause === HELD_FOR_BUDGET ? num(entry.detail.usdcValue ?? observed.amount) : null,
-        // Held for want of cash: what it needed, and the balances it saw (reserve cash back R4), and its own amount and
-        // day, so what falls due before it is measured again now (cash ahead, review of #418).
-        heldForCash:
-          execution?.heldBecause === HELD_FOR_CASH
-            ? heldForCashFacts(execution, (entry.detail.cashPriority as Record<string, unknown> | undefined)?.waits === true ? undefined : entry.detail.timing)
-            : null,
-        // Held in shadow mode for a person to agree: only a person ends it (shadow mode S2).
-        heldForVerdict: execution?.heldBecause === HELD_FOR_VERDICT,
-        // Decided while the counterparty's new address waited for a person: once confirmed, it is decided again.
-        addressUnconfirmed: observed.addressUnconfirmed === true,
-        // Decided with no address to pay: once one is added and confirmed, it is decided again.
-        addressMissing: observed.addressMissing === true,
-        // Decided while the counterparty needed a purchase order: once paid without them, decided again (three-way
-        // match design M5). Absent for a decision recorded before the setting, when every counterparty needed one.
-        purchaseOrderRequired: typeof observed.purchaseOrderRequired === "boolean" ? observed.purchaseOrderRequired : undefined,
-        // Held for a EURC rate, a swap, the swap's cost or the value at the rate: a fresh quote may clear it (F1).
-        fxHold: fxHoldOf({ seq: entry.seq, detail: entry.detail }),
-        // Held as the first payment to an address one party alone stood behind (new payee check N7).
-        newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
-        // Held for the payee lock's wait after an address change (payee lock PL5): decided again once it has passed.
-        coolingOffHeld: entry.detail.guardrailRule === "counterparty.cooling_off",
-        // Held for two approvals: the value and the figure it was weighed at (two approvals T3).
-        heldForTwoApprovals: twoApprovalsHeldValue(entry),
-        // Held for its project's budget: the project and what it needed (project budgets P6).
-        heldForProject: heldForProjectFacts(entry.detail),
-      });
-    }
+    const factsByInvoice = payableDecisionFacts(priorEntries);
     // Each project's room now, read only when a payable waits on it (P6).
     const projectHeldIds = frozenRows.filter((row) => factsByInvoice.get(row.id)?.heldForProject).map((row) => row.id);
     const projectRooms = projectHeldIds.length > 0 ? await projectRoomsFor(db, "invoices", projectHeldIds) : undefined;

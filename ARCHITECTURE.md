@@ -479,9 +479,10 @@ payment to an address.
   reconcile holds it (`newPayeeResendBlocker`), after the high risk and unconfirmed address checks and before two
   approvals, as the stages order them. Its `ap_reconcile` or `milestone_reconcile` entry records
   `notResubmittedBecause: "counterparty.new_payee"` with `guardrailBlocked`, `guardrailRule` and `newPayee`, and the
-  reasoning gains "[not resubmitted: this is the first payment to this address, …]". The entry carries no `observed`,
-  so the follow-up keeps comparing against the decision before it, and the payment waits for a person. A transfer
-  recorded with its Circle id is only read, and asks nothing.
+  reasoning gains "[not resubmitted: this is the first payment to this address, …]". The entry carries no `observed`.
+  For a payable, the follow-up keeps the facts of the decision before it, but held as a new payee and for nothing else
+  (`payableDecisionFacts`), and reopens it as **Afterwards** says; a milestone waits for a person. A transfer recorded
+  with its Circle id is only read, and asks nothing.
 - **A person's side:** Approve and pay, and Pay now on a milestone, refuse whoever `firstPaymentRefusal` names unless
   they are the sole approver, in words that say why: they gave it or asked for it with a link (`newPayeeSelfMessage`),
   they confirmed an address no member answers for alone, or no one has confirmed it yet. The Approvals card
@@ -521,8 +522,10 @@ adds two columns to `approval_policies`: `payee_lock` (off by default) and `paye
   `coolingOff`) reopens it once the wait ends. The milestone stage leaves a verified milestone waiting, as it does for a
   confirmation.
 - **Resubmission:** a payment that never reached the network is not sent again inside the wait. `resubmissionBlocker`
-  returns `counterparty.cooling_off`: a payable is held for a person (`notResubmittedBecause`), and a milestone waits,
-  still verified.
+  returns `counterparty.cooling_off`: a payable is held (`notResubmittedBecause`), and a milestone waits, still
+  verified. The follow-up reads that entry as `coolingOffHeld` (`payableDecisionFacts`) and reopens the payable once the
+  wait ends, as it does one the guardrail held, unless its earlier send could not be looked up
+  (`earlierSendNotLookedUp`, payment safety below).
 - **Lookalikes:** `lookalikes` buckets the payees' addresses by chain and by their first 6 and last 4 hex digits.
   `earlierLookalike` compares a changed address with the same payee's earlier addresses and the ones it was paid at,
   which is the usual address poisoning. Counterparties shows the matches and Confirm address repeats them; they never
@@ -980,8 +983,19 @@ would find.
     - Never taken: a `submitting` one goes on to the resend checks (high risk, unconfirmed address, new payee, two
       approvals) and is sent again; an `unanswered` one is handed back (`decideAgain`), writing nothing, and the stage
       decides it again through the model and every guardrail, cash check included.
+    - A payable a resend check held (`notResubmittedBecause`) is reopened by the follow-up once what held it ends:
+      the payee lock's wait, a person's confirmation of the address, or a second person behind it.
+      `payableDecisionFacts` keeps the facts of the decision before the reconcile, with only that hold; a payment
+      agreed to in shadow mode keeps its verdict hold, which only a person ends. `fxRecheckCandidates` reads the
+      reconcile as the latest word too, so no quote is asked for it. The AP stage then decides it with every
+      guardrail and pays it on the same intent: `failed` with `NO_EARLIER_SEND`, claimed and sent under the payment's
+      own key, never in a batch, which takes only `created` intents. A payment decided again after that finds its
+      intent confirmed and sends nothing.
     - A payout to another chain cannot be looked up (`unlookable`) and is taken as never taken: checked, or decided
-      again, before it is asked for again under its key, so it can be held while Circle may hold the transfer.
+      again, before it is asked for again under its key, so it can be held while Circle may hold the transfer. Held
+      that way, its entry records `earlierSendNotLookedUp: true` and the follow-up does not reopen it: its intent is
+      still `submitting`, and asked for again under that key at a changed address it would be refused (review M1), so
+      a person checks it with Circle first.
     - Not listed yet, not asked, or settled by another request right now (`settling`): the invoice stays `matched`
       (the milestone `verified`), nothing is written to it, and `ap_reconcile` (`milestone_reconcile`) records
       `reconciled: false` with the reason. With no operating account nothing is looked for, and it stays as it is.
@@ -1866,8 +1880,10 @@ way, is resubmitted under its key), and then the counterparty's risk level
 is read again first, and a counterparty now screened high risk is not paid.
 Nor is a resubmission that would be the first payment to the counterparty's
 current address with two different people not behind it: it is held as
-`counterparty.new_payee` for a person, as the stage holds a decision (the
-new payee check above).
+`counterparty.new_payee`, as the stage holds a decision (the new payee check
+above). Nor one to a changed address no one has confirmed, or one inside the
+payee lock's wait. The follow-up stage reopens a payable held for one of
+these three once that ends, and the AP stage decides it again.
 The contractor stage does the same for a `verified` milestone whose release is
 already in flight. It records `milestone_reconcile` rather than asking the
 model again, so a change of mind cannot record a released payment as held.

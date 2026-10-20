@@ -86,8 +86,19 @@ Confirm address opens a form instead of a yes/no:
   waits.
 - The follow-up stage decides a held payable again once the time has passed. It is held, not refused, so nothing is
   lost.
-- A payment that never reached the network is not sent again inside the wait either. A payable is held for a person
+- A payment that never reached the network is not sent again inside the wait either. A payable is held
   (`notResubmittedBecause: "counterparty.cooling_off"`), and a milestone waits, still verified.
+- The follow-up stage decides such a payable again once the wait has ended, as it does one the guardrail held (added
+  after the lock first shipped: it waited for a person, since its `ap_reconcile` entry records no `observed`). It keeps
+  the facts of the decision that sent the payment, held for the wait and for nothing else. The same goes for a payable
+  not sent again to an address no one has confirmed, once someone confirms it
+  (`notResubmittedBecause: "counterparty.address_unconfirmed"`), and for a first payment to an address one person
+  alone stood behind, once a second person does (`"counterparty.new_payee"`). Decided again, it is paid on its
+  payment intent, under the payment's own key, so it is never paid twice.
+- Two such payables still wait for a person:
+  - a payout to another chain whose earlier send could not be looked up (`earlierSendNotLookedUp: true`). Circle may
+    still hold that send, and asking for it again under its key at the new address would be refused;
+  - one agreed to in shadow mode, since only a person ends that hold.
 
 **PL6. Lookalike addresses.**
 - Two addresses look alike when they differ but share the first 6 and the last 4 hex digits after `0x`, the pattern
