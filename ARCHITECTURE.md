@@ -61,6 +61,21 @@ code, and holds its subprocessors (`src/lib/subprocessors.ts`) to the privacy
 page's services, name for name. `SECURITY.md` is the policy for reporting a
 vulnerability.
 
+## Where it runs
+
+The app is one Next.js deployment on Vercel. Its functions run in Vercel's Tokyo region, `hnd1`, which `vercel.json` sets
+for the whole project, beside the Supabase project in `ap-northeast-1`. A page or an action makes its database calls one
+after another, so the distance between the two counts once per call. From Vercel's default, `iad1`, each call crossed
+the Pacific, and a payee's **Keep this address** took about 4.4 seconds
+(`docs/superpowers/specs/2026-10-20-functions-beside-database-design.md`). The route-level `preferredRegion` is
+deprecated in this Next.js version, so the setting is not per route. `tests/vercel-region.test.ts` pins it, and
+`vercel.json` holds nothing else (no header: see the security page's test). The scheduled routes are called by Supabase
+Cron from the database itself (`supabase/cron/watches.sql`), and GitHub's schedule calls only the sandbox cleanup, so
+none is a Vercel cron. Calls to services in the US now leave from Tokyo: Circle (Wallets, Iris, Gateway), the Arc RPC,
+the model providers, Resend, BlindPay, the accounting and CRM connectors, and customers' webhook endpoints. Their time
+limits (the tick's start cutoff, Circle waits, the connector sweep's budget) are wall-clock, so a slower call means
+less work in a run, never a run past its limit.
+
 ## Workspaces, roles and the cron
 
 A person creates their own workspace at `/onboarding` (`createWorkspaceAction` ->
