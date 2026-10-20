@@ -35,7 +35,7 @@ import { consoleActor } from "@/lib/commands/actor";
 import { assignToProjectCommand } from "@/lib/commands/projects";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { db } from "@/lib/dal";
-import { parseVerification, readPayeeLock } from "@/lib/payee-lock";
+import { coolingOffLabel, inCoolingOff, parseVerification, readPayeeLock } from "@/lib/payee-lock";
 import { FxRateError } from "@/lib/fx/usd-rates";
 import { shadowBill, ShadowBillError, type OriginalBill } from "@/lib/shadow-bills";
 
@@ -293,7 +293,15 @@ export async function confirmCounterpartyAddressAction(
       });
       revalidateOrgPages();
       if (confirmed) raiseCycleEvent(auth, "address_confirmed");
-      return { ok: true, message: confirmed ? "Address confirmed. Payments to it are decided as usual again." : "This address is already confirmed." };
+      if (!confirmed) return { ok: true, message: "This address is already confirmed." };
+      // Inside the payee lock's wait (PL5), payments still wait: the confirmation says until when, not that they go now.
+      const until = lock.on && lock.coolingHours > 0 ? await coolingOffUntilFor(id.data, lock) : null;
+      return {
+        ok: true,
+        message: until
+          ? `Address confirmed. The payee lock keeps payments to it waiting until ${coolingOffLabel(until)}.`
+          : "Address confirmed. Payments to it are decided as usual again.",
+      };
     } catch (error) {
       return addressFailure(error, "counterparty address confirmation failed");
     }
@@ -371,4 +379,15 @@ export async function createInvoiceAction(
       return { ok: false, message: error instanceof Error ? error.message : "Invoice could not be added." };
     }
   });
+}
+
+/** When the payee lock's wait on this counterparty's changed address ends, while it is still ahead (PL5); best effort. */
+async function coolingOffUntilFor(counterpartyId: string, lock: Awaited<ReturnType<typeof readPayeeLock>>): Promise<Date | null> {
+  try {
+    const found = await db().from("counterparties").select("address_changed_at").eq("id", counterpartyId).maybeSingle();
+    if (found.error) return null;
+    return inCoolingOff((found.data as { address_changed_at: string | null } | null)?.address_changed_at ?? null, lock);
+  } catch {
+    return null;
+  }
 }
