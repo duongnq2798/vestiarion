@@ -499,10 +499,15 @@ adds two columns to `approval_policies`: `payee_lock` (off by default) and `paye
   `counterparty.cooling_off`, right after `counterparty.address_unconfirmed`. The follow-up (`coolingOffHeld`,
   `coolingOff`) reopens it once the wait ends. The milestone stage leaves a verified milestone waiting, as it does for a
   confirmation.
+- **Resubmission:** a payment that never reached the network is not sent again inside the wait. `resubmissionBlocker`
+  returns `counterparty.cooling_off`: a payable is held for a person (`notResubmittedBecause`), and a milestone waits,
+  still verified.
 - **Lookalikes:** `lookalikes` buckets the payees' addresses by chain and by their first 6 and last 4 hex digits.
-  Counterparties shows the matches and Confirm address repeats them; they never refuse anything.
-- **Not covered:** a resubmission of a payment that never reached the network still waits for a confirmation, but not
-  for the cooling-off.
+  `earlierLookalike` compares a changed address with the same payee's earlier addresses and the ones it was paid at,
+  which is the usual address poisoning. Counterparties shows the matches and Confirm address repeats them; they never
+  refuse anything. The confirmation records `lookalikeOf`, `looksLikeEarlier` and, when no giver can be named,
+  `giverUnknown`.
+- **Fails closed:** only the codes 42703 and PGRST204 read as "before 0135"; any other failure throws.
 
 **Ask every payee at once** (`docs/superpowers/specs/2026-10-18-ask-every-payee-design.md`). `askablePayees`
 (`src/lib/address-requests.ts`) lists, for an owner or admin on Counterparties, the vendors and contractors with no

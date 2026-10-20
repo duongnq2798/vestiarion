@@ -96,6 +96,14 @@ describe("CounterpartyAddress", () => {
     expect(on).toContain("The payee lock needs a record of how you checked it.");
   });
 
+  it("names an earlier address of the payee the changed one is made to look like (PL6)", () => {
+    const earlier = "0x2222220000000000000000000000000000002222";
+    expect(render({ earlierLookalike: earlier })).toContain("Looks like an earlier address of this payee");
+    const form = fields({ earlierLookalike: earlier });
+    expect(form).toContain("Check every character");
+    expect(form).toContain(earlier);
+  });
+
   it("names a lookalike address on the card and before anyone confirms it (PL6)", () => {
     const lookalikes = [{ kind: "alike" as const, id: "c2", name: "Northwind" }, { kind: "same" as const, id: "c3", name: "Orbit" }];
     const card = render({ lookalikes });

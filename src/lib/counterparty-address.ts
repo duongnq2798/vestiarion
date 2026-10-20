@@ -7,7 +7,7 @@ import { appendLedgerEntry } from "./ledger";
 import { addressGiver } from "./new-payee";
 import { loadNewPayeeFacts, newPayeeCheckFor } from "./new-payee-facts";
 import { homeChain } from "./payee-chains";
-import { lookalikes, readPayeeLock, type Verification } from "./payee-lock";
+import { earlierLookalike, lookalikes, readPayeeLock, type Verification } from "./payee-lock";
 import { workspaceNetwork } from "./workspace-network";
 
 /**
@@ -251,19 +251,27 @@ export async function confirmCounterpartyAddress(input: {
   const verification = input.verification ?? null;
   let soloConfirmation = false;
   let byGiver = false;
+  let giverUnknown = false;
+  let earlier: string | null = null;
   if (lock.on) {
     if (input.via === "approval") throw new CounterpartyAddressError("lock_requires_confirm");
     if (!meetsLock(verification)) throw new CounterpartyAddressError("verification_required");
-    // Whoever entered the address or asked the payee for it: another member confirms it, unless no one else may.
-    const giver = await giverOf(current);
-    if (giver !== null && giver === input.actorId) {
+    // Whoever entered the address or asked the payee for it: another member confirms it, unless no one else may. Read
+    // strictly: a lock that cannot tell who gave it refuses nothing it should, so a failed read refuses the confirmation.
+    const facts = await addressFactsOf(current);
+    const giver = facts.giver;
+    earlier = facts.earlier;
+    if (giver === null) giverUnknown = true;
+    else if (giver === input.actorId) {
       if ((await approversBesides([giver])) > 0) throw new CounterpartyAddressError("giver_confirms");
       soloConfirmation = true;
     }
   } else if (input.via === "confirm") {
     // Recorded, not refused, with the lock off: best effort, since nothing waits on it.
     try {
-      byGiver = (await giverOf(current)) === input.actorId;
+      const facts = await addressFactsOf(current);
+      byGiver = facts.giver === input.actorId;
+      earlier = facts.earlier;
     } catch (error) {
       console.error("address confirmation: giver not read", current.id, error instanceof Error ? error.message : error);
     }
@@ -296,7 +304,9 @@ export async function confirmCounterpartyAddress(input: {
         ...(lock.on ? { payeeLock: { coolingHours: lock.coolingHours } } : {}),
         ...(soloConfirmation ? { soloConfirmation: true } : {}),
         ...(byGiver ? { byGiver: true } : {}),
+        ...(giverUnknown ? { giverUnknown: true } : {}),
         ...(alike.length > 0 ? { lookalikeOf: alike } : {}),
+        ...(earlier ? { looksLikeEarlier: earlier } : {}),
       },
     });
   } catch (error) {
@@ -321,10 +331,17 @@ function meetsLock(verification: Verification | null): boolean {
   return true;
 }
 
-/** The member who answers for the counterparty's address: who typed it, or who asked the payee for it (new payee check N4). */
-async function giverOf(current: AddressRow): Promise<string | null> {
+/**
+ * From the counterparty's address entries and the addresses it was paid at, in one read: the member who answers for its
+ * address (who typed it, or who asked the payee for it, new payee check N4), and an address it had before that the
+ * current one is made to look like (payee lock PL6).
+ */
+async function addressFactsOf(current: AddressRow): Promise<{ giver: string | null; earlier: string | null }> {
   const facts = await loadNewPayeeFacts(db(), [current.id]);
-  return addressGiver(newPayeeCheckFor(facts, { id: current.id, address: current.address }));
+  return {
+    giver: addressGiver(newPayeeCheckFor(facts, { id: current.id, address: current.address })),
+    earlier: earlierLookalike(current.address, facts.entries.get(current.id) ?? [], facts.paidTo.get(current.id) ?? []),
+  };
 }
 
 /**

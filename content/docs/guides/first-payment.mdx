@@ -208,7 +208,11 @@ Whether the lock is on or off, a counterparty's row warns about an address that 
 - "Same address as" the other counterparty;
 - "Looks like" the other counterparty's address, when the two share their first 6 and last 4 characters after `0x`. That is the pattern address poisoning uses.
 
+When a changed address looks like an address the same payee had or was paid at before, but is a different one, the row and **Confirm address** say so too: "Looks like an earlier address of this payee". A real new wallet almost never shares both ends with the old one; an address made to look like it does.
+
 **Confirm address** repeats the warning before anyone confirms. It never blocks, since two counterparties can share a wallet on purpose.
+
+The payee lock covers addresses on Arc and the chains it pays. A payout to a vendor's bank account already waits for a person every time, so the lock adds nothing there.
 
 The ledger records each change to the lock as `payee_lock_changed`, and the check behind each confirmation in its `counterparty_address_confirmed` entry.
 

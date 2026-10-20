@@ -8,10 +8,13 @@ Changes to the API and webhooks that affect an integration, newest first. Change
   - `payeeLock` (`{ coolingHours }`), when the lock was on;
   - `soloConfirmation: true`, when whoever entered or asked for the address confirmed it because no one else could;
   - `byGiver: true`, when they confirmed it with the lock off;
-  - `lookalikeOf`: the ids of other counterparties whose address is the same, or shares its first 6 and last 4 hex digits.
+  - `lookalikeOf`: the ids of other counterparties whose address is the same, or shares its first 6 and last 4 hex digits;
+  - `looksLikeEarlier`: an address the same payee had or was paid at before that shares those digits with the new one;
+  - `giverUnknown: true`, when the lock was on and no member could be named as having entered or asked for the address.
 
   Each field is present only when it applies.
 - An agent decision entry (`ap_pay` and the other `ap_*` actions) can now carry `guardrailRule: "counterparty.cooling_off"`: the payment was held because the counterparty's address changed less than the payee lock's wait ago. Once the wait ends, an `invoice_reopened` entry's `followUp.changes` reads "the payee lock's wait for the new address has ended", and a new decision follows.
+- An `ap_reconcile` entry can now carry `notResubmittedBecause: "counterparty.cooling_off"`: a payment that never reached the network is not sent again to a changed address inside the payee lock's wait. It is held for a person.
 - Nothing in `/api/v1` request bodies or the webhooks' shapes changes.
 
 ## 2026-10-19: A payee sends its invoice, and picks where it is paid, through its payee link

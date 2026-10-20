@@ -26,11 +26,13 @@ export const COOLING_HOURS_MAX = 168;
 /** The waits Settings offers. */
 export const COOLING_HOURS_CHOICES = [0, 4, 24, 48, 72] as const;
 
-/** The columns are 0135's: before it runs, a read or write names a column the table does not have. */
-function missingColumns(error: { code?: string; message?: string }): boolean {
-  if (error.code === "42703" || error.code === "PGRST204") return true;
-  const message = error.message ?? "";
-  return /payee_lock/.test(message) && /column|schema cache|does not exist/.test(message);
+/**
+ * The columns are 0135's: before it runs, a select names a column the table does not have (42703, Postgres's own), and
+ * an upsert one PostgREST's schema cache does not know (PGRST204). Only those codes: any other failure, a permission
+ * refused included, throws rather than read as no lock.
+ */
+export function payeeLockColumnsMissing(error: { code?: string; message?: string }): boolean {
+  return error.code === "42703" || error.code === "PGRST204";
 }
 
 /**
@@ -40,13 +42,18 @@ function missingColumns(error: { code?: string; message?: string }): boolean {
 export async function readPayeeLockStatus(orgDb: OrgDb): Promise<{ lock: PayeeLock; ready: boolean }> {
   const result = await orgDb.from("approval_policies").select("payee_lock, payee_lock_cooling_hours").limit(1);
   if (result.error) {
-    if (missingColumns(result.error)) return { lock: PAYEE_LOCK_OFF, ready: false };
+    if (payeeLockColumnsMissing(result.error)) return { lock: PAYEE_LOCK_OFF, ready: false };
     throw new Error(`approval_policies not read: ${result.error.message}`);
   }
   const row = ((result.data ?? []) as Array<{ payee_lock: boolean | null; payee_lock_cooling_hours: number | string | null }>)[0];
-  if (!row) return { lock: PAYEE_LOCK_OFF, ready: true };
+  return { lock: payeeLockFromRow(row), ready: true };
+}
+
+/** A lock as its `approval_policies` row holds it; no row, or no columns in it, is off. */
+export function payeeLockFromRow(row: { payee_lock?: boolean | null; payee_lock_cooling_hours?: number | string | null } | undefined): PayeeLock {
+  if (!row) return PAYEE_LOCK_OFF;
   const hours = Number(row.payee_lock_cooling_hours ?? 0);
-  return { lock: { on: row.payee_lock === true, coolingHours: Number.isInteger(hours) && hours >= 0 ? Math.min(hours, COOLING_HOURS_MAX) : 0 }, ready: true };
+  return { on: row.payee_lock === true, coolingHours: Number.isInteger(hours) && hours >= 0 ? Math.min(hours, COOLING_HOURS_MAX) : 0 };
 }
 
 /** The workspace's lock (PL1); off before 0135 and for a workspace that never set it. */
@@ -131,8 +138,9 @@ export const VERIFICATION_MESSAGES: Record<VerificationProblem, string> = {
   text: "Use plain text, without links, and keep it short.",
 };
 
-const CONTROL = /\p{Cc}/u;
-const CONTROL_BUT_LINE_BREAK = /(?!\n)\p{Cc}/u;
+// Control characters, and format characters such as U+202E, which reverses how the text after it reads.
+const CONTROL = /[\p{Cc}\p{Cf}]/u;
+const CONTROL_BUT_LINE_BREAK = /(?!\n)[\p{Cc}\p{Cf}]/u;
 const LINK = /:\/\/|www\./i;
 
 const isMethod = (value: string): value is VerificationMethod => (VERIFICATION_METHODS as readonly string[]).includes(value);
@@ -218,6 +226,35 @@ export function lookalikes(rows: ReadonlyArray<LookalikeRow>): Map<string, Looka
   return found;
 }
 
+/** Whether two different EVM addresses share their first 6 and last 4 hex digits, case ignored (PL6). */
+export function looksAlike(a: string | null | undefined, b: string | null | undefined): boolean {
+  const x = (a ?? "").toLowerCase();
+  const y = (b ?? "").toLowerCase();
+  return EVM.test(x) && EVM.test(y) && x !== y && x.slice(2, 8) === y.slice(2, 8) && x.slice(-4) === y.slice(-4);
+}
+
+/**
+ * The address this payee had or was paid at before that its current one is made to look like, or null (PL6): the way
+ * address poisoning gets past the person confirming, who compares the ends with an address they know. `entries` are the
+ * payee's address entries (new payee check N2); `paidTo` the addresses it was paid at, lowercase.
+ */
+export function earlierLookalike(
+  address: string | null,
+  entries: ReadonlyArray<{ action: string; detail: Record<string, unknown> }>,
+  paidTo: Iterable<string> = []
+): string | null {
+  if (!address) return null;
+  const earlier = new Set<string>(paidTo);
+  for (const entry of entries) {
+    for (const value of [entry.detail.from, entry.detail.to, entry.detail.address]) if (typeof value === "string") earlier.add(value.toLowerCase());
+  }
+  for (const candidate of earlier) if (looksAlike(address, candidate)) return candidate;
+  return null;
+}
+
+/** What Counterparties and the confirm form say about an address made to look like one the payee had before. */
+export const EARLIER_LOOKALIKE = "Looks like an earlier address of this payee";
+
 /** What Counterparties and the confirm form say about a lookalike. */
 export function lookalikeWords(match: Lookalike): string {
   return match.kind === "same" ? `Same address as ${match.name}` : `Looks like ${match.name}'s address`;
@@ -244,6 +281,7 @@ export class PayeeLockError extends Error {
 
 function summary(from: PayeeLock, to: PayeeLock): string {
   const wait = (hours: number) => (hours > 0 ? `, with a ${hours}-hour wait after an address changes` : "");
+  if (!to.on && !from.on) return `Changed the payee lock's wait after an address changes from ${from.coolingHours} to ${to.coolingHours} hours, with the lock off`;
   if (!to.on) return "Turned off the payee lock";
   if (!from.on) return `Turned on the payee lock${wait(to.coolingHours)}`;
   return `Changed the payee lock's wait after an address changes from ${from.coolingHours} to ${to.coolingHours} hours`;
@@ -280,7 +318,7 @@ export async function changePayeeLock(input: { actorId: string; on: boolean; coo
       { onConflict: "org_id" }
     );
   if (write.error) {
-    if (missingColumns(write.error)) throw new PayeeLockError("not_ready");
+    if (payeeLockColumnsMissing(write.error)) throw new PayeeLockError("not_ready");
     throw new Error(write.error.message);
   }
 

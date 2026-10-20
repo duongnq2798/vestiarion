@@ -42,7 +42,8 @@ import { simulatesPayments } from "@/lib/capability-read";
 import { plural } from "@/lib/copy";
 import { listCounterparties, stats } from "@/lib/queries";
 import { readShadowMode } from "@/lib/shadow-mode";
-import { lookalikes, PAYEE_LOCK_OFF, readPayeeLock } from "@/lib/payee-lock";
+import { earlierLookalike, lookalikes, PAYEE_LOCK_OFF, readPayeeLock } from "@/lib/payee-lock";
+import { loadNewPayeeFacts } from "@/lib/new-payee-facts";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
 
@@ -95,6 +96,24 @@ export default async function CounterpartiesPage({
     const alike = lookalikes(
       counterparties.map((counterparty) => ({ id: counterparty.id, name: counterparty.name, address: counterparty.address, chain: counterparty.chain ?? homeChain(network).id }))
     );
+    // For an address waiting for its confirmation, one this payee had or was paid at before that it is made to look like
+    // (PL6), read only for those, for whoever may confirm them. Best effort: none when unread.
+    const waitingIds = canConfirm
+      ? counterparties.filter((counterparty) => addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at)).map((counterparty) => counterparty.id)
+      : [];
+    const earlierAlike = new Map<string, string>();
+    if (waitingIds.length > 0) {
+      try {
+        const facts = await loadNewPayeeFacts(db(), waitingIds);
+        for (const counterparty of counterparties) {
+          if (!waitingIds.includes(counterparty.id)) continue;
+          const earlier = earlierLookalike(counterparty.address, facts.entries.get(counterparty.id) ?? [], facts.paidTo.get(counterparty.id) ?? []);
+          if (earlier) earlierAlike.set(counterparty.id, earlier);
+        }
+      } catch (error) {
+        console.error("counterparties: earlier addresses not read", error instanceof Error ? error.message : error);
+      }
+    }
     // Only those who may send a payee link see which ones are out.
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
     // The payees with no address of their own to ask at once (ask every payee A1, A2).
@@ -262,6 +281,7 @@ export default async function CounterpartiesPage({
                         canConfirm={canConfirm}
                         payeeLockOn={payeeLock.on}
                         lookalikes={alike.get(counterparty.id) ?? []}
+                        earlierLookalike={earlierAlike.get(counterparty.id) ?? null}
                       />
                       {bankPayoutsOn && counterparty.role === "vendor" && (
                         <CounterpartyBankAccount

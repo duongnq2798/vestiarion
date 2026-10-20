@@ -24,7 +24,7 @@ import { loadObligationGate, NO_OBLIGATIONS, type ObligationGate } from "./oblig
 import { projectRoomsFor } from "../projects/rooms";
 import type { HeldForProject } from "./follow-up";
 import type { SameWorkMatch } from "../projects/same-work";
-import { readTwoApprovalsAbove } from "../approval-policy";
+import { readPaymentPolicies, readTwoApprovalsAbove } from "../approval-policy";
 import { readShadowMode, type ShadowMode } from "../shadow-mode";
 import { choosePayoutRoute } from "../payout-route";
 import { needsTwoApprovals, TWO_APPROVALS_RULE } from "../two-approvals";
@@ -620,6 +620,8 @@ const NOT_RESUBMITTED_HIGH_RISK_NOTE = " [not resubmitted: counterparty now scre
 
 /** Appended to a held invoice's reasoning when a resubmission was refused because a changed address is unconfirmed. */
 const NOT_RESUBMITTED_ADDRESS_NOTE = " [not resubmitted: the counterparty's address changed and no one has confirmed it]";
+/** A payment never sent, not sent again while the payee lock keeps the payee's changed address waiting (payee lock PL5). */
+const NOT_RESUBMITTED_COOLING_NOTE = " [not resubmitted: the counterparty's address changed recently and the payee lock keeps it waiting]";
 
 /**
  * Why a resubmission must not go out, from the counterparty as it stands now,
@@ -630,8 +632,10 @@ const NOT_RESUBMITTED_ADDRESS_NOTE = " [not resubmitted: the counterparty's addr
  */
 async function resubmissionBlocker(
   orgDb: OrgDb,
-  counterpartyId: string
-): Promise<"counterparty.high_risk" | "counterparty.address_unconfirmed" | null> {
+  counterpartyId: string,
+  /** The stage's payee lock (payee lock PL5): a changed address inside its wait is not paid again either. */
+  payeeLock: PayeeLock = PAYEE_LOCK_OFF
+): Promise<"counterparty.high_risk" | "counterparty.address_unconfirmed" | "counterparty.cooling_off" | null> {
   const result = await orgDb
     .from("counterparties")
     .select("risk_level, address_changed_at, address_confirmed_at")
@@ -641,6 +645,7 @@ async function resubmissionBlocker(
   const row = result.data as { risk_level: string; address_changed_at?: string | null; address_confirmed_at?: string | null } | null;
   if (row?.risk_level === "high") return "counterparty.high_risk";
   if (addressUnconfirmed(row?.address_changed_at ?? null, row?.address_confirmed_at ?? null)) return "counterparty.address_unconfirmed";
+  if (inCoolingOff(row?.address_changed_at ?? null, payeeLock)) return "counterparty.cooling_off";
   return null;
 }
 
@@ -906,6 +911,8 @@ export async function reconcileApInvoice(
     twoApprovalsAbove?: number | null;
     /** The stage's new payee check, wherever payments are real (new payee check N5); absent in a sandbox. */
     newPayee?: NewPayeeCheckOf;
+    /** The workspace's payee lock, as the stage read it (payee lock PL5); off when absent. */
+    payeeLock?: PayeeLock;
   }
 ): Promise<ReconcileOutcome> {
   const input = {
@@ -974,13 +981,19 @@ export async function reconcileApInvoice(
   const sent = transferExists || earlier?.answer === "sent";
 
   let outcome: PayStepOutcome;
-  let notResubmitted: "counterparty.high_risk" | "counterparty.address_unconfirmed" | "counterparty.new_payee" | "workspace.two_approvals" | null = null;
+  let notResubmitted:
+    | "counterparty.high_risk"
+    | "counterparty.address_unconfirmed"
+    | "counterparty.cooling_off"
+    | "counterparty.new_payee"
+    | "workspace.two_approvals"
+    | null = null;
   // `undefined` leaves the invoice's recorded paid amount as it is.
   let paidAmount: number | null | undefined;
   // A payment Circle never took is sent again only to a counterparty still fit to pay, at an address two different
   // parties stand behind if it was never paid there (new payee check N3), and only on its own when one approval may pay
   // it (payment integrity I4).
-  const riskOrAddress = sent ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId);
+  const riskOrAddress = sent ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId, deps.payeeLock);
   const newPayeeHeld = sent || riskOrAddress ? null : newPayeeResendBlocker(deps.newPayee, { id: invoice.counterpartyId, address: invoice.address });
   const blocker = sent
     ? null
@@ -1031,7 +1044,9 @@ export async function reconcileApInvoice(
             ? notResubmittedTwoApprovalsNote(deps.twoApprovalsAbove as number)
             : newPayeeHeld
               ? notResubmittedNewPayeeNote(newPayeeHeld)
-              : NOT_RESUBMITTED_ADDRESS_NOTE,
+              : blocker === "counterparty.cooling_off"
+                ? NOT_RESUBMITTED_COOLING_NOTE
+                : NOT_RESUBMITTED_ADDRESS_NOTE,
       heldBecausePaused: false,
       operatingBalance: null,
     };
@@ -1116,6 +1131,8 @@ export async function reconcileApInvoice(
       ? `${name}: not resubmitted, the counterparty is now screened high risk (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.address_unconfirmed"
       ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} ${currency})`
+      : notResubmitted === "counterparty.cooling_off"
+      ? `${name}: not resubmitted, the payee lock keeps the counterparty's changed address waiting (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.new_payee"
       ? `${name}: ${NOT_RESUBMITTED_NEW_PAYEE_LINE} (${invoice.amount} ${currency})`
       : notResubmitted === "workspace.two_approvals"
@@ -2493,10 +2510,11 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   // Asked by each decision, and by each resubmission of a payment never sent, which pays the address as it stands now.
   const newPayeeOf: NewPayeeCheckOf = (counterparty) => (newPayeeFacts ? newPayeeCheckFor(newPayeeFacts, counterparty) : null);
   // The figure above which a payment needs two people (two approvals T3): read once for the stage, when anything is decided.
-  const twoApprovalsAbove = input.twoApprovalsAbove !== undefined ? input.twoApprovalsAbove : payables.length > 0 ? await readTwoApprovalsAbove(db) : null;
-  // The payee lock (payee lock PL5): read once for the stage, when anything is decided. A lock that cannot be read stops
-  // the stage, as the figure does.
-  const payeeLock = input.payeeLock !== undefined ? input.payeeLock : payables.length > 0 ? await readPayeeLock(db) : PAYEE_LOCK_OFF;
+  // With it, the payee lock (payee lock PL5), in the same read. A row that cannot be read stops the stage.
+  const policies =
+    payables.length > 0 && (input.twoApprovalsAbove === undefined || input.payeeLock === undefined) ? await readPaymentPolicies(db) : null;
+  const twoApprovalsAbove = input.twoApprovalsAbove !== undefined ? input.twoApprovalsAbove : (policies?.twoApprovalsAbove ?? null);
+  const payeeLock = input.payeeLock !== undefined ? input.payeeLock : (policies?.payeeLock ?? PAYEE_LOCK_OFF);
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
   const shadow = input.shadow !== undefined ? input.shadow : payables.length > 0 ? await shadowOnce() : null;
 
@@ -2598,7 +2616,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
         intent,
         // The stage's figure, so a payment it never sent goes again on its own only when one approval may pay it (I4), and
         // its check, so it goes again to an address never paid only with two parties behind it (new payee check N3).
-        { db, provider, operating, onChainLimit, twoApprovalsAbove, newPayee: newPayeeOf }
+        { db, provider, operating, onChainLimit, twoApprovalsAbove, newPayee: newPayeeOf, payeeLock }
       );
       if (!reconciled.decideAgain) {
         if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;
@@ -3186,6 +3204,8 @@ export async function reconcileMilestone(
     onChainLimit?: OnChainLimitGate;
     /** The workspace's figure above which a payment needs two approvals, as the stage read it; null or absent when off. */
     twoApprovalsAbove?: number | null;
+    /** The workspace's payee lock, as the stage read it (payee lock PL5); off when absent. */
+    payeeLock?: PayeeLock;
     /** The stage's new payee check, wherever payments are real (new payee check N5); absent in a sandbox. */
     newPayee?: NewPayeeCheckOf;
   }
@@ -3250,12 +3270,20 @@ export async function reconcileMilestone(
   // current address. While a changed address is unconfirmed the milestone
   // waits exactly as the contractor stage's own check makes it wait: still
   // verified, nothing written, decided again once someone confirms it.
-  const blocker = sent ? null : await resubmissionBlocker(deps.db, milestone.contractorId);
+  const blocker = sent ? null : await resubmissionBlocker(deps.db, milestone.contractorId, deps.payeeLock);
   if (blocker === "counterparty.address_unconfirmed") {
     return {
       status: "verified",
       operatingBalance: null,
       line: { domain: "contractor", message: `${name}: "${milestone.title}" waiting for someone to confirm its new address` },
+    };
+  }
+  // The payee lock's wait (PL5): the milestone waits the same way, and is decided again once it has passed.
+  if (blocker === "counterparty.cooling_off") {
+    return {
+      status: "verified",
+      operatingBalance: null,
+      line: { domain: "contractor", message: `${name}: "${milestone.title}" waiting out the payee lock's wait on its new address` },
     };
   }
 
@@ -4080,9 +4108,10 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   const newPayeeFacts =
     provider.mode === "live" && milestones.length > 0 ? await loadNewPayeeFacts(db, [...new Set(milestones.map((m) => m.contractor_id))]) : null;
   // The figure above which a release needs two people (two approvals T3): read once for the stage, when anything is decided.
-  const twoApprovalsAbove = milestones.length > 0 ? await readTwoApprovalsAbove(db) : null;
-  // The payee lock (payee lock PL5): read once for the stage, when anything is decided.
-  const payeeLock = milestones.length > 0 ? await readPayeeLock(db) : PAYEE_LOCK_OFF;
+  // With it, the payee lock (payee lock PL5), in the same read.
+  const policies = milestones.length > 0 ? await readPaymentPolicies(db) : null;
+  const twoApprovalsAbove = policies?.twoApprovalsAbove ?? null;
+  const payeeLock = policies?.payeeLock ?? PAYEE_LOCK_OFF;
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
   const shadow = milestones.length > 0 ? await readShadowMode(db) : null;
   // The bills a milestone may repeat, and its project's reservations (project budgets P5, P9): read once, when anything is decided.
@@ -4243,7 +4272,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
         intent,
         // The stage's figure, so a release it never sent goes again on its own only when one approval may pay it (I4), and
         // its check, so it goes again to an address never paid only with two parties behind it (new payee check N3).
-        { db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove, newPayee: firstReleaseTo }
+        { db, provider, operating: operating ? { id: operating.id } : null, onChainLimit, twoApprovalsAbove, newPayee: firstReleaseTo, payeeLock }
       );
       if (!reconciled.decideAgain) {
         if (reconciled.operatingBalance !== null) operatingBalance = reconciled.operatingBalance;

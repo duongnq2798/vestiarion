@@ -24,7 +24,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
     - an optional wait of 4 to 72 hours keeps a changed address from being paid, confirmed or not. The agent holds the
       payment, then decides it again when the wait ends.
   - Counterparties now warns about an address that is the same as another payee's, or that looks like it (the same
-    first 6 and last 4 characters).
+    first 6 and last 4 characters). It also warns about a changed address that looks like one the same payee had or was
+    paid at before, which is how address poisoning usually works.
   - Each check is signed with the confirmation. Migration `0135_payee_lock.sql`.
 
 ### Changed

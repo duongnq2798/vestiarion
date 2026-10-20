@@ -22,3 +22,6 @@ begin
       check (payee_lock_cooling_hours between 0 and 168);
   end if;
 end $$;
+
+-- PostgREST reads the new columns at once, so the first Settings save is not refused as before 0135.
+notify pgrst, 'reload schema';

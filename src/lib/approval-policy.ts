@@ -6,6 +6,7 @@ import { parseTwoApprovalsForm } from "./two-approvals";
 import { workspaceNetwork } from "./workspace-network";
 import { MAINNET_STARTING_TWO_APPROVALS } from "./mainnet";
 import { sameFigure, type ReplaySummary } from "./policy-replay";
+import { PAYEE_LOCK_OFF, payeeLockColumnsMissing, payeeLockFromRow, type PayeeLock } from "./payee-lock";
 
 /**
  * The figure above which a payment needs two approvals (docs/superpowers/specs/2026-10-05-two-approvals-design.md T1):
@@ -51,11 +52,28 @@ export async function readTwoApprovalsAbove(orgDb: OrgDb): Promise<number | null
   const result = await orgDb.from("approval_policies").select("two_approvals_above").limit(1);
   if (result.error) throw new Error(`approval_policies not read: ${result.error.message}`);
   const rows = (result.data ?? []) as Array<{ two_approvals_above: string | number | null }>;
-  const stored = numeric(rows[0]?.two_approvals_above);
-  // On Arc mainnet a figure always stands (mainnet limits L1, L2): a workspace whose row is missing, created before it
-  // was written or left without it, reads the starting figure, never none (final review I1).
+  return figureOf(rows[0]?.two_approvals_above);
+}
+
+/** The figure a row holds. On Arc mainnet a figure always stands (mainnet limits L1, L2): a workspace whose row is
+ * missing, created before it was written or left without it, reads the starting figure, never none (final review I1). */
+function figureOf(value: string | number | null | undefined): number | null {
+  const stored = numeric(value);
   if (stored === null && workspaceNetwork().id === "arc-mainnet") return MAINNET_STARTING_TWO_APPROVALS;
   return stored;
+}
+
+/**
+ * The figure for two approvals and the payee lock together, in one read, for an agent stage that weighs both
+ * (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL5). Before migration 0135 the lock's columns are missing:
+ * the figure is read alone and the lock is off. Any other failure throws, as the figure's own read does.
+ */
+export async function readPaymentPolicies(orgDb: OrgDb): Promise<{ twoApprovalsAbove: number | null; payeeLock: PayeeLock }> {
+  const result = await orgDb.from("approval_policies").select("two_approvals_above, payee_lock, payee_lock_cooling_hours").limit(1);
+  if (result.error && payeeLockColumnsMissing(result.error)) return { twoApprovalsAbove: await readTwoApprovalsAbove(orgDb), payeeLock: PAYEE_LOCK_OFF };
+  if (result.error) throw new Error(`approval_policies not read: ${result.error.message}`);
+  const row = ((result.data ?? []) as Array<{ two_approvals_above: string | number | null; payee_lock?: boolean | null; payee_lock_cooling_hours?: number | string | null }>)[0];
+  return { twoApprovalsAbove: figureOf(row?.two_approvals_above), payeeLock: payeeLockFromRow(row) };
 }
 
 /** How many members may approve payments, leaving out those named (`approvers_besides`, migration 0076). */

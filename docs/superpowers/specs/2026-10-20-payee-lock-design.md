@@ -66,6 +66,8 @@ Confirm address opens a form instead of a yes/no:
   `soloConfirmation: true`, so the record says plainly that one person did both.
 - The refusal reads: "You entered or asked for this address, so someone else confirms it."
 - With the lock off nothing changes. The entry records `byGiver: true` when the giver confirmed it.
+- When no giver can be named (a change entry that names no one), anyone may confirm it, and the entry records
+  `giverUnknown: true`.
 
 **PL4. No confirmation by approving (lock on).**
 - Approve and pay on a payment to an address waiting for confirmation is refused before anything is claimed: "Confirm
@@ -81,6 +83,8 @@ Confirm address opens a form instead of a yes/no:
   waits.
 - The follow-up stage decides a held payable again once the time has passed. It is held, not refused, so nothing is
   lost.
+- A payment that never reached the network is not sent again inside the wait either. A payable is held for a person
+  (`notResubmittedBecause: "counterparty.cooling_off"`), and a milestone waits, still verified.
 
 **PL6. Lookalike addresses.**
 - Two addresses look alike when they differ but share the first 6 and the last 4 hex digits after `0x`, the pattern
@@ -88,6 +92,9 @@ Confirm address opens a form instead of a yes/no:
 - On Counterparties, a counterparty whose address looks like another counterparty's, or is the same address as another
   counterparty's, shows a warning: "Looks like {other}'s address" or "Same address as {other}".
 - The confirm form repeats the warning, and the confirmation records `lookalikeOf: [counterpartyId…]`.
+- A changed address is also compared with the same payee's earlier addresses and the ones it was paid at. Address
+  poisoning usually imitates the address the person confirming already knows. A match reads "Looks like an earlier
+  address of this payee" on the card and in the form, and is recorded as `looksLikeEarlier`.
 - It never blocks: two counterparties can share a wallet on purpose.
 - Only addresses on the same chain are compared. Case is ignored.
 

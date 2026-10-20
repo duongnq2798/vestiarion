@@ -9,6 +9,7 @@ import { planFollowUp } from "@/lib/agent/follow-up";
 import {
   changePayeeLock,
   coolingOffUntil,
+  earlierLookalike,
   inCoolingOff,
   lookalikes,
   parseVerification,
@@ -16,6 +17,7 @@ import {
   readPayeeLockStatus,
 } from "@/lib/payee-lock";
 import { db } from "@/lib/dal";
+import { readPaymentPolicies } from "@/lib/approval-policy";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -148,6 +150,10 @@ describe("parseVerification (PL2)", () => {
     expect(parseVerification({ method: "other", note: "line one\nline two" }, true)).toMatchObject({ ok: true });
   });
 
+  it("refuses a format character that reverses how text reads (U+202E)", () => {
+    expect(parseVerification({ method: "call", contact: "+44\u202E0000" }, false)).toMatchObject({ ok: false, problem: "text" });
+  });
+
   it("refuses a method it does not know", () => {
     expect(parseVerification({ method: "email" }, false)).toMatchObject({ ok: false, problem: "method" });
   });
@@ -230,6 +236,18 @@ describe("the cooling-off (PL5)", () => {
   });
 });
 
+describe("earlierLookalike (PL6)", () => {
+  it("finds an address the payee had or was paid at before that the new one is made to look like", () => {
+    const poisoned = "0x1111110000000000000000000000000000001111";
+    const entries = [{ action: "counterparty_address_changed", detail: { from: OLD, to: poisoned } }];
+    expect(earlierLookalike(poisoned, entries)).toBe(OLD);
+    expect(earlierLookalike(poisoned, [], [OLD])).toBe(OLD);
+    // A real new wallet shares no such ends with the old one.
+    expect(earlierLookalike(NEW, [{ action: "counterparty_address_changed", detail: { from: OLD, to: NEW } }])).toBeNull();
+    expect(earlierLookalike(null, entries)).toBeNull();
+  });
+});
+
 describe("lookalikes (PL6)", () => {
   const row = (id: string, name: string, address: string | null, chain = "ARC-TESTNET") => ({ id, name, address, chain });
 
@@ -279,11 +297,58 @@ describe("the setting (PL1)", () => {
     expect(entry.p_detail).toEqual({ by: ACTOR, from: { on: false, coolingHours: 0 }, to: { on: true, coolingHours: 24 } });
   });
 
+  it("refuses a save PostgREST cannot take yet, as not ready (PGRST204)", async () => {
+    const upsert = { status: 400, body: { code: "PGRST204", message: "Could not find the 'payee_lock' column of 'approval_policies' in the schema cache" } };
+    await expect(lockFake({ upsert }).run(() => changePayeeLock({ actorId: ACTOR, on: true, coolingHours: 0 }))).rejects.toMatchObject({ code: "not_ready" });
+  });
+
+  it("fails closed on any other error, one naming the column included", async () => {
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow() };
+      if (request.path === "/rest/v1/approval_policies") return { status: 403, body: { code: "42501", message: "permission denied for column payee_lock" } };
+      return { body: [] };
+    });
+    await expect(runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => readPayeeLockStatus(db())))).rejects.toThrow(/permission denied/);
+  });
+
+  it("names a change of wait alone, with the lock off", async () => {
+    const { fake, run } = lockFake({ lock: { on: false, hours: 0 } });
+    await run(() => changePayeeLock({ actorId: ACTOR, on: false, coolingHours: 24 }));
+    expect(ledgerBodies(fake.requests)[0].p_summary).toBe("Changed the payee lock's wait after an address changes from 0 to 24 hours, with the lock off");
+  });
+
   it("refuses no change, a wait out of range, a running cycle, and a database without it", async () => {
     await expect(lockFake({ lock: { on: true, hours: 24 } }).run(() => changePayeeLock({ actorId: ACTOR, on: true, coolingHours: 24 }))).rejects.toMatchObject({ code: "unchanged" });
     await expect(lockFake().run(() => changePayeeLock({ actorId: ACTOR, on: true, coolingHours: 169 }))).rejects.toMatchObject({ code: "invalid" });
     await expect(lockFake({ cycleRunning: true }).run(() => changePayeeLock({ actorId: ACTOR, on: true, coolingHours: 0 }))).rejects.toMatchObject({ code: "cycle_running" });
     await expect(lockFake({ lock: "missing" }).run(() => changePayeeLock({ actorId: ACTOR, on: true, coolingHours: 0 }))).rejects.toMatchObject({ code: "not_ready" });
+  });
+});
+
+describe("readPaymentPolicies, the agent stage's one read (PL5)", () => {
+  it("reads the figure and the lock together", async () => {
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow() };
+      if (request.path === "/rest/v1/approval_policies") return { body: [{ two_approvals_above: "280", payee_lock: true, payee_lock_cooling_hours: 24 }] };
+      return { body: [] };
+    });
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => readPaymentPolicies(db())));
+    expect(result).toEqual({ twoApprovalsAbove: 280, payeeLock: { on: true, coolingHours: 24 } });
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/approval_policies")).toHaveLength(1);
+  });
+
+  it("before 0135, reads the figure alone and the lock as off", async () => {
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: orgRow() };
+      if (request.path === "/rest/v1/approval_policies") {
+        return request.params.get("select")?.includes("payee_lock")
+          ? { status: 400, body: { code: "42703", message: "column approval_policies.payee_lock does not exist" } }
+          : { body: [{ two_approvals_above: "280" }] };
+      }
+      return { body: [] };
+    });
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => readPaymentPolicies(db())));
+    expect(result).toEqual({ twoApprovalsAbove: 280, payeeLock: { on: false, coolingHours: 0 } });
   });
 });
 
@@ -350,6 +415,33 @@ describe("confirmCounterpartyAddress under the payee lock (PL2–PL4, PL6)", () 
     await expect(run(() => confirm(ACTOR, null))).resolves.toBe(true);
     const [entry] = ledgerBodies(fake.requests);
     expect(entry.p_detail).toEqual({ by: ACTOR, counterpartyId: COUNTERPARTY_ID, address: NEW, chain: "ARC-TESTNET", via: "confirm", byGiver: true });
+  });
+
+  it("refuses the member who created the payee link the address came through, and records an unknown giver", async () => {
+    const LINK = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1";
+    const throughLink = [
+      { action: "counterparty_address_changed", detail: { by: null, via: "payee_link", linkId: LINK, counterpartyId: COUNTERPARTY_ID, from: OLD, to: NEW } },
+      { action: "payee_link_created", detail: { by: ACTOR, linkId: LINK, counterpartyId: COUNTERPARTY_ID } },
+    ];
+    await expect(
+      lockFake({ lock: { on: true }, counterparty: unconfirmed(), entries: throughLink, approversBesides: 1 }).run(() => confirm(ACTOR, CALL))
+    ).rejects.toMatchObject({ code: "giver_confirms" });
+
+    // A change whose entry names no one: anyone may confirm it, and the record says no giver was known.
+    const unknown = [{ action: "counterparty_address_changed", detail: { by: null, counterpartyId: COUNTERPARTY_ID, from: OLD, to: NEW } }];
+    const { fake, run } = lockFake({ lock: { on: true }, counterparty: unconfirmed(), entries: unknown });
+    await run(() => confirm(ACTOR, CALL));
+    expect(ledgerBodies(fake.requests)[0].p_detail).toMatchObject({ giverUnknown: true });
+  });
+
+  it("records an earlier address of the payee the new one is made to look like (address poisoning)", async () => {
+    const poisoned = "0x1111110000000000000000000000000000001111";
+    const { fake, run } = lockFake({
+      counterparty: unconfirmed({ address: poisoned }),
+      entries: [{ action: "counterparty_address_changed", detail: { by: OTHER, counterpartyId: COUNTERPARTY_ID, from: OLD, to: poisoned } }],
+    });
+    await run(() => confirmCounterpartyAddress({ actorId: ACTOR, counterpartyId: COUNTERPARTY_ID, shownAddress: poisoned, via: "confirm" }));
+    expect(ledgerBodies(fake.requests)[0].p_detail).toMatchObject({ looksLikeEarlier: OLD });
   });
 
   it("records the counterparties whose address this one is, or looks like", async () => {

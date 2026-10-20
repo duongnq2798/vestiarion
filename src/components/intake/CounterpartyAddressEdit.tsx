@@ -21,6 +21,7 @@ import { useActionForm } from "@/components/ui/useActionForm";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import { chainById } from "@/lib/payee-chains";
 import {
+  EARLIER_LOOKALIKE,
   lookalikeWords,
   VERIFICATION_CONTACT_MAX,
   VERIFICATION_LABELS,
@@ -45,6 +46,8 @@ export interface CounterpartyAddressProps {
   payeeLockOn?: boolean;
   /** Other counterparties whose address is this one, or made to look like it (PL6). */
   lookalikes?: readonly Lookalike[];
+  /** An address this payee had or was paid at before that its changed one is made to look like (PL6); null when none. */
+  earlierLookalike?: string | null;
 }
 
 /**
@@ -63,6 +66,7 @@ export default function CounterpartyAddress({
   canConfirm,
   payeeLockOn = false,
   lookalikes = [],
+  earlierLookalike = null,
 }: CounterpartyAddressProps) {
   const chainLabel = counterparty.chain ? chainById(counterparty.chain).label : null;
   return (
@@ -80,8 +84,15 @@ export default function CounterpartyAddress({
         )}
         {canWrite && <EditAddress orgSlug={orgSlug} counterparty={counterparty} />}
       </div>
-      {lookalikes.length > 0 && (
+      {(lookalikes.length > 0 || earlierLookalike) && (
         <ul className="flex flex-wrap gap-1.5" aria-label="Lookalike addresses">
+          {earlierLookalike && (
+            <li>
+              <Badge size="sm" tone="refused" icon={<TriangleAlert aria-hidden />} title={earlierLookalike}>
+                {EARLIER_LOOKALIKE}
+              </Badge>
+            </li>
+          )}
           {lookalikes.map((match) => (
             <li key={match.id}>
               <Badge size="sm" tone="refused" icon={<TriangleAlert aria-hidden />}>
@@ -96,7 +107,9 @@ export default function CounterpartyAddress({
           <Badge size="sm" dot tone="held">
             Changed {unconfirmedSince.slice(0, 10)} · not yet confirmed
           </Badge>
-          {canConfirm && <ConfirmAddress orgSlug={orgSlug} counterparty={counterparty} payeeLockOn={payeeLockOn} lookalikes={lookalikes} />}
+          {canConfirm && (
+            <ConfirmAddress orgSlug={orgSlug} counterparty={counterparty} payeeLockOn={payeeLockOn} lookalikes={lookalikes} earlierLookalike={earlierLookalike} />
+          )}
         </div>
       )}
     </div>
@@ -149,11 +162,13 @@ function ConfirmAddress({
   counterparty,
   payeeLockOn,
   lookalikes,
+  earlierLookalike,
 }: {
   orgSlug: string;
   counterparty: CounterpartyAddressProps["counterparty"];
   payeeLockOn: boolean;
   lookalikes: readonly Lookalike[];
+  earlierLookalike: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -176,7 +191,14 @@ function ConfirmAddress({
         }
       >
         <form id={formId} className="grid gap-4" {...formProps}>
-          <ConfirmAddressFields orgSlug={orgSlug} counterparty={counterparty} payeeLockOn={payeeLockOn} lookalikes={lookalikes} idPrefix={formId} />
+          <ConfirmAddressFields
+            orgSlug={orgSlug}
+            counterparty={counterparty}
+            payeeLockOn={payeeLockOn}
+            lookalikes={lookalikes}
+            earlierLookalike={earlierLookalike}
+            idPrefix={formId}
+          />
           <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
           <DialogFooter>
             <DialogClose asChild>
@@ -201,12 +223,14 @@ export function ConfirmAddressFields({
   counterparty,
   payeeLockOn,
   lookalikes,
+  earlierLookalike = null,
   idPrefix,
 }: {
   orgSlug: string;
   counterparty: CounterpartyAddressProps["counterparty"];
   payeeLockOn: boolean;
   lookalikes: readonly Lookalike[];
+  earlierLookalike?: string | null;
   idPrefix: string;
 }) {
   // With the lock off every field is optional; with it on, a call or a message names its contact (the action checks).
@@ -218,6 +242,12 @@ export function ConfirmAddressFields({
       <input type="hidden" name="counterpartyId" value={counterparty.id} />
       <input type="hidden" name="address" value={counterparty.address ?? ""} />
       {counterparty.chain && <input type="hidden" name="chain" value={counterparty.chain} />}
+      {earlierLookalike && (
+        <Callout tone="refused" title="Check every character">
+          {EARLIER_LOOKALIKE}: it starts and ends like <span className="break-all font-mono text-xs">{earlierLookalike}</span>, but it is a
+          different address. That is how address poisoning works. Read the whole address back to {counterparty.name}.
+        </Callout>
+      )}
       {lookalikes.length > 0 && (
         <Callout tone="refused" title="Check this address twice">
           {lookalikes.map(lookalikeWords).join(". ")}. A fraudster may have made it look like an address you know.
