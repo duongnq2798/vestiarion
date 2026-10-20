@@ -75,7 +75,10 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
   // With each counter (0127); before that migration runs, as before.
   const withCounters = await offersRead("id, invoice_id, discount_pct, amount, offered_amount, counter_pct, status, expires_at, decided_at, counterparties(name)");
   const offers = (withCounters.error ? unwrap(await offersRead("id, invoice_id, discount_pct, amount, offered_amount, status, expires_at, decided_at, counterparties(name)")) : withCounters.data) as unknown as OfferRow[];
-  const reserve = (unwrap(await db().from("accounts").select("apy").eq("kind", "reserve").maybeSingle()) as { apy: string | null } | null) ?? null;
+  // A workspace with no reserve earns nothing by waiting, as the agent reads it; only a failed read is an error.
+  const reserveRead = await db().from("accounts").select("apy").eq("kind", "reserve").maybeSingle<{ apy: string | null }>();
+  if (reserveRead.error) throw new Error(reserveRead.error.message);
+  const reserve = reserveRead.data;
   const reserveApy = reserve?.apy != null && Number.isFinite(Number(reserve.apy)) ? Number(reserve.apy) : 0;
   // An offer out, or one a supplier countered that the agent has not answered yet (offer counters N7).
   const openBy = new Map(offers.filter((row) => (row.status === "open" && Date.parse(row.expires_at) > now.getTime()) || row.status === "countered").map((row) => [row.invoice_id, row] as const));

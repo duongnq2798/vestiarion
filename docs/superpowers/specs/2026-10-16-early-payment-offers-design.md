@@ -29,7 +29,9 @@ Bills held, flagged or waiting for information are a person's to decide first.
 **E2. What to ask.** For each eligible bill, Vestiarion suggests a discount from the reserve's yield. The break-even is
 `yield × days / 365`, the share of the bill the cash would earn by its due date. The suggestion is twice that, rounded up
 to the next 0.25%, at least 0.5% and at most 5%. The card says what it is worth: "Paying 20 days early for 1.00% is
-like earning 18.3% a year, above the reserve's 4.2%." A person may ask any discount from 0.1% to 10%.
+like earning 18.3% a year, above the reserve's 4.2%." A person may ask any discount from 0.1% to 10%. A workspace with
+no reserve earns nothing by waiting, as the agent reads it: each bill suggests the 0.5% floor, and the card names no
+reserve.
 
 **E3. Who offers.** An owner or admin makes the offer, never the agent on its own: it is a message to a supplier on the
 business's behalf. Making it records `early_payment_offered` and gives a one-time link (`vxo_` and 43 base64url

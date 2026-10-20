@@ -2510,8 +2510,8 @@ A supplier paid today for a discount it accepts (docs/superpowers/specs/2026-10-
 
 - **Which bills, what to ask** (`src/lib/early-pay/offers-words.ts`, `offersView`). A payable scheduled or pending,
   with no discount, no payment intent and a due date at least 3 days out. The suggestion is twice the reserve's yield to
-  the due date (`apy × days / 365`), rounded up to 0.25%, from 0.5% to 5%. Shown on Bills & receivables above the
-  list (`EarlyPaymentOffers`).
+  the due date (`apy × days / 365`), rounded up to 0.25%, from 0.5% to 5%; with no reserve account the yield is 0, and
+  only a failed read is an error. Shown on Bills & receivables above the list (`EarlyPaymentOffers`).
 - **The offer** (`createOffer`, migration 0125). `create_early_payment_offer` checks eligibility
   (`early_payment_offer_eligible`), withdraws the bill's open offer, and stores the bill's amount, the discounted amount
   and the SHA-256 of a `vxo_` token (one open per invoice, partial unique index). It lapses after 7 days or the day
