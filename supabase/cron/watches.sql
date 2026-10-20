@@ -55,6 +55,17 @@ select cron.schedule('vestiarion-agent-tick', '17 */6 * * *', $$
       where name = 'agent_api_token')),
     timeout_milliseconds := 330000)
 $$);
+-- The due-work watch: a cycle where work became due only because time passed, every 5 minutes (at most 300 seconds):
+-- a scheduled cycle the tick missed in a workspace, or the end of the payee lock's wait on a confirmed address
+-- (docs/superpowers/specs/2026-10-21-due-work-watch-design.md). With nothing due it runs no cycle.
+select cron.schedule('vestiarion-due-watch', '*/5 * * * *', $$
+  select net.http_post(
+    url := 'https://www.vestiarion.xyz/api/agent/due-watch',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || (
+      select decrypted_secret from vault.decrypted_secrets
+      where name = 'agent_api_token')),
+    timeout_milliseconds := 330000)
+$$);
 -- The accounting sync: bills from the Xero organisations and QuickBooks companies workspaces connected, and deals from
 -- their HubSpot accounts, every 15 minutes (at most 300 seconds).
 select cron.schedule('vestiarion-accounting-sync', '*/15 * * * *', $$

@@ -49,6 +49,16 @@ export function takeTransferWatchToken(key: string, now = Date.now()): boolean {
   return take(transferWatchBuckets, key, 2, 60_000, now);
 }
 
+const dueWatchBuckets = new Map<string, Bucket>();
+
+/**
+ * Two due-work watches a minute per client (due-work watch DW1), in their own bucket so a watch never takes the tick's
+ * or another watch's token. Single-instance, like the cycle guard.
+ */
+export function takeDueWatchToken(key: string, now = Date.now()): boolean {
+  return take(dueWatchBuckets, key, 2, 60_000, now);
+}
+
 const circleNotificationBuckets = new Map<string, Bucket>();
 
 /**

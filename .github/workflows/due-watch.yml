@@ -1,0 +1,32 @@
+name: Vestiarion due-work watch
+
+# Runs a cycle where work became due only because time passed: a scheduled cycle the six-hourly tick missed, or the end
+# of the payee lock's wait on a confirmed address that holds a payment back
+# (docs/superpowers/specs/2026-10-21-due-work-watch-design.md). A run with nothing due starts no cycle. Supabase Cron
+# calls the route every 5 minutes (supabase/cron/watches.sql); this workflow is its manual run.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: due-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the protected due-work watch
+        env:
+          VESTIARION_URL: ${{ secrets.VESTIARION_URL }}
+          AGENT_API_TOKEN: ${{ secrets.AGENT_API_TOKEN }}
+        run: |
+          test -n "$VESTIARION_URL"
+          test -n "$AGENT_API_TOKEN"
+          curl --fail-with-body --silent --show-error \
+            --max-time 330 \
+            --request POST \
+            --header "Authorization: Bearer $AGENT_API_TOKEN" \
+            "${VESTIARION_URL%/}/api/agent/due-watch"

@@ -201,7 +201,7 @@ With the lock on:
 - **Someone else confirms it.** Whoever entered the address, or asked the payee for it, cannot confirm it while another member can: "You entered or asked for this address, so someone else confirms it." Where no one else can, they confirm it alone, and the record says so.
 - **Approve and pay no longer confirms an address.** It is refused until someone confirms the address on Counterparties.
 - **Wait after an address changes** keeps a changed address from being paid for 4, 24, 48 or 72 hours after the change, confirmed or not, which gives the real payee time to notice a change they did not make.
-  - The agent holds a payment to that address until then, and decides it again once the wait ends.
+  - The agent holds a payment to that address until then, and decides it again within about five minutes of the wait ending.
   - **Approve and pay** and **Pay now** say when it can be paid.
   - A verified milestone waits too. Its card on **Contractors** reads "Payee lock wait" and says until when.
 
@@ -316,7 +316,7 @@ A workspace on Arc mainnet pays a vendor on **Base** the same way, in real USDC:
 ## 3. Run a cycle
 
 A cycle is one run of the agent: it screens counterparties, reads open invoices, and pays, schedules, holds or flags each one.
-Adding a payable starts a cycle, usually within a minute, so the invoice is decided without anyone pressing a button, and the pages show the decision on their own. The agent also starts one when a person returns a payable to it, confirms a changed address, verifies a milestone, or resumes it. One cycle runs at a time: if one is already running, the next waits for it, and **Run cycle now** says so instead of starting a second. A live workspace also runs a cycle every 6 hours on its own, for what time alone changes, such as due dates and screening.
+Adding a payable starts a cycle, usually within a minute, so the invoice is decided without anyone pressing a button, and the pages show the decision on their own. The agent also starts one when a person returns a payable to it, confirms a changed address, verifies a milestone, or resumes it. One cycle runs at a time: if one is already running, the next waits for it, and **Run cycle now** says so instead of starting a second. A live workspace also runs a cycle every 6 hours on its own, for what time alone changes, such as due dates and screening. Two things time changes start one sooner: the end of a [payee lock](#payee-lock) wait that holds a payment back, within about five minutes, and a scheduled cycle the workspace missed, within about 20 minutes of the time it was due.
 
 To run one yourself, open **Treasury**, the console, and choose **Run cycle now**. Only owners and admins have this button. When the cycle ends, a message says "Cycle complete at *time* · *n* decisions logged." and the console shows a report of what the cycle did.
 

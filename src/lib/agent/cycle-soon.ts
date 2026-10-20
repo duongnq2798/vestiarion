@@ -76,7 +76,9 @@ export type CycleEventKind =
   /** A fresh quote cleared what held a EURC payable; started by the FX watch, not by a person (FX re-evaluation F4). */
   | "fx_changed"
   /** Circle said a transfer in flight settled or failed; started by its notification, not by a person (Circle notifications N4). */
-  | "payment_settled";
+  | "payment_settled"
+  /** The payee lock's wait on a confirmed address ended; started by the due-work watch, not by a person (due-work watch DW5). */
+  | "payee_lock_wait_ended";
 
 export interface CycleEvent {
   orgId: string;

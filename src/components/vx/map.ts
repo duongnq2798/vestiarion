@@ -739,7 +739,7 @@ function milestoneProgress(milestone: MilestoneRow, waiting: MilestoneContext["w
   // Nothing for a person to do: the agent decides it on the first cycle after the wait, as the contractor stage does.
   if (waiting === "cooling_off") {
     const until = waitsUntil ? `until ${coolingOffLabel(waitsUntil)}` : "for a while";
-    return { label: "Payee lock wait", line: `Verified. ${name}'s address changed recently, and the payee lock makes it wait ${until}. The agent decides on pay within a minute after that.` };
+    return { label: "Payee lock wait", line: `Verified. ${name}'s address changed recently, and the payee lock makes it wait ${until}. The agent decides on pay within five minutes after that.` };
   }
   if (milestone.tx_ref) return { label: "Payment in flight", line: "Verified. The payment was submitted and is waiting for Circle to confirm it." };
   return { label: "Being decided", line: "Verified. The agent decides on pay within a minute." };

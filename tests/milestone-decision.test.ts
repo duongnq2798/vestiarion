@@ -103,14 +103,14 @@ describe("milestoneDecision: a milestone the agent has not paid yet says what it
     const decision = milestoneDecision(verified, [], { network: "arc-testnet", waiting: "cooling_off", waitsUntil: new Date("2026-10-21T14:05:00Z") });
     expect(decision.outcomeLabel).toBe("Payee lock wait");
     expect(decision.reasoning).toBe(
-      "Verified. Mr Pop's address changed recently, and the payee lock makes it wait until Oct 21, 2026, 14:05 UTC. The agent decides on pay within a minute after that."
+      "Verified. Mr Pop's address changed recently, and the payee lock makes it wait until Oct 21, 2026, 14:05 UTC. The agent decides on pay within five minutes after that."
     );
     expect(decision.outcome).not.toBe("held");
   });
 
   it("still says it waits when the end of the wait is not known", () => {
     expect(milestoneDecision(verified, [], { network: "arc-testnet", waiting: "cooling_off" }).reasoning).toBe(
-      "Verified. Mr Pop's address changed recently, and the payee lock makes it wait for a while. The agent decides on pay within a minute after that."
+      "Verified. Mr Pop's address changed recently, and the payee lock makes it wait for a while. The agent decides on pay within five minutes after that."
     );
   });
 

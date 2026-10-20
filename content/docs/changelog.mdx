@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-21: A cycle when a payee lock's wait ends, and when the schedule missed a workspace
+
+- A `cycle_complete` entry's `events` can include `payee_lock_wait_ended`. The payee lock's wait on a confirmed address ended while a payable or a verified milestone was held back by it, and the due-work watch started the cycle, within about five minutes of the wait ending. The watch, not a person, started it, so its `by` is absent.
+- A scheduled cycle that the six-hourly schedule missed in a workspace now runs within about 20 minutes of its time. Its `cycle_complete` carries `trigger: "schedule"`, as any scheduled cycle's does.
+- Nothing in `/api/v1` request bodies or the webhooks' shapes changes.
+
 ## 2026-10-20: The payee lock
 
 - A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`payee_lock_changed`** (domain `system`, actor `human`), when an owner turns the payee lock on or off or changes its wait. It carries `by`, `from` and `to`, each `{ on, coolingHours }`.
