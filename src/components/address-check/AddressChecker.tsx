@@ -9,7 +9,8 @@ import { Input, Textarea } from "@/components/ui/Input";
 import {
   chanceWords,
   checkAddress,
-  knownAddresses,
+  readKnownAddresses,
+  sharedWords,
   type AddressCheck,
   type AddressMatch,
   type SanctionedEntry,
@@ -26,6 +27,10 @@ export const EXAMPLE_KNOWN = "Northwind Design, 0x7a2dc41e9b03f6a85d1c27e4b98f0a
 export const EXAMPLE_PAY = "0x7a2d8f06c3e1b9a457d02c6e8f1b3a9d4e7ce10d";
 
 const ICON = "mt-0.5 size-4 shrink-0";
+/** 16 px on a phone, so the browser does not zoom into the field; smaller beside a keyboard and mouse. */
+const MONO_FIELD = "font-mono text-base sm:text-[0.8125rem]";
+
+const short = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
 function Check({ ok, children }: { ok: boolean | null; children: ReactNode }) {
   return (
@@ -42,7 +47,7 @@ function Check({ ok, children }: { ok: boolean | null; children: ReactNode }) {
   );
 }
 
-/** One address, its shared ends marked, and in the other line each middle digit that differs. */
+/** One address, its shared ends underlined, and each middle digit that differs from the other's bold on a tint. */
 function Marked({ address, other, leading, trailing }: { address: string; other: string; leading: number; trailing: number }) {
   const digits = address.slice(2);
   const end = digits.length - trailing;
@@ -52,7 +57,7 @@ function Marked({ address, other, leading, trailing }: { address: string; other:
       0x
       <span className="font-semibold text-ink underline decoration-agent decoration-2 underline-offset-4">{digits.slice(0, leading)}</span>
       {[...digits.slice(leading, end)].map((digit, index) => (
-        <span key={index} className={digit === other.slice(2)[leading + index] ? undefined : "text-refused"}>
+        <span key={index} className={digit === other.slice(2)[leading + index] ? undefined : "rounded-sm bg-refused-soft font-semibold text-refused"}>
           {digit}
         </span>
       ))}
@@ -62,20 +67,20 @@ function Marked({ address, other, leading, trailing }: { address: string; other:
 }
 
 function Comparison({ address, match }: { address: string; match: AddressMatch }) {
-  const { leading, trailing, known } = match;
+  const { known } = match;
   return (
     <div className="mt-3 space-y-2 rounded-xl border border-line bg-surface px-3.5 py-3">
       <p className="text-sm text-ink-2">
-        Shares its first {leading} and last {trailing} digits with {known.label}&apos;s address, and differs in between. A random address
-        does that about {chanceWords(leading + trailing)} times.
+        Shares {sharedWords(match)} with {known.label}&apos;s address, and differs in between. A random address does that about once in{" "}
+        {chanceWords(match.leading + match.trailing)}.
       </p>
       <div>
         <p className="text-xs font-medium text-ink-3">The address you are about to pay</p>
-        <Marked address={address} other={known.address} leading={leading} trailing={trailing} />
+        <Marked address={address} other={known.address} leading={match.leading} trailing={match.trailing} />
       </div>
       <div>
         <p className="text-xs font-medium text-ink-3">{known.label}</p>
-        <Marked address={known.address} other={address} leading={leading} trailing={trailing} />
+        <Marked address={known.address} other={address} leading={match.leading} trailing={match.trailing} />
       </div>
     </div>
   );
@@ -88,42 +93,43 @@ function specialWords(special: SpecialAddress): string {
   return `This is the ${special.label} token contract, not a wallet. USDC sent to it is lost.`;
 }
 
-/** The headline: what to do, and the one reason that matters most. */
+/** The headline once the input is an address: what to do, and the one reason that matters most. */
 function Verdict({ check }: { check: AddressCheck }) {
-  if (!check.format.ok) {
-    return (
-      <Callout tone="held" title="Not an address yet">
-        {check.format.message}
-      </Callout>
-    );
-  }
+  const alike = check.matches.find((match) => match.kind === "alike");
+  const same = check.matches.find((match) => match.kind === "same");
   if (check.verdict === "stop") {
-    const alike = check.matches.find((match) => match.kind === "alike");
     const title = check.sanctioned
       ? "Do not pay: this address is on OFAC's sanctions list"
-      : alike
-        ? `Do not pay: this address is made to look like ${alike.known.label}'s`
-        : check.special
-          ? "Do not pay: this is not a wallet"
-          : "Do not pay: a letter in it has the wrong case";
+      : check.special
+        ? "Do not pay: this is not a wallet"
+        : check.checksum === "invalid"
+          ? "Do not pay: its checksum does not match"
+          : `Do not pay: this address is made to look like ${alike!.known.label}'s`;
     const body = check.sanctioned
       ? `OFAC lists it under ${check.sanctioned.name}.`
-      : alike
-        ? "This is how address poisoning works: someone makes an address with the same ends as one you pay, and gets it into your history. Ask the payee for the address again, on a call or to a contact you already had."
-        : check.special
-          ? specialWords(check.special)
-          : "Its mix of capitals does not match its checksum, so it was typed wrong or changed. Ask the payee for it again.";
+      : check.special
+        ? specialWords(check.special)
+        : check.checksum === "invalid"
+          ? "Its mix of capitals does not match its EIP-55 checksum, so a character was mistyped or changed. Ask the payee for it again."
+          : "This is how address poisoning works: someone makes an address with the same ends as one you pay, and gets it into your history. Ask the payee for the address again, on a call or to a contact you already had.";
     return (
       <Callout tone="refused" title={title}>
         {body}
       </Callout>
     );
   }
-  if (check.verdict === "same") {
-    const same = check.matches.find((match) => match.kind === "same")!;
+  if (check.verdict === "conflict") {
     return (
-      <Callout tone="proof" title={`It is the address you know as ${same.known.label}`}>
-        Every character matches. Paying it pays the same wallet as before.
+      <Callout tone="held" title={`It matches ${same!.known.label}, but your list has an address made to look like it`}>
+        {alike!.known.label}&apos;s address shares {sharedWords(alike!)} with it. One of the two is not the payee&apos;s: confirm the address with
+        the payee, on a call or to a contact you already had, before you pay.
+      </Callout>
+    );
+  }
+  if (check.verdict === "same") {
+    return (
+      <Callout tone="proof" title={`It is the address you know as ${same!.known.label}`}>
+        Every character matches: it is the same wallet as in your list.
       </Callout>
     );
   }
@@ -135,12 +141,22 @@ function Verdict({ check }: { check: AddressCheck }) {
   );
 }
 
+function lookalikeLine(check: AddressCheck, knownCount: number): { ok: boolean | null; text: string } {
+  if (knownCount === 0) return { ok: null, text: "Add the addresses you know to compare it with them." };
+  const alike = check.matches.filter((match) => match.kind === "alike");
+  if (alike.length > 0) return { ok: false, text: `It is made to look like ${alike.length === 1 ? "one" : alike.length} of the ${knownCount} you know.` };
+  const partial = check.matches.find((match) => match.kind === "partial");
+  if (partial) return { ok: null, text: `It shares ${sharedWords(partial)} with ${partial.known.label}'s address. Compare the whole address.` };
+  return { ok: true, text: `It is not made to look like any of the ${knownCount} you know.` };
+}
+
 export function AddressChecker({ sanctioned, listDate }: { sanctioned: readonly SanctionedEntry[]; listDate: string }) {
   const id = useId();
   const [pay, setPay] = useState("");
   const [knownText, setKnownText] = useState("");
-  const known = useMemo(() => knownAddresses(knownText), [knownText]);
-  const check = useMemo(() => (pay.trim() === "" ? null : checkAddress(pay, known, sanctioned)), [pay, known, sanctioned]);
+  const read = useMemo(() => readKnownAddresses(knownText), [knownText]);
+  const check = useMemo(() => (pay.trim() === "" ? null : checkAddress(pay, read.known, sanctioned)), [pay, read.known, sanctioned]);
+  const lookalike = check?.address ? lookalikeLine(check, read.known.length) : null;
 
   return (
     <div className="space-y-6">
@@ -154,7 +170,7 @@ export function AddressChecker({ sanctioned, listDate }: { sanctioned: readonly 
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
-            className="font-mono text-[0.8125rem]"
+            className={MONO_FIELD}
           />
         </Field>
         <Field
@@ -171,9 +187,31 @@ export function AddressChecker({ sanctioned, listDate }: { sanctioned: readonly 
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
-            className="font-mono text-[0.8125rem]"
+            className={MONO_FIELD}
           />
         </Field>
+        {(read.known.length > 0 || read.unread.length > 0) && (
+          <div className="space-y-1.5 text-sm text-ink-2">
+            {read.known.length > 0 && (
+              <p>
+                Read {read.known.length === 1 ? "1 address" : `${read.known.length} addresses`}:{" "}
+                {read.known
+                  .slice(0, 8)
+                  .map((entry) => `${entry.label} (${short(entry.address)})`)
+                  .join(", ")}
+                {read.known.length > 8 ? `, and ${read.known.length - 8} more` : ""}.{read.more ? " Only the first 200 are read." : ""}
+              </p>
+            )}
+            {read.unread.map((line) => (
+              <p key={line.line} className="flex gap-2">
+                <OctagonX aria-hidden className={`${ICON} text-refused`} />
+                <span>
+                  Line {line.line} was not read. {line.message}
+                </span>
+              </p>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <Button
             type="button"
@@ -203,9 +241,15 @@ export function AddressChecker({ sanctioned, listDate }: { sanctioned: readonly 
       </div>
 
       <section aria-label="What the check found" className="space-y-4">
-        {/* Only the headline is announced as it changes, not every line under it at each keystroke. */}
-        <div aria-live="polite">{check && <Verdict check={check} />}</div>
-        {check?.address && (
+        {/* While it is not an address yet, what is wrong changes at each keystroke, so it is shown but not announced. */}
+        {check && !check.format.ok && (
+          <Callout tone="held" title="Not an address yet">
+            {check.format.message}
+          </Callout>
+        )}
+        {/* Only the headline is announced as it changes, not every line under it. */}
+        <div aria-live="polite">{check?.address && <Verdict check={check} />}</div>
+        {check?.address && lookalike && (
           <ul className="space-y-2">
             <Check ok={true}>It is 0x and 40 hex digits, the form of an address on Arc, Base, Ethereum and every EVM chain.</Check>
             <Check ok={check.checksum === "none" ? null : check.checksum === "valid"}>
@@ -215,15 +259,9 @@ export function AddressChecker({ sanctioned, listDate }: { sanctioned: readonly 
                   ? `Its mix of capitals does not match its checksum (EIP-55), which is ${check.checksummed}.`
                   : "It is all in one case, so it carries no checksum to check."}
             </Check>
-            <Check ok={known.length === 0 ? null : !check.matches.some((match) => match.kind === "alike")}>
-              {known.length === 0
-                ? "Add the addresses you know to compare it with them."
-                : check.matches.some((match) => match.kind === "alike")
-                  ? `It is made to look like ${check.matches.filter((match) => match.kind === "alike").length === 1 ? "one" : "some"} of the ${known.length} you know.`
-                  : `It is not made to look like any of the ${known.length} you know.`}
-            </Check>
+            <Check ok={lookalike.ok}>{lookalike.text}</Check>
             <Check ok={check.sanctioned === null}>
-              {check.sanctioned ? `It is on OFAC's SDN list, for ${check.sanctioned.name}.` : `It is not among the ${sanctioned.length} addresses on OFAC's SDN list of ${listDate}.`}
+              {check.sanctioned ? `It is on OFAC's SDN list, under ${check.sanctioned.name}.` : `It is not among the ${sanctioned.length} EVM addresses on OFAC's SDN list of ${listDate}.`}
             </Check>
             <Check ok={check.special === null}>{check.special ? specialWords(check.special) : "It is not a token contract or a burn address Vestiarion knows."}</Check>
           </ul>

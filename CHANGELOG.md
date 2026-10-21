@@ -36,7 +36,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 - **A free address lookalike checker** at [/check-address](https://www.vestiarion.xyz/check-address). Paste the address
   you are about to pay and the addresses you know. It says if the address is made to look like one of them, the
-  trick called address poisoning, if a character in it is hidden, from another alphabet or has the wrong case, if it
+  trick called address poisoning, if a character in it is hidden, from another alphabet or fails its checksum, if it
   is a token contract or a burn address, and if it is on OFAC's sanctions list. It runs in the browser: nothing
   pasted is sent anywhere.
 

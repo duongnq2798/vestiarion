@@ -22,8 +22,8 @@ export type FormatProblem = "empty" | "invisible" | "lookalike_character" | "no_
 
 export interface AddressMatch {
   known: KnownAddress;
-  /** `same`: the very address; `alike`: a different one made to look like it. */
-  kind: "same" | "alike";
+  /** `same`: the very address; `alike`: a different one made to look like it; `partial`: one sharing 4 digits at an end. */
+  kind: "same" | "alike" | "partial";
   /** Hex digits after `0x` that agree from the start, and from the end, case ignored. */
   leading: number;
   trailing: number;
@@ -31,7 +31,7 @@ export interface AddressMatch {
 
 export type SpecialAddress = { kind: "zero" } | { kind: "burn" } | { kind: "system" } | { kind: "token"; label: string };
 
-export type Verdict = "fix" | "stop" | "same" | "check";
+export type Verdict = "fix" | "stop" | "conflict" | "same" | "check";
 
 export interface AddressCheck {
   /** Lowercase `0x` and 40 hex digits; null when the input is not one. */
@@ -51,29 +51,31 @@ const EVM = /^0x[0-9a-f]{40}$/;
 const ADDRESS_IN_TEXT = /(?<![0-9A-Za-z])0x[0-9a-fA-F]{40}(?![0-9A-Za-z])/;
 
 /**
- * Characters a copy can carry that nobody sees: zero-width spaces and joiners, direction marks and overrides, the
- * byte-order mark. An override can show an address's characters in an order other than the one that is pasted.
+ * Characters nobody sees, or sees as a space, that a copy can carry: format characters (zero-width spaces and joiners,
+ * direction marks and overrides, the byte-order mark, tags), spaces other than the plain one, combining marks and
+ * variation selectors, and the blank fillers some scripts have. An override can show an address's characters in an
+ * order other than the one that is pasted. Written as escapes, so none of them is hidden in this file.
  */
-const INVISIBLE = /[­؜᠎​-‏‪-‮⁠-⁤⁦-⁩﻿]/;
+const INVISIBLE = /[\p{Cf}\p{Zs}\p{M}\u115f\u1160\u3164\uffa0\u2800]/u;
 
 /** Letters from other scripts that look like the Latin ones an address uses, and the Latin ones that look like digits. */
 const LOOKALIKE_CHARACTERS: Record<string, string> = {
-  "а": "a", // Cyrillic a
-  "с": "c", // Cyrillic es
-  "е": "e", // Cyrillic ie
-  "х": "x", // Cyrillic ha
-  "А": "A",
-  "В": "B",
-  "С": "C",
-  "Е": "E",
-  "Х": "X",
-  "α": "a", // Greek alpha
-  "ο": "0", // Greek omicron
-  "Ο": "0",
-  "Α": "A",
-  "Β": "B",
-  "Ε": "E",
-  "Χ": "X",
+  "\u0430": "a", // Cyrillic a
+  "\u0441": "c", // Cyrillic es
+  "\u0435": "e", // Cyrillic ie
+  "\u0445": "x", // Cyrillic ha
+  "\u0410": "A",
+  "\u0412": "B",
+  "\u0421": "C",
+  "\u0415": "E",
+  "\u0425": "X",
+  "\u03b1": "a", // Greek alpha
+  "\u03bf": "0", // Greek omicron
+  "\u039f": "0",
+  "\u0391": "A",
+  "\u0392": "B",
+  "\u0395": "E",
+  "\u03a7": "X",
   O: "0",
   o: "0",
   l: "1",
@@ -83,18 +85,20 @@ const LOOKALIKE_CHARACTERS: Record<string, string> = {
 /** The hex digits at each end two addresses must share to be called made to look alike (AC3). */
 export const BOTH_ENDS_MIN = 3;
 export const ONE_END_MIN = 5;
+/** At one end, the digits that make a partial match: worth comparing the whole address, not a reason to stop (AC3). */
+export const PARTIAL_MIN = 4;
 
 const codePoint = (character: string) => `U+${character.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}`;
 
 function formatOf(raw: string): AddressCheck["format"] {
   const input = raw.trim();
   if (input === "") return { ok: false, problem: "empty", message: "Paste the address you are about to pay." };
-  const invisible = INVISIBLE.exec(input);
+  const invisible = [...input].find((character) => character !== " " && INVISIBLE.test(character));
   if (invisible) {
     return {
       ok: false,
       problem: "invisible",
-      message: `It contains a character you cannot see (${codePoint(invisible[0])}). A copy can carry one, and some reorder what is shown. Copy the address again from where you got it, or ask for it again.`,
+      message: `It contains a character you cannot see, or that shows as a space (${codePoint(invisible)}). A copy can carry one, and some reorder what is shown. Copy the address again from where you got it, or ask for it again.`,
     };
   }
   const characters = [...input];
@@ -108,7 +112,10 @@ function formatOf(raw: string): AddressCheck["format"] {
       message: `Character ${lookalike + 1}, “${character}” (${codePoint(character)}), only looks like “${like}”. An address has only 0–9 and a–f after 0x.`,
     };
   }
-  if (!/^0x/i.test(input)) {
+  if (input.startsWith("0X")) {
+    return { ok: false, problem: "no_prefix", message: "An address starts with 0x, with a small x. This one starts with 0X, which wallets refuse." };
+  }
+  if (!input.startsWith("0x")) {
     return { ok: false, problem: "no_prefix", message: /^[0-9a-fA-F]{40}$/.test(input) ? "An address starts with 0x: this one has its 40 digits without it." : "An address starts with 0x." };
   }
   const digits = input.slice(2);
@@ -142,14 +149,21 @@ export function sharedEnds(a: string, b: string): { leading: number; trailing: n
 
 /**
  * Whether two different addresses are made to look alike (AC3): at least 3 hex digits shared at each end, or 5 at one.
- * Wallets show an address's ends, and address poisoning makes an address with the same ends as one the victim pays. Two
- * unrelated addresses share 6 such digits by chance about once in 17 million.
+ * Wallets show an address's ends, and address poisoning makes an address with the same ends as one the victim pays. By
+ * chance, two unrelated addresses share 3 at each end about once in 17 million, and 5 at one end or the other about
+ * once in 524 thousand.
  */
 export function madeToLookAlike(ends: { leading: number; trailing: number }): boolean {
   return (ends.leading >= BOTH_ENDS_MIN && ends.trailing >= BOTH_ENDS_MIN) || ends.leading >= ONE_END_MIN || ends.trailing >= ONE_END_MIN;
 }
 
-/** How rarely a random address shares `digits` hex digits in given places with another: "1 in 4.3 billion". */
+/** Which digits two addresses share, in words: "its first 4 and last 4 digits", "its last 5 digits". */
+export function sharedWords(ends: { leading: number; trailing: number }): string {
+  if (ends.leading > 0 && ends.trailing > 0) return `its first ${ends.leading} and last ${ends.trailing} digits`;
+  return ends.leading > 0 ? `its first ${ends.leading} digits` : `its last ${ends.trailing} digits`;
+}
+
+/** How rarely a random address shares `digits` hex digits in given places with another: "4.3 billion". */
 export function chanceWords(digits: number): string {
   const odds = 16 ** digits;
   const scales: [number, string][] = [
@@ -161,10 +175,10 @@ export function chanceWords(digits: number): string {
   for (const [scale, word] of scales) {
     if (odds >= scale) {
       const value = odds / scale;
-      return `1 in ${value >= 100 ? Math.round(value) : Number(value.toPrecision(2))} ${word}`;
+      return `${value >= 100 ? Math.round(value) : Number(value.toPrecision(2))} ${word}`;
     }
   }
-  return `1 in ${odds}`;
+  return String(odds);
 }
 
 /** Addresses no payee should give: where USDC is burned or held by a contract, not a person's wallet (AC4). */
@@ -196,23 +210,52 @@ export function specialAddress(address: string): SpecialAddress | null {
   return SPECIAL.get(address.toLowerCase()) ?? null;
 }
 
+/** At most this many known addresses are read. */
+export const KNOWN_MAX = 200;
+
+export interface KnownAddresses {
+  known: KnownAddress[];
+  /** Lines that seem to hold an address that could not be read, with why, so none is left out unnoticed. */
+  unread: Array<{ line: number; message: string }>;
+  /** Whether addresses past the first `KNOWN_MAX` were left out. */
+  more: boolean;
+}
+
+/** A word on a line that seems meant as an address: it has `0x`, or a long run of hex digits. */
+const ADDRESS_LIKE = /0x|[0-9a-f]{30,}/i;
+
 /**
- * The addresses in what someone pasted as the ones they know, one or more a line, each with the rest of its line as its
- * name ("Northwind, 0x…"), or "Address 2" without one. The same address twice is kept once. At most 200.
+ * The addresses in what someone pasted as the ones they know (AC5), one or more a line, each with the rest of its line as
+ * its name ("Northwind, 0x…"), or "Address 2" without one. The same address twice is kept once, and at most 200. A line
+ * that seems to hold an address that is not one is listed with what is wrong with it.
  */
-export function knownAddresses(text: string): KnownAddress[] {
+export function readKnownAddresses(text: string): KnownAddresses {
   const known = new Map<string, KnownAddress>();
-  for (const line of text.split(/\r?\n/)) {
+  const unread: KnownAddresses["unread"] = [];
+  let more = false;
+  text.split(/\r?\n/).forEach((line, index) => {
     const pattern = new RegExp(ADDRESS_IN_TEXT.source, "g");
     const found = line.match(pattern) ?? [];
+    if (found.length === 0) {
+      const candidate = line.split(/[\s,;|]+/).find((word) => ADDRESS_LIKE.test(word));
+      if (candidate) {
+        const format = formatOf(candidate.replace(/^[^0-9a-zA-Z]+|[.:)\]]+$/g, ""));
+        unread.push({ line: index + 1, message: format.ok ? "Put a space or a comma between the address and its name." : format.message });
+      }
+      return;
+    }
     const rest = line.replace(pattern, " ").replace(/[\s,;:|\-–—]+/g, " ").trim().slice(0, 60);
     for (const address of found) {
       const key = address.toLowerCase();
-      if (known.has(key) || known.size >= 200) continue;
+      if (known.has(key)) continue;
+      if (known.size >= KNOWN_MAX) {
+        more = true;
+        continue;
+      }
       known.set(key, { label: rest || `Address ${known.size + 1}`, address: key });
     }
-  }
-  return [...known.values()];
+  });
+  return { known: [...known.values()], unread, more };
 }
 
 /** What the page says about `raw`, against the addresses someone knows and OFAC's list (AC1-AC5). */
@@ -230,10 +273,15 @@ export function checkAddress(raw: string, known: readonly KnownAddress[], sancti
     const ends = sharedEnds(address, entry.address);
     if (entry.address === address) matches.push({ known: entry, kind: "same", ...ends });
     else if (madeToLookAlike(ends)) matches.push({ known: entry, kind: "alike", ...ends });
+    else if (ends.leading >= PARTIAL_MIN || ends.trailing >= PARTIAL_MIN) matches.push({ known: entry, kind: "partial", ...ends });
   }
-  // The likeliest first: most digits shared.
-  matches.sort((a, b) => (a.kind === b.kind ? b.leading + b.trailing - (a.leading + a.trailing) : a.kind === "alike" ? -1 : 1));
-  const stop = listed !== null || special !== null || checksum === "invalid" || matches.some((match) => match.kind === "alike");
-  const verdict: Verdict = stop ? "stop" : matches.some((match) => match.kind === "same") ? "same" : "check";
+  // Lookalikes first, then the very address, then partial matches; within each, most digits shared first.
+  const rank = { alike: 0, same: 1, partial: 2 } as const;
+  matches.sort((a, b) => rank[a.kind] - rank[b.kind] || b.leading + b.trailing - (a.leading + a.trailing));
+  const alike = matches.some((match) => match.kind === "alike");
+  const same = matches.some((match) => match.kind === "same");
+  // An address in the list that another in the list is made to look like: one of the two is not the payee's.
+  const verdict: Verdict =
+    listed !== null || special !== null || checksum === "invalid" ? "stop" : alike && same ? "conflict" : alike ? "stop" : same ? "same" : "check";
   return { address, format, checksum, checksummed, sanctioned: listed, special, matches, verdict };
 }

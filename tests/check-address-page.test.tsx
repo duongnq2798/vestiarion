@@ -64,9 +64,12 @@ describe("the checker (AC6)", () => {
     expect((container.querySelector("input") as HTMLInputElement).value).toBe(EXAMPLE_PAY);
     expect(text()).toContain("Do not pay: this address is made to look like Northwind Design's");
     expect(text()).toContain("Shares its first 4 and last 4 digits with Northwind Design's address, and differs in between.");
-    expect(text()).toContain("about 1 in 4.3 billion times");
+    expect(text()).toContain("about once in 4.3 billion");
     expect(text()).toContain("It is made to look like one of the 2 you know.");
-    expect(text()).toContain("It is not among the 124 addresses on OFAC's SDN list of Oct 21, 2026.");
+    expect(text()).toContain("It is not among the 124 EVM addresses on OFAC's SDN list of Oct 21, 2026.");
+    expect(text()).toContain("Read 2 addresses: Northwind Design (0x7a2d…e10d), Harbor Print Co (0x3f9e…b742).");
+    // A differing digit is marked by more than its colour.
+    expect(container.querySelector(".bg-refused-soft.font-semibold")).not.toBeNull();
     // The headline alone is announced as it changes.
     expect(container.querySelector('[aria-live="polite"]')?.textContent).toContain("Do not pay");
     expect(container.querySelector('[aria-live="polite"] li')).toBeNull();
@@ -75,16 +78,41 @@ describe("the checker (AC6)", () => {
     expect(text()).not.toContain("Do not pay");
   });
 
-  it("says what is wrong while it is not an address yet", () => {
+  it("says what is wrong while it is not an address yet, without announcing it at each keystroke", () => {
     type(container.querySelector("input")!, KNOWN.slice(0, 30));
     expect(text()).toContain("Not an address yet");
     expect(text()).toContain("It has 28 characters after 0x; an address has 40.");
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe("");
+  });
+
+  it("says when the list itself holds an address made to look like the one being paid", () => {
+    type(container.querySelector("textarea")!, `Northwind, ${KNOWN}\nFrom history, 0x7a2d${"9".repeat(32)}e10d`);
+    type(container.querySelector("input")!, KNOWN);
+    expect(text()).toContain("It matches Northwind, but your list has an address made to look like it");
+    expect(text()).toContain("From history's address shares its first 4 and last 4 digits with it.");
+  });
+
+  it("lists a line it could not read, and why", () => {
+    type(container.querySelector("textarea")!, `Northwind, 0X${KNOWN.slice(2)}`);
+    expect(text()).toContain("Line 1 was not read. An address starts with 0x, with a small x.");
+  });
+
+  it("notes a partial match without stopping", () => {
+    type(container.querySelector("textarea")!, `Harbor, ${KNOWN}`);
+    type(container.querySelector("input")!, `0x${"1".repeat(36)}e10d`);
+    expect(text()).toContain("Nothing here says it is wrong");
+    expect(text()).toContain("It shares its last 4 digits with Harbor's address. Compare the whole address.");
+  });
+
+  it("uses 16 px fields on a phone, so the browser does not zoom into them", () => {
+    for (const control of container.querySelectorAll("input, textarea")) expect(control.className).toContain("text-base sm:text-[0.8125rem]");
   });
 
   it("says it is the address known, or that nothing says it is wrong", () => {
     type(container.querySelector("textarea")!, `Northwind, ${KNOWN}`);
     type(container.querySelector("input")!, KNOWN);
     expect(text()).toContain("It is the address you know as Northwind");
+    expect(text()).toContain("it is the same wallet as in your list");
     type(container.querySelector("input")!, `0x${"12".repeat(20)}`);
     expect(text()).toContain("Nothing here says it is wrong");
     expect(text()).toContain("It is not made to look like any of the 1 you know.");
@@ -122,7 +150,9 @@ describe("the page (AC7)", () => {
   it("sends nothing anywhere: the checker and its rules make no request and read no address bar", () => {
     for (const file of ["src/components/address-check/AddressChecker.tsx", "src/lib/address-check.ts", "src/app/check-address/page.tsx"]) {
       const code = source(file);
-      expect(code, file).not.toMatch(/fetch\(|XMLHttpRequest|sendBeacon|useSearchParams|useRouter|location\.|"use server"|gtag/);
+      expect(code, file).not.toMatch(
+        /fetch\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|useSearchParams|useRouter|location\.|history\.(?:push|replace)State|"use server"|gtag|localStorage|sessionStorage|indexedDB|document\.cookie|window\.open|new Image|<form|name=/
+      );
     }
   });
 });

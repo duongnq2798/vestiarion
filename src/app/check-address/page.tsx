@@ -13,7 +13,7 @@ import { X_HANDLE } from "@/lib/site-links";
 const TITLE = "Address lookalike checker";
 const SOCIAL_TITLE = "Address lookalike checker — catch address poisoning before you pay";
 const DESCRIPTION =
-  "Paste the address you are about to pay and the ones you know. It tells you if it is made to look like one of them, if a character in it is wrong or hidden, and if it is on OFAC's sanctions list. Free, and nothing you paste leaves your browser.";
+  "Paste the address you are about to pay and the ones you know. It tells you if it is made to look like one of them, if a character in it is hidden, from another alphabet or fails its checksum, and if it is on OFAC's sanctions list. Free, and nothing you paste leaves your browser.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -44,8 +44,9 @@ export default function CheckAddressPage() {
           <Eyebrow>Free tool</Eyebrow>
           <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink sm:text-3xl">Check an address before you pay it</h1>
           <p className="mt-3 text-base leading-relaxed text-ink-2">
-            Paste the address you are about to pay, and the addresses you have paid before. It tells you if it is made to look like one of them,
-            the trick called address poisoning, if a character in it is wrong or hidden, and if it is on OFAC&apos;s sanctions list.
+            Paste the address you are about to pay, and the addresses you already have for your payees. It tells you if it is made to look like
+            one of them, the trick called address poisoning, if a character in it is hidden, from another alphabet or fails its checksum, and if it
+            is on OFAC&apos;s sanctions list.
           </p>
           <p className="mt-2 text-sm leading-relaxed text-ink-3">The check runs in this page. Nothing you paste is sent anywhere or kept.</p>
 
@@ -70,14 +71,14 @@ export default function CheckAddressPage() {
 
           <section aria-labelledby="payee-lock" className="mt-10 rounded-2xl border border-line bg-surface px-5 py-6 sm:px-6">
             <h2 id="payee-lock" className="text-lg font-semibold tracking-[-0.01em] text-ink">
-              Vestiarion does this on every payment
+              What Vestiarion does inside a workspace
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-ink-2">
               Vestiarion is an AI agent for bills and payments. It never pays a changed payout address until a person confirms it. With its payee
-              lock on, that person is someone other than whoever entered it, when anyone else can, the check uses a contact you had before the
-              change, and the payment waits as long as you choose. Counterparties warns when an address looks like another payee&apos;s, or like the
-              same payee&apos;s earlier one, and every payout address is checked against OFAC&apos;s list. Each step is signed into a ledger anyone
-              can verify.
+              lock on, someone other than whoever entered it confirms it when anyone else can, a call or a message must use a contact you had
+              before the change, and the payment can wait up to 72 hours after it. Counterparties warns when a payee&apos;s address shares its
+              first 6 and last 4 characters with another payee&apos;s, or with the same payee&apos;s earlier one, and the agent checks every payout
+              address against OFAC&apos;s list. Each step is signed into a ledger anyone can verify.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <Button asChild>

@@ -1,26 +1,32 @@
+import { readFileSync } from "node:fs";
 import { getAddress } from "viem";
 import { describe, expect, it } from "vitest";
 import { EXAMPLE_KNOWN, EXAMPLE_PAY } from "@/components/address-check/AddressChecker";
-import { chanceWords, checkAddress, knownAddresses, madeToLookAlike, sharedEnds, specialAddress } from "@/lib/address-check";
+import { chanceWords, checkAddress, madeToLookAlike, readKnownAddresses, sharedEnds, sharedWords, specialAddress } from "@/lib/address-check";
 import snapshot from "@/lib/data/ofac-sdn-evm-wallets.json";
 import { looksAlike } from "@/lib/payee-lock-rules";
 
 /**
  * The address lookalike checker's rules (docs/superpowers/specs/2026-10-21-address-checker-design.md AC1-AC5): the
  * form of what was pasted, its checksum, addresses made to look like known ones, OFAC's list and addresses no payee
- * should give.
+ * should give. Hidden characters are written as escapes here, as in the rules.
  */
 
 const KNOWN = "0x7a2dc41e9b03f6a85d1c27e4b98f0a3c61d5e10d";
 const known = [{ label: "Northwind", address: KNOWN }];
 const sanctioned = snapshot.wallets.map(({ address, name }) => ({ address, name }));
 const check = (raw: string, list = known) => checkAddress(raw, list, sanctioned);
-/** KNOWN with its middle replaced, keeping `leading` digits at the start and `trailing` at the end. */
-const alike = (leading: number, trailing: number) => {
+/**
+ * KNOWN with its middle replaced, keeping `leading` digits at the start and `trailing` at the end. Each `fill` gives a
+ * middle no other fill shares, so two of them differ wherever KNOWN does not show through.
+ */
+const FILLS = { "9": "8", a: "b", c: "d" } as const;
+const alike = (leading: number, trailing: number, fill: keyof typeof FILLS = "9") => {
   const digits = KNOWN.slice(2);
-  const middle = [...digits.slice(leading, 40 - trailing)].map((digit) => (digit === "9" ? "8" : "9")).join("");
+  const middle = [...digits.slice(leading, 40 - trailing)].map((digit) => (digit === fill ? FILLS[fill] : fill)).join("");
   return `0x${digits.slice(0, leading)}${middle}${digits.slice(40 - trailing)}`;
 };
+const at = (text: string, index: number, inserted: string) => `${text.slice(0, index)}${inserted}${text.slice(index)}`;
 
 describe("what was pasted (AC1)", () => {
   it("says what is wrong with something that is not an address yet, and checks nothing else", () => {
@@ -28,31 +34,37 @@ describe("what was pasted (AC1)", () => {
     expect(check(KNOWN.slice(0, 41)).format).toMatchObject({ ok: false, problem: "length", message: expect.stringContaining("It has 39 characters after 0x") });
     expect(check(`${KNOWN}0`).format).toMatchObject({ ok: false, problem: "length" });
     expect(check(KNOWN.slice(2)).format).toMatchObject({ ok: false, problem: "no_prefix", message: expect.stringContaining("without it") });
+    expect(check(`0X${KNOWN.slice(2)}`).format).toMatchObject({ ok: false, problem: "no_prefix", message: expect.stringContaining("starts with 0X") });
     expect(check(`0x${"g".repeat(40)}`).format).toMatchObject({ ok: false, problem: "not_hex", message: expect.stringContaining("Character 3, “g”") });
-    expect(check(`${KNOWN.slice(0, 10)} ${KNOWN.slice(10)}`).format).toMatchObject({ ok: false, problem: "not_hex" });
-    const result = check(KNOWN.slice(0, 41));
-    expect(result).toMatchObject({ verdict: "fix", address: null, matches: [], sanctioned: null, special: null });
+    expect(check(at(KNOWN, 10, " ")).format).toMatchObject({ ok: false, problem: "not_hex" });
+    expect(check(KNOWN.slice(0, 41))).toMatchObject({ verdict: "fix", address: null, matches: [], sanctioned: null, special: null });
   });
 
-  it("finds characters nobody sees, which a copy can carry", () => {
-    for (const hidden of ["​", "‍", "‮", "⁦", "﻿"]) {
-      const result = check(`${KNOWN.slice(0, 20)}${hidden}${KNOWN.slice(20)}`);
-      expect(result.format, hidden.codePointAt(0)!.toString(16)).toMatchObject({ ok: false, problem: "invisible" });
+  it("finds characters nobody sees, or sees as a space, which a copy can carry", () => {
+    const hidden = ["\u200b", "\u200d", "\u202e", "\u2066", "\ufeff", "\u00a0", "\u3164", "\u115f", "\u2800", "\ufe0f", "\u034f", "\u206a", "\udb40\udc41"];
+    for (const character of hidden) {
+      expect(check(at(KNOWN, 20, character)).format, character.codePointAt(0)!.toString(16)).toMatchObject({ ok: false, problem: "invisible" });
     }
-    expect(check(`${KNOWN.slice(0, 20)}‮${KNOWN.slice(20)}`).format).toMatchObject({ message: expect.stringContaining("U+202E") });
+    expect(check(at(KNOWN, 20, "\u202e")).format).toMatchObject({ message: expect.stringContaining("U+202E") });
   });
 
   it("finds letters from other scripts, full-width digits and O, l or I standing in for 0 or 1", () => {
-    expect(check(`0x7а${KNOWN.slice(4)}`).format).toMatchObject({ problem: "lookalike_character", message: expect.stringContaining("Character 4, “а” (U+0430), only looks like “a”") });
-    expect(check(`0х${KNOWN.slice(2)}`).format).toMatchObject({ problem: "lookalike_character" });
-    expect(check(`0x７${KNOWN.slice(3)}`).format).toMatchObject({ problem: "lookalike_character", message: expect.stringContaining("only looks like “7”") });
+    expect(check(`0x7\u0430${KNOWN.slice(4)}`).format).toMatchObject({ problem: "lookalike_character", message: expect.stringContaining("Character 4, “\u0430” (U+0430), only looks like “a”") });
+    expect(check(`0\u0445${KNOWN.slice(2)}`).format).toMatchObject({ problem: "lookalike_character" });
+    expect(check(`0x\uff17${KNOWN.slice(3)}`).format).toMatchObject({ problem: "lookalike_character", message: expect.stringContaining("only looks like “7”") });
     expect(check(`0x${KNOWN.slice(2, 10)}O${KNOWN.slice(11)}`).format).toMatchObject({ problem: "lookalike_character", message: expect.stringContaining("only looks like “0”") });
     expect(check(`0x${KNOWN.slice(2, 10)}l${KNOWN.slice(11)}`).format).toMatchObject({ problem: "lookalike_character" });
   });
 
-  it("takes an address with spaces around it, and 0X, as an address", () => {
+  it("takes an address with spaces around it as an address", () => {
     expect(check(`  ${KNOWN}\n`).address).toBe(KNOWN);
-    expect(check(`0X${KNOWN.slice(2)}`).address).toBe(KNOWN);
+  });
+
+  it("keeps every hidden or foreign character out of its own source, written as escapes instead", () => {
+    for (const file of ["src/lib/address-check.ts", "src/components/address-check/AddressChecker.tsx"]) {
+      const odd = [...readFileSync(file, "utf8")].filter((character) => character.charCodeAt(0) > 127 && !"“”–—…’".includes(character));
+      expect(odd, file).toEqual([]);
+    }
   });
 });
 
@@ -62,10 +74,10 @@ describe("the checksum (AC2)", () => {
   it("passes a mixed-case address that matches EIP-55, and says a single-case one carries none", () => {
     expect(check(checksummed)).toMatchObject({ checksum: "valid", checksummed, verdict: "same" });
     expect(check(KNOWN)).toMatchObject({ checksum: "none", checksummed });
-    expect(check(KNOWN.toUpperCase().replace("0X", "0x"))).toMatchObject({ checksum: "none" });
+    expect(check(`0x${KNOWN.slice(2).toUpperCase()}`)).toMatchObject({ checksum: "none" });
   });
 
-  it("stops at one whose mix of capitals does not match: typed wrong or changed", () => {
+  it("stops at one whose mix of capitals does not match: mistyped or changed", () => {
     const index = [...checksummed].findIndex((character, position) => position > 1 && /[a-f]/i.test(character));
     const flipped = checksummed.slice(0, index) + (checksummed[index] === checksummed[index].toUpperCase() ? checksummed[index].toLowerCase() : checksummed[index].toUpperCase()) + checksummed.slice(index + 1);
     expect(check(flipped, [])).toMatchObject({ checksum: "invalid", verdict: "stop" });
@@ -73,10 +85,13 @@ describe("the checksum (AC2)", () => {
 });
 
 describe("addresses made to look like known ones (AC3)", () => {
-  it("counts the digits two addresses share at each end", () => {
+  it("counts the digits two addresses share at each end, and says which in words", () => {
     expect(sharedEnds(KNOWN, alike(4, 4))).toEqual({ leading: 4, trailing: 4 });
     expect(sharedEnds(KNOWN, KNOWN)).toEqual({ leading: 40, trailing: 40 });
-    expect(sharedEnds(KNOWN.toUpperCase().replace("0X", "0x"), KNOWN)).toEqual({ leading: 40, trailing: 40 });
+    expect(sharedEnds(`0x${KNOWN.slice(2).toUpperCase()}`, KNOWN)).toEqual({ leading: 40, trailing: 40 });
+    expect(sharedWords({ leading: 4, trailing: 4 })).toBe("its first 4 and last 4 digits");
+    expect(sharedWords({ leading: 5, trailing: 0 })).toBe("its first 5 digits");
+    expect(sharedWords({ leading: 0, trailing: 6 })).toBe("its last 6 digits");
   });
 
   it("calls an address made to look alike at 3 digits at each end, or 5 at one, and stops at it", () => {
@@ -85,53 +100,64 @@ describe("addresses made to look like known ones (AC3)", () => {
       expect(result.verdict, `${leading}+${trailing}`).toBe("stop");
       expect(result.matches, `${leading}+${trailing}`).toEqual([{ known: known[0], kind: "alike", leading, trailing }]);
     }
-    for (const [leading, trailing] of [[2, 2], [3, 2], [4, 0], [0, 4]] as const) {
+    for (const [leading, trailing] of [[2, 2], [3, 2], [2, 3]] as const) {
       expect(check(alike(leading, trailing)), `${leading}+${trailing}`).toMatchObject({ verdict: "check", matches: [] });
+    }
+  });
+
+  it("notes an address that shares 4 digits at one end without stopping at it", () => {
+    for (const [leading, trailing] of [[4, 0], [0, 4], [4, 2], [2, 4]] as const) {
+      expect(check(alike(leading, trailing)), `${leading}+${trailing}`).toMatchObject({ verdict: "check", matches: [{ kind: "partial", leading, trailing }] });
     }
   });
 
   it("says the very address is the one known, and puts lookalikes first, most digits shared first", () => {
     expect(check(KNOWN)).toMatchObject({ verdict: "same", matches: [{ kind: "same", known: known[0] }] });
-    const list = [
-      { label: "Same", address: alike(4, 4) },
-      { label: "Three", address: alike(3, 3) },
-      { label: "Six", address: alike(6, 4) },
-    ];
-    const result = check(alike(4, 4), list);
+    const result = check(alike(4, 4), [
+      { label: "Partial", address: alike(4, 0, "a") },
+      { label: "Three", address: alike(3, 3, "a") },
+      { label: "Six", address: alike(6, 5, "c") },
+    ]);
     expect(result.matches.map((match) => [match.known.label, match.kind])).toEqual([
       ["Six", "alike"],
       ["Three", "alike"],
-      ["Same", "same"],
+      ["Partial", "partial"],
     ]);
     expect(result.verdict).toBe("stop");
   });
 
-  it("catches every pair the payee lock's warning catches (PL6: first 6 and last 4)", () => {
-    let seed = 7;
-    const hex = (length: number) =>
-      Array.from({ length }, () => {
-        seed = (seed * 1103515245 + 12345) % 2 ** 31;
-        return (seed % 16).toString(16);
-      }).join("");
-    for (let index = 0; index < 200; index += 1) {
-      const start = hex(6);
-      const end = hex(4);
-      const a = `0x${start}${hex(30)}${end}`;
-      const b = `0x${start}${hex(30)}${end}`;
-      if (looksAlike(a, b)) expect(madeToLookAlike(sharedEnds(a, b)), `${a} ${b}`).toBe(true);
+  it("says the list itself holds a lookalike when the address is one in it and another is made to look like it", () => {
+    const list = [
+      { label: "Northwind", address: KNOWN },
+      { label: "From history", address: alike(4, 4) },
+    ];
+    expect(check(KNOWN, list)).toMatchObject({ verdict: "conflict", matches: [{ kind: "alike", known: list[1] }, { kind: "same", known: list[0] }] });
+    expect(check(alike(4, 4), list)).toMatchObject({ verdict: "conflict" });
+    // OFAC's list, an address that is not a wallet or a wrong checksum still stops it.
+    const [listed] = snapshot.wallets;
+    expect(check(listed.address, [{ label: "A", address: listed.address }, { label: "B", address: `${listed.address.slice(0, 6)}${"9".repeat(32)}${listed.address.slice(-4)}` }]).verdict).toBe("stop");
+  });
+
+  it("catches every pair the payee lock's warning catches (PL6: first 6 and last 4), at any length of shared ends", () => {
+    for (let leading = 6; leading <= 20; leading += 1) {
+      for (let trailing = 4; trailing <= 18; trailing += 1) {
+        const other = alike(leading, trailing);
+        expect(looksAlike(KNOWN, other)).toBe(true);
+        expect(madeToLookAlike(sharedEnds(KNOWN, other)), `${leading}+${trailing}`).toBe(true);
+      }
     }
   });
 
   it("puts how rare a match is in words", () => {
-    expect(chanceWords(8)).toBe("1 in 4.3 billion");
-    expect(chanceWords(6)).toBe("1 in 17 million");
-    expect(chanceWords(10)).toBe("1 in 1.1 trillion");
-    expect(chanceWords(4)).toBe("1 in 66 thousand");
-    expect(chanceWords(2)).toBe("1 in 256");
+    expect(chanceWords(8)).toBe("4.3 billion");
+    expect(chanceWords(6)).toBe("17 million");
+    expect(chanceWords(10)).toBe("1.1 trillion");
+    expect(chanceWords(4)).toBe("66 thousand");
+    expect(chanceWords(2)).toBe("256");
   });
 
   it("has an example whose address shares Northwind's first 4 and last 4 digits", () => {
-    const list = knownAddresses(EXAMPLE_KNOWN);
+    const { known: list } = readKnownAddresses(EXAMPLE_KNOWN);
     const result = check(EXAMPLE_PAY, list);
     expect(result.verdict).toBe("stop");
     expect(result.matches).toEqual([{ known: list[0], kind: "alike", leading: 4, trailing: 4 }]);
@@ -142,7 +168,7 @@ describe("addresses made to look like known ones (AC3)", () => {
 describe("OFAC's list and addresses that are not a wallet (AC4)", () => {
   it("stops at an address on the SDN list, naming its entry", () => {
     const [listed] = snapshot.wallets;
-    expect(check(listed.address.toUpperCase().replace("0X", "0x"), [])).toMatchObject({ verdict: "stop", sanctioned: { address: listed.address, name: listed.name } });
+    expect(check(`0x${listed.address.slice(2).toUpperCase()}`, [])).toMatchObject({ verdict: "stop", sanctioned: { address: listed.address, name: listed.name } });
     expect(check(KNOWN, []).sanctioned).toBeNull();
   });
 
@@ -165,19 +191,38 @@ describe("OFAC's list and addresses that are not a wallet (AC4)", () => {
 });
 
 describe("the addresses someone knows (AC5)", () => {
-  it("reads one or more a line, the rest of the line as the name, each address once, at most 200", () => {
+  it("reads one or more a line, the rest of the line as the name, each address once", () => {
     const b = alike(0, 0);
-    expect(knownAddresses(`Northwind Design, ${KNOWN}\n${b}\n  - Harbor: ${KNOWN.toUpperCase().replace("0X", "0x")}\nnothing here\nTwo ${b} ${alike(1, 1)}`)).toEqual([
-      { label: "Northwind Design", address: KNOWN },
-      { label: "Address 2", address: b },
-      { label: "Two", address: alike(1, 1) },
-    ]);
-    const many = Array.from({ length: 250 }, (_, index) => `0x${index.toString(16).padStart(40, "0")}`).join("\n");
-    expect(knownAddresses(many)).toHaveLength(200);
+    expect(readKnownAddresses(`Northwind Design, ${KNOWN}\n${b}\n  - Harbor: 0x${KNOWN.slice(2).toUpperCase()}\nnothing here\nTwo ${b} ${alike(1, 1)}`)).toEqual({
+      known: [
+        { label: "Northwind Design", address: KNOWN },
+        { label: "Address 2", address: b },
+        { label: "Two", address: alike(1, 1) },
+      ],
+      unread: [],
+      more: false,
+    });
   });
 
-  it("does not read a transaction hash, or longer hex, as an address", () => {
-    expect(knownAddresses(`Paid in tx 0x${"ab".repeat(32)}`)).toEqual([]);
-    expect(knownAddresses(`x0x${KNOWN.slice(2)}`)).toEqual([]);
+  it("reads at most 200, and says more were left out", () => {
+    const many = Array.from({ length: 250 }, (_, index) => `0x${index.toString(16).padStart(40, "0")}`).join("\n");
+    const read = readKnownAddresses(many);
+    expect(read.known).toHaveLength(200);
+    expect(read.more).toBe(true);
+  });
+
+  it("lists each line that seems to hold an address it could not read, and why, so none is dropped unnoticed", () => {
+    const read = readKnownAddresses(`Northwind, ${at(KNOWN, 12, "\u200b")}\nHarbor, 0X${KNOWN.slice(2)}\nShort, ${KNOWN.slice(0, 30)}\nNo prefix ${KNOWN.slice(2)}\nnotes only`);
+    expect(read.known).toEqual([]);
+    expect(read.unread.map((line) => line.line)).toEqual([1, 2, 3, 4]);
+    expect(read.unread[0].message).toContain("U+200B");
+    expect(read.unread[1].message).toContain("starts with 0X");
+    expect(read.unread[2].message).toContain("It has 28 characters after 0x");
+    expect(read.unread[3].message).toContain("without it");
+  });
+
+  it("does not read a transaction hash, or an address run into other letters, as an address", () => {
+    expect(readKnownAddresses(`Paid in tx 0x${"ab".repeat(32)}`).known).toEqual([]);
+    expect(readKnownAddresses(`x0x${KNOWN.slice(2)}`).known).toEqual([]);
   });
 });
