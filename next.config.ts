@@ -1,6 +1,7 @@
 import createMDX from "@next/mdx";
 import type { NextConfig } from "next";
 import { legacyRedirects } from "./src/lib/auth/org-paths";
+import { contentSecurityPolicy, CSP_REPORTING_ENDPOINTS } from "./src/lib/security/csp";
 
 const nextConfig: NextConfig = {
   // An invoice document of up to 4 MB is read through a Server Action
@@ -34,6 +35,15 @@ const nextConfig: NextConfig = {
   // other than the plain script it is.
   async headers() {
     return [
+      {
+        // The Content Security Policy, report-only (CSP report-only design CSP1-CSP3): browsers report to /api/csp-report
+        // what it would block, and block nothing, until it is enforced.
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy() },
+          { key: "Reporting-Endpoints", value: CSP_REPORTING_ENDPOINTS },
+        ],
+      },
       { source: "/docs-md/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] },
       {
         // The Chrome extension's consent page (invoice capture design C13): never inside another site's frame, where a

@@ -178,3 +178,15 @@ const extensionConsentBuckets = new Map<string, Bucket>();
 export function takeExtensionConsentToken(userId: string, now = Date.now()): boolean {
   return take(extensionConsentBuckets, userId, 10, 6_000, now);
 }
+
+const cspReportBuckets = new Map<string, Bucket>();
+const cspReportAll = new Map<string, Bucket>();
+
+/**
+ * Content Security Policy reports (CSP report-only CSP4): twenty at once, then one every 3 seconds, per client, and 300
+ * a minute in all, so a page that breaks the policy in a loop, or someone posting reports, cannot fill the log.
+ * Single-instance, like the others.
+ */
+export function takeCspReportToken(key: string, now = Date.now()): boolean {
+  return take(cspReportBuckets, key, 20, 3_000, now) && take(cspReportAll, "all", 300, 200, now);
+}

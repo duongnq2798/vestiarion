@@ -799,17 +799,21 @@ describe("what it does not claim, still true of the code", () => {
     expect(notClaimed).toContain("no SOC 2 report or ISO 27001 certification");
   });
 
-  it("no Content Security Policy yet, but the extension sign-in page's frame rule: when one is added, this page says so", () => {
+  it("a Content Security Policy sent report-only, but the extension sign-in page's frame rule: when it is enforced, this page says so", () => {
     const config = source("next.config.ts");
-    // The one policy is frame-ancestors 'none', on the Chrome extension's sign-in page.
-    expect(config.match(/Content-Security-Policy[^\n]*/gi)).toEqual([`Content-Security-Policy", value: "frame-ancestors 'none'" },`]);
+    // The one policy enforced is frame-ancestors 'none', on the Chrome extension's sign-in page; the app's is report-only
+    // (CSP report-only design CSP3), with inline scripts allowed.
+    expect(config.match(/"Content-Security-Policy"[^\n]*/g)).toEqual([`"Content-Security-Policy", value: "frame-ancestors 'none'" },`]);
     expect(config.split('source: "/extension/:path*"')[1]?.split("source:")[0]).toContain("frame-ancestors 'none'");
+    expect(config.match(/"Content-Security-Policy-Report-Only"[^\n]*/g)).toEqual([`"Content-Security-Policy-Report-Only", value: contentSecurityPolicy() },`]);
+    expect(source("src/lib/security/csp.ts")).toMatch(/\["script-src", \["'self'", "'unsafe-inline'"/);
     // vercel.json sets only where the functions run (ARCHITECTURE.md, "Where it runs"): no header, so no policy there.
     const vercel = existsSync(path.join(process.cwd(), "vercel.json")) ? (JSON.parse(source("vercel.json")) as Record<string, unknown>) : {};
     expect(Object.keys(vercel).filter((key) => key !== "$schema" && key !== "regions")).toEqual([]);
     expect(notClaimed).toContain(
-      "does not send a Content Security Policy yet, except frame-ancestors 'none' on the Chrome extension's sign-in page, so that page cannot be framed"
+      "sends its Content Security Policy report-only: browsers report what it would block, and it blocks nothing yet, except frame-ancestors 'none' on the Chrome extension's sign-in page, so that page cannot be framed"
     );
+    expect(notClaimed).toContain("It allows inline scripts, since pages carry no nonce.");
   });
 
   it("review and CI before each merge, and no branch protection or required human second approval", () => {
