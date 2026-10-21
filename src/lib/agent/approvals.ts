@@ -37,6 +37,7 @@ import type { Provenance } from "../provenance";
 import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, cctpFeeCushion, reserveCover, type ReserveCover } from "./liquidity";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { payeeLockRefusal } from "../payee-lock";
+import { loadSanctionedWallets, sanctionedWallet } from "../sanctioned-wallets";
 import { needsSecondApprover, needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
 import {
   clearApprovals,
@@ -126,7 +127,9 @@ export type ApprovalErrorCode =
   | "bank_not_set_up"
   | "bank_unsupported_token"
   // The payee lock refused it (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL4, PL5); its text names why.
-  | "payee_locked";
+  | "payee_locked"
+  // The address is on OFAC's sanctioned addresses (docs/superpowers/specs/2026-10-21-sanctioned-wallets-design.md SW6).
+  | "sanctioned_address";
 
 /**
  * Every message except `insufficient_funds` and `needs_second_approver`, whose texts name the balance and the figure,
@@ -154,6 +157,7 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_
   verdict_disagreed: "Someone disagreed with this decision in shadow mode, so it is not paid. Return it to the agent or reject it.",
   bank_not_set_up: "This vendor is paid to a bank account, and bank payouts are not set up on this workspace yet. Set them up under Settings, Bank payouts.",
   bank_unsupported_token: "Only USDC is paid to a bank account, and this invoice is in EURC.",
+  sanctioned_address: "This payee's address is on OFAC's sanctions list, so nothing is paid to it.",
 };
 
 export class ApprovalError extends Error {
@@ -1065,6 +1069,11 @@ export async function approveAndPay(
   if (!alreadySent && !invoice.bankAccount) {
     const locked = await payeeLockRefusal(invoice.counterpartyId, invoice.counterpartyName);
     if (locked) throw new ApprovalError("payee_locked", locked);
+    // An address on OFAC's list is never paid, whatever its counterparty's screening says yet (SW6): checked here as well,
+    // because an approval can confirm a changed address and pay it before any sweep has read it. The list is read live
+    // where the deployment reads it, so this instance's copy is no older than 12 hours.
+    const wallets = await loadSanctionedWallets({ live: currentConfig().compliance.sanctionedWalletsLive === true });
+    if (sanctionedWallet(wallets, invoice.address)) raise("sanctioned_address");
   }
   const bank = invoice.bankAccount && !alreadySent ? await bankRouteFor(invoice) : null;
 

@@ -2518,6 +2518,23 @@ describe("approveAndPay and the address the person was shown", () => {
   });
 });
 
+describe("approveAndPay to an address on OFAC's sanctions list (sanctioned wallets SW6)", () => {
+  it("refuses before any claim, with the payee lock off, whatever the counterparty's screening says yet", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
+    const SANCTIONED = "0x0330070fd38ec3bb94f58fa55d40368271e9e54a";
+    const { fake, run } = approvalsFake({
+      invoice: (r) => (r.params.get("id") ? { body: invoiceRow({ counterparties: { name: "Acme Supplies", risk_level: "clear", address: SANCTIONED } }) } : undefined),
+    });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: SANCTIONED }));
+
+    await expect(attempt).rejects.toMatchObject({ code: "sanctioned_address" });
+    await expect(attempt).rejects.toThrow("This payee's address is on OFAC's sanctions list, so nothing is paid to it.");
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("approveAndPay under the payee lock (payee lock PL4, PL5)", () => {
   const paid = () => payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
 

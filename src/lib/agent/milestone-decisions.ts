@@ -27,6 +27,7 @@ import { isSoleApprover } from "./sole-approver";
 import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { payeeLockRefusal } from "../payee-lock";
+import { loadSanctionedWallets, sanctionedWallet } from "../sanctioned-wallets";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { personPaymentNote, SECOND_OF_TWO_NOTE } from "./approvals";
 import { bringCashForApproval, CashBackError, cashShortMessage, HELD_FOR_CASH, reserveCover, type ReserveCover } from "./liquidity";
@@ -85,7 +86,9 @@ export type MilestoneDecisionErrorCode =
   | "already_approved"
   | "needs_second_approver"
   // The payee lock refused it (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL5); its text names why.
-  | "payee_locked";
+  | "payee_locked"
+  // The address is on OFAC's sanctioned addresses (docs/superpowers/specs/2026-10-21-sanctioned-wallets-design.md SW6).
+  | "sanctioned_address";
 
 const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   milestone_not_found: "That milestone is not in this workspace.",
@@ -109,6 +112,7 @@ const MESSAGES: Record<MilestoneDecisionErrorCode, string> = {
   needs_second_approver:
     "Payments above the workspace's figure need two approvals, and only one person in this workspace can approve payments. Raise the figure in Settings, or add an approver on Members.",
   payee_locked: "The payee lock makes this contractor's new address wait before it is paid.",
+  sanctioned_address: "This contractor's address is on OFAC's sanctions list, so nothing is paid to it.",
 };
 
 export class MilestoneDecisionError extends Error {
@@ -647,6 +651,9 @@ export async function payHeldMilestone(input: {
     // The payee lock (PL5): a changed address waits out its cooling-off before anyone pays it.
     const locked = await payeeLockRefusal(milestone.contractorId, milestone.facts.contractor.name);
     if (locked) raise("payee_locked", locked);
+    // An address on OFAC's list is never paid (SW6), the list read live where the deployment reads it.
+    const wallets = await loadSanctionedWallets({ live: currentConfig().compliance.sanctionedWalletsLive === true });
+    if (sanctionedWallet(wallets, milestone.facts.contractor.address)) raise("sanctioned_address");
     if (twoNeeded) {
       // No approval is taken while someone is deciding it.
       if (milestone.decisionClaimedAt && Date.parse(milestone.decisionClaimedAt) > Date.now() - 10 * 60_000) raise("already_claimed");

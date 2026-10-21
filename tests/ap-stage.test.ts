@@ -443,6 +443,18 @@ describe("the AP stage schedules a correct invoice with terms", () => {
     expect(entry.p_detail).toMatchObject({ timingRule: null });
   });
 
+  it("refuses to pay an address on OFAC's sanctions list as high risk, whatever its screening says (sanctioned wallets SW6)", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", reasoning: "Due and matched.", confidence: 0.9 }));
+    const { fake, chain, stage } = apFake({ book: [payable({ counterparties: counterparty({ risk_level: "low", address: "0x0330070fd38ec3bb94f58fa55d40368271e9e54a" }) })] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "counterparty.high_risk" });
+  });
+
   it("refuses to schedule for a high-risk counterparty, as it would refuse to pay", async () => {
     today("2026-10-01T09:00:00.000Z");
     model(() => ({ action: "schedule", payOn: "2026-10-11", reasoning: "Take the discount on the deadline.", confidence: 0.8 }));
