@@ -1,7 +1,7 @@
-# The payee lock's evidence pack: the data
+# The payee lock's evidence pack
 
-Date: 2026-10-21. Status: accepted. Part 1 of 2: the data and its signed JSON file. Part 2 adds the page, CSV and PDF,
-and the answers to each insurer question.
+Date: 2026-10-21. Status: accepted. Part 1 (EP1-EP6): the data and its signed JSON file. Part 2 (EP7-EP10): the page,
+the answers to each insurer question, the CSV and the PDF.
 
 ## Why
 
@@ -104,11 +104,68 @@ it is left out. Each row has:
 
   It checks only the entries the pack cites.
 
-## Not in this part
+## Part 2: the page, the answers, the CSV and the PDF
 
-- The page that shows the pack, its CSV and PDF, and the questionnaire mapping (part 2).
+A broker or an underwriter does not read JSON. The owner needs the pack as a page to look over, the answers to the
+questions the insurer's form asks, and a PDF or a spreadsheet to send.
+
+**EP7. The page.** `/o/<slug>/evidence/payee-lock`, for any member, as the file is.
+- It takes `from` and `to` as the file does, with links for the last 30 days, this year and all time, and two date
+  fields. A period that cannot be read shows all time and says so.
+- It shows:
+  - the lock as it is now;
+  - the counts: changes, confirmed with a record, by a second person, changes with a payment held, paid only after
+    confirming;
+  - the answers (EP8);
+  - every change: when and by whom, from and to, the confirmation and its record, whether a second person gave it, the
+    wait, any lookalike warning, the holds, the first payment with its transaction, and the signed entries it rests on;
+  - the lock's changes in the period;
+  - how many of the cited entries verify against the workspace's keys.
+- It reads the pack with `readPayeeLockEvidence`, the same as the file, and writes nothing.
+- Settings' payee lock panel offers **Open the evidence pack** beside the download.
+
+**EP8. What insurers ask** (`payeeLockQuestions`, `src/lib/payee-lock-evidence-report.ts`). Insurers'
+questionnaires on payment-change fraud ask about the same controls; each words its own. The page asks seven, in its own
+words, and answers each from the period's rows:
+
+| Control | Counts |
+|---|---|
+| A call or message to a contact held before the change | confirmed changes with `contactOnFileBefore` |
+| Confirmation by someone other than whoever entered it | confirmed changes with `secondPerson`, those not known said apart |
+| A record of each check | confirmations with `recordKept` |
+| A hold until the change is confirmed | first payments with `paidAfterConfirmation`, and the holds |
+| A wait before the first payment | the lock's wait now, and payments with `paidAfterWait` |
+| Lookalike details | changes whose confirmation warned of a lookalike |
+| Records someone outside can check | cited entries that verify |
+
+- **Yes** when every case counted passes, **Partly** when some do, **No** when none, **Nothing to show yet** when the
+  period has no case. A period with no change answers nothing as yes.
+- The wait is **No** when the lock sets none now. Lookalike warnings are always on, so that answer is **Yes**.
+- Each answer also says how Vestiarion makes it so, as the workspace is set up now, lock on or off.
+- The page names no insurer and quotes no form, so it implies no one's endorsement.
+
+**EP9. The CSV.** `GET /api/evidence/payee-lock?…&format=csv`, with the same gate, period and limit as the file.
+- One row per address change, the columns `PAYEE_LOCK_CSV_FIELDS` names:
+  - the counterparty, the change, who entered and who confirmed it, the check, its contact, the checks as yes or no;
+  - the wait, the lookalike warnings, the holds by rule and count, the first payment;
+  - each fact's entry numbers.
+- Each cell is guarded as the audit export's are (`csvCell`), so a value that starts like a formula never runs in a
+  spreadsheet. A byte-order mark comes first, so Excel reads UTF-8.
+- The signatures stay in the JSON file, which the entry numbers point into.
+- Any other `format` is 400.
+
+**EP10. The PDF.** **Print or save as PDF** opens the browser's print dialog, which saves a PDF.
+- No PDF library is added: the browser already lays the page out and makes the PDF, links included.
+- Printed, a workspace page drops its sidebar, header, banners and footer (`print:` classes in the shell), and this
+  page drops its period controls and buttons.
+- A line only the print shows names the workspace, its network, the period and when the pack was read. Each change and
+  each answer keeps to one page where it fits.
+
+## Not in this change
+
 - An `/api/v1` endpoint: the entries are already in `GET /api/v1/ledger`.
 - Bank payouts, which the lock does not cover.
+- A PDF made on the server: the print dialog makes it.
 
 ## Tests
 
@@ -133,5 +190,15 @@ it is left out. Each row has:
 `tests/payee-lock-evidence-route.test.ts` covers:
 - the gates, 400 and 429;
 - the file's name and headers;
+- the CSV's name, headers and rows, and another format refused;
 - the ids asked a hundred at a time;
 - that nothing is written.
+
+`tests/payee-lock-evidence-report.test.tsx` covers:
+- who did a step, in words;
+- the seven answers, counted, with the lock on and off, for an empty period, and partly or no;
+- the CSV's columns, rows, checks, entries, and formulas and quotes kept safe;
+- the page: the lock, the counts, the answers, each change with its entries, the downloads for the period, the print
+  line and what the print leaves out, and an empty period.
+
+`tests/payee-lock-panel.test.tsx` covers **Open the evidence pack**.

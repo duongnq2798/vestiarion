@@ -215,13 +215,19 @@ When a changed address looks like an address the same payee had or was paid at b
 
 **Confirm address** repeats the warning before anyone confirms. It never blocks, since two counterparties can share a wallet on purpose.
 
-Any member can download the payee lock's evidence pack from **Settings**, under **Payee lock**, with **Download the evidence pack**. It is a JSON file. Each address change is a row with:
+Any member can open the payee lock's evidence pack from **Settings**, under **Payee lock**, with **Open the evidence pack**. It covers a period you choose: the last 30 days, this year, all time, or any days. Each address change shows:
 - who entered it;
 - how it was checked, and whether by a second person;
 - the payments the agent held for its address;
-- its first payment.
+- its first payment;
+- the signed ledger entries each fact rests on.
 
-Every fact names the signed ledger entries it rests on, and the file carries those entries in full, so it can be checked offline like the [audit export](/docs/guides/audit-export). This is the record an insurer's questionnaire on payment-change fraud asks for.
+The page counts them, and under **What insurers ask, and what these records show** answers, from the period's records, the questions an insurer's questionnaire on payment-change fraud asks: a call-back to a contact held before the change, a second person, a record of the check, a hold until it is confirmed, a wait, lookalike addresses, and records someone outside can check. Each insurer words its own questions, so the page puts them in its own words.
+
+To share it:
+- **Print or save as PDF** prints the page without the workspace's menus; choose Save as PDF in the print dialog.
+- **Download CSV** gives one row per address change, for a spreadsheet.
+- **Download signed JSON**, or **Download the evidence pack** in Settings, gives the JSON file. It carries every entry the pack cites, in full, so it can be checked offline like the [audit export](/docs/guides/audit-export).
 
 The payee lock covers addresses on Arc and the chains it pays. A payout to a vendor's bank account already waits for a person every time, so the lock adds nothing there.
 

@@ -77,9 +77,9 @@ export function inPeriod(ts: string, period: Period): boolean {
 }
 
 /** `vestiarion-payee-lock-evidence-pinecrest-studio-2026-10-01-2026-10-31.json`; `all` and `now` for open ends. */
-export function payeeLockEvidenceFileName(slug: string, period: Period): string {
+export function payeeLockEvidenceFileName(slug: string, period: Period, extension: "json" | "csv" = "json"): string {
   const safe = slug.replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "workspace";
-  return `vestiarion-payee-lock-evidence-${safe}-${period.from ?? "all"}-${period.to ?? "now"}.json`;
+  return `vestiarion-payee-lock-evidence-${safe}-${period.from ?? "all"}-${period.to ?? "now"}.${extension}`;
 }
 
 const str = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);

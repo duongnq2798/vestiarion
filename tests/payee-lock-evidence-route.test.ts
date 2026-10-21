@@ -148,6 +148,25 @@ describe("GET /api/evidence/payee-lock", () => {
     expect(fake.requests.filter((request) => request.method !== "GET" && !request.path.startsWith("/rest/v1/rpc/"))).toEqual([]);
   });
 
+  it("gives the pack as CSV with format=csv, one row per change, and refuses any other format (EP9)", async () => {
+    // Another member, so these downloads leave the owner's six a minute to the tests that count them.
+    sessionMock.mockResolvedValue({ id: APPROVER, email: null });
+    const answer = await call("?org=pinecrest-studio&from=2026-10-20&to=2026-10-20&format=csv").response;
+    expect(answer.status).toBe(200);
+    expect(answer.headers.get("content-type")).toBe("text/csv; charset=utf-8");
+    expect(answer.headers.get("content-disposition")).toBe('attachment; filename="vestiarion-payee-lock-evidence-pinecrest-studio-2026-10-20-2026-10-20.csv"');
+    expect(answer.headers.get("cache-control")).toBe("no-store");
+    const bytes = new Uint8Array(await answer.arrayBuffer());
+    // A byte-order mark first, so Excel reads it as UTF-8.
+    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    const lines = new TextDecoder().decode(bytes.slice(3)).trimEnd().split("\r\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0].startsWith("counterparty,counterparty_id,changed_at,")).toBe(true);
+    expect(lines[1]).toContain("Northwind Referrals");
+    expect(lines[1]).toContain("approver@pinecrest.test");
+    expect((await call("?org=pinecrest-studio&format=pdf").response).status).toBe(400);
+  });
+
   it("asks for the ids a hundred at a time, so no request's address grows too long", async () => {
     const many = Array.from({ length: 150 }, (_, index) =>
       signed(5000 + index, "2026-10-20T11:00:00Z", "counterparty_address_changed", { by: OWNER, counterpartyId: "cp-" + index, from: null, to: "0xa8a4" })

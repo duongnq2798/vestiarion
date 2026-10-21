@@ -1,6 +1,7 @@
 "use client";
 
-import { FileJson } from "lucide-react";
+import { FileJson, ScrollText } from "lucide-react";
+import Link from "next/link";
 import { setPayeeLockAction } from "@/app/actions/payee-lock";
 import { DocsLink } from "@/components/DocsLink";
 import { Button } from "@/components/ui/Button";
@@ -18,8 +19,8 @@ import { COOLING_HOURS_CHOICES, type PayeeLock } from "@/lib/payee-lock-rules";
  * The "Payee lock" section of Settings (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL1): whether a changed
  * payout address needs a recorded check by another person before anyone pays it, and how long it waits after it
  * changes. Everyone sees it; an owner (`canChange`) changes it. Before the workspace's database has it (`ready`), the
- * panel says so and offers nothing. Once it has, any member can download the evidence pack: every address change and how
- * it was checked (docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md EP1).
+ * panel says so and offers nothing. Once it has, any member can open the evidence pack, every address change and how it
+ * was checked, as a page or download it (docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md EP1, EP7).
  */
 export interface PayeeLockPanelProps {
   orgSlug: string;
@@ -94,6 +95,12 @@ export default function PayeeLockPanel({ orgSlug, status, canChange }: PayeeLock
         {status.ready && (
           <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
             <p className="text-sm text-ink-2">Every address change, who entered it, how it was checked and by whom, and its first payment, from the signed ledger.</p>
+            <Button asChild size="sm" variant="secondary">
+              <Link href={`/o/${encodeURIComponent(orgSlug)}/evidence/payee-lock`}>
+                <ScrollText aria-hidden />
+                Open the evidence pack
+              </Link>
+            </Button>
             <Button asChild size="sm" variant="secondary">
               <a href={`/api/evidence/payee-lock?org=${encodeURIComponent(orgSlug)}`} download>
                 <FileJson aria-hidden />
