@@ -624,6 +624,8 @@ const NOT_RESUBMITTED_HIGH_RISK_NOTE = " [not resubmitted: counterparty now scre
 const NOT_RESUBMITTED_ADDRESS_NOTE = " [not resubmitted: the counterparty's address changed and no one has confirmed it]";
 /** A payment never sent, not sent again while the payee lock keeps the payee's changed address waiting (payee lock PL5). */
 const NOT_RESUBMITTED_COOLING_NOTE = " [not resubmitted: the counterparty's address changed recently and the payee lock keeps it waiting]";
+/** A payment never sent, whose invoice asked to be paid to another address than the one on file now (invoice pay-to hold IP2). */
+const NOT_RESUBMITTED_PAY_TO_NOTE = " [not resubmitted: the invoice asks to be paid to a different address from the one on file]";
 
 /**
  * Why a resubmission must not go out, from the counterparty as it stands now,
@@ -906,6 +908,8 @@ export async function reconcileApInvoice(
     destinationChain?: string;
     /** When the agent decided it: a bridge still not minted long after is held for a person (review I5). */
     decidedAt?: string | null;
+    /** The address its document asked to be paid to (invoice pay-to hold IP2); a resend to any other waits for a person. */
+    documentPayTo?: string | null;
   },
   intent: ExistingPaymentIntent,
   deps: {
@@ -991,6 +995,7 @@ export async function reconcileApInvoice(
     | "counterparty.high_risk"
     | "counterparty.address_unconfirmed"
     | "counterparty.cooling_off"
+    | "invoice.pay_to_differs"
     | "counterparty.new_payee"
     | "workspace.two_approvals"
     | null = null;
@@ -1000,10 +1005,13 @@ export async function reconcileApInvoice(
   // parties stand behind if it was never paid there (new payee check N3), and only on its own when one approval may pay
   // it (payment integrity I4).
   const riskOrAddress = sent ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId, deps.payeeLock);
-  const newPayeeHeld = sent || riskOrAddress ? null : newPayeeResendBlocker(deps.newPayee, { id: invoice.counterpartyId, address: invoice.address });
+  // A resend pays the address as it stands now: one the invoice did not ask for waits for a person (invoice pay-to hold IP2).
+  const payToHeld = !sent && !riskOrAddress && payToDiffers(invoice.documentPayTo, invoice.address) ? ("invoice.pay_to_differs" as const) : null;
+  const newPayeeHeld = sent || riskOrAddress || payToHeld ? null : newPayeeResendBlocker(deps.newPayee, { id: invoice.counterpartyId, address: invoice.address });
   const blocker = sent
     ? null
     : (riskOrAddress ??
+      payToHeld ??
       (newPayeeHeld ? ("counterparty.new_payee" as const) : null) ??
       (await twoApprovalsResendBlocker({ type: "invoice", id: invoice.id }, { amount: invoice.amount, currency, address: invoice.address }, deps.twoApprovalsAbove)));
   if (sent) {
@@ -1052,7 +1060,9 @@ export async function reconcileApInvoice(
               ? notResubmittedNewPayeeNote(newPayeeHeld)
               : blocker === "counterparty.cooling_off"
                 ? NOT_RESUBMITTED_COOLING_NOTE
-                : NOT_RESUBMITTED_ADDRESS_NOTE,
+                : blocker === "invoice.pay_to_differs"
+                  ? NOT_RESUBMITTED_PAY_TO_NOTE
+                  : NOT_RESUBMITTED_ADDRESS_NOTE,
       heldBecausePaused: false,
       operatingBalance: null,
     };
@@ -1142,6 +1152,8 @@ export async function reconcileApInvoice(
       ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.cooling_off"
       ? `${name}: not resubmitted, the payee lock keeps the counterparty's changed address waiting (${invoice.amount} ${currency})`
+      : notResubmitted === "invoice.pay_to_differs"
+      ? `${name}: not resubmitted, the invoice asks to be paid to a different address from the one on file (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.new_payee"
       ? `${name}: ${NOT_RESUBMITTED_NEW_PAYEE_LINE} (${invoice.amount} ${currency})`
       : notResubmitted === "workspace.two_approvals"
@@ -2633,6 +2645,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           currency: invoiceCurrency(invoice.currency),
           ...(paidAcrossChains(counterparty.chain) ? { destinationChain: chainOn(provider.network.id, counterparty.chain).id } : {}),
           decidedAt: invoice.decided_at ?? null,
+          documentPayTo: documentPayTo.get(invoice.id) ?? null,
         },
         intent,
         // The stage's figure, so a payment it never sent goes again on its own only when one approval may pay it (I4), and
@@ -3534,7 +3547,7 @@ function notResentFacts(decided: DecisionFacts, reason: string | null): Decision
     addressUnconfirmed: reason === "counterparty.address_unconfirmed",
     addressMissing: false,
     coolingOffHeld: reason === "counterparty.cooling_off",
-    payToHeld: false,
+    payToHeld: reason === "invoice.pay_to_differs",
     newPayeeHeld: reason === "counterparty.new_payee",
     heldForBudgetUsdc: null,
     heldForCash: null,
@@ -4002,7 +4015,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           addressMissing: !row.counterparties.address,
           purchaseOrderRequired: row.counterparties.purchase_order_required,
           ...(lockNow && factsByInvoice.get(row.id)?.coolingOffHeld ? { coolingOff: inCoolingOff(row.counterparties.address_changed_at, lockNow, now) !== null } : {}),
-          ...(payToNow && factsByInvoice.get(row.id)?.payToHeld ? { payToDiffers: payToDiffers(payToNow.get(row.id), row.counterparties.address) } : {}),
+          ...(payToNow?.has(row.id) && factsByInvoice.get(row.id)?.payToHeld ? { payToDiffers: payToDiffers(payToNow.get(row.id), row.counterparties.address) } : {}),
           ...(fxNow.has(row.id) ? { fx: fxNow.get(row.id) } : {}),
           ...(newPayeeNow.has(row.id) ? { newPayee: newPayeeNow.get(row.id) } : {}),
           ...(twoApprovalsNow !== undefined ? { twoApprovalsAbove: twoApprovalsNow } : {}),

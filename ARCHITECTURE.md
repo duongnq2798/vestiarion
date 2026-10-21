@@ -586,16 +586,19 @@ document keeps the 0x address the document asked to be paid to in `invoices.docu
 - `DocumentProvenance.payTo` carries it from each path:
   - the invoice form's `documentRead` (`documentPayToOf`);
   - the chats' and email's stored draft (`chatDraftOf`), and the inbox's reading for an email finished by hand;
-  - a captured draft's `read.payTo`.
+  - a Chrome extension draft's `read.payTo`. A payee link's draft reads no document, so it carries none.
 - `createInvoice` writes it and records it in the `create_invoice` entry's `document`. Before 0136 the insert is
   retried without it, as before.
 - The AP stage reads the payables' addresses once (`readDocumentPayTo`, none before 0136; any other failure stops the
   stage). `enforceApGuardrails` holds a payment whose document asked for another address than the one on file as
-  `invoice.pay_to_differs`, after the address checks and before the three-way match. The decision's `observed` records
-  `documentPayTo`.
+  `invoice.pay_to_differs`, after the address checks and before the three-way match, except for a payee paid to a
+  bank account. The decision's `observed` records `documentPayTo`.
+- `reconcileApInvoice` does not resend a payment never sent while they differ (`notResubmittedBecause:
+  "invoice.pay_to_differs"`, `payToHeld` in its facts).
 - The follow-up (`payToHeld`, `payToDiffers`) reopens it once the address on file is the one asked for.
 - Approvals' card shows the address the invoice asked for beside the one Approve and pay sends to
-  (`invoice-pay-to-rules.ts`, pure, for the browser). The agent never pays the document's address.
+  (`invoice-pay-to-rules.ts`, pure, for the browser). `approveRefusal` refuses Approve and pay from Slack or Telegram
+  for it (`open_in_console`). The agent never pays the document's address.
 
 **Ask every payee at once** (`docs/superpowers/specs/2026-10-18-ask-every-payee-design.md`). `askablePayees`
 (`src/lib/address-requests.ts`) lists, for an owner or admin on Counterparties, the vendors and contractors with no

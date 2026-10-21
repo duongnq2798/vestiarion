@@ -56,6 +56,16 @@ describe("the guardrail (IP2)", () => {
     expect(result.reasoning).toContain(`the invoice asks to be paid to ${ASKED}, not the address on file (${ON_FILE})`);
   });
 
+  it("says so when there is no address on file at all", () => {
+    const result = enforceApGuardrails({ ...base, documentPayTo: ASKED, addressOnFile: null });
+    expect(result.rule).toBe("invoice.pay_to_differs");
+    expect(result.reasoning).toContain(`the invoice asks to be paid to ${ASKED}, and there is no address on file`);
+  });
+
+  it("leaves a vendor paid to a bank account to the bank payout's own rule", () => {
+    expect(enforceApGuardrails({ ...base, documentPayTo: ASKED, addressOnFile: ON_FILE, paidToBank: true }).rule).not.toBe("invoice.pay_to_differs");
+  });
+
   it("lets it through when the document named none or the same address", () => {
     expect(enforceApGuardrails({ ...base, documentPayTo: null, addressOnFile: ON_FILE }).blocked).toBe(false);
     expect(enforceApGuardrails({ ...base, documentPayTo: ASKED.toUpperCase().replace("0X", "0x"), addressOnFile: ASKED.toLowerCase() }).blocked).toBe(false);
@@ -186,7 +196,27 @@ describe("reading what the documents asked for (IP2)", () => {
 
 describe("the approval card's words (IP3)", () => {
   it("names the address the invoice asked for and says the one on file is paid", () => {
-    const words = renderToStaticMarkup(<p>{invoiceAskedFor(ASKED)}</p>);
+    const words = renderToStaticMarkup(<p>{invoiceAskedFor(ASKED, ON_FILE)}</p>);
     expect(words).toContain(`The invoice asks to be paid to ${ASKED}. Approve and pay sends to the address above, the one on file.`);
+  });
+
+  it("says an address must be added first when there is none on file", () => {
+    expect(invoiceAskedFor(ASKED, null)).toBe(
+      `The invoice asks to be paid to ${ASKED}. There is no address on file: add one, after checking it with the vendor, before this can be paid. Check with the vendor, by a contact you had before, which address is theirs.`
+    );
+  });
+});
+
+describe("approving from a chat (IP3)", () => {
+  const facts = { network: "arc-testnet" as const, amount: 50, currency: "USDC", chain: "ARC-TESTNET", address: ON_FILE, addressChangedAt: null, addressConfirmedAt: null };
+
+  it("is refused while the invoice asks for another address, and sent to the console where both are shown", async () => {
+    const { approveRefusal } = await import("@/lib/commands/chat-decisions");
+    expect(approveRefusal({ ...facts, documentPayTo: ASKED }, 100, "Slack")).toMatchObject({
+      code: "open_in_console",
+      message: "Its invoice asks to be paid to a different address from the one on file.",
+    });
+    expect(approveRefusal({ ...facts, documentPayTo: ON_FILE.toUpperCase().replace("0X", "0x") }, 100, "Slack")).toBeNull();
+    expect(approveRefusal({ ...facts, documentPayTo: null }, 100, "Telegram")).toBeNull();
   });
 });

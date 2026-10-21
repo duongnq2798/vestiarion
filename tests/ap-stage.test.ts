@@ -472,12 +472,13 @@ describe("the AP stage schedules a correct invoice with terms", () => {
     today("2026-10-01T09:00:00.000Z");
     model(() => ({ action: "pay", reasoning: "Due and matched.", confidence: 0.9 }));
     const address = "0x7a2dc41e9b03f6a85d1c27e4b98f0a3c61d5e10d";
-    const { fake, stage } = apFake({ book: [payable({ document_pay_to: address.toUpperCase().replace("0X", "0x"), counterparties: counterparty({ address }) })] });
+    const { fake, chain, stage } = apFake({ book: [payable({ document_pay_to: address.toUpperCase().replace("0X", "0x"), counterparties: counterparty({ address }) })] });
 
     await stage();
 
+    expect(chain.transfers).toHaveLength(1);
     const [entry] = ledger(fake.requests);
-    expect(entry.p_detail.guardrailRule ?? null).not.toBe("invoice.pay_to_differs");
+    expect((entry.p_detail as { guardrailRule?: string }).guardrailRule ?? null).not.toBe("invoice.pay_to_differs");
   });
 
   it("refuses to schedule for a high-risk counterparty, as it would refuse to pay", async () => {

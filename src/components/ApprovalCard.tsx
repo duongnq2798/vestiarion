@@ -282,7 +282,7 @@ export default function ApprovalCard({
             // The invoice asked to be paid somewhere else (invoice pay-to hold IP3): Approve and pay still pays the address on file.
             <Callout tone="held" className="mt-2">
               <span className="break-all">
-                {invoiceAskedFor(payable.documentPayTo as string)}
+                {invoiceAskedFor(payable.documentPayTo as string, payable.address)}
               </span>
             </Callout>
           )}

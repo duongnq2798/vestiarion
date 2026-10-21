@@ -10,7 +10,10 @@ export function payToDiffers(documentPayTo: string | null | undefined, onFile: s
   return !onFile || documentPayTo.toLowerCase() !== onFile.toLowerCase();
 }
 
-/** What the approval card says when the invoice asked to be paid to another address (IP3). */
-export function invoiceAskedFor(documentPayTo: string): string {
-  return `The invoice asks to be paid to ${documentPayTo}. Approve and pay sends to the address above, the one on file. Check with the vendor, by a contact you had before, which address is theirs.`;
+/** What the approval card says when the invoice asked to be paid to another address (IP3), or when none is on file. */
+export function invoiceAskedFor(documentPayTo: string, onFile: string | null = null): string {
+  const pays = onFile
+    ? "Approve and pay sends to the address above, the one on file."
+    : "There is no address on file: add one, after checking it with the vendor, before this can be paid.";
+  return `The invoice asks to be paid to ${documentPayTo}. ${pays} Check with the vendor, by a contact you had before, which address is theirs.`;
 }

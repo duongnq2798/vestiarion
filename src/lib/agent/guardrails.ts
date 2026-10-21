@@ -299,12 +299,14 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
   // The invoice asked to be paid somewhere else (invoice pay-to hold IP2): the way a changed payment detail on an invoice,
   // real or forged, usually arrives. The agent pays only the address on file, and holds this one for a person to check
   // with the vendor which address is theirs. Held, not refused: Approve and pay pays the address on file.
-  if (payToDiffers(input.documentPayTo, input.addressOnFile)) {
+  // A vendor paid to a bank account has no address to compare: its payout waits for a person on its own rule.
+  if (!input.paidToBank && payToDiffers(input.documentPayTo, input.addressOnFile)) {
+    const onFile = input.addressOnFile ? `not the address on file (${input.addressOnFile})` : "and there is no address on file";
     return {
       blocked: true,
       status: "held",
       rule: "invoice.pay_to_differs",
-      reasoning: `${input.reasoning} [guardrail override: the invoice asks to be paid to ${input.documentPayTo}, not the address on file${input.addressOnFile ? ` (${input.addressOnFile})` : ""} — held for a person to confirm with the vendor, by a contact they had before, which address is theirs]`,
+      reasoning: `${input.reasoning} [guardrail override: the invoice asks to be paid to ${input.documentPayTo}, ${onFile} — held for a person to confirm with the vendor, by a contact they had before, which address is theirs]`,
     };
   }
   // The three-way match (three-way match design M1, M3): the goods received and, for a counterparty that needs one, a
