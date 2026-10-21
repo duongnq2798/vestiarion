@@ -3,12 +3,13 @@
  * CSP1-CSP3): browsers report what it would block and block nothing, until the reports show it fits every page and it
  * is enforced. `next.config.ts` sends it on every response; `/api/csp-report` receives the reports.
  *
- * `next.config.ts` imports it, so it imports only the network profiles, which import nothing. `tests/csp.test.ts` holds
- * each origin here to the code that reaches it: the connect forms' OAuth hosts, Circle's Iris and the modular wallets
- * client.
+ * `next.config.ts` imports it, so it imports only the network profiles and the site's links, which import nothing.
+ * `tests/csp.test.ts` holds each origin here to the code that reaches it: the connect forms' OAuth hosts, Circle's Iris,
+ * the modular wallets client and Product Hunt's badge.
  */
 
 import { NETWORKS } from "../network";
+import { PRODUCT_HUNT_BADGE } from "../site-links";
 
 /** Where browsers send reports, by `report-uri` and through the Reporting API's `csp` endpoint. */
 export const CSP_REPORT_PATH = "/api/csp-report";
@@ -100,7 +101,8 @@ export function contentSecurityPolicy(env: CspEnv = process.env): string {
     ["default-src", ["'self'"]],
     ["script-src", ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...GOOGLE_ANALYTICS.script, ...preview("script")]],
     ["style-src", ["'self'", "'unsafe-inline'", ...preview("style")]],
-    ["img-src", ["'self'", "data:", "blob:", ...GOOGLE_ANALYTICS.img, ...preview("img")]],
+    // Product Hunt draws its badge in the site footer, the first production report showed (CSP4).
+    ["img-src", ["'self'", "data:", "blob:", ...GOOGLE_ANALYTICS.img, new URL(PRODUCT_HUNT_BADGE.src).origin, ...preview("img")]],
     ["font-src", ["'self'", "data:", ...preview("font")]],
     ["media-src", ["'self'"]],
     [

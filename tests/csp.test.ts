@@ -8,6 +8,7 @@ import { NETWORKS } from "@/lib/network";
 import { PIPEDRIVE_AUTHORIZE } from "@/lib/pipedrive/http";
 import { INTUIT_AUTHORIZE } from "@/lib/quickbooks/http";
 import { takeCspReportToken } from "@/lib/rate-limit";
+import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
 import { contentSecurityPolicy, CSP_REPORT_PATH, CSP_REPORTING_ENDPOINTS, CSP_REPORTS_PER_REQUEST, cspViolations } from "@/lib/security/csp";
 import { XERO_AUTHORIZE } from "@/lib/xero/http";
 import { ZOHO_REGIONS } from "@/lib/zohobooks/regions";
@@ -34,6 +35,11 @@ describe("the policy (CSP1, CSP2)", () => {
     expect(policy.get("report-uri")).toEqual([CSP_REPORT_PATH]);
     expect(policy.get("report-to")).toEqual(["csp"]);
     expect(CSP_REPORTING_ENDPOINTS).toBe(`csp="${CSP_REPORT_PATH}"`);
+  });
+
+  it("lets the site footer show Product Hunt's badge, which Product Hunt draws", () => {
+    expect(policy.get("img-src")).toContain(new URL(PRODUCT_HUNT_BADGE.src).origin);
+    expect(policy.get("img-src")).toContain("https://api.producthunt.com");
   });
 
   it("allows eval in development only, where React uses it", () => {

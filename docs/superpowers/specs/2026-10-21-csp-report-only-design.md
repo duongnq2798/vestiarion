@@ -22,7 +22,7 @@ would have blocked and block nothing. Once the reports show it fits every page, 
 | `default-src` | `'self'` |
 | `script-src` | `'self'`, `'unsafe-inline'`, Google Tag Manager; `'unsafe-eval'` in development only |
 | `style-src` | `'self'`, `'unsafe-inline'` |
-| `img-src` | `'self'`, `data:`, `blob:`, Google Analytics and Tag Manager |
+| `img-src` | `'self'`, `data:`, `blob:`, Google Analytics and Tag Manager, Product Hunt's badge |
 | `font-src` | `'self'`, `data:` |
 | `media-src` | `'self'` |
 | `connect-src` | `'self'`, Google Analytics, Circle's Iris (both networks), Circle's modular wallets client |
@@ -55,6 +55,8 @@ would have blocked and block nothing. Once the reports show it fits every page, 
   - The test lists every `src/app/api/integrations/*/connect` route, so a new one fails it until its consent screen is
     named.
 - The test also reads the tag's origin from the Google Analytics component.
+- The site footer shows Product Hunt's badge, an image Product Hunt draws. The first production report named it
+  (`img-src`, `https://api.producthunt.com`, page `/`); its origin now comes from `PRODUCT_HUNT_BADGE`.
 - **Continue with Google** is a Server Action that sends the person to Supabase Auth, then Google. A browser that submits
   it before the page's script runs follows those redirects as a form submission. So `form-action` names Google's sign-in
   and the deployment's `NEXT_PUBLIC_SUPABASE_URL` origin.
