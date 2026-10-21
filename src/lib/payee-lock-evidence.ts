@@ -219,6 +219,8 @@ export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
           ? {
               at: confirmed.ts,
               by: person(confirmed.detail.by, input.members),
+              // With Confirm address (`confirm`), which checks for lookalikes, or by approving a payment to it (`approval`).
+              via: str(confirmed.detail.via),
               record: verification
                 ? {
                     method,

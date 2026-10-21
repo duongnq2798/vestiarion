@@ -552,9 +552,10 @@ adds two columns to `approval_policies`: `payee_lock` (off by default) and `paye
     - the checks that follow.
   - Every fact cites its entries by `seq`, and the file carries those entries in full with the keys and
     `CHECK_AN_ENTRY`. Settings links it from the payee lock panel.
-  - The page, `/o/<slug>/evidence/payee-lock` (`PayeeLockEvidenceView`), reads the same pack for a period, with the
-    answers `payeeLockQuestions` (`src/lib/payee-lock-evidence-report.ts`) gives to seven controls insurers ask about,
-    counted from the rows. `format=csv` on the route answers `payeeLockEvidenceCsv`, one row per change, cells guarded
+  - The page, `/o/<slug>/evidence/payee-lock` (`PayeeLockEvidenceView`), reads the same pack for a period (the last 30
+    days unless asked, `evidencePeriodFrom`; twenty reads at once per member, then one every 3 seconds,
+    `takeEvidencePageToken`), with the answers `payeeLockQuestions` (`src/lib/payee-lock-evidence-report.ts`) gives to
+    seven controls insurers ask about, counted from the rows' own records, never the lock's setting today. `format=csv` on the route answers `payeeLockEvidenceCsv`, one row per change, cells guarded
     by the audit export's `csvCell`.
   - Its PDF is the browser's print: the shell's sidebar, headers, banners and footer carry `print:hidden!`, and the
     frame drops its padding (`print:pl-0!`), so any workspace page prints its content alone.

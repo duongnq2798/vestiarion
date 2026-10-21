@@ -46,6 +46,8 @@ it is left out. Each row has:
 - **The confirmation:** the first `counterparty_address_confirmed` for that counterparty after the change and before
   its next change. Its fields:
   - when, and who;
+  - how: with Confirm address (`via: "confirm"`), which checks for lookalikes, or by approving a payment to it
+    (`"approval"`);
   - the record: method, contact used, contact on file before the change, note;
   - whether a second person confirmed it, true only when that is known:
     - with the lock on, the confirmation checked who gave the address, so its flags answer: `soloConfirmation` or
@@ -110,15 +112,19 @@ A broker or an underwriter does not read JSON. The owner needs the pack as a pag
 questions the insurer's form asks, and a PDF or a spreadsheet to send.
 
 **EP7. The page.** `/o/<slug>/evidence/payee-lock`, for any member, as the file is.
-- It takes `from` and `to` as the file does, with links for the last 30 days, this year and all time, and two date
-  fields. A period that cannot be read shows all time and says so.
+- It takes `from` and `to` as the file does, with links for the last 30 days, this year and all time (`all=1`), and
+  two date fields. It opens on the last 30 days. A day that cannot be read, or a value given twice, shows those and says
+  so.
+- A member reads it twenty times at once, then once every 3 seconds (`takeEvidencePageToken`), since each read checks the
+  cited entries' signatures as a download does.
 - It shows:
-  - the lock as it is now;
+  - the lock as it is now, said as now, since the period's changes may predate it;
   - the counts: changes, confirmed with a record, by a second person, changes with a payment held, paid only after
     confirming;
   - the answers (EP8);
-  - every change: when and by whom, from and to, the confirmation and its record, whether a second person gave it, the
-    wait, any lookalike warning, the holds, the first payment with its transaction, and the signed entries it rests on;
+  - every change: when and by whom, from and to, the confirmation (how it was made) and its record, whether a second
+    person gave it, the wait, any lookalike warning, the holds, the first payment with its transaction hash written out
+    for a printed copy, and the signed entries it rests on;
   - the lock's changes in the period;
   - how many of the cited entries verify against the workspace's keys.
 - It reads the pack with `readPayeeLockEvidence`, the same as the file, and writes nothing.
@@ -128,25 +134,32 @@ questions the insurer's form asks, and a PDF or a spreadsheet to send.
 questionnaires on payment-change fraud ask about the same controls; each words its own. The page asks seven, in its own
 words, and answers each from the period's rows:
 
-| Control | Counts |
-|---|---|
-| A call or message to a contact held before the change | confirmed changes with `contactOnFileBefore` |
-| Confirmation by someone other than whoever entered it | confirmed changes with `secondPerson`, those not known said apart |
-| A record of each check | confirmations with `recordKept` |
-| A hold until the change is confirmed | first payments with `paidAfterConfirmation`, and the holds |
-| A wait before the first payment | the lock's wait now, and payments with `paidAfterWait` |
-| Lookalike details | changes whose confirmation warned of a lookalike |
-| Records someone outside can check | cited entries that verify |
+| Control | Passes | Out of |
+|---|---|---|
+| A call or message to a contact held before the change | a call or a message recorded with its contact marked as on file before | confirmations |
+| Confirmation by someone other than whoever entered it | `secondPerson` true, those not known said apart | confirmations |
+| A record of each check | `recordKept` | confirmations |
+| A hold until the change is confirmed | `paidAfterConfirmation`; with nothing paid, any hold | first payments |
+| A wait before the first payment | `paidAfterWait`: a wait recorded with the confirmation had ended | first payments |
+| Lookalike details | confirmed with Confirm address, which checks for lookalikes; how many warned is said | confirmations |
+| Records someone outside can check | the cited entry verifies | cited entries |
 
-- **Yes** when every case counted passes, **Partly** when some do, **No** when none, **Nothing to show yet** when the
-  period has no case. A period with no change answers nothing as yes.
-- The wait is **No** when the lock sets none now. Lookalike warnings are always on, so that answer is **Yes**.
-- Each answer also says how Vestiarion makes it so, as the workspace is set up now, lock on or off.
+- **Yes** when every case counted passes, **Partly** when some do, **No** when none, **Nothing to show yet** when there
+  is no case. Every answer counts the changes' own records, never the lock's setting today, so a period with no change
+  answers nothing as yes, and a lock turned on after a change does not make that change pass.
+- A check in person or another way does not count as a call-back, even with its contact marked as on file before.
+- A confirmation by approving a payment shows no lookalike warning, so it does not count for that control.
+- A change's holds and first payment run to its next change, which can fall after the period; the evidence says "these
+  addresses", not "this period".
+- Each answer also says how Vestiarion works now (`how`), starting "Now", lock on or off.
+- Beside the answers: "Counted from these records, not a completed questionnaire", and that a confirmation's method and
+  contact are what the person confirming recorded.
 - The page names no insurer and quotes no form, so it implies no one's endorsement.
 
 **EP9. The CSV.** `GET /api/evidence/payee-lock?…&format=csv`, with the same gate, period and limit as the file.
 - One row per address change, the columns `PAYEE_LOCK_CSV_FIELDS` names:
-  - the counterparty, the change, who entered and who confirmed it, the check, its contact, the checks as yes or no;
+  - the counterparty, the change, who entered and who confirmed it and how, the check, its contact and note, the checks
+    as yes or no;
   - the wait, the lookalike warnings, the holds by rule and count, the first payment;
   - each fact's entry numbers.
 - Each cell is guarded as the audit export's are (`csvCell`), so a value that starts like a formula never runs in a
@@ -196,7 +209,9 @@ words, and answers each from the period's rows:
 
 `tests/payee-lock-evidence-report.test.tsx` covers:
 - who did a step, in words;
-- the seven answers, counted, with the lock on and off, for an empty period, and partly or no;
+- the seven answers, counted from the records, with the lock on and off now, for an empty period, partly or no, a check
+  in person, a payment with no wait, holds with no payment and a confirmation by approving;
+- the page's period: the last 30 days by default, all time, a day it cannot read, a value given twice; and its limit;
 - the CSV's columns, rows, checks, entries, and formulas and quotes kept safe;
 - the page: the lock, the counts, the answers, each change with its entries, the downloads for the period, the print
   line and what the print leaves out, and an empty period.

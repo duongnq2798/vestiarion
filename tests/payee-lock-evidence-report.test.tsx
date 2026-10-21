@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PayeeLockEvidenceView, periodWords, utc } from "@/components/PayeeLockEvidenceView";
 import { payeeLockEvidence, type CheckedEntry } from "@/lib/payee-lock-evidence";
-import { PAYEE_LOCK_CSV_FIELDS, payeeLockEvidenceCsv, payeeLockQuestions, whoWords } from "@/lib/payee-lock-evidence-report";
+import { evidencePeriodFrom, PAYEE_LOCK_CSV_FIELDS, payeeLockEvidenceCsv, payeeLockQuestions, QUESTIONS_NOTE, viaWords, whoWords } from "@/lib/payee-lock-evidence-report";
+import { takeEvidencePageToken } from "@/lib/rate-limit";
 
 /**
  * The payee lock's evidence pack read for people (docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md
@@ -46,6 +47,7 @@ const entries: CheckedEntry[] = [
     by: APPROVER,
     counterpartyId: NORTHWIND,
     address: NEW,
+    via: "confirm",
     verification: { method: "call", contact: "=HYPERLINK(\"http://evil.test\")", contactOnFileBefore: true, note: "Second member confirms." },
     payeeLock: { coolingHours: 4 },
   }),
@@ -79,6 +81,9 @@ describe("who did a step, in words", () => {
     expect(whoWords({ kind: "payee_link", linkId: "l1" })).toBe("the payee, through a payee link");
     expect(whoWords({ kind: "github", login: "octo" })).toBe("GitHub (octo)");
     expect(whoWords({ kind: "unknown" })).toBe("unknown");
+    expect(viaWords("confirm")).toBe("Confirm address");
+    expect(viaWords("approval")).toBe("approving a payment to it");
+    expect(viaWords(null)).toBe("not recorded");
   });
 });
 
@@ -90,35 +95,88 @@ describe("what the records answer to insurers' questions (EP8)", () => {
     for (const item of Object.values(answers)) expect(item.question.endsWith("?")).toBe(true);
   });
 
-  it("counts this period's changes: one confirmed with a call-back by a second person, held, then paid after the wait", () => {
-    expect(answers.callback).toMatchObject({ answer: "yes", evidence: "1 of 1 confirmed address change was checked with a contact on file before the change." });
-    expect(answers.second_person).toMatchObject({ answer: "yes", evidence: "1 of 1 confirmed change was confirmed by someone other than whoever entered the address." });
+  it("counts the changes' own records: one confirmed with a call-back by a second person, held, then paid after the wait", () => {
+    expect(answers.callback).toMatchObject({
+      answer: "yes",
+      evidence: "1 of 1 confirmation recorded a call or a message to a contact the person confirming marked as on file before the change.",
+    });
+    expect(answers.second_person).toMatchObject({ answer: "yes", evidence: "1 of 1 confirmation came from someone other than whoever entered the address." });
     expect(answers.record.answer).toBe("yes");
-    expect(answers.hold).toMatchObject({ answer: "yes", evidence: "1 of 1 first payment to a changed address came after it was confirmed. The agent held 2 payments for an address in this period." });
-    expect(answers.wait).toMatchObject({ answer: "yes", evidence: "The payee lock waits 4 hours after a change. 1 of 1 payment made under a wait came after it ended." });
-    expect(answers.lookalike).toMatchObject({ answer: "yes", evidence: "None of the 2 changes looked like another payee's address or an earlier one of the same payee." });
+    expect(answers.hold).toMatchObject({ answer: "yes", evidence: "1 of 1 first payment to these addresses came after the address was confirmed, and the agent held 2 payments for them." });
+    expect(answers.wait).toMatchObject({ answer: "yes", evidence: "1 of 1 first payment to these addresses came after a payee lock wait recorded with its confirmation had ended." });
+    expect(answers.lookalike).toMatchObject({ answer: "yes", evidence: "1 of 1 confirmation went through Confirm address, which checks for lookalikes before anyone confirms; it warned on 0." });
     // One cited entry's key is not known here, so not every entry is verified.
     expect(answers.independent).toMatchObject({ answer: "partly", evidence: "5 of 6 ledger entries this pack cites verified against the workspace's keys." });
   });
 
-  it("says what the lock does as it is set now, and answers no wait as no", () => {
+  it("answers from the records, never today's setting, which only the how line names", () => {
     const off = payeeLockQuestions({ ...pack, lock: { ...pack.lock, now: { on: false, coolingHours: 0 } } });
-    expect(off.find((item) => item.id === "callback")!.how).toContain("The payee lock is off");
-    expect(off.find((item) => item.id === "wait")).toMatchObject({ answer: "no", evidence: "The payee lock sets no wait now." });
+    const answer = (id: string) => off.find((item) => item.id === id)!;
+    expect(answer("wait").answer).toBe("yes");
+    expect(answer("callback").answer).toBe("yes");
+    expect(answer("callback").how).toMatch(/^Now the payee lock is off\./);
+    expect(answers.wait.how).toMatch(/^Now the payee lock is on, with a 4-hour wait\./);
   });
 
-  it("has nothing to show for a period without a change, rather than a yes", () => {
+  it("has nothing to show for a period without a change, rather than a yes, whatever the lock is set to now", () => {
     const empty = payeeLockQuestions({ ...pack, changes: [], entries: [] });
-    for (const id of ["callback", "second_person", "record", "hold", "independent"]) expect(empty.find((item) => item.id === id)!.answer, id).toBe("not_seen");
+    for (const item of empty) expect(item.answer, item.id).toBe("not_seen");
   });
+
+  const [northwind] = pack.changes;
+  const ask = (rows: (typeof pack)["changes"]) => Object.fromEntries(payeeLockQuestions({ ...pack, changes: rows }).map((item) => [item.id, item.answer]));
 
   it("answers partly or no when some or none of the confirmations had the check", () => {
-    const [northwind] = pack.changes;
     const solo = { ...northwind, checks: { ...northwind.checks, secondPerson: false, contactOnFileBefore: false } };
-    const mixed = payeeLockQuestions({ ...pack, changes: [northwind, solo] });
-    expect(mixed.find((item) => item.id === "second_person")!.answer).toBe("partly");
-    const none = payeeLockQuestions({ ...pack, changes: [solo] });
-    expect(none.find((item) => item.id === "callback")!.answer).toBe("no");
+    expect(ask([northwind, solo]).second_person).toBe("partly");
+    expect(ask([solo]).callback).toBe("no");
+  });
+
+  it("counts a check in person as no call-back, even with its contact marked as on file before", () => {
+    const inPerson = { ...northwind, confirmation: { ...northwind.confirmation!, record: { ...northwind.confirmation!.record!, method: "in_person" as const } } };
+    expect(ask([inPerson]).callback).toBe("no");
+  });
+
+  it("counts a payment made with no wait recorded against the wait, though the lock waits now", () => {
+    const noWait = { ...northwind, checks: { ...northwind.checks, paidAfterWait: null } };
+    expect(ask([northwind, noWait]).wait).toBe("partly");
+    expect(ask([noWait]).wait).toBe("no");
+  });
+
+  it("answers the hold from holds alone when nothing was paid", () => {
+    expect(ask([{ ...northwind, firstPayment: null, checks: { ...northwind.checks, paidAfterConfirmation: null, paidAfterWait: null } }]).hold).toBe("yes");
+  });
+
+  it("does not count a confirmation by approving, which shows no lookalike warning", () => {
+    const approved = { ...northwind, confirmation: { ...northwind.confirmation!, via: "approval" } };
+    expect(ask([northwind, approved]).lookalike).toBe("partly");
+    expect(ask([approved]).lookalike).toBe("no");
+  });
+});
+
+describe("the page's period and limit (EP7)", () => {
+  const NOW = new Date("2026-10-21T08:00:00Z");
+
+  it("opens on the last 30 days, shows all time when asked, and reads from and to as the file does", () => {
+    expect(evidencePeriodFrom({}, NOW)).toEqual({ period: { from: "2026-09-22", to: "2026-10-21" }, unreadable: false });
+    expect(evidencePeriodFrom({ from: "", to: "" }, NOW)).toEqual({ period: { from: "2026-09-22", to: "2026-10-21" }, unreadable: false });
+    expect(evidencePeriodFrom({ all: "1" }, NOW)).toEqual({ period: { from: null, to: null }, unreadable: false });
+    expect(evidencePeriodFrom({ from: "2026-10-01" }, NOW)).toEqual({ period: { from: "2026-10-01", to: null }, unreadable: false });
+  });
+
+  it("shows the last 30 days and says so for a day it cannot read or a value given twice", () => {
+    expect(evidencePeriodFrom({ from: "2026-13-01" }, NOW)).toEqual({ period: { from: "2026-09-22", to: "2026-10-21" }, unreadable: true });
+    expect(evidencePeriodFrom({ from: ["2026-10-01", "2026-10-02"] }, NOW).unreadable).toBe(true);
+    expect(evidencePeriodFrom({ all: ["1", "1"] }, NOW).unreadable).toBe(true);
+  });
+
+  it("lets a member read the page twenty times at once, then once every 3 seconds", () => {
+    const at = 5_000_000_000_000;
+    const member = "evidence-page-member";
+    const reads = Array.from({ length: 21 }, () => takeEvidencePageToken(member, at));
+    expect(reads.slice(0, 20).every(Boolean)).toBe(true);
+    expect(reads[20]).toBe(false);
+    expect(takeEvidencePageToken(member, at + 3_000)).toBe(true);
   });
 });
 
@@ -158,7 +216,11 @@ describe("the page (EP7, EP10)", () => {
   const text = markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ");
 
   it("shows the lock, the counts, the questions and every change with its entries", () => {
-    expect(text).toContain("The payee lock is on, with a 4-hour wait after an address changes.");
+    expect(text).toContain("Now the payee lock is on, with a 4-hour wait after an address changes.");
+    expect(text).toContain(QUESTIONS_NOTE);
+    expect(text).toContain("by approver@pinecrest.test, with Confirm address");
+    // The transaction itself, so a printed copy keeps it.
+    expect(text).toContain(TX);
     expect(text).toContain("Address changes 2");
     expect(text).toContain("What insurers ask, and what these records show");
     expect(text).toContain("each insurer words its own");
@@ -178,6 +240,7 @@ describe("the page (EP7, EP10)", () => {
     expect(markup).toContain("hidden text-sm text-ink-2 print:block");
     expect(text).toContain("Vestiarion payee lock evidence · Pinecrest Studio (Arc testnet) · 2026-10-20 to 2026-10-20 · read 2026-10-21 08:00 UTC");
     expect(markup).toContain('href="?from=2026-09-22&amp;to=2026-10-21"');
+    expect(markup).toContain('href="?all=1"');
   });
 
   it("writes times and periods without ambiguity", () => {

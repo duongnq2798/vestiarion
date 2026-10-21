@@ -1,5 +1,5 @@
 import { csvCell } from "./ledger-export";
-import type { PayeeLockEvidence, Who } from "./payee-lock-evidence";
+import { parsePeriod, type PayeeLockEvidence, type Period, type Who } from "./payee-lock-evidence";
 
 /**
  * The payee lock's evidence pack read for people (docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md
@@ -16,18 +16,51 @@ export function whoWords(who: Who): string {
   return "unknown";
 }
 
+const DAY = 86_400_000;
+
+/** The last 30 days, in whole UTC days, ending today. */
+export function last30Days(now: Date): Period {
+  return { from: new Date(now.getTime() - 29 * DAY).toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+}
+
+/**
+ * The period the page shows (EP7): `all=1` for all time, `from` and `to` as the file reads them, the last 30 days when
+ * neither is given. A value given twice, or a day that cannot be read, shows the last 30 days and says so.
+ */
+export function evidencePeriodFrom(query: Record<string, string | string[] | undefined>, now: Date): { period: Period; unreadable: boolean } {
+  const values = [query.from, query.to, query.all];
+  if (values.some((value) => Array.isArray(value))) return { period: last30Days(now), unreadable: true };
+  if (query.all === "1") return { period: { from: null, to: null }, unreadable: false };
+  const from = (query.from as string | undefined) ?? "";
+  const to = (query.to as string | undefined) ?? "";
+  if (from === "" && to === "") return { period: last30Days(now), unreadable: false };
+  const period = parsePeriod(from, to);
+  return period ? { period, unreadable: false } : { period: last30Days(now), unreadable: true };
+}
+
+/** How an address was confirmed, in words: with Confirm address, or by approving a payment to it. */
+export function viaWords(via: string | null): string {
+  if (via === "confirm") return "Confirm address";
+  if (via === "approval") return "approving a payment to it";
+  return "not recorded";
+}
+
 export type Answer = "yes" | "partly" | "no" | "not_seen";
 
 export const ANSWER_WORDS: Record<Answer, string> = { yes: "Yes", partly: "Partly", no: "No", not_seen: "Nothing to show yet" };
+
+/** What the answers are, and are not: said beside them wherever they are shown. */
+export const QUESTIONS_NOTE =
+  "Counted from these records, not a completed questionnaire. A confirmation's method and whether its contact was on file before the change are what the person confirming recorded.";
 
 export interface QuestionAnswer {
   id: "callback" | "second_person" | "record" | "hold" | "wait" | "lookalike" | "independent";
   /** The control, in our words: each insurer words its own questionnaire. */
   question: string;
   answer: Answer;
-  /** What this period's records show. */
+  /** What the records of these changes show. */
   evidence: string;
-  /** How Vestiarion makes it so, as the workspace is set up now. */
+  /** How Vestiarion works now, as the workspace is set up today, which may differ from when a change was made. */
   how: string;
 }
 
@@ -38,87 +71,79 @@ function share(passed: number, of: number): Answer {
 }
 
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
+const CALL_OR_MESSAGE = new Set(["call", "message"]);
 
 /**
  * The answers the pack gives to the controls insurers' questionnaires on payment-change fraud ask about (EP8): a
  * call-back to a contact held before the change, a second person, a record of the check, a hold until it is confirmed,
- * a wait, lookalike addresses, and records someone outside can check. Each answer counts this period's address changes;
- * none is a claim about a change the pack does not hold.
+ * a wait, lookalike addresses, and records someone outside can check. Each answer counts the pack's address changes
+ * from their own records, never the lock's setting today, and a pack with no case answers nothing as yes. A change's
+ * holds and first payment run to its next change, which can be after the period ends.
  */
 export function payeeLockQuestions(pack: PayeeLockEvidence): QuestionAnswer[] {
   const rows = pack.changes;
   const confirmed = rows.filter((row) => row.confirmation !== null);
-  const count = (test: (row: (typeof rows)[number]) => boolean) => rows.filter(test).length;
+  const paidRows = rows.filter((row) => row.firstPayment !== null);
+  const count = (list: typeof rows, test: (row: (typeof rows)[number]) => boolean) => list.filter(test).length;
   const lock = pack.lock.now;
-  const waitHours = lock.on ? lock.coolingHours : 0;
+  const now = lock.on
+    ? `Now the payee lock is on${lock.coolingHours > 0 ? `, with a ${lock.coolingHours}-hour wait` : ", with no wait"}`
+    : "Now the payee lock is off";
 
-  const contactBefore = count((row) => row.checks.contactOnFileBefore === true);
-  const second = count((row) => row.checks.secondPerson === true);
-  const secondUnknown = confirmed.filter((row) => row.checks.secondPerson === null).length;
-  const recorded = count((row) => row.checks.recordKept === true);
-  const paid = count((row) => row.firstPayment !== null);
-  const paidAfterConfirmation = count((row) => row.checks.paidAfterConfirmation === true);
+  const callBack = count(confirmed, (row) => CALL_OR_MESSAGE.has(row.confirmation?.record?.method ?? "") && row.checks.contactOnFileBefore === true);
+  const second = count(confirmed, (row) => row.checks.secondPerson === true);
+  const secondUnknown = count(confirmed, (row) => row.checks.secondPerson === null);
+  const recorded = count(confirmed, (row) => row.checks.recordKept === true);
+  const paidAfterConfirmation = count(paidRows, (row) => row.checks.paidAfterConfirmation === true);
   const holds = rows.reduce((total, row) => total + row.holds.length, 0);
-  const underWait = count((row) => row.checks.paidAfterWait !== null);
-  const afterWait = count((row) => row.checks.paidAfterWait === true);
-  const flagged = count((row) => (row.confirmation?.lookalikeOf.length ?? 0) > 0 || (row.confirmation?.looksLikeEarlier ?? null) !== null);
+  const paidAfterWait = count(paidRows, (row) => row.checks.paidAfterWait === true);
+  // Confirm address checks for lookalikes before anyone confirms; approving a payment does not show them.
+  const viaConfirm = confirmed.filter((row) => row.confirmation?.via === "confirm");
+  const warned = count(viaConfirm, (row) => (row.confirmation?.lookalikeOf.length ?? 0) > 0 || (row.confirmation?.looksLikeEarlier ?? null) !== null);
   const verified = pack.entries.filter((entry) => entry.check?.ok === true).length;
-
-  const holdAnswer = paid > 0 ? share(paidAfterConfirmation, paid) : holds > 0 ? "yes" : "not_seen";
-  const waitAnswer: Answer = waitHours === 0 ? "no" : underWait === 0 ? "yes" : share(afterWait, underWait);
 
   return [
     {
       id: "callback",
       question: "Before paying changed payment details, do you call or message the payee on contact details you already held?",
-      answer: share(contactBefore, confirmed.length),
-      evidence: `${contactBefore} of ${plural(confirmed.length, "confirmed address change")} ${contactBefore === 1 ? "was" : "were"} checked with a contact on file before the change.`,
-      how: lock.on
-        ? "With the payee lock on, Confirm address refuses a call or a message without a contact that was on file before the new address arrived."
-        : "The payee lock is off, so Confirm address asks how the address was checked but does not require it.",
+      answer: share(callBack, confirmed.length),
+      evidence: `${callBack} of ${plural(confirmed.length, "confirmation")} recorded a call or a message to a contact the person confirming marked as on file before the change.`,
+      how: `${now}. With it on, Confirm address refuses a call or a message without a contact on file before the new address arrived.`,
     },
     {
       id: "second_person",
       question: "Is each change confirmed by someone other than the person who requested or entered it?",
       answer: share(second, confirmed.length),
-      evidence: `${second} of ${plural(confirmed.length, "confirmed change")} ${second === 1 ? "was" : "were"} confirmed by someone other than whoever entered the address${secondUnknown > 0 ? `; for ${secondUnknown} it is not known` : ""}.`,
-      how: lock.on
-        ? "With the payee lock on, whoever entered or asked for an address cannot confirm it while another member can. A confirmation made alone says so."
-        : "The payee lock is off, so the person who entered an address may confirm it.",
+      evidence: `${second} of ${plural(confirmed.length, "confirmation")} came from someone other than whoever entered the address${secondUnknown > 0 ? `; for ${secondUnknown} it is not known` : ""}.`,
+      how: `${now}. With it on, whoever entered or asked for an address cannot confirm it while another member can, and a confirmation made alone says so.`,
     },
     {
       id: "record",
       question: "Do you keep a record of each check: who made it, when, and how?",
       answer: share(recorded, confirmed.length),
-      evidence: `${recorded} of ${plural(confirmed.length, "confirmation")} recorded how the address was checked, and by whom.`,
-      how: "Each confirmation is a signed ledger entry naming who confirmed and when; with the payee lock on, it must say how the address was checked.",
+      evidence: `${recorded} of ${plural(confirmed.length, "confirmation")} recorded how the address was checked, beside who confirmed it and when.`,
+      how: `Each confirmation is a signed ledger entry naming who confirmed and when. ${now}; with it on, a confirmation must say how the address was checked.`,
     },
     {
       id: "hold",
       question: "Are payments to changed payment details held until the change is confirmed?",
-      answer: holdAnswer,
-      evidence: `${paidAfterConfirmation} of ${plural(paid, "first payment")} to a changed address came after it was confirmed. The agent held ${plural(holds, "payment")} for an address in this period.`,
+      answer: paidRows.length > 0 ? share(paidAfterConfirmation, paidRows.length) : holds > 0 ? "yes" : "not_seen",
+      evidence: `${paidAfterConfirmation} of ${plural(paidRows.length, "first payment")} to these addresses came after the address was confirmed, and the agent held ${plural(holds, "payment")} for them.`,
       how: "The agent holds every payment to a changed address until a person confirms it, whether the payee lock is on or off.",
     },
     {
       id: "wait",
       question: "Do changed payment details wait a set time before the first payment?",
-      answer: waitAnswer,
-      evidence:
-        waitHours === 0
-          ? "The payee lock sets no wait now."
-          : `The payee lock waits ${waitHours} hours after a change. ${afterWait} of ${plural(underWait, "payment")} made under a wait came after it ended.`,
-      how: "An owner sets a wait of 4, 24, 48 or 72 hours after an address changes, confirmed or not, in Settings.",
+      answer: share(paidAfterWait, paidRows.length),
+      evidence: `${paidAfterWait} of ${plural(paidRows.length, "first payment")} to these addresses came after a payee lock wait recorded with its confirmation had ended.`,
+      how: `${now}. An owner can set a wait of 4, 24, 48 or 72 hours after an address changes, confirmed or not, in Settings.`,
     },
     {
       id: "lookalike",
       question: "Do you look for payment details made to resemble a known payee's?",
-      answer: "yes",
-      evidence:
-        flagged === 0
-          ? `None of the ${plural(rows.length, "change")} looked like another payee's address or an earlier one of the same payee.`
-          : `${flagged} of ${plural(rows.length, "change")} looked like another payee's address or an earlier one of the same payee, and Confirm address said so before anyone confirmed.`,
-      how: "Counterparties and Confirm address warn when an address shares its first 6 and last 4 characters with another payee's, or with an earlier one of the same payee.",
+      answer: share(viaConfirm.length, confirmed.length),
+      evidence: `${viaConfirm.length} of ${plural(confirmed.length, "confirmation")} went through Confirm address, which checks for lookalikes before anyone confirms; it warned on ${warned}.`,
+      how: "Counterparties and Confirm address warn when an address shares its first 6 and last 4 characters with another payee's, or with an earlier one of the same payee. Approving a payment does not show the warning.",
     },
     {
       id: "independent",
@@ -141,9 +166,11 @@ export const PAYEE_LOCK_CSV_FIELDS = [
   "entered_by",
   "confirmed_at",
   "confirmed_by",
+  "confirmed_with",
   "check_method",
   "contact_used",
   "contact_on_file_before",
+  "check_note",
   "second_person",
   "confirmed_alone",
   "wait_hours",
@@ -189,9 +216,11 @@ export function payeeLockEvidenceCsv(pack: PayeeLockEvidence): string {
       entered_by: whoWords(row.change.enteredBy),
       confirmed_at: confirmation?.at,
       confirmed_by: confirmation ? whoWords(confirmation.by) : null,
+      confirmed_with: confirmation ? viaWords(confirmation.via) : null,
       check_method: confirmation?.record?.methodLabel,
       contact_used: confirmation?.record?.contact,
       contact_on_file_before: confirmation ? yesNo(row.checks.contactOnFileBefore) : null,
+      check_note: confirmation?.record?.note,
       second_person: yesNo(row.checks.secondPerson),
       confirmed_alone: confirmation ? yesNo(confirmation.soloConfirmation) : null,
       wait_hours: confirmation?.waitHours,

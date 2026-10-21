@@ -10,7 +10,7 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import type { PayeeLockEvidence, Period } from "@/lib/payee-lock-evidence";
-import { ANSWER_WORDS, whoWords, type Answer, type QuestionAnswer } from "@/lib/payee-lock-evidence-report";
+import { ANSWER_WORDS, QUESTIONS_NOTE, viaWords, whoWords, type Answer, type QuestionAnswer } from "@/lib/payee-lock-evidence-report";
 
 /**
  * The payee lock's evidence pack as a page (docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md EP7, EP8,
@@ -74,7 +74,11 @@ function Change({ row }: { row: PayeeLockEvidence["changes"][number] }) {
           <Address value={row.change.to} />
         </Fact>
         <Fact label="Confirmed">
-          {confirmation ? `${utc(confirmation.at)}, by ${whoWords(confirmation.by)}` : <span className="text-held">Not confirmed</span>}
+          {confirmation ? (
+            `${utc(confirmation.at)}, by ${whoWords(confirmation.by)}, with ${viaWords(confirmation.via)}`
+          ) : (
+            <span className="text-held">Not confirmed</span>
+          )}
         </Fact>
         {confirmation && (
           <>
@@ -101,10 +105,12 @@ function Change({ row }: { row: PayeeLockEvidence["changes"][number] }) {
             )}
             {(confirmation.lookalikeOf.length > 0 || confirmation.looksLikeEarlier) && (
               <Fact label="Lookalike warning">
-                {[
-                  ...confirmation.lookalikeOf.map((other) => `looks like ${other.name ?? other.id}'s address`),
-                  ...(confirmation.looksLikeEarlier ? [`looks like an earlier address of this payee (${confirmation.looksLikeEarlier})`] : []),
-                ].join("; ")}
+                {confirmation.lookalikeOf.map((other) => `Looks like ${other.name ?? other.id}'s address. `).join("")}
+                {confirmation.looksLikeEarlier && (
+                  <>
+                    Looks like an earlier address of this payee: <Address value={confirmation.looksLikeEarlier} />
+                  </>
+                )}
               </Fact>
             )}
           </>
@@ -116,6 +122,9 @@ function Change({ row }: { row: PayeeLockEvidence["changes"][number] }) {
           {payment ? (
             <>
               {payment.amount !== null ? `${payment.amount} ${payment.currency}` : payment.currency}, {utc(payment.at)}, {payment.decidedBy === "person" ? "approved by a person" : "by the agent"}
+              <br />
+              {/* The transaction itself, so a printed copy keeps it. */}
+              <Address value={payment.txRef} />
               {payment.txUrl && (
                 <>
                   {" "}
@@ -160,16 +169,17 @@ export function PayeeLockEvidenceView({
     }).toString();
   const pageHref = (period: Period) => {
     const params = new URLSearchParams({ ...(period.from ? { from: period.from } : {}), ...(period.to ? { to: period.to } : {}) }).toString();
-    return params ? `?${params}` : "?";
+    // Without a period the page opens on the last 30 days, so all time asks for itself.
+    return params ? `?${params}` : "?all=1";
   };
   const { summary, lock } = pack;
   const verified = pack.entries.filter((entry) => entry.check?.ok === true).length;
   const heldChanges = pack.changes.filter((row) => row.holds.length > 0).length;
   const lockWords = lock.now.on
     ? lock.now.coolingHours > 0
-      ? `The payee lock is on, with a ${lock.now.coolingHours}-hour wait after an address changes.`
-      : "The payee lock is on, with no wait after an address changes."
-    : "The payee lock is off.";
+      ? `Now the payee lock is on, with a ${lock.now.coolingHours}-hour wait after an address changes.`
+      : "Now the payee lock is on, with no wait after an address changes."
+    : "Now the payee lock is off.";
 
   return (
     <div className="space-y-8">
@@ -218,7 +228,7 @@ export function PayeeLockEvidenceView({
           {periodWords(pack.period).replace(/^./, (first) => first.toUpperCase())}
         </h2>
         <p className="text-sm text-ink-2">{lockWords}</p>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-5">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-5">
           {[
             ["Address changes", String(summary.changes)],
             ["Confirmed with a record", `${summary.confirmedWithRecord} of ${summary.confirmed}`],
@@ -242,8 +252,9 @@ export function PayeeLockEvidenceView({
         </h2>
         <p className="text-sm text-ink-3">
           The questions paraphrase the controls on changed payment details that insurers&apos; questionnaires commonly ask about; each insurer words its
-          own. The answers count this period&apos;s address changes.
+          own. The answers count this period&apos;s address changes; each change&apos;s holds and first payment run to its next change.
         </p>
+        <p className="text-sm text-ink-3">{QUESTIONS_NOTE}</p>
         <ol className="space-y-3">
           {questions.map((item) => (
             <li key={item.id} className="break-inside-avoid rounded-xl border border-line px-4 py-3">
