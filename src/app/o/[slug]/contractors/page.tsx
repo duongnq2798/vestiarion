@@ -312,7 +312,7 @@ export default async function ContractorsPage({ params, searchParams }: { params
             data every 20 s, and at once on return to the tab, so the release appears without a reload. */}
         <AutoRefresh intervalMs={20_000} />
 
-        <div className="mb-6 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 xl:grid-cols-4">
+        <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatTile label="Needs you" tone={needsYou.length > 0 ? "held" : "default"} sub={needsYou.length > 0 ? "Held, or an address to confirm" : "Nothing held"}>
             <span className="tabular-nums">{needsYou.length}</span>
           </StatTile>

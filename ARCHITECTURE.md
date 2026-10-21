@@ -3995,7 +3995,10 @@ server-rendered primitive contracts are tested. The landing uses these primitive
 The public token pages and sign-in use the server-rendered `src/components/public/PublicMain.tsx` and its scoped CSS
 for reading widths, gutters, compact headings, wrapping and 44px touch areas. Checkbox/radio labels provide the large
 equivalent target while their visual controls retain the shared primitive's size. These presentation rules do not
-change workspace controls. The payee page still sends only `payeeView(status)` to its client journey; action answers,
+change workspace controls. In the workspace, `Button`'s `touch` size is `sm` from 640px up and md's 44px below it,
+for the decisions taken from a phone: the approval card's actions and a held milestone's Pay now and Close without
+paying (`docs/superpowers/specs/2026-10-21-decide-from-a-phone-design.md`). That card shows the whole payee address,
+wrapped, never truncated. The payee page still sends only `payeeView(status)` to its client journey; action answers,
 `answered`/`over`, refresh fallback and heading focus remain owned by that existing journey and its forms. `/signup`
 still redirects to the existing sign-in form. `/open` composes `Section` and `Heading` around its unchanged readers and
 number formatting, with a single column for figures on narrow phones. `SiteChrome` retains its header height and

@@ -147,7 +147,7 @@ export function HeldMilestoneActions({
                     formId={payId}
                     tone="primary"
                     trigger={
-                      <Button size="sm" icon={<Banknote />} loading={payForm.pending} disabled={blocked !== null} aria-describedby={blocked ? blockedId : undefined}>
+                      <Button size="touch" icon={<Banknote />} loading={payForm.pending} disabled={blocked !== null} aria-describedby={blocked ? blockedId : undefined}>
                         {willPay ? "Pay now" : "Approve"}
                       </Button>
                     }
@@ -193,7 +193,7 @@ function CloseDialog({ orgSlug, milestone }: { orgSlug: string; milestone: { id:
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="danger" icon={<CircleSlash />}>
+        <Button size="touch" variant="danger" icon={<CircleSlash />}>
           Close without paying
         </Button>
       </DialogTrigger>
