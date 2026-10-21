@@ -49,6 +49,16 @@ export function takeTransferWatchToken(key: string, now = Date.now()): boolean {
   return take(transferWatchBuckets, key, 2, 60_000, now);
 }
 
+const evidencePackBuckets = new Map<string, Bucket>();
+
+/**
+ * Six evidence-pack downloads a minute per member (payee lock evidence EP1): each reads every address change and its
+ * entries, and checks their signatures. Single-instance, like the cycle guard.
+ */
+export function takeEvidencePackToken(userId: string, now = Date.now()): boolean {
+  return take(evidencePackBuckets, userId, 6, 60_000, now);
+}
+
 const dueWatchBuckets = new Map<string, Bucket>();
 
 /**
