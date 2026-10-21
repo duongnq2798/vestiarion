@@ -38,8 +38,10 @@ describe("PayeeLockPanel", () => {
     expect(markup).not.toContain("Download the evidence pack");
   });
 
-  it("offers any member the evidence pack, as a download of the workspace's own file (evidence pack EP1)", () => {
+  it("offers any member the evidence pack, as its page and as a download of the workspace's own file (evidence pack EP1, EP7)", () => {
     const viewer = render({ orgSlug: "pinecrest studio" });
+    expect(viewer).toContain("Open the evidence pack");
+    expect(viewer).toContain('href="/o/pinecrest%20studio/evidence/payee-lock"');
     expect(viewer).toContain("Download the evidence pack");
     expect(viewer).toContain('href="/api/evidence/payee-lock?org=pinecrest%20studio"');
     expect(viewer).toMatch(/<a[^>]*download/);

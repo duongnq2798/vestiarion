@@ -111,14 +111,14 @@ export function FrameProvider({
 /** The banners the layout drew, where the page puts them: under the header, above its title. */
 export function FrameBanners() {
   const { banners } = useFrame();
-  return banners ? <div className="mb-6 space-y-3 empty:hidden">{banners}</div> : null;
+  return banners ? <div className="mb-6 space-y-3 empty:hidden print:hidden!">{banners}</div> : null;
 }
 
 /** The column beside the sidebar: its left padding follows the sidebar's width. */
 export function FrameColumn({ children }: { children: ReactNode }) {
   const { sidebarCollapsed } = useFrame();
   return (
-    <div data-workspace-frame data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"} className="min-h-dvh transition-[padding] duration-200 ease-standard lg:pl-58 lg:data-[sidebar=collapsed]:pl-16">
+    <div data-workspace-frame data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"} className="min-h-dvh transition-[padding] duration-200 ease-standard lg:pl-58 lg:data-[sidebar=collapsed]:pl-16 print:pl-0!">
       {children}
     </div>
   );

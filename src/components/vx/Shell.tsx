@@ -63,7 +63,7 @@ export function ProductShell({
         <FrameBanners />
         {children}
         <ScrollToHash />
-        <footer className="mt-12 flex justify-center">
+        <footer className="mt-12 flex justify-center print:hidden!">
           <Badge size="sm" className="bg-surface/80 font-mono font-normal text-ink-3">
             {shellFooterLine(network)}
           </Badge>

@@ -86,6 +86,8 @@ const SUBPAGES: ReadonlyArray<{ pattern: RegExp; section: NavKey; label: string 
   { pattern: /^\/o\/[^/]+\/invoices\/commissions(?:\/|$)/, section: "invoices", label: "Commissions" },
   // A project's page sits inside Projects, where every project is listed (project budgets).
   { pattern: /^\/o\/[^/]+\/projects\/[^/]+/, section: "projects", label: "Project" },
+  // The payee lock's evidence pack sits inside Settings, whose payee lock panel opens it (payee lock evidence EP7).
+  { pattern: /^\/o\/[^/]+\/evidence\/payee-lock(?:\/|$)/, section: "settings", label: "Payee lock evidence" },
 ];
 
 function subpageOf(pathname: string) {

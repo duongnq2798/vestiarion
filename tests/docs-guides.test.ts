@@ -1468,6 +1468,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     // The payee lock (payee lock PL1-PL5).
     ["Turn on the payee lock", "src/components/PayeeLockPanel.tsx"],
     ["Download the evidence pack", "src/components/PayeeLockPanel.tsx"],
+    // The evidence pack's page (payee lock evidence EP7-EP10).
+    ["Open the evidence pack", "src/components/PayeeLockPanel.tsx"],
+    ["Print or save as PDF", "src/components/PrintButton.tsx"],
+    ["Download CSV", "src/components/PayeeLockEvidenceView.tsx"],
+    ["Download signed JSON", "src/components/PayeeLockEvidenceView.tsx"],
+    ["What insurers ask, and what these records show", "src/components/PayeeLockEvidenceView.tsx"],
     ["Wait after an address changes", "src/components/PayeeLockPanel.tsx"],
     ["How did you check it?", ADDRESS_CONTROLS],
     ["This contact was on file before the new address arrived", ADDRESS_CONTROLS],

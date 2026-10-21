@@ -40,7 +40,7 @@ export function WorkspaceHeader({ page, activity, crumb }: { page?: PageStatus; 
   const rows = statusRows(platform, page);
 
   return (
-    <header className="border-line/80 lg:sticky lg:top-0 lg:z-20 lg:border-b lg:bg-ground/85 lg:backdrop-blur-xl">
+    <header className="border-line/80 lg:sticky lg:top-0 lg:z-20 lg:border-b lg:bg-ground/85 lg:backdrop-blur-xl print:hidden!">
       <div className={cn(CONTENT_FRAME, "flex flex-wrap items-center gap-x-3 gap-y-2 pt-4 lg:h-14 lg:flex-nowrap lg:pt-0")}>
         <div className="hidden min-w-0 items-center gap-2 lg:flex">
           <Tooltip

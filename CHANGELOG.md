@@ -14,13 +14,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
-- **The payee lock's evidence pack.** Any member can download it from **Settings**, under **Payee lock**. It is a
-  JSON file of signed ledger entries, with one row per payout address change:
+- **The payee lock's evidence pack.** Any member can open it from **Settings**, under **Payee lock**, for a period
+  they choose. It shows one row per payout address change:
   - who entered the address;
   - how it was checked and whether by a second person, with the lock's wait;
   - the payments the agent held for its address, and its first payment.
 
-  It carries the checks an insurer asks about, and every ledger entry it cites, in full, to check offline.
+  It answers, from those records, the questions insurers ask about changed payment details. It prints or saves as a
+  PDF, downloads as CSV, and downloads as a JSON file carrying every ledger entry it cites, in full, to check offline.
 
 - **Sanctioned payout addresses.** Every cycle checks each counterparty's payout address against the addresses on
   OFAC's SDN list, read from the Treasury every 12 hours in production. An address on it makes the counterparty high

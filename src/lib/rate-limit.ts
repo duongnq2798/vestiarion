@@ -59,6 +59,17 @@ export function takeEvidencePackToken(userId: string, now = Date.now()): boolean
   return take(evidencePackBuckets, userId, 6, 60_000, now);
 }
 
+const evidencePageBuckets = new Map<string, Bucket>();
+
+/**
+ * Reads of the evidence pack's page (payee lock evidence EP7): twenty at once, then one every 3 seconds, per member. Each
+ * reads the period's address changes and checks their entries' signatures, as a download does. Single-instance, like
+ * the cycle guard.
+ */
+export function takeEvidencePageToken(userId: string, now = Date.now()): boolean {
+  return take(evidencePageBuckets, userId, 20, 3_000, now);
+}
+
 const dueWatchBuckets = new Map<string, Bucket>();
 
 /**

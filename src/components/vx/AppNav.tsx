@@ -307,7 +307,7 @@ export function Sidebar({ home, workspaces, email }: { home: string; workspaces:
     <div
       id="workspace-sidebar"
       data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}
-      className="fixed inset-y-0 left-0 z-30 hidden w-58 overflow-hidden border-r border-line/80 bg-surface/80 backdrop-blur-xl transition-[width] duration-200 ease-standard data-[sidebar=collapsed]:w-16 lg:block"
+      className="fixed inset-y-0 left-0 z-30 hidden w-58 overflow-hidden border-r border-line/80 bg-surface/80 backdrop-blur-xl transition-[width] duration-200 ease-standard data-[sidebar=collapsed]:w-16 lg:block print:hidden!"
     >
       <NavPanel home={home} workspace={workspace} workspaces={workspaces} email={email} layoutId="sidebar" collapsed={sidebarCollapsed} />
     </div>
@@ -350,7 +350,7 @@ export function MobileNav({
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line/80 bg-surface/90 backdrop-blur-xl lg:hidden">
+    <header className="sticky top-0 z-40 border-b border-line/80 bg-surface/90 backdrop-blur-xl lg:hidden print:hidden!">
       <div className="flex h-14 items-center gap-1 px-2 sm:px-4">
         <Sheet open={open} onOpenChange={(next) => setOpenAt(next ? pathname : null)}>
           <SheetTrigger asChild>
