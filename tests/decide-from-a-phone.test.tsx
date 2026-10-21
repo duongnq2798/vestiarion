@@ -3,9 +3,12 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import ApprovalCard from "@/components/ApprovalCard";
+import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
+import { StatTile } from "@/components/vx/StatTile";
 import { buttonVariants } from "@/components/ui/Button";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { WaitingPayable } from "@/lib/agent/approvals";
+import type { HeldReason } from "@/lib/agent/milestone-decisions";
 
 /**
  * Decide from a phone (docs/superpowers/specs/2026-10-21-decide-from-a-phone-design.md P1-P4): Approvals and
@@ -15,6 +18,7 @@ import type { WaitingPayable } from "@/lib/agent/approvals";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock("@/app/actions/verdicts", () => ({ giveVerdictAction: vi.fn() }));
+vi.mock("@/app/actions/milestones", () => ({ payHeldMilestoneAction: vi.fn(), closeMilestoneAction: vi.fn() }));
 vi.mock("@/app/actions/approvals", () => ({
   approveInvoiceAction: vi.fn(),
   rejectInvoiceAction: vi.fn(),
@@ -64,13 +68,21 @@ const classesOf = (html: string, text: string) => {
   return open < 0 || at < 0 ? "" : (html.slice(open, at).match(/class="([^"]*)"/)?.[1] ?? "");
 };
 
+/** `sm`'s own classes, which `touch` must give from 640px up so nothing changes on a wider screen. */
+const SM = ["h-8", "rounded-lg", "px-3", "text-xs", "[&_svg]:size-3.5"];
+
 describe("the touch size (P2)", () => {
-  it("is md's 44px below 640px and sm from there up", () => {
-    const touch = buttonVariants({ size: "touch" });
-    expect(touch).toContain("h-11");
-    expect(touch).toContain("sm:h-8");
-    expect(touch).toContain("sm:text-xs");
-    expect(buttonVariants({ size: "sm" })).toContain("h-8");
+  it("is exactly sm from 640px up", () => {
+    const sm = buttonVariants({ size: "sm" }).split(" ");
+    const touch = buttonVariants({ size: "touch" }).split(" ");
+    for (const name of SM) {
+      expect(sm, name).toContain(name);
+      expect(touch, `sm:${name}`).toContain(`sm:${name}`);
+    }
+  });
+
+  it("is md's 44px below it", () => {
+    expect(buttonVariants({ size: "touch" }).split(" ")).toEqual(expect.arrayContaining(["h-11", "rounded-xl", "px-4", "text-sm"]));
   });
 });
 
@@ -80,8 +92,10 @@ describe("the approval card on a phone", () => {
     const line = html.slice(html.indexOf("Pays to"), html.indexOf(ADDRESS) + ADDRESS.length);
     expect(line).toContain(ADDRESS);
     const paragraph = html.slice(html.lastIndexOf("<p", html.indexOf("Pays to")), html.indexOf("Pays to"));
-    expect(paragraph).toContain("break-all");
     expect(paragraph).not.toContain("truncate");
+    // Only the address breaks anywhere; "Pays to" and a chain's name break as words.
+    expect(paragraph).not.toContain("break-all");
+    expect(html.slice(html.lastIndexOf("<span", html.indexOf(ADDRESS)), html.indexOf(ADDRESS))).toContain("break-all");
   });
 
   it("gives every decision a thumb-sized button, and Approve and pay the card's width (P2)", () => {
@@ -95,18 +109,60 @@ describe("the approval card on a phone", () => {
 });
 
 describe("Contractors on a phone", () => {
-  it("sizes a held milestone's Pay now and Close without paying for a thumb (P2)", () => {
-    const held = source("src/components/HeldMilestoneActions.tsx");
-    expect(held).not.toMatch(/<Button size="sm"/);
-    expect(held.match(/<Button size="touch"/g)).toHaveLength(2);
+  it("sizes a held milestone's Pay now and Close without paying for a thumb, Pay now across the row (P2)", () => {
+    const reason: HeldReason = {
+      kind: "transfer_failed",
+      hint: "Circle did not send it",
+      text: "Circle did not send it. Pay now sends it again.",
+      link: null,
+      canPay: true,
+      canClose: true,
+      override: false,
+    };
+    const html = renderToStaticMarkup(
+      <HeldMilestoneActions
+        orgSlug="acme"
+        milestone={{ id: "m-1", title: "Clean service", amount: 0.3, contractorName: "Puka Hotel" }}
+        reason={reason}
+        canDecide
+        selfAdded={false}
+        sandbox={false}
+        soleApprover={false}
+      />
+    );
+    for (const name of ["Pay now", "Close without paying"]) {
+      expect(classesOf(html, name), name).toContain("h-11");
+      expect(classesOf(html, name), name).toContain("sm:h-8");
+    }
+    expect(classesOf(html, "Pay now")).toContain("max-sm:w-full");
   });
 
-  it("puts its counts two a row from the smallest width (P3)", () => {
-    expect(source("src/app/o/[slug]/contractors/page.tsx")).toContain('className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4"');
+  it("gives what needs you, and what was paid, a row each on a phone, the two counts side by side between (P3)", () => {
+    const page = source("src/app/o/[slug]/contractors/page.tsx");
+    expect(page).toContain('className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4"');
+    expect(page.match(/className="max-sm:col-span-2"/g)).toHaveLength(2);
+    const paidAt = page.indexOf('label="Paid"');
+    expect(page.slice(paidAt, page.indexOf(">", paidAt))).toContain("max-sm:col-span-2");
+    // The tile takes its place in the grid.
+    expect(renderToStaticMarkup(<StatTile label="Paid" className="max-sm:col-span-2">1</StatTile>)).toContain("max-sm:col-span-2");
   });
 
-  it("wraps a row's second line, which carries its date, and the page's footer line (P4)", () => {
-    expect(source("src/components/vx/DecisionRows.tsx")).toContain("block truncate text-xs text-ink-3 max-sm:whitespace-normal");
-    expect(source("src/components/vx/Shell.tsx")).toContain("max-sm:whitespace-normal");
+  it("wraps a row's second line to two lines at most, its date whole, and the page's footer line (P4)", () => {
+    const rows = source("src/components/vx/DecisionRows.tsx");
+    expect(rows).toContain("block truncate text-xs text-ink-3 max-sm:line-clamp-2 max-sm:whitespace-normal");
+    expect(rows).toContain('cn("whitespace-nowrap sm:hidden"');
+    expect(source("src/components/vx/Shell.tsx")).toContain(
+      '<Badge size="sm" className="bg-surface/80 font-mono font-normal text-ink-3 max-sm:justify-center max-sm:rounded-xl max-sm:text-center max-sm:whitespace-normal">'
+    );
+  });
+});
+
+describe("a verdict in shadow mode on a phone (P2)", () => {
+  it("is given with thumb-sized buttons on Approvals, and stays small elsewhere", () => {
+    const card = source("src/components/ApprovalCard.tsx");
+    expect(card.match(/<VerdictControl [^>]*size="touch" \/>/g)).toHaveLength(2);
+    const control = source("src/components/VerdictControl.tsx");
+    expect(control).toContain('size = "sm"');
+    expect(control).not.toMatch(/<Button size="sm"/);
   });
 });

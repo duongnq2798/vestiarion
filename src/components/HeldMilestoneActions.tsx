@@ -147,7 +147,14 @@ export function HeldMilestoneActions({
                     formId={payId}
                     tone="primary"
                     trigger={
-                      <Button size="touch" icon={<Banknote />} loading={payForm.pending} disabled={blocked !== null} aria-describedby={blocked ? blockedId : undefined}>
+                      <Button
+                        size="touch"
+                        icon={<Banknote />}
+                        loading={payForm.pending}
+                        disabled={blocked !== null}
+                        aria-describedby={blocked ? blockedId : undefined}
+                        className="max-sm:w-full"
+                      >
                         {willPay ? "Pay now" : "Approve"}
                       </Button>
                     }

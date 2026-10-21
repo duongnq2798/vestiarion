@@ -312,8 +312,14 @@ export default async function ContractorsPage({ params, searchParams }: { params
             data every 20 s, and at once on return to the tab, so the release appears without a reload. */}
         <AutoRefresh intervalMs={20_000} />
 
+        {/* On a phone: what needs you across the top, the two counts side by side, then what was paid across. */}
         <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
-          <StatTile label="Needs you" tone={needsYou.length > 0 ? "held" : "default"} sub={needsYou.length > 0 ? "Held, or an address to confirm" : "Nothing held"}>
+          <StatTile
+            label="Needs you"
+            tone={needsYou.length > 0 ? "held" : "default"}
+            sub={needsYou.length > 0 ? "Held, or an address to confirm" : "Nothing held"}
+            className="max-sm:col-span-2"
+          >
             <span className="tabular-nums">{needsYou.length}</span>
           </StatTile>
           <StatTile label="Awaiting verification" sub={<Money value={awaiting.reduce((sum, milestone) => sum + Number(milestone.amount), 0)} />}>
@@ -322,7 +328,8 @@ export default async function ContractorsPage({ params, searchParams }: { params
           <StatTile label="Verified, being paid" sub="The agent decides within a minute">
             <span className="tabular-nums">{milestones.filter((milestone) => milestone.status === "verified").length}</span>
           </StatTile>
-          <StatTile label="Paid" sub={`${paidCount} ${paidCount === 1 ? "milestone" : "milestones"}`}>
+          {/* The whole row on a phone: a total in the millions is wider than half of it. */}
+          <StatTile label="Paid" sub={`${paidCount} ${paidCount === 1 ? "milestone" : "milestones"}`} className="max-sm:col-span-2">
             <Money value={paidTotal} />
           </StatTile>
         </div>

@@ -65,9 +65,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 - **Approvals and Contractors on a phone.** At a phone's width the approval card showed only the start of the address
   **Approve and pay** sends to; it now shows the whole address. The buttons that decide a payment (Approve and pay,
-  Reject, Return to agent, Add details, and a held milestone's Pay now and Close without paying) are a thumb's size
-  there, with Approve and pay across the card. Contractors' counts sit two a row, a milestone's date is no longer cut
-  off, and the line at the foot of each page wraps. Nothing changes on a wider screen.
+  Reject, Return to agent, Add details, a shadow-mode verdict, and a held milestone's Pay now and Close without paying)
+  are a thumb's size there, with Approve and pay across the card. On Contractors, what needs you and what was paid
+  each take a row, so the milestones start sooner, a milestone's date is no longer cut off, and the line at the foot
+  of each page wraps. Nothing changes on a wider screen.
 
 - A live workspace on Arc testnet said **Payments live** in its header, as one on Arc mainnet does. It now says
   **Test payments live**, and Arc mainnet **Real payments live**, and the lines about where an approved or agreed

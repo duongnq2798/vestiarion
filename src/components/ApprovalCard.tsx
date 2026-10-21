@@ -272,9 +272,9 @@ export default function ApprovalCard({
               <p className="text-ink-3">{bankQuoteLine(payable.bank)}</p>
             </div>
           ) : (
-            <p className="mt-2 min-w-0 text-xs break-all text-ink-3">
+            <p className="mt-2 min-w-0 text-xs text-ink-3">
               Pays to{" "}
-              {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}
+              {payable.address ? <span className="font-mono break-all text-ink-2">{payable.address}</span> : "no address set"}
               {paidAcrossChains(payable.payeeChain) && ` on ${chainById(payable.payeeChain as string).label}`}
             </p>
           )}
@@ -342,13 +342,13 @@ export default function ApprovalCard({
         ) : canDecide && verdict && verdict.open && payable.heldForVerdict ? (
           // Held in shadow mode for a person to agree: the verdict is the decision (shadow mode S4).
           <CardFooter>
-            <VerdictControl orgSlug={orgSlug} view={verdict} payBlocked={verdictPayBlocked} />
+            <VerdictControl orgSlug={orgSlug} view={verdict} payBlocked={verdictPayBlocked} size="touch" />
           </CardFooter>
         ) : canDecide ? (
           <>
             {verdict?.given && (
               <CardFooter>
-                <VerdictControl orgSlug={orgSlug} view={verdict} />
+                <VerdictControl orgSlug={orgSlug} view={verdict} size="touch" />
               </CardFooter>
             )}
             <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} ownAddress={ownAddress} canAddDetails={canAddDetails} />

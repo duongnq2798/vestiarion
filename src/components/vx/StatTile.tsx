@@ -11,12 +11,15 @@ export function StatTile({
   sub,
   tone = "default",
   href,
+  className: extra,
 }: {
   label: string;
   children: ReactNode;
   sub?: ReactNode;
   tone?: "default" | "held";
   href?: string;
+  /** Its place in the page's grid, such as a span of two columns. */
+  className?: string;
 }) {
   const content = (
     <>
@@ -25,7 +28,7 @@ export function StatTile({
       {sub && <div className="mt-2 text-[0.8125rem] leading-snug text-ink-2">{sub}</div>}
     </>
   );
-  const className = cn("block min-w-0 px-4 py-4", tone === "held" && "bg-held-soft");
+  const className = cn("block min-w-0 px-4 py-4", tone === "held" && "bg-held-soft", extra);
   return href ? (
     <Card asChild interactive tone={tone} className={className}>
       <Link href={href}>{content}</Link>
