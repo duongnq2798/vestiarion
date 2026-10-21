@@ -1,5 +1,5 @@
 import { getAddress } from "viem";
-import { ARC_MAINNET, ARC_TESTNET } from "./network";
+import { NETWORKS } from "./network";
 
 /**
  * The address lookalike checker's rules (docs/superpowers/specs/2026-10-21-address-checker-design.md AC1-AC5): what
@@ -187,7 +187,8 @@ const SPECIAL: ReadonlyMap<string, SpecialAddress> = (() => {
     [`0x${"0".repeat(40)}`, { kind: "zero" }],
     ["0x000000000000000000000000000000000000dead", { kind: "burn" }],
   ]);
-  for (const profile of [ARC_MAINNET, ARC_TESTNET]) {
+  // Mainnet first, so an address both networks share takes its mainnet name.
+  for (const profile of Object.values(NETWORKS).sort((a, b) => Number(b.id === "arc-mainnet") - Number(a.id === "arc-mainnet"))) {
     const add = (address: string, label: string) => {
       const key = address.toLowerCase();
       if (!special.has(key)) special.set(key, { kind: "token", label });

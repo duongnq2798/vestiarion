@@ -57,7 +57,7 @@ function Marked({ address, other, leading, trailing }: { address: string; other:
       0x
       <span className="font-semibold text-ink underline decoration-agent decoration-2 underline-offset-4">{digits.slice(0, leading)}</span>
       {[...digits.slice(leading, end)].map((digit, index) => (
-        <span key={index} className={digit === other.slice(2)[leading + index] ? undefined : "rounded-sm bg-refused-soft font-semibold text-refused"}>
+        <span key={index} className={digit === other.slice(2)[leading + index] ? undefined : "rounded-md bg-refused-soft font-semibold text-refused"}>
           {digit}
         </span>
       ))}
