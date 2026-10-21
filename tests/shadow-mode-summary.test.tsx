@@ -25,7 +25,7 @@ describe("ShadowModeSummary", () => {
     expect(words).toContain("Shadow mode");
     expect(words).toContain("for bills in VND");
     expect(words).toContain("You agreed with 9 of 11 decisions (82%).");
-    expect(words).toContain("A payment you agree to is sent in USDC on Arc testnet.");
+    expect(words).toContain("A payment you agree to is sent in test USDC on Arc testnet.");
     expect(words).not.toContain("wait for your verdict");
   });
 
@@ -93,7 +93,8 @@ describe("ShadowModeSummary: test USDC", () => {
     expect(text(markup)).not.toContain("Your open bills need");
   });
 
-  it("says nothing about test USDC without it", () => {
-    expect(text(panel({ agreed: 1, disagreed: 0, waiting: 0 }))).not.toContain("test USDC");
+  it("says nothing about the test USDC float without it", () => {
+    // The line about where an agreed payment goes names test USDC on Arc testnet; the float's offer and record do not show.
+    expect(text(panel({ agreed: 1, disagreed: 0, waiting: 0 }))).not.toMatch(/float|Last added|Your open bills need|Add [0-9,.]+ test USDC/);
   });
 });

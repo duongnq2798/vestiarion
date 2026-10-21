@@ -7,7 +7,7 @@ import { networkProfile, type Network } from "./network";
  * report. Five situations, and only five:
  *
  * - `live-mainnet`: approved payments move real USDC on Arc mainnet.
- * - `live-testnet`: approved payments are sent in USDC on Arc testnet.
+ * - `live-testnet`: approved payments are sent in test USDC on Arc testnet.
  * - `simulated`: a sandbox paying through no wallet: payments are recorded and nothing is sent on chain.
  * - `shadow`: nothing is paid until a person agrees with the agent; what an agreement then pays is `afterVerdict`.
  * - `unavailable`: nothing can be paid now: payments switched off, a fact the payment gates need could not be read, or
@@ -92,6 +92,14 @@ export function paysOnChain(capability: Capability): boolean {
   return capability.situation === "live-mainnet" || capability.situation === "live-testnet" || (capability.situation === "shadow" && capability.afterVerdict === "live");
 }
 
+/**
+ * Which USDC a network's payments move, as copy names it: real on Arc mainnet, test on Arc testnet. Every line that says
+ * a payment is live or sent names it, so a live testnet workspace never reads as one moving real money.
+ */
+export function usdcWords(network: Capability["network"]): "real USDC" | "test USDC" {
+  return network === "arc-mainnet" ? "real USDC" : "test USDC";
+}
+
 const UNAVAILABLE_LOOK: Record<UnavailableCause, { chip: string; value: string; tone: StatusTone }> = {
   off: { chip: "Payments off", value: "Off", tone: "stopped" },
   unread: { chip: "Payments", value: "Could not be read", tone: "unknown" },
@@ -107,9 +115,9 @@ const UNAVAILABLE_LOOK: Record<UnavailableCause, { chip: string; value: string; 
 export function situationLook(capability: Capability): { chip: string; value: string; tone: StatusTone } {
   switch (capability.situation) {
     case "live-mainnet":
-      return { chip: "Payments live", value: "Live", tone: "mainnet" };
+      return { chip: "Real payments live", value: "Live, real USDC", tone: "mainnet" };
     case "live-testnet":
-      return { chip: "Payments live", value: "Live", tone: "good" };
+      return { chip: "Test payments live", value: "Live, test USDC", tone: "good" };
     case "simulated":
       return { chip: "Payments simulated", value: "Simulated", tone: "simulated" };
     case "shadow":
@@ -126,7 +134,7 @@ export function paymentSentence(capability: Capability): string {
     case "live-mainnet":
       return `Approved payments move real USDC on ${network}.`;
     case "live-testnet":
-      return `Approved payments are sent in USDC on ${network}.`;
+      return `Approved payments are sent in test USDC on ${network}.`;
     case "simulated":
       return "Payments are recorded here and nothing is sent on chain.";
     case "shadow":
@@ -140,14 +148,14 @@ export function paymentSentence(capability: Capability): string {
 export function agreedPaymentLine(capability: Capability): string {
   if (capability.situation === "unavailable") return `Nothing is paid when you agree right now. ${capability.why ?? NO_WALLET}`;
   if (paysSimulated(capability)) return "A payment you agree to is simulated: nothing is sent on chain.";
-  return `A payment you agree to is sent in USDC on ${networkProfile(capability.network).label}.`;
+  return `A payment you agree to is sent in ${usdcWords(capability.network)} on ${networkProfile(capability.network).label}.`;
 }
 
 /** What Agree and pay says before it pays, for a payment held for a verdict; null when it cannot pay now. */
 export function agreeAndPayLine(capability: Capability): string | null {
   if (capability.situation === "unavailable") return null;
   if (paysSimulated(capability)) return "You agree with the agent, and it is paid now, simulated: nothing is sent on chain.";
-  return `You agree with the agent, and it is paid in USDC on ${networkProfile(capability.network).label} now.`;
+  return `You agree with the agent, and it is paid in ${usdcWords(capability.network)} on ${networkProfile(capability.network).label} now.`;
 }
 
 /** The mark a confirmation adds to a payment it describes: " (simulated)" when it will be, else nothing. */
