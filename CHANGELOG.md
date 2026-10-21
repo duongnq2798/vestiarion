@@ -56,6 +56,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- A live workspace on Arc testnet said **Payments live** in its header, as one on Arc mainnet does. It now says
+  **Test payments live**, and Arc mainnet **Real payments live**, and the lines about where an approved or agreed
+  payment goes name test USDC or real USDC.
 - On a window shorter than the Settings contents beside the sections, the last groups (Security, Danger zone) were cut
   off and could not be reached. The contents now scroll within the window, and follow the section being read.
 - A payment whose first send never reached Circle, and that the agent then did not send again because the payee

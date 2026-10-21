@@ -111,10 +111,10 @@ const ROWS: Row[] = [
     name: "live on Arc mainnet",
     situation: "live-mainnet",
     facts: { network: "arc-mainnet", payments: ON, hold: null, chainMode: "live", shadow: false },
-    chip: { label: "Payments live", tone: "mainnet" },
-    row: { value: "Live", tone: "mainnet", detail: "Approved payments move real USDC on Arc mainnet." },
-    agreed: "A payment you agree to is sent in USDC on Arc mainnet.",
-    agreeAndPay: "You agree with the agent, and it is paid in USDC on Arc mainnet now.",
+    chip: { label: "Real payments live", tone: "mainnet" },
+    row: { value: "Live, real USDC", tone: "mainnet", detail: "Approved payments move real USDC on Arc mainnet." },
+    agreed: "A payment you agree to is sent in real USDC on Arc mainnet.",
+    agreeAndPay: "You agree with the agent, and it is paid in real USDC on Arc mainnet now.",
     marked: false,
     tile: "live",
     goLive: "Live · paying on Arc mainnet",
@@ -124,10 +124,10 @@ const ROWS: Row[] = [
     name: "live on Arc testnet",
     situation: "live-testnet",
     facts: { network: "arc-testnet", payments: ON, hold: null, chainMode: "live", shadow: false },
-    chip: { label: "Payments live", tone: "good" },
-    row: { value: "Live", tone: "good", detail: "Approved payments are sent in USDC on Arc testnet." },
-    agreed: "A payment you agree to is sent in USDC on Arc testnet.",
-    agreeAndPay: "You agree with the agent, and it is paid in USDC on Arc testnet now.",
+    chip: { label: "Test payments live", tone: "good" },
+    row: { value: "Live, test USDC", tone: "good", detail: "Approved payments are sent in test USDC on Arc testnet." },
+    agreed: "A payment you agree to is sent in test USDC on Arc testnet.",
+    agreeAndPay: "You agree with the agent, and it is paid in test USDC on Arc testnet now.",
     marked: false,
     tile: "live",
     goLive: "Live · paying on Arc testnet",
@@ -154,10 +154,10 @@ const ROWS: Row[] = [
     row: {
       value: "Live, after your verdict",
       tone: "shadow",
-      detail: "Nothing is paid until a person agrees with the agent. A payment you agree to is sent in USDC on Arc testnet.",
+      detail: "Nothing is paid until a person agrees with the agent. A payment you agree to is sent in test USDC on Arc testnet.",
     },
-    agreed: "A payment you agree to is sent in USDC on Arc testnet.",
-    agreeAndPay: "You agree with the agent, and it is paid in USDC on Arc testnet now.",
+    agreed: "A payment you agree to is sent in test USDC on Arc testnet.",
+    agreeAndPay: "You agree with the agent, and it is paid in test USDC on Arc testnet now.",
     marked: false,
     tile: "live",
     goLive: "Live · shadow mode, paying after a verdict",
@@ -340,7 +340,7 @@ describe.each(ROWS)("$name", (row) => {
       // the network an address belongs to; no payment is said to go there.)
       for (const [surface, words] of everything) {
         expect(words, surface).not.toMatch(PAID_ON_A_NETWORK);
-        expect(words, surface).not.toMatch(/Payments live|paying on/);
+        expect(words, surface).not.toMatch(/payments live|paying on/i);
       }
       expect(said.approve).toMatch(/\(simulated\)$/);
       expect(said.payeePage).toContain(SIMULATED_PAYMENT);
@@ -355,7 +355,7 @@ describe.each(ROWS)("$name", (row) => {
     if (capability.situation === "unavailable") {
       // Nothing can be paid: no surface says a payment is live, paying, or paid now.
       for (const [surface, words] of everything) {
-        expect(words, surface).not.toMatch(/Payments live|paying on|it is paid/);
+        expect(words, surface).not.toMatch(/payments live|paying on|it is paid/i);
       }
       expect(said.freelancer).toBe(capability.why);
       expect(said.agreeAndPay).toBe("");

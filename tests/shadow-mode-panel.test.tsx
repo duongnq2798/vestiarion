@@ -34,7 +34,7 @@ describe("ShadowModePanel", () => {
     const words = text(markup);
     expect(words).toContain("Off: the agent pays on its own, within its limits.");
     expect(words).toContain(
-      "Keep paying your bills as you do today. The agent decides on the same bills, and you agree or disagree with each decision. A payment you agree to is sent in USDC on Arc testnet. It is the bill's amount in USDC."
+      "Keep paying your bills as you do today. The agent decides on the same bills, and you agree or disagree with each decision. A payment you agree to is sent in test USDC on Arc testnet. It is the bill's amount in USDC."
     );
     // In the capability's words, as the header says it (capability and reasons R5): simulated where the workspace simulates.
     const simulated = capabilityOf({ network: "arc-testnet", payments: { state: "on" }, hold: null, chainMode: "simulate", shadow: false });

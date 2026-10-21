@@ -79,7 +79,9 @@ icon beside it, never colour alone.
      workspace's wallet credentials cannot be read).
    - Shadow mode: shadow mode is on. The agent decides each bill and nothing is paid until a person agrees.
    - Payments simulated: the chain mode is simulate.
-   - Payments live: the chain mode is live. On Arc testnet that is USDC on the test network; on Arc mainnet real USDC.
+   - Test payments live on Arc testnet, Real payments live on Arc mainnet: the chain mode is live. Until 2026-10-21
+     both said Payments live, which read on Arc testnet as real money moving; the chip and the lines about where a
+     payment goes now name test USDC or real USDC (`usdcWords`, `src/lib/capability.ts`).
 3. **Agent**: Agent paused (with since, by and why), or Agent on. While payments are off or held it says Agent
    stopped: every cycle refuses first. A pause does not stop a person paying from Approvals, and the panel says so.
 

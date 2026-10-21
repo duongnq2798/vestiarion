@@ -30,7 +30,7 @@ describe("the header's chips", () => {
   it("say the network, what happens to payments and what the agent does, in that order", () => {
     expect(statusChips(platform(), page())).toEqual([
       { key: "network", label: "Arc testnet", tone: "quiet" },
-      { key: "payments", label: "Payments live", tone: "good" },
+      { key: "payments", label: "Test payments live", tone: "good" },
       { key: "agent", label: "Agent on", tone: "good" },
     ]);
   });
@@ -38,11 +38,11 @@ describe("the header's chips", () => {
   it("set Arc mainnet apart: real money, in the brand colour", () => {
     expect(statusChips(platform({ network: "arc-mainnet" }), page())[0]).toEqual({ key: "network", label: "Arc mainnet", tone: "mainnet" });
     expect(row("payments", platform({ network: "arc-mainnet" }), page())?.detail).toBe("Approved payments move real USDC on Arc mainnet.");
-    expect(row("payments", platform(), page())?.detail).toBe("Approved payments are sent in USDC on Arc testnet.");
+    expect(row("payments", platform(), page())?.detail).toBe("Approved payments are sent in test USDC on Arc testnet.");
   });
 
   it("follow the provider, not the workspace's mode: a sandbox with a wallet pays on chain, one without simulates", () => {
-    expect(labels(platform({ mode: "sandbox" }), page())[1]).toBe("Payments live");
+    expect(labels(platform({ mode: "sandbox" }), page())[1]).toBe("Test payments live");
     expect(labels(platform(), page({ chain: { mode: "simulate", earnMode: "simulate", held: false } }))[1]).toBe("Payments simulated");
   });
 

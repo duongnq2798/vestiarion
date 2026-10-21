@@ -43,7 +43,7 @@ Your browser remembers the choice for the next page and the next visit, in one c
 From the left, the header names the workspace and the section you are in; the workspace's name takes you back to **Treasury**. On a page inside a section it then names that page: **Commissions**, or a deal's title, a project's name or the bill or milestone a payment's evidence is about, and the section's name takes you back to the section. On the right it says when the agent's last cycle ran, or "The agent is working · *n* s" while one runs, and three chips:
 
 - **The network**: **Arc testnet**, or **Arc mainnet** in blue, where payments move real USDC.
-- **What happens to payments**, the first that holds: **Payments off** while the platform has switched payments off for every workspace; **Payments held** when nothing can be paid from this workspace, for example a workspace on Arc mainnet that is not live yet; **Shadow mode** when each payment waits for a person to agree with the agent; **Payments simulated** in a sandbox that pays through no wallet yet; **Payments live** otherwise, in blue on Arc mainnet.
+- **What happens to payments**, the first that holds: **Payments off** while the platform has switched payments off for every workspace; **Payments held** when nothing can be paid from this workspace, for example a workspace on Arc mainnet that is not live yet; **Shadow mode** when each payment waits for a person to agree with the agent; **Payments simulated** in a sandbox that pays through no wallet yet; otherwise **Test payments live** on Arc testnet, where payments move test USDC, or **Real payments live** in blue on Arc mainnet, where they move real USDC.
 - **The agent**: **Agent on**, **Agent paused**, or **Agent stopped** while payments are off or held, when the agent runs no cycle.
 
 A fact that could not be read is said as such, never as its usual value.
@@ -63,7 +63,7 @@ What each row can say, as the panel words it:
 | Row | Values | What it means |
 | --- | --- | --- |
 | Network | Arc testnet, Arc mainnet | Arc testnet is Arc's public test network, with test USDC; on Arc mainnet USDC is real money. |
-| Payments | Live, Simulated, Live after your verdict, Simulated after your verdict, Held, Off | Live sends approved payments in USDC on the workspace's network. Simulated records them and sends nothing on chain. After your verdict means shadow mode: nothing is paid until a person agrees. Held means nothing can be paid from this workspace right now; Off means payments are switched off for every workspace. |
+| Payments | Live, test USDC; Live, real USDC; Simulated; Live after your verdict; Simulated after your verdict; Held; Off | Live sends approved payments on the workspace's network: test USDC on Arc testnet, real USDC on Arc mainnet. Simulated records them and sends nothing on chain. After your verdict means shadow mode: nothing is paid until a person agrees. Held means nothing can be paid from this workspace right now; Off means payments are switched off for every workspace. |
 | Shadow mode | On, Off | On: each decision waits for a person's verdict. Off: the agent pays what passes its checks, and anything else waits in Approvals. |
 | Agent | On, Paused, Stopped | On: it decides each bill within a minute of it arriving, within its limits. Stopped: payments are off or held, so it does not run. |
 | Reserve | Live, Simulated, Held | Whether the USYC reserve is held on chain, or simulated. Shown on Arc testnet only. |
