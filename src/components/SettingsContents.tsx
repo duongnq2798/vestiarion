@@ -41,14 +41,20 @@ export function SettingsContents({ groups, variant, className }: { groups: Conte
   const active = useActiveHeading(variant === "rail" ? groups.flatMap((group) => group.sections.map((section) => section.id)) : [], READING_LINE);
   const rail = useRef<HTMLDivElement>(null);
 
-  // The rail scrolls only itself to the section being read, never the page.
+  // The rail scrolls only itself to the section being read, never the page: when that section changes, and when the
+  // window's height changes what fits.
   useEffect(() => {
-    const box = rail.current;
-    const link = box?.querySelector<HTMLElement>('a[aria-current="location"]');
-    if (!box || !link || box.scrollHeight <= box.clientHeight) return;
-    const top = link.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
-    const next = railScrollFor({ scrollTop: box.scrollTop, height: box.clientHeight }, { top, height: link.offsetHeight });
-    if (next !== box.scrollTop) box.scrollTop = next;
+    const align = () => {
+      const box = rail.current;
+      const link = box?.querySelector<HTMLElement>('a[aria-current="location"]');
+      if (!box || !link || box.scrollHeight <= box.clientHeight) return;
+      const top = link.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+      const next = railScrollFor({ scrollTop: box.scrollTop, height: box.clientHeight }, { top, height: link.offsetHeight });
+      if (next !== box.scrollTop) box.scrollTop = next;
+    };
+    align();
+    window.addEventListener("resize", align);
+    return () => window.removeEventListener("resize", align);
   }, [active]);
 
   if (variant === "inline") {
@@ -81,9 +87,11 @@ export function SettingsContents({ groups, variant, className }: { groups: Conte
 
   return (
     <nav aria-label="Settings sections" className={className}>
-      {/* Never taller than the window below the workspace header (top-22), so its last groups can always be reached; the
-          padding keeps a link's focus ring inside the scrolling box, and the negative margin keeps the column aligned. */}
-      <div ref={rail} className="sticky top-22 -mx-1.5 -mt-1.5 max-h-[calc(100dvh-7rem)] space-y-5 overflow-y-auto overscroll-contain px-1.5 py-1.5 [scrollbar-width:thin]">
+      {/* Never taller than the window below the workspace header: 7rem is top-22 (5.5rem) and 1.5rem to spare below, so
+          its last groups can always be reached. The padding and scroll padding keep a link's focus ring inside the
+          scrolling box, also when tabbing scrolls it; the negative margin keeps the column aligned. A wheel that reaches
+          the rail's end goes on to scroll the page. */}
+      <div ref={rail} className="sticky top-22 -mx-1.5 -mt-1.5 max-h-[calc(100dvh-7rem)] scroll-py-2 space-y-5 overflow-y-auto px-1.5 py-1.5">
         {groups.map((group, index) => (
           <div key={group.key}>
             <p id={`${id}-${index}`} className={GROUP_LABEL}>

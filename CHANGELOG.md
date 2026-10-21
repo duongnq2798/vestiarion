@@ -50,6 +50,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- On a window shorter than the Settings contents beside the sections, the last groups (Security, Danger zone) were cut
+  off and could not be reached. The contents now scroll within the window, and follow the section being read.
 - A payment whose first send never reached Circle, and that the agent then did not send again because the payee
   lock's wait was running, is now decided again once the wait ends. Before, it stayed held until a person approved it.
   The same goes for one not sent again because its payee's new address was not confirmed, once someone confirms it,
