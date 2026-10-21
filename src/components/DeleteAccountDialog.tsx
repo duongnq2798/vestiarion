@@ -20,8 +20,8 @@ import { DELETE_ACCOUNT_CONFIRMATION } from "@/lib/platform/delete-account-phras
  * Deleting your own account (docs/superpowers/specs/2026-09-30-workspace-delete-footer-screenshots-design.md §6).
  *
  * The dialog reads what would happen (`accountDeletionPlanAction`) each time
- * it opens, rather than being handed it by the page: the account menu is on
- * every workspace page, and the plan costs a read per workspace the person
+ * it opens, rather than being handed it by the page: its panel ends every
+ * workspace's Settings, and the plan costs a read per workspace the person
  * owns, which only the few who open the dialog should pay. Reading it on open
  * also means it is never stale by the time it is shown.
  */

@@ -630,7 +630,7 @@ export default function PrivacyPage() {
 
       <LegalSection id="delete-account" title="Deleting your account">
         <p>
-          <strong>Delete account</strong> is the last item of the account menu, below Sign out: under your email address inside a workspace, and behind your initial at the top of the workspaces page. It needs no workspace role. Its
+          <strong>Delete account</strong> is under Danger zone, at the end of a workspace&apos;s Settings and of your account&apos;s own page, which <strong>Account settings</strong> in the account menu opens, with or without a workspace. It needs no workspace role. Its
           dialog lists what will happen before anything does, and you type <code>delete my account</code> to confirm.
         </p>
         <ul>

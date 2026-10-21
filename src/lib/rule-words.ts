@@ -9,6 +9,7 @@ export const RULE_WORDS: Record<string, string> = {
   "counterparty.payment_limit": "it is above the payee's payment limit",
   "counterparty.address_unconfirmed": "the payee's address changed and no one had confirmed it",
   "counterparty.cooling_off": "the payee's address changed recently, and the payee lock makes it wait",
+  "invoice.pay_to_differs": "the invoice asked to be paid to a different address from the one on file",
   "counterparty.no_address": "the payee had no payment address yet",
   "counterparty.unscreened": "the payee had not been screened yet",
   "counterparty.high_risk": "the payee was screened high risk",

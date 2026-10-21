@@ -117,6 +117,7 @@ const RULE_WORDS: Record<string, string> = {
   "counterparty.no_address": "no payment address",
   "counterparty.address_unconfirmed": "address not confirmed",
   "counterparty.cooling_off": "address changed recently",
+  "invoice.pay_to_differs": "the invoice asks for another address",
   "counterparty.new_payee": "first payment to an address one person stands behind",
   "invoice.duplicate_of_settled": "repeats a bill already paid",
   "invoice.match_incomplete": "three-way match incomplete",

@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A payment waits when its invoice asks to be paid somewhere else.** An invoice read from a document keeps the
+  address the document asked to be paid to. When that is not the counterparty's address on file, the agent holds the
+  payment for a person, naming both addresses, instead of paying silently. **Approve and pay** still pays only the
+  address on file and shows the one the invoice asked for; changing the address to it goes through the usual checks,
+  and the agent decides the payment again once the two match.
+
 - **The payee lock's evidence pack.** Any member can open it from **Settings**, under **Payee lock**, for a period
   they choose. It shows one row per payout address change:
   - who entered the address;
@@ -47,6 +53,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 - **`main` is a protected branch.** Every change reaches it through a pull request that has passed CI,
   administrators included, and it cannot be force-pushed or deleted. The security page says so.
+
+### Changed
+
+- **Delete account moved out of the account menu, into Settings.** The menu you open to switch workspaces or sign
+  out no longer holds a red row one slip below **Sign out**. **Delete account** is now under **Danger zone** at the
+  end of a workspace's **Settings**, for every member, and of a new **Your account** page, which **Account settings**
+  in the account menu opens, with or without a workspace. The dialog and its rules are unchanged.
 
 ### Fixed
 

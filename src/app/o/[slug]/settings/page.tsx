@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import ApiKeysPanel from "@/components/ApiKeysPanel";
+import DeleteAccountPanel from "@/components/DeleteAccountPanel";
 import DeleteWorkspacePanel from "@/components/DeleteWorkspacePanel";
 import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
@@ -106,7 +107,7 @@ export default async function SettingsPage({
       listWebhookEndpoints(membership.orgId),
       ledgerKeyStatus(membership.orgId),
       stats(),
-      // Only an owner sees the danger zone, so only an owner's page reads what it says.
+      // Only an owner sees Delete workspace in the danger zone, so only an owner's page reads what it says.
       canAdminister ? deletionContext(membership.orgId) : null,
       // Best effort: a reserve status that cannot be read hides its section, nothing else. Only a network with a
       // reserve has one to show (mainnet copy C3).
@@ -551,6 +552,8 @@ export default async function SettingsPage({
             // deletionContext carries counts and booleans only. Only an owner's page reads it, and never for the founding workspace.
             content: deletion && !deletion.isFounding ? <DeleteWorkspacePanel orgSlug={slug} context={deletion} canAdminister={canAdminister} /> : null,
           },
+          // Every member's own account, whatever their role: deleting it needs none (delete account in Settings DA3).
+          { id: "delete-account-title", title: "Delete account", content: <DeleteAccountPanel /> },
         ],
       },
     ];

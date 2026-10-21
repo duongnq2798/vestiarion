@@ -105,7 +105,7 @@ export function DocumentDraft({
         counterparties={counterparties}
         idPrefix="invoice-document-draft"
         initial={read}
-        document={{ kind: document.kind, sha256: document.sha256, reader: result.reader ?? "heuristic", read: JSON.stringify(read) }}
+        document={{ kind: document.kind, sha256: document.sha256, reader: result.reader ?? "heuristic", read: JSON.stringify({ ...read, payToAddress: draft.payToAddress }) }}
         onAdded={onAdded}
       />
     </div>

@@ -504,6 +504,7 @@ const RULE_REASONS: Readonly<Record<string, string>> = {
   "counterparty.new_payee": "the first payment to this address, and two different people do not stand behind it yet",
   "counterparty.address_unconfirmed": "the payee's address changed, and no one has confirmed it",
   "counterparty.cooling_off": "the payee's address changed recently, and the payee lock makes it wait before it is paid",
+  "invoice.pay_to_differs": "the invoice asks to be paid to a different address from the one on file",
   "counterparty.no_address": "the payee has no payment address yet",
   "invoice.match_incomplete": "the three-way match is not complete",
   "invoice.duplicate_of_settled": "it repeats an invoice already paid, being paid or scheduled",

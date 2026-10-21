@@ -455,6 +455,32 @@ describe("the AP stage schedules a correct invoice with terms", () => {
     expect(entry.p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "counterparty.high_risk" });
   });
 
+  it("holds a payment whose invoice asked to be paid to another address, and pays none there (invoice pay-to hold IP2)", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", reasoning: "Due and matched.", confidence: 0.9 }));
+    const asked = "0x7a2dC41e9b03F6a85d1c27e4b98f0a3c61d5e10d";
+    const { fake, chain, stage } = apFake({ book: [payable({ document_pay_to: asked, counterparties: counterparty({ address: "0x1111111111111111111111111111111111111111" }) })] });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "invoice.pay_to_differs", observed: { documentPayTo: asked } });
+  });
+
+  it("pays as usual when the invoice asked for the address on file, whatever its case", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    model(() => ({ action: "pay", reasoning: "Due and matched.", confidence: 0.9 }));
+    const address = "0x7a2dc41e9b03f6a85d1c27e4b98f0a3c61d5e10d";
+    const { fake, chain, stage } = apFake({ book: [payable({ document_pay_to: address.toUpperCase().replace("0X", "0x"), counterparties: counterparty({ address }) })] });
+
+    await stage();
+
+    expect(chain.transfers).toHaveLength(1);
+    const [entry] = ledger(fake.requests);
+    expect((entry.p_detail as { guardrailRule?: string }).guardrailRule ?? null).not.toBe("invoice.pay_to_differs");
+  });
+
   it("refuses to schedule for a high-risk counterparty, as it would refuse to pay", async () => {
     today("2026-10-01T09:00:00.000Z");
     model(() => ({ action: "schedule", payOn: "2026-10-11", reasoning: "Take the discount on the deadline.", confidence: 0.8 }));

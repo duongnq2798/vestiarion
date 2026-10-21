@@ -229,3 +229,26 @@ describe("where Approve and pay asks why", () => {
     expect(overridesHold({ ...held, status: "flagged", heldForVerdict: true })).toBe(false);
   });
 });
+
+describe("an invoice that asks to be paid somewhere else (invoice pay-to hold IP3)", () => {
+  const ASKED = "0x7a2dC41e9b03F6a85d1c27e4b98f0a3c61d5e10d";
+  const held = { ...PAYABLE, guardrailRule: "invoice.pay_to_differs" };
+
+  it("shows the address the invoice asked for beside the one Approve and pay sends to", () => {
+    render({ ...held, documentPayTo: ASKED });
+    expect(container.textContent).toContain(`The invoice asks to be paid to ${ASKED}. Approve and pay sends to the address above, the one on file.`);
+  });
+
+  it("says nothing when the invoice asked for the address on file, case aside, or named none", () => {
+    render({ ...held, documentPayTo: PAYABLE.address?.toUpperCase().replace("0X", "0x") });
+    expect(container.textContent).not.toContain("The invoice asks to be paid to");
+    render({ ...held, documentPayTo: null });
+    expect(container.textContent).not.toContain("The invoice asks to be paid to");
+  });
+
+  it("says nothing for a vendor paid to a bank account, which has no address to compare", () => {
+    const bank = { bankCode: "012", last4: "1234", beneficiaryName: "Ana Lopez", accountStatus: "approved" as const, quote: null, quoteProblem: "unread" as const };
+    render({ ...held, documentPayTo: ASKED, bank });
+    expect(container.textContent).not.toContain("The invoice asks to be paid to");
+  });
+});

@@ -214,7 +214,9 @@ windows); otherwise, in one transaction, it writes a tombstone to the service-ro
 `signing_key_id`), deletes every tenant table in `delete_sandbox_org`'s order, and deletes the org
 row, which cascades to memberships, invitations, API keys and webhooks.
 
-**Deleting your account** (spec §6) is the last item of `AccountMenu` (`src/components/vx/AccountMenu.tsx`: the workspace sidebar, folded or not, and the `/onboarding` header), gated by the
+**Deleting your account** (spec §6) is `DeleteAccountPanel`, under Danger zone at the end of Settings, for every
+member, and of `/account`, which the account menu's **Account settings** opens with or without a workspace
+(`docs/superpowers/specs/2026-10-21-delete-account-in-settings-design.md`; the menu holds no danger row). It is gated by the
 session alone (`src/app/account/actions.ts`, never a user id from the form). `accountDeletionPlan`
 (`src/lib/platform/delete-account.ts`) blocks it while the person is the last owner of a workspace
 with other members or of the founding workspace; `deleteAccount` then runs `delete_org` on each
@@ -580,6 +582,25 @@ adds two columns to `approval_policies`: `payee_lock` (off by default) and `paye
     by the audit export's `csvCell`.
   - Its PDF is the browser's print: the shell's sidebar, headers, banners and footer carry `print:hidden!`, and the
     frame drops its padding (`print:pl-0!`), so any workspace page prints its content alone.
+
+**The invoice pay-to hold** (`docs/superpowers/specs/2026-10-21-invoice-pay-to-hold-design.md`). An invoice read from a
+document keeps the 0x address the document asked to be paid to in `invoices.document_pay_to` (migration 0136).
+- `DocumentProvenance.payTo` carries it from each path:
+  - the invoice form's `documentRead` (`documentPayToOf`);
+  - the chats' and email's stored draft (`chatDraftOf`), and the inbox's reading for an email finished by hand;
+  - a Chrome extension draft's `read.payTo`. A payee link's draft reads no document, so it carries none.
+- `createInvoice` writes it and records it in the `create_invoice` entry's `document`. Before 0136 the insert is
+  retried without it, as before.
+- The AP stage reads the payables' addresses once (`readDocumentPayTo`, none before 0136; any other failure stops the
+  stage). `enforceApGuardrails` holds a payment whose document asked for another address than the one on file as
+  `invoice.pay_to_differs`, after the address checks and before the three-way match, except for a payee paid to a
+  bank account. The decision's `observed` records `documentPayTo`.
+- `reconcileApInvoice` does not resend a payment never sent while they differ (`notResubmittedBecause:
+  "invoice.pay_to_differs"`, `payToHeld` in its facts).
+- The follow-up (`payToHeld`, `payToDiffers`) reopens it once the address on file is the one asked for.
+- Approvals' card shows the address the invoice asked for beside the one Approve and pay sends to
+  (`invoice-pay-to-rules.ts`, pure, for the browser). `approveRefusal` refuses Approve and pay from Slack or Telegram
+  for it (`open_in_console`). The agent never pays the document's address.
 
 **Ask every payee at once** (`docs/superpowers/specs/2026-10-18-ask-every-payee-design.md`). `askablePayees`
 (`src/lib/address-requests.ts`) lists, for an owner or admin on Counterparties, the vendors and contractors with no

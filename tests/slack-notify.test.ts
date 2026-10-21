@@ -150,9 +150,12 @@ describe("sendSlackDecisions", () => {
     const { fake, run, posts } = stage();
     await run();
 
-    const reads = fake.requests.filter((sent) => sent.path === "/rest/v1/invoices");
+    const invoiceReads = fake.requests.filter((sent) => sent.path === "/rest/v1/invoices");
+    // The cards' own read, then what each invoice's document asked to be paid to (invoice pay-to hold IP3).
+    const reads = invoiceReads.filter((sent) => !sent.params.get("select")?.includes("document_pay_to"));
     expect(reads).toHaveLength(1);
     expect(reads[0].params.get("id")).toBe(`in.(${INVOICE})`);
+    expect(invoiceReads.filter((sent) => sent.params.get("select") === "id,document_pay_to")).toHaveLength(1);
     const body = JSON.stringify(posts[0].body);
     expect(body).toContain("vx_approve");
     expect(body).toContain("Pays 0.50 USDC to Jiren on Arc testnet, to 0x1111…0000.");

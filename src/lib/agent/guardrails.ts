@@ -1,3 +1,4 @@
+import { payToDiffers } from "../invoice-pay-to-rules";
 import type { DuplicateMatch } from "./duplicates";
 import { blockingDuplicate } from "./duplicates";
 import { addressUnconfirmed } from "../counterparty-address";
@@ -32,6 +33,13 @@ export interface ApGuardrailInput {
   payeeLock?: PayeeLock;
   /** When the cooling-off is measured; now when absent. */
   now?: number;
+  /**
+   * The address the invoice's document asked to be paid to, and the counterparty's on file
+   * (docs/superpowers/specs/2026-10-21-invoice-pay-to-hold-design.md IP2): a payment whose document asked for another
+   * address is held for a person. Absent or null, nothing is held for it.
+   */
+  documentPayTo?: string | null;
+  addressOnFile?: string | null;
   /**
    * The invoice's currency (EURC invoices design). For EURC, `amount` is its
    * USDC value at the quoted rate, which is what counts against the limit;
@@ -114,6 +122,7 @@ export type ApGuardrailRule =
   | "counterparty.payment_limit"
   | "counterparty.address_unconfirmed"
   | "counterparty.cooling_off"
+  | "invoice.pay_to_differs"
   | "counterparty.no_address"
   | "invoice.duplicate_of_settled"
   | "invoice.match_incomplete"
@@ -285,6 +294,19 @@ export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult 
       status: "held",
       rule: "counterparty.cooling_off",
       reasoning: `${input.reasoning} [guardrail override: the payee lock keeps a changed address waiting ${input.payeeLock.coolingHours} hours — it can be paid from ${coolingOffLabel(coolingUntil)}; held until then]`,
+    };
+  }
+  // The invoice asked to be paid somewhere else (invoice pay-to hold IP2): the way a changed payment detail on an invoice,
+  // real or forged, usually arrives. The agent pays only the address on file, and holds this one for a person to check
+  // with the vendor which address is theirs. Held, not refused: Approve and pay pays the address on file.
+  // A vendor paid to a bank account has no address to compare: its payout waits for a person on its own rule.
+  if (!input.paidToBank && payToDiffers(input.documentPayTo, input.addressOnFile)) {
+    const onFile = input.addressOnFile ? `not the address on file (${input.addressOnFile})` : "and there is no address on file";
+    return {
+      blocked: true,
+      status: "held",
+      rule: "invoice.pay_to_differs",
+      reasoning: `${input.reasoning} [guardrail override: the invoice asks to be paid to ${input.documentPayTo}, ${onFile} — held for a person to confirm with the vendor, by a contact they had before, which address is theirs]`,
     };
   }
   // The three-way match (three-way match design M1, M3): the goods received and, for a counterparty that needs one, a

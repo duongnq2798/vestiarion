@@ -428,7 +428,7 @@ export default function SecurityPage() {
             workspace&apos;s id.
           </li>
           <li>
-            Anyone can delete their own account from the account menu, within the rules Privacy gives. A workspace where they are the only member is
+            Anyone can delete their own account, under Danger zone at the end of Settings or of their account&apos;s own page, within the rules Privacy gives. A workspace where they are the only member is
             deleted with it, as above. In a workspace they share, their membership, the invitations they sent, the payment approvals they gave
             and their Slack and Telegram links go; the API keys they created are revoked and kept without their name; and the connections they made
             and the records they added stay, without their name. The ledger entries they caused keep their account&apos;s id, never their email, because the ledger is append-only.
