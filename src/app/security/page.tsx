@@ -566,7 +566,8 @@ export default function SecurityPage() {
           </li>
           <li>
             No human second approval is required before merge: GitHub requires a pull request and a passing CI run on <code>main</code>, while the
-            independent AI review is how the team works, not a rule GitHub enforces. Dependencies are not updated automatically.
+            independent AI review is how the team works, not a rule GitHub enforces. A pull request need not be up to date with <code>main</code>{" "}
+            before it merges, and release tags and other branches are not protected. Dependencies are not updated automatically.
           </li>
           <li>
             Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota, and API reads are not limited.

@@ -830,6 +830,7 @@ describe("what it does not claim, still true of the code", () => {
     expect(notClaimed).toContain("No human second approval is required before merge: GitHub requires a pull request and a passing CI run on main");
     expect(notClaimed).toContain("the independent AI review is how the team works, not a rule GitHub enforces");
     expect(notClaimed).not.toContain("no branch protection");
+    expect(notClaimed).toContain("A pull request need not be up to date with main before it merges, and release tags and other branches are not protected.");
     expect(notClaimed).not.toMatch(/no independent review|not reviewed|no second reviewer/i);
     // Every release's notes since the second beta say whether its changes were reviewed by an independent reviewer before
     // merge (v0.1.0-beta.8 says not every one was), and CI runs on every pull request.
