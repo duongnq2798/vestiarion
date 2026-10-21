@@ -76,6 +76,23 @@ the model providers, Resend, BlindPay, the accounting and CRM connectors, and cu
 limits (the tick's start cutoff, Circle waits, the connector sweep's budget) are wall-clock, so a slower call means
 less work in a run, never a run past its limit.
 
+## Content Security Policy
+
+`next.config.ts` sends `Content-Security-Policy-Report-Only` on every response, with `Reporting-Endpoints`
+(`docs/superpowers/specs/2026-10-21-csp-report-only-design.md`). Browsers report what it would block and block nothing;
+it is enforced once production's reports show it fits every page.
+- The policy is `contentSecurityPolicy` (`src/lib/security/csp.ts`), a module with no app imports, since the config
+  imports it.
+- Scripts and styles may be inline, since Next.js inlines its own and a nonce would end static rendering.
+- `connect-src` names Circle's Iris and modular wallets client, which the browser calls, and Google Analytics.
+- `form-action` names the connect forms' consent screens, Google sign-in and the deployment's Supabase, since Chrome
+  checks a form submission's redirects too.
+- `tests/csp.test.ts` holds each origin to the code that reaches it.
+- `POST /api/csp-report` logs each violation as one line, `csp report-only {"directive","blocked","page"}`: the blocked
+  origin or keyword and the page's first path segment, nothing else from the report. A browser extension's violations
+  are dropped. It is rate-limited per client and per instance (`takeCspReportToken`) and stores nothing.
+- The extension sign-in page keeps its own enforced `frame-ancestors 'none'`.
+
 ## Workspaces, roles and the cron
 
 A person creates their own workspace at `/onboarding` (`createWorkspaceAction` ->

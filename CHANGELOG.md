@@ -34,6 +34,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   card for a milestone in the wait now says the agent decides within five minutes after it. Turning the payee lock
   off, or choosing a shorter wait, decides what it held back at once.
 
+- **A Content Security Policy, report-only.** Every page now sends one, limiting where scripts come from, where data is
+  sent, which site may frame a page and where forms go. Browsers report what it would block and it blocks nothing yet;
+  once the reports show it fits every page, it will be enforced. The security page says so.
+
 ### Fixed
 
 - A payment whose first send never reached Circle, and that the agent then did not send again because the payee
