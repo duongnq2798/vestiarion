@@ -26,11 +26,14 @@ export function AddDetailsDialog({
   orgSlug,
   payable,
   variant = "secondary",
+  size = "sm",
 }: {
   orgSlug: string;
   payable: Pick<WaitingPayable, "id" | "counterpartyName" | "poReference" | "goodsReceived">;
   /** Secondary beside Approve and pay; primary where adding details is the one thing to do (Invoices). */
   variant?: "primary" | "secondary";
+  /** `touch` where it is decided from a phone too (Approvals). */
+  size?: "sm" | "touch";
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -40,7 +43,7 @@ export function AddDetailsDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant={variant} icon={<ClipboardCheck />}>
+        <Button size={size} variant={variant} icon={<ClipboardCheck />}>
           Add details
         </Button>
       </DialogTrigger>

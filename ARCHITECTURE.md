@@ -4040,6 +4040,12 @@ MDX, article layout, sidebar, search and page controls stay intact. This phase i
 dependency, authentication change or migration. Its scope is in
 `docs/superpowers/specs/2026-10-20-public-visual-system-design.md`.
 
+Workspace decisions taken from a phone (`docs/superpowers/specs/2026-10-21-decide-from-a-phone-design.md`) use
+`Button`'s `touch` size: `sm` from 640px up and md's 44px below it. The approval card's actions, its shadow-mode
+verdict (`VerdictControl size="touch"`) and a held milestone's Pay now and Close without paying use it. The card wraps
+the whole payee address rather than truncating it. On a phone, Contractors' "Needs you" and "Paid" tiles span both
+columns (`StatTile` takes a `className` for its place in the grid), so a total in the millions keeps its own row.
+
 ## Social previews
 
 Public links use Next.js file-based metadata routes: `src/app/opengraph-image.tsx`

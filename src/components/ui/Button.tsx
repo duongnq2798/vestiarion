@@ -30,6 +30,8 @@ export const buttonVariants = cva(
       },
       size: {
         sm: "h-8 rounded-lg px-3 text-xs [&_svg]:size-3.5",
+        // Small from 640px up; below it md's 44px, a thumb's target, for the decisions a person takes from a phone.
+        touch: "h-11 rounded-xl px-4 text-sm sm:h-8 sm:rounded-lg sm:px-3 sm:text-xs [&_svg]:size-4 sm:[&_svg]:size-3.5",
         md: "h-11 rounded-xl px-4 text-sm sm:h-10 [&_svg]:size-4",
         lg: "h-12 rounded-xl px-5 text-[0.9375rem] [&_svg]:size-[1.125rem]",
         icon: "size-11 rounded-xl sm:size-10 [&_svg]:size-[1.125rem]",

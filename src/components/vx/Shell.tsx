@@ -64,7 +64,8 @@ export function ProductShell({
         {children}
         <ScrollToHash />
         <footer className="mt-12 flex justify-center print:hidden!">
-          <Badge size="sm" className="bg-surface/80 font-mono font-normal text-ink-3">
+          {/* On a phone the line is wider than the page: it wraps rather than run past the edge. */}
+          <Badge size="sm" className="bg-surface/80 font-mono font-normal text-ink-3 max-sm:justify-center max-sm:rounded-xl max-sm:text-center max-sm:whitespace-normal">
             {shellFooterLine(network)}
           </Badge>
         </footer>

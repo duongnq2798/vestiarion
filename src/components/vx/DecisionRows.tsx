@@ -64,9 +64,9 @@ function DecisionRow({ item, orgSlug }: { item: DecisionRowItem; orgSlug: string
         <>
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium text-ink">{decision.subject}</span>
-            <span className="block truncate text-xs text-ink-3">
+            <span className="block truncate text-xs text-ink-3 max-sm:line-clamp-2 max-sm:whitespace-normal">
               {decision.memo ?? decision.action}
-              {date && <span className={cn("sm:hidden", date.tone === "held" && "text-held")}> · {date.label}</span>}
+              {date && <span className={cn("whitespace-nowrap sm:hidden", date.tone === "held" && "text-held")}> · {date.label}</span>}
             </span>
             {item.context && <span className="block truncate text-xs text-agent">{item.context}</span>}
             {item.hint && <span className="block text-xs font-medium text-held">{item.hint}</span>}

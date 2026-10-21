@@ -39,7 +39,18 @@ const SETTLE_OPTIONS = [
  * `payBlocked`: why the viewer may not pay it now (they entered it, gave its payee's address, or it needs another
  * approval): they agree without paying, and another person pays it in Approvals (shadow mode review I2).
  */
-export default function VerdictControl({ orgSlug, view, payBlocked = null }: { orgSlug: string; view: VerdictView; payBlocked?: string | null }) {
+export default function VerdictControl({
+  orgSlug,
+  view,
+  payBlocked = null,
+  size = "sm",
+}: {
+  orgSlug: string;
+  view: VerdictView;
+  payBlocked?: string | null;
+  /** `touch` on Approvals, where it is given from a phone too. */
+  size?: "sm" | "touch";
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState<Note>(null);
@@ -98,7 +109,7 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
           <ConfirmDialog
             tone="primary"
             trigger={
-              <Button size="sm" icon={<CircleCheck />} loading={pending}>
+              <Button size={size} icon={<CircleCheck />} loading={pending}>
                 Agree and pay
               </Button>
             }
@@ -108,13 +119,13 @@ export default function VerdictControl({ orgSlug, view, payBlocked = null }: { o
             onConfirm={() => give("agree", "pay")}
           />
         ) : (
-          <Button size="sm" icon={<Check />} loading={pending} onClick={() => give("agree")}>
+          <Button size={size} icon={<Check />} loading={pending} onClick={() => give("agree")}>
             Agree
           </Button>
         )}
         <Dialog open={disagreeing} onOpenChange={setDisagreeing}>
           <DialogTrigger asChild>
-            <Button size="sm" variant="secondary" icon={<ThumbsDown />} disabled={pending}>
+            <Button size={size} variant="secondary" icon={<ThumbsDown />} disabled={pending}>
               Disagree
             </Button>
           </DialogTrigger>

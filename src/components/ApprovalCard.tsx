@@ -272,9 +272,9 @@ export default function ApprovalCard({
               <p className="text-ink-3">{bankQuoteLine(payable.bank)}</p>
             </div>
           ) : (
-            <p className="mt-2 min-w-0 truncate text-xs text-ink-3" title={payable.address ?? undefined}>
+            <p className="mt-2 min-w-0 text-xs text-ink-3">
               Pays to{" "}
-              {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}
+              {payable.address ? <span className="font-mono break-all text-ink-2">{payable.address}</span> : "no address set"}
               {paidAcrossChains(payable.payeeChain) && ` on ${chainById(payable.payeeChain as string).label}`}
             </p>
           )}
@@ -342,13 +342,13 @@ export default function ApprovalCard({
         ) : canDecide && verdict && verdict.open && payable.heldForVerdict ? (
           // Held in shadow mode for a person to agree: the verdict is the decision (shadow mode S4).
           <CardFooter>
-            <VerdictControl orgSlug={orgSlug} view={verdict} payBlocked={verdictPayBlocked} />
+            <VerdictControl orgSlug={orgSlug} view={verdict} payBlocked={verdictPayBlocked} size="touch" />
           </CardFooter>
         ) : canDecide ? (
           <>
             {verdict?.given && (
               <CardFooter>
-                <VerdictControl orgSlug={orgSlug} view={verdict} />
+                <VerdictControl orgSlug={orgSlug} view={verdict} size="touch" />
               </CardFooter>
             )}
             <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} ownAddress={ownAddress} canAddDetails={canAddDetails} />
@@ -497,7 +497,14 @@ function Decisions({
           formId={approveId}
           tone="primary"
           trigger={
-            <Button size="sm" icon={<Banknote />} loading={approveForm.pending} disabled={blocked !== null} aria-describedby={blocked ? blockedId : undefined}>
+            <Button
+              size="touch"
+              icon={<Banknote />}
+              loading={approveForm.pending}
+              disabled={blocked !== null}
+              aria-describedby={blocked ? blockedId : undefined}
+              className="max-sm:w-full"
+            >
               {willPay ? "Approve and pay" : "Approve"}
             </Button>
           }
@@ -533,7 +540,7 @@ function Decisions({
               : undefined
           }
         />
-        {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} />}
+        {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} size="touch" />}
         {(!payable.paymentSent || payable.lastAttempt?.state === "unanswered") && payable.lastAttempt?.state !== "in_flight" && (
           <>
             <RejectDialog orgSlug={orgSlug} payable={payable} />
@@ -546,7 +553,7 @@ function Decisions({
               formId={returnId}
               tone="primary"
               trigger={
-                <Button size="sm" variant="ghost" icon={<Undo2 />} loading={returnForm.pending}>
+                <Button size="touch" variant="ghost" icon={<Undo2 />} loading={returnForm.pending}>
                   Return to agent
                 </Button>
               }
@@ -587,7 +594,7 @@ function ApprovalGuidance({
       <Callout tone="refused" title="Screened high risk" className="mt-3">
         <p>{HIGH_RISK_EXPLAINED}</p>
         {canEdit && (
-          <Button asChild size="sm" variant="secondary" className="mt-2">
+          <Button asChild size="touch" variant="secondary" className="mt-2">
             <Link href={orgHref(orgSlug, counterpartyPath(payable.counterpartyId))}>Review screening</Link>
           </Button>
         )}
@@ -604,11 +611,11 @@ function ApprovalGuidance({
       {resumes && <p className="mt-1.5">{resumes}</p>}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         {fix && canEdit && (
-          <Button asChild size="sm" variant="secondary">
+          <Button asChild size="touch" variant="secondary">
             <Link href={orgHref(orgSlug, fix.path)}>{fix.label}</Link>
           </Button>
         )}
-        <Button asChild size="sm" variant="ghost">
+        <Button asChild size="touch" variant="ghost">
           <Link href={orgHref(orgSlug, "/members")}>See who can approve</Link>
         </Button>
       </div>
@@ -625,7 +632,7 @@ function RejectDialog({ orgSlug, payable }: { orgSlug: string; payable: WaitingP
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="danger" icon={<X />}>
+        <Button size="touch" variant="danger" icon={<X />}>
           Reject
         </Button>
       </DialogTrigger>
