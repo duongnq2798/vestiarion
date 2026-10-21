@@ -491,7 +491,19 @@ describe("orgConfig — screening by workspace mode (docs/superpowers/specs/2026
     expect(config.compliance.openSanctionsUrl).toBeUndefined();
     expect(config.compliance.openSanctionsApiKey).toBeUndefined();
     expect(config.compliance.rescreenIntervalHours).toBe(0);
+    expect(config.compliance.screeningProvider).toBeUndefined();
     expect(JSON.stringify(config)).not.toContain("os-key-must-stay-with-live-workspaces");
+  });
+
+  it("drops a named provider for a sandbox too, and keeps it for a live workspace (screening providers SP3)", () => {
+    const yente = configFromEnv({
+      NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+      SUPABASE_SERVICE_ROLE_KEY: "test-service-role",
+      SCREENING_PROVIDER: "yente",
+      SCREENING_API_URL: "https://yente.example",
+    });
+    expect(orgConfig(yente, { ...row(OTHER_ORG), mode: "sandbox" }, keys).config.compliance).toMatchObject({ openSanctionsUrl: undefined, screeningProvider: undefined });
+    expect(orgConfig(yente, { ...row(OTHER_ORG), mode: "live" }, keys).config.compliance).toMatchObject({ openSanctionsUrl: "https://yente.example", screeningProvider: "yente" });
   });
 
   it("requires the screening service of a live workspace on a deployment without one, so the demo list never clears its counterparties (payment safety K1)", () => {

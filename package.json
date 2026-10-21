@@ -21,6 +21,7 @@
     "circle:subscribe": "tsx scripts/circle-subscribe.ts",
     "extension:download": "node scripts/build-extension-download.mjs",
     "agent:doctor": "tsx scripts/agent-doctor.ts",
+    "screening:check": "tsx scripts/screening-check.ts",
     "arc:proof": "tsx scripts/arc-live-proof.ts",
     "status": "tsx scripts/status.ts",
     "cycle": "tsx scripts/run-cycle.ts",

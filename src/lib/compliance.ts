@@ -8,7 +8,7 @@ import {
   type SanctionedWallet,
   type SanctionedWalletList,
 } from "./sanctioned-wallets";
-import { z } from "zod";
+import { classifyYenteCandidate, PROVIDER_NAMES, screeningProvider, type YenteCandidate } from "./screening/providers";
 import {
   COUNTERPARTY_HISTORY_ACTIONS,
   deriveCounterpartyHistories,
@@ -71,10 +71,7 @@ export interface ScreeningCandidate {
   topics: string[];
 }
 
-/** How many matches a counterparty keeps for review (migration 0060's bound). */
-export const MATCHES_KEPT = 25;
-
-export const STRONG_SANCTIONS_MATCH_THRESHOLD = 0.85;
+export { MATCHES_KEPT, STRONG_SANCTIONS_MATCH_THRESHOLD } from "./screening/providers";
 
 /** Why a live workspace on a deployment with no screening service gets no verdict (payment safety K1). */
 export const NO_SCREENING_SERVICE =
@@ -109,112 +106,25 @@ export function screenBundledName(name: string): ScreeningResult {
   };
 }
 
-const openSanctionsMatchSchema = z.object({
-  responses: z.record(z.string(), z.object({
-    status: z.number(),
-    results: z.array(z.object({
-      id: z.string(),
-      caption: z.string().optional(),
-      score: z.number().min(0).max(1),
-      target: z.boolean().optional(),
-      properties: z.record(z.string(), z.array(z.string())).default({}),
-    })),
-  })),
-});
-
-type OpenSanctionsCandidate = z.infer<typeof openSanctionsMatchSchema>["responses"][string]["results"][number];
-
-export function classifyOpenSanctionsCandidate(candidate: OpenSanctionsCandidate | undefined): ScreeningResult {
-  if (!candidate) {
-    return {
-      riskLevel: "clear",
-      notes: "OpenSanctions returned no matching entity",
-      source: "opensanctions:yente",
-      screeningMode: "live",
-      rawScore: null,
-      matchedEntityId: null,
-      matchedTopics: [],
-    };
-  }
-
-  const topics = candidate.properties.topics ?? [];
-  const sanctionsHit = topics.some((topic) => topic === "sanction" || topic.startsWith("sanction."));
-  // 0.85 is deliberately above yente's 0.70 default match cutoff: a high
-  // tier removes payment authority, so fuzzy sanctions matches stay medium
-  // for review while a strong same-entity match fails closed at high.
-  const riskLevel = sanctionsHit && candidate.score >= STRONG_SANCTIONS_MATCH_THRESHOLD ? "high" : "medium";
-  return {
-    riskLevel,
-    notes: `${candidate.caption ?? candidate.id} matched at ${candidate.score.toFixed(3)}${topics.length ? ` (${topics.join(", ")})` : ""}`,
-    source: "opensanctions:yente",
-    screeningMode: "live",
-    rawScore: candidate.score,
-    matchedEntityId: candidate.id,
-    matchedTopics: topics,
-  };
-}
-
-function matchEndpoint(baseUrl: string, limit: number): string {
-  const trimmed = baseUrl.replace(/\/+$/, "");
-  const url = new URL(/\/match\/[^/]+$/.test(trimmed) ? trimmed : `${trimmed}/match/default`);
-  url.searchParams.set("limit", String(limit));
-  return url.toString();
+/** A yente candidate as OpenSanctions' verdict (kept for its callers; the providers module classifies). */
+export function classifyOpenSanctionsCandidate(candidate: YenteCandidate | undefined): ScreeningResult {
+  const { label, source } = PROVIDER_NAMES.opensanctions;
+  return classifyYenteCandidate(candidate, source, label);
 }
 
 /**
- * Screens a name. `dismissed` names entities a person reviewed and dismissed
- * as not this counterparty (dismiss screening match R2): they are skipped, and
- * the best match left, if any, is judged as usual.
+ * Screens a name with the deployment's provider (screening providers SP1-SP3). `dismissed` names entities a person
+ * reviewed and dismissed as not this counterparty (dismiss screening match R2): they are skipped, and the best match
+ * left, if any, is judged as usual. A sandbox uses the bundled list; a live workspace with no provider gets no verdict.
  */
 export async function screenName(name: string, jurisdiction?: string | null, dismissed: ReadonlySet<string> = new Set()): Promise<ScreeningResult> {
-  const { openSanctionsUrl: baseUrl, openSanctionsApiKey, serviceRequired } = currentConfig().compliance;
-  if (!baseUrl) {
+  const { openSanctionsUrl: url, openSanctionsApiKey: apiKey, screeningProvider: provider, serviceRequired } = currentConfig().compliance;
+  if (!url) {
     // A live workspace is never cleared by the bundled list (payment safety K1): no verdict, so it stays unscreened.
     if (serviceRequired) throw new Error(NO_SCREENING_SERVICE);
     return screenBundledName(name);
   }
-
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (openSanctionsApiKey) headers.Authorization = `ApiKey ${openSanctionsApiKey}`;
-
-  // Enough candidates that the dismissed ones can never crowd out one that is not (review every match R1):
-  // asked for only the service's default five, five dismissals would read as no match at all.
-  const response = await fetch(matchEndpoint(baseUrl, Math.min(200, dismissed.size + MATCHES_KEPT)), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      queries: {
-        counterparty: {
-          schema: "LegalEntity",
-          properties: {
-            name: [name],
-            ...(jurisdiction ? { jurisdiction: [jurisdiction] } : {}),
-          },
-        },
-      },
-    }),
-    signal: AbortSignal.timeout(10_000),
-    cache: "no-store",
-  });
-  if (!response.ok) throw new Error(`OpenSanctions screening failed with HTTP ${response.status}`);
-
-  const parsed = openSanctionsMatchSchema.safeParse(await response.json());
-  if (!parsed.success) throw new Error("OpenSanctions returned an invalid match response");
-  const query = parsed.data.responses.counterparty;
-  if (!query || query.status >= 400) throw new Error(`OpenSanctions query failed with status ${query?.status ?? "missing"}`);
-  const remaining = query.results.filter((candidate) => !dismissed.has(candidate.id));
-  const result = classifyOpenSanctionsCandidate(remaining[0]);
-  return remaining.length === 0
-    ? result
-    : {
-        ...result,
-        matches: remaining.slice(0, MATCHES_KEPT).map((candidate) => ({
-          id: candidate.id,
-          caption: candidate.caption ?? candidate.id,
-          score: Number(candidate.score.toFixed(3)),
-          topics: candidate.properties.topics ?? [],
-        })),
-      };
+  return screeningProvider(provider ?? "opensanctions", { url, ...(apiKey ? { apiKey } : {}) }).screen(name, jurisdiction, dismissed);
 }
 
 /**
@@ -629,6 +539,11 @@ async function refreshCounterpartyPerformance(
   return outcomes;
 }
 
+/** What a live check records as its `source`: the deployment's provider (screening providers SP2). */
+function liveSource(): string {
+  return PROVIDER_NAMES[currentConfig().compliance.screeningProvider ?? "opensanctions"].source;
+}
+
 async function recordScreeningFailure(
   row: CounterpartyScreeningRow,
   message: string,
@@ -637,7 +552,7 @@ async function recordScreeningFailure(
   const failureCheck = await db().from("compliance_checks").insert({
     counterparty_id: row.id,
     risk_level: row.risk_level,
-    source: screeningMode() === "live" ? "opensanctions:yente" : "simulated-sanctions-list",
+    source: screeningMode() === "live" ? liveSource() : "simulated-sanctions-list",
     notes: message,
     screening_mode: screeningMode(),
     status: "failed",
@@ -715,7 +630,7 @@ export async function runComplianceSweep(): Promise<SweepResult> {
         ? `Screened ${screened.length} of ${rows.length} counterparties: ${firstScreens} for the first time, ${changes.length - firstScreens} changed`
         : `Re-screened ${screened.length} of ${rows.length} counterparties; ${changes.length} changed`,
     detail: {
-      source: screeningMode() === "live" ? "opensanctions:yente" : "simulated-sanctions-list",
+      source: screeningMode() === "live" ? liveSource() : "simulated-sanctions-list",
       screeningMode: screeningMode(),
       // The sanctioned addresses the payout addresses were checked against (SW5).
       sanctionedWallets: { list: "ofac-sdn", from: wallets.from, readAt: wallets.readAt, addresses: wallets.wallets.size },

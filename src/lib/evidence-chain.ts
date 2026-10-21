@@ -7,6 +7,7 @@
  * stay "Stated by a person" though their entry is signed. A step reads as its weakest fact.
  */
 
+import { PROVIDER_NAMES, providerOfSource } from "./screening/providers";
 import { bookingFromEntries } from "./connectors/booked";
 import type { LinkAccess } from "./evidence-links/check";
 import { utcDay, utcMinute } from "./copy";
@@ -782,8 +783,10 @@ function screeningFact(ctx: Context): EvidenceFact {
   if (check) {
     const words = check.risk_level === "clear" ? "clear" : `${check.risk_level} risk`;
     const warn = check.risk_level !== "clear";
-    if (check.screening_mode === "live" && check.source.startsWith("opensanctions")) {
-      return { kind: "verified", text: `${ctx.name} was screened ${words} by OpenSanctions.`, at: check.created_at, seqs: [], ...(warn ? { warn } : {}) };
+    // A live provider's verdict (screening providers SP4), named by the provider its source records.
+    const provider = check.screening_mode === "live" ? providerOfSource(check.source) : null;
+    if (provider) {
+      return { kind: "verified", text: `${ctx.name} was screened ${words} by ${PROVIDER_NAMES[provider].label}.`, at: check.created_at, seqs: [], ...(warn ? { warn } : {}) };
     }
     // Its payout address is on OFAC's SDN list (sanctioned wallets SW4): the Treasury's own list, not the bundled one.
     if (check.source === "ofac-sdn") {

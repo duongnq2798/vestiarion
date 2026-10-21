@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-21: A screening verdict names the service that gave it
+
+- `screen_counterparty`, `risk_level_changed` and `compliance_sweep` can now carry `source: "yente:self-hosted"`, and so can the screening history `GET /api/v1/counterparties/{id}` returns: the counterparty was screened by a self-hosted yente server the deployment names, rather than OpenSanctions' hosted API (`opensanctions:yente`, as before). Both are judged by the same rules.
+- Nothing in `/api/v1` request bodies or the webhooks' shapes changes.
+
 ## 2026-10-21: Sanctioned payout addresses
 
 - `screen_counterparty` and `risk_level_changed` can carry `source: "ofac-sdn"` and `matchedEntityId: "ofac-sdn-<entry>"`, and so can the screening history `GET /api/v1/counterparties/{id}` returns. The counterparty's payout address is on OFAC's SDN list, which decides a high-risk verdict whatever its name screens as.

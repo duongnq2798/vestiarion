@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Choose the screening service by its settings.** A deployment names the service that screens counterparties with
+  `SCREENING_PROVIDER`: OpenSanctions' hosted API, or a self-hosted yente server, each with its address and key.
+  Both are judged by the same rules, and each verdict, the console and the evidence chain say which one screened.
+  A service named without its key or address stops the app at start. `npm run screening:check` screens one name
+  with a new key before it is set, and never prints the key. A deployment that sets nothing new screens as before.
+
 - **The payee lock's evidence pack.** Any member can open it from **Settings**, under **Payee lock**, for a period
   they choose. It shows one row per payout address change:
   - who entered the address;

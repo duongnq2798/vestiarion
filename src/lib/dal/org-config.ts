@@ -237,7 +237,7 @@ export function orgConfig(
             ? base.compliance
             : { ...base.compliance, serviceRequired: true }
           : base.compliance.openSanctionsUrl
-            ? { ...base.compliance, openSanctionsUrl: undefined, openSanctionsApiKey: undefined, rescreenIntervalHours: 0 }
+            ? { ...base.compliance, openSanctionsUrl: undefined, openSanctionsApiKey: undefined, screeningProvider: undefined, rescreenIntervalHours: 0 }
             : base.compliance,
       ledgerSigningKey: open("ledger_signing_key_enc"),
       ledgerPublicKey: undefined,

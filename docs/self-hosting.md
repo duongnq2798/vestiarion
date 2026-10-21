@@ -138,6 +138,7 @@ Two independent upgrades from there, in either order:
 | `npm run status -- <org-slug>` | Balances, wallets, open invoices, ledger height |
 | `npm run traction-digest -- <org-slug> --since YYYY-MM-DD` | That workspace's shadow mode decisions since the day: each verdict, what it paid with its Arc testnet transaction ("Paid later by a person" on a decision not to pay), and the agreement rate, in ASCII with no blank line for a traction post. `--hide-payees` names each supplier by a letter |
 | `npm run circle:doctor -- <org-slug>` / `agent:doctor` | Reports exactly which parts are live |
+| `npm run screening:check -- "<name>"` | Screens one name with the screening provider the environment names, to check a key before it is set; never prints the key |
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
 | `npm run telegram:setup -- <https origin>` | Registers the Telegram bot's webhook and command menu, once the three `TELEGRAM_*` variables are set (see `.env.example`) |
 | `npm run docs:screenshots` | Rebuilds the user guides’ step screenshots in `public/docs/guides/` with local headless Edge. Run it after changing a screen a guide shows (Go live, the counterparty or invoice form, a decision or approval card, the audit log), then look at each PNG before committing |
@@ -331,11 +332,26 @@ which produced each entry:
   is valued at USYC's latest price every cycle. USYC is permissioned, so Circle allowlists both
   wallets first, and an owner turns it on in **Settings → USYC reserve**. Until then the reserve is
   simulated, and labelled so.
-- **Live when configured** — sanctions screening calls an OpenSanctions/yente match endpoint when
-  `OPENSANCTIONS_API_URL` is set. Without it, a sandbox screens against the small bundled
-  watchlist, labelled as simulated, and a live workspace gets no verdict at all: its
-  counterparties stay unscreened, and the agent pays them nothing. Provider errors create an
-  incomplete check and retain the previous verdict; they never silently clear a counterparty.
+- **Live when configured** — sanctions screening calls the provider the deployment names:
+  - `SCREENING_PROVIDER=opensanctions` with `SCREENING_API_KEY`: OpenSanctions' hosted API
+    (`SCREENING_API_URL` defaults to `https://api.opensanctions.org`);
+  - `SCREENING_PROVIDER=yente` with `SCREENING_API_URL`: a self-hosted
+    [yente](https://www.opensanctions.org/docs/yente/) server, with `SCREENING_API_KEY` only if it
+    asks for one.
+
+  Both are asked the same match query and judged by the same rules; each verdict records which
+  one gave it (`opensanctions:yente` or `yente:self-hosted`). A provider named without what it
+  needs, or an address or key set without `SCREENING_PROVIDER`, stops the app at start. The older
+  `OPENSANCTIONS_API_URL` and `OPENSANCTIONS_API_KEY` still work when none of the `SCREENING_*`
+  names is set: a URL alone screens with OpenSanctions at that address. The two sets never mix, so
+  a key only goes to the address set beside it. Before setting a new key,
+  check it with `npm run screening:check -- "Zenith Trading LLC"`, which screens one name and
+  prints the verdict, the best matches and how long it took, never the key.
+
+  Without a provider, a sandbox screens against the small bundled watchlist, labelled as
+  simulated, and a live workspace gets no verdict at all: its counterparties stay unscreened, and
+  the agent pays them nothing. Provider errors create an incomplete check and retain the previous
+  verdict; they never silently clear a counterparty.
 
 ## Bringing your own business
 

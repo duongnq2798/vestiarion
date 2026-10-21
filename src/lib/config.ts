@@ -23,6 +23,7 @@
  * something does need to say what is configured.
  */
 
+import { OPENSANCTIONS_API_URL } from "./screening/providers";
 import type { NetworkProfile } from "./network";
 import { parseModelPrices } from "./usage/model";
 
@@ -119,9 +120,14 @@ export interface LlmConfig {
 }
 
 export interface ComplianceConfig {
-  /** A self-hosted yente base URL, or a full OpenSanctions match endpoint. */
+  /**
+   * Where the screening provider is reached: OpenSanctions' API, a self-hosted yente base URL, or a full match endpoint.
+   * Its absence means no screening service. (The name predates other providers; it is the provider's address.)
+   */
   openSanctionsUrl?: string;
   openSanctionsApiKey?: string;
+  /** Which provider screens names (screening providers SP3); `opensanctions` when a URL is set and none is named. */
+  screeningProvider?: "opensanctions" | "yente";
   /** Hours a screening stays fresh. 0 re-screens every cycle. */
   rescreenIntervalHours: number;
   /**
@@ -240,6 +246,35 @@ function clockModeFrom(env: EnvLike): "real" | "simulate" {
   return env.NODE_ENV === "production" ? "real" : "simulate";
 }
 
+/**
+ * The screening provider the environment names, its address and its key (screening providers SP3).
+ * `SCREENING_PROVIDER`, `SCREENING_API_URL` and `SCREENING_API_KEY` name them. Only when none of the three is set are
+ * `OPENSANCTIONS_API_URL` and `OPENSANCTIONS_API_KEY` read, as before: the two sets never mix, so a key is only ever
+ * sent to the address it was set beside. A provider named without what it needs, or an address or key with no provider,
+ * is refused at start, so a deployment never screens with one it did not configure.
+ */
+export function screeningSettingsFromEnv(env: Record<string, string | undefined>): { provider?: "opensanctions" | "yente"; url?: string; apiKey?: string } {
+  const named = trimmed(env.SCREENING_PROVIDER)?.toLowerCase();
+  const url = trimmed(env.SCREENING_API_URL);
+  const apiKey = trimmed(env.SCREENING_API_KEY);
+  if (named === undefined && url === undefined && apiKey === undefined) {
+    const oldUrl = trimmed(env.OPENSANCTIONS_API_URL);
+    const oldKey = trimmed(env.OPENSANCTIONS_API_KEY);
+    return oldUrl ? { provider: "opensanctions", url: oldUrl, ...(oldKey ? { apiKey: oldKey } : {}) } : {};
+  }
+  if (named === undefined) throw new ConfigError("SCREENING_API_URL or SCREENING_API_KEY is set without SCREENING_PROVIDER: name opensanctions or yente.");
+  if (url !== undefined && !/^https?:\/\//i.test(url)) throw new ConfigError("SCREENING_API_URL is not an http(s) address.");
+  if (named === "opensanctions") {
+    if (!apiKey) throw new ConfigError("SCREENING_PROVIDER=opensanctions but no SCREENING_API_KEY is set.");
+    return { provider: "opensanctions", url: url ?? OPENSANCTIONS_API_URL, apiKey };
+  }
+  if (named === "yente") {
+    if (!url) throw new ConfigError("SCREENING_PROVIDER=yente but no SCREENING_API_URL is set: name the yente server's address.");
+    return { provider: "yente", url, ...(apiKey ? { apiKey } : {}) };
+  }
+  throw new ConfigError(`SCREENING_PROVIDER="${named}" is not one of opensanctions, yente.`);
+}
+
 export class ConfigError extends Error {
   constructor(message: string) {
     super(message);
@@ -305,7 +340,8 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
     llm.provider = pinned as LlmProvider;
   }
 
-  const screeningIsLive = !!trimmed(env.OPENSANCTIONS_API_URL);
+  const screening = screeningSettingsFromEnv(env);
+  const screeningIsLive = !!screening.url;
 
   return {
     businessName: trimmed(env.BUSINESS_NAME) ?? "Vestiarion workspace",
@@ -328,8 +364,9 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
     },
     llm,
     compliance: {
-      openSanctionsUrl: trimmed(env.OPENSANCTIONS_API_URL),
-      openSanctionsApiKey: trimmed(env.OPENSANCTIONS_API_KEY),
+      ...(screening.url ? { openSanctionsUrl: screening.url } : {}),
+      ...(screening.apiKey ? { openSanctionsApiKey: screening.apiKey } : {}),
+      ...(screening.provider ? { screeningProvider: screening.provider } : {}),
       // Live screening is a network call per counterparty per cycle, so it
       // defaults to a day. The bundled list costs nothing, so it re-screens
       // every cycle — the behaviour RFB5 describes.
