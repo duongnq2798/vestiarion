@@ -1,3 +1,4 @@
+import { documentPayToOf } from "../invoice-document/provenance";
 import { orgHref } from "../auth/org-paths";
 import { db, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
@@ -123,6 +124,7 @@ function shown(read: InvoiceDraftRead, known: boolean): ShownRead {
     earlyPayDiscountPct: draft.earlyPayDiscountPct,
     discountDeadline: draft.discountDeadline,
     document: { kind: read.document.kind, sha256: read.document.sha256 },
+    ...(documentPayToOf(draft) ? { payTo: documentPayToOf(draft) as string } : {}),
   };
 }
 

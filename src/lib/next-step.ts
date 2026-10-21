@@ -89,6 +89,13 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
         sentence: `${counterparty.name}'s payment address changed recently, and the payee lock makes it wait before it is paid. The agent decides it again once the wait ends.`,
         fix: { label: "Open counterparty", path: row },
       };
+    case "invoice.pay_to_differs":
+      // The invoice asked to be paid somewhere else (invoice pay-to hold IP3): a person checks with the vendor, then pays
+      // the address on file in Approvals, or changes the address, which goes through its own checks.
+      return {
+        sentence: `The invoice from ${counterparty.name} asks to be paid to a different address from the one on file. Check with them, by a contact you had before, which address is theirs: approve to pay the one on file, or change the address.`,
+        fix: { label: "Open counterparty", path: row },
+      };
     case "counterparty.unscreened":
       return {
         sentence: `${counterparty.name} has not been screened yet. Screening runs again at every cycle, and the agent decides it again once there is a verdict; you can also pay it in Approvals.`,
@@ -223,6 +230,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "the payment address changed and is not confirmed";
     case "counterparty.cooling_off":
       return "the payment address changed recently, and the payee lock makes it wait";
+    case "invoice.pay_to_differs":
+      return "the invoice asks to be paid to a different address from the one on file";
     case "counterparty.no_address":
       return "the counterparty has no payment address yet";
     case "counterparty.unscreened":

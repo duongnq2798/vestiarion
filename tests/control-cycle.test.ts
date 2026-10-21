@@ -711,6 +711,62 @@ describe("reconcileApInvoice — a matched payable with a payment in flight", ()
     expect(followUpFactsAfter(append)).toMatchObject({ coolingOffHeld: true, addressUnconfirmed: false });
   });
 
+  it("does not resubmit while the invoice asks to be paid to another address than the one on file (invoice pay-to hold IP2)", async () => {
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: null, address_confirmed_at: null } };
+      }
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileApInvoice(
+        { ...invoice, txRef: null, documentPayTo: "0xbeef" },
+        { providerTxId: null, status: "submitting" },
+        { db: db(), provider, operating: { id: ACCOUNT_ID } }
+      )
+    );
+
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(outcome.status).toBe("held");
+    expect(outcome.line.message).toBe("Acme Supplies: not resubmitted, the invoice asks to be paid to a different address from the one on file (150 USDC)");
+    const body = invoicePatches(fake.requests)[0].body as Record<string, unknown>;
+    expect(body.agent_reasoning).toBe(`${invoice.reasoning} [not resubmitted: the invoice asks to be paid to a different address from the one on file]`);
+    const [append] = rpcBodies(fake.requests, "append_ledger_entry");
+    expect(append.p_detail).toMatchObject({ notResubmittedBecause: "invoice.pay_to_differs", execution: { resultingStatus: "held" } });
+    // The follow-up reads it as held for the address, and decides it again once the address on file is the one asked for.
+    expect(followUpFactsAfter(append)).toMatchObject({ payToHeld: true, coolingOffHeld: false, addressUnconfirmed: false });
+  });
+
+  it("is not held for the invoice's address when it asked for the one on file, case aside (invoice pay-to hold IP2)", async () => {
+    payInvoiceMock.mockResolvedValue({
+      status: "paid", txRef: "0xhash", note: "", operatingBalance: null,
+      execution: { providerMode: "live", feeUsd: 0.003, feeSource: "chain_reported", settledInMs: 4000, executedAt: "2026-09-29T00:00:00Z", reconciled: true },
+    });
+    const { fake, run } = cycleFake((r) => {
+      if (r.path === "/rest/v1/counterparties" && r.method === "GET") {
+        return { body: { risk_level: "low", address_changed_at: null, address_confirmed_at: null } };
+      }
+      if (r.path === "/rest/v1/rpc/agent_paused") return { body: false };
+      return undefined;
+    });
+
+    const outcome = await run(() =>
+      reconcileApInvoice(
+        { ...invoice, txRef: null, documentPayTo: "0xDEAD" },
+        { providerTxId: null, status: "submitting" },
+        { db: db(), provider, operating: { id: ACCOUNT_ID } }
+      )
+    );
+
+    expect(payInvoiceMock).toHaveBeenCalledTimes(1);
+    expect(outcome.line.message).not.toContain("the invoice asks to be paid");
+    for (const append of rpcBodies(fake.requests, "append_ledger_entry")) {
+      expect((append.p_detail as { notResubmittedBecause?: string }).notResubmittedBecause).not.toBe("invoice.pay_to_differs");
+    }
+  });
+
   it("says so when the earlier send was a payout to another chain that could not be looked up, which a person then checks", async () => {
     settleMock.mockResolvedValue({ answer: "undecided", retryAt: null, unlookable: true });
     const changed = new Date(Date.now() - 2 * 3_600_000).toISOString();

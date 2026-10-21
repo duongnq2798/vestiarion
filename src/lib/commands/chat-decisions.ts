@@ -1,3 +1,5 @@
+import { readDocumentPayTo } from "../invoice-pay-to";
+import { payToDiffers } from "../invoice-pay-to-rules";
 import crypto from "node:crypto";
 import { addressUnconfirmed } from "../counterparty-address";
 import { db } from "../dal";
@@ -73,6 +75,8 @@ export interface ApprovalFacts {
   address: string | null;
   addressChangedAt: string | null;
   addressConfirmedAt: string | null;
+  /** The address the invoice's document asked to be paid to (invoice pay-to hold IP3); null or absent for none. */
+  documentPayTo?: string | null;
 }
 
 /**
@@ -93,6 +97,10 @@ export function approveRefusal(facts: ApprovalFacts, limit: number | null, where
   if (!facts.address) return refused("no_address", "Its payee has no address yet.");
   if (addressUnconfirmed(facts.addressChangedAt, facts.addressConfirmedAt)) {
     return refused("address_unconfirmed", "Its payee's address changed and nobody has confirmed it.");
+  }
+  // The invoice asked to be paid somewhere else (invoice pay-to hold IP3): approved where the card shows both addresses.
+  if (payToDiffers(facts.documentPayTo, facts.address)) {
+    return refused("open_in_console", "Its invoice asks to be paid to a different address from the one on file.");
   }
   return null;
 }
@@ -128,6 +136,7 @@ export async function checkChatDecision(
   if (decision !== "approve") return { ok: true, address };
 
   const limit = "decisionsLimitUsdc" in actor.surface ? actor.surface.decisionsLimitUsdc : null;
+  const documentPayTo = (await readDocumentPayTo([invoiceId])).get(invoiceId) ?? null;
   const refusal = approveRefusal(
     {
       network: workspaceNetwork().id,
@@ -137,6 +146,7 @@ export async function checkChatDecision(
       address,
       addressChangedAt: payee?.address_changed_at ?? null,
       addressConfirmedAt: payee?.address_confirmed_at ?? null,
+      documentPayTo,
     },
     limit,
     where

@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-21: A payment waits when its invoice asks to be paid somewhere else
+
+- A `create_invoice` entry for an invoice read from a document can carry `document.payTo`: the 0x address the document asked to be paid to.
+- An agent decision entry (`ap_pay` and the other `ap_*` actions) can now carry `guardrailRule: "invoice.pay_to_differs"`: the payment was held because the invoice asked to be paid to an address that is not the counterparty's address on file. Its `observed` carries `documentPayTo`.
+- An `ap_reconcile` entry can now carry `notResubmittedBecause: "invoice.pay_to_differs"`: a payment that never reached the network is not sent again while the invoice asks for another address. It is held for a person.
+- Once the counterparty's address on file is the one the invoice asked for, the follow-up reopens it: an `invoice_reopened` entry follows, with `followUp.changes` reading "the address on file is now the one the invoice asked to be paid to", then a new decision. A webhook endpoint receives each as `ledger.appended`.
+- Nothing in `/api/v1` request bodies or the webhooks' shapes changes.
+
 ## 2026-10-21: Sanctioned payout addresses
 
 - `screen_counterparty` and `risk_level_changed` can carry `source: "ofac-sdn"` and `matchedEntityId: "ofac-sdn-<entry>"`, and so can the screening history `GET /api/v1/counterparties/{id}` returns. The counterparty's payout address is on OFAC's SDN list, which decides a high-risk verdict whatever its name screens as.

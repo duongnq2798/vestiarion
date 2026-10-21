@@ -94,32 +94,37 @@ export async function createInvoice(input: {
   const counterparty = lookup.data;
   if (!counterparty) return null;
 
-  const row = unwrap(
-    await db()
-      .from("invoices")
-      .insert({
-        ...(id ? { id } : {}),
-        direction: invoice.direction,
-        counterparty_id: counterparty.id,
-        amount: invoice.amount,
-        currency: invoice.currency,
-        memo: invoice.memo,
-        po_reference: invoice.poReference,
-        goods_received: invoice.goodsReceived,
-        due_date: dueDateIso(invoice.dueDate),
-        early_pay_discount_pct: invoice.earlyPayDiscountPct,
-        discount_due_date: invoice.discountDeadline ? dueDateIso(invoice.discountDeadline) : null,
-        created_by: actorId,
-        // The bill's own figure beside the USDC it is paid in, all five or none (`invoices_original_complete`).
-        ...(original
-          ? { original_currency: original.currency, original_amount: original.amount, fx_rate: original.perUsd, fx_source: original.source, fx_at: original.at }
-          : {}),
-        // Only a released deal line names one: before migration 0104 the columns are not there to name.
-        ...(deal ? { deal_id: deal.dealId, deal_line_id: deal.lineId } : {}),
-      })
-      .select("id")
-      .single<{ id: string }>()
-  );
+  const values = {
+    ...(id ? { id } : {}),
+    direction: invoice.direction,
+    counterparty_id: counterparty.id,
+    amount: invoice.amount,
+    currency: invoice.currency,
+    memo: invoice.memo,
+    po_reference: invoice.poReference,
+    goods_received: invoice.goodsReceived,
+    due_date: dueDateIso(invoice.dueDate),
+    early_pay_discount_pct: invoice.earlyPayDiscountPct,
+    discount_due_date: invoice.discountDeadline ? dueDateIso(invoice.discountDeadline) : null,
+    created_by: actorId,
+    // The bill's own figure beside the USDC it is paid in, all five or none (`invoices_original_complete`).
+    ...(original
+      ? { original_currency: original.currency, original_amount: original.amount, fx_rate: original.perUsd, fx_source: original.source, fx_at: original.at }
+      : {}),
+    // Only a released deal line names one: before migration 0104 the columns are not there to name.
+    ...(deal ? { deal_id: deal.dealId, deal_line_id: deal.lineId } : {}),
+    // The address its document asked to be paid to, which holds a payment to any other (invoice pay-to hold IP1).
+    ...(document?.payTo ? { document_pay_to: document.payTo } : {}),
+  };
+  let inserted = await db().from("invoices").insert(values).select("id").single<{ id: string }>();
+  // Before migration 0136 the column is not there: the invoice is added without it, as before, and nothing is held for it.
+  if (inserted.error && "document_pay_to" in values && ["PGRST204", "42703"].includes(inserted.error.code ?? "")) {
+    console.warn("invoices.document_pay_to is not there yet (migration 0136); the invoice is added without it");
+    const { document_pay_to: _left, ...without } = values;
+    void _left;
+    inserted = await db().from("invoices").insert(without).select("id").single<{ id: string }>();
+  }
+  const row = unwrap(inserted);
 
   await appendLedgerEntry({
     // The agent's cycle releases a deal's line on its day when the deal says so; a person adds every other invoice.

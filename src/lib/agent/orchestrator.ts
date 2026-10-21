@@ -1,3 +1,4 @@
+import { payToDiffers, readDocumentPayTo } from "../invoice-pay-to";
 import { z } from "zod";
 import { db, unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
@@ -623,6 +624,8 @@ const NOT_RESUBMITTED_HIGH_RISK_NOTE = " [not resubmitted: counterparty now scre
 const NOT_RESUBMITTED_ADDRESS_NOTE = " [not resubmitted: the counterparty's address changed and no one has confirmed it]";
 /** A payment never sent, not sent again while the payee lock keeps the payee's changed address waiting (payee lock PL5). */
 const NOT_RESUBMITTED_COOLING_NOTE = " [not resubmitted: the counterparty's address changed recently and the payee lock keeps it waiting]";
+/** A payment never sent, whose invoice asked to be paid to another address than the one on file now (invoice pay-to hold IP2). */
+const NOT_RESUBMITTED_PAY_TO_NOTE = " [not resubmitted: the invoice asks to be paid to a different address from the one on file]";
 
 /**
  * Why a resubmission must not go out, from the counterparty as it stands now,
@@ -905,6 +908,8 @@ export async function reconcileApInvoice(
     destinationChain?: string;
     /** When the agent decided it: a bridge still not minted long after is held for a person (review I5). */
     decidedAt?: string | null;
+    /** The address its document asked to be paid to (invoice pay-to hold IP2); a resend to any other waits for a person. */
+    documentPayTo?: string | null;
   },
   intent: ExistingPaymentIntent,
   deps: {
@@ -990,6 +995,7 @@ export async function reconcileApInvoice(
     | "counterparty.high_risk"
     | "counterparty.address_unconfirmed"
     | "counterparty.cooling_off"
+    | "invoice.pay_to_differs"
     | "counterparty.new_payee"
     | "workspace.two_approvals"
     | null = null;
@@ -999,10 +1005,13 @@ export async function reconcileApInvoice(
   // parties stand behind if it was never paid there (new payee check N3), and only on its own when one approval may pay
   // it (payment integrity I4).
   const riskOrAddress = sent ? null : await resubmissionBlocker(deps.db, invoice.counterpartyId, deps.payeeLock);
-  const newPayeeHeld = sent || riskOrAddress ? null : newPayeeResendBlocker(deps.newPayee, { id: invoice.counterpartyId, address: invoice.address });
+  // A resend pays the address as it stands now: one the invoice did not ask for waits for a person (invoice pay-to hold IP2).
+  const payToHeld = !sent && !riskOrAddress && payToDiffers(invoice.documentPayTo, invoice.address) ? ("invoice.pay_to_differs" as const) : null;
+  const newPayeeHeld = sent || riskOrAddress || payToHeld ? null : newPayeeResendBlocker(deps.newPayee, { id: invoice.counterpartyId, address: invoice.address });
   const blocker = sent
     ? null
     : (riskOrAddress ??
+      payToHeld ??
       (newPayeeHeld ? ("counterparty.new_payee" as const) : null) ??
       (await twoApprovalsResendBlocker({ type: "invoice", id: invoice.id }, { amount: invoice.amount, currency, address: invoice.address }, deps.twoApprovalsAbove)));
   if (sent) {
@@ -1051,7 +1060,9 @@ export async function reconcileApInvoice(
               ? notResubmittedNewPayeeNote(newPayeeHeld)
               : blocker === "counterparty.cooling_off"
                 ? NOT_RESUBMITTED_COOLING_NOTE
-                : NOT_RESUBMITTED_ADDRESS_NOTE,
+                : blocker === "invoice.pay_to_differs"
+                  ? NOT_RESUBMITTED_PAY_TO_NOTE
+                  : NOT_RESUBMITTED_ADDRESS_NOTE,
       heldBecausePaused: false,
       operatingBalance: null,
     };
@@ -1141,6 +1152,8 @@ export async function reconcileApInvoice(
       ? `${name}: not resubmitted, the counterparty's address changed and no one has confirmed it (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.cooling_off"
       ? `${name}: not resubmitted, the payee lock keeps the counterparty's changed address waiting (${invoice.amount} ${currency})`
+      : notResubmitted === "invoice.pay_to_differs"
+      ? `${name}: not resubmitted, the invoice asks to be paid to a different address from the one on file (${invoice.amount} ${currency})`
       : notResubmitted === "counterparty.new_payee"
       ? `${name}: ${NOT_RESUBMITTED_NEW_PAYEE_LINE} (${invoice.amount} ${currency})`
       : notResubmitted === "workspace.two_approvals"
@@ -1542,6 +1555,8 @@ async function decideApPayable(
     shadow?: ShadowMode | null;
     /** The checks after the guardrails (project budgets P5, P9): the same work as a milestone, and the project's budget. */
     obligations?: ObligationGate;
+    /** The address this payable's document asked to be paid to, read once per stage (invoice pay-to hold IP2); null for none. */
+    documentPayTo?: (invoiceId: string) => string | null;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
@@ -1963,6 +1978,9 @@ async function decideApPayable(
     addressChangedAt: counterparty.address_changed_at,
     addressConfirmedAt: counterparty.address_confirmed_at,
     payeeLock: ctx.payeeLock,
+    // The address the invoice asked to be paid to, against the one on file (invoice pay-to hold IP2).
+    documentPayTo: ctx.documentPayTo?.(invoice.id) ?? null,
+    addressOnFile: counterparty.address,
     match: { poReference: invoice.po_reference, goodsReceived: invoice.goods_received, purchaseOrderRequired },
     newPayee: firstPayment ? { twoParties: firstPayment.twoParties, ...(firstPayment.unanswered ? { unanswered: true } : {}) } : null,
     currency,
@@ -2211,6 +2229,8 @@ async function decideApPayable(
         addressUnconfirmed: addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at),
         // No address where payments are real: the follow-up decides it again once one is added and confirmed.
         ...(addressMissing ? { addressMissing: true } : {}),
+        // The address the invoice's document asked to be paid to (invoice pay-to hold IP2), when it named one.
+        ...(ctx.documentPayTo?.(invoice.id) ? { documentPayTo: ctx.documentPayTo(invoice.id) } : {}),
         // The project it belongs to, and what its reservation found (project budgets P5); absent in none.
         ...(invoice.project_id ? { projectId: invoice.project_id } : {}),
         ...(projectCheck ? { project: projectRecord(projectCheck) } : {}),
@@ -2527,6 +2547,9 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const payeeLock = input.payeeLock !== undefined ? input.payeeLock : (policies?.payeeLock ?? PAYEE_LOCK_OFF);
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
   const shadow = input.shadow !== undefined ? input.shadow : payables.length > 0 ? await shadowOnce() : null;
+  // The addresses the payables' documents asked to be paid to (invoice pay-to hold IP2): read once for the stage, none
+  // before migration 0136. A read that fails stops the stage, so a payment is never made past it.
+  const documentPayTo = payables.length > 0 ? await readDocumentPayTo(payables.map((row) => row.id), db) : new Map<string, string>();
 
   // The whole payable book, settled rows included, because a duplicate is only
   // detectable against what came before it — and the invoice that matters most
@@ -2622,6 +2645,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
           currency: invoiceCurrency(invoice.currency),
           ...(paidAcrossChains(counterparty.chain) ? { destinationChain: chainOn(provider.network.id, counterparty.chain).id } : {}),
           decidedAt: invoice.decided_at ?? null,
+          documentPayTo: documentPayTo.get(invoice.id) ?? null,
         },
         intent,
         // The stage's figure, so a payment it never sent goes again on its own only when one approval may pay it (I4), and
@@ -2682,6 +2706,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       payeeLock,
       shadow,
       obligations,
+      documentPayTo: (invoiceId) => documentPayTo.get(invoiceId) ?? null,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
@@ -3494,6 +3519,8 @@ export function payableDecisionFacts(entries: Array<{ seq: number; action: strin
       newPayeeHeld: entry.detail.guardrailRule === "counterparty.new_payee",
       // Held for the payee lock's wait after an address change (payee lock PL5): decided again once it has passed.
       coolingOffHeld: entry.detail.guardrailRule === "counterparty.cooling_off",
+      // Held because its invoice asked for another address (invoice pay-to hold IP3): decided again once they match.
+      payToHeld: entry.detail.guardrailRule === "invoice.pay_to_differs",
       // Held for two approvals: the value and the figure it was weighed at (two approvals T3).
       heldForTwoApprovals: twoApprovalsHeldValue(entry),
       // Held for its project's budget: the project and what it needed (project budgets P6).
@@ -3520,6 +3547,7 @@ function notResentFacts(decided: DecisionFacts, reason: string | null): Decision
     addressUnconfirmed: reason === "counterparty.address_unconfirmed",
     addressMissing: false,
     coolingOffHeld: reason === "counterparty.cooling_off",
+    payToHeld: reason === "invoice.pay_to_differs",
     newPayeeHeld: reason === "counterparty.new_payee",
     heldForBudgetUsdc: null,
     heldForCash: null,
@@ -3921,6 +3949,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const twoApprovalsNow = twoApprovalsHeldIds.length > 0 ? await readTwoApprovalsAbove(db) : undefined;
     // The payee lock now, read only when a payable waits out its cooling-off (PL5).
     const lockNow = [...factsByInvoice.values()].some((facts) => facts.coolingOffHeld) ? await readPayeeLock(db) : null;
+    // What the documents of the payables held for asking another address asked for, read only when one was (IP3).
+    const payToHeldIds = frozenRows.filter((row) => factsByInvoice.get(row.id)?.payToHeld).map((row) => row.id);
+    const payToNow = payToHeldIds.length > 0 ? await readDocumentPayTo(payToHeldIds, db) : null;
     // Who stands behind those addresses now, read once, wherever payments are real (N5, N7).
     const newPayeeHeldIds = [
       ...new Set(frozenRows.filter((row) => factsByInvoice.get(row.id)?.newPayeeHeld && row.counterparty_id).map((row) => row.counterparty_id as string)),
@@ -3984,6 +4015,7 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
           addressMissing: !row.counterparties.address,
           purchaseOrderRequired: row.counterparties.purchase_order_required,
           ...(lockNow && factsByInvoice.get(row.id)?.coolingOffHeld ? { coolingOff: inCoolingOff(row.counterparties.address_changed_at, lockNow, now) !== null } : {}),
+          ...(payToNow?.has(row.id) && factsByInvoice.get(row.id)?.payToHeld ? { payToDiffers: payToDiffers(payToNow.get(row.id), row.counterparties.address) } : {}),
           ...(fxNow.has(row.id) ? { fx: fxNow.get(row.id) } : {}),
           ...(newPayeeNow.has(row.id) ? { newPayee: newPayeeNow.get(row.id) } : {}),
           ...(twoApprovalsNow !== undefined ? { twoApprovalsAbove: twoApprovalsNow } : {}),

@@ -144,6 +144,8 @@ describe("an invoice read from a document", () => {
       discountDeadline: "2026-10-11",
       memo: "Managed hosting, October",
       counterpartyId: COUNTERPARTIES[0].id,
+      // The address the document asked to be paid to, which holds a payment to any other (invoice pay-to hold IP1).
+      payToAddress: "0x2222222222222222222222222222222222222222",
     });
   });
 

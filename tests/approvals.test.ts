@@ -2103,6 +2103,7 @@ describe("listWaitingPayables", () => {
         reclaimable: false,
         paymentSent: false,
         address: "0xdead",
+        documentPayTo: null,
         lastAttempt: null,
         discount: null,
         currency: "USDC",
