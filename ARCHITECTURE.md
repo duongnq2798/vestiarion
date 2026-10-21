@@ -85,6 +85,7 @@ it is enforced once production's reports show it fits every page.
   network profiles, which import nothing; Iris's origins come from them.
 - Scripts and styles may be inline, since Next.js inlines its own and a nonce would end static rendering.
 - `connect-src` names Circle's Iris and modular wallets client, which the browser calls, and Google Analytics.
+  `img-src` names Product Hunt's badge on the landing page.
 - `form-action` names every connect form's consent screen (each Zoho data center's), Google sign-in and the
   deployment's Supabase, since Chrome checks a form submission's redirects too.
 - A Vercel preview also allows Vercel's toolbar.
