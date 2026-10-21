@@ -493,8 +493,9 @@ export default function SecurityPage() {
       <LegalSection id="development" title="Secure development">
         <ul>
           <li>
-            The code is public on <LegalLink href={GITHUB_URL}>GitHub</LegalLink> under the MIT License. Changes reach <code>main</code> through pull
-            requests, and Vercel deploys <code>main</code>.
+            The code is public on <LegalLink href={GITHUB_URL}>GitHub</LegalLink> under the MIT License. <code>main</code> is a protected branch: every
+            change reaches it through a pull request that has passed CI, administrators included, and it cannot be force-pushed or deleted. Vercel
+            deploys <code>main</code>.
           </li>
           <li>
             Changes are reviewed by an independent AI code reviewer before merge, and every defect it finds is fixed with a test that fails first; when a
@@ -564,8 +565,9 @@ export default function SecurityPage() {
             not rewritten by someone in control of the server.
           </li>
           <li>
-            <code>main</code> has no branch protection and no required human second approval: the independent AI review and CI before each merge
-            are how the team works, not a rule GitHub enforces. Dependencies are not updated automatically.
+            No human second approval is required before merge: GitHub requires a pull request and a passing CI run on <code>main</code>, while the
+            independent AI review is how the team works, not a rule GitHub enforces. A pull request need not be up to date with <code>main</code>{" "}
+            before it merges, and release tags and other branches are not protected. Dependencies are not updated automatically.
           </li>
           <li>
             Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota, and API reads are not limited.

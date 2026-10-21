@@ -816,12 +816,21 @@ describe("what it does not claim, still true of the code", () => {
     expect(notClaimed).toContain("It allows inline scripts, since pages carry no nonce.");
   });
 
-  it("review and CI before each merge, and no branch protection or required human second approval", () => {
+  it("review and CI before each merge, main protected, and no required human second approval", () => {
     const development = section("development");
+    // Branch protection on main, set in GitHub and read back on 2026-10-21: a pull request, the CI job `verify` passing,
+    // administrators included, no force push or deletion, and no approval count.
+    expect(development).toContain(
+      "main is a protected branch: every change reaches it through a pull request that has passed CI, administrators included, and it cannot be force-pushed or deleted"
+    );
+    expect(source(".github/workflows/ci.yml")).toMatch(/^jobs:\s*\n\s+verify:/m);
     expect(development).toContain("Changes are reviewed by an independent AI code reviewer before merge");
     expect(development).toContain("when a release's changes were not each reviewed so, its release notes say so");
     expect(development).toContain("Each change must pass CI before it is merged");
-    expect(notClaimed).toContain("main has no branch protection and no required human second approval");
+    expect(notClaimed).toContain("No human second approval is required before merge: GitHub requires a pull request and a passing CI run on main");
+    expect(notClaimed).toContain("the independent AI review is how the team works, not a rule GitHub enforces");
+    expect(notClaimed).not.toContain("no branch protection");
+    expect(notClaimed).toContain("A pull request need not be up to date with main before it merges, and release tags and other branches are not protected.");
     expect(notClaimed).not.toMatch(/no independent review|not reviewed|no second reviewer/i);
     // Every release's notes since the second beta say whether its changes were reviewed by an independent reviewer before
     // merge (v0.1.0-beta.8 says not every one was), and CI runs on every pull request.

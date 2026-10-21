@@ -101,7 +101,8 @@ would have blocked and block nothing. Once the reports show it fits every page, 
     the script. Production never serves them, so its reports will not show it.
 - **Nonces or hashes.** Without `'unsafe-inline'` an injected inline script would be blocked too. That needs a nonce on
   each request, which ends static rendering, or Next.js's experimental hashes. Either can come later, report-only first.
-- **Branch protection on `main`.** The repository's owner turns it on in GitHub; the security page changes when it is.
+- **Branch protection on `main`.** The repository's owner turned it on in GitHub on 2026-10-21, and the security page
+  says so; that change is separate from this one.
 
 ## Tests
 

@@ -45,6 +45,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   is a token contract or a burn address, and if it is on OFAC's sanctions list. It runs in the browser: nothing
   pasted is sent anywhere.
 
+- **`main` is a protected branch.** Every change reaches it through a pull request that has passed CI,
+  administrators included, and it cannot be force-pushed or deleted. The security page says so.
+
 ### Fixed
 
 - A payment whose first send never reached Circle, and that the agent then did not send again because the payee
