@@ -581,6 +581,25 @@ adds two columns to `approval_policies`: `payee_lock` (off by default) and `paye
   - Its PDF is the browser's print: the shell's sidebar, headers, banners and footer carry `print:hidden!`, and the
     frame drops its padding (`print:pl-0!`), so any workspace page prints its content alone.
 
+**The invoice pay-to hold** (`docs/superpowers/specs/2026-10-21-invoice-pay-to-hold-design.md`). An invoice read from a
+document keeps the 0x address the document asked to be paid to in `invoices.document_pay_to` (migration 0136).
+- `DocumentProvenance.payTo` carries it from each path:
+  - the invoice form's `documentRead` (`documentPayToOf`);
+  - the chats' and email's stored draft (`chatDraftOf`), and the inbox's reading for an email finished by hand;
+  - a Chrome extension draft's `read.payTo`. A payee link's draft reads no document, so it carries none.
+- `createInvoice` writes it and records it in the `create_invoice` entry's `document`. Before 0136 the insert is
+  retried without it, as before.
+- The AP stage reads the payables' addresses once (`readDocumentPayTo`, none before 0136; any other failure stops the
+  stage). `enforceApGuardrails` holds a payment whose document asked for another address than the one on file as
+  `invoice.pay_to_differs`, after the address checks and before the three-way match, except for a payee paid to a
+  bank account. The decision's `observed` records `documentPayTo`.
+- `reconcileApInvoice` does not resend a payment never sent while they differ (`notResubmittedBecause:
+  "invoice.pay_to_differs"`, `payToHeld` in its facts).
+- The follow-up (`payToHeld`, `payToDiffers`) reopens it once the address on file is the one asked for.
+- Approvals' card shows the address the invoice asked for beside the one Approve and pay sends to
+  (`invoice-pay-to-rules.ts`, pure, for the browser). `approveRefusal` refuses Approve and pay from Slack or Telegram
+  for it (`open_in_console`). The agent never pays the document's address.
+
 **Ask every payee at once** (`docs/superpowers/specs/2026-10-18-ask-every-payee-design.md`). `askablePayees`
 (`src/lib/address-requests.ts`) lists, for an owner or admin on Counterparties, the vendors and contractors with no
 address of their own (a mirror address counts as none), no unused link out and no sample flag, 25 at most by name.

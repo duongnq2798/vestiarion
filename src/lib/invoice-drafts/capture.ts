@@ -1,3 +1,4 @@
+import { documentPayToOf } from "../invoice-document/provenance";
 import { createHash } from "node:crypto";
 import { readInvoiceDocument } from "../invoice-document/draft";
 import { MAX_DOCUMENT_BYTES } from "../invoice-document/read";
@@ -101,6 +102,7 @@ async function read(input: CaptureInput, today: string): Promise<CaptureRead> {
     fields,
     read: {
       reader: document.read.reader,
+      ...(documentPayToOf(draft) ? { payTo: documentPayToOf(draft) as string } : {}),
       warnings: document.read.warnings,
       documentNotes: document.documentWarnings,
       modelNote: document.read.modelNote,

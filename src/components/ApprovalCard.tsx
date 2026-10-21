@@ -1,5 +1,6 @@
 "use client";
 
+import { invoiceAskedFor, payToDiffers } from "@/lib/invoice-pay-to-rules";
 import { Banknote, Undo2, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState, type FormEvent } from "react";
@@ -276,6 +277,14 @@ export default function ApprovalCard({
               {payable.address ? <span className="font-mono text-ink-2">{payable.address}</span> : "no address set"}
               {paidAcrossChains(payable.payeeChain) && ` on ${chainById(payable.payeeChain as string).label}`}
             </p>
+          )}
+          {!payable.bank && payToDiffers(payable.documentPayTo, payable.address) && (
+            // The invoice asked to be paid somewhere else (invoice pay-to hold IP3): Approve and pay still pays the address on file.
+            <Callout tone="held" className="mt-2">
+              <span className="break-all">
+                {invoiceAskedFor(payable.documentPayTo as string, payable.address)}
+              </span>
+            </Callout>
           )}
           {two && <p className="mt-2 text-sm text-ink-2">{twoApprovalsLine(two, viewerId, memberEmails)}</p>}
           {two && canDecide && two.approvers < 2 && (

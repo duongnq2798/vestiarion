@@ -7,6 +7,10 @@ import type { DecisionMode } from "@/lib/agent/decide";
  * never stored. The fields arrive as hidden inputs on the invoice form; they
  * describe the member's own edits and never decide anything about money, so
  * a malformed set is dropped rather than refused.
+ *
+ * It also keeps the address the document asked to be paid to, when it named one
+ * (invoice pay-to hold IP1). That one only ever holds a payment back: the agent
+ * pays the address on file, and holds a payment whose document asked for another.
  */
 
 export const DOCUMENT_FIELDS = ["amount", "currency", "dueDate", "poReference", "earlyPayDiscountPct", "discountDeadline", "memo", "counterpartyId"] as const;
@@ -17,6 +21,19 @@ export interface DocumentProvenance {
   sha256: string;
   reader: DecisionMode;
   changed: DocumentField[];
+  /** The 0x address the document asked to be paid to, as it writes it (IP1); absent when it named none. */
+  payTo?: string;
+}
+
+const PAY_TO_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * The address a reading asked to be paid to (`payToAddress`), or none: only a 0x address, which the reader kept only when
+ * the document's text has it.
+ */
+export function documentPayToOf(read: { payToAddress?: unknown } | null | undefined): string | null {
+  const address = typeof read?.payToAddress === "string" ? read.payToAddress.trim() : "";
+  return PAY_TO_ADDRESS.test(address) ? address : null;
 }
 
 const READERS: readonly DecisionMode[] = ["anthropic", "openai", "deepseek", "heuristic"];
@@ -63,5 +80,6 @@ export function documentProvenance(formData: FormData, submitted: Submitted): Do
     return null;
   }
   if (typeof read !== "object" || read === null || Array.isArray(read)) return null;
-  return { kind, sha256, reader, changed: changedFields(read as Record<string, unknown>, submitted) };
+  const payTo = documentPayToOf(read as Record<string, unknown>);
+  return { kind, sha256, reader, changed: changedFields(read as Record<string, unknown>, submitted), ...(payTo ? { payTo } : {}) };
 }

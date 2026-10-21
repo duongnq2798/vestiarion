@@ -20,6 +20,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   A service named without its key or address stops the app at start. `npm run screening:check` screens one name
   with a new key before it is set, and never prints the key. A deployment that sets nothing new screens as before.
 
+- **A payment waits when its invoice asks to be paid somewhere else.** An invoice read from a document keeps the
+  address the document asked to be paid to. When that is not the counterparty's address on file, the agent holds the
+  payment for a person, naming both addresses, instead of paying silently. **Approve and pay** still pays only the
+  address on file and shows the one the invoice asked for; changing the address to it goes through the usual checks,
+  and the agent decides the payment again once the two match.
+
 - **The payee lock's evidence pack.** Any member can open it from **Settings**, under **Payee lock**, for a period
   they choose. It shows one row per payout address change:
   - who entered the address;

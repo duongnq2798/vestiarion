@@ -1,3 +1,4 @@
+import { documentPayToOf } from "./provenance";
 import type { InvoiceInput } from "../invoices/create";
 import { invoiceFormRefusal, invoiceInputSchema } from "../intake-validation";
 import type { InvoiceDraftRead } from "./draft";
@@ -29,10 +30,10 @@ export interface ChatDraftFields {
   discountDeadline: string;
 }
 
-/** A draft as a chat stores it: the fields, and where they were read from. */
+/** A draft as a chat stores it: the fields, and where they were read from, with the address it asked payment to (IP1). */
 export interface StoredChatDraft {
   draft: ChatDraftFields;
-  document: { kind: "pdf" | "email" | "text"; sha256: string; reader: InvoiceDraftRead["reader"] };
+  document: { kind: "pdf" | "email" | "text"; sha256: string; reader: InvoiceDraftRead["reader"]; payTo?: string };
 }
 
 /** A read as a chat's draft: stored when it can be added from a chat, or the reasons it cannot, in words. */
@@ -60,7 +61,11 @@ export function chatDraftOf(read: InvoiceDraftRead): { reasons: string[]; stored
   };
   const parsed = invoiceInputSchema.safeParse({ direction: "payable", ...fields, goodsReceived: false });
   if (!parsed.success) return { reasons: [invoiceFormRefusal(parsed.error).message], stored: null };
-  return { reasons: [], stored: { draft: fields, document: { kind: read.document.kind, sha256: read.document.sha256, reader: read.reader } } };
+  const payTo = documentPayToOf(draft);
+  return {
+    reasons: [],
+    stored: { draft: fields, document: { kind: read.document.kind, sha256: read.document.sha256, reader: read.reader, ...(payTo ? { payTo } : {}) } },
+  };
 }
 
 /** The payable a stored draft becomes, with the goods as the person said; null if the form's rules no longer accept it. */

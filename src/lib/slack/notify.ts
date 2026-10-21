@@ -1,3 +1,4 @@
+import { readDocumentPayTo } from "../invoice-pay-to";
 import type { ActivityItem } from "../agent-activity";
 import { readAgentActivity } from "../agent-activity-read";
 import { siteOrigin } from "../auth/env";
@@ -73,6 +74,8 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
       ) as Array<IntentState & { source_id: string }>
     ).map((intent) => [intent.source_id, intent])
   );
+  // What each invoice's document asked to be paid to (invoice pay-to hold IP3): none before migration 0136.
+  const documentPayTo = await readDocumentPayTo(ids);
   for (const row of rows) {
     if (row.direction !== "payable" || !WAITING.includes(row.status)) continue;
     const payee = row.counterparties;
@@ -87,6 +90,7 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
         address,
         addressChangedAt: payee?.address_changed_at ?? null,
         addressConfirmedAt: payee?.address_confirmed_at ?? null,
+        documentPayTo: documentPayTo.get(row.id) ?? null,
       },
       install.decisionsLimitUsdc,
       "Slack"

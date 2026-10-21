@@ -82,7 +82,14 @@ function finishedProvenance(row: FinishableRow, invoice: InvoiceInput): Document
     memo: invoice.memo,
     counterpartyId: invoice.counterpartyId,
   };
-  return { kind: source.kind, sha256: source.sha256, reader: source.reader, changed: changedFields(row.draft?.draft ?? row.read ?? {}, submitted) };
+  const payTo = row.draft?.document.payTo ?? row.read?.payTo;
+  return {
+    kind: source.kind,
+    sha256: source.sha256,
+    reader: source.reader,
+    changed: changedFields(row.draft?.draft ?? row.read ?? {}, submitted),
+    ...(payTo ? { payTo } : {}),
+  };
 }
 
 /**
