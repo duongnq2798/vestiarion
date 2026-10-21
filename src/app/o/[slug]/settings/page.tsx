@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import ApiKeysPanel from "@/components/ApiKeysPanel";
+import DeleteAccountPanel from "@/components/DeleteAccountPanel";
 import DeleteWorkspacePanel from "@/components/DeleteWorkspacePanel";
 import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
@@ -551,6 +552,8 @@ export default async function SettingsPage({
             // deletionContext carries counts and booleans only. Only an owner's page reads it, and never for the founding workspace.
             content: deletion && !deletion.isFounding ? <DeleteWorkspacePanel orgSlug={slug} context={deletion} canAdminister={canAdminister} /> : null,
           },
+          // Every member's own account, whatever their role: deleting it needs none (delete account in Settings DA3).
+          { id: "delete-account-title", title: "Delete account", content: <DeleteAccountPanel /> },
         ],
       },
     ];
