@@ -3,9 +3,12 @@
  * CSP1-CSP3): browsers report what it would block and block nothing, until the reports show it fits every page and it
  * is enforced. `next.config.ts` sends it on every response; `/api/csp-report` receives the reports.
  *
- * Kept free of other app modules, since `next.config.ts` imports it. `tests/csp.test.ts` holds each origin here to the
- * code that reaches it: the connect forms' OAuth hosts, Circle's Iris and the modular wallets client.
+ * `next.config.ts` imports it, so it imports only the network profiles, which import nothing. `tests/csp.test.ts` holds
+ * each origin here to the code that reaches it: the connect forms' OAuth hosts, Circle's Iris and the modular wallets
+ * client.
  */
+
+import { NETWORKS } from "../network";
 
 /** Where browsers send reports, by `report-uri` and through the Reporting API's `csp` endpoint. */
 export const CSP_REPORT_PATH = "/api/csp-report";
@@ -20,10 +23,13 @@ const GOOGLE_ANALYTICS = {
 };
 
 /**
- * What the browser itself calls: Circle's Iris for a transfer from another chain (fees and arrival, both networks), and
- * Circle's modular wallets client for a passkey wallet.
+ * What the browser itself calls: Circle's Iris for a transfer from another chain (fees and arrival), each network's as its
+ * profile names it, and Circle's modular wallets client for a passkey wallet.
  */
-const CIRCLE_CONNECT = ["https://iris-api.circle.com", "https://iris-api-sandbox.circle.com", "https://modular-sdk.circle.com"];
+const CIRCLE_CONNECT = [
+  ...Object.values(NETWORKS).flatMap((profile) => (profile.inbound ? [new URL(profile.inbound.iris).origin] : [])),
+  "https://modular-sdk.circle.com",
+];
 
 /**
  * Where a form's submission may end up. Each connect page posts to this deployment, which sends the person on to the
