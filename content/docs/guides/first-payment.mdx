@@ -213,6 +213,14 @@ When a changed address looks like an address the same payee had or was paid at b
 
 **Confirm address** repeats the warning before anyone confirms. It never blocks, since two counterparties can share a wallet on purpose.
 
+Any member can download the payee lock's evidence pack from **Settings**, under **Payee lock**, with **Download the evidence pack**. It is a JSON file. Each address change is a row with:
+- who entered it;
+- how it was checked, and whether by a second person;
+- the payments the change held back;
+- its first payment.
+
+Every fact names the signed ledger entries it rests on, and the file carries those entries in full, so it can be checked offline like the [audit export](/docs/guides/audit-export). This is the record an insurer's questionnaire on payment-change fraud asks for.
+
 The payee lock covers addresses on Arc and the chains it pays. A payout to a vendor's bank account already waits for a person every time, so the lock adds nothing there.
 
 The ledger records each change to the lock as `payee_lock_changed`, and the check behind each confirmation in its `counterparty_address_confirmed` entry.

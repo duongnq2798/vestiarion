@@ -532,6 +532,23 @@ adds two columns to `approval_policies`: `payee_lock` (off by default) and `paye
   refuse anything. The confirmation records `lookalikeOf`, `looksLikeEarlier` and, when no giver can be named,
   `giverUnknown`.
 - **Fails closed:** only the codes 42703 and PGRST204 read as "before 0135"; any other failure throws.
+- **Evidence pack** (`docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md`): `GET /api/evidence/payee-lock`
+  answers any member with `vestiarion-payee-lock-evidence/1`, gated as the payment evidence is. It writes no entry.
+  - `readPayeeLockEvidence` reads, a page at a time:
+    - the `counterparty_address_changed` and `payee_lock_changed` entries in the period;
+    - every later entry of the counterparties those changes name.
+
+    It checks each entry with the workspace's keys (`verifyEntry`).
+  - `payeeLockEvidence` (pure) makes one row per change that sets an address. Each row carries:
+    - who entered it;
+    - the first confirmation of that address before the counterparty's next change, with its record and whether a
+      second person gave it;
+    - the holds for its address (`counterparty.address_unconfirmed`, `cooling_off`, `new_payee`, by `guardrailRule` or
+      `notResubmittedBecause`);
+    - the first entry with a transaction;
+    - the checks that follow.
+  - Every fact cites its entries by `seq`, and the file carries those entries in full with the keys and
+    `CHECK_AN_ENTRY`. Settings links it from the payee lock panel.
 
 **Ask every payee at once** (`docs/superpowers/specs/2026-10-18-ask-every-payee-design.md`). `askablePayees`
 (`src/lib/address-requests.ts`) lists, for an owner or admin on Counterparties, the vendors and contractors with no

@@ -35,5 +35,13 @@ describe("PayeeLockPanel", () => {
     const markup = render({ canChange: true, status: { lock: { on: false, coolingHours: 0 }, ready: false } });
     expect(markup).toContain("Not available in this workspace yet.");
     expect(markup).not.toContain("Turn on the payee lock");
+    expect(markup).not.toContain("Download the evidence pack");
+  });
+
+  it("offers any member the evidence pack, as a download of the workspace's own file (evidence pack EP1)", () => {
+    const viewer = render({ orgSlug: "pinecrest studio" });
+    expect(viewer).toContain("Download the evidence pack");
+    expect(viewer).toContain('href="/api/evidence/payee-lock?org=pinecrest%20studio"');
+    expect(viewer).toMatch(/<a[^>]*download/);
   });
 });
