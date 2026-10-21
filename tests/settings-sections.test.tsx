@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { railScrollFor } from "@/components/SettingsContents";
 import { SettingsSections, shownGroups, type SettingsGroup } from "@/components/SettingsSections";
 
 /**
@@ -75,5 +76,31 @@ describe("SettingsSections", () => {
   it("marks the first section as the one being read before anything scrolls", () => {
     expect(markup).toMatch(/href="#notifications-title" aria-current="location"/);
     expect(markup.match(/aria-current=/g)).toHaveLength(1);
+  });
+
+  it("keeps the rail within the window below the header, scrolling a longer list within it rather than cutting it off", () => {
+    const rail = /<div class="([^"]*sticky top-22[^"]*)"/.exec(markup)?.[1] ?? "";
+    // 7rem is the rail's sticky top, top-22 (5.5rem), and 1.5rem to spare below.
+    for (const name of ["top-22", "max-h-[calc(100dvh-7rem)]", "overflow-y-auto", "scroll-py-2"]) expect(rail.split(" "), name).toContain(name);
+    // A wheel that reaches the rail's end goes on to scroll the page.
+    expect(rail).not.toContain("overscroll-contain");
+  });
+});
+
+describe("railScrollFor", () => {
+  const rail = { scrollTop: 100, height: 400 };
+
+  it("leaves the rail where it is while the link shows whole", () => {
+    expect(railScrollFor(rail, { top: 200, height: 28 })).toBe(100);
+  });
+
+  it("scrolls just far enough to show a link below or above, with room to spare", () => {
+    expect(railScrollFor(rail, { top: 600, height: 28 })).toBe(600 + 28 + 24 - 400);
+    expect(railScrollFor(rail, { top: 110, height: 28 })).toBe(110 - 24);
+    expect(railScrollFor(rail, { top: 10, height: 28 })).toBe(0);
+  });
+
+  it("shows the top of a link taller than the rail", () => {
+    expect(railScrollFor(rail, { top: 50, height: 600 })).toBe(50 - 24);
   });
 });

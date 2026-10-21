@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useRef } from "react";
 import { cn } from "@/components/ui/cn";
 import { useActiveHeading } from "@/components/ui/useActiveHeading";
 import { GROUP_LABEL } from "./settings-group-label";
@@ -15,16 +15,47 @@ export interface ContentsGroup {
 /** How far below the top of the window a section's heading counts as the one being read: below the workspace header, which sticks at every width (workspace shell design S4), and below where a jump to a heading lands. */
 const READING_LINE = 128;
 
+/** Room above and below a link the rail scrolls to, so the one being read never sits flush against the rail's edge. */
+const RAIL_MARGIN = 24;
+
+/**
+ * Where a rail that scrolls itself should scroll to show a link whole: unchanged when the link already shows, else just
+ * far enough, with `margin` to spare. Positions are within the rail's content, as `scrollTop` measures them.
+ */
+export function railScrollFor(rail: { scrollTop: number; height: number }, link: { top: number; height: number }, margin = RAIL_MARGIN): number {
+  if (link.top - margin < rail.scrollTop) return Math.max(0, link.top - margin);
+  if (link.top + link.height + margin > rail.scrollTop + rail.height) return link.top + link.height + margin - rail.height;
+  return rail.scrollTop;
+}
+
 /**
  * The contents of Settings (Settings structure design S2). `rail`: a column that stays beside the sections from `xl`,
- * marking the one being read. `inline`: a list above the sections on a narrower screen, each group on its own row,
- * its label beside its links.
+ * marking the one being read. It is never taller than the window below the workspace header: a longer list scrolls
+ * within it, and follows the section being read. `inline`: a list above the sections on a narrower screen, each group
+ * on its own row, its label beside its links.
  * The links are plain anchors; the page scrolls itself.
  */
 export function SettingsContents({ groups, variant, className }: { groups: ContentsGroup[]; variant: "rail" | "inline"; className?: string }) {
   const id = useId();
   // Only the rail marks a section; the list above the sections has scrolled away by the time one is read.
   const active = useActiveHeading(variant === "rail" ? groups.flatMap((group) => group.sections.map((section) => section.id)) : [], READING_LINE);
+  const rail = useRef<HTMLDivElement>(null);
+
+  // The rail scrolls only itself to the section being read, never the page: when that section changes, and when the
+  // window's height changes what fits.
+  useEffect(() => {
+    const align = () => {
+      const box = rail.current;
+      const link = box?.querySelector<HTMLElement>('a[aria-current="location"]');
+      if (!box || !link || box.scrollHeight <= box.clientHeight) return;
+      const top = link.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+      const next = railScrollFor({ scrollTop: box.scrollTop, height: box.clientHeight }, { top, height: link.offsetHeight });
+      if (next !== box.scrollTop) box.scrollTop = next;
+    };
+    align();
+    window.addEventListener("resize", align);
+    return () => window.removeEventListener("resize", align);
+  }, [active]);
 
   if (variant === "inline") {
     return (
@@ -56,7 +87,11 @@ export function SettingsContents({ groups, variant, className }: { groups: Conte
 
   return (
     <nav aria-label="Settings sections" className={className}>
-      <div className="sticky top-22 space-y-5">
+      {/* Never taller than the window below the workspace header: 7rem is top-22 (5.5rem) and 1.5rem to spare below, so
+          its last groups can always be reached. The padding and scroll padding keep a link's focus ring inside the
+          scrolling box, also when tabbing scrolls it; the negative margin keeps the column aligned. A wheel that reaches
+          the rail's end goes on to scroll the page. */}
+      <div ref={rail} className="sticky top-22 -mx-1.5 -mt-1.5 max-h-[calc(100dvh-7rem)] scroll-py-2 space-y-5 overflow-y-auto px-1.5 py-1.5">
         {groups.map((group, index) => (
           <div key={group.key}>
             <p id={`${id}-${index}`} className={GROUP_LABEL}>
