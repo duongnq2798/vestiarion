@@ -120,26 +120,49 @@ describe("DeleteAccountBody", () => {
   });
 });
 
-describe("where Delete account lives (A1)", () => {
-  it("is the account menu's last item, below Sign out, for every signed-in person", () => {
+describe("where Delete account lives (docs/superpowers/specs/2026-10-21-delete-account-in-settings-design.md)", () => {
+  it("is never in the account menu, which holds no danger row and opens the account's own page instead (DA1)", () => {
     const file = source("src/components/vx/AccountMenu.tsx");
     const menu = file.slice(file.indexOf("<DropdownMenuContent"));
-    expect(menu).toContain("<DeleteAccountDialog");
-    expect(menu.lastIndexOf("<DropdownMenuItem")).toBeLessThan(menu.indexOf("Delete account"));
-    expect(menu.indexOf("Sign out")).toBeGreaterThan(-1);
-    expect(menu.indexOf("Delete account")).toBeGreaterThan(menu.indexOf("Sign out"));
-    // Unconditional: no role, flag or prop decides whether it is offered.
-    const item = menu.slice(0, menu.indexOf("Delete account"));
+    expect(file).not.toContain("Delete account");
+    expect(file).not.toContain("DeleteAccountDialog");
+    expect(menu).not.toContain('tone="danger"');
+    // Account settings comes before Sign out, for every signed-in person: no role, flag or prop decides it.
+    expect(menu).toContain('<Link href="/account">');
+    expect(menu).toContain("Account settings");
+    expect(menu).toContain("Sign out");
+    expect(menu.indexOf("Account settings")).toBeLessThan(menu.indexOf("Sign out"));
+    const item = menu.slice(0, menu.indexOf("Account settings"));
     expect(item.slice(item.lastIndexOf("<DropdownMenuItem"))).not.toMatch(/&&|\?\s*</);
-    // The only danger row: Sign out is an ordinary way out, not a red one.
-    expect(menu.match(/tone="danger"/g)).toHaveLength(1);
+    // The menu still opens from the workspace sidebar, folded or not, and from the headers outside a workspace.
+    expect(source("src/components/vx/AppNav.tsx")).toContain('<AccountMenu email={email} placement={collapsed ? "rail" : "sidebar"} railTip={collapsed}>');
+    expect(source("src/app/onboarding/page.tsx")).toContain('<AccountMenu email={user.email} placement="header" />');
   });
 
-  it("is reached from the workspace sidebar, folded or not, and from the /onboarding header", () => {
-    expect(source("src/components/vx/AppNav.tsx")).toContain('<AccountMenu email={email} placement={collapsed ? "rail" : "sidebar"} railTip={collapsed}>');
-    const onboarding = source("src/app/onboarding/page.tsx");
-    expect(onboarding).toContain('<AccountMenu email={user.email} placement="header" />');
-    expect(onboarding).not.toContain("Delete account");
+  it("is a danger zone panel with its own button, which opens the dialog (DA2, DA3)", async () => {
+    const { default: DeleteAccountPanel } = await import("@/components/DeleteAccountPanel");
+    const markup = html(<DeleteAccountPanel />);
+    expect(markup).toMatch(/<section[^>]*aria-labelledby="delete-account-title"/);
+    expect(markup).toMatch(/<h2 id="delete-account-title"[^>]*>Delete account<\/h2>/);
+    expect(markup).toContain("border-refused-line");
+    expect(text(markup)).toContain("A workspace where you are the only member is deleted with it: the dialog lists each one first. It cannot be undone.");
+    expect(markup).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>.*Delete account<\/button>/s);
+  });
+
+  it("ends /account, for any signed-in person, and Settings, for every member whatever their role (DA2, DA3)", () => {
+    const account = source("src/app/account/page.tsx");
+    expect(account).toContain('verifySession("/account")');
+    expect(account).toContain("Danger zone");
+    expect(account).toContain("<DeleteAccountPanel />");
+    expect(account.indexOf("Danger zone")).toBeLessThan(account.indexOf("<DeleteAccountPanel />"));
+    const settings = source("src/app/o/[slug]/settings/page.tsx");
+    const danger = settings.slice(settings.indexOf('key: "danger"'));
+    expect(danger).toContain('{ id: "delete-account-title", title: "Delete account", content: <DeleteAccountPanel /> }');
+    expect(danger).toContain("delete-workspace-title");
+    expect(danger.indexOf("delete-account-title")).toBeGreaterThan(danger.indexOf("delete-workspace-title"));
+    // The security page and the privacy page say where it is, not the menu.
+    expect(source("src/app/security/page.tsx")).not.toContain("from the account menu");
+    expect(source("src/app/privacy/page.tsx")).not.toContain("last item of the account menu");
   });
 
   it("the dialog is an alertdialog guarded against dismissal while pending", () => {

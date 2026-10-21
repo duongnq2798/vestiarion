@@ -54,6 +54,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **`main` is a protected branch.** Every change reaches it through a pull request that has passed CI,
   administrators included, and it cannot be force-pushed or deleted. The security page says so.
 
+### Changed
+
+- **Delete account moved out of the account menu, into Settings.** The menu you open to switch workspaces or sign
+  out no longer holds a red row one slip below **Sign out**. **Delete account** is now under **Danger zone** at the
+  end of a workspace's **Settings**, for every member, and of a new **Your account** page, which **Account settings**
+  in the account menu opens, with or without a workspace. The dialog and its rules are unchanged.
+
 ### Fixed
 
 - A live workspace on Arc testnet said **Payments live** in its header, as one on Arc mainnet does. It now says
