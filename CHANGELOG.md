@@ -34,6 +34,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   card for a milestone in the wait now says the agent decides within five minutes after it. Turning the payee lock
   off, or choosing a shorter wait, decides what it held back at once.
 
+- **A free address lookalike checker** at [/check-address](https://www.vestiarion.xyz/check-address). Paste the address
+  you are about to pay and the addresses you know. It says if the address is made to look like one of them, the
+  trick called address poisoning, if a character in it is hidden, from another alphabet or has the wrong case, if it
+  is a token contract or a burn address, and if it is on OFAC's sanctions list. It runs in the browser: nothing
+  pasted is sent anywhere.
+
 ### Fixed
 
 - A payment whose first send never reached Circle, and that the agent then did not send again because the payee
