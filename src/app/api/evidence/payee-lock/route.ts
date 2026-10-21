@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { inOrg } from "@/lib/dal/scope";
 import { parsePeriod, payeeLockEvidenceFileName } from "@/lib/payee-lock-evidence";
 import { readPayeeLockEvidence } from "@/lib/payee-lock-evidence-read";
+import { takeEvidencePackToken } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,9 @@ export async function GET(request: Request) {
   const slug = params.get("org") ?? "";
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "Sign in to download this evidence." }, { status: 401 });
+  if (!takeEvidencePackToken(user.id)) {
+    return NextResponse.json({ error: "Too many downloads. Try again in a minute." }, { status: 429, headers: { "retry-after": "60" } });
+  }
   const period = parsePeriod(params.get("from"), params.get("to"));
   if (!period) return NextResponse.json({ error: "from and to must be days as YYYY-MM-DD, from no later than to" }, { status: 400 });
 

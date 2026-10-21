@@ -29,12 +29,14 @@ offline.
 - Someone signed out gets 401.
 - A non-member gets the same 404 as a workspace that does not exist.
 - A malformed day gets 400.
+- A member gets six downloads a minute; a seventh gets 429.
 - It writes no ledger entry.
 
 The file is `vestiarion-payee-lock-evidence-<slug>-<from>-<to>.json`, format `vestiarion-payee-lock-evidence/1`.
 
 **EP2. One row per address change.** Each `counterparty_address_changed` entry in the period that sets an address (not
-a clear) becomes a row:
+a clear) becomes a row. A mirror address Vestiarion made in shadow mode (`via: "mirror"`) needs no confirmation, so
+it is left out. Each row has:
 - **The counterparty:** its id and name.
 - **The change:** when, the address from and to, the chain, and who entered it:
   - a member, by email, or "a former member" with the id's first 8 characters when no longer in the workspace;
@@ -45,8 +47,13 @@ a clear) becomes a row:
   its next change. Its fields:
   - when, and who;
   - the record: method, contact used, contact on file before the change, note;
-  - whether a second person confirmed it: not `soloConfirmation`, not `byGiver`, not `giverUnknown`;
-  - the lock's wait, and the time from which the address could be paid;
+  - whether a second person confirmed it, true only when that is known:
+    - with the lock on, the confirmation checked who gave the address, so its flags answer: `soloConfirmation` or
+      `byGiver` means false, `giverUnknown` means unknown;
+    - with the lock off, only a different member from the one who entered the address proves it;
+    - the same member is always false;
+    - a payee link or GitHub giver with the lock off is unknown;
+  - the lock's wait as recorded with the confirmation, and the time from which the address could be paid;
   - the lookalike warnings.
 
   The confirmation is `null` while the change is unconfirmed.
@@ -56,16 +63,22 @@ a clear) becomes a row:
   - `counterparty.address_unconfirmed`;
   - `counterparty.cooling_off`;
   - `counterparty.new_payee`.
-- **The first payment:** the first entry for that counterparty after the change, and before its next change, whose
-  execution carries a transaction and a status of `paid` or `matched`. Its fields:
+- **The first payment:** the first entry for that counterparty after the change, and before its next change, that
+  carries a transaction with a status of `paid` or `matched`, or `verified` for a milestone in flight. Two kinds are
+  left out:
+  - a bank payout, which the lock does not cover;
+  - a transaction the counterparty's earlier entries already named. That transfer went to the earlier address, even
+    when it is reconciled or approved after the change.
+
+  Its fields:
   - when, the amount and currency, and the transaction with its explorer link;
-  - whether the agent decided it, or a person approved it (`approval_paid`, `decision_verdict`).
+  - whether the agent decided it, or a person approved it (`approval_paid`, `milestone_approval_paid`).
 - **The checks**, each true, false or null when it does not apply:
   - `recordKept`;
   - `contactOnFileBefore`;
   - `secondPerson`;
   - `paidAfterConfirmation`;
-  - `paidAfterWait`, null when there was no wait.
+  - `paidAfterWait`, measured against the wait recorded with the confirmation, and null when there was none.
 
 **EP3. The lock.** The lock as it is now, and each `payee_lock_changed` in the period: when, who, from and to.
 
@@ -85,8 +98,11 @@ a clear) becomes a row:
 **EP6. Pure and read-only.**
 - `payeeLockEvidence` (`src/lib/payee-lock-evidence.ts`) builds the document from entries, members, the lock and the
   network.
-- `readPayeeLockEvidence` reads them in the workspace's scope: the entries by action within the period, plus the
-  payments and holds of the counterparties those changes name.
+- `readPayeeLockEvidence` reads in the workspace's scope:
+  - the entries by action within the period;
+  - then every entry of the counterparties those changes name, a hundred ids at a time and a page at a time.
+
+  It checks only the entries the pack cites.
 
 ## Not in this part
 
@@ -106,7 +122,16 @@ a clear) becomes a row:
 - the period;
 - the lock's history;
 - the summary;
-- the entries carried in full, each once.
+- the entries carried in full, each once;
+- a shadow-mode mirror left out;
+- the second person, true only when known;
+- a hold on a payment not sent again;
+- a milestone paid by a person;
+- a transfer to the earlier address, a bank payout, and a payment after the next change left out;
+- a payment before the recorded wait.
 
-`tests/payee-lock-evidence-route.test.ts` covers the gates, 400, the file's name and headers, and that nothing is
-written.
+`tests/payee-lock-evidence-route.test.ts` covers:
+- the gates, 400 and 429;
+- the file's name and headers;
+- the ids asked a hundred at a time;
+- that nothing is written.

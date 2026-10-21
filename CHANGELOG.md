@@ -15,10 +15,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 ### Added
 
 - **The payee lock's evidence pack.** Any member can download it from **Settings**, under **Payee lock**. It is a
-  signed JSON file, with one row per payout address change:
+  JSON file of signed ledger entries, with one row per payout address change:
   - who entered the address;
   - how it was checked and whether by a second person, with the lock's wait;
-  - the payments it held back, and its first payment.
+  - the payments the agent held for its address, and its first payment.
 
   It carries the checks an insurer asks about, and every ledger entry it cites, in full, to check offline.
 

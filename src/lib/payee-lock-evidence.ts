@@ -18,8 +18,8 @@ export const PAYEE_LOCK_EVIDENCE_FORMAT = "vestiarion-payee-lock-evidence/1";
 /** The rules that hold a payment back for its address (EP2). */
 export const ADDRESS_HOLD_RULES = ["counterparty.address_unconfirmed", "counterparty.cooling_off", "counterparty.new_payee"] as const;
 const HOLD_RULES: ReadonlySet<string> = new Set(ADDRESS_HOLD_RULES);
-/** The entries a person's decision writes when it pays (EP2). */
-const PERSON_PAID = new Set(["approval_paid", "milestone_approval_paid", "decision_verdict"]);
+/** The entries a person's decision writes when it pays (EP2): a shadow-mode verdict that pays writes `approval_paid`. */
+const PERSON_PAID = new Set(["approval_paid", "milestone_approval_paid"]);
 
 /** An entry with the server's own check of its signature and chain link. */
 export type CheckedEntry = LedgerRow & { check?: EntryCheck };
@@ -29,7 +29,6 @@ export type Who =
   | { kind: "former_member"; id: string }
   | { kind: "payee_link"; linkId: string | null }
   | { kind: "github"; login: string | null }
-  | { kind: "api" }
   | { kind: "unknown" };
 
 export interface PayeeLockEvidenceInput {
@@ -37,7 +36,7 @@ export interface PayeeLockEvidenceInput {
   network: Network;
   period: Period;
   lock: PayeeLock;
-  /** The address changes and lock changes in the period, and every later entry of the counterparties they name. */
+  /** The address changes and lock changes in the period, and every entry of the counterparties they name. */
   entries: readonly CheckedEntry[];
   /** Counterparty names, by id. */
   counterparties: ReadonlyMap<string, string>;
@@ -99,16 +98,24 @@ function person(id: unknown, members: ReadonlyMap<string, string>): Who {
 function enteredBy(detail: Record<string, unknown>, members: ReadonlyMap<string, string>): Who {
   if (detail.via === "payee_link") return { kind: "payee_link", linkId: str(detail.linkId) };
   if (detail.via === "github") return { kind: "github", login: str(detail.login) };
-  if (detail.via === "api") return { kind: "api" };
   return person(detail.by, members);
 }
 
-/** A payment the entry records: a transaction, sent or settled (EP2). */
+/** The transaction an entry names, if any: a payment's or one it reconciles. */
+function txRefOf(entry: CheckedEntry): string | null {
+  return str(record(entry.detail.execution)?.txRef) ?? str(entry.detail.txRef);
+}
+
+/**
+ * A payment the entry records to an address on chain: a transaction sent or settled (`paid`, `matched`, or `verified`
+ * for a milestone in flight). A bank payout is not one: the lock does not cover it (EP2).
+ */
 function paymentOf(entry: CheckedEntry): { txRef: string; amount: number | null; currency: string } | null {
   const execution = record(entry.detail.execution);
-  const txRef = str(execution?.txRef) ?? str(entry.detail.txRef);
+  const txRef = txRefOf(entry);
   const status = str(execution?.resultingStatus) ?? str(entry.detail.status);
   if (!txRef || !status || !["paid", "matched", "verified"].includes(status)) return null;
+  if (record(entry.detail.payout)?.route === "bank" || execution?.bankPayout) return null;
   const observed = record(entry.detail.observed);
   const raw = entry.detail.amountPaid ?? entry.detail.amount ?? observed?.amount;
   const amount = raw === null || raw === undefined || raw === "" ? null : Number(raw);
@@ -129,7 +136,26 @@ function subjectOf(entry: CheckedEntry): { kind: "invoice" | "milestone"; id: st
 }
 
 const methodOf = (value: unknown): VerificationMethod | null =>
-  typeof value === "string" && value in VERIFICATION_LABELS ? (value as VerificationMethod) : null;
+  typeof value === "string" && Object.hasOwn(VERIFICATION_LABELS, value) ? (value as VerificationMethod) : null;
+
+/**
+ * Whether someone other than whoever entered the address confirmed it (EP2): true only when that is known. With the
+ * lock on, the confirmation itself checked who gave the address and refused them while another member could confirm,
+ * failing closed, so its flags answer. With the lock off it checked only when confirmed with Confirm address, best
+ * effort, so a different member is the only proof; a payee link or GitHub giver, or a confirmation by approving, is not
+ * known either way.
+ */
+function secondPersonOf(change: CheckedEntry, confirmed: CheckedEntry | undefined): boolean | null {
+  if (!confirmed) return null;
+  const detail = confirmed.detail;
+  if (detail.soloConfirmation === true || detail.byGiver === true) return false;
+  const confirmer = str(detail.by);
+  const giver = str(change.detail.by);
+  if (confirmer && giver && confirmer === giver) return false;
+  if (detail.giverUnknown === true) return null;
+  if (record(detail.payeeLock)) return true;
+  return confirmer && giver && change.detail.via === undefined ? true : null;
+}
 
 export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
   const sorted = [...input.entries].sort((a, b) => a.seq - b.seq);
@@ -141,8 +167,12 @@ export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
   const counterpartyOf = (entry: CheckedEntry) => str(entry.detail.counterpartyId);
   const isChange = (entry: CheckedEntry) => entry.action === "counterparty_address_changed";
 
+  // A mirror address Vestiarion made in shadow mode is not a payee's change, and needs no confirmation (EP2).
   const changes = sorted
-    .filter((entry) => isChange(entry) && str(entry.detail.to) !== null && counterpartyOf(entry) !== null && inPeriod(entry.ts, input.period))
+    .filter(
+      (entry) =>
+        isChange(entry) && entry.detail.via !== "mirror" && str(entry.detail.to) !== null && counterpartyOf(entry) !== null && inPeriod(entry.ts, input.period)
+    )
     .map((change) => {
       const counterpartyId = counterpartyOf(change) as string;
       const to = str(change.detail.to);
@@ -154,16 +184,22 @@ export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
       const confirmed = window.find(
         (entry) => entry.action === "counterparty_address_confirmed" && (str(entry.detail.address) === null || same(str(entry.detail.address), to))
       );
-      const paid = window.find((entry) => paymentOf(entry) !== null);
+      // A transfer the counterparty's earlier entries already named went to the address it had then: reconciling it, or
+      // approving it once sent, is not a payment to this one (EP2).
+      const sentBefore = new Set(
+        sorted.filter((entry) => entry.seq < change.seq && counterpartyOf(entry) === counterpartyId).flatMap((entry) => txRefOf(entry) ?? [])
+      );
+      const paid = window.find((entry) => {
+        const payment = paymentOf(entry);
+        return payment !== null && !sentBefore.has(payment.txRef);
+      });
       const holds = window.filter((entry) => (paid === undefined || entry.seq < paid.seq) && holdRuleOf(entry) !== null);
 
       const lock = record(confirmed?.detail.payeeLock);
       const waitHours = typeof lock?.coolingHours === "number" && lock.coolingHours > 0 ? lock.coolingHours : null;
       const payableFrom = waitHours !== null ? new Date(Date.parse(change.ts) + waitHours * 3_600_000).toISOString() : null;
       const verification = record(confirmed?.detail.verification);
-      const secondPerson = confirmed
-        ? confirmed.detail.soloConfirmation !== true && confirmed.detail.byGiver !== true && confirmed.detail.giverUnknown !== true
-        : null;
+      const secondPerson = secondPersonOf(change, confirmed);
       const alike = Array.isArray(confirmed?.detail.lookalikeOf) ? (confirmed?.detail.lookalikeOf as unknown[]).flatMap((id) => (typeof id === "string" ? [id] : [])) : [];
 
       const payment = paid ? paymentOf(paid) : null;
@@ -272,7 +308,7 @@ export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
         prev_hash: entry.prev_hash,
         hash: entry.hash,
         signing_key_id: entry.signing_key_id,
-        check: entry.check ?? null,
+        check: (entry.check ?? null) as EntryCheck | null,
       })),
   };
 }

@@ -143,8 +143,39 @@ describe("GET /api/evidence/payee-lock", () => {
     expect(ledger[0].params.get("action")).toBe("in.(counterparty_address_changed,payee_lock_changed)");
     expect(ledger[0].params.getAll("ts")).toEqual(["gte.2026-10-20T00:00:00.000Z", "lt.2026-10-21T00:00:00.000Z"]);
     expect(ledger[1].params.get("detail->>counterpartyId")).toBe(`in.(${NORTHWIND})`);
-    expect(ledger[1].params.get("seq")).toBe("gt.4839");
+    // All of their entries, so a transfer to an earlier address is told apart from a payment to this one.
+    expect(ledger[1].params.get("seq")).toBeNull();
     expect(fake.requests.filter((request) => request.method !== "GET" && !request.path.startsWith("/rest/v1/rpc/"))).toEqual([]);
+  });
+
+  it("asks for the ids a hundred at a time, so no request's address grows too long", async () => {
+    const many = Array.from({ length: 150 }, (_, index) =>
+      signed(5000 + index, "2026-10-20T11:00:00Z", "counterparty_address_changed", { by: OWNER, counterpartyId: "cp-" + index, from: null, to: "0xa8a4" })
+    );
+    const fake = fakeSupabase((request: RecordedRequest) => {
+      if (request.path === "/rest/v1/orgs") {
+        return { body: { id: ORG, slug: "pinecrest-studio", name: "Pinecrest Studio", mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null, wallet_host: null } };
+      }
+      if (request.path === "/rest/v1/ledger_entries" && request.params.get("action")) return { body: many };
+      if (request.path === "/rest/v1/approval_policies") return { body: [{ payee_lock: false, payee_lock_cooling_hours: 0 }] };
+      return { body: [] };
+    });
+    sessionMock.mockResolvedValue({ id: "chunking-member", email: null });
+    const answer = await runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
+      GET(new Request("https://www.vestiarion.xyz/api/evidence/payee-lock?org=pinecrest-studio"))
+    );
+    expect(answer.status).toBe(200);
+    const history = fake.requests.filter((request) => request.path === "/rest/v1/ledger_entries" && request.params.get("detail->>counterpartyId"));
+    expect(history.map((request) => (request.params.get("detail->>counterpartyId") ?? "").split(",").length)).toEqual([100, 50]);
+    expect(fake.requests.filter((request) => request.path === "/rest/v1/counterparties")).toHaveLength(2);
+  });
+
+  it("lets a member download six packs a minute", async () => {
+    sessionMock.mockResolvedValue({ id: "rate-limited-member", email: null });
+    for (let index = 0; index < 6; index += 1) expect((await call("?org=pinecrest-studio").response).status).toBe(200);
+    const seventh = await call("?org=pinecrest-studio").response;
+    expect(seventh.status).toBe(429);
+    expect(seventh.headers.get("retry-after")).toBe("60");
   });
 
   it("says when the pack could not be read, and nothing of why", async () => {

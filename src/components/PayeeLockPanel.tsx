@@ -93,7 +93,7 @@ export default function PayeeLockPanel({ orgSlug, status, canChange }: PayeeLock
         )}
         {status.ready && (
           <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
-            <p className="text-sm text-ink-2">Every address change, who entered it, how it was checked and by whom, and its first payment, signed.</p>
+            <p className="text-sm text-ink-2">Every address change, who entered it, how it was checked and by whom, and its first payment, from the signed ledger.</p>
             <Button asChild size="sm" variant="secondary">
               <a href={`/api/evidence/payee-lock?org=${encodeURIComponent(orgSlug)}`} download>
                 <FileJson aria-hidden />

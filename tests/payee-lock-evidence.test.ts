@@ -176,19 +176,82 @@ describe("payeeLockEvidence", () => {
     expect(rows[0].confirmation).toBeNull();
   });
 
-  it("names who entered an address: a payee link, GitHub, the API, or a former member", () => {
+  it("names who entered an address: a payee link, GitHub, or a former member, and leaves out a shadow-mode mirror", () => {
     const entries = [
       entry(30, "2026-10-03T10:00:00Z", "counterparty_address_changed", { by: null, via: "payee_link", linkId: "link-1", counterpartyId: NORTHWIND, from: null, to: NEW }, "human"),
       entry(31, "2026-10-03T11:00:00Z", "counterparty_address_changed", { by: null, via: "github", login: "octocat", counterpartyId: WARDROBE, from: null, to: "0x532a" }, "human"),
-      entry(32, "2026-10-03T12:00:00Z", "counterparty_address_changed", { by: OWNER, via: "api", counterpartyId: "cp-api", from: null, to: "0x9999" }, "human"),
       entry(33, "2026-10-03T13:00:00Z", "counterparty_address_changed", { by: "deadbeef-1234-4000-8000-000000000000", counterpartyId: "cp-gone", from: null, to: "0x8888" }, "human"),
+      // A mirror address Vestiarion made in shadow mode needs no confirmation and is no payee's change.
+      entry(34, "2026-10-03T14:00:00Z", "counterparty_address_changed", { by: OWNER, via: "mirror", counterpartyId: "cp-mirror", from: null, to: "0x7777", walletId: "w-1" }, "human"),
     ];
     expect(payeeLockEvidence({ ...base, entries }).changes.map((row) => row.change.enteredBy)).toEqual([
       { kind: "payee_link", linkId: "link-1" },
       { kind: "github", login: "octocat" },
-      { kind: "api" },
       { kind: "former_member", id: "deadbeef" },
     ]);
+  });
+
+  describe("whether a second person confirmed the address, true only when that is known", () => {
+    const change = (detail: Record<string, unknown>) => entry(50, "2026-10-05T10:00:00Z", "counterparty_address_changed", { counterpartyId: NORTHWIND, from: OLD, to: NEW, ...detail }, "human");
+    const confirm = (detail: Record<string, unknown>) => entry(51, "2026-10-05T10:05:00Z", "counterparty_address_confirmed", { counterpartyId: NORTHWIND, address: NEW, ...detail }, "human");
+    const secondPerson = (entries: CheckedEntry[]) => payeeLockEvidence({ ...base, entries }).changes[0].checks.secondPerson;
+
+    it("is false when the member who entered the address confirmed it, by approving its payment with the lock off", () => {
+      expect(secondPerson([change({ by: OWNER }), confirm({ by: OWNER, via: "approval" })])).toBe(false);
+    });
+
+    it("is false for a solo confirmation or one the giver made with the lock off", () => {
+      expect(secondPerson([change({ by: OWNER }), confirm({ by: OWNER, via: "confirm", soloConfirmation: true, payeeLock: { coolingHours: 4 } })])).toBe(false);
+      expect(secondPerson([change({ by: null, via: "payee_link", linkId: "l" }), confirm({ by: OWNER, via: "confirm", byGiver: true })])).toBe(false);
+    });
+
+    it("is true for another member, with the lock on or off", () => {
+      expect(secondPerson([change({ by: OWNER }), confirm({ by: APPROVER, via: "approval" })])).toBe(true);
+      expect(secondPerson([change({ by: null, via: "payee_link", linkId: "l" }), confirm({ by: APPROVER, via: "confirm", payeeLock: { coolingHours: 0 } })])).toBe(true);
+    });
+
+    it("is not known when the giver could not be named, or the lock was off and a payee link gave the address", () => {
+      expect(secondPerson([change({ by: null, via: "payee_link", linkId: "l" }), confirm({ by: APPROVER, via: "confirm", giverUnknown: true, payeeLock: { coolingHours: 4 } })])).toBeNull();
+      expect(secondPerson([change({ by: null, via: "payee_link", linkId: "l" }), confirm({ by: APPROVER, via: "approval" })])).toBeNull();
+    });
+  });
+
+  it("counts a hold on a payment not sent again, and a milestone paid by a person", () => {
+    const entries = [
+      entry(60, "2026-10-06T10:00:00Z", "counterparty_address_changed", { by: OWNER, counterpartyId: NORTHWIND, from: OLD, to: NEW }, "human"),
+      entry(61, "2026-10-06T10:01:00Z", "ap_reconcile", { invoiceId: INVOICE, counterpartyId: NORTHWIND, notResubmittedBecause: "counterparty.cooling_off", execution: { txRef: null, resultingStatus: "held" } }),
+      entry(62, "2026-10-06T10:02:00Z", "counterparty_address_confirmed", { by: APPROVER, counterpartyId: NORTHWIND, address: NEW, payeeLock: { coolingHours: 1 } }, "human"),
+      entry(63, "2026-10-06T11:30:00Z", "milestone_approval_paid", { by: APPROVER, milestoneId: "ms-1", counterpartyId: NORTHWIND, amount: "6", txRef: TX, status: "paid" }, "human"),
+    ];
+    const [row] = payeeLockEvidence({ ...base, entries }).changes;
+    expect(row.holds).toEqual([{ at: "2026-10-06T10:01:00Z", rule: "counterparty.cooling_off", subject: { kind: "invoice", id: INVOICE }, entry: 61 }]);
+    expect(row.firstPayment).toMatchObject({ amount: 6, decidedBy: "person", subject: { kind: "milestone", id: "ms-1" }, entry: 63 });
+    expect(row.checks.paidAfterWait).toBe(true);
+  });
+
+  it("never takes a transfer sent to the earlier address, a bank payout, or a payment after the next change as this change's payment", () => {
+    const entries = [
+      // A transfer to the old address, still in flight when the address changed, then reconciled.
+      entry(70, "2026-10-07T09:00:00Z", "ap_pay", { invoiceId: "inv-old", counterpartyId: NORTHWIND, execution: { txRef: "0xold", resultingStatus: "matched" } }),
+      entry(71, "2026-10-07T10:00:00Z", "counterparty_address_changed", { by: OWNER, counterpartyId: NORTHWIND, from: OLD, to: NEW }, "human"),
+      entry(72, "2026-10-07T10:01:00Z", "ap_reconcile", { invoiceId: "inv-old", counterpartyId: NORTHWIND, execution: { txRef: "0xold", resultingStatus: "paid" } }),
+      // A bank payout: the lock does not cover it.
+      entry(73, "2026-10-07T10:02:00Z", "approval_paid", { by: APPROVER, invoiceId: "inv-bank", counterpartyId: NORTHWIND, amount: "10", txRef: TX, status: "paid", payout: { route: "bank" } }, "human"),
+      entry(74, "2026-10-07T11:00:00Z", "counterparty_address_changed", { by: OWNER, counterpartyId: NORTHWIND, from: NEW, to: "0x2222" }, "human"),
+      entry(75, "2026-10-07T12:00:00Z", "ap_pay", { invoiceId: "inv-new", counterpartyId: NORTHWIND, amountPaid: 2, execution: { txRef: "0xnew", resultingStatus: "paid" } }),
+    ];
+    const rows = payeeLockEvidence({ ...base, entries }).changes;
+    expect(rows[0].firstPayment).toBeNull();
+    expect(rows[1].firstPayment).toMatchObject({ txRef: "0xnew", entry: 75 });
+  });
+
+  it("says a payment before the wait recorded with the confirmation was not paid after it", () => {
+    const entries = [
+      entry(80, "2026-10-08T10:00:00Z", "counterparty_address_changed", { by: OWNER, counterpartyId: NORTHWIND, from: OLD, to: NEW }, "human"),
+      entry(81, "2026-10-08T10:05:00Z", "counterparty_address_confirmed", { by: APPROVER, counterpartyId: NORTHWIND, address: NEW, payeeLock: { coolingHours: 24 } }, "human"),
+      entry(82, "2026-10-08T12:00:00Z", "ap_pay", { invoiceId: INVOICE, counterpartyId: NORTHWIND, amountPaid: 3, execution: { txRef: TX, resultingStatus: "paid" } }),
+    ];
+    expect(payeeLockEvidence({ ...base, entries }).changes[0].checks).toMatchObject({ paidAfterConfirmation: true, paidAfterWait: false });
   });
 
   it("names the counterparties a confirmation's lookalike warning points to", () => {

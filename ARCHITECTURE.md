@@ -533,19 +533,22 @@ adds two columns to `approval_policies`: `payee_lock` (off by default) and `paye
   `giverUnknown`.
 - **Fails closed:** only the codes 42703 and PGRST204 read as "before 0135"; any other failure throws.
 - **Evidence pack** (`docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md`): `GET /api/evidence/payee-lock`
-  answers any member with `vestiarion-payee-lock-evidence/1`, gated as the payment evidence is. It writes no entry.
-  - `readPayeeLockEvidence` reads, a page at a time:
+  answers any member with `vestiarion-payee-lock-evidence/1`, gated as the payment evidence is, six a minute per member
+  (`takeEvidencePackToken`). It writes no entry.
+  - `readPayeeLockEvidence` reads, a page at a time and a hundred ids at a time:
     - the `counterparty_address_changed` and `payee_lock_changed` entries in the period;
-    - every later entry of the counterparties those changes name.
+    - every entry of the counterparties those changes name.
 
-    It checks each entry with the workspace's keys (`verifyEntry`).
-  - `payeeLockEvidence` (pure) makes one row per change that sets an address. Each row carries:
+    It checks only the cited entries with the workspace's keys (`verifyEntry`).
+  - `payeeLockEvidence` (pure) makes one row per change that sets an address, leaving out shadow-mode mirrors. Each row
+    carries:
     - who entered it;
     - the first confirmation of that address before the counterparty's next change, with its record and whether a
-      second person gave it;
+      second person gave it (`secondPersonOf`: true only when known);
     - the holds for its address (`counterparty.address_unconfirmed`, `cooling_off`, `new_payee`, by `guardrailRule` or
       `notResubmittedBecause`);
-    - the first entry with a transaction;
+    - the first entry with a transaction, leaving out a bank payout and a transaction the counterparty's earlier
+      entries already named;
     - the checks that follow.
   - Every fact cites its entries by `seq`, and the file carries those entries in full with the keys and
     `CHECK_AN_ENTRY`. Settings links it from the payee lock panel.
