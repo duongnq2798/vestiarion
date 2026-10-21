@@ -17,6 +17,8 @@ export const OFAC_SDN_COMMENTS_URL = "https://sanctionslistservice.ofac.treas.go
 export const SANCTIONED_WALLETS_TTL_MS = 12 * 3_600_000;
 /** Fewer addresses than this in a live read means the files were not what they should be (SW2): the snapshot stays. */
 export const SANCTIONED_WALLETS_MIN = 50;
+/** After a failed read, the next waits this long, so a slow or absent Treasury site never holds every cycle up (SW2). */
+export const SANCTIONED_WALLETS_RETRY_MS = 30 * 60_000;
 const READ_TIMEOUT_MS = 20_000;
 
 export interface SanctionedWallet {
@@ -72,6 +74,10 @@ const SNAPSHOT: SanctionedWalletList = {
 };
 
 let cached: SanctionedWalletList | null = null;
+/** The read under way on this instance, which every caller meanwhile waits on rather than starting its own. */
+let reading: Promise<void> | null = null;
+/** When the last read failed; none since the last success. */
+let failedAt: number | null = null;
 
 /** The list a lookup can use at once, without the network: the last live read, or the snapshot (SW3). */
 export function cachedSanctionedWallets(): SanctionedWalletList {
@@ -86,21 +92,37 @@ export async function loadSanctionedWallets(options: { live: boolean; fetch?: ty
   if (!options.live) return cachedSanctionedWallets();
   const now = options.now ?? Date.now();
   if (cached && now - Date.parse(cached.readAt) < SANCTIONED_WALLETS_TTL_MS) return cached;
-  const read = options.fetch ?? fetch;
+  if (failedAt !== null && now - failedAt < SANCTIONED_WALLETS_RETRY_MS) return cachedSanctionedWallets();
+  reading ??= readLive(options.fetch ?? fetch, now).finally(() => {
+    reading = null;
+  });
+  await reading;
+  return cachedSanctionedWallets();
+}
+
+/**
+ * One read of both files (SW2). A read counts only when the comments file has rows, since overflowing remarks hold
+ * addresses too, and when it finds at least half as many addresses as the snapshot: a list that shrank that far is more
+ * likely a broken file than OFAC's.
+ */
+async function readLive(read: typeof fetch, now: number): Promise<void> {
   try {
     const text = async (url: string) => {
-      const response = await read(url, { signal: AbortSignal.timeout(READ_TIMEOUT_MS) });
+      const response = await read(url, { signal: AbortSignal.timeout(READ_TIMEOUT_MS), cache: "no-store" });
       if (!response.ok) throw new Error(`${url} answered ${response.status}`);
       return response.text();
     };
     const [sdn, comments] = await Promise.all([text(OFAC_SDN_URL), text(OFAC_SDN_COMMENTS_URL)]);
+    if (rowsFromCsv(comments).length === 0) throw new Error("the comments file has no rows");
     const wallets = parseSdnWallets(sdn, comments);
-    if (wallets.size < SANCTIONED_WALLETS_MIN) throw new Error(`only ${wallets.size} addresses read`);
+    const least = Math.max(SANCTIONED_WALLETS_MIN, Math.floor(SNAPSHOT.wallets.size / 2));
+    if (wallets.size < least) throw new Error(`only ${wallets.size} addresses read`);
     cached = { from: "live", readAt: new Date(now).toISOString(), wallets };
+    failedAt = null;
   } catch (error) {
+    failedAt = now;
     console.error("sanctioned wallets not read; the last list stays", error instanceof Error ? error.message : "unknown error");
   }
-  return cachedSanctionedWallets();
 }
 
 /** The list's entry for an address, in any case, or null (SW1). */
@@ -109,7 +131,9 @@ export function sanctionedWallet(list: SanctionedWalletList, address: string | n
   return list.wallets.get(address.toLowerCase()) ?? null;
 }
 
-/** Forgets the live read, for tests. */
+/** Forgets the live read and any failure, for tests. */
 export function resetSanctionedWalletsForTests(): void {
   cached = null;
+  reading = null;
+  failedAt = null;
 }

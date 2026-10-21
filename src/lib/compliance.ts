@@ -399,6 +399,27 @@ async function applyScreening(cp: CounterpartyScreeningRow, dismissed?: Readonly
   let result: ScreeningResult;
   // A sanctioned payout address decides the verdict whatever the name screens as, and no dismissal answers it (SW4).
   const wallet = wallets ? sanctionedWallet(wallets, cp.address) : null;
+  // Only a live read of the list clears a verdict an address on it gave: the snapshot, or a list another instance read
+  // earlier, may predate the listing. Until then the verdict stands, and nothing is written (SW4).
+  if (!wallet && wallets?.from !== "live" && cp.risk_level === "high" && (cp.risk_entity_id ?? "").startsWith("ofac-sdn-")) {
+    const limit = toNum(cp.payment_limit);
+    return {
+      riskLevel: "high",
+      notes: "Kept: its payout address was on OFAC's SDN list when the list was last read live, and only a live read can clear it.",
+      source: "ofac-sdn",
+      screeningMode: "live",
+      rawScore: 1,
+      matchedEntityId: cp.risk_entity_id ?? null,
+      matchedTopics: ["sanction"],
+      counterpartyId: cp.id,
+      name: cp.name,
+      previousRiskLevel: cp.risk_level,
+      previousPaymentLimit: limit,
+      newPaymentLimit: limit,
+      changed: false,
+      firstScreen: false,
+    };
+  }
   if (wallet) {
     result = walletScreening(wallet);
   } else {

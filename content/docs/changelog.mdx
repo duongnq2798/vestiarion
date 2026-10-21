@@ -2,7 +2,7 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 
 ## 2026-10-21: Sanctioned payout addresses
 
-- `screen_counterparty` and `risk_level_changed` can carry `source: "ofac-sdn"` and `matchedEntityId: "ofac-sdn-<entry>"`. The counterparty's payout address is on OFAC's SDN list, which decides a high-risk verdict whatever its name screens as.
+- `screen_counterparty` and `risk_level_changed` can carry `source: "ofac-sdn"` and `matchedEntityId: "ofac-sdn-<entry>"`, and so can the screening history `GET /api/v1/counterparties/{id}` returns. The counterparty's payout address is on OFAC's SDN list, which decides a high-risk verdict whatever its name screens as.
 - A `compliance_sweep` entry carries `sanctionedWallets` (`{ list: "ofac-sdn", from, readAt, addresses }`): the list the payout addresses were checked against. `from` is `live` for the Treasury's files and `snapshot` for the copy bundled with the code.
 - Nothing in `/api/v1` request bodies or the webhooks' shapes changes.
 

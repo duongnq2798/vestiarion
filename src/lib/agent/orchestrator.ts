@@ -4,6 +4,7 @@ import { appendLedgerEntry } from "../ledger";
 import { getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
 import { cycleClockMode, type CycleClockMode } from "../clock";
 import { runComplianceSweep, screeningMode as complianceScreeningMode } from "../compliance";
+import { cachedSanctionedWallets, sanctionedWallet } from "../sanctioned-wallets";
 import { recheckAcceptedWork, refreshAcceptedWork, refreshGitHubMilestones } from "../milestone-verification";
 import { sendPullRequestComments } from "../github/payment-comments";
 import { seedScale } from "../seed";
@@ -1952,7 +1953,9 @@ async function decideApPayable(
     action: decision.action,
     reasoning: decision.reasoning + timingNote,
     amount: usdcValue ?? amount,
-    riskLevel: counterparty.risk_level,
+    // An address on OFAC's list is high risk here whatever the sweep saw, in case it was confirmed since (SW6). The list is
+    // the one this cycle's sweep read.
+    riskLevel: sanctionedWallet(cachedSanctionedWallets(), counterparty.address) ? "high" : counterparty.risk_level,
     counterpartyRole: counterparty.role ?? null,
     paymentLimit: limit,
     duplicates,
@@ -4371,7 +4374,8 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       continue;
     }
     const limit = contractor.payment_limit == null ? null : num(contractor.payment_limit);
-    const highRisk = contractor.risk_level === "high";
+    // An address on OFAC's list is high risk here whatever the sweep saw (SW6).
+    const highRisk = contractor.risk_level === "high" || sanctionedWallet(cachedSanctionedWallets(), contractor.address) !== null;
     // No screening has given a verdict yet (unscreened hold R4): nothing is released to it until one does.
     const unscreened = contractor.risk_level === "unscreened";
     const overLimit = limit != null && amount > limit;

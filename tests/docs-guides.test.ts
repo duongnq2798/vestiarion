@@ -1463,10 +1463,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Confirm address", ADDRESS_CONTROLS],
     ["Pays to", APPROVAL_CARD],
     ["This counterparty's address changed after this page loaded. Check the new address and try again.", ADDRESS_LIBRARY],
+    // An address on OFAC's sanctions list (sanctioned wallets SW6).
+    ["This payee's address is on OFAC's sanctions list, so nothing is paid to it.", "src/lib/agent/approvals.ts"],
     // The payee lock (payee lock PL1-PL5).
     ["Turn on the payee lock", "src/components/PayeeLockPanel.tsx"],
     ["Download the evidence pack", "src/components/PayeeLockPanel.tsx"],
-    ["This payee's address is on OFAC's sanctions list, so nothing is paid to it.", "src/lib/agent/approvals.ts"],
     ["Wait after an address changes", "src/components/PayeeLockPanel.tsx"],
     ["How did you check it?", ADDRESS_CONTROLS],
     ["This contact was on file before the new address arrived", ADDRESS_CONTROLS],

@@ -9,6 +9,7 @@ import {
   parseSdnWallets,
   resetSanctionedWalletsForTests,
   SANCTIONED_WALLETS_MIN,
+  SANCTIONED_WALLETS_RETRY_MS,
   SANCTIONED_WALLETS_TTL_MS,
   sanctionedWallet,
 } from "@/lib/sanctioned-wallets";
@@ -35,6 +36,13 @@ describe("parseSdnWallets (SW1)", () => {
     const wallets = parseSdnWallets(sdn, "");
     expect([...wallets.keys()]).toEqual([MIXED.toLowerCase(), `0x${hex(7)}`]);
     expect(wallets.get(MIXED.toLowerCase())).toEqual({ address: MIXED.toLowerCase(), entityNumber: "100", name: "LAZARUS GROUP", currencies: ["ETH", "USDT"] });
+  });
+
+  it("reads CRLF files and remarks with commas inside their quotes", () => {
+    const sdn = [sdnRow("400", "COMMA, NAME", `Website x.test, y.test; Digital Currency Address - ETH 0x${hex(4)}; alt.`), sdnRow("401", "NEXT", `Digital Currency Address - USDT 0x${hex(5)}`)].join("\r\n");
+    const wallets = parseSdnWallets(sdn, "");
+    expect(wallets.get(`0x${hex(4)}`)).toMatchObject({ entityNumber: "400", name: "COMMA, NAME" });
+    expect(wallets.get(`0x${hex(5)}`)).toMatchObject({ entityNumber: "401", currencies: ["USDT"] });
   });
 
   it("joins an entry's remarks that overflow into SDN_COMMENTS.CSV, so an address split between the files is read", () => {
@@ -88,11 +96,13 @@ describe("the bundled snapshot (SW3)", () => {
 
 describe("loadSanctionedWallets (SW2)", () => {
   const NOW = Date.parse("2026-10-21T08:00:00Z");
-  const manyRows = Array.from({ length: 60 }, (_, index) => sdnRow(String(1000 + index), `ENTRY ${index}`, `Digital Currency Address - ETH 0x${hex(0x1000 + index)}`)).join("\n");
-  const files = (sdn: string, status = 200) =>
-    vi.fn(async (url: string | URL | Request) => {
+  const manyRows = Array.from({ length: 70 }, (_, index) => sdnRow(String(1000 + index), `ENTRY ${index}`, `Digital Currency Address - ETH 0x${hex(0x1000 + index)}`)).join("\r\n");
+  const COMMENTS = '1000,"Website www.example.test, more remarks"';
+  const files = (sdn: string, status = 200, comments = COMMENTS) =>
+    vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+      void _init;
       if (String(url) === OFAC_SDN_URL) return new Response(sdn, { status });
-      if (String(url) === OFAC_SDN_COMMENTS_URL) return new Response("", { status });
+      if (String(url) === OFAC_SDN_COMMENTS_URL) return new Response(comments, { status });
       return new Response("", { status: 404 });
     });
 
@@ -111,7 +121,7 @@ describe("loadSanctionedWallets (SW2)", () => {
     const list = await loadSanctionedWallets({ live: true, fetch, now: NOW });
     expect(list.from).toBe("live");
     expect(list.readAt).toBe("2026-10-21T08:00:00.000Z");
-    expect(list.wallets.size).toBe(60);
+    expect(list.wallets.size).toBe(70);
     expect(fetch.mock.calls.map(([url]) => String(url)).sort()).toEqual([OFAC_SDN_COMMENTS_URL, OFAC_SDN_URL].sort());
 
     await loadSanctionedWallets({ live: true, fetch, now: NOW + SANCTIONED_WALLETS_TTL_MS - 1 });
@@ -122,11 +132,34 @@ describe("loadSanctionedWallets (SW2)", () => {
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
-  it("keeps the snapshot when a file cannot be read, or holds too few addresses", async () => {
+  it("keeps the snapshot when a file cannot be read, the comments file is empty, or too few addresses are read", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect((await loadSanctionedWallets({ live: true, fetch: files(manyRows, 503), now: NOW })).from).toBe("snapshot");
-    expect((await loadSanctionedWallets({ live: true, fetch: files(sdnRow("1", "ONE", `Digital Currency Address - ETH 0x${hex(1)}`)), now: NOW })).from).toBe("snapshot");
+    resetSanctionedWalletsForTests();
+    expect((await loadSanctionedWallets({ live: true, fetch: files(manyRows, 200, ""), now: NOW })).from).toBe("snapshot");
+    resetSanctionedWalletsForTests();
+    // Fewer than half the snapshot's addresses is more likely a broken file than OFAC's list.
+    const half = Array.from({ length: Math.floor(snapshot.wallets.length / 2) - 1 }, (_, index) => sdnRow(String(index), "E", `Digital Currency Address - ETH 0x${hex(0x5000 + index)}`)).join("\n");
+    expect((await loadSanctionedWallets({ live: true, fetch: files(half), now: NOW })).from).toBe("snapshot");
     expect(console.error).toHaveBeenCalledWith("sanctioned wallets not read; the last list stays", expect.any(String));
+  });
+
+  it("waits 30 minutes after a failed read before trying again", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = files(manyRows, 503);
+    await loadSanctionedWallets({ live: true, fetch: failing, now: NOW });
+    const working = files(manyRows);
+    expect((await loadSanctionedWallets({ live: true, fetch: working, now: NOW + SANCTIONED_WALLETS_RETRY_MS - 1 })).from).toBe("snapshot");
+    expect(working).not.toHaveBeenCalled();
+    expect((await loadSanctionedWallets({ live: true, fetch: working, now: NOW + SANCTIONED_WALLETS_RETRY_MS })).from).toBe("live");
+  });
+
+  it("shares one read among the callers that ask while it runs, and asks without the HTTP cache", async () => {
+    const fetch = files(manyRows);
+    const lists = await Promise.all([1, 2, 3, 4].map(() => loadSanctionedWallets({ live: true, fetch, now: NOW })));
+    expect(lists.every((list) => list.from === "live")).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls.every(([, init]) => init?.cache === "no-store")).toBe(true);
   });
 
   it("keeps the last live read when a later read fails", async () => {

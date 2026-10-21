@@ -785,6 +785,10 @@ function screeningFact(ctx: Context): EvidenceFact {
     if (check.screening_mode === "live" && check.source.startsWith("opensanctions")) {
       return { kind: "verified", text: `${ctx.name} was screened ${words} by OpenSanctions.`, at: check.created_at, seqs: [], ...(warn ? { warn } : {}) };
     }
+    // Its payout address is on OFAC's SDN list (sanctioned wallets SW4): the Treasury's own list, not the bundled one.
+    if (check.source === "ofac-sdn") {
+      return { kind: "verified", text: `${ctx.name} was screened ${words}: its payout address is on OFAC's SDN list.`, at: check.created_at, seqs: [], ...(warn ? { warn } : {}) };
+    }
     return { kind: "checked", text: `${ctx.name} was screened ${words} against the bundled list, not a screening service.`, at: check.created_at, seqs: [], ...(warn ? { warn } : {}) };
   }
   const recorded = text(record(ctx.decision?.detail.observed)?.riskLevel);

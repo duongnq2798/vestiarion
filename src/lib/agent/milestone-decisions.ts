@@ -27,7 +27,7 @@ import { isSoleApprover } from "./sole-approver";
 import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { payeeLockRefusal } from "../payee-lock";
-import { cachedSanctionedWallets, sanctionedWallet } from "../sanctioned-wallets";
+import { loadSanctionedWallets, sanctionedWallet } from "../sanctioned-wallets";
 import { needsSecondApprover, TWO_APPROVALS_RULE, type TwoApprovalsFacts } from "../two-approvals";
 import { personPaymentNote, SECOND_OF_TWO_NOTE } from "./approvals";
 import { bringCashForApproval, CashBackError, cashShortMessage, HELD_FOR_CASH, reserveCover, type ReserveCover } from "./liquidity";
@@ -651,8 +651,9 @@ export async function payHeldMilestone(input: {
     // The payee lock (PL5): a changed address waits out its cooling-off before anyone pays it.
     const locked = await payeeLockRefusal(milestone.contractorId, milestone.facts.contractor.name);
     if (locked) raise("payee_locked", locked);
-    // An address on OFAC's list is never paid (SW6).
-    if (sanctionedWallet(cachedSanctionedWallets(), milestone.facts.contractor.address)) raise("sanctioned_address");
+    // An address on OFAC's list is never paid (SW6), the list read live where the deployment reads it.
+    const wallets = await loadSanctionedWallets({ live: currentConfig().compliance.sanctionedWalletsLive === true });
+    if (sanctionedWallet(wallets, milestone.facts.contractor.address)) raise("sanctioned_address");
     if (twoNeeded) {
       // No approval is taken while someone is deciding it.
       if (milestone.decisionClaimedAt && Date.parse(milestone.decisionClaimedAt) > Date.now() - 10 * 60_000) raise("already_claimed");

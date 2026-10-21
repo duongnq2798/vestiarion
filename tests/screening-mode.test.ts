@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { runComplianceSweep, screenCounterparty } from "@/lib/compliance";
+import { loadSanctionedWallets, resetSanctionedWalletsForTests } from "@/lib/sanctioned-wallets";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 import { applyMigrations, createDatabase, createOrg } from "./support/pglite";
@@ -189,6 +190,41 @@ describe("a payout address on OFAC's sanctions list (sanctioned wallets SW4, SW5
     const fake = workspace([counterparty({ address: SANCTIONED, risk_level: "high", risk_entity_id: ENTITY, last_screening_mode: "live" })]);
     const result = await runWith(orgTestContext({ config: live, client: fake.client, orgId: ORG }), () => runComplianceSweep());
     expect(result.screened).toHaveLength(0);
+  });
+
+  it("keeps a verdict an address gave when the list at hand is not a live read, writing nothing", async () => {
+    resetSanctionedWalletsForTests();
+    // OFAC listed this address after the snapshot was made; a live read in another instance flagged it.
+    const fake = workspace([counterparty({ address: "0x9999999999999999999999999999999999999999", risk_level: "high", risk_entity_id: "ofac-sdn-99999", payment_limit: 0, last_screening_mode: "live" })]);
+    const outcome = await runWith(orgTestContext({ config: bundled, client: fake.client, orgId: ORG }), () => screenCounterparty("0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de"));
+    expect(outcome).toMatchObject({ riskLevel: "high", source: "ofac-sdn", matchedEntityId: "ofac-sdn-99999", changed: false });
+    expect(patches(fake.requests)).toEqual([]);
+    expect(checks(fake.requests)).toEqual([]);
+  });
+
+  it("lets a live read without the address screen it again by its name", async () => {
+    resetSanctionedWalletsForTests();
+    const rows = Array.from({ length: 70 }, (_, index) => `${1000 + index},"E ${index}","-0- ","CYBER2","-0- ","-0- ","-0- ","-0- ","-0- ","-0- ","-0- ","Digital Currency Address - ETH 0x${(0x7000 + index).toString(16).padStart(40, "0")}"`).join("\n");
+    const fetch = vi.fn(async (url: string | URL | Request) => new Response(String(url).includes("COMMENTS") ? '1000,"more"' : rows));
+    expect((await loadSanctionedWallets({ live: true, fetch })).from).toBe("live");
+    const fake = workspace([counterparty({ address: "0x9999999999999999999999999999999999999999", risk_level: "high", risk_entity_id: "ofac-sdn-99999", payment_limit: 0, last_screening_mode: "live" })]);
+    const outcome = await runWith(orgTestContext({ config: bundled, client: fake.client, orgId: ORG }), () => screenCounterparty("0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de"));
+    expect(outcome.source).not.toBe("ofac-sdn");
+    expect(patches(fake.requests)).toHaveLength(1);
+    resetSanctionedWalletsForTests();
+  });
+
+  it("is not answered by a dismissal of its entry", async () => {
+    resetSanctionedWalletsForTests();
+    const fake = fakeSupabase((request: RecordedRequest) => {
+      const wantsObject = request.headers.get("accept")?.includes("application/vnd.pgrst.object+json") ?? false;
+      const row = counterparty({ address: SANCTIONED, last_screening_mode: "live" });
+      if (request.path === "/rest/v1/counterparties" && request.method === "GET") return { body: wantsObject ? row : [row] };
+      if (request.path === "/rest/v1/screening_dismissals") return { body: [{ counterparty_id: row.id, matched_entity_id: ENTITY, screened_name: row.name }] };
+      return { body: [] };
+    });
+    const result = await runWith(orgTestContext({ config: live, client: fake.client, orgId: ORG }), () => runComplianceSweep());
+    expect(result.screened[0]).toMatchObject({ riskLevel: "high", matchedEntityId: ENTITY });
   });
 
   it("decides the verdict when screening a counterparty, whatever its name screens as", async () => {

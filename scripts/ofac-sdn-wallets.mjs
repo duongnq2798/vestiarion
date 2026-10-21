@@ -3,8 +3,8 @@
 //   https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV
 //   https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_COMMENTS.CSV
 // Usage: node scripts/ofac-sdn-wallets.mjs <SDN.CSV> <SDN_COMMENTS.CSV> [YYYY-MM-DD]
-// The parsing is the same as src/lib/sanctioned-wallets.ts's parseSdnWallets, which tests/sanctioned-wallets.test.ts
-// holds to the snapshot: every address it lists is one the parser finds in the files' format.
+// It parses as src/lib/sanctioned-wallets.ts's parseSdnWallets does, except that it does not refuse an unclosed quote.
+// tests/sanctioned-wallets.test.ts checks the snapshot's shape: lowercase, unique, sorted addresses with their entries.
 import { readFileSync, writeFileSync } from "node:fs";
 
 const [sdnPath, commentsPath, day] = process.argv.slice(2);

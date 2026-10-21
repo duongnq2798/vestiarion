@@ -29,7 +29,10 @@ without a key, so Vestiarion reads it directly.
 **SW2. Live in production, kept 12 hours.**
 - A production deployment (`VERCEL_ENV=production`), or one with `SANCTIONED_WALLETS=live`, reads both files from
   `sanctionslistservice.ofac.treas.gov` once every 12 hours per instance, with a 20-second timeout.
-- A read that fails, or finds fewer than 50 addresses, keeps what there was: the last live read, else the snapshot.
+- One read runs at a time per instance; callers meanwhile wait on it. Requests skip the HTTP cache.
+- A read counts only when the comments file has rows and it finds at least half as many addresses as the snapshot (and
+  at least 50). One that fails or falls short keeps what there was: the last live read, else the snapshot.
+- After a failed read, the next waits 30 minutes, so a slow Treasury site never holds every cycle up.
 - `SANCTIONED_WALLETS=snapshot` keeps the snapshot even in production. Elsewhere the snapshot answers.
 
 **SW3. The snapshot.**
@@ -46,6 +49,8 @@ without a key, so Vestiarion reads it directly.
 - It is written as any verdict is: the counterparty's row, a `compliance_checks` row, and a `risk_level_changed` entry
   (or `screen_counterparty` for a first screen).
 - No dismissal answers it, since the match is the address itself, not a similar name.
+- Only a live read of the list clears it. The snapshot, or a list another instance read earlier, may predate the
+  listing, so with either the verdict stands and nothing is written.
 - A counterparty whose verdict already names that entry is not screened again for it.
 - `screenCounterparty` (adding one, **Screen again**) uses the list at hand without the network.
 
@@ -56,8 +61,9 @@ from, readAt, addresses }`.
 - **Approve and pay** refuses an invoice whose address is on the list (`sanctioned_address`), before any claim. An
   approval can confirm a changed address and pay it before a sweep has read it, so this check runs here too.
 - **Pay now** on a held milestone does the same.
-- The agent never pays a high-risk counterparty, so the guardrail it already has covers its own payments after the
-  sweep.
+- Both load the list live where the deployment does, so their copy is no older than 12 hours.
+- The agent takes such an address as high risk at the moment it would pay, in the AP stage's guardrail input and the
+  contractor stage, from the list this cycle's sweep read. That covers an address confirmed after the sweep.
 
 ## Not in this change
 
@@ -80,7 +86,14 @@ from, readAt, addresses }`.
 - not doing so again;
 - `screenCounterparty`.
 
-`tests/approvals.test.ts` and `tests/milestone-decisions.test.ts` cover the refusals.
+`tests/screening-mode.test.ts` also covers:
+- a verdict kept with the snapshot;
+- one screened again by name after a live read without the address;
+- a dismissal that does not answer it.
+
+`tests/approvals.test.ts`, `tests/milestone-decisions.test.ts` and `tests/ap-stage.test.ts` cover the refusals.
+`tests/sanctioned-wallets.test.ts` also covers one shared read, the 30-minute wait, the stricter guard, CRLF files and
+quoted commas.
 
 ## Rollout
 

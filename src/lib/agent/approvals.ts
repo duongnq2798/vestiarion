@@ -37,7 +37,7 @@ import type { Provenance } from "../provenance";
 import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, cctpFeeCushion, reserveCover, type ReserveCover } from "./liquidity";
 import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { payeeLockRefusal } from "../payee-lock";
-import { cachedSanctionedWallets, sanctionedWallet } from "../sanctioned-wallets";
+import { loadSanctionedWallets, sanctionedWallet } from "../sanctioned-wallets";
 import { needsSecondApprover, needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
 import {
   clearApprovals,
@@ -1070,8 +1070,10 @@ export async function approveAndPay(
     const locked = await payeeLockRefusal(invoice.counterpartyId, invoice.counterpartyName);
     if (locked) throw new ApprovalError("payee_locked", locked);
     // An address on OFAC's list is never paid, whatever its counterparty's screening says yet (SW6): checked here as well,
-    // because an approval can confirm a changed address and pay it before any sweep has read it.
-    if (sanctionedWallet(cachedSanctionedWallets(), invoice.address)) raise("sanctioned_address");
+    // because an approval can confirm a changed address and pay it before any sweep has read it. The list is read live
+    // where the deployment reads it, so this instance's copy is no older than 12 hours.
+    const wallets = await loadSanctionedWallets({ live: currentConfig().compliance.sanctionedWalletsLive === true });
+    if (sanctionedWallet(wallets, invoice.address)) raise("sanctioned_address");
   }
   const bank = invoice.bankAccount && !alreadySent ? await bankRouteFor(invoice) : null;
 

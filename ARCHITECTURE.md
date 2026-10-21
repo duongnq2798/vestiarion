@@ -1034,9 +1034,15 @@ would find.
   - `runComplianceSweep` screens every counterparty whose address is on it and whose verdict does not name it yet
     (`walletVerdictDue`), due or not. `applyScreening` then takes `walletScreening`'s verdict (high, `ofac-sdn`,
     `ofac-sdn-<entry>`) over the name's, and ignores dismissals. The sweep entry records `sanctionedWallets`.
-  - `screenCounterparty` uses `cachedSanctionedWallets` without the network.
+  - One read runs at a time per instance, a failed one waits 30 minutes before the next, and a read counts only with
+    comment rows and at least half the snapshot's addresses.
+  - `screenCounterparty` uses `cachedSanctionedWallets` without the network. Only a live list clears a verdict an
+    address gave (`risk_entity_id` `ofac-sdn-…`): with the snapshot it keeps it and writes nothing.
   - `approveAndPay` and `payHeldMilestone` refuse such an address before any claim (`sanctioned_address`), since an
-    approval can confirm and pay a changed address before a sweep reads it.
+    approval can confirm and pay a changed address before a sweep reads it. They load the list live where the
+    deployment does.
+  - The AP stage's guardrail input and the contractor stage take such an address as high risk at the moment they would
+    pay, from the list this cycle's sweep read.
 
 **Settings** (`/o/[slug]/settings`) is one page in six groups: You, Workspace, Developers, Integrations,
 Security and Danger zone (`docs/superpowers/specs/2026-10-04-settings-structure-design.md`). The page lists every
