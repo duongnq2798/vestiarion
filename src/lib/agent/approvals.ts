@@ -20,6 +20,7 @@ import { gatewayQuoter, type GatewayQuote } from "../circle/gateway-quote";
 import { enforcedSpendingLimit } from "../circle/spending-limit-setup";
 import { choosePayoutRoute, payoutFundsShort, type GatewayFigures } from "../payout-route";
 import { bankAccountsOf, readPayoutPartner, type CounterpartyBankAccount } from "../bank-payouts/store";
+import { readDocumentPayTo } from "../invoice-pay-to";
 import type { BankPayoutShown } from "../bank-payouts/words";
 import { createQuote, MIN_QUOTE } from "../blindpay/api";
 import type { BlindpayQuote } from "../blindpay/map";
@@ -451,6 +452,11 @@ export interface WaitingPayable {
   paymentSent: boolean;
   /** Where Approve and pay sends the money: the counterparty's address now, or null when it has none. */
   address: string | null;
+  /**
+   * The address the invoice's document asked to be paid to, when it named one (invoice pay-to hold IP3). Approve and pay
+   * never sends there: the card shows it beside the address it pays, so the person approving sees a mismatch.
+   */
+  documentPayTo?: string | null;
   /** The last payment attempt, when Circle ended it in a terminal failure (Approve and pay sends a new transfer) or it is still in flight; else null. */
   lastAttempt: LastPaymentAttempt;
   /** The invoice's early-payment discount, read as `payInvoice` applies it, so the approval dialog can say what will leave; null without one. */
@@ -585,6 +591,8 @@ export async function listWaitingPayables(
   };
   // Vendors paid to their bank account in Mexico (bank payouts B4): no chain, no address, no CCTP or Gateway route.
   const bankAccounts = rows.length > 0 ? await bankAccountsOf(rows.map((row) => row.counterparty_id)) : new Map<string, CounterpartyBankAccount>();
+  // What each invoice's document asked to be paid to (invoice pay-to hold IP3): none before migration 0136.
+  const documentPayTo = rows.length > 0 ? await readDocumentPayTo(rows.map((row) => row.id)) : new Map<string, string>();
   const quotes = new Map<string, PayoutQuotes>();
   await Promise.all(
     rows
@@ -691,6 +699,7 @@ export async function listWaitingPayables(
       reclaimable: isReclaimable(row.status, row.reviewed_at, now),
       paymentSent: paymentWasSent(intent),
       address: row.counterparties?.address ?? null,
+      documentPayTo: documentPayTo.get(row.id) ?? null,
       lastAttempt: lastAttemptOf(intent, currencyOf(row.currency)),
       discount: invoiceDiscount(row),
       currency: currencyOf(row.currency),

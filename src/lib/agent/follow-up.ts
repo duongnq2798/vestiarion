@@ -67,6 +67,11 @@ export interface FrozenInvoice {
   addressUnconfirmed?: boolean;
   /** Whether the payee lock still keeps its changed address waiting, now (payee lock PL5). Absent when it was not read. */
   coolingOff?: boolean;
+  /**
+   * Whether the invoice's document still asks for an address other than the one on file, now (invoice pay-to hold IP3).
+   * Absent when it was not read.
+   */
+  payToDiffers?: boolean;
   /** Whether the counterparty has no payment address, now. Absent when it was not read. */
   addressMissing?: boolean;
   /** Whether the counterparty needs a purchase order, now (three-way match design M5). Absent when it was not read. */
@@ -140,6 +145,8 @@ export interface DecisionFacts {
    * `guardrailRule`, or `notResubmittedBecause` for a payment not sent again.
    */
   coolingOffHeld?: boolean;
+  /** Held because the invoice's document asked for another address (`"invoice.pay_to_differs"`, invoice pay-to hold IP3). */
+  payToHeld?: boolean;
   /**
    * Whether the counterparty needed a purchase order (`observed.purchaseOrderRequired`). Absent for a decision recorded
    * before the setting existed, when every counterparty needed one.
@@ -353,6 +360,8 @@ export function planFollowUp(
   // A first payment held for want of a second person: decided again once the address was paid, or two parties stand behind it.
   // Held for the payee lock's wait: decided again once it has passed (payee lock PL5).
   if (atDecision.coolingOffHeld && invoice.coolingOff === false) changes.push("the payee lock's wait for the new address has ended");
+  // Held because the invoice asked for another address: decided again once the address on file is the one it asked for.
+  if (atDecision.payToHeld && invoice.payToDiffers === false) changes.push("the address on file is now the one the invoice asked to be paid to");
   if (atDecision.newPayeeHeld && invoice.newPayee?.addressPaid) changes.push("the payee's address has received a confirmed payment since");
   else if (atDecision.newPayeeHeld && invoice.newPayee?.twoParties) changes.push("a second person now stands behind the payee's address");
   // A payment held for two approvals: decided again once the figure no longer covers it.

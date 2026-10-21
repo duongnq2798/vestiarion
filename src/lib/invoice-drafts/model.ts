@@ -140,6 +140,8 @@ export interface StoredRead {
   via?: "payee_link";
   /** The payee's own note, up to 500 characters, on an invoice it sent through its link. */
   note?: string | null;
+  /** The 0x address the document asked to be paid to (invoice pay-to hold IP1); absent when it named none. */
+  payTo?: string;
   /** Everything a reviewer should check, the counterparty match's warnings included. */
   warnings: string[];
   /** What the document alone says to check, which the extension is shown: never a counterparty's name or address. */
