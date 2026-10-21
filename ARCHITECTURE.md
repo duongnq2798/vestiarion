@@ -85,12 +85,15 @@ it is enforced once production's reports show it fits every page.
   imports it.
 - Scripts and styles may be inline, since Next.js inlines its own and a nonce would end static rendering.
 - `connect-src` names Circle's Iris and modular wallets client, which the browser calls, and Google Analytics.
-- `form-action` names the connect forms' consent screens, Google sign-in and the deployment's Supabase, since Chrome
-  checks a form submission's redirects too.
-- `tests/csp.test.ts` holds each origin to the code that reaches it.
+- `form-action` names every connect form's consent screen (each Zoho data center's), Google sign-in and the
+  deployment's Supabase, since Chrome checks a form submission's redirects too.
+- A Vercel preview also allows Vercel's toolbar.
+- `tests/csp.test.ts` holds each origin to the code that reaches it, and fails on a connect route whose consent screen
+  is not named.
 - `POST /api/csp-report` logs each violation as one line, `csp report-only {"directive","blocked","page"}`: the blocked
-  origin or keyword and the page's first path segment, nothing else from the report. A browser extension's violations
-  are dropped. It is rate-limited per client and per instance (`takeCspReportToken`) and stores nothing.
+  origin or keyword, bounded in length, and the page's first path segment, nothing else from the report. A browser
+  extension's violations are dropped. It reads at most 64 KB of body, is rate-limited per client and per instance
+  (`takeCspReportToken`, a dropped report still answered 204 so the browser does not resend it) and stores nothing.
 - The extension sign-in page keeps its own enforced `frame-ancestors 'none'`.
 
 ## Workspaces, roles and the cron

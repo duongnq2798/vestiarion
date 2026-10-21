@@ -26,15 +26,44 @@ const GOOGLE_ANALYTICS = {
 const CIRCLE_CONNECT = ["https://iris-api.circle.com", "https://iris-api-sandbox.circle.com", "https://modular-sdk.circle.com"];
 
 /**
- * Where a form's submission may end up. The connect pages post to this deployment, which sends the person on to the
- * tool's consent screen (HubSpot, Asana, Pipedrive, Zoho CRM). Continue with Google is a Server Action that sends them
- * to Supabase Auth, then Google; a browser that submits it before the page's script runs follows those redirects as a
- * form submission.
+ * Where a form's submission may end up. Each connect page posts to this deployment, which sends the person on to the
+ * tool's consent screen: HubSpot, Asana, Pipedrive, QuickBooks, Xero, and Zoho's accounts server, which forwards an
+ * account to its own data center's. Continue with Google is a Server Action that sends them to Supabase Auth, then
+ * Google; a browser that submits it before the page's script runs follows those redirects as a form submission.
  */
-const FORM_TARGETS = ["https://app.hubspot.com", "https://app.asana.com", "https://oauth.pipedrive.com", "https://accounts.zoho.com", "https://accounts.google.com"];
+const FORM_TARGETS = [
+  "https://app.hubspot.com",
+  "https://app.asana.com",
+  "https://oauth.pipedrive.com",
+  "https://appcenter.intuit.com",
+  "https://login.xero.com",
+  "https://accounts.zoho.com",
+  "https://accounts.zoho.eu",
+  "https://accounts.zoho.in",
+  "https://accounts.zoho.com.au",
+  "https://accounts.zoho.jp",
+  "https://accounts.zoho.uk",
+  "https://accounts.zohocloud.ca",
+  "https://accounts.zoho.sa",
+  "https://accounts.zoho.ae",
+  "https://accounts.google.com",
+];
+
+/**
+ * A Vercel preview deployment adds Vercel's toolbar, which loads from these and talks to Pusher; production has none.
+ */
+const VERCEL_PREVIEW = {
+  script: ["https://vercel.live"],
+  style: ["https://vercel.live"],
+  img: ["https://vercel.live", "https://vercel.com"],
+  font: ["https://vercel.live", "https://assets.vercel.com"],
+  connect: ["https://vercel.live", "wss://ws-us3.pusher.com"],
+  frame: ["https://vercel.live"],
+};
 
 export interface CspEnv {
   NODE_ENV?: string;
+  VERCEL_ENV?: string;
   NEXT_PUBLIC_SUPABASE_URL?: string;
   NEXT_PUBLIC_MODULAR_WALLETS_CLIENT_URL?: string;
   NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_URL?: string;
@@ -55,16 +84,18 @@ const unique = (values: readonly (string | null)[]) => [...new Set(values.filter
 
 /**
  * The policy as one header value. Scripts and styles may be inline: Next.js inlines its own, and a nonce would make every
- * page render per request. Development also allows `eval`, which React uses there for its error overlay.
+ * page render per request. Development also allows `eval`, which React uses there for its error overlay. A Vercel
+ * preview also allows its toolbar.
  */
 export function contentSecurityPolicy(env: CspEnv = process.env): string {
   const dev = env.NODE_ENV === "development";
+  const preview = (key: keyof typeof VERCEL_PREVIEW) => (env.VERCEL_ENV === "preview" ? VERCEL_PREVIEW[key] : []);
   const directives: [string, readonly string[]][] = [
     ["default-src", ["'self'"]],
-    ["script-src", ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...GOOGLE_ANALYTICS.script]],
-    ["style-src", ["'self'", "'unsafe-inline'"]],
-    ["img-src", ["'self'", "data:", "blob:", ...GOOGLE_ANALYTICS.img]],
-    ["font-src", ["'self'", "data:"]],
+    ["script-src", ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...GOOGLE_ANALYTICS.script, ...preview("script")]],
+    ["style-src", ["'self'", "'unsafe-inline'", ...preview("style")]],
+    ["img-src", ["'self'", "data:", "blob:", ...GOOGLE_ANALYTICS.img, ...preview("img")]],
+    ["font-src", ["'self'", "data:", ...preview("font")]],
     ["media-src", ["'self'"]],
     [
       "connect-src",
@@ -74,8 +105,10 @@ export function contentSecurityPolicy(env: CspEnv = process.env): string {
         ...CIRCLE_CONNECT,
         httpsOrigin(env.NEXT_PUBLIC_MODULAR_WALLETS_CLIENT_URL),
         httpsOrigin(env.NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_URL),
+        ...preview("connect"),
       ]),
     ],
+    ...(env.VERCEL_ENV === "preview" ? [["frame-src", ["'self'", ...VERCEL_PREVIEW.frame]] as [string, readonly string[]]] : []),
     ["object-src", ["'none'"]],
     ["base-uri", ["'self'"]],
     ["form-action", unique(["'self'", ...FORM_TARGETS, httpsOrigin(env.NEXT_PUBLIC_SUPABASE_URL)])],
@@ -98,6 +131,8 @@ export interface CspViolation {
 
 const DIRECTIVE = /^[a-z-]{1,40}$/;
 const KEYWORD = /^[a-z-]{1,24}$/;
+/** An origin as the log keeps it: a web scheme, hostname characters and a port, at most 120 characters. */
+const ORIGIN = /^(?:https?|wss?):\/\/[a-z0-9.-]{1,100}(?::\d{1,5})?$/;
 const SEGMENT = /^[A-Za-z0-9._-]{1,40}$/;
 /** A browser extension's own scripts and frames: reported by some browsers, about the extension, not this app. */
 const EXTENSION_SCHEMES = new Set(["chrome-extension:", "moz-extension:", "safari-extension:", "safari-web-extension:"]);
@@ -109,8 +144,11 @@ function blockedOf(value: unknown): string | null {
   try {
     const url = new URL(value);
     if (EXTENSION_SCHEMES.has(url.protocol)) return null;
-    if (url.protocol === "http:" || url.protocol === "https:" || url.protocol === "wss:" || url.protocol === "ws:") return url.origin;
-    return url.protocol.replace(/:$/, "");
+    if (url.protocol === "http:" || url.protocol === "https:" || url.protocol === "wss:" || url.protocol === "ws:") {
+      return ORIGIN.test(url.origin) ? url.origin : "unknown";
+    }
+    const scheme = url.protocol.replace(/:$/, "");
+    return KEYWORD.test(scheme) ? scheme : "unknown";
   } catch {
     return "unknown";
   }
@@ -119,7 +157,10 @@ function blockedOf(value: unknown): string | null {
 function pageOf(value: unknown): string {
   if (typeof value !== "string") return "unknown";
   try {
-    const segment = new URL(value).pathname.split("/")[1] ?? "";
+    const url = new URL(value);
+    // about:blank, about:srcdoc and the like are no page of this site's.
+    if (url.protocol !== "http:" && url.protocol !== "https:") return "unknown";
+    const segment = url.pathname.split("/")[1] ?? "";
     if (segment === "") return "/";
     return SEGMENT.test(segment) ? `/${segment}` : "unknown";
   } catch {

@@ -1,11 +1,15 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import nextConfig from "../next.config";
-import { POST } from "@/app/api/csp-report/route";
+import { MAX_REPORT_BYTES, POST } from "@/app/api/csp-report/route";
 import { ASANA_AUTHORIZE } from "@/lib/asana/http";
 import { HUBSPOT_AUTHORIZE } from "@/lib/hubspot/http";
 import { NETWORKS } from "@/lib/network";
 import { PIPEDRIVE_AUTHORIZE } from "@/lib/pipedrive/http";
+import { INTUIT_AUTHORIZE } from "@/lib/quickbooks/http";
+import { takeCspReportToken } from "@/lib/rate-limit";
 import { contentSecurityPolicy, CSP_REPORT_PATH, CSP_REPORTING_ENDPOINTS, CSP_REPORTS_PER_REQUEST, cspViolations } from "@/lib/security/csp";
+import { XERO_AUTHORIZE } from "@/lib/xero/http";
 import { ZOHO_REGIONS } from "@/lib/zohobooks/regions";
 
 /**
@@ -37,6 +41,23 @@ describe("the policy (CSP1, CSP2)", () => {
     expect(policy.get("script-src")).not.toContain("'unsafe-eval'");
   });
 
+  it("allows Vercel's toolbar on a preview deployment only", () => {
+    const preview = directives(contentSecurityPolicy({ NODE_ENV: "production", VERCEL_ENV: "preview" }));
+    for (const directive of ["script-src", "connect-src", "frame-src"]) expect(preview.get(directive), directive).toContain("https://vercel.live");
+    const production = directives(contentSecurityPolicy({ NODE_ENV: "production", VERCEL_ENV: "production" }));
+    expect([...production.values()].flat().join(" ")).not.toContain("vercel");
+    expect(production.has("frame-src")).toBe(false);
+  });
+
+  it("lets the tag Google Analytics loads come from the origins it allows", () => {
+    const tag = /src=\{`(https:\/\/[^/`]+)\//.exec(readFileSync("src/components/analytics/GoogleAnalytics.tsx", "utf8"))?.[1];
+    expect(tag).toBe("https://www.googletagmanager.com");
+    const allowed = (origin: string, sources: readonly string[]) =>
+      sources.some((source) => source === origin || (source.startsWith("https://*.") && origin.endsWith(source.slice("https://*".length))));
+    expect(allowed(tag!, policy.get("script-src")!)).toBe(true);
+    expect(allowed(tag!, policy.get("connect-src")!)).toBe(true);
+  });
+
   it("lets the browser reach Circle's Iris on both networks and the modular wallets client", async () => {
     for (const profile of Object.values(NETWORKS)) {
       if (profile.inbound) expect(policy.get("connect-src"), profile.id).toContain(new URL(profile.inbound.iris).origin);
@@ -64,9 +85,24 @@ describe("the policy (CSP1, CSP2)", () => {
     expect(directives(contentSecurityPolicy({ NEXT_PUBLIC_SUPABASE_URL: "not a url; script-src *" })).get("form-action")!.join(" ")).not.toContain("*");
   });
 
-  it("lets each connect form end at its tool's consent screen, and Continue with Google at Google", () => {
-    for (const authorize of [HUBSPOT_AUTHORIZE, ASANA_AUTHORIZE, PIPEDRIVE_AUTHORIZE, `${ZOHO_REGIONS.us.accounts}/oauth/v2/auth`]) {
-      expect(policy.get("form-action"), authorize).toContain(new URL(authorize).origin);
+  it("lets every connect form end at its tool's consent screen, every Zoho data center's, and Continue with Google at Google", () => {
+    // Each connect route's tool, and where its consent screen is: a new connect route fails here until it is named.
+    const consent: Record<string, string[]> = {
+      asana: [ASANA_AUTHORIZE],
+      hubspot: [HUBSPOT_AUTHORIZE],
+      pipedrive: [PIPEDRIVE_AUTHORIZE],
+      quickbooks: [INTUIT_AUTHORIZE],
+      xero: [XERO_AUTHORIZE],
+      zohobooks: Object.values(ZOHO_REGIONS).map((region) => region.accounts),
+      zohocrm: Object.values(ZOHO_REGIONS).map((region) => region.accounts),
+    };
+    const routes = readdirSync("src/app/api/integrations", { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && readdirSync(`src/app/api/integrations/${entry.name}`).includes("connect"))
+      .map((entry) => entry.name)
+      .sort();
+    expect(routes).toEqual(Object.keys(consent).sort());
+    for (const [tool, urls] of Object.entries(consent)) {
+      for (const url of urls) expect(policy.get("form-action"), `${tool} ${url}`).toContain(new URL(url).origin);
     }
     expect(policy.get("form-action")).toContain("https://accounts.google.com");
     expect(policy.get("form-action")![0]).toBe("'self'");
@@ -79,10 +115,11 @@ describe("the header (CSP3)", () => {
     expect(headers[0]).toEqual({
       source: "/:path*",
       headers: [
-        { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy() },
+        { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy(process.env) },
         { key: "Reporting-Endpoints", value: CSP_REPORTING_ENDPOINTS },
       ],
     });
+    expect(headers[0].headers[0].value).toMatch(/^default-src 'self'; script-src .*; frame-ancestors 'none'; report-uri \/api\/csp-report; report-to csp$/);
     // Nothing enforces it yet but the extension sign-in page's frame rule.
     const enforced = headers.flatMap((entry) => entry.headers.filter((header) => header.key === "Content-Security-Policy").map(() => entry.source));
     expect(enforced).toEqual(["/extension/:path*"]);
@@ -130,6 +167,18 @@ describe("reading reports (CSP4)", () => {
     expect(cspViolations({ nothing: true })).toEqual([]);
     expect(cspViolations("text")).toEqual([]);
   });
+
+  it("never logs more than a short origin, and reads an about: page as no page of this site's", () => {
+    const long = `https://${"a".repeat(3000)}.example.test/x`;
+    expect(cspViolations({ "csp-report": { "blocked-uri": long, "effective-directive": "img-src" } })).toEqual([{ directive: "img-src", blocked: "unknown", page: "unknown" }]);
+    expect(cspViolations({ "csp-report": { "blocked-uri": `${"z".repeat(40)}:thing`, "effective-directive": "img-src" } })[0].blocked).toBe("unknown");
+    expect(cspViolations({ "csp-report": { "blocked-uri": "https://cdn.example.test:8443/a", "document-uri": "about:srcdoc" } })[0]).toMatchObject({
+      blocked: "https://cdn.example.test:8443",
+      page: "unknown",
+    });
+    const batch = Array.from({ length: 20 }, () => ({ type: "csp-violation", body: { blockedURL: long, effectiveDirective: "img-src", documentURL: long } }));
+    expect(JSON.stringify(cspViolations(batch)).length).toBeLessThan(20 * 80);
+  });
 });
 
 describe("POST /api/csp-report (CSP4)", () => {
@@ -163,13 +212,49 @@ describe("POST /api/csp-report (CSP4)", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("slows one client down after twenty reports", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const send = () =>
-      POST(new Request(`https://vestiarion.invalid${CSP_REPORT_PATH}`, { method: "POST", headers: { "x-forwarded-for": "10.9.9.9" }, body: "[]" }));
+  it("stops reading a body sent without its length once it passes the limit", async () => {
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(new Uint8Array(16 * 1024).fill(32));
+        if (pulled > 100) controller.close();
+      },
+    });
+    ip += 1;
+    const response = await POST(new Request(`https://vestiarion.invalid${CSP_REPORT_PATH}`, { method: "POST", headers: { "x-forwarded-for": `10.9.1.${ip}` }, body, duplex: "half" } as RequestInit));
+    expect(response.status).toBe(413);
+    expect(pulled * 16 * 1024).toBeLessThan(MAX_REPORT_BYTES + 3 * 16 * 1024);
+  });
+
+  it("answers 400 to a body the client stops sending", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"csp-report":'));
+        controller.error(new Error("connection reset"));
+      },
+    });
+    ip += 1;
+    const response = await POST(new Request(`https://vestiarion.invalid${CSP_REPORT_PATH}`, { method: "POST", headers: { "x-forwarded-for": `10.9.2.${ip}` }, body, duplex: "half" } as RequestInit));
+    expect(response.status).toBe(400);
+  });
+
+  it("drops one client's reports past twenty, answering 204 so the browser does not send them again", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const report = JSON.stringify({ "csp-report": { "blocked-uri": "eval", "effective-directive": "script-src" } });
+    const send = () => POST(new Request(`https://vestiarion.invalid${CSP_REPORT_PATH}`, { method: "POST", headers: { "x-forwarded-for": "10.9.9.9" }, body: report }));
     const statuses = [];
-    for (let index = 0; index < 21; index += 1) statuses.push((await send()).status);
-    expect(statuses.slice(0, 20).every((status) => status === 204)).toBe(true);
-    expect(statuses[20]).toBe(429);
+    for (let index = 0; index < 22; index += 1) statuses.push((await send()).status);
+    expect(statuses.every((status) => status === 204)).toBe(true);
+    expect(warn).toHaveBeenCalledTimes(20);
+  });
+
+  it("holds every client together to 300 a minute per instance", () => {
+    const now = 9_000_000_000_000;
+    let allowed = 0;
+    for (let index = 0; index < 400; index += 1) if (takeCspReportToken(`10.8.${Math.floor(index / 10)}.${index % 10}`, now)) allowed += 1;
+    expect(allowed).toBe(300);
+    expect(takeCspReportToken("10.7.0.1", now)).toBe(false);
+    expect(takeCspReportToken("10.7.0.1", now + 60_000)).toBe(true);
   });
 });
