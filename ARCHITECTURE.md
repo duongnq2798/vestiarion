@@ -1074,6 +1074,21 @@ would find.
 - **Screening that fails closed:** `orgConfig` marks a live workspace on a deployment with no screening service
   (`compliance.serviceRequired`). `screenName` then gives no verdict rather than the bundled list's, so its
   counterparties stay `unscreened`.
+- **Screening providers** (`docs/superpowers/specs/2026-10-21-screening-providers-design.md`,
+  `src/lib/screening/providers.ts`): `screenName` screens through the provider the deployment names.
+  - `screeningSettingsFromEnv` (`src/lib/config.ts`) reads `SCREENING_PROVIDER`, `SCREENING_API_URL` and
+    `SCREENING_API_KEY`; only when none is set does it read `OPENSANCTIONS_API_URL` and `OPENSANCTIONS_API_KEY` (a
+    URL alone is `opensanctions`), so a key never reaches an address set apart from it. `opensanctions` without a key,
+    `yente` without a URL, an address or key with no provider, or an unknown name is a `ConfigError` at start. The
+    address stays in `compliance.openSanctionsUrl`, the provider in `compliance.screeningProvider`; a sandbox's
+    `orgConfig` drops all three.
+  - Both providers send yente's match query and classify with `classifyYenteCandidate` (a sanctions match at 0.85
+    or more is high, any other match medium); each records its own `source` (`opensanctions:yente`,
+    `yente:self-hosted`), as do a failed check and the sweep's `compliance_sweep` entry. `providerOfSource` and
+    `PROVIDER_NAMES` name it in `screeningSourceLabel` and the evidence chain. Another service is one more entry in
+    the registry.
+  - `checkScreening` (`src/lib/screening/check.ts`, `npm run screening:check`) screens one name with the
+    environment's provider, printing the address's origin and never the key.
 - **Sanctioned payout addresses** (`docs/superpowers/specs/2026-10-21-sanctioned-wallets-design.md`,
   `src/lib/sanctioned-wallets.ts`): `parseSdnWallets` reads the EVM "Digital Currency Address" entries from OFAC's
   `SDN.CSV` and `SDN_COMMENTS.CSV` together, since remarks overflow into the second file.

@@ -18,7 +18,7 @@ Database rollback after reconciliation: retain the table as an audit record if p
 
 ## Phase 3 — OpenSanctions screening
 
-Application rollback: unset `OPENSANCTIONS_API_URL` to return immediately to the labelled bundled provider, or revert the Phase 3 commit. Existing live verdicts and their tiered limits remain until the bundled provider screens them again; review high-risk rows before changing providers.
+Application rollback: unset `SCREENING_PROVIDER`, `SCREENING_API_URL` and `OPENSANCTIONS_API_URL` to return immediately to the labelled bundled provider, or revert the Phase 3 commit. Existing live verdicts and their tiered limits remain until the bundled provider screens them again; review high-risk rows before changing providers.
 
 Database rollback: the added evidence columns are backward-compatible and should normally remain. Dropping them discards raw match scores, matched entity ids, and explicit failed-check records, so export `compliance_checks` first if removal is unavoidable.
 

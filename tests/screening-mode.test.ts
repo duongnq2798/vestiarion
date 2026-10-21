@@ -81,6 +81,27 @@ describe("the sweep, once live screening is on", () => {
     expect(patches(fake.requests)[0]).toMatchObject({ last_screening_mode: "live" });
   });
 
+  it("records a yente server as the source of its verdict, and of a check that failed (screening providers SP2)", async () => {
+    const yente = configFromEnv({
+      NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
+      SUPABASE_SERVICE_ROLE_KEY: "k",
+      SCREENING_PROVIDER: "yente",
+      SCREENING_API_URL: "https://yente.invalid",
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ responses: { counterparty: { status: 200, results: [] } } }), { status: 200 })));
+    const answered = workspace([counterparty()]);
+    vi.mocked(appendLedgerEntry).mockClear();
+    await runWith(orgTestContext({ config: yente, client: answered.client, orgId: ORG }), () => runComplianceSweep());
+    expect(checks(answered.requests)[0]).toMatchObject({ source: "yente:self-hosted", screening_mode: "live" });
+    const sweep = vi.mocked(appendLedgerEntry).mock.calls.map(([entry]) => entry).find((entry) => entry.action === "compliance_sweep");
+    expect(sweep?.detail).toMatchObject({ source: "yente:self-hosted", screeningMode: "live" });
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+    const failed = workspace([counterparty()]);
+    await runWith(orgTestContext({ config: yente, client: failed.client, orgId: ORG }), () => runComplianceSweep());
+    expect(checks(failed.requests)[0]).toMatchObject({ source: "yente:self-hosted", status: "failed" });
+  });
+
   it("leaves a fresh live verdict alone", async () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
