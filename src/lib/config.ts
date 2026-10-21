@@ -129,6 +129,12 @@ export interface ComplianceConfig {
    * than the demo list's, which knows two names and would clear everyone else. Set only by `orgConfig`.
    */
   serviceRequired?: boolean;
+  /**
+   * Read OFAC's SDN files for sanctioned payout addresses, kept 12 hours (sanctioned wallets SW2): on a production
+   * deployment (`VERCEL_ENV=production`), or with `SANCTIONED_WALLETS=live`. Otherwise the snapshot bundled with the
+   * code answers. `SANCTIONED_WALLETS=snapshot` keeps the snapshot even in production.
+   */
+  sanctionedWalletsLive?: true;
 }
 
 export interface FollowUpConfig {
@@ -331,6 +337,9 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
         env.COMPLIANCE_RESCREEN_HOURS,
         screeningIsLive ? 24 : 0
       ),
+      ...(env.SANCTIONED_WALLETS === "live" || (env.SANCTIONED_WALLETS !== "snapshot" && env.VERCEL_ENV === "production")
+        ? { sanctionedWalletsLive: true as const }
+        : {}),
     },
     followUp: {
       staleAfterDays: positiveNumber(env.FOLLOW_UP_STALE_DAYS, 3),

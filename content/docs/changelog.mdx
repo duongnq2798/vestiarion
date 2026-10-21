@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-21: Sanctioned payout addresses
+
+- `screen_counterparty` and `risk_level_changed` can carry `source: "ofac-sdn"` and `matchedEntityId: "ofac-sdn-<entry>"`. The counterparty's payout address is on OFAC's SDN list, which decides a high-risk verdict whatever its name screens as.
+- A `compliance_sweep` entry carries `sanctionedWallets` (`{ list: "ofac-sdn", from, readAt, addresses }`): the list the payout addresses were checked against. `from` is `live` for the Treasury's files and `snapshot` for the copy bundled with the code.
+- Nothing in `/api/v1` request bodies or the webhooks' shapes changes.
+
 ## 2026-10-21: A payment not sent again is decided again once what held it ends
 
 - A payable whose `ap_reconcile` entry carries `notResubmittedBecause` `"counterparty.cooling_off"`, `"counterparty.address_unconfirmed"` or `"counterparty.new_payee"` is no longer held until a person acts. Once the payee lock's wait ends, someone confirms the address, or a second person stands behind it, the follow-up reopens it: an `invoice_reopened` entry follows, with `followUp.changes` reading "the payee lock's wait for the new address has ended", "the counterparty's new address has since been confirmed" or "a second person now stands behind the payee's address", then a new decision (`ap_pay` and the other `ap_*` actions). A webhook endpoint receives each as `ledger.appended`.

@@ -1,6 +1,13 @@
 import { db, unwrap } from "./dal";
 import { appendLedgerEntry } from "./ledger";
 import { currentConfig } from "./context";
+import {
+  cachedSanctionedWallets,
+  loadSanctionedWallets,
+  sanctionedWallet,
+  type SanctionedWallet,
+  type SanctionedWalletList,
+} from "./sanctioned-wallets";
 import { z } from "zod";
 import {
   COUNTERPARTY_HISTORY_ACTIONS,
@@ -278,12 +285,35 @@ export interface CounterpartyScreeningRow {
   jurisdiction?: string | null;
   performance_score?: string | number | null;
   performance_inputs?: CounterpartyHistoryInputs | null;
+  /** The payout address, checked against OFAC's sanctioned addresses at every sweep (sanctioned wallets SW4). */
+  address?: string | null;
+  /** The entity the current verdict matched: `ofac-sdn-<entry>` for a sanctioned address. */
+  risk_entity_id?: string | null;
 }
 
 const toNum = (v: string | number | null) => (v == null ? null : Number(v));
 
 const SCREENING_COLUMNS =
-  "id, name, risk_level, payment_limit, baseline_payment_limit, last_screened_at, last_screening_mode, jurisdiction, performance_score, performance_inputs";
+  "id, name, risk_level, payment_limit, baseline_payment_limit, last_screened_at, last_screening_mode, jurisdiction, performance_score, performance_inputs, address, risk_entity_id";
+
+/** The verdict when a counterparty's payout address is on OFAC's SDN list: high risk, which nothing pays (sanctioned wallets SW4). */
+export function walletScreening(wallet: SanctionedWallet): ScreeningResult {
+  return {
+    riskLevel: "high",
+    notes: `Its payout address ${wallet.address} is on OFAC's SDN list as a digital currency address (${wallet.currencies.join(", ")}) of ${wallet.name}, entry ${wallet.entityNumber}. Nothing is paid to it.`,
+    source: "ofac-sdn",
+    screeningMode: "live",
+    rawScore: 1,
+    matchedEntityId: `ofac-sdn-${wallet.entityNumber}`,
+    matchedTopics: ["sanction"],
+  };
+}
+
+/** Whether a counterparty's address is on the list and its verdict does not say so yet, so the sweep screens it now (SW4). */
+export function walletVerdictDue(row: Pick<CounterpartyScreeningRow, "address" | "risk_level" | "risk_entity_id">, list: SanctionedWalletList): boolean {
+  const wallet = sanctionedWallet(list, row.address);
+  return wallet !== null && !(row.risk_level === "high" && row.risk_entity_id === `ofac-sdn-${wallet.entityNumber}`);
+}
 
 /**
  * Decides what a screen should write, without touching the database. The
@@ -351,7 +381,8 @@ export async function screenCounterparty(counterpartyId: string): Promise<Screen
       .single<CounterpartyScreeningRow>()
   );
   try {
-    return await applyScreening(cp, (await dismissedEntities([cp])).get(cp.id));
+    // The list at hand (the last live read, or the snapshot): adding or screening a counterparty never waits on OFAC's files.
+    return await applyScreening(cp, (await dismissedEntities([cp])).get(cp.id), cachedSanctionedWallets());
   } catch (error) {
     if (!(error instanceof ScreeningLookupError)) throw error;
     await recordScreeningFailure(cp, error.message, true);
@@ -363,13 +394,19 @@ export async function screenCounterparty(counterpartyId: string): Promise<Screen
  * Screens one already-loaded row. Split out so a sweep can screen the whole
  * book from a single select rather than one round trip per counterparty.
  */
-async function applyScreening(cp: CounterpartyScreeningRow, dismissed?: ReadonlySet<string>): Promise<ScreeningOutcome> {
+async function applyScreening(cp: CounterpartyScreeningRow, dismissed?: ReadonlySet<string>, wallets?: SanctionedWalletList): Promise<ScreeningOutcome> {
   const client = db();
   let result: ScreeningResult;
-  try {
-    result = await screenName(cp.name, cp.jurisdiction, dismissed);
-  } catch (error) {
-    throw new ScreeningLookupError(error instanceof Error ? error.message : "Unknown screening failure");
+  // A sanctioned payout address decides the verdict whatever the name screens as, and no dismissal answers it (SW4).
+  const wallet = wallets ? sanctionedWallet(wallets, cp.address) : null;
+  if (wallet) {
+    result = walletScreening(wallet);
+  } else {
+    try {
+      result = await screenName(cp.name, cp.jurisdiction, dismissed);
+    } catch (error) {
+      throw new ScreeningLookupError(error instanceof Error ? error.message : "Unknown screening failure");
+    }
   }
   const plan = planScreening(cp, result);
   const now = new Date().toISOString();
@@ -619,14 +656,17 @@ export async function runComplianceSweep(): Promise<SweepResult> {
 
   const interval = rescreenIntervalMs();
   const now = Date.now();
-  const due = rows.filter((r) => isScreeningDue(r, now, interval, screeningMode()));
+  // OFAC's sanctioned addresses, read live in production and kept 12 hours, else the bundled snapshot (SW2, SW3). A
+  // counterparty whose address is on it is screened now, due or not (SW4).
+  const wallets = await loadSanctionedWallets({ live: currentConfig().compliance.sanctionedWalletsLive === true });
+  const due = rows.filter((r) => isScreeningDue(r, now, interval, screeningMode()) || walletVerdictDue(r, wallets));
 
   const screened: ScreeningOutcome[] = [];
   const failures: SweepResult["failures"] = [];
   const dismissed = await dismissedEntities(due);
   for (const row of due) {
     try {
-      screened.push(await applyScreening(row, dismissed.get(row.id)));
+      screened.push(await applyScreening(row, dismissed.get(row.id), wallets));
     } catch (error) {
       if (!(error instanceof ScreeningLookupError)) throw error;
       const message = error instanceof Error ? error.message : "Unknown screening failure";
@@ -656,6 +696,8 @@ export async function runComplianceSweep(): Promise<SweepResult> {
     detail: {
       source: screeningMode() === "live" ? "opensanctions:yente" : "simulated-sanctions-list",
       screeningMode: screeningMode(),
+      // The sanctioned addresses the payout addresses were checked against (SW5).
+      sanctionedWallets: { list: "ofac-sdn", from: wallets.from, readAt: wallets.readAt, addresses: wallets.wallets.size },
       complete,
       rescreenIntervalHours: interval / 3_600_000,
       screened: screened.map((s) => ({

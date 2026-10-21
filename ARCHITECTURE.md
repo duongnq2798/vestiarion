@@ -1025,6 +1025,18 @@ would find.
 - **Screening that fails closed:** `orgConfig` marks a live workspace on a deployment with no screening service
   (`compliance.serviceRequired`). `screenName` then gives no verdict rather than the bundled list's, so its
   counterparties stay `unscreened`.
+- **Sanctioned payout addresses** (`docs/superpowers/specs/2026-10-21-sanctioned-wallets-design.md`,
+  `src/lib/sanctioned-wallets.ts`): `parseSdnWallets` reads the EVM "Digital Currency Address" entries from OFAC's
+  `SDN.CSV` and `SDN_COMMENTS.CSV` together, since remarks overflow into the second file.
+  - `loadSanctionedWallets` reads them live when `compliance.sanctionedWalletsLive` (production, or
+    `SANCTIONED_WALLETS=live`), keeping them 12 hours per instance. A failed or thin read keeps the last list, else the
+    dated snapshot `src/lib/data/ofac-sdn-evm-wallets.json` (`scripts/ofac-sdn-wallets.mjs`).
+  - `runComplianceSweep` screens every counterparty whose address is on it and whose verdict does not name it yet
+    (`walletVerdictDue`), due or not. `applyScreening` then takes `walletScreening`'s verdict (high, `ofac-sdn`,
+    `ofac-sdn-<entry>`) over the name's, and ignores dismissals. The sweep entry records `sanctionedWallets`.
+  - `screenCounterparty` uses `cachedSanctionedWallets` without the network.
+  - `approveAndPay` and `payHeldMilestone` refuse such an address before any claim (`sanctioned_address`), since an
+    approval can confirm and pay a changed address before a sweep reads it.
 
 **Settings** (`/o/[slug]/settings`) is one page in six groups: You, Workspace, Developers, Integrations,
 Security and Danger zone (`docs/superpowers/specs/2026-10-04-settings-structure-design.md`). The page lists every

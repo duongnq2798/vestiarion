@@ -22,6 +22,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
   It carries the checks an insurer asks about, and every ledger entry it cites, in full, to check offline.
 
+- **Sanctioned payout addresses.** Every cycle checks each counterparty's payout address against the addresses on
+  OFAC's SDN list, read from the Treasury every 12 hours in production. An address on it makes the counterparty high
+  risk at the next cycle, whatever its name screens as, and a dismissal or a screening again does not clear it while
+  the address is listed. Approve and pay, Pay now and the agent refuse to pay it.
+
 - **Work that comes due with nobody acting no longer waits up to 6 hours.** A watch runs every 5 minutes. It starts
   a cycle in a live workspace when the payee lock's wait on a confirmed address ends while a payment is held back by
   it, so the payment is decided within about five minutes. It also runs the scheduled cycle the six-hourly schedule

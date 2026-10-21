@@ -160,3 +160,40 @@ describe("counterparties.last_screening_mode (0041)", () => {
     expect(row.rows[0].last_screening_mode).toBe("simulate");
   });
 });
+
+describe("a payout address on OFAC's sanctions list (sanctioned wallets SW4, SW5)", () => {
+  const SANCTIONED = "0x0330070fd38ec3bb94f58fa55d40368271e9e54a";
+  const ENTITY = "ofac-sdn-57056";
+
+  beforeEach(() => vi.mocked(appendLedgerEntry).mockClear());
+
+  it("makes its counterparty high risk at the next sweep, however fresh its screening, with no name lookup", async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const fake = workspace([counterparty({ address: SANCTIONED.toUpperCase().replace("0X", "0x"), last_screening_mode: "live" })]);
+    const result = await runWith(orgTestContext({ config: live, client: fake.client, orgId: ORG }), () => runComplianceSweep());
+
+    expect(result.screened).toHaveLength(1);
+    expect(result.screened[0]).toMatchObject({ riskLevel: "high", source: "ofac-sdn", matchedEntityId: ENTITY, changed: true });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(patches(fake.requests)[0]).toMatchObject({ risk_level: "high", risk_entity_id: ENTITY, payment_limit: 0 });
+    expect(String(patches(fake.requests)[0].risk_notes)).toContain("is on OFAC's SDN list");
+    expect(checks(fake.requests)[0]).toMatchObject({ risk_level: "high", source: "ofac-sdn", matched_entity_id: ENTITY });
+    const changed = vi.mocked(appendLedgerEntry).mock.calls.map(([entry]) => entry).find((entry) => entry.action === "risk_level_changed");
+    expect(changed?.detail).toMatchObject({ riskLevel: "high", previousRiskLevel: "clear", source: "ofac-sdn", matchedEntityId: ENTITY });
+    const sweep = vi.mocked(appendLedgerEntry).mock.calls.map(([entry]) => entry).find((entry) => entry.action === "compliance_sweep");
+    expect(sweep?.detail.sanctionedWallets).toMatchObject({ list: "ofac-sdn", from: "snapshot", addresses: expect.any(Number) });
+  });
+
+  it("leaves it alone once its verdict says so", async () => {
+    const fake = workspace([counterparty({ address: SANCTIONED, risk_level: "high", risk_entity_id: ENTITY, last_screening_mode: "live" })]);
+    const result = await runWith(orgTestContext({ config: live, client: fake.client, orgId: ORG }), () => runComplianceSweep());
+    expect(result.screened).toHaveLength(0);
+  });
+
+  it("decides the verdict when screening a counterparty, whatever its name screens as", async () => {
+    const fake = workspace([counterparty({ address: SANCTIONED, risk_level: "unscreened", last_screened_at: null, last_screening_mode: null })]);
+    const outcome = await runWith(orgTestContext({ config: bundled, client: fake.client, orgId: ORG }), () => screenCounterparty("0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de"));
+    expect(outcome).toMatchObject({ riskLevel: "high", source: "ofac-sdn", matchedEntityId: ENTITY, firstScreen: true });
+  });
+});

@@ -490,6 +490,14 @@ describe("Pay now", () => {
     expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
   });
 
+  it("refuses, before any claim, a contractor whose address is on OFAC's sanctions list (sanctioned wallets SW6)", async () => {
+    const { run, claimed } = world({ milestone: { counterparties: { ...milestoneRow().counterparties, address: "0x0330070fd38ec3bb94f58fa55d40368271e9e54a" } } });
+    const attempt = run(() => payHeldMilestone({ actorId: ACTOR, milestoneId: MILESTONE }));
+    expect(await refusal(attempt)).toBe("sanctioned_address");
+    expect(claimed()).toBe(false);
+    expect(releaseHeldMilestoneMock).not.toHaveBeenCalled();
+  });
+
   it("refuses, before any claim, a contractor's changed address inside the payee lock's wait, confirmed or not (payee lock PL5)", async () => {
     const changed = new Date(Date.now() - 2 * 3_600_000).toISOString();
     const confirmed = new Date(Date.now() - 3_600_000).toISOString();
