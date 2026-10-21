@@ -28,8 +28,8 @@ export default async function AccountPage() {
         <div className={cn("mx-auto w-full", SITE_COLUMN)}>
           <h1 className="text-[1.75rem] font-semibold tracking-[-0.025em] text-ink">Your account</h1>
           <p className="mt-2 text-[0.9375rem] leading-relaxed text-ink-2">
-            Signed in as <span className="break-all font-medium text-ink">{user.email ?? "this account"}</span>. Your role and notifications in each
-            workspace are in that workspace&apos;s Settings.
+            Signed in as <span className="break-all font-medium text-ink">{user.email ?? "this account"}</span>. Your notifications in each workspace
+            are in its Settings, and your role on its Members page.
           </p>
           <div role="group" aria-labelledby="account-danger-zone" className="mt-10 border-t border-line pt-10">
             <p id="account-danger-zone" className={GROUP_LABEL}>

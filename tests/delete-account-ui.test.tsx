@@ -129,6 +129,8 @@ describe("where Delete account lives (docs/superpowers/specs/2026-10-21-delete-a
     expect(menu).not.toContain('tone="danger"');
     // Account settings comes before Sign out, for every signed-in person: no role, flag or prop decides it.
     expect(menu).toContain('<Link href="/account">');
+    expect(menu).toContain("Account settings");
+    expect(menu).toContain("Sign out");
     expect(menu.indexOf("Account settings")).toBeLessThan(menu.indexOf("Sign out"));
     const item = menu.slice(0, menu.indexOf("Account settings"));
     expect(item.slice(item.lastIndexOf("<DropdownMenuItem"))).not.toMatch(/&&|\?\s*</);
@@ -143,18 +145,24 @@ describe("where Delete account lives (docs/superpowers/specs/2026-10-21-delete-a
     expect(markup).toMatch(/<section[^>]*aria-labelledby="delete-account-title"/);
     expect(markup).toMatch(/<h2 id="delete-account-title"[^>]*>Delete account<\/h2>/);
     expect(markup).toContain("border-refused-line");
-    expect(text(markup)).toContain("A workspace where you are the only member is deleted with it. It cannot be undone.");
+    expect(text(markup)).toContain("A workspace where you are the only member is deleted with it: the dialog lists each one first. It cannot be undone.");
     expect(markup).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>.*Delete account<\/button>/s);
   });
 
   it("ends /account, for any signed-in person, and Settings, for every member whatever their role (DA2, DA3)", () => {
     const account = source("src/app/account/page.tsx");
     expect(account).toContain('verifySession("/account")');
+    expect(account).toContain("Danger zone");
+    expect(account).toContain("<DeleteAccountPanel />");
     expect(account.indexOf("Danger zone")).toBeLessThan(account.indexOf("<DeleteAccountPanel />"));
     const settings = source("src/app/o/[slug]/settings/page.tsx");
     const danger = settings.slice(settings.indexOf('key: "danger"'));
     expect(danger).toContain('{ id: "delete-account-title", title: "Delete account", content: <DeleteAccountPanel /> }');
+    expect(danger).toContain("delete-workspace-title");
     expect(danger.indexOf("delete-account-title")).toBeGreaterThan(danger.indexOf("delete-workspace-title"));
+    // The security page and the privacy page say where it is, not the menu.
+    expect(source("src/app/security/page.tsx")).not.toContain("from the account menu");
+    expect(source("src/app/privacy/page.tsx")).not.toContain("last item of the account menu");
   });
 
   it("the dialog is an alertdialog guarded against dismissal while pending", () => {

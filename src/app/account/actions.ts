@@ -26,8 +26,8 @@ const GENERIC = "Something went wrong; try again.";
 
 /**
  * What deleting the account would do, read when its dialog opens. Loaded then
- * rather than with every page: the menu that opens the dialog is on every
- * workspace page, and the plan costs a read per workspace the person owns.
+ * rather than with every page: the panel that opens the dialog ends every
+ * workspace's Settings, and the plan costs a read per workspace the person owns.
  */
 export async function accountDeletionPlanAction(): Promise<AccountDeletionPlanResult> {
   const user = await getSessionUser();

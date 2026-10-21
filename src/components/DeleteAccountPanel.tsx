@@ -16,7 +16,7 @@ export default function DeleteAccountPanel() {
       <SectionHeader id="delete-account-title" title="Delete account" />
       <div className="space-y-4 rounded-xl border border-refused-line p-5">
         <p className="text-sm leading-relaxed text-ink-2">
-          Deletes your sign-in and takes you out of every workspace. A workspace where you are the only member is deleted with it. It cannot be undone.
+          Deletes your sign-in and takes you out of every workspace. A workspace where you are the only member is deleted with it: the dialog lists each one first. It cannot be undone.
         </p>
         <DeleteAccountDialog
           trigger={
