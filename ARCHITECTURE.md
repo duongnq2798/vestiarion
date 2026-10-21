@@ -3818,6 +3818,18 @@ When `GROWTH_INBOUND_NOTIFY_EMAIL` is set, the team gets a short note through `s
 message); nothing is ever sent to the person who asked. The approval queue's card shows an inbound lead's contact,
 site, notes and source detail.
 
+**The address lookalike checker.** `/check-address` (`src/app/check-address/page.tsx`,
+`docs/superpowers/specs/2026-10-21-address-checker-design.md`) is a free public page, static and outside `/tools`,
+which serves downloads. Everything runs in the browser and nothing is sent: there is no form, request or URL
+parameter.
+- `checkAddress` (`src/lib/address-check.ts`) checks the pasted address's characters (invisible ones, lookalikes from
+  other scripts, length, hex) and its EIP-55 checksum.
+- It compares the address with those the person pasted as known: at least 3 hex digits shared at each end, or 5 at one,
+  a broader rule than the payee lock's first 6 and last 4, which it includes.
+- It checks the OFAC snapshot the page carries, its date shown, and addresses that are not a wallet, from the network
+  profiles: the zero and burn addresses, the USDC and EURC contracts, Arc's USDC system address.
+- `tests/check-address-page.test.tsx` holds the checker's code to making no request.
+
 ## Onboarding by role
 
 `docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md` (R1 to R6). Each member's first real task

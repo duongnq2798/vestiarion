@@ -507,6 +507,9 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
   same signed entries.
 - **[Research](https://www.vestiarion.xyz/docs/research/model-vs-policy)** — three weeks of the model's decisions
   recorded beside the written policy's, including where code had to refuse it.
+- **[Address lookalike checker](https://www.vestiarion.xyz/check-address)** — a free page that compares an address with
+  ones you know, with a broader rule than the lookalike warning on Counterparties, and checks its characters, checksum
+  and OFAC's list in the browser.
 
 ### Contracts on Arc testnet
 
