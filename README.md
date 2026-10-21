@@ -233,6 +233,7 @@ flowchart LR
 | --- | --- |
 | **Guardrails in code** | Never pay a counterparty screened high risk, above its limit, a duplicate of a settled invoice, or with an incomplete match. A refusal records the model's argument and the rule that overruled it |
 | **New-payee check** | The first payment to a payee at an address needs two people behind it: the agent never makes one that only the person who gave the address stands behind, and that person cannot approve it either. Whoever creates a payee link counts as having given the address the payee sends, read from the link's signed ledger entry, or from the link's own record when that entry is missing. For an address sent on GitHub, or one no member can be named as having given, no confirmation counts as the second person: one member confirms it and a different one approves its first payment, and no one approves it alone before another member has confirmed it. The agent asks the same before it sends a payment again whose earlier send was never recorded, so an address changed while a payment waited does not slip past it |
+| **Payee lock** | Opt-in. A changed payout address is paid only once someone other than whoever entered it records how they checked it, with a contact the workspace had before the change, and, if the owner sets one, after a wait of 4 to 72 hours. Approving a payment never confirms its address. An address that matches or looks like another payee's, or like one the same payee had before, is flagged |
 | **Two approvals** | Above a figure the owner sets, a payment needs two different people. Arc mainnet workspaces start at 100 USDC, and the owner can raise it but not turn it off there |
 | **Maker and checker** | Roles are owner, admin, approver, viewer and accountant, who books and reads but decides no payment. No one approves an invoice they created; only Compliance clears a high-risk counterparty |
 | **Agent spending limit** | A daily and a 7-day figure, checked in code and, where enforced, by the contract. Arc mainnet workspaces start at 50 USDC a day and 150 USDC in 7 days |
@@ -318,7 +319,16 @@ Made by the agent in production:
   [`0x365da374…9d8b`](https://explorer.testnet.arc.io/tx/0x365da374f902fcb995643713962554b41e6114b62bb40695874aa519dd829d8b);
 - with the cash short of two bills due the same day, the 50 USDC of database backups the agent chose to pay first,
   over a 30 USDC one-off migration the written policy put first,
-  [`0x1adfad84…3a7b`](https://explorer.testnet.arc.io/tx/0x1adfad848f00fdadf7021ba1f1ac30505146c40c220eac8cbca36cfc479e3a7b).
+  [`0x1adfad84…3a7b`](https://explorer.testnet.arc.io/tx/0x1adfad848f00fdadf7021ba1f1ac30505146c40c220eac8cbca36cfc479e3a7b);
+- with the payee lock on, a vendor's payout address changed to a fresh wallet holding 0 USDC. The agent held its
+  3 USDC bill while the address was unconfirmed. The member who entered the address could not confirm it, even with a
+  full record. A second member confirmed it, and the agent then held the bill through the 4-hour wait. Only after
+  that did it pay, and the wallet went from 0 to 3 USDC:
+  [`0x49787501…0551`](https://explorer.testnet.arc.io/tx/0x49787501b6738cc2653bfb93a51293d4f036ff85a41115dc7f5b5f07db720551);
+- the same in a workspace with one member. A record that did not say the contact was on file before the change was
+  refused, and so was **Agree and pay** during the wait. Once the wait ended, the first payment to the new address still
+  needed the approver:
+  [`0x7948ea38…72c5`](https://explorer.testnet.arc.io/tx/0x7948ea3868fc4ea284b69c88b90b20aa728bc8592f809ce7477f1895282972c5).
 
 Each feature's design under [`docs/superpowers/specs/`](docs/superpowers/specs) ends with its rollout record: what was
 run in production, with its ledger entries and transactions.

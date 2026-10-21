@@ -166,3 +166,34 @@ The partner runs migration 0135. Until then everything behaves as before. On pro
 4. check that the agent holds the payment until the cooling-off ends.
 
 No money needs to move.
+
+## Rollout record
+
+- **Oct 20, Arc mainnet, base-payout-test (one member).** Migration 0135 was applied, and no money moved.
+  - Turning the lock on with a 24-hour wait was signed: `payee_lock_changed`, ledger entry 4828.
+  - A record without "contact on file before" was refused.
+  - A confirmation with a record was signed with `soloConfirmation` and the wait: entry 4829.
+- **Oct 20, Arc testnet, pinecrest-studio (two members).** Lock on with a 4-hour wait (4832). Northwind Referrals'
+  address changed to a fresh wallet with 0 USDC (4839).
+  - Its 3.00 USDC bill (4840) was held as `counterparty.address_unconfirmed` (4843).
+  - The owner, who entered the address, was refused even with a full record: "You entered or asked for this address,
+    so someone else confirms it."
+  - **Approve and pay** from the approver was refused until the address was confirmed.
+  - The approver confirmed with a record (4863). The bill was held again as `counterparty.cooling_off` (4866).
+  - After the wait it reopened with "the payee lock's wait for the new address has ended" (4917) and was paid (4919):
+    [`0x49787501…0551`](https://explorer.testnet.arc.io/tx/0x49787501b6738cc2653bfb93a51293d4f036ff85a41115dc7f5b5f07db720551),
+    3 USDC, and the wallet went from 0 to 3.
+- **Oct 20, Arc testnet, founding (one member).** Lock on with a 4-hour wait (4846). Wardrobe Holdings' address
+  changed to a fresh wallet (4851).
+  - Its 1.50 USDC bill was held as unconfirmed (4854).
+  - A record without the on-file tick was refused.
+  - A full record was signed with `soloConfirmation` (4857). The bill was held for the wait (4860).
+  - **Agree and pay** during the wait was refused: "Nothing was paid, and your verdict was not recorded: … it can be
+    paid from Oct 20, 2026, 15:32 UTC."
+  - After the wait it reopened (4923) and was held as `counterparty.new_payee` (4924), because one person gave and
+    confirmed the address. The only approver approved it (4927):
+    [`0x7948ea38…72c5`](https://explorer.testnet.arc.io/tx/0x7948ea3868fc4ea284b69c88b90b20aa728bc8592f809ce7477f1895282972c5),
+    1.50 USDC.
+
+Both testnet cycles after the wait were started with **Run cycle now**. The due-work watch
+(`2026-10-21-due-work-watch-design.md`) now starts them within about five minutes.

@@ -115,3 +115,20 @@ An unconfirmed address is left out: it cannot be paid yet, and confirming it sta
 
 `tests/supabase-cron.test.ts` covers the new job. `tests/due-watch-route.test.ts` covers the bearer, the rate limit and
 the response.
+
+## Rollout record
+
+- **Oct 20, 18:25 UTC.** The partner ran the `vestiarion-due-watch` statement in the SQL editor (job 8).
+- **The first run, 18:30 UTC.** It answered HTTP 200 for 14 live workspaces, all `due: "none"`, right after the 18:17
+  tick.
+- **Arc testnet, founding.**
+  - Wardrobe Holdings' address changed at 18:11:09 UTC (ledger entry 4929), and a 1.00 USDC bill was added (4930).
+  - The address was confirmed with a record (4935), and the bill was held as `counterparty.cooling_off` until 22:11:09
+    UTC (4938).
+  - The 18:17 tick left it held.
+  - The 22:15:00 run answered `{"slug":"founding","ok":true,"due":"payee_lock_wait_ended","counterparties":1}`, with
+    the other 13 workspaces `none`.
+  - The cycle reopened the bill with "the payee lock's wait for the new address has ended" (4993) and decided it again
+    (4994: held as `counterparty.new_payee`, since one member both gave and confirmed the address).
+  - Its `cycle_complete` (4996) carries `trigger: "event"`, `events: ["payee_lock_wait_ended"]` and no `by`.
+- **The 22:20 run.** It answered `none` for founding: no cycle repeated.
