@@ -101,7 +101,7 @@ export function contentSecurityPolicy(env: CspEnv = process.env): string {
     ["default-src", ["'self'"]],
     ["script-src", ["'self'", "'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...GOOGLE_ANALYTICS.script, ...preview("script")]],
     ["style-src", ["'self'", "'unsafe-inline'", ...preview("style")]],
-    // Product Hunt draws its badge on the landing page, the first production report showed (CSP4).
+    // Product Hunt draws its badge in the site footer, the first production report showed (CSP4).
     ["img-src", ["'self'", "data:", "blob:", ...GOOGLE_ANALYTICS.img, new URL(PRODUCT_HUNT_BADGE.src).origin, ...preview("img")]],
     ["font-src", ["'self'", "data:", ...preview("font")]],
     ["media-src", ["'self'"]],

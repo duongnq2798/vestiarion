@@ -82,10 +82,10 @@ less work in a run, never a run past its limit.
 (`docs/superpowers/specs/2026-10-21-csp-report-only-design.md`). Browsers report what it would block and block nothing;
 it is enforced once production's reports show it fits every page.
 - The policy is `contentSecurityPolicy` (`src/lib/security/csp.ts`). The config imports it, so it imports only the
-  network profiles, which import nothing; Iris's origins come from them.
+  network profiles and the site's links, which import nothing; Iris's origins and Product Hunt's badge come from them.
 - Scripts and styles may be inline, since Next.js inlines its own and a nonce would end static rendering.
 - `connect-src` names Circle's Iris and modular wallets client, which the browser calls, and Google Analytics.
-  `img-src` names Product Hunt's badge on the landing page.
+- `img-src` names Product Hunt's badge in the site footer.
 - `form-action` names every connect form's consent screen (each Zoho data center's), Google sign-in and the
   deployment's Supabase, since Chrome checks a form submission's redirects too.
 - A Vercel preview also allows Vercel's toolbar.

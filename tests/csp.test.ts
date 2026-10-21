@@ -37,7 +37,7 @@ describe("the policy (CSP1, CSP2)", () => {
     expect(CSP_REPORTING_ENDPOINTS).toBe(`csp="${CSP_REPORT_PATH}"`);
   });
 
-  it("lets the landing page show Product Hunt's badge, which Product Hunt draws", () => {
+  it("lets the site footer show Product Hunt's badge, which Product Hunt draws", () => {
     expect(policy.get("img-src")).toContain(new URL(PRODUCT_HUNT_BADGE.src).origin);
     expect(policy.get("img-src")).toContain("https://api.producthunt.com");
   });
