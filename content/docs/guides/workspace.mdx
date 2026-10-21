@@ -63,7 +63,7 @@ What each row can say, as the panel words it:
 | Row | Values | What it means |
 | --- | --- | --- |
 | Network | Arc testnet, Arc mainnet | Arc testnet is Arc's public test network, with test USDC; on Arc mainnet USDC is real money. |
-| Payments | Live, Simulated, Live after your verdict, Simulated after your verdict, Held, Off | Live sends approved payments in USDC on the workspace's network. Simulated records them and sends nothing on chain. After your verdict means shadow mode: nothing is paid until a person agrees. Held means nothing can be paid from this workspace right now; Off means payments are switched off for every workspace. |
+| Payments | Live, test USDC; Live, real USDC; Simulated; Live after your verdict; Simulated after your verdict; Held; Off | Live sends approved payments on the workspace's network: test USDC on Arc testnet, real USDC on Arc mainnet. Simulated records them and sends nothing on chain. After your verdict means shadow mode: nothing is paid until a person agrees. Held means nothing can be paid from this workspace right now; Off means payments are switched off for every workspace. |
 | Shadow mode | On, Off | On: each decision waits for a person's verdict. Off: the agent pays what passes its checks, and anything else waits in Approvals. |
 | Agent | On, Paused, Stopped | On: it decides each bill within a minute of it arriving, within its limits. Stopped: payments are off or held, so it does not run. |
 | Reserve | Live, Simulated, Held | Whether the USYC reserve is held on chain, or simulated. Shown on Arc testnet only. |

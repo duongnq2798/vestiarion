@@ -340,7 +340,7 @@ describe.each(ROWS)("$name", (row) => {
       // the network an address belongs to; no payment is said to go there.)
       for (const [surface, words] of everything) {
         expect(words, surface).not.toMatch(PAID_ON_A_NETWORK);
-        expect(words, surface).not.toMatch(/Payments live|paying on/);
+        expect(words, surface).not.toMatch(/payments live|paying on/i);
       }
       expect(said.approve).toMatch(/\(simulated\)$/);
       expect(said.payeePage).toContain(SIMULATED_PAYMENT);
@@ -355,7 +355,7 @@ describe.each(ROWS)("$name", (row) => {
     if (capability.situation === "unavailable") {
       // Nothing can be paid: no surface says a payment is live, paying, or paid now.
       for (const [surface, words] of everything) {
-        expect(words, surface).not.toMatch(/Payments live|paying on|it is paid/);
+        expect(words, surface).not.toMatch(/payments live|paying on|it is paid/i);
       }
       expect(said.freelancer).toBe(capability.why);
       expect(said.agreeAndPay).toBe("");

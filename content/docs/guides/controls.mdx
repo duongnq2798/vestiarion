@@ -112,7 +112,7 @@ Owners, admins and approvers decide what the agent did not pay, in **Approvals**
 | Sandbox, on Arc testnet | Your bills, or sample data | Simulated: nothing reaches a chain. |
 | Shadow mode, in a sandbox | Your real bills | Waits for your verdict; a payment you agree to is simulated. |
 | Shadow mode, live on Arc testnet | Your real bills | Waits for your verdict; a payment you agree to is sent in test USDC on Arc testnet, at the bill's amount. |
-| Live on Arc testnet | Your bills | The agent pays in USDC on Arc testnet within its limits; the rest waits for a person. |
+| Live on Arc testnet | Your bills | The agent pays in test USDC on Arc testnet within its limits; the rest waits for a person. |
 | Live on Arc mainnet | Your bills | The agent pays real USDC within its limits; the rest waits for a person. |
 
 USDC on Arc testnet has no market value: it comes from Circle's faucet or from Vestiarion's float, and lets you try everything, real transactions included. A workspace's network is chosen when it is created and never changes. Some features run on Arc testnet only: the USYC reserve, the EURC swap and escrow. Payouts to other chains run on Arc testnet, and on Arc mainnet to Base from your own Circle account. See [On Arc mainnet](/docs/guides/go-live#on-arc-mainnet).
