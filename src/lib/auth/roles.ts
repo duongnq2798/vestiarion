@@ -24,6 +24,9 @@ export const PERMISSIONS = {
   // a customer said through their statement link (accountant console A1). Owners and admins held it as records.write
   // before; the accountant gets it without adding bills or receivables.
   "receivables.reconcile": ["owner", "admin", "accountant"],
+  // Its payables twin: checking a vendor's statement of account against the bills and the payments made to them, which
+  // reads them and signs that it was checked, and adds nothing (vendor statement VS1).
+  "payables.reconcile": ["owner", "admin", "accountant"],
   "agent.run_cycle": ["owner", "admin"],
   "agent.resume": ["owner", "admin"],
   // The agent's spending limit: loosening it is as deliberate as resuming the agent.
@@ -61,7 +64,7 @@ export const ROLE_SUMMARIES: Record<OrgRole, string> = {
     "Everything an approver and an accountant do, and adds bills and receivables, runs and resumes the agent, and manages members, API keys, webhooks, integrations and treasury.",
   approver: "Decides the payments the agent held, and pauses the agent. Adds no records.",
   accountant:
-    "Reads everything, books payments in Xero, applies money received and answers customers. Decides no payment, and changes no treasury, limit, integration or member.",
+    "Reads everything, books payments in Xero, applies money received, checks vendors' statements and answers customers. Decides no payment, and changes no treasury, limit, integration or member.",
   viewer: "Reads the workspace.",
 };
 

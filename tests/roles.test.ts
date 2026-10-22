@@ -11,6 +11,7 @@ const TABLE: Array<[Permission, Row]> = [
   ["approval.decide",  { owner: true,  admin: true,  approver: true,  accountant: false, viewer: false }],
   ["records.write",    { owner: true,  admin: true,  approver: false, accountant: false, viewer: false }],
   ["receivables.reconcile", { owner: true, admin: true, approver: false, accountant: true, viewer: false }],
+  ["payables.reconcile", { owner: true, admin: true, approver: false, accountant: true, viewer: false }],
   ["agent.run_cycle",  { owner: true,  admin: true,  approver: false, accountant: false, viewer: false }],
   ["agent.resume",     { owner: true,  admin: true,  approver: false, accountant: false, viewer: false }],
   ["agent.budget",     { owner: true,  admin: true,  approver: false, accountant: false, viewer: false }],
@@ -72,6 +73,7 @@ describe("ROLE_SUMMARIES — what the invitation form says each role may do", ()
     ["approval.decide", /\bDecides the payments\b/],
     ["accounting.book", /\bbooks payments\b/],
     ["receivables.reconcile", /\bapplies money received\b/],
+    ["payables.reconcile", /\bchecks vendors' statements\b/],
   ] as const)("says a role holds %s exactly when it does, so nobody grants a decision unknowingly", (permission, words) => {
     for (const role of ORG_ROLES) expect(words.test(said(role)), `${role}: ${said(role)}`).toBe(can(role, permission));
   });

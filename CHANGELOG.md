@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Check a vendor's statement against your books.** On Counterparties, a vendor's **Check their statement** reads
+  their statement of account, pasted or as a CSV, and matches each line to your bills and the payments you made them.
+  It lists what is missing here (with an Add for each), what is listed twice, amounts that differ, payments of yours
+  they have not credited (with the transaction to send them), payments they list that you have no record of, and both
+  balances. Owners, admins and accountants can check; nothing is paid or changed.
+
 - **A bank payout's card compares it with USDC.** Before you approve a payout to a vendor's bank account, its card
   shows the invoice, BlindPay's fees taken from it and what leaves the wallet, and what the vendor would receive in
   USDC to a wallet instead: the full amount, no fee taken.

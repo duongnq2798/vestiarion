@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-22: A vendor's statement checked
+
+- A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`vendor_statement_checked`**, domain `ap`, actor `human`, when a person checks a vendor's statement of account against its bills. It carries `by`, `counterpartyId`, `period` (`{ from, to }`), `currency`, the numbers of `lines`, `charges`, `payments`, `matchedCharges` and `matchedPayments`, how many were `missing`, `twice`, `differs`, `paidNotListed`, `unknownPayments` and `notListed`, and `theirBalance` and `ourBalance`. It never carries the statement or its lines.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-22: Arc mainnet pays vendors on Arbitrum
 
 - **`POST /api/v1/counterparties`** now accepts `chain: "ARB"` (Arbitrum One) for a vendor in a workspace on Arc mainnet, beside `ARC` and `BASE`. A contractor stays on Arc.

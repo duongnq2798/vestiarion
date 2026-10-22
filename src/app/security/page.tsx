@@ -145,8 +145,8 @@ export default function SecurityPage() {
         <ul>
           <li>
             <strong>Maker and checker.</strong> Owners and admins add records. Owners, admins and approvers decide the payments the agent held, pause
-            the agent, and can mark a screening match as not the counterparty. An accountant books payments, applies money received and answers
-            customers, but decides no payment. A viewer reads, and changes only their own settings and links.
+            the agent, and can mark a screening match as not the counterparty. An accountant books payments, applies money received, checks vendors&apos;
+            statements and answers customers, but decides no payment. A viewer reads, and changes only their own settings and links.
           </li>
           <li>
             <strong>No self-approval.</strong> The database&apos;s approval function refuses the person who created an invoice unless they are the

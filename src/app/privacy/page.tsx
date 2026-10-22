@@ -93,7 +93,7 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>accountant</strong>: reads the workspace as a viewer does, and books payments in the workspace&apos;s accounting tool, applies money
-            received and answers customers, but decides no payment; an accountant&apos;s console lists only the workspaces they are a member of, and
+            received, checks vendors&apos; statements and answers customers, but decides no payment; an accountant&apos;s console lists only the workspaces they are a member of, and
             stops listing one when they are removed from it.
           </li>
         </ul>
