@@ -232,6 +232,8 @@ To share it:
 - **Download CSV** gives one row per address change, for a spreadsheet.
 - **Download signed JSON**, or **Download the evidence pack** in Settings, gives the JSON file. It carries every entry the pack cites, in full, so it can be checked offline like the [audit export](/docs/guides/audit-export).
 
+[Share the evidence pack and receipts](/docs/guides/evidence-and-receipts) goes through the pack step by step: each fact on a change, what each answer counts, the CSV's columns, and checking the JSON offline.
+
 The payee lock covers addresses on Arc and the chains it pays. A payout to a vendor's bank account already waits for a person every time, so the lock adds nothing there.
 
 The ledger records each change to the lock as `payee_lock_changed`, and the check behind each confirmation in its `counterparty_address_confirmed` entry.
@@ -663,7 +665,7 @@ To check a signature yourself, see [Verifying signatures](/docs/webhooks/verify)
 
 ## 8. Share a receipt
 
-A payee, an accountant or anyone else can check a payment without an account: share its receipt.
+A payee, an accountant or anyone else can check a payment without an account: share its receipt. [Share the evidence pack and receipts](/docs/guides/evidence-and-receipts#7-share-a-receipt) walks through it step by step, row by row as the payee sees it.
 
 - **Sharing it.** On **Bills & receivables**, under **Paid and closed**, open a paid bill: one with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once. At its foot, as on every page Vestiarion sends your counterparties, a line says it was sent with Vestiarion and links to Vestiarion's site, tagged with the kind of page only, never your business or theirs.
 - **What the page shows.** The amount, the payee's chain and address, and how it was paid. It also shows the transaction, linked to its explorer; for a CCTP payout, the burn on Arc testnet as well.

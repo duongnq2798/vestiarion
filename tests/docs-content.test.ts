@@ -216,6 +216,7 @@ describe("the docs navigation", () => {
       ["guides/controls", "How payments are controlled"],
       ["guides/try-a-rule", "Try a limit before you change it"],
       ["guides/evidence", "Why a payment was paid"],
+      ["guides/evidence-and-receipts", "Share the evidence pack and receipts"],
       ["guides/audit-export", "Verify an audit export"],
       ["research/model-vs-policy", "When the model and the policy disagree"],
       ["contracts", "Contracts on Arc"],
@@ -288,10 +289,12 @@ describe("the docs navigation", () => {
     expect(neighbours("guides/report").next?.slug).toBe("guides/accountants");
     expect(neighbours("guides/accountants").next?.slug).toBe("guides/deals");
     expect(neighbours("guides/commissions").next?.slug).toBe("guides/controls");
-    // How payments are controlled, trying a limit first, why one payment was paid, then checking the whole ledger.
+    // How payments are controlled, trying a limit first, why one payment was paid, the evidence pack and receipts
+    // shared outside, then checking the whole ledger.
     expect(neighbours("guides/controls").next?.slug).toBe("guides/try-a-rule");
     expect(neighbours("guides/try-a-rule").next?.slug).toBe("guides/evidence");
-    expect(neighbours("guides/evidence").next?.slug).toBe("guides/audit-export");
+    expect(neighbours("guides/evidence").next?.slug).toBe("guides/evidence-and-receipts");
+    expect(neighbours("guides/evidence-and-receipts").next?.slug).toBe("guides/audit-export");
     expect(neighbours("contracts").next?.slug).toBe("guides/integrations");
     expect(neighbours("guides/integrations").next?.slug).toBe("guides/xero");
     expect(neighbours("guides/invoice-capture").next?.slug).toBe("get-started/quickstart");

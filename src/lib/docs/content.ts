@@ -87,6 +87,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "guides/zohocrm": () => import("../../../content/docs/guides/zohocrm.mdx"),
   "guides/asana": () => import("../../../content/docs/guides/asana.mdx"),
   "guides/evidence": () => import("../../../content/docs/guides/evidence.mdx"),
+  "guides/evidence-and-receipts": () => import("../../../content/docs/guides/evidence-and-receipts.mdx"),
   "guides/audit-export": () => import("../../../content/docs/guides/audit-export.mdx"),
   "guides/report": () => import("../../../content/docs/guides/report.mdx"),
   "guides/cash-scenarios": () => import("../../../content/docs/guides/cash-scenarios.mdx"),

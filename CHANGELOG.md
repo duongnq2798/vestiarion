@@ -116,6 +116,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **A guide to the evidence pack and shared receipts.** [Share the evidence pack and
+  receipts](https://www.vestiarion.xyz/docs/guides/evidence-and-receipts) walks a business owner or their accountant
+  through the payee lock's evidence pack: choosing a period, reading each address change, what each insurer question
+  is answered from, the PDF, CSV and signed JSON, and checking the JSON offline. It then shares a payment's receipt:
+  what the payee sees, the amounts and who paid the fees, the three checks, saving it as a PDF, and making a new link
+  or stopping one, with who may do each. The evidence pack's page links it beside its title.
 - **Delete account moved out of the account menu, into Settings.** The menu you open to switch workspaces or sign
   out no longer holds a red row one slip below **Sign out**. **Delete account** is now under **Danger zone** at the
   end of a workspace's **Settings**, for every member, and of a new **Your account** page, which **Account settings**
