@@ -2926,7 +2926,12 @@ and the once-a-week check reads the week's last non-preview entry of the two, so
 `sendWeeklyBriefNowAction` (`src/app/actions/notifications.ts`, `approval.decide`) sends it to the session's own
 address via `sendWeeklyBrief({ only })`, signed with `preview: true` and `by`, at most once per member in
 `PREVIEW_EVERY_MS` (5 minutes); the button is `SendBriefNow` in `NotificationsPanel`. Its emails
-are metered as `weekly_brief`.
+are metered as `weekly_brief`. Payee addresses (docs/superpowers/specs/2026-10-22-weekly-brief-payee-lock-design.md):
+`payeeWeek` reads the week's `counterparty_address_changed` (setting an address), `counterparty_address_confirmed`,
+`address_change_check_sent` and `address_change_answered` entries, the agent's entries whose `detail->>guardrailRule` is
+in `ADDRESS_HOLDS`, `readPayeeLock` and the frozen counterparties (none before 0137), or null when they cannot be read;
+`payeeSentences` turns them into the email's **Payee addresses** section, frozen payees first, and counts toward
+`briefWorthSending`. They are signed in `weekly_brief_sent` as `payees`.
 
 ## Setup reminders for workspaces that stop
 

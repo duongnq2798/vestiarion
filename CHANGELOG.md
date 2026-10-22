@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Payee address changes in the weekly brief.** In a week when a payee's address changed, Monday's email has a
+  **Payee addresses** section: a payee frozen because their contact said the change was not theirs, first; the
+  addresses changed and confirmed; the payments the agent held for an address; and the contacts asked "Was this you?"
+  and what they said. Where the payee lock is off, it suggests turning it on. Such a week is now reason enough to send
+  the brief.
+
 - **The payee lock starts on for a new Arc mainnet workspace.** A workspace created on Arc mainnet now has the
   payee lock on from the start, with no wait: a payee's new address is paid only after someone records how they checked
   it, and whoever gave it does not confirm it while someone else can. Its **Get started** checklist explains it in
