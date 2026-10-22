@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { amountsLine, groupAddress, looksLikeAddress, maskAddress, moveOn, payeeStage, payeeView, paymentState, type PayeeLinkStatus, type PayeePayment } from "@/lib/payee-journey";
+import { amountsLine, chainFeeNote, groupAddress, looksLikeAddress, maskAddress, moveOn, payeeStage, payeeView, paymentState, type PayeeLinkStatus, type PayeePayment } from "@/lib/payee-journey";
 
 /** The freelancer's side of a payment (docs/superpowers/specs/2026-10-02-freelancer-journey-design.md §2–§4). */
 
@@ -146,5 +146,14 @@ describe("amountsLine", () => {
     expect(amountsLine([payment(), payment({ amount: 5.5 })])).toBe("30.50 USDC");
     expect(amountsLine([payment({ currency: "EURC", amount: 10 }), payment()])).toBe("25.00 USDC and 10.00 EURC");
     expect(amountsLine([])).toBe("");
+  });
+});
+
+describe("chainFeeNote (payee link chain fees CF1, CF3)", () => {
+  it("says no fee on the network's own chain, about what the business pays to another, and never a figure not read", () => {
+    expect(chainFeeNote("Acme", true, undefined)).toBe("No fee to send it here.");
+    expect(chainFeeNote("Acme", false, 0.076994)).toBe("Acme pays about 0.077 USDC to send it here.");
+    expect(chainFeeNote("Acme", false, null)).toBe("Acme pays a small fee to send it here.");
+    expect(chainFeeNote("Acme", false, undefined)).toBe("Acme pays a small fee to send it here.");
   });
 });

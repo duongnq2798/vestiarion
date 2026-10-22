@@ -679,7 +679,9 @@ page; `revokePayeeLink` answers which (`payee_link_revoked` carries `invoiceOnly
   (`payeesHeldToTheirChain`, `chainChoiceFits`); `issuePayeeLink` checks the same. `payee_link_status` says
   `chainOpen` when the link offers it, is unused, and its payee is a vendor with no address, no `payment_intents` row
   for any of its invoices or milestones, no milestone not yet paid or closed and no open payable not in USDC.
-  `payeeLinkStatus` turns that into `chainChoices`, read in the paying workspace's scope. `submitPayeeAddress(token, raw,
+  `payeeLinkStatus` turns that into `chainChoices`, read in the paying workspace's scope, with `chainFees`: `bridgeFee`
+  for each chain but the first, quoted for the USDC owed and not paid, each within 3 seconds and null when not read
+  (docs/superpowers/specs/2026-10-22-payee-link-chain-fees-design.md); `chainFeeNote` words each choice. `submitPayeeAddress(token, raw,
   { chain })` reads `chainOpen` before claiming the link, checks the chain against `choosablePayeeChains` after
   (releasing the link when it is not one), and `changeCounterpartyAddress` writes `address` and, when it is another
   than the effective one (none recorded is the network's own), `chain`, in one compare-and-set guarded on the chain
