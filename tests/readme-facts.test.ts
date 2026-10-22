@@ -15,4 +15,12 @@ describe("the README", () => {
     const named = CYCLE_STAGES.map((stage) => words[stage] ?? stage);
     expect(block).toContain(named.join(" -> "));
   });
+
+  it("names the SDK's own version in its npm badge, which shields.io cannot look up for this package", () => {
+    const { version } = JSON.parse(readFileSync(path.join(process.cwd(), "sdk", "package.json"), "utf8")) as { version: string };
+    const line = README.split("\n").find((row) => row.startsWith("[![npm](")) ?? "";
+    const badge = line.slice("[![npm](".length, line.indexOf(")]("));
+    expect(line).toContain("](https://www.npmjs.com/package/@vestiarion/sdk)");
+    expect(badge).toBe(`https://img.shields.io/badge/%40vestiarion%2Fsdk-v${version}-cb3837?style=flat-square&logo=npm&logoColor=white`);
+  });
 });
