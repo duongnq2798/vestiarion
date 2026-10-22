@@ -1,10 +1,21 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { TENANT_RPCS, TENANT_TABLES } from "@/lib/dal";
 import { fakeSupabase, carriesOrg, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
+const { chainModes } = vi.hoisted(() => ({
+  chainModes: vi.fn((): { mode: "live" | "simulate"; earnMode: "live" | "simulate" } => ({ mode: "simulate", earnMode: "simulate" })),
+}));
+
 vi.mock("server-only", () => ({}));
+// Whether payments are real is the workspace's configuration: simulated unless a test says live.
+vi.mock("@/lib/circle", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/circle")>()), chainModes }));
+
+afterEach(() => {
+  chainModes.mockReset();
+  chainModes.mockReturnValue({ mode: "simulate", earnMode: "simulate" });
+});
 
 import { COSIGN_BLOCKED, cosignState, readCosignStates, type CosignFacts, type CosignPayable } from "@/lib/cosign-state";
 import { verdictHolds } from "@/lib/verdicts";
@@ -28,6 +39,7 @@ const facts = (over: Partial<CosignFacts> = {}): CosignFacts => ({
   verdict: null,
   deciding: false,
   riskLevel: "low",
+  noAddress: false,
   frozen: false,
   lock: null,
   ...over,
@@ -72,6 +84,7 @@ describe("cosignState", () => {
     [{ verdict: "disagreed" as const }, "Someone disagreed with it in shadow mode"],
     [{ deciding: true }, "Being decided right now"],
     [{ riskLevel: "high" }, "Screened high risk"],
+    [{ noAddress: true }, "The payee has no payment address yet"],
     [{ frozen: true }, "The payee is frozen"],
     [{ lock: "unconfirmed" as const }, "Confirm the address first"],
     [{ lock: "cooling" as const }, "Waiting for the payee lock's wait to end"],
@@ -83,6 +96,13 @@ describe("cosignState", () => {
     expect(cosignState(facts({ verdict: "waiting", riskLevel: "high", frozen: true }), ACCOUNTANT)).toEqual({ state: "blocked", reason: COSIGN_BLOCKED.verdict });
     expect(cosignState(facts({ riskLevel: "high", frozen: true, lock: "unconfirmed" }), ACCOUNTANT)).toEqual({ state: "blocked", reason: COSIGN_BLOCKED.high_risk });
     expect(cosignState(facts({ frozen: true, lock: "unconfirmed" }), ACCOUNTANT)).toEqual({ state: "blocked", reason: COSIGN_BLOCKED.frozen });
+    // A payee with no address where payments are real: after high risk, before a frozen payee or the payee lock.
+    expect(cosignState(facts({ riskLevel: "high", noAddress: true }), ACCOUNTANT)).toEqual({ state: "blocked", reason: COSIGN_BLOCKED.high_risk });
+    expect(cosignState(facts({ noAddress: true, frozen: true, lock: "unconfirmed" }), ACCOUNTANT)).toEqual({ state: "blocked", reason: COSIGN_BLOCKED.no_address });
+  });
+
+  it("keeps the reasons in the order approveAndPay refuses them", () => {
+    expect(Object.keys(COSIGN_BLOCKED)).toEqual(["verdict", "disagreed", "deciding", "high_risk", "no_address", "frozen", "unconfirmed", "cooling"]);
   });
 
   it("blocks nothing a co-sign is not needed for", () => {
@@ -277,6 +297,50 @@ describe("readCosignStates", () => {
     const { fake, read } = reading({ counterparties: [{ id: bill(1).counterpartyId, address_changed_at: "2026-10-22T09:00:00Z", address_confirmed_at: null }] });
     expect(stateOf(await read([bill(1)]), bill(1))).toEqual({ state: "can_cosign", above: 500, approvals: 0 });
     expect(fake.requests.some((r) => r.path === "/rest/v1/counterparties" && !r.params.get("frozen_at"))).toBe(false);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/counterparty_bank_accounts")).toBe(false);
+
+    // Nor a bank account where payments are real, while every payee has an address.
+    chainModes.mockReturnValue({ mode: "live", earnMode: "simulate" });
+    const live = reading();
+    expect(stateOf(await live.read([bill(1)]), bill(1))).toEqual({ state: "can_cosign", above: 500, approvals: 0 });
+    expect(live.fake.requests.some((r) => r.path === "/rest/v1/counterparty_bank_accounts")).toBe(false);
+  });
+
+  it("blocks a payee with no address where payments are real, as Approve and pay refuses it, unless it is paid to its bank", async () => {
+    chainModes.mockReturnValue({ mode: "live", earnMode: "simulate" });
+    const bare = bill(1, { address: null });
+    const banked = bill(2, { address: null });
+    const withAddress = bill(3);
+    const { fake, read } = reading({ banked: [banked.counterpartyId] });
+    const states = await read([bare, banked, withAddress]);
+    expect(stateOf(states, bare)).toEqual({ state: "blocked", reason: "The payee has no payment address yet" });
+    expect(stateOf(states, banked)).toEqual({ state: "can_cosign", above: 500, approvals: 0 });
+    expect(stateOf(states, withAddress)).toEqual({ state: "can_cosign", above: 500, approvals: 0 });
+    // The payees' bank accounts in one request; with the lock off, no address state.
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/counterparty_bank_accounts")).toHaveLength(1);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/counterparties" && !r.params.get("frozen_at"))).toBe(false);
+  });
+
+  it("takes no missing address against a co-sign where payments are simulated", async () => {
+    const bare = bill(1, { address: null });
+    const { fake, read } = reading();
+    expect(stateOf(await read([bare]), bare)).toEqual({ state: "can_cosign", above: 500, approvals: 0 });
+    expect(fake.requests.some((r) => r.path === "/rest/v1/counterparty_bank_accounts")).toBe(false);
+  });
+
+  it("names a verdict first where high risk or a claim in progress would refuse it too, and reads no payee for bills already blocked", async () => {
+    const risky = bill(1, { riskLevel: "high" });
+    const claimed = bill(2, { status: "processing", reviewedAt: "2026-10-22T11:58:00.000Z" });
+    const { fake, read } = reading({
+      shadow: true,
+      decisions: [heldForVerdict(52, claimed.id), heldForVerdict(51, risky.id)],
+      verdicts: [{ entry_seq: 52, verdict: "disagree" }],
+    });
+    const states = await read([risky, claimed]);
+    expect(stateOf(states, risky)).toEqual({ state: "blocked", reason: "Waiting for a verdict in shadow mode" });
+    expect(stateOf(states, claimed)).toEqual({ state: "blocked", reason: "Someone disagreed with it in shadow mode" });
+    // Both were blocked before a payee could matter: no frozen payee, address state or bank account is read.
+    expect(fake.requests.some((r) => r.path === "/rest/v1/counterparties")).toBe(false);
     expect(fake.requests.some((r) => r.path === "/rest/v1/counterparty_bank_accounts")).toBe(false);
   });
 

@@ -157,6 +157,9 @@ async function decisions(orgDb: OrgDb, period: HandoffPeriod) {
         .from("ledger_entries")
         .select("seq, ts, actor, action, summary, invoice_id:detail->>invoiceId, cosign:detail->>cosign, hash")
         .in("action", [...AGENT_DECISION_ACTIONS, ...PERSON_DECISIONS, APPROVAL_GIVEN])
+        // The first of two approvals by an owner, admin or approver is no decision yet: only an accountant's co-sign is
+        // read, so the rows the export counts against its most are decisions only.
+        .or(`action.neq.${APPROVAL_GIVEN},detail->>cosign.eq.true`)
         .gte("ts", `${period.from}T00:00:00.000Z`)
         .lt("ts", `${period.to}T00:00:00.000Z`)
         .order("seq", { ascending: true })
@@ -165,7 +168,8 @@ async function decisions(orgDb: OrgDb, period: HandoffPeriod) {
   return {
     cut: read.cut,
     rows: read.rows
-      // The first of two approvals by an owner, admin or approver is no decision yet: the one that pays it is.
+      // The first of two approvals by an owner, admin or approver is no decision yet: the one that pays it is. The request
+      // already leaves it out; kept here as well.
       .filter((row) => row.action !== APPROVAL_GIVEN || row.cosign === "true")
       .map((row) => ({
         seq: row.seq,

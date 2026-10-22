@@ -12,6 +12,7 @@ export const COSIGN_BLOCKED = {
   disagreed: "Someone disagreed with it in shadow mode",
   deciding: "Being decided right now",
   high_risk: "Screened high risk",
+  no_address: "The payee has no payment address yet",
   frozen: "The payee is frozen",
   unconfirmed: "Confirm the address first",
   cooling: "Waiting for the payee lock's wait to end",
@@ -43,6 +44,8 @@ export interface CosignFacts {
   /** Someone's claim on it is in progress. */
   deciding: boolean;
   riskLevel: string | null;
+  /** Payments are real here, and the payee has neither an address nor a bank account (counterparty.no_address). */
+  noAddress: boolean;
   frozen: boolean;
   /** What the payee lock holds it for: an address to confirm, or a wait after a change. */
   lock: "unconfirmed" | "cooling" | null;
@@ -63,6 +66,7 @@ export function cosignState(facts: CosignFacts, viewerId: string): CosignState {
   if (facts.verdict === "disagreed") return blocked(COSIGN_BLOCKED.disagreed);
   if (facts.deciding) return blocked(COSIGN_BLOCKED.deciding);
   if (facts.riskLevel === "high") return blocked(COSIGN_BLOCKED.high_risk);
+  if (facts.noAddress) return blocked(COSIGN_BLOCKED.no_address);
   if (facts.frozen) return blocked(COSIGN_BLOCKED.frozen);
   if (facts.lock === "unconfirmed") return blocked(COSIGN_BLOCKED.unconfirmed);
   if (facts.lock === "cooling") return blocked(COSIGN_BLOCKED.cooling);

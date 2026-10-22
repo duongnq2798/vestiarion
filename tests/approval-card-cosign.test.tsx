@@ -109,6 +109,15 @@ describe("Co-sign on the approval card", () => {
     expect(markup).toContain(`href="/o/acme/counterparties#counterparty-${payable.counterpartyId}"`);
   });
 
+  it("links the payee's row where it has no payment address yet, which the server refuses with no_address", () => {
+    const markup = html(
+      <ApprovalCard orgSlug="acme" payable={{ ...payable, address: null }} canDecide={false} viewerId={ACCOUNTANT} sandbox={false} canCosign cosign={{ state: "blocked", reason: COSIGN_BLOCKED.no_address }} />
+    );
+    expect(text(markup)).toContain("The payee has no payment address yet on Counterparties .");
+    expect(text(markup)).not.toContain("Co-sign");
+    expect(markup).toContain(`href="/o/acme/counterparties#counterparty-${payable.counterpartyId}"`);
+  });
+
   it("says they co-signed it when the page read so", () => {
     expect(card({}, true, { state: "cosigned" })).toContain("You co-signed it. An owner, admin or approver's Approve and pay pays it.");
   });

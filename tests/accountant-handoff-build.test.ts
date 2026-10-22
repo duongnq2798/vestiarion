@@ -124,6 +124,8 @@ describe("buildHandoff: co-signs and what waits for the accountant", () => {
     const asked = fake.requests.find((sent) => sent.path === "/rest/v1/ledger_entries" && sent.params.get("action")?.startsWith("in."))!;
     expect(asked.params.get("action")).toContain("approval_given");
     expect(asked.params.get("select")).toContain("cosign:detail->>cosign");
+    // Only a co-sign's approval_given is read, so the export's most counts decisions alone.
+    expect(asked.params.get("or")).toBe("(action.neq.approval_given,detail->>cosign.eq.true)");
     // The CSV says which decision was a co-sign.
     const lines = [...handoffCsvChunks(doc)].join("").split("\r\n");
     expect(lines.find((line) => line.startsWith("decision,802,"))).toContain(",inv-8,co-sign,h802");

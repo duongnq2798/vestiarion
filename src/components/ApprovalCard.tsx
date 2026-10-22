@@ -419,7 +419,8 @@ export default function ApprovalCard({
 
 /**
  * An accountant's Co-sign (accountant co-sign CS8): one of the two approvals, recorded behind a confirmation, never paid.
- * A co-sign that cannot be given yet says why instead (accountant queue AQ5); the address to confirm links its row.
+ * A co-sign that cannot be given yet says why instead (accountant queue AQ5); an address to confirm, or one still to add,
+ * links the payee's row.
  */
 function CosignControl({ orgSlug, payable, viewerId, cosign: state }: { orgSlug: string; payable: WaitingPayable; viewerId: string; cosign?: CosignState }) {
   const form = useActionForm(cosign, INITIAL);
@@ -436,7 +437,7 @@ function CosignControl({ orgSlug, payable, viewerId, cosign: state }: { orgSlug:
       <CardFooter>
         <p className="text-sm text-ink-2">
           {state.reason}
-          {state.reason === COSIGN_BLOCKED.unconfirmed ? (
+          {state.reason === COSIGN_BLOCKED.unconfirmed || state.reason === COSIGN_BLOCKED.no_address ? (
             <>
               {" "}
               on{" "}

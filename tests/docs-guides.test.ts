@@ -483,6 +483,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Someone disagreed with it in shadow mode", COSIGN_RULES],
     ["Being decided right now", COSIGN_RULES],
     ["Screened high risk", COSIGN_RULES],
+    ["The payee has no payment address yet", COSIGN_RULES],
     ["The payee is frozen", COSIGN_RULES],
     ["Confirm the address first", COSIGN_RULES],
     ["Waiting for the payee lock's wait to end", COSIGN_RULES],

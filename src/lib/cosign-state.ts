@@ -5,6 +5,7 @@ import { isReclaimable } from "./agent/claim-age";
 import { twoApprovalsFacts } from "./agent/second-approval";
 import { readPaymentPolicies } from "./approval-policy";
 import { bankAccountsOf } from "./bank-payouts/store";
+import { chainModes } from "./circle";
 import { cosignState, type CosignFacts, type CosignState } from "./cosign-state-rules";
 import { addressUnconfirmed } from "./counterparty-address";
 import { db, unwrap, type OrgDb } from "./dal";
@@ -22,9 +23,9 @@ export * from "./cosign-state-rules";
  * reads its facts for many bills at once, in the workspace in scope, through its tenant client.
  *
  * Who co-signs at all (an accountant, while an owner lets accountants co-sign) is the caller's check, as it is for the
- * co-sign itself. Left to the card's own refusal: a first payment to an address whose confirmation leaves the accountant
- * out, a bill the accountant entered, and the refusals no held bill is likely to meet (payments switched off, a
- * sanctioned address, a payee off the network).
+ * co-sign itself. Left to the card's own refusal, given when Co-sign is clicked: a first payment to an address whose
+ * confirmation leaves the accountant out, a bill the accountant entered, a commission's partner, and the refusals no held
+ * bill is likely to meet (payments switched off, a sanctioned address, a payee off the network).
  */
 
 /** A bill waiting for a person, as the console and Approvals list it, for `readCosignStates`. */
@@ -79,12 +80,13 @@ async function cosigningAccountants(orgDb: OrgDb, givers: string[]): Promise<Set
   return new Set(givers.filter((giver) => !deciders.has(giver)));
 }
 
-/** What the payee lock holds each payee for (PL4, PL5), read only while it is on; a payee paid to its bank account, none. */
-async function lockHolds(orgDb: OrgDb, lock: PayeeLock, counterpartyIds: string[], now: number): Promise<Map<string, "unconfirmed" | "cooling">> {
+/**
+ * What the payee lock holds each payee for (PL4, PL5), read only while it is on. The caller leaves out a payee paid to its
+ * bank account, which the lock never holds.
+ */
+async function lockHolds(orgDb: OrgDb, lock: PayeeLock, paidToAddress: string[], now: number): Promise<Map<string, "unconfirmed" | "cooling">> {
   const holds = new Map<string, "unconfirmed" | "cooling">();
-  if (!lock.on || counterpartyIds.length === 0) return holds;
-  const banked = await bankAccountsOf(counterpartyIds, orgDb);
-  const paidToAddress = counterpartyIds.filter((id) => !banked.has(id));
+  if (!lock.on || paidToAddress.length === 0) return holds;
   for (const part of chunks(paidToAddress)) {
     const rows = unwrap(await orgDb.from("counterparties").select("id, address_changed_at, address_confirmed_at").in("id", part)) as Array<{
       id: string;
@@ -102,9 +104,11 @@ async function lockHolds(orgDb: OrgDb, lock: PayeeLock, counterpartyIds: string[
 /**
  * Each bill's co-sign state for this viewer (AQ1), in the workspace in scope. A handful of requests however many bills:
  * the figure with the payee lock, then only as far as an answer is still open, a EURC bill's recorded USDC value, the
- * bills' payment intents, their standing approvals (`twoApprovalsFacts`), which of those are co-signs, frozen payees, the
- * lock's holds and the shadow-mode verdicts. It never reads a quote, a balance or Circle. A figure that cannot be read
- * throws, as every read of it does: the caller names the part as unread.
+ * bills' payment intents, their standing approvals (`twoApprovalsFacts`), which of those are co-signs, the shadow-mode
+ * verdicts of every bill still to be decided, and, for the bills nothing else blocks yet, frozen payees, the payees paid
+ * to a bank account (while the lock is on, or where payments are real and a payee has no address) and the lock's holds.
+ * It never reads a quote, a balance or Circle: whether payments are real is the workspace's configuration. A figure that
+ * cannot be read throws, as every read of it does: the caller names the part as unread.
  */
 export async function readCosignStates(viewerId: string, payables: readonly CosignPayable[], now: number = Date.now()): Promise<Map<string, CosignState>> {
   const states = new Map<string, CosignState>();
@@ -123,6 +127,7 @@ export async function readCosignStates(viewerId: string, payables: readonly Cosi
         verdict: null,
         deciding: payable.status === "processing" && !isReclaimable(payable.status, payable.reviewedAt, now),
         riskLevel: payable.riskLevel,
+        noAddress: false,
         frozen: false,
         lock: null,
       },
@@ -174,21 +179,38 @@ export async function readCosignStates(viewerId: string, payables: readonly Cosi
     (facts.get(payable.id) as CosignFacts).approvals = (standing.get(payable.id)?.approvals ?? []).map((approval) => ({ by: approval.by, cosign: accountants.has(approval.by) }));
   }
 
-  // What could still refuse a co-sign, read only for the bills one could still be given on.
-  const open = needing.filter((payable) => cosignState(facts.get(payable.id) as CosignFacts, viewerId).state === "can_cosign");
-  if (open.length === 0) return settle();
+  // What could still refuse a co-sign, read only for the bills one could still be given on. A verdict comes first in
+  // approveAndPay's order, before a claim in progress or high risk, so it is read for every bill still to be decided; a
+  // missing address, a frozen payee and the payee lock come after them, so only for the bills nothing else blocks yet.
+  const undecided = needing.filter((payable) => {
+    const { state } = cosignState(facts.get(payable.id) as CosignFacts, viewerId);
+    return state === "can_cosign" || state === "blocked";
+  });
+  if (undecided.length === 0) return settle();
+  const open = undecided.filter((payable) => cosignState(facts.get(payable.id) as CosignFacts, viewerId).state === "can_cosign");
   const payees = [...new Set(open.map((payable) => payable.counterpartyId))];
-  const [frozen, holds, verdicts] = await Promise.all([
-    readFrozenPayees(payees, orgDb),
-    lockHolds(orgDb, payeeLock, payees, now),
+  // Where payments are real, a payee with no address is refused (counterparty.no_address), unless it is paid to its bank
+  // (bank payouts B4); the payee lock never holds a payee paid to its bank either. So bank accounts are read only when
+  // either could matter.
+  const live = chainModes().mode === "live";
+  const needBanks = payeeLock.on || (live && open.some((payable) => !payable.address));
+  const [frozen, banked, verdicts] = await Promise.all([
+    readFrozenPayees(payees, orgDb), // no request for an empty list
+    needBanks ? bankAccountsOf(payees, orgDb) : Promise.resolve(new Map<string, unknown>()), // none either
     // A verdict holds a bill only while it is held, or claimed by someone (verdictGate).
-    verdictHolds(open.filter((payable) => payable.status === "held" || payable.status === "processing").map((payable) => payable.id)),
+    verdictHolds(undecided.filter((payable) => payable.status === "held" || payable.status === "processing").map((payable) => payable.id)),
   ]);
+  const holds = await lockHolds(orgDb, payeeLock, payees.filter((id) => !banked.has(id)), now);
+  for (const payable of undecided) {
+    const fact = facts.get(payable.id) as CosignFacts;
+    fact.verdict = verdicts.waiting.has(payable.id) ? "waiting" : verdicts.disagreed.has(payable.id) ? "disagreed" : null;
+  }
   for (const payable of open) {
     const fact = facts.get(payable.id) as CosignFacts;
+    // As approveAndPay refuses it, before any lock (counterparty.no_address); a payee paid to its bank needs none (B4).
+    fact.noAddress = live && !payable.address && !banked.has(payable.counterpartyId);
     fact.frozen = frozen.has(payable.counterpartyId);
     fact.lock = holds.get(payable.counterpartyId) ?? null;
-    fact.verdict = verdicts.waiting.has(payable.id) ? "waiting" : verdicts.disagreed.has(payable.id) ? "disagreed" : null;
   }
   return settle();
 }

@@ -1,6 +1,6 @@
 import { readFrozenPayees } from "../address-change-check";
 import { invoiceDiscount } from "../agent/payment-timing";
-import { readAccountantCosign } from "../approval-policy";
+import { billApproversBesides, readAccountantCosign } from "../approval-policy";
 import { membershipsOf, type OrgMembership } from "../auth/membership";
 import { approvalAnchor, orgHref } from "../auth/org-paths";
 import { can } from "../auth/roles";
@@ -14,7 +14,10 @@ import { readCustomerRequests } from "../customer-portal/requests";
 import { db, type OrgDb } from "../dal";
 import { withOrg } from "../dal/scope";
 import { decideByOf } from "../exceptions";
+import { addressGiver } from "../new-payee";
+import { ID_CHUNK, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
 import { counterpartyPath } from "../next-step";
+import { readPayeeLock } from "../payee-lock";
 import { twoApprovalsSentence } from "../two-approvals";
 import { readConnectorProblems, readUsageLimits } from "../usage/read";
 import { routeTo, sortTriage, type TriageItem } from "./triage";
@@ -196,11 +199,49 @@ async function decisionItems(
   return items;
 }
 
+/** What a changed address's item says to whoever entered or asked for it, under the payee lock, while another may confirm it. */
+const GIVER_WAITS = { canAct: false, who: "Waiting on another member to confirm it: you entered or asked for this address" } as const;
+
+/**
+ * Of these payees' changed addresses, those the viewer may not confirm (AQ4): with the payee lock on, whoever entered or
+ * asked for an address does not confirm it while another member may (payee lock PL3), as `confirmCounterpartyAddress`
+ * refuses with `giver_confirms`. None with the lock off, and none where no one else may confirm, since the viewer's
+ * confirmation is then recorded as a solo one. The addresses are read here only to know who gave each, and never put on
+ * an item. Best effort: a part that cannot be read leaves the items as the viewer's role routes them, and the server
+ * still refuses what it must.
+ */
+async function givenByViewer(orgDb: OrgDb, viewerId: string, counterpartyIds: string[]): Promise<Set<string>> {
+  const none = new Set<string>();
+  if (counterpartyIds.length === 0) return none;
+  try {
+    if (!(await readPayeeLock(orgDb)).on) return none;
+    const addressReads = Array.from({ length: Math.ceil(counterpartyIds.length / ID_CHUNK) }, (_, index) =>
+      orgDb.from("counterparties").select("id, address").in("id", counterpartyIds.slice(index * ID_CHUNK, (index + 1) * ID_CHUNK))
+    );
+    // Who gave each address, from its signed entries, in one read for them all, as the confirmation reads it.
+    const [facts, ...addresses] = await Promise.all([loadNewPayeeFacts(orgDb, counterpartyIds), ...addressReads]);
+    const given = new Set<string>();
+    for (const result of addresses) {
+      if (result.error) throw new Error(result.error.message);
+      for (const row of (result.data ?? []) as Array<{ id: string; address: string | null }>) {
+        if (addressGiver(newPayeeCheckFor(facts, row)) === viewerId) given.add(row.id);
+      }
+    }
+    if (given.size === 0) return none;
+    // A co-signing accountant confirms addresses too, so counts as someone else (accountant co-sign CS6).
+    return (await billApproversBesides([viewerId])) > 0 ? given : none;
+  } catch (error) {
+    console.error("accountant: who gave an address not read", error instanceof Error ? error.message : "unknown error");
+    return none;
+  }
+}
+
 /**
  * Changed payout addresses no one has confirmed yet (AQ4), for whoever may confirm one: the newest changes first, up to
- * the console's most, never the address itself. A frozen payee is unfrozen first, by an owner or admin.
+ * the console's most, never the address itself. A frozen payee is unfrozen first, by an owner or admin; under the payee
+ * lock, an address the viewer entered or asked for waits on another member, where one may confirm it.
  */
-async function addressItems(orgDb: OrgDb, ws: { slug: string; name: string; role: OrgMembership["role"] }): Promise<TriageItem[]> {
+async function addressItems(orgDb: OrgDb, ws: { slug: string; name: string; role: OrgMembership["role"] }, viewerId: string | undefined): Promise<TriageItem[]> {
   const result = await orgDb
     .from("counterparties")
     .select("id, name, address_changed_at, address_confirmed_at")
@@ -215,10 +256,13 @@ async function addressItems(orgDb: OrgDb, ws: { slug: string; name: string; role
   if (rows.length === 0) return [];
   // None before migration 0137.
   const frozen = await readFrozenPayees(rows.map((row) => row.id), orgDb);
+  const roleRoute = routeTo(ws.role, "confirm_address");
+  const unfrozen = rows.filter((row) => !frozen.has(row.id)).map((row) => row.id);
+  const viewerGave = roleRoute.canAct && viewerId ? await givenByViewer(orgDb, viewerId, unfrozen) : new Set<string>();
   return rows.map((row) => {
     const isFrozen = frozen.has(row.id);
     const route = !isFrozen
-      ? routeTo(ws.role, "confirm_address")
+      ? (viewerGave.has(row.id) ? GIVER_WAITS : roleRoute)
       : can(ws.role, "records.write")
         ? { canAct: true, who: "You can unfreeze it once you have checked with them, then confirm it" }
         : { canAct: false, who: "Waiting on an owner or admin of this workspace" };
@@ -377,7 +421,7 @@ export async function readWorkspaceTriage(membership: OrgMembership, now: Date =
   const parts = await Promise.all([
     part("payments waiting for a decision", unread, async () => decisionItems(orgDb, ws, now, { on: await cosignOn, viewerId, unread }), []),
     // Whoever may confirm a changed address: whoever decides payments, and an accountant while co-signing is on (CS6).
-    part("addresses to confirm", unread, async () => (can(ws.role, "approval.decide") || (await cosignOn) ? addressItems(orgDb, ws) : []), []),
+    part("addresses to confirm", unread, async () => (can(ws.role, "approval.decide") || (await cosignOn) ? addressItems(orgDb, ws, viewerId) : []), []),
     part("payments to book", unread, () => bookingItems(orgDb, ws), []),
     part("receivables", unread, () => receivableItems(orgDb, ws, now), []),
     part("connectors", unread, () => connectorItems(ws, now), []),

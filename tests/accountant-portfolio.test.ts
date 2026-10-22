@@ -227,6 +227,8 @@ describe("readPortfolio: what waits for the accountant", () => {
 
   type Options = {
     cosignOn?: boolean;
+    /** The payee lock (docs/superpowers/specs/2026-10-20-payee-lock-design.md); off unless set. */
+    lock?: boolean;
     payables?: unknown[];
     counterparties?: unknown[];
     frozen?: string[];
@@ -240,7 +242,7 @@ describe("readPortfolio: what waits for the accountant", () => {
       const inHarbor = claimsOf(sent)?.org_id === HARBOR.id;
       if (options.failing && sent.path === options.failing && inHarbor) return { status: 500, body: { message: "down" } };
       if (sent.path === "/rest/v1/approval_policies") {
-        return { body: inHarbor ? [{ two_approvals_above: "500", accountant_cosigns: options.cosignOn ?? true, payee_lock: false, payee_lock_cooling_hours: 0 }] : [] };
+        return { body: inHarbor ? [{ two_approvals_above: "500", accountant_cosigns: options.cosignOn ?? true, payee_lock: options.lock ?? false, payee_lock_cooling_hours: 0 }] : [] };
       }
       if (!inHarbor) return null;
       if (sent.path === "/rest/v1/invoices" && sent.params.get("direction") === "eq.payable") return { body: options.payables ?? [payable("big"), payable("small", { amount: "200" })] };
@@ -403,5 +405,61 @@ describe("readPortfolio: what waits for the accountant", () => {
       ["Frozen Ltd", true, "You can unfreeze it once you have checked with them, then confirm it"],
       ["Northwind", true, "You can confirm it"],
     ]);
+  });
+
+  it("under the payee lock, leaves an address the viewer entered to another member, as the confirmation refuses it, and lets them confirm it alone where no one else may", async () => {
+    const counterparties = [
+      { id: "cp-mine", name: "Northwind", address_changed_at: "2026-10-12T08:00:00Z", address_confirmed_at: null },
+      { id: "cp-theirs", name: "Pixel Print", address_changed_at: "2026-10-11T08:00:00Z", address_confirmed_at: null },
+    ];
+    const asOwner = INVITED.map((row) => (row.user === ACCOUNTANT && row.org.slug === HARBOR.slug ? { ...row, role: "owner" } : row));
+    const lockWorld = (othersWhoConfirm: number) =>
+      world(asOwner, (sent) => {
+        const inHarbor = claimsOf(sent)?.org_id === HARBOR.id;
+        // The addresses, read only to know who gave each; and the entries that set them, the viewer's for Northwind.
+        if (inHarbor && sent.path === "/rest/v1/counterparties" && sent.params.get("select") === "id,address") {
+          return { body: [{ id: "cp-mine", address: "0xnew1" }, { id: "cp-theirs", address: "0xnew2" }] };
+        }
+        if (inHarbor && sent.path === "/rest/v1/ledger_entries" && sent.params.get("action")?.includes("counterparty_address_changed")) {
+          return {
+            body: [
+              { action: "counterparty_address_changed", detail: { by: ACCOUNTANT, counterpartyId: "cp-mine", from: "0xold1", to: "0xnew1" } },
+              { action: "counterparty_address_changed", detail: { by: OWNER, counterpartyId: "cp-theirs", from: "0xold2", to: "0xnew2" } },
+            ],
+          };
+        }
+        if (inHarbor && (sent.path === "/rest/v1/rpc/approvers_besides" || sent.path === "/rest/v1/rpc/cosigners_besides")) return { body: othersWhoConfirm };
+        return harbor({ cosignOn: false, lock: true, payables: [], counterparties })(sent);
+      });
+
+    const { fake, read } = lockWorld(1);
+    const portfolio = await read();
+    expect(harborItems(portfolio.items).map((item) => [item.title, item.canAct, item.who])).toEqual([
+      ["Pixel Print", true, "You can confirm it"],
+      ["Northwind", false, "Waiting on another member to confirm it: you entered or asked for this address"],
+    ]);
+    // Not among what the viewer can act on, and no address on any item.
+    expect(portfolio.items.filter((item) => item.canAct).map((item) => item.title)).toEqual(["Pixel Print"]);
+    for (const item of harborItems(portfolio.items)) expect(item.detail).not.toMatch(/0x/i);
+    // Who else may confirm is asked once, leaving out the viewer.
+    const asked = fake.requests.filter((sent) => sent.path === "/rest/v1/rpc/approvers_besides" && claimsOf(sent)?.org_id === HARBOR.id);
+    expect(asked).toHaveLength(1);
+    expect((asked[0].body as { p_excluded: string[] }).p_excluded).toEqual([ACCOUNTANT]);
+
+    // With no one else to confirm it, the viewer confirms it alone, as a solo confirmation.
+    const alone = lockWorld(0);
+    expect(harborItems((await alone.read()).items).map((item) => [item.title, item.canAct])).toEqual([
+      ["Pixel Print", true],
+      ["Northwind", true],
+    ]);
+  });
+
+  it("reads no address, and no one who gave one, while the payee lock is off", async () => {
+    const counterparties = [{ id: "cp-mine", name: "Northwind", address_changed_at: "2026-10-12T08:00:00Z", address_confirmed_at: null }];
+    const asOwner = INVITED.map((row) => (row.user === ACCOUNTANT && row.org.slug === HARBOR.slug ? { ...row, role: "owner" } : row));
+    const { fake, read } = world(asOwner, harbor({ cosignOn: false, payables: [], counterparties }));
+    expect(harborItems((await read()).items).map((item) => [item.title, item.canAct])).toEqual([["Northwind", true]]);
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/counterparties" && sent.params.get("select") === "id,address")).toBe(false);
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/ledger_entries" && sent.params.get("action")?.includes("counterparty_address_changed"))).toBe(false);
   });
 });
