@@ -128,7 +128,7 @@ describe("the terms", () => {
     for (const feature of ["hosted wallets", "the USYC reserve", "milestone escrow", "the EURC swap", "Circle's faucet"]) {
       expect(testnet, feature).toContain(feature);
     }
-    expect(testnet).toContain("Payouts to other chains run here, and on Arc mainnet to Base from a workspace's own Circle account.");
+    expect(testnet).toContain("Payouts to other chains run here, and on Arc mainnet to Base and Arbitrum from a workspace's own Circle account.");
   });
 });
 
