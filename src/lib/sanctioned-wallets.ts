@@ -11,7 +11,13 @@ import { rowsFromCsv } from "./csv-rows";
  * files cannot be read, the snapshot bundled with the code answers, dated, so a lookup never depends on the network.
  */
 
-export const OFAC_SDN_URL = "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV";
+/**
+ * The source a verdict from this list records (SW4). It is written with screening mode `live`, since OFAC's own list
+ * decided it, but it calls no screening provider, so the provider's health leaves it out (screening health SH3, SH4).
+ */
+export const OFAC_ADDRESS_SOURCE = "ofac-sdn";
+
+export const OFAC_SDN_URL ="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV";
 export const OFAC_SDN_COMMENTS_URL = "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_COMMENTS.CSV";
 /** How long a live read is kept before the next one (SW2). */
 export const SANCTIONED_WALLETS_TTL_MS = 12 * 3_600_000;

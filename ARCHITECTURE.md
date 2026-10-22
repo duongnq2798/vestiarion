@@ -1170,7 +1170,23 @@ would find.
     `PROVIDER_NAMES` name it in `screeningSourceLabel` and the evidence chain. Another service is one more entry in
     the registry.
   - `checkScreening` (`src/lib/screening/check.ts`, `npm run screening:check`) screens one name with the
-    environment's provider, printing the address's origin and never the key.
+    environment's provider, printing the address's origin and never the key. It prints from `runScreeningCheck`,
+    which returns the same check structured (setup, ms, HTTP status, verdict); a provider's own error comes back
+    with the key and every address but its origin taken out (`redactScreeningSecrets`).
+- **Screening health** (`docs/superpowers/specs/2026-10-22-screening-health-design.md`): configured is not working.
+  - A provider's HTTP error is a `ScreeningHttpError` (`providers.ts`) with its status and kind (`key_refused` for
+    401/403, `over_quota` for 429, `provider_down` for 5xx), and the message failed checks always recorded.
+    `applyScreening` keeps it as its wrapper's `cause`; `screeningHttpFailure` finds it.
+  - `shellStatus` reads the workspace's newest live check (`readNewestLiveCheck`, `src/lib/screening/health.ts`)
+    beside shadow mode, only where screening is live: one `limit 1` query on migration 0139's partial index
+    `compliance_checks_live_newest`. When it failed, the header's Screening row says "Live, last lookup failed" in
+    the held tone. Compliance shows owners and admins "Last successful live screening" (`lastLiveSuccessLine`).
+  - Live means a lookup of the provider. A verdict on a payout address on OFAC's list (source `ofac-sdn`,
+    `OFAC_ADDRESS_SOURCE` in `src/lib/sanctioned-wallets.ts`) is written as live but calls no provider, so both reads
+    and `screening_health()` leave it out by its source; its `live` mode still decides when a counterparty is due.
+  - Check now writes no check, so after a key change a workspace's header and Compliance line move only with its next
+    live lookup, its next agent cycle (`docs/self-hosting.md`, "Changing the screening key").
+  - `/admin/screening`, for the platform team: see the founder dashboard below.
 - **Sanctioned payout addresses** (`docs/superpowers/specs/2026-10-21-sanctioned-wallets-design.md`,
   `src/lib/sanctioned-wallets.ts`): `parseSdnWallets` reads the EVM "Digital Currency Address" entries from OFAC's
   `SDN.CSV` and `SDN_COMMENTS.CSV` together, since remarks overflow into the second file.
@@ -1384,7 +1400,8 @@ Every page under `/o/[slug]` sits in one frame (spec `2026-10-10-workspace-shell
   three chips, network, payments and agent, which open a "Workspace status" panel. The chips combine the
   layout's `PlatformStatus` with the page's `PageStatus`, which only the page can read, inside `inOrg`:
   `chainModes={shellModes()}` and `status={await shellStatus()}` (`src/lib/shell-status.ts`: shadow mode, and the
-  workspace's own screening, which read out of scope would be the deployment's). `workspace-status.ts` turns both into
+  workspace's own screening, which read out of scope would be the deployment's, with whether its newest live lookup
+  failed). `workspace-status.ts` turns both into
   chips and rows, pure and tested; payments off wins, then held, shadow mode, simulated, live. A fact the layout or the
   page could not read (the switch, the pause, shadow mode) shows as not known, never as its healthy value, since the
   payment gates refuse on the same failure; the agent shows as stopped while payments are off or held.
@@ -4003,6 +4020,19 @@ every row and never overwrites a lead, and forms for campaigns, spend and revenu
 where each figure comes from. **It never sends a message to anyone**: approving a lead records a decision, and
 Vestiarion never sends outreach. Payment volume is never shown as revenue, and amounts in different currencies are
 never added together.
+
+**The team's screening page** at `/admin/screening` (`docs/superpowers/specs/2026-10-22-screening-health-design.md`)
+sits behind the same gate: the page answers anyone off `platform_team` with `notFound()`, and its one action,
+`checkScreeningNowAction` (`src/app/admin/screening/actions.ts`), asks `growthTeamUser()` again itself. The page shows
+the deployment's screening setup from its environment (`screeningSetup`: provider, the address's origin, whether a key
+is set, which variable set is read) without calling anyone, and live checks across workspaces from
+`screening_health()` (migration 0139, service role only, read by `src/lib/screening/platform-health.ts`, which no other
+module imports): the last complete and last failed live check with the failed one's note cut to 120 characters, and the
+counts over 24 hours and 7 days, workspace slugs only. Live checks there are provider lookups: OFAC address verdicts
+(source `ofac-sdn`), written as live without calling a provider, are left out, a sandbox's included. **Check now** screens the fixed fictitious name "Zenith Trading
+Example LLC" with the deployment's provider and key and shows the outcome. It writes no counterparty, no compliance
+check and no ledger entry, only one `console.info` line, `screening check: provider=… origin=… ok=… status=… ms=…`,
+never the key or the full address. The key's runbook is in `docs/self-hosting.md`.
 
 **Inbound leads from /studios.** The page for studios that pay contractors per deliverable (`src/app/studios/page.tsx`)
 reads the landing's figures the same way (`readAllTimeOrNull` per network, `readLatestDecision`); its count of code

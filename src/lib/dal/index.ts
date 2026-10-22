@@ -149,6 +149,8 @@ export const PLATFORM_RPCS = [
   "telegram_claim_code", "telegram_activate", "slack_link_member",
   "growth_team_member", "growth_workspaces", "growth_update_lead", "growth_import_leads", "record_org_attribution",
   "growth_decision_reasons",
+  // Live screening across workspaces, for the team's /admin/screening (0139, screening health SH3).
+  "screening_health",
   "accounting_token_lease", "accounting_token_store", "accounting_token_release", "accounting_connections_due",
   "accounting_connections_by_external",
   "customer_portal_by_token", "customer_portal_submit", "customer_portal_reply",
