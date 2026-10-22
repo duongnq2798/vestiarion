@@ -50,7 +50,8 @@ before putting the key in the deployment.
 
 - A third service. Adding one is a file in `src/lib/screening/` and a line in the registry; it waits for the partner's
   choice and a key to test against.
-- Changing the deployment's key, which is the partner's (by Oct 30).
+- Changing the deployment's key, which is the partner's (by Oct 30). Checking it on the deployment, and the steps, came
+  later: `2026-10-22-screening-health-design.md`.
 
 ## Tests
 

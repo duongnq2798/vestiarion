@@ -641,6 +641,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Agent on", "src/components/vx/workspace-status.ts"],
     ["Agent paused", "src/components/vx/workspace-status.ts"],
     ["Agent stopped", "src/components/vx/workspace-status.ts"],
+    // The newest live lookup failed (screening health SH4).
+    ["Live, last lookup failed", "src/components/vx/workspace-status.ts"],
     ["Search…", "src/components/vx/AppNav.tsx"],
     ["Shortcuts", "src/components/vx/CommandPalette.tsx"],
     ["Add a bill", "src/components/vx/command-items.ts"],

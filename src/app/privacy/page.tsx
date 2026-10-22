@@ -20,7 +20,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-16"
+      updated="2026-10-22"
       intro="Vestiarion is an AI agent for bills and payments on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -302,7 +302,7 @@ export default function PrivacyPage() {
           <li>
             <strong>OpenSanctions</strong>, when this deployment has it configured, receives the names and jurisdictions of a live workspace&apos;s
             counterparties to screen them. A sandbox, and any workspace on a deployment without it, checks names against a list built into the app and sends
-            them nowhere.
+            them nowhere. When our team checks that the service answers, it sends one made-up company name, nothing about any workspace.
           </li>
           <li>
             <strong>RPC nodes</strong> receive the wallet addresses and transaction hashes whose balances, fees and receipts Vestiarion&apos;s server
