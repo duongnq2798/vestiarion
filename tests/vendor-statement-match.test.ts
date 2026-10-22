@@ -46,6 +46,32 @@ describe("charges", () => {
     expect(result.notListed.map((entry) => entry.billId)).toEqual(["near"]);
   });
 
+  it("never take by amount a bill another line names by number, in whatever order the statement lists them (review 1)", () => {
+    // Newest first: INV-11 comes before INV-10, both 99. Only INV-10 is on the books.
+    const result = matchStatement({ lines: [charge("2026-10-09", "INV-11", 99), charge("2026-10-02", "INV-10", 99)], bills: [bill("ten", "INV-10", 99, "2026-10-02")], payments: [], currency: "USD" });
+    expect(result.missing).toEqual([expect.objectContaining({ number: "INV-11" })]);
+    expect(result.notListed).toEqual([]);
+  });
+
+  it("match a number to the first word of a memo only, never to part of one (review 1)", () => {
+    const result = matchStatement({
+      lines: [charge("2026-10-01", "1001", 10), charge("2026-10-02", "10012", 20), charge("2026-10-03", "2026", 30)],
+      bills: [bill("paper", null, 20, "2026-10-02", { memo: "10012 Paper" }), bill("own", "1001", 10, "2026-10-01"), bill("year", null, 31, "2026-10-03", { memo: "Rent for October 2026" })],
+      payments: [],
+      currency: "USD",
+    });
+    expect(result.counts.matchedCharges).toBe(2);
+    expect(result.differs).toEqual([]);
+    expect(result.missing).toEqual([expect.objectContaining({ number: "2026" })]);
+  });
+
+  it("say a charge for a bill rejected here apart, never as missing (review 4)", () => {
+    const result = matchStatement({ lines: [charge("2026-10-01", "INV-7", 40)], bills: [bill("r", "INV-7", 40, "2026-10-01", { status: "rejected" })], payments: [], currency: "USD" });
+    expect(result.missing).toEqual([]);
+    expect(result.rejected).toEqual([{ line: expect.any(Number), number: "INV-7", billId: "r", amount: 40 }]);
+    expect(result.notListed).toEqual([]);
+  });
+
   it("say what is listed twice, on their statement or here", () => {
     const result = matchStatement({
       lines: [charge("2026-10-01", "INV-1", 10), charge("2026-10-02", "INV-1", 10)],
@@ -98,6 +124,8 @@ describe("currencies and balances", () => {
     const other = matchStatement({ lines: [charge("2026-10-01", "X-1", 135, { currency: "GBP" })], bills: [bill("a", "X-1", 100, "2026-10-01")], payments: [], currency: "GBP" });
     expect(other.counts.matchedCharges).toBe(1);
     expect(other.differs).toEqual([]);
+    // Said, so a clean result is never claimed for an amount nobody compared (review 7).
+    expect(other.notCompared).toEqual([{ line: expect.any(Number), number: "X-1", billId: "a" }]);
   });
 
   it("give their last printed balance beside what our open bills add up to", () => {
@@ -107,7 +135,17 @@ describe("currencies and balances", () => {
       payments: [paid("a", 100, "2026-10-08")],
       currency: "USD",
     });
-    expect(result.balance).toEqual({ theirs: 50, ours: 50 });
+    expect(result.balance).toEqual({ theirs: 50, ours: 50, otherCurrency: 0 });
     expect(result.period).toEqual({ from: "2026-10-01", to: "2026-10-09" });
+  });
+
+  it("take the balance written last on the last day of a statement listed newest first, and leave out later and other bills (review 6)", () => {
+    const result = matchStatement({
+      lines: [charge("2026-10-09", "INV-3", 20, { balance: 170 }), charge("2026-10-09", "INV-2", 50, { balance: 150 }), charge("2026-10-01", "INV-1", 100, { balance: 100 })],
+      bills: [bill("a", "INV-1", 100, "2026-10-01"), bill("b", "INV-2", 50, "2026-10-09"), bill("later", null, 5, "2026-10-15"), bill("sgd", null, 7, "2026-10-02", { currency: "SGD" })],
+      payments: [],
+      currency: "USD",
+    });
+    expect(result.balance).toEqual({ theirs: 170, ours: 150, otherCurrency: 1 });
   });
 });

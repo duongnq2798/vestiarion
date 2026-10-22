@@ -85,7 +85,11 @@ export function VendorStatementCheck({ orgSlug, vendor, canAddBills }: { orgSlug
 
   function check() {
     startTransition(async () => {
-      setAnswer(await checkVendorStatementAction(orgSlug, vendor.id, source, { ...choices, columns: read?.columns ?? null }));
+      try {
+        setAnswer(await checkVendorStatementAction(orgSlug, vendor.id, source, { ...choices, columns: read?.columns ?? null }));
+      } catch {
+        setAnswer({ ok: false, message: "The statement could not be checked. Try again in a moment." });
+      }
     });
   }
 
@@ -101,11 +105,13 @@ export function VendorStatementCheck({ orgSlug, vendor, canAddBills }: { orgSlug
         description="Paste the table of their statement of account, or choose its CSV. Each line is matched against your bills to them and what you paid them. Nothing is paid or changed."
       >
         <div className="grid gap-5">
-          <FileInput id={`statement-${vendor.id}`} accept=".csv,.txt,text/csv,text/plain" label="Their statement, as a CSV" onFile={onFile} />
+          <FileInput id={`statement-${vendor.id}`} accept=".csv,.txt,text/csv,text/plain" label="Their statement, as a CSV" onFile={onFile} disabled={pending} />
           <Field id={`statement-text-${vendor.id}`} label="Or paste its table" description="From their portal, a spreadsheet or a PDF's table: the date, the invoice number and the amounts.">
             <Textarea
               rows={5}
               value={source}
+              // What is being checked stays what was read until its answer is back (review 7).
+              readOnly={pending}
               onChange={(event) => {
                 setSource(event.target.value);
                 setLegacy(false);
@@ -221,8 +227,18 @@ function Group({ title, count, children }: { title: string; count: number; child
 export function StatementResults({ orgSlug, vendor, result, canAddBills }: { orgSlug: string; vendor: { id: string; name: string }; result: VendorStatementResult; canAddBills: boolean }) {
   const money = (amount: number | null) => (amount === null ? "in another currency" : `${fmt(amount)} ${result.currency}`);
   const { counts } = result;
+  // Each line added from here stays said, so it is never offered twice (review 7).
+  const [added, setAdded] = useState<ReadonlySet<number>>(new Set());
   const clean =
-    result.missing.length + result.twice.length + result.differs.length + result.paidNotListed.length + result.unknownPayments.length + result.notListed.length === 0;
+    result.missing.length +
+      result.rejected.length +
+      result.twice.length +
+      result.differs.length +
+      result.notCompared.length +
+      result.paidNotListed.length +
+      result.unknownPayments.length +
+      result.notListed.length ===
+    0;
   return (
     <div className="grid gap-4 border-t border-line pt-4">
       <p className="text-sm text-ink">
@@ -239,7 +255,9 @@ export function StatementResults({ orgSlug, vendor, result, canAddBills }: { org
               {money(line.amount)}
               {line.description ? `, ${line.description}` : ""}
             </span>
-            {canAddBills ? (
+            {added.has(line.line) ? (
+              <span className="text-xs text-proof">Added.</span>
+            ) : canAddBills ? (
               <Disclosure summary="Add this bill" summaryClassName="text-xs font-medium text-agent">
                 <InvoiceIntake
                   orgSlug={orgSlug}
@@ -253,11 +271,19 @@ export function StatementResults({ orgSlug, vendor, result, canAddBills }: { org
                     memo: line.description || null,
                     invoiceNumber: line.number,
                   }}
+                  onAdded={() => setAdded((before) => new Set(before).add(line.line))}
                 />
               </Disclosure>
             ) : (
               <span className="text-xs text-ink-3">An owner or admin adds it.</span>
             )}
+          </li>
+        ))}
+      </Group>
+      <Group title="Rejected here" count={result.rejected.length}>
+        {result.rejected.map((entry) => (
+          <li key={entry.line}>
+            Line {entry.line}: {entry.number}, {money(entry.amount)}. You rejected this bill: tell them why, or ask them to take it off.
           </li>
         ))}
       </Group>
@@ -277,6 +303,12 @@ export function StatementResults({ orgSlug, vendor, result, canAddBills }: { org
           </li>
         ))}
       </Group>
+      {result.notCompared.length > 0 && (
+        <p className="text-sm text-ink-2">
+          {result.notCompared.map((entry) => entry.number).join(", ")} matched {result.notCompared.length === 1 ? "a bill" : "bills"} in another currency, so{" "}
+          {result.notCompared.length === 1 ? "its amount was" : "their amounts were"} not compared.
+        </p>
+      )}
       <Group title="Paid, not on their statement" count={result.paidNotListed.length}>
         {result.paidNotListed.map((entry) => (
           <li key={`${entry.billId}-${entry.paidOn}`}>
@@ -311,7 +343,11 @@ export function StatementResults({ orgSlug, vendor, result, canAddBills }: { org
       </Group>
       <p className="text-sm text-ink-2">
         {result.balance.theirs === null ? "Their statement prints no balance." : `Their balance: ${money(result.balance.theirs)}.`} What your open bills to{" "}
-        {vendor.name} add up to: {money(result.balance.ours)}.
+        {vendor.name} add up to: {money(result.balance.ours)}
+        {result.balance.otherCurrency > 0
+          ? `, leaving out ${result.balance.otherCurrency} open bill${result.balance.otherCurrency === 1 ? "" : "s"} in another currency`
+          : ""}
+        .
       </p>
     </div>
   );

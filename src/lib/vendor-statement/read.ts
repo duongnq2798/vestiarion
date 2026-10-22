@@ -38,8 +38,11 @@ export function suggestVendorColumns(headers: readonly string[]): ColumnMapping 
   fill("moneyOut", CHARGES);
   fill("moneyIn", PAYMENTS);
   fill("description", DESCRIPTION);
-  // Charges and payments in two columns win over a lone amount, as in the bank reader.
+  // Charges and payments in two columns win over a lone amount, as in the bank reader. A lone amount beside only one of
+  // them is the other: "Invoice Amount" beside "Payments" is the charges, "Amount paid" beside "Charges" the payments.
   if (mapping.moneyOut !== null && mapping.moneyIn !== null) mapping.amount = null;
+  else if (mapping.amount !== null && mapping.moneyIn !== null) [mapping.moneyOut, mapping.amount] = [mapping.amount, null];
+  else if (mapping.amount !== null && mapping.moneyOut !== null) [mapping.moneyIn, mapping.amount] = [mapping.amount, null];
   return mapping;
 }
 
@@ -54,9 +57,10 @@ export function readVendorStatement(source: string, choices: StatementChoices, t
     const headerRow = choices.headerRow != null ? choices.headerRow : findHeaderRow(table.records);
     columns = headerRow >= 0 && table.records[headerRow] ? suggestVendorColumns(table.records[headerRow].cells) : null;
   }
-  // A charge is money out of the business; a vendor writes it positive unless told otherwise.
+  // A charge is money out of the business; a vendor writes it positive unless told otherwise. Its lines are named by their
+  // number, so a description is optional, and a debit balance is what is owed to the vendor.
   const outIs = choices.outIs ?? "positive";
-  return readStatement(source, { ...choices, outIs, ...(columns ? { columns } : {}) }, today);
+  return readStatement(source, { ...choices, outIs, ...(columns ? { columns } : {}) }, today, { descriptionOptional: true, owedBalance: true });
 }
 
 /** A statement line as the matching reads it (VS3): a charge (their invoice) or a payment they received. */

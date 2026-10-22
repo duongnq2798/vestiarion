@@ -1543,13 +1543,18 @@ disagrees with every decision.
 **A vendor's statement** (`docs/superpowers/specs/2026-10-22-vendor-statement-design.md`) reuses the bank statement's
 reader: `readVendorStatement` (`src/lib/vendor-statement/read.ts`) suggests a vendor's columns (`suggestVendorColumns`:
 the invoice number as `reference`, charges as `moneyOut`, payments as `moneyIn`) and reads a single amount column's
-charges positive by default; `vendorLines` turns money out into charges. `matchStatement` (`match.ts`, pure) matches
-charges by `sameNumber` (the bill's `create_invoice` `invoiceNumber` through `invoiceNumberOf`, or its memo's head),
-then by amount and the closest day within `CHARGE_DAYS` (45), and listed payments to confirmed `payment_intents` within
-`PAYMENT_DAYS` (10), in the statement's currency (USD as USDC, EUR as EURC, or a shadow bill's original figure).
-`checkVendorStatement` (`check.ts`) reads the text again with the person's choices, refuses a non-vendor and a statement
-in two currencies, reads the vendor's payables, numbers and confirmed intents in scope (100 ids a read), and signs
-`vendor_statement_checked` best effort with counts only. `checkVendorStatementAction` needs `payables.reconcile`
+charges positive by default; `vendorLines` turns money out into charges. `readStatement` takes a `StatementReading` for it: no description column required,
+and a DR balance read as owed. `matchStatement` (`match.ts`, pure) matches charges in passes over the whole statement:
+`sameNumber` against a bill's own number, then `memoNumber` (a memo's first word), then a rejected bill's number (its
+own group), and only then, for a line or a bill with no number, by amount and the closest pairs within `CHARGE_DAYS`
+(45). Listed payments are matched within `PAYMENT_DAYS` (10), in the statement's currency (USD as USDC, EUR as EURC, or
+a shadow bill's original figure). `checkVendorStatement` (`check.ts`):
+- reads the text again with the person's choices;
+- refuses a non-vendor and a statement in two currencies;
+- reads the vendor's payables in pages, each bill's `create_invoice` detail (`invoiceNumberInDetail`), its confirmed
+  intents, and the newest `payment_actuals` records, all in scope, 100 ids a read;
+- prefers a recorded payment, drops a simulated one, and links only an Arc mainnet transfer;
+- signs `vendor_statement_checked` best effort, with counts only. `checkVendorStatementAction` needs `payables.reconcile`
 (owner, admin, accountant); the dialog is `VendorStatementCheck` on Counterparties, whose missing lines embed
 `InvoiceIntake` for `records.write`.
 

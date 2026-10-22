@@ -22,6 +22,10 @@ describe("a vendor's columns", () => {
     expect(suggestVendorColumns(["Posting date", "Document", "Type", "Amount", "Running balance"])).toMatchObject({ bookingDate: 0, reference: 1, description: 2, amount: 3, balance: 4 });
     expect(suggestVendorColumns(["Date", "Doc no", "Charges", "Payments"])).toMatchObject({ reference: 1, moneyOut: 2, moneyIn: 3, amount: null });
   });
+
+  it("takes a lone amount beside payments as the charges, as a Xero statement writes them (review 2)", () => {
+    expect(suggestVendorColumns(["Date", "Reference", "Invoice Amount", "Payments", "Balance"])).toMatchObject({ reference: 1, moneyOut: 2, moneyIn: 3, amount: null });
+  });
 });
 
 describe("reading it", () => {
@@ -35,6 +39,17 @@ describe("reading it", () => {
     ]);
     const flipped = vendorLines(readVendorStatement(text, { currency: "USD", outIs: "negative" }, TODAY).lines);
     expect(flipped.map((line) => line.kind)).toEqual(["payment", "payment", "charge"]);
+  });
+
+  it("reads a statement with no description column, and a debit balance as what is owed (review 2, 6)", () => {
+    const text = ["Date,Invoice No,Charges,Payments,Balance", "2026-10-01,INV-1001,100.00,,100.00 DR", "2026-10-03,INV-1002,50.00,,150.00 DR", "2026-10-08,,,160.00,10.00 CR"].join("\n");
+    const read = readVendorStatement(text, { currency: "USD" }, TODAY);
+    expect(read.problems).toEqual([]);
+    expect(vendorLines(read.lines).map((line) => [line.kind, line.number, line.amount, line.balance])).toEqual([
+      ["charge", "INV-1001", 100, 100],
+      ["charge", "INV-1002", 50, 150],
+      ["payment", null, 160, -10],
+    ]);
   });
 
   it("reads charges and payments in two columns, and asks the currency when no column gives it", () => {

@@ -37,6 +37,16 @@ export interface StatementChoices {
   currency?: string | null;
 }
 
+/**
+ * How a caller reads the statement beyond the person's choices. A vendor's statement of account (vendor statement VS2)
+ * names its lines by invoice number and may have no description column, and writes what is owed to the vendor as a
+ * debit (DR) balance: read positive there, and a credit (CR) one negative.
+ */
+export interface StatementReading {
+  descriptionOptional?: boolean;
+  owedBalance?: boolean;
+}
+
 export type StatementQuestion =
   | { kind: "dateOrder"; example: string; readings: Array<{ order: DateOrder; day: string }> }
   | { kind: "decimalMark"; example: string };
@@ -133,7 +143,7 @@ const DAY_MS = 86_400_000;
 const nextDay = (day: string) => new Date(Date.parse(`${day}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
 
 /** The columns as chosen, each within the table; the problems that stop the lines being read. */
-function checkColumns(columns: ColumnMapping, width: number): { columns: ColumnMapping; problems: string[] } {
+function checkColumns(columns: ColumnMapping, width: number, descriptionOptional = false): { columns: ColumnMapping; problems: string[] } {
   const inTable = Object.fromEntries(ROLES.map((role) => [role, columns[role] !== null && columns[role]! >= 0 && columns[role]! < width ? columns[role] : null])) as ColumnMapping;
   const problems: string[] = [];
   const taken = new Map<number, Role>();
@@ -145,7 +155,7 @@ function checkColumns(columns: ColumnMapping, width: number): { columns: ColumnM
     else taken.set(column, role);
   }
   if (inTable.bookingDate === null) problems.push("Choose the column with the booking date.");
-  if (inTable.description === null) problems.push("Choose the column with the description.");
+  if (inTable.description === null && !descriptionOptional) problems.push("Choose the column with the description.");
   const twoColumns = inTable.moneyOut !== null || inTable.moneyIn !== null;
   if (inTable.amount === null && !twoColumns) problems.push("Choose the amount column, or the money out and money in columns.");
   if (inTable.amount !== null && twoColumns) problems.push("Choose either one amount column, or money out and money in, not both.");
@@ -202,7 +212,7 @@ function checkBalance(currency: string, inFile: readonly Entry[]): BalanceCheck 
  * the questions still open and the problems that stop it, and once there are none, its lines, the rows skipped with
  * why, the period and the balance check. Throws `StatementReadError` for a file that is no table at all.
  */
-export function readStatement(source: string, choices: StatementChoices, today: string): StatementRead {
+export function readStatement(source: string, choices: StatementChoices, today: string, reading: StatementReading = {}): StatementRead {
   if (source.length > STATEMENT_MAX_BYTES) throw new StatementReadError("Choose a statement smaller than 2 MB.");
   const table = readTable(source, choices.delimiter ?? undefined);
   const records = table.records;
@@ -213,7 +223,7 @@ export function readStatement(source: string, choices: StatementChoices, today: 
   const headers = Array.from({ length: width }, (_, index) => (headerRow >= 0 ? text(records[headerRow].cells[index], 60) : "") || `Column ${index + 1}`);
   const rows = records.slice(headerRow + 1);
   const suggested = headerRow >= 0 ? suggestColumns(records[headerRow].cells) : NO_COLUMNS;
-  const { columns, problems } = checkColumns(choices.columns ?? suggested, width);
+  const { columns, problems } = checkColumns(choices.columns ?? suggested, width, reading.descriptionOptional === true);
   const outIs = choices.outIs === "positive" ? "positive" : "negative";
   // A currency column with a blank cell on a dated row needs the account's currency too, for that row.
   const blankCurrency = columns.currency !== null && rows.some((row) => looksLikeDate(cellOf(row, columns.bookingDate)) && cellOf(row, columns.currency) === "");
@@ -312,7 +322,14 @@ export function readStatement(source: string, choices: StatementChoices, today: 
       notAmount(balanceCell);
       continue;
     }
-    const balance = balanceRead ? (balanceRead.marked === "out" ? -Math.abs(balanceRead.minor) : balanceRead.marked === "in" ? Math.abs(balanceRead.minor) : balanceRead.minor) : null;
+    const owed = reading.owedBalance === true ? -1 : 1;
+    const balance = balanceRead
+      ? balanceRead.marked === "out"
+        ? -owed * Math.abs(balanceRead.minor)
+        : balanceRead.marked === "in"
+          ? owed * Math.abs(balanceRead.minor)
+          : balanceRead.minor
+      : null;
 
     let minor = 0;
     if (columns.amount !== null) {

@@ -21,12 +21,14 @@ const result: VendorStatementResult = {
   currency: "USD",
   counts: { lines: 5, charges: 3, payments: 2, matchedCharges: 1, matchedPayments: 1 },
   missing: [{ line: 4, on: "2026-10-06", number: "INV-1003", description: "Revisions", amount: 25 }],
+  rejected: [],
   twice: [],
   differs: [{ line: 3, number: "INV-1002", billId: "b", theirs: 60, ours: 65 }],
+  notCompared: [],
   paidNotListed: [{ billId: "c", number: "INV-0999", amount: 40, paidOn: "2026-10-05", txUrl: "https://explorer.arc.io/tx/0xabc" }],
   unknownPayments: [{ line: 6, on: "2026-10-08", description: "Payment received", amount: 999 }],
   notListed: [],
-  balance: { theirs: 85, ours: 65 },
+  balance: { theirs: 85, ours: 65, otherCurrency: 0 },
 };
 
 describe("Check their statement", () => {
@@ -54,6 +56,33 @@ describe("Check their statement", () => {
     const accountant = text(renderToStaticMarkup(<StatementResults orgSlug="acme" vendor={VENDOR} result={result} canAddBills={false} />));
     expect(accountant).not.toContain("Add this bill");
     expect(accountant).toContain("An owner or admin adds it.");
+  });
+
+  it("says a charge for a rejected bill, an amount not compared, and open bills in another currency, and claims no clean result then", () => {
+    const shown = text(
+      renderToStaticMarkup(
+        <StatementResults
+          orgSlug="acme"
+          vendor={VENDOR}
+          result={{
+            ...result,
+            missing: [],
+            differs: [],
+            paidNotListed: [],
+            unknownPayments: [],
+            rejected: [{ line: 2, number: "INV-0990", billId: "r", amount: 12 }],
+            notCompared: [{ line: 5, number: "F-77", billId: "f" }],
+            balance: { theirs: 85, ours: 65, otherCurrency: 2 },
+          }}
+          canAddBills
+        />
+      )
+    );
+    expect(shown).toContain("Rejected here (1)");
+    expect(shown).toContain("Line 2: INV-0990, 12.00 USD. You rejected this bill: tell them why, or ask them to take it off.");
+    expect(shown).toContain("F-77 matched a bill in another currency, so its amount was not compared.");
+    expect(shown).toContain("add up to: 65.00 USD, leaving out 2 open bills in another currency.");
+    expect(shown).not.toContain("Everything on their statement matches");
   });
 
   it("says when everything matches", () => {

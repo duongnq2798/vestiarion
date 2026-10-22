@@ -46,16 +46,17 @@ The **Accountant console** shows a new accountant **Get started as an accountant
 
 At month end a vendor sends a statement of account: the invoices they billed, the payments they received, and what they say is owed. On **Counterparties**, a vendor's row has **Check their statement**, for owners, admins and accountants:
 
-1. **Give it the statement.** Choose its CSV, or paste its table from their portal, a spreadsheet or a PDF. It is read as a bank statement is: the delimiter, the header row and the columns are found, and when a date or an amount reads two ways, you are asked. The columns are the date, the invoice number, a description, the charges and the payments, or one amount column, where a charge is a positive amount unless you say otherwise, and the balance. Type its currency when no column gives it.
-2. **Check against your books.** Each charge is matched to the vendor's bill with the same invoice number, ignoring spaces, dashes and case, and failing that to the bill of the same amount added closest in time, within 45 days. Each payment they list is matched to a payment you made of the same amount within 10 days. USD is compared with USDC, EUR with EURC, and a bill written in your own currency in shadow mode by that figure.
+1. **Give it the statement.** Choose its CSV, or paste its table from their portal, a spreadsheet or a PDF. It is read as a bank statement is: the delimiter, the header row and the columns are found, and when a date or an amount reads two ways, you are asked. The columns are the date, the invoice number, a description if it has one, the charges and the payments, or one amount column, where a charge is a positive amount unless you say otherwise, and the balance, where DR is what you owe. Type its currency when no column gives it.
+2. **Check against your books.** Each charge is matched to the vendor's bill with the same invoice number, ignoring spaces, dashes and case, or whose memo starts with it. Only a charge with no number, or a bill with none, is matched by amount instead: the bill of the same amount added closest in time, within 45 days. Each payment they list is matched to one of yours of the same amount within 10 days: what you recorded you paid, where you did, as in shadow mode, or else a payment made here. USD is compared with USDC, EUR with EURC, and a bill written in your own currency in shadow mode by that figure.
 3. **Read what is left.**
    - **Missing here**: their charges with no bill. An owner or admin can add each from the line, with its number, amount and description filled in; it goes through every check, as a bill typed in.
+   - **Rejected here**: their charges for a bill you rejected, to tell them why or ask them to take it off.
    - **Listed twice**: the same number twice on their statement, or on two of your bills.
    - **Amount differs**: theirs, yours and the difference.
-   - **Paid, not on their statement**: what you paid them in those days that they have not listed, each with its transaction's link, to send them.
+   - **Paid, not on their statement**: what you paid them in those days that they have not listed. A payment on Arc mainnet comes with its transaction's link, to send them.
    - **A payment you have no record of**: one they list that matches none of yours.
    - **Not on their statement**: your bills added in those days that they do not list.
-   - Their last printed balance beside what your open bills to them add up to.
+   - Their last printed balance beside what your open bills to them add up to by the statement's last day. A charge matched to a bill in another currency is named, since its amount was not compared.
 
 Nothing is paid or changed, and the file is not kept. The check is signed into the ledger as `vendor_statement_checked`, with its counts and balances only.
 

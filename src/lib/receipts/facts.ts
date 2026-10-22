@@ -77,8 +77,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> => value !==
  */
 export function invoiceNumberOf(invoiceId: string, entries: LedgerEntry[]): string | null {
   const created = entries.find((entry) => entry.action === "create_invoice" && entry.detail.invoiceId === invoiceId);
-  if (!created) return null;
-  const candidates = [created.detail.invoiceNumber, ...CONNECTORS.map((provider) => (isRecord(created.detail[provider]) ? created.detail[provider].invoiceNumber : undefined))];
+  return created ? invoiceNumberInDetail(created.detail) : null;
+}
+
+/** The number a `create_invoice` entry's detail carries: its own, or under the accounting connector's name. */
+export function invoiceNumberInDetail(detail: Record<string, unknown>): string | null {
+  const candidates = [detail.invoiceNumber, ...CONNECTORS.map((provider) => (isRecord(detail[provider]) ? detail[provider].invoiceNumber : undefined))];
   const found = candidates.find((value): value is string => typeof value === "string" && value.trim() !== "");
   return found ? found.trim().slice(0, 100) : null;
 }
