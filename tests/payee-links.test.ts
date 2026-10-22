@@ -467,7 +467,7 @@ describe("payeeLinkStatus and the link's options (payee invoice link P2, P4)", (
       (request) => (rpc(request, "payee_link_status") ? { body: { ...STATUS, chainOpen: true } } : request.path === "/rest/v1/payee_links" ? { body: [{ org_id: ORG }] } : { body: [] })
     );
     const status = await result;
-    expect(status).toMatchObject({ asksInvoice: true, offersChain: true, invoiceSent: false, chainChoices: ["ARC", "BASE"] });
+    expect(status).toMatchObject({ asksInvoice: true, offersChain: true, invoiceSent: false, chainChoices: ["ARC", "BASE", "ARB"] });
     expect(status).not.toHaveProperty("chainOpen");
     expect(withOrgMock).toHaveBeenCalledWith(ORG, expect.any(Function));
     expect(fake.requests.find((request) => request.path === "/rest/v1/payee_links")?.params.get("token_hash")).toBe(`eq.${HASH}`);

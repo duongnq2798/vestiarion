@@ -8,11 +8,13 @@ import { chainChoiceFits, choosablePayeeChains } from "@/lib/payee-chain-choice"
  * them: from the owner's own wallet, only version 2 of its spending limit contract pays another chain.
  */
 
-const { state, limitMock, chainsOnMock } = vi.hoisted(() => ({
+const { state, limitMock, chainsOnMock, domainsMock } = vi.hoisted(() => ({
   state: { network: "arc-mainnet" as "arc-mainnet" | "arc-testnet", walletHost: "hosted" as "hosted" | "own" | "external" | null },
   limitMock: vi.fn(),
   chainsOnMock: vi.fn(),
+  domainsMock: vi.fn(),
 }));
+vi.mock("@/lib/spending-limit/onchain", () => ({ contractAllowedDomains: domainsMock }));
 vi.mock("@/lib/workspace-network", () => ({ workspaceNetwork: () => networkProfile(state.network) }));
 vi.mock("@/lib/context", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/context")>()),
@@ -31,9 +33,22 @@ beforeEach(() => {
   state.network = "arc-mainnet";
   state.walletHost = "hosted";
   limitMock.mockReset().mockResolvedValue(null);
+  // Base and Arbitrum: what a version 2 contract deployed on Arc mainnet since Arbitrum joined it names.
+  domainsMock.mockReset().mockResolvedValue((1n << 6n) | (1n << 3n));
 });
 
 describe("choosablePayeeChains", () => {
+  it("offers only the chains a version 2 contract was deployed for, and none while it does not answer (arbitrum mainnet AR3)", async () => {
+    state.walletHost = "external";
+    limitMock.mockResolvedValue({ ...ENFORCED, version: 2 });
+    domainsMock.mockResolvedValueOnce(1n << 6n);
+    expect(await ids()).toEqual(["ARC", "BASE"]);
+    domainsMock.mockResolvedValueOnce(null);
+    expect(await ids()).toEqual([]);
+    domainsMock.mockResolvedValueOnce(0n);
+    expect(await ids()).toEqual([]);
+  });
+
   it("offers every payee chain of the network to a workspace on its own or a hosted Circle account, reading no contract", async () => {
     expect(await ids()).toEqual(ARC_MAINNET.payeeChains.map((chain) => chain.id));
     state.walletHost = "own";
@@ -45,7 +60,8 @@ describe("choosablePayeeChains", () => {
   it("offers them from the owner's own wallet only through an enforced version 2 contract", async () => {
     state.walletHost = "external";
     limitMock.mockResolvedValueOnce({ ...ENFORCED, version: 2 });
-    expect(await ids()).toEqual(["ARC", "BASE"]);
+    expect(await ids()).toEqual(["ARC", "BASE", "ARB"]);
+    expect(domainsMock).toHaveBeenCalledWith("0x1");
     limitMock.mockResolvedValueOnce({ ...ENFORCED, version: 1 });
     expect(await ids()).toEqual([]);
     limitMock.mockResolvedValueOnce({ ...ENFORCED });

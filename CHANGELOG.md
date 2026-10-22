@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Pay a vendor on Arbitrum from Arc mainnet.** Arbitrum joins Base as a chain Arc mainnet pays across to through
+  CCTP, in real USDC: give a vendor an Arbitrum address, or let them choose Arbitrum on their payee link. Circle
+  quoted about 0.077 USDC to forward a payout there on Oct 22, paid on top of the invoice. A contract from your own
+  wallet deployed before Oct 22 pays Base only: Vestiarion reads which chains your contract pays and offers only
+  those. Run the migration that allows Arbitrum vendors.
+
 - **What a payment costs, on the approval card.** Before you approve, each card waiting for Approve and pay shows the
   invoice, an early-payment discount that still applies, the CCTP or Gateway fee for a payee on another chain, what
   leaves the wallet in all, and what the payee receives. On Arc mainnet a note gives Arc's network fee, about 0.00319

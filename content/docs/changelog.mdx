@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-22: Arc mainnet pays vendors on Arbitrum
+
+- **`POST /api/v1/counterparties`** now accepts `chain: "ARB"` (Arbitrum One) for a vendor in a workspace on Arc mainnet, beside `ARC` and `BASE`. A contractor stays on Arc.
+- Counterparties, bills and their entries may name `ARB` wherever they name a payee's chain, as they name `BASE`: `counterparty_address_changed`, a CCTP payout's `destinationChain`, and a receipt's `chain`, whose transaction is the mint on Arbitrum.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-22: Receipts state the fees, who paid them and the invoice number
 
 - **`receipt_shared`** entries' `receipt` can now also carry `invoiceNumber` (the invoice's own number, as on its `create_invoice` entry), `invoiceAmount` (the invoice's amount, only when it was for more than was paid, as after an early-payment discount) and `feesPaidBy: "sender"` (every fee was paid by the business on top of the amount, and none taken from the payee's). Receipts shared before keep what they stated.

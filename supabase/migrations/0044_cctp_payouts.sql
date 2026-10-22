@@ -14,9 +14,10 @@
 -- Only a vendor is paid on another chain: a contractor's milestones are
 -- released on Arc (review C1). Any chain written before this, when the field
 -- was free text, was always paid on Arc, so it is read as ARC-TESTNET. ARC,
--- Arc mainnet's chain (0078), and BASE, the chain Arc mainnet pays across to
--- (docs/superpowers/specs/2026-10-19-mainnet-base-payouts-design.md B6), are
--- kept as written: db:migrate re-runs this file.
+-- Arc mainnet's chain (0078), and BASE and ARB, the chains Arc mainnet pays
+-- across to (docs/superpowers/specs/2026-10-19-mainnet-base-payouts-design.md
+-- B6, 2026-10-22-arbitrum-mainnet-design.md AR2), are kept as written:
+-- db:migrate re-runs this file.
 -- The rewrite runs only on the first application, before the check exists, so a later run never rewrites a chain
 -- added since (0078 owns the check from then on).
 do $$
@@ -27,7 +28,7 @@ begin
   ) then
     update public.counterparties
        set chain = 'ARC-TESTNET'
-     where chain is not null and chain not in ('ARC-TESTNET', 'ARC', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA', 'BASE');
+     where chain is not null and chain not in ('ARC-TESTNET', 'ARC', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA', 'BASE', 'ARB');
     alter table public.counterparties
       add constraint counterparties_chain_check
       check (chain in ('ARC-TESTNET', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA') and (chain = 'ARC-TESTNET' or role = 'vendor'));

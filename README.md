@@ -256,7 +256,7 @@ Each workspace lives on one network, chosen when it is created, and never moves.
 | **Money** | Testnet USDC and EURC from Circle's faucet | Real USDC, sent on Arc or brought from another chain through CCTP |
 | **Treasury** | Hosted wallet, or your own Circle account | Your own wallet or passkey wallet, or your own Circle account |
 | **Spending-limit contract** | Opt-in, deployed through Circle's Smart Contract Platform | Deployed by the owner's wallet on the own-wallet path |
-| **Also available** | USYC reserve, milestone escrow, EURC swaps, CCTP and Gateway payouts to other chains, x402, shadow mode | USDC on Arc, and CCTP payouts to Base; features Arc mainnet lacks are not shown |
+| **Also available** | USYC reserve, milestone escrow, EURC swaps, CCTP and Gateway payouts to other chains, x402, shadow mode | USDC on Arc, and CCTP payouts to Base and Arbitrum; features Arc mainnet lacks are not shown |
 
 ### Mainnet proof
 
@@ -360,7 +360,7 @@ run in production, with its ledger entries and transactions.
   is set aside, paid and still available, what its deals collected, and its days in the payment plan. The agent never
   sets aside the same money twice, and holds what a budget cannot cover for a person.
 - **Treasury** — safe-to-spend today, cash outlook, USYC reserve with **Bring cash back** (Arc testnet).
-- **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet), and CCTP payouts to Base from Arc mainnet.
+- **Cross-currency and cross-chain** — EURC invoices and swaps, CCTP and Gateway payouts (Arc testnet), and CCTP payouts to Base and Arbitrum from Arc mainnet.
 - **Supplier payment status** — a link per supplier to a page of its own bills: where each one stands, from received to
   paid, with each payment's transaction on Arc, and never why a bill is held.
 - **Early-payment offers** — the agent's later bills, each with the discount worth asking for paying today; an owner or
@@ -407,7 +407,7 @@ run in production, with its ledger entries and transactions.
 | **Smart Contract Platform** | Deploying the escrow and spending-limit contracts on Arc testnet |
 | **Gas Station** | Paying the agent wallet's gas on Arc testnet |
 | **USYC** | The yield-bearing reserve, through its Teller (Arc testnet) |
-| **CCTP V2** and **Gateway** | Paying payees on other chains: through CCTP and Gateway on Arc testnet, where Gateway also settles x402 purchases, and through CCTP to Base from Arc mainnet |
+| **CCTP V2** and **Gateway** | Paying payees on other chains: through CCTP and Gateway on Arc testnet, where Gateway also settles x402 purchases, and through CCTP to Base and Arbitrum from Arc mainnet |
 | **CCTP V2 Forwarding Service** | Adding USDC to a workspace's wallet on Arc from Base, Ethereum and other chains, minted by Circle so the wallet needs no gas (both networks) |
 | **Stablecoin Service** | EURC quotes and USDC→EURC swaps (Arc testnet) |
 | **Notifications** | Settlement and incoming-transfer webhooks, recorded within seconds |

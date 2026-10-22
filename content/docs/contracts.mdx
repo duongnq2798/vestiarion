@@ -27,11 +27,11 @@ Makes the agent's spending limit binding on Arc. See [Enforce the limit on Arc](
 
 ### VestiarionSpendingLimitV2
 
-Version 2 of the spending limit contract, which a workspace paying from its owner's own wallet deploys since Oct 19, 2026. It does everything [VestiarionSpendingLimit](#vestiarionspendinglimit) does, with the same `pay`, figures, events and errors, and also pays a vendor on another chain. See [Pay a vendor on Base from Arc mainnet](/docs/guides/first-payment#pay-a-vendor-on-base-from-arc-mainnet).
+Version 2 of the spending limit contract, which a workspace paying from its owner's own wallet deploys since Oct 19, 2026. It does everything [VestiarionSpendingLimit](#vestiarionspendinglimit) does, with the same `pay`, figures, events and errors, and also pays a vendor on another chain. See [Pay a vendor on Base or Arbitrum from Arc mainnet](/docs/guides/first-payment#pay-a-vendor-on-base-or-arbitrum-from-arc-mainnet).
 
 - `payAcrossChains(amount, maxFee, domain, recipient, ref)`, for the agent only, counts `amount + maxFee` against both figures and marks `ref` paid, as `pay` does: a `ref` is paid once by either function.
 - It draws `amount + maxFee` from the treasury, approves CCTP's TokenMessengerV2 for it, and calls `depositForBurnWithHook` with fast finality and the forwarding hook, so Circle's Forwarding Service mints on the payee's chain. The payee is minted `amount` and whatever of `maxFee` the transfer does not charge.
-- TokenMessengerV2 and the CCTP domains it may burn for are fixed when it is deployed: Base (domain 6) on Arc mainnet, and the CCTP testnets on Arc testnet. Any other domain is refused with `DomainNotAllowed`.
+- TokenMessengerV2 and the CCTP domains it may burn for are fixed when it is deployed, from the network's payee chains then: on Arc mainnet Base (domain 6), and Arbitrum (domain 3) for one deployed since Oct 22, 2026; the CCTP testnets on Arc testnet. Any other domain is refused with `DomainNotAllowed`. Vestiarion reads `allowedDomains()` from the contract before offering a payee a chain.
 - `maxFee` may be at most 10% of `amount` and at most 2 USDC; above either, it refuses with `FeeTooHigh`.
 - It holds nothing after a call: its USDC balance must be what it was before, and its approval of TokenMessengerV2 back at 0, or the whole call reverts with `BalanceLeft`.
 - It emits `PaidAcrossChains` too, and `VERSION()` returns 2.
