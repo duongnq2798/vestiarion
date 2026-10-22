@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CampaignForm, RevenueForm, SpendForm } from "@/components/growth/GrowthForms";
-import { ApprovalCard, BreakdownTable, Definitions, FilterLinks, FunnelTable, LeadCard, RateTile, Section, Tile, WorkspacesTable } from "@/components/growth/GrowthSections";
+import { ApprovalCard, BreakdownTable, Definitions, FilterLinks, FunnelTable, LeadCard, RateTile, RetentionTable, Section, Tile, WorkspacesTable } from "@/components/growth/GrowthSections";
 import { LeadsCsvImport } from "@/components/growth/LeadsCsvImport";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -18,6 +18,8 @@ import { ALL_STAGES, REVENUE_WORDS, REVIEW_STATUSES, REVIEW_WORDS, STAGE_WORDS, 
 import { growthTeamUser } from "@/lib/growth/gate";
 import { breakdown, furthestStages, growthMetrics, NOT_ENOUGH_DATA } from "@/lib/growth/metrics";
 import { readGrowth, readGrowthReasons } from "@/lib/growth/read";
+import { retentionCohorts } from "@/lib/growth/retention";
+import { readRetentionActivity } from "@/lib/growth/retention-read";
 import { readSentNudges } from "@/lib/notifications/activation-nudge";
 import { REASON_SOURCES, SURFACE_WORDS, type ReasonSource } from "@/lib/decision-reasons";
 import { growthHref, parseGrowthView } from "@/lib/growth/view";
@@ -75,6 +77,14 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
     .filter((lead) => !view.review || lead.review_status === view.review)
     .reverse();
   const workspaces = (data.workspaces ?? []).filter((workspace) => workspace.side === view.side);
+  // Retention by week for the same workspaces (growth retention R1, R2): each one's activity from its own records; one
+  // that could not be read is left out of the table and counted beside it.
+  const retention = await readRetentionActivity(workspaces);
+  const cohorts = retentionCohorts(
+    workspaces.filter((workspace) => retention.activity.has(workspace.orgId)),
+    retention.activity,
+    now
+  );
   const today = now.toISOString().slice(0, 10);
 
   return (
@@ -179,6 +189,24 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
         ) : (
           <WorkspacesTable workspaces={workspaces} now={now} />
         )}
+      </Section>
+
+      <Section
+        id="retention"
+        title="Retention by week"
+        meta={`${view.side === "ours" ? "Ours" : "Customers"}, opened since ${view.since}: active in each of their first ${cohorts[0]?.cells.length ?? 8} weeks`}
+      >
+        {data.workspaces === null ? (
+          <Callout tone="held">The workspaces could not be read.</Callout>
+        ) : cohorts.length === 0 ? (
+          <EmptyState compact title={view.side === "ours" ? "None of ours opened in the window" : "No customer workspace opened in the window"} />
+        ) : (
+          <RetentionTable cohorts={cohorts} />
+        )}
+        <p className="mt-2 text-xs text-ink-3">
+          Active in a week: a real bill added, or a person approved, rejected or returned a payment, or gave a verdict. Week 0 is the 7 days from opening.
+          {retention.unread.length > 0 ? ` ${retention.unread.length} workspace${retention.unread.length === 1 ? "" : "s"} could not be read and ${retention.unread.length === 1 ? "is" : "are"} left out.` : ""}
+        </p>
       </Section>
 
       <Section id="reasons" title="Why people went against the agent" meta={reasons ? `${reasons.length} since ${view.since}, newest first` : undefined}>

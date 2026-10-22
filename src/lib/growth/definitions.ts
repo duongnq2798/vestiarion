@@ -69,6 +69,14 @@ export const DEFINITIONS: readonly Definition[] = [
     limits: "Workspaces with no decision yet are left out, not counted as slow.",
   },
   {
+    metric: "Retention by week",
+    source: "Each workspace's own records, read in its own scope: its payables whose counterparty is not sample data, and its ledger's approval_paid, approval_rejected, approval_returned and decision_verdict entries made by a person.",
+    calculation: "Workspaces grouped by the UTC week (from Monday) they opened. A workspace's week k is the 7 days from its opening plus 7k days. Each cell: the workspaces active in their week k over those whose week k has begun; a week none has reached is a dash, and one still running is marked so far.",
+    window: `${WORKSPACES_WINDOW} The side chosen on the Workspaces table: customers' or ours.`,
+    dedupe: "Each workspace once per week, however much it did.",
+    limits: "Activity is a real bill added or a person's decision: a member who only looked, or an agent's decision no one acted on, is not activity. A workspace whose records could not be read is left out and counted under the table. At most 200 workspaces are read.",
+  },
+  {
     metric: "7-day repeat rate",
     source: "growth_workspaces.",
     calculation: "Customer workspaces with a second real bill added within 7 days of the first, over customer workspaces whose first real bill is at least 7 days old.",
