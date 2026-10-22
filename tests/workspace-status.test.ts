@@ -143,6 +143,22 @@ describe("the status panel's rows", () => {
     expect(row("screening", platform(), page({ screening: { live: false, source: "no service" } }))).toMatchObject({ value: "No service", tone: "held" });
   });
 
+  it("stop saying Live when the newest live lookup failed, in the held tone (screening health SH4)", () => {
+    expect(row("screening", platform(), page({ screening: { live: true, source: "OpenSanctions", lastLookupFailed: true } }))).toEqual({
+      key: "screening",
+      label: "Screening",
+      value: "Live, last lookup failed",
+      tone: "held",
+      detail: "The last lookup with OpenSanctions failed. New counterparties stay unscreened until one succeeds, and the others keep their last verdict.",
+    });
+    // A lookup that worked, or none yet: Live, as before.
+    for (const lastLookupFailed of [false, undefined]) {
+      expect(row("screening", platform(), page({ screening: { live: true, source: "OpenSanctions", lastLookupFailed } }))).toMatchObject({ value: "Live", tone: "good" });
+    }
+    // The chips are not about screening: a failed lookup leaves them as they were.
+    expect(statusChips(platform(), page({ screening: { live: true, source: "OpenSanctions", lastLookupFailed: true } }))).toEqual(statusChips(platform(), page()));
+  });
+
   it("say the reserve is live only when the provider earns for real, and held with payments", () => {
     expect(row("reserve", platform(), page({ chain: { mode: "live", earnMode: "live", held: false } }))?.value).toBe("Live");
     expect(row("reserve", platform(), page())?.value).toBe("Simulated");

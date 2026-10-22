@@ -14,6 +14,22 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The header says when screening lookups fail.** When a live workspace's newest screening lookup failed, the
+  Screening row of Workspace status says **Live, last lookup failed** instead of **Live**: new counterparties stay
+  unscreened until a lookup works, and the others keep their last verdict. Owners and admins also see on Compliance,
+  beside the latest sweep, when a live screening last worked. Both count lookups of the screening provider only: a
+  payout address found on OFAC's list calls no provider, so it never makes a failing key look like it works. After a
+  key change, both move with the workspace's next agent cycle. Migration 0139 adds the index both read from; they work
+  before it runs.
+
+- **Check the screening key on a running deployment.** `/admin/screening`, for the platform team only, shows the
+  deployment's screening provider, the address's origin, whether a key is set and which variables are read, and
+  **Check now** screens one fictitious company with the deployment's own key: OK or the HTTP status and what it means
+  (the key refused, over quota, the provider down), the time and the verdict. It adds no counterparty and writes no
+  check or ledger entry, only one log line, never the key. The page also shows the last complete and last failed live
+  lookup across workspaces once migration 0139 has run, leaving out OFAC payout-address verdicts, which call no
+  provider. `docs/self-hosting.md` now says how to change the key, step by step.
+
 - **Your accountant as the second person on larger bills.** In Settings, under Two approvals, an owner can now choose
   **Let accountants co-sign**. An accountant then sees **Co-sign** on a bill above the figure: it records one of the two
   approvals and never pays, even when another approval stands, so the approval that pays is always an owner's, admin's
@@ -128,6 +144,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   administrators included, and it cannot be force-pushed or deleted. The security page says so.
 
 ### Changed
+
+- **`npm run screening:check` never prints an address past its origin.** When the provider's error quotes the address
+  it was asked for, or the key, the command now prints it with the key and everything after the address's origin
+  taken out.
 
 - **A guide to the evidence pack and shared receipts.** [Share the evidence pack and
   receipts](https://www.vestiarion.xyz/docs/guides/evidence-and-receipts) walks a business owner or their accountant

@@ -21,9 +21,11 @@ import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { shellModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
+import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { listLedgerEntries, listLedgerEntriesByDomain } from "@/lib/ledger";
 import { listCounterparties, stats } from "@/lib/queries";
+import { lastLiveSuccessLine } from "@/lib/screening/health";
 import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
@@ -42,11 +44,14 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
   const { slug } = await params;
   const access = await requireMembership(slug);
   return inOrg(access, async () => {
-    const [counterparties, entries, headEntries, dashboardStats] = await Promise.all([
+    // Owners and admins of a workspace that screens live see when a live lookup last worked (screening health SH3).
+    const ownerOrAdmin = access.membership.role === "owner" || access.membership.role === "admin";
+    const [counterparties, entries, headEntries, dashboardStats, liveSuccess] = await Promise.all([
       listCounterparties(),
       listLedgerEntriesByDomain("compliance", 100),
       listLedgerEntries(1),
       stats(),
+      ownerOrAdmin && screeningMode() === "live" ? lastLiveSuccessLine(db()) : Promise.resolve(null),
     ]);
     const lastSweep = entries.find((entry) => entry.action === "compliance_sweep");
     const lastSweepComplete = lastSweep?.detail.complete !== false;
@@ -70,11 +75,13 @@ export default async function CompliancePage({ params }: { params: Promise<{ slu
               <div className="min-w-0">
                 <p className="text-ink">{lastSweep.summary}</p>
                 {!lastSweepComplete && <p className="mt-1 text-xs text-refused">Incomplete — no failed lookup was treated as clear, and every previous verdict remains in force.</p>}
+                {liveSuccess && <p className="mt-1 text-xs text-ink-3">{liveSuccess}</p>}
               </div>
               <MoreLink href={orgHref(slug, `/audit#seq-${lastSweep.seq}`)}>audit #{pad(lastSweep.seq)}</MoreLink>
             </div>
           </Callout>
         )}
+        {!lastSweep && liveSuccess && <p className="mb-6 text-xs text-ink-3">{liveSuccess}</p>}
 
         <section>
           <SectionHeader title="Counterparties" meta={`${counterparties.length} continuously screened · a hit first, open · the rest open on demand`} />

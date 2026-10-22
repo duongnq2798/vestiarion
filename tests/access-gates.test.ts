@@ -74,13 +74,13 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, a customer's statement, a supplier's answer to an early-payment offer, a customer's answer to an early-payment discount, a payee's answer about a change to its address, the founder dashboard, and a studio's guided setup request", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, a customer's statement, a supplier's answer to an early-payment offer, a customer's answer to an early-payment discount, a payee's answer about a change to its address, the founder dashboard, the team's screening check, and a studio's guided setup request", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
-      "src/app/account/actions.ts", "src/app/address-change/[token]/actions.ts", "src/app/admin/growth/actions.ts", "src/app/discount/[token]/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/more-time/[token]/actions.ts",
+      "src/app/account/actions.ts", "src/app/address-change/[token]/actions.ts", "src/app/admin/growth/actions.ts", "src/app/admin/screening/actions.ts", "src/app/discount/[token]/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/more-time/[token]/actions.ts",
       "src/app/offer/[token]/actions.ts", "src/app/onboarding/actions.ts", "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts", "src/app/statement/[token]/actions.ts", "src/app/studios/actions.ts",
     ]);
   });
@@ -206,6 +206,27 @@ describe("every founder dashboard action", () => {
     expect(page).toMatch(/if \(!user\) notFound\(\);/);
     const route = read(path.join(ROOT, "src", "app", "admin", "growth", "leads.csv", "route.ts"));
     expect(awaitedNames(route.slice(route.indexOf("export async function GET")))[0]).toBe("growthTeamUser");
+  });
+});
+
+describe("the team's screening check", () => {
+  // /admin/screening belongs to no workspace either: its gate is the founder dashboard's (screening health SH1).
+  const SCREENING_ACTIONS = path.join(ROOT, "src", "app", "admin", "screening", "actions.ts");
+  const actions = existsSync(SCREENING_ACTIONS) ? exportedAsyncFunctions(read(SCREENING_ACTIONS)) : [];
+
+  it("exists — the list is not empty", () => {
+    expect(actions.map((action) => action.name)).toEqual(["checkScreeningNowAction"]);
+  });
+
+  it.each(actions.map((action) => [action.name, action.body]))("%s awaits growthTeamUser first, and stops without it", (_name, body) => {
+    expect(awaitedNames(body)[0]).toBe("growthTeamUser");
+    expect(body).toMatch(/const user = await growthTeamUser\(\);\s+if \(!user\) return \{ ok: false, message: NOT_AVAILABLE \};/);
+  });
+
+  it("the page asks the gate first too", () => {
+    const page = defaultExportBody(read(path.join(ROOT, "src", "app", "admin", "screening", "page.tsx")));
+    expect(awaitedNames(page)[0]).toBe("growthTeamUser");
+    expect(page).toMatch(/if \(!user\) notFound\(\);/);
   });
 });
 

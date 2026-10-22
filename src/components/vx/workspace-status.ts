@@ -40,8 +40,11 @@ export interface PageStatus {
   chain: { mode: "live" | "simulate"; earnMode: "live" | "simulate"; held: boolean; hold?: string | null };
   /** Whether shadow mode is on; null when it could not be read. */
   shadow: boolean | null;
-  /** The workspace's own screening, read in its scope: live, and which source ("OpenSanctions", "bundled list", "no service"). */
-  screening: { live: boolean; source: string };
+  /**
+   * The workspace's own screening, read in its scope: live, and which source ("OpenSanctions", "bundled list", "no
+   * service"); and whether its newest live lookup failed (screening health SH4).
+   */
+  screening: { live: boolean; source: string; lastLookupFailed?: boolean };
   clock: { mode: CycleClockMode; day: number };
 }
 
@@ -191,7 +194,16 @@ export function statusRows(platform: PlatformStatus, page?: PageStatus): StatusR
     const source = page.screening.source;
     rows.push(
       page.screening.live
-        ? { key: "screening", label: "Screening", value: "Live", tone: "good", detail: `Each counterparty is screened against ${source} when it is added, and checked again from time to time.` }
+        ? // Configured is not working: the newest live lookup failing says so, in the held tone (screening health SH4).
+          page.screening.lastLookupFailed
+          ? {
+              key: "screening",
+              label: "Screening",
+              value: "Live, last lookup failed",
+              tone: "held",
+              detail: `The last lookup with ${source} failed. New counterparties stay unscreened until one succeeds, and the others keep their last verdict.`,
+            }
+          : { key: "screening", label: "Screening", value: "Live", tone: "good", detail: `Each counterparty is screened against ${source} when it is added, and checked again from time to time.` }
         : source === "no service"
           ? { key: "screening", label: "Screening", value: "No service", tone: "held", detail: "No screening service is set up, so new counterparties stay unscreened." }
           : { key: "screening", label: "Screening", value: "Bundled list", tone: "simulated", detail: "Counterparties are screened against a bundled list, not a live service." }
