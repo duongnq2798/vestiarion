@@ -16,8 +16,8 @@ vi.mock("@/lib/ledger", async (importOriginal) => ({ ...(await importOriginal<ty
 vi.mock("@/lib/notifications/waiting", () => ({ decidingRecipients: recipientsMock, DIGEST_MAX_RECIPIENTS: 25, DIGEST_SEND_DEADLINE_MS: 60_000 }));
 vi.mock("@/lib/auth/env", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/auth/env")>()), siteOrigin: () => "https://www.vestiarion.xyz" }));
 
-import { briefDue, briefWorthSending, isoWeek, sendWeeklyBrief, weeklyBriefFacts, WEEKLY_BRIEF_FAILED, WEEKLY_BRIEF_SENT } from "@/lib/notifications/weekly-brief";
-import { briefSentences, weeklyBriefEmail, type WeeklyBriefFacts } from "@/lib/email/weekly-brief";
+import { briefDue, briefWorthSending, isoWeek, payeeWeek, sendWeeklyBrief, weeklyBriefFacts, WEEKLY_BRIEF_FAILED, WEEKLY_BRIEF_SENT } from "@/lib/notifications/weekly-brief";
+import { briefSentences, payeeSentences, weeklyBriefEmail, type WeeklyBriefFacts } from "@/lib/email/weekly-brief";
 import { db } from "@/lib/dal";
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -167,6 +167,82 @@ describe("what the brief says (W3)", () => {
   });
 });
 
+describe("payee addresses in the brief (docs/superpowers/specs/2026-10-22-weekly-brief-payee-lock-design.md WP1, WP2)", () => {
+  const none = { lockOn: true, changed: 0, confirmed: 0, held: 0, asked: 0, notMe: 0, frozen: 0 };
+  const quiet: WeeklyBriefFacts = {
+    week: "2026-W43", from: "2026-10-12", to: "2026-10-18", paid: { count: 0, usdc: 0 }, received: { count: 0, usdc: 0 }, decisions: 0, waiting: 0,
+    next7: { count: 0, usdc: 0, expectedUsdc: 0, lines: [] }, cash: { operating: 20, reserve: 0, short: null },
+  };
+
+  it("says a frozen payee first, then the changes, the holds and the questions, and nothing in a quiet week", () => {
+    expect(payeeSentences({ ...none, changed: 2, confirmed: 1, held: 1, asked: 2, notMe: 1, frozen: 1 })).toEqual([
+      "1 payee is frozen: their contact said they did not make a change to their address. An owner or admin unfreezes one on Counterparties after checking with them.",
+      "2 payee addresses changed, and 1 address was confirmed.",
+      "The agent held 1 payment for an address no one had confirmed, or one an invoice asked for instead.",
+      "2 payees' contacts were asked whether they made a change, and 1 said they did not.",
+    ]);
+    expect(payeeSentences({ ...none, confirmed: 3 })).toEqual(["3 payee addresses were confirmed."]);
+    expect(payeeSentences(none)).toEqual([]);
+    expect(payeeSentences(null)).toEqual([]);
+  });
+
+  it("suggests the payee lock where it is off and something happened", () => {
+    expect(payeeSentences({ ...none, lockOn: false, changed: 1 })).toEqual([
+      "1 payee address changed.",
+      "The payee lock is off: turn it on in Settings to have a second person record how each changed address was checked.",
+    ]);
+    expect(payeeSentences({ ...none, lockOn: false })).toEqual([]);
+  });
+
+  it("is reason enough to send the brief, and has its own section", () => {
+    expect(briefWorthSending({ ...quiet, payees: none })).toBe(false);
+    const facts = { ...quiet, payees: { ...none, frozen: 1 } };
+    expect(briefWorthSending(facts)).toBe(true);
+    const email = weeklyBriefEmail({ orgName: "Pinecrest", facts, links: { console: "https://x/console", approvals: "https://x/approvals", plan: "https://x/plan" }, origin: "https://x" });
+    expect(email.text).toContain("Payee addresses\n- 1 payee is frozen");
+    expect(email.html).toContain("Payee addresses");
+    expect(weeklyBriefEmail({ orgName: "Pinecrest", facts: quiet, links: { console: "c", approvals: "a", plan: "p" }, origin: "https://x" }).text).not.toContain("Payee addresses");
+  });
+
+  it("reads the week's entries, the agent's holds for an address, the lock and the frozen payees", async () => {
+    const client = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/orgs") return { body: { name: "Pinecrest Studio", slug: "pinecrest-studio" } };
+      if (request.path === "/rest/v1/approval_policies") return { body: [{ payee_lock: true, payee_lock_cooling_hours: 0 }] };
+      if (request.path === "/rest/v1/counterparties") return { body: [{ id: "c1" }] };
+      if (request.path === "/rest/v1/ledger_entries" && request.params.get("actor") === "eq.agent") return { body: [{ seq: 9 }, { seq: 10 }] };
+      if (request.path === "/rest/v1/ledger_entries") {
+        return {
+          body: [
+            { action: "counterparty_address_changed", detail: { to: "0x1" } },
+            { action: "counterparty_address_changed", detail: { to: null } },
+            { action: "counterparty_address_confirmed", detail: {} },
+            { action: "address_change_check_sent", detail: {} },
+            { action: "address_change_answered", detail: { answer: "not_me" } },
+            { action: "address_change_answered", detail: { answer: "me" } },
+          ],
+        };
+      }
+      return { body: [] };
+    });
+    const week = await run(client, () => payeeWeek(db(), "2026-10-12T00:00:00.000Z", "2026-10-19T00:00:00.000Z"));
+    expect(week).toEqual({ lockOn: true, changed: 1, confirmed: 1, held: 2, asked: 1, notMe: 1, frozen: 1 });
+    const holds = client.requests.find((request) => request.path === "/rest/v1/ledger_entries" && request.params.get("actor") === "eq.agent");
+    expect(holds?.params.get("detail->>guardrailRule")).toBe("in.(counterparty.address_unconfirmed,counterparty.cooling_off,invoice.pay_to_differs)");
+    const frozen = client.requests.find((request) => request.path === "/rest/v1/counterparties");
+    expect(frozen?.params.get("frozen_at")).toBe("not.is.null");
+  });
+
+  it("leaves them out when they cannot be read, and counts no frozen payee before migration 0137", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const down = fakeSupabase((request) => (request.path === "/rest/v1/ledger_entries" ? { status: 500, body: { code: "XX000", message: "down" } } : { body: [] }));
+    expect(await run(down, () => payeeWeek(db(), "a", "b"))).toBeNull();
+    const before = fakeSupabase((request) =>
+      request.path === "/rest/v1/counterparties" ? { status: 400, body: { code: "42703", message: "column counterparties.frozen_at does not exist" } } : { body: [] }
+    );
+    expect((await run(before, () => payeeWeek(db(), "a", "b")))?.frozen).toBe(0);
+  });
+});
+
 describe("sending it (W1, W2, W4, W5)", () => {
   it("claims the week, then sends it on a Monday to each member who decides", async () => {
     const outcome = await run(world(), () => sendWeeklyBrief({ now: MONDAY }));
@@ -180,6 +256,8 @@ describe("sending it (W1, W2, W4, W5)", () => {
     expect(claimMock.mock.invocationCallOrder[0]).toBeLessThan(sendMock.mock.invocationCallOrder[0]);
     expect(claimMock.mock.calls[0][0]).toMatchObject({ action: WEEKLY_BRIEF_SENT, actor: "system", detail: { week: "2026-W43", recipients: 2 } });
     expect((claimMock.mock.calls[0][0] as { detail: Record<string, unknown> }).detail.preview).toBeUndefined();
+    // The payee figures it told of (WP1), signed with the rest.
+    expect((claimMock.mock.calls[0][0] as { detail: { payees: unknown } }).detail.payees).toMatchObject({ changed: 0, held: 3, frozen: 0 });
     expect(ledgerMock).not.toHaveBeenCalled();
   });
 

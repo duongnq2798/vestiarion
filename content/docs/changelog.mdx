@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-22: The weekly brief counts payee address changes
+
+- **`weekly_brief_sent`** now carries `payees: { lockOn, changed, confirmed, held, asked, notMe, frozen }` for the last 7 days: whether the payee lock is on, the addresses set and confirmed, the agent's decisions held for an address (`guardrailRule` `counterparty.address_unconfirmed`, `counterparty.cooling_off` or `invoice.pay_to_differs`), the payees' contacts asked "Was this you?" and those who answered `not_me`, and the payees frozen now. It is absent when they could not be read. A week with only these to tell now sends the brief, where before it sent none.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-22: "Was this you?" and frozen payees
 
 - Four new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, all in the `compliance` domain:

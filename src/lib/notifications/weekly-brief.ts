@@ -3,7 +3,8 @@ import { billsHref } from "../bills-view";
 import { currentOrgId } from "../context";
 import { db, platformDb, unwrap, type OrgDb } from "../dal";
 import { emailSettingsFromEnv, sendEmail } from "../email/send";
-import { BRIEF_LINES, weeklyBriefEmail, type WeeklyBriefFacts } from "../email/weekly-brief";
+import { BRIEF_LINES, payeeSentences, weeklyBriefEmail, type WeeklyBriefFacts } from "../email/weekly-brief";
+import { readPayeeLock } from "../payee-lock";
 import { appendLedgerEntry } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { cashShortOf, readOpenCashOutlook } from "../agent/cash-alert";
@@ -57,8 +58,49 @@ export function briefWorthSending(facts: WeeklyBriefFacts): boolean {
     facts.waiting > 0 ||
     facts.next7.count > 0 ||
     facts.cash.short !== null ||
-    (facts.shadow?.verdicts.given ?? 0) > 0
+    (facts.shadow?.verdicts.given ?? 0) > 0 ||
+    payeeSentences(facts.payees ?? null).length > 0
   );
+}
+
+/** A decision the agent held for an address (WP1): changed and unconfirmed, inside the lock's wait, or not the invoice's. */
+const ADDRESS_HOLDS = ["counterparty.address_unconfirmed", "counterparty.cooling_off", "invoice.pay_to_differs"];
+
+/**
+ * Payee addresses in the last 7 days (WP1), read from the workspace's signed entries, its payee lock and its frozen payees.
+ * Null when they cannot be read: the brief still goes, without them. Before migration 0137, no payee is frozen.
+ */
+export async function payeeWeek(orgDb: OrgDb, since: string, until: string): Promise<WeeklyBriefFacts["payees"]> {
+  try {
+    const [entries, holds, lock, frozen] = await Promise.all([
+      orgDb
+        .from("ledger_entries")
+        .select("action, detail")
+        .in("action", ["counterparty_address_changed", "counterparty_address_confirmed", "address_change_check_sent", "address_change_answered"])
+        .gte("ts", since)
+        .lt("ts", until)
+        .limit(2000),
+      orgDb.from("ledger_entries").select("seq").eq("actor", "agent").in("detail->>guardrailRule", ADDRESS_HOLDS).gte("ts", since).lt("ts", until).limit(2000),
+      readPayeeLock(orgDb),
+      orgDb.from("counterparties").select("id").not("frozen_at", "is", null).limit(1000),
+    ]);
+    const rows = unwrap(entries) as Array<{ action: string; detail: Record<string, unknown> }>;
+    const count = (action: string, test: (detail: Record<string, unknown>) => boolean = () => true) => rows.filter((row) => row.action === action && test(row.detail)).length;
+    const frozenRows = frozen.error ? [] : ((frozen.data ?? []) as unknown[]);
+    return {
+      lockOn: lock.on,
+      // A cleared address is no change to check.
+      changed: count("counterparty_address_changed", (detail) => typeof detail.to === "string"),
+      confirmed: count("counterparty_address_confirmed"),
+      held: (unwrap(holds) as unknown[]).length,
+      asked: count("address_change_check_sent"),
+      notMe: count("address_change_answered", (detail) => detail.answer === "not_me"),
+      frozen: frozenRows.length,
+    };
+  } catch (error) {
+    console.error("weekly brief: payee addresses not read", error instanceof Error ? error.message : "unknown error");
+    return null;
+  }
 }
 
 /** The brief's figures, read in the workspace's scope (W3). */
@@ -84,6 +126,7 @@ export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number, shadow: Shad
   const short = cashShortOf(outlook);
   // In shadow mode (W6): the person's verdicts, in the week and since shadow mode began, from their signed entries.
   const verdictsOf = (rows: Array<{ ts: string; detail: Record<string, unknown> }>) => ({ given: rows.length, agreed: rows.filter((row) => row.detail.verdict === "agree").length });
+  const payees = await payeeWeek(orgDb, since, until);
   const verdictRows = shadow
     ? (unwrap(await orgDb.from("ledger_entries").select("ts, detail").eq("action", "decision_verdict").gte("ts", shadow.startedAt).lt("ts", until).limit(5000)) as Array<{ ts: string; detail: Record<string, unknown> }>)
     : [];
@@ -108,6 +151,7 @@ export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number, shadow: Shad
           sinceStart: { ...verdictsOf(verdictRows), since: shadow.startedAt.slice(0, 10) },
         }
       : null,
+    payees,
   };
 }
 
@@ -203,6 +247,7 @@ export async function sendWeeklyBrief(options: { now?: number; only?: { userId: 
         next7: { count: facts.next7.count, usdc: facts.next7.usdc, expectedUsdc: facts.next7.expectedUsdc },
         short: facts.cash.short,
         ...(facts.shadow ? { shadow: facts.shadow } : {}),
+        ...(facts.payees ? { payees: facts.payees } : {}),
       },
     });
 

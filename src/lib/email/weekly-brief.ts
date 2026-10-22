@@ -34,6 +34,12 @@ export interface WeeklyBriefFacts {
    * outside it. The wallet then only mirrors agreed payments, so `cash.short` is null.
    */
   shadow?: { verdicts: { given: number; agreed: number }; sinceStart: { given: number; agreed: number; since: string } } | null;
+  /**
+   * Payee addresses in the last 7 days (docs/superpowers/specs/2026-10-22-weekly-brief-payee-lock-design.md WP1): whether
+   * the payee lock is on, addresses changed and confirmed, payments the agent held for an address, payees' contacts asked
+   * "Was this you?" and those who said not, and payees frozen now. Absent where it could not be read.
+   */
+  payees?: { lockOn: boolean; changed: number; confirmed: number; held: number; asked: number; notMe: number; frozen: number } | null;
 }
 
 export const BRIEF_LINES = 5;
@@ -54,6 +60,29 @@ const NOTE: Record<string, string> = {
   "payable once verified": "milestone, once verified",
 };
 
+/**
+ * What the brief says of payee addresses (WP2), or nothing in a week with none of it. A frozen payee is said first: it is
+ * the one a person must act on.
+ */
+export function payeeSentences(payees: WeeklyBriefFacts["payees"]): string[] {
+  if (!payees) return [];
+  const said: string[] = [];
+  if (payees.frozen > 0) {
+    said.push(`${plural(payees.frozen, "payee is", "payees are")} frozen: their contact said they did not make a change to their address. An owner or admin unfreezes one on Counterparties after checking with them.`);
+  }
+  if (payees.changed > 0) {
+    said.push(`${plural(payees.changed, "payee address", "payee addresses")} changed${payees.confirmed > 0 ? `, and ${plural(payees.confirmed, "address was", "addresses were")} confirmed` : ""}.`);
+  } else if (payees.confirmed > 0) {
+    said.push(`${plural(payees.confirmed, "payee address was", "payee addresses were")} confirmed.`);
+  }
+  if (payees.held > 0) said.push(`The agent held ${plural(payees.held, "payment", "payments")} for an address no one had confirmed, or one an invoice asked for instead.`);
+  if (payees.asked > 0) {
+    said.push(`${plural(payees.asked, "payee's contact was", "payees' contacts were")} asked whether they made a change${payees.notMe > 0 ? `, and ${payees.notMe} said they did not` : ""}.`);
+  }
+  if (said.length > 0 && !payees.lockOn) said.push("The payee lock is off: turn it on in Settings to have a second person record how each changed address was checked.");
+  return said;
+}
+
 /** The brief's sentences, shared by the HTML and the text version. */
 export function briefSentences(facts: WeeklyBriefFacts): {
   lastWeek: string[];
@@ -62,6 +91,7 @@ export function briefSentences(facts: WeeklyBriefFacts): {
   lines: string[];
   more: number;
   cash: string;
+  payees: string[];
 } {
   const shadow = facts.shadow ?? null;
   const lastWeek = shadow
@@ -93,7 +123,7 @@ export function briefSentences(facts: WeeklyBriefFacts): {
       ? `The cash runs short on ${day(short.shortOn)}: ${shortUsdc(short.need)} more is needed by then.`
       : `The cash runs short on ${day(short.shortOn)}: ${shortUsdc(short.shortBy)} short that day, and ${shortUsdc(short.need)} by ${day(short.lowestOn)}.`
     : `The cash covers everything due in the next 30 days: ${usdc(facts.cash.operating + facts.cash.reserve)} in the wallet${facts.cash.reserve > 0 ? " and the reserve" : ""}.`;
-  return { lastWeek, waiting, ahead, lines, more: Math.max(0, facts.next7.count - lines.length), cash };
+  return { lastWeek, waiting, ahead, lines, more: Math.max(0, facts.next7.count - lines.length), cash, payees: payeeSentences(facts.payees ?? null) };
 }
 
 export function weeklyBriefEmail(input: {
@@ -127,6 +157,7 @@ export function weeklyBriefEmail(input: {
     "",
     said.waiting,
     "",
+    ...(said.payees.length > 0 ? ["Payee addresses", ...said.payees.map((line) => `- ${line}`), ""] : []),
     "Next 7 days",
     said.ahead,
     ...said.lines.map((line) => `- ${line}`),
@@ -186,7 +217,15 @@ export function weeklyBriefEmail(input: {
 ${said.lastWeek.map((line) => row(escapeHtml(line))).join("\n")}
             </table>
             ${heading("Waiting for you")}
-            ${p(escapeHtml(said.waiting))}
+            ${p(escapeHtml(said.waiting))}${
+              said.payees.length > 0
+                ? `
+            ${heading("Payee addresses")}
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+${said.payees.map((line) => row(escapeHtml(line))).join("\n")}
+            </table>`
+                : ""
+            }
             ${heading("Next 7 days")}
             ${p(escapeHtml(said.ahead))}
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">

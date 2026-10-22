@@ -374,8 +374,9 @@ run in production, with its ledger entries and transactions.
   takes the request back once the cash is there; and it offers customers a small discount to pay sooner. It tells the
   owner how much is needed and by when, in the console, Telegram and Slack.
 - **Weekly brief** — on Mondays, owners, admins and approvers get the week by email: what was paid and received, the
-  decisions, what waits for them, what leaves next, and whether the cash covers the next 30 days. In shadow mode it
-  reports the verdicts instead, and how often the business agreed with the agent.
+  decisions, what waits for them, what leaves next, whether the cash covers the next 30 days, and the week's payee
+  address changes, frozen payees first. In shadow mode it reports the verdicts instead, and how often the business
+  agreed with the agent.
 - **Bank payouts** — a vendor's bills paid to its bank account in Mexico, in pesos over SPEI through BlindPay, from the
   workspace's USDC; a person sees what the vendor receives and approves every one (BlindPay's development instance).
 - **Shadow mode** — try the agent on real bills, paid in the business's own way, before it pays anything itself.
