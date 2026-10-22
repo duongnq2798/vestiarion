@@ -1,19 +1,28 @@
+import { readFrozenPayees } from "../address-change-check";
 import { invoiceDiscount } from "../agent/payment-timing";
+import { readAccountantCosign } from "../approval-policy";
 import { membershipsOf, type OrgMembership } from "../auth/membership";
 import { approvalAnchor, orgHref } from "../auth/org-paths";
+import { can } from "../auth/roles";
 import { billsHref } from "../bills-view";
 import { ACCOUNTANT_BOOKING_CONSENTS } from "../connectors/consent";
 import { PROVIDER_LABELS } from "../connectors/provider";
+import { currentUserId } from "../context";
+import { readCosignStates, type CosignState } from "../cosign-state";
+import { addressUnconfirmed } from "../counterparty-address";
 import { readCustomerRequests } from "../customer-portal/requests";
 import { db, type OrgDb } from "../dal";
 import { withOrg } from "../dal/scope";
 import { decideByOf } from "../exceptions";
+import { counterpartyPath } from "../next-step";
+import { twoApprovalsSentence } from "../two-approvals";
 import { readConnectorProblems, readUsageLimits } from "../usage/read";
 import { routeTo, sortTriage, type TriageItem } from "./triage";
 
 /**
- * The accountant console's read model (docs/superpowers/specs/2026-10-13-accountant-console-design.md A2, A3): the
- * workspaces a person is a member of, each read in its own scope, through its own tenant client, as that person.
+ * The accountant console's read model (docs/superpowers/specs/2026-10-13-accountant-console-design.md A2, A3; bills to
+ * co-sign and addresses to confirm, 2026-10-22-accountant-queue-design.md AQ3, AQ4): the workspaces a person is a member
+ * of, each read in its own scope, through its own tenant client, as that person.
  *
  * Never a service-role read across tenants. The list of workspaces is the person's own memberships, read afresh on
  * every request from the session's user id (`membershipsOf`, the same read every workspace page's gate makes); each
@@ -71,7 +80,9 @@ type PayableRow = {
   created_at: string;
   early_pay_discount_pct: string | number | null;
   discount_due_date: string | null;
-  counterparties: { name: string } | null;
+  counterparty_id: string;
+  /** The payee's screening and address, read for whether a co-sign could be given, and never shown on an item. */
+  counterparties: { name: string; risk_level?: string | null; address?: string | null } | null;
 };
 
 const HELD_WORDS: Record<PayableRow["status"], string> = {
@@ -83,12 +94,57 @@ const HELD_WORDS: Record<PayableRow["status"], string> = {
 const dayWords = (iso: string) =>
   new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso.slice(0, 10)}T00:00:00.000Z`));
 
-async function decisionItems(orgDb: OrgDb, ws: { slug: string; name: string; role: OrgMembership["role"] }, now: Date): Promise<TriageItem[]> {
+/** What a bill's item says of its co-sign (docs/superpowers/specs/2026-10-22-accountant-queue-design.md AQ3), ahead of its decide-by day. */
+function cosignWords(state: CosignState | undefined): string | null {
+  switch (state?.state) {
+    case "can_cosign":
+      return `${twoApprovalsSentence(state.above)} ${state.approvals > 0 ? "One approval is given." : "No one has approved it yet."}`;
+    case "cosigned":
+      return "You co-signed it. An owner, admin or approver pays it.";
+    case "blocked":
+      return `${state.reason}.`;
+    default:
+      return null;
+  }
+}
+
+/**
+ * For an accountant while the workspace's accountants co-sign: each bill's co-sign state (AQ3). Read on its own, so a
+ * failure leaves the bills as decision items, and names "bills to co-sign" on the card.
+ */
+async function cosignStatesOf(viewerId: string, rows: PayableRow[], unread: string[]): Promise<Map<string, CosignState> | null> {
+  try {
+    return await readCosignStates(
+      viewerId,
+      rows.map((row) => ({
+        id: row.id,
+        amount: num(row.amount),
+        currency: row.currency === "EURC" ? "EURC" : "USDC",
+        status: row.status,
+        reviewedAt: null,
+        counterpartyId: row.counterparty_id,
+        riskLevel: row.counterparties?.risk_level ?? null,
+        address: row.counterparties?.address ?? null,
+      }))
+    );
+  } catch (error) {
+    console.error("accountant: bills to co-sign not read", error instanceof Error ? error.message : "unknown error");
+    unread.push("bills to co-sign");
+    return null;
+  }
+}
+
+async function decisionItems(
+  orgDb: OrgDb,
+  ws: { slug: string; name: string; role: OrgMembership["role"] },
+  now: Date,
+  cosign: { on: boolean; viewerId: string | undefined; unread: string[] }
+): Promise<TriageItem[]> {
   const today = day(now);
   const [payables, milestones] = await Promise.all([
     orgDb
       .from("invoices")
-      .select("id, amount, currency, due_date, status, decided_at, created_at, early_pay_discount_pct, discount_due_date, counterparties(name)")
+      .select("id, amount, currency, due_date, status, decided_at, created_at, early_pay_discount_pct, discount_due_date, counterparty_id, counterparties(name, risk_level, address)")
       .eq("direction", "payable")
       .in("status", ["held", "flagged", "awaiting_info"])
       .order("due_date", { ascending: true })
@@ -97,20 +153,28 @@ async function decisionItems(orgDb: OrgDb, ws: { slug: string; name: string; rol
   ]);
   if (payables.error) throw new Error(payables.error.message);
   if (milestones.error) throw new Error(milestones.error.message);
+  const rows = (payables.data ?? []) as unknown as PayableRow[];
+  // A bill an accountant can co-sign becomes theirs to act on, in place of its decision item: one item per bill, so
+  // nothing is counted twice (AQ3). Milestones are never co-signed.
+  const states = ws.role === "accountant" && cosign.on && cosign.viewerId && rows.length > 0 ? await cosignStatesOf(cosign.viewerId, rows, cosign.unread) : null;
   const items: TriageItem[] = [];
-  for (const row of (payables.data ?? []) as unknown as PayableRow[]) {
+  for (const row of rows) {
     const decideBy = decideByOf({ dueDate: row.due_date, discount: invoiceDiscount(row) }, today);
     const past = decideBy.day < today;
-    const kind = past ? "past_decide_by" : "decision";
+    const state = states?.get(row.id);
+    const kind = state?.state === "can_cosign" ? "cosign" : past ? "past_decide_by" : "decision";
+    const by = past
+      ? `Its decide-by day was ${dayWords(decideBy.day)}${decideBy.reason === "discount" ? ", to keep the early-payment discount" : ""}.`
+      : `Decide by ${dayWords(decideBy.day)}.`;
+    const words = cosignWords(state);
     items.push({
       key: `${ws.slug}:${kind}:${row.id}`,
       kind,
       workspace: { slug: ws.slug, name: ws.name },
       title: row.counterparties?.name ?? "A supplier",
-      detail: past
-        ? `${HELD_WORDS[row.status]}. Its decide-by day was ${dayWords(decideBy.day)}${decideBy.reason === "discount" ? ", to keep the early-payment discount" : ""}.`
-        : `${HELD_WORDS[row.status]}. Decide by ${dayWords(decideBy.day)}.`,
+      detail: kind === "cosign" ? `${words} ${by}` : words ? `${words} ${HELD_WORDS[row.status]}. ${by}` : `${HELD_WORDS[row.status]}. ${by}`,
       amount: { value: num(row.amount), currency: row.currency ?? "USDC" },
+      // A bill past its decide-by day ages from that day, whichever kind it is.
       since: past ? decideBy.day : (row.decided_at ?? row.created_at),
       href: `${orgHref(ws.slug, "/approvals")}#${approvalAnchor(row.id)}`,
       ...routeTo(ws.role, kind),
@@ -130,6 +194,48 @@ async function decisionItems(orgDb: OrgDb, ws: { slug: string; name: string; rol
     });
   }
   return items;
+}
+
+/**
+ * Changed payout addresses no one has confirmed yet (AQ4), for whoever may confirm one: the newest changes first, up to
+ * the console's most, never the address itself. A frozen payee is unfrozen first, by an owner or admin.
+ */
+async function addressItems(orgDb: OrgDb, ws: { slug: string; name: string; role: OrgMembership["role"] }): Promise<TriageItem[]> {
+  const result = await orgDb
+    .from("counterparties")
+    .select("id, name, address_changed_at, address_confirmed_at")
+    .not("address_changed_at", "is", null)
+    .order("address_changed_at", { ascending: false })
+    .limit(ROWS);
+  if (result.error) throw new Error(result.error.message);
+  // Changed, and no confirmation since: two columns compared, so here rather than in the request.
+  const rows = ((result.data ?? []) as Array<{ id: string; name: string; address_changed_at: string; address_confirmed_at: string | null }>).filter((row) =>
+    addressUnconfirmed(row.address_changed_at, row.address_confirmed_at)
+  );
+  if (rows.length === 0) return [];
+  // None before migration 0137.
+  const frozen = await readFrozenPayees(rows.map((row) => row.id), orgDb);
+  return rows.map((row) => {
+    const isFrozen = frozen.has(row.id);
+    const route = !isFrozen
+      ? routeTo(ws.role, "confirm_address")
+      : can(ws.role, "records.write")
+        ? { canAct: true, who: "You can unfreeze it once you have checked with them, then confirm it" }
+        : { canAct: false, who: "Waiting on an owner or admin of this workspace" };
+    return {
+      key: `${ws.slug}:confirm_address:${row.id}`,
+      kind: "confirm_address" as const,
+      workspace: { slug: ws.slug, name: ws.name },
+      title: row.name,
+      detail: isFrozen
+        ? `Its address changed on ${dayWords(row.address_changed_at)}, and its contact said they did not make the change. It is unfrozen before it is confirmed.`
+        : `Its address changed on ${dayWords(row.address_changed_at)}. The agent pays nothing to it until someone confirms it.`,
+      amount: null,
+      since: row.address_changed_at,
+      href: orgHref(ws.slug, counterpartyPath(row.id)),
+      ...route,
+    };
+  });
 }
 
 async function bookingItems(orgDb: OrgDb, ws: { slug: string; name: string; role: OrgMembership["role"] }): Promise<TriageItem[]> {
@@ -256,15 +362,22 @@ async function limitItems(ws: { orgId: string; slug: string; name: string; role:
 }
 
 /**
- * One workspace's open items, read in the scope already entered: each part on its own, so one that cannot be read is
- * named and the rest still show.
+ * One workspace's open items, read in the scope already entered, as the person it names (`viewerId`, the scope's user by
+ * default): each part on its own, so one that cannot be read is named and the rest still show.
  */
-export async function readWorkspaceTriage(membership: OrgMembership, now: Date = new Date()): Promise<WorkspaceTriage> {
+export async function readWorkspaceTriage(membership: OrgMembership, now: Date = new Date(), viewerId: string | undefined = currentUserId()): Promise<WorkspaceTriage> {
   const unread: string[] = [];
   const ws = { orgId: membership.orgId, slug: membership.slug, name: membership.name, role: membership.role, mode: membership.mode };
   const orgDb = db();
+  // Whether the workspace's accountants co-sign (AQ4): read once, for an accountant only, and shared by the two parts it
+  // shapes. Read afresh on every request; unread, it counts as off, as `cosignsNow` reads it, and the card names it.
+  const cosignOn: Promise<boolean> = can(ws.role, "approval.cosign")
+    ? part("the co-sign setting", unread, async () => (await readAccountantCosign(orgDb)).on, false)
+    : Promise.resolve(false);
   const parts = await Promise.all([
-    part("payments waiting for a decision", unread, () => decisionItems(orgDb, ws, now), []),
+    part("payments waiting for a decision", unread, async () => decisionItems(orgDb, ws, now, { on: await cosignOn, viewerId, unread }), []),
+    // Whoever may confirm a changed address: whoever decides payments, and an accountant while co-signing is on (CS6).
+    part("addresses to confirm", unread, async () => (can(ws.role, "approval.decide") || (await cosignOn) ? addressItems(orgDb, ws) : []), []),
     part("payments to book", unread, () => bookingItems(orgDb, ws), []),
     part("receivables", unread, () => receivableItems(orgDb, ws, now), []),
     part("connectors", unread, () => connectorItems(ws, now), []),

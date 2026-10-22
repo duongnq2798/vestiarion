@@ -103,6 +103,8 @@ provider, whatever approvals stand.
 
 ## Not in this change
 
-- A queue of what waits for an accountant's co-sign in the accountant console. That is the next item.
+- A queue of what waits for an accountant's co-sign in the accountant console. Done since, in
+  `2026-10-22-accountant-queue-design.md`: bills to co-sign and addresses to confirm, with the card offering Co-sign
+  only where it would be taken.
 - Co-signing contractors' milestones.
 - A co-sign that blocks a payment: no approval does today.

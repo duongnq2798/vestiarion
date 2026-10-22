@@ -23,6 +23,7 @@ import { Money, fmt } from "@/components/vx/Primitives";
 import { paymentSendingToast, paymentToastId, withPaymentReceipt } from "@/components/payment-toast";
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
+import { COSIGN_BLOCKED, type CosignState } from "@/lib/cosign-state-rules";
 import { addedDetailsSentence } from "@/lib/added-details";
 import { bankAccountLine, bankQuoteLine } from "@/lib/bank-payouts/words";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
@@ -213,6 +214,8 @@ const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfini
  *
  * An accountant while the workspace's accountants co-sign (`canCosign`) gets Co-sign on a payment above the figure, which
  * records one of its two approvals and sends nothing, and the card then says they co-signed it (accountant co-sign CS8).
+ * Where the page read whether the co-sign can be given now (`cosign`, accountant queue AQ5), Co-sign shows only when it
+ * can; a co-sign the server would refuse shows why in its place, and one the approvals standing make needless, nothing.
  *
  * An owner or admin (`canEdit`) may instead add what the payable is missing —
  * its purchase order, or its goods marked received — while it waits and no
@@ -232,12 +235,18 @@ export default function ApprovalCard({
   exception,
   viewerEmail,
   canCosign = false,
+  cosign,
 }: {
   orgSlug: string;
   payable: WaitingPayable;
   canDecide: boolean;
   /** The viewer is an accountant and the workspace's accountants co-sign (accountant co-sign CS2). */
   canCosign?: boolean;
+  /**
+   * Whether that accountant can co-sign this payment now (`readCosignStates`, accountant queue AQ5), as the console says
+   * it. Absent when it was not read: Co-sign then shows on any payment above the figure, and the server refuses what it must.
+   */
+  cosign?: CosignState;
   viewerId: string;
   sandbox: boolean;
   /** The viewer is the only member of the workspace who may approve payments. */
@@ -392,8 +401,8 @@ export default function ApprovalCard({
             )}
             <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} ownAddress={ownAddress} canAddDetails={canAddDetails} />
           </>
-        ) : canCosign && two ? (
-          <CosignControl orgSlug={orgSlug} payable={payable} viewerId={viewerId} />
+        ) : canCosign && (cosign ? cosign.state !== "not_needed" : two) ? (
+          <CosignControl orgSlug={orgSlug} payable={payable} viewerId={viewerId} cosign={cosign} />
         ) : exception && exception.owners.length > 0 ? (
           // Someone who cannot decide it still has a next step: who to ask (deal cash readiness E5).
           <CardFooter>
@@ -408,14 +417,38 @@ export default function ApprovalCard({
   );
 }
 
-/** An accountant's Co-sign (accountant co-sign CS8): one of the two approvals, recorded behind a confirmation, never paid. */
-function CosignControl({ orgSlug, payable, viewerId }: { orgSlug: string; payable: WaitingPayable; viewerId: string }) {
+/**
+ * An accountant's Co-sign (accountant co-sign CS8): one of the two approvals, recorded behind a confirmation, never paid.
+ * A co-sign that cannot be given yet says why instead (accountant queue AQ5); the address to confirm links its row.
+ */
+function CosignControl({ orgSlug, payable, viewerId, cosign: state }: { orgSlug: string; payable: WaitingPayable; viewerId: string; cosign?: CosignState }) {
   const form = useActionForm(cosign, INITIAL);
   const formId = `cosign-${payable.id}`;
-  if (payable.twoApprovals?.approvals.some((approval) => approval.by === viewerId)) {
+  if (state ? state.state === "cosigned" : payable.twoApprovals?.approvals.some((approval) => approval.by === viewerId)) {
     return (
       <CardFooter>
         <p className="text-sm text-ink-2">You co-signed it. An owner, admin or approver&apos;s Approve and pay pays it.</p>
+      </CardFooter>
+    );
+  }
+  if (state?.state === "blocked") {
+    return (
+      <CardFooter>
+        <p className="text-sm text-ink-2">
+          {state.reason}
+          {state.reason === COSIGN_BLOCKED.unconfirmed ? (
+            <>
+              {" "}
+              on{" "}
+              <Link href={orgHref(orgSlug, counterpartyPath(payable.counterpartyId))} className="font-medium text-agent underline-offset-2 hover:underline">
+                Counterparties
+              </Link>
+              .
+            </>
+          ) : (
+            "."
+          )}
+        </p>
       </CardFooter>
     );
   }

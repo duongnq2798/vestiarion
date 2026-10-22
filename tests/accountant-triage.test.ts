@@ -5,7 +5,11 @@ import {
   applyFilter,
   countByAge,
   countByKind,
+  KIND_TITLES,
+  kindWords,
+  permissionFor,
   routeTo,
+  TRIAGE_KINDS,
   sortTriage,
   triageFilter,
   type TriageItem,
@@ -43,6 +47,20 @@ describe("routeTo", () => {
     expect(routeTo("accountant", "past_decide_by").canAct).toBe(false);
     expect(routeTo("accountant", "connector")).toEqual({ canAct: false, who: "Waiting on an owner or admin of this workspace" });
     expect(routeTo("accountant", "limit", "agent_budget").canAct).toBe(false);
+  });
+
+  it("lets an accountant co-sign and confirm an address, and an owner, admin or approver confirm one as a decider (accountant queue AQ2)", () => {
+    expect(routeTo("accountant", "cosign")).toEqual({ canAct: true, who: "You can co-sign it" });
+    expect(routeTo("accountant", "confirm_address")).toEqual({ canAct: true, who: "You can confirm it" });
+    for (const role of ["owner", "admin", "approver"] as const) {
+      expect(routeTo(role, "confirm_address"), role).toEqual({ canAct: true, who: "You can confirm it" });
+      // A co-sign is the accountant's alone: the others decide the bill outright.
+      expect(routeTo(role, "cosign").canAct, role).toBe(false);
+    }
+    expect(routeTo("approver", "cosign").who).toBe("Waiting on a co-signing accountant of this workspace");
+    expect(routeTo("viewer", "confirm_address")).toEqual({ canAct: false, who: "Waiting on an owner, admin or approver of this workspace" });
+    expect(permissionFor("confirm_address", undefined, "accountant")).toBe("approval.cosign");
+    expect(permissionFor("confirm_address", undefined, "approver")).toBe("approval.decide");
   });
 
   it("lets an approver decide, and a viewer act on nothing", () => {
@@ -91,6 +109,20 @@ describe("sortTriage", () => {
     expect(sorted.map((entry) => entry.title)).toEqual(["book old", "book new", "overdue", "past", "decision"]);
   });
 
+  it("ranks bills to co-sign right after decisions, then addresses to confirm, before what customers said", () => {
+    expect(TRIAGE_KINDS.slice(0, 5)).toEqual(["past_decide_by", "decision", "cosign", "confirm_address", "customer_says_paid"]);
+    const sorted = sortTriage([
+      item("customer_says_paid", "2026-09-01", { canAct: true, title: "customer" }),
+      item("confirm_address", "2026-09-01", { canAct: true, title: "address" }),
+      item("cosign", "2026-10-12", { canAct: true, title: "co-sign" }),
+    ]);
+    expect(sorted.map((entry) => entry.title)).toEqual(["co-sign", "address", "customer"]);
+    expect(KIND_TITLES.cosign).toEqual({ one: "Waiting for your co-sign", many: "Bills waiting for your co-sign" });
+    expect(KIND_TITLES.confirm_address).toEqual({ one: "Address to confirm", many: "Addresses to confirm" });
+    expect(kindWords("cosign", 2)).toBe("2 bills waiting for your co-sign");
+    expect(kindWords("confirm_address", 1)).toBe("1 address to confirm");
+  });
+
   it("gives the same order whatever order the workspaces answered in", () => {
     const a = item("decision", "2026-10-01", { workspace: { slug: "a", name: "Alpha" } });
     const b = item("decision", "2026-10-01", { workspace: { slug: "b", name: "Beta" } });
@@ -108,6 +140,8 @@ describe("filters", () => {
     expect(triageFilter({ kind: "to_book", workspace: "lumen", mine: "1" })).toEqual({ kind: "to_book", workspace: "lumen", mine: true });
     expect(triageFilter({ kind: "drop_table", workspace: "../x", mine: "yes" })).toEqual({ kind: null, workspace: null, mine: false });
     expect(triageFilter({ kind: ["decision", "to_book"] }).kind).toBe("decision");
+    expect(triageFilter({ kind: "cosign" }).kind).toBe("cosign");
+    expect(triageFilter({ kind: "confirm_address" }).kind).toBe("confirm_address");
   });
 
   it("narrows the queue by kind, workspace and what the viewer can act on", () => {

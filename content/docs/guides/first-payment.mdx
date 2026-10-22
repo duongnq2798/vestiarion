@@ -598,6 +598,7 @@ An owner can make larger payments need two people. In **Settings**, under **Two 
 - **Your accountant as the second person.** Under the figure, an owner can choose **Let accountants co-sign**.
   - An accountant then sees **Co-sign** on a bill above the figure. It records one of the two approvals, signed as `approval_given` with `cosign: true`, and says "Co-signed. An owner, admin or approver's Approve and pay pays it."
   - A co-sign never pays, even when another approval stands: the approval that pays is always an owner's, admin's or approver's.
+  - **Co-sign** shows only where a co-sign can still help pay. Where it would be refused, such as a bill waiting for a shadow-mode verdict or an address to confirm, the card says why in its place. The accountant's **Accountant console** lists the bills waiting for their co-sign and the addresses to confirm: see [Accountants](/docs/guides/accountants#co-sign-a-larger-bill).
   - Accountants count among the people who can approve bills. So a founder alone with their accountant can turn two approvals on, and pay a bill above the figure once the accountant co-signs it.
   - Accountants also confirm changed addresses, and a co-signing accountant counts as someone else, so whoever entered an address no longer confirms it alone.
   - Turning it off, or changing the person's role, makes their co-signs count for nothing.

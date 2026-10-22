@@ -352,6 +352,7 @@ const PORTAL_PUBLIC = "src/lib/customer-portal/public.ts";
 const ACCOUNTANT_PAGE = "src/app/accountant/page.tsx";
 const ACCOUNTANT_CONSOLE = "src/components/accountant/AccountantConsole.tsx";
 const TRIAGE = "src/lib/accountant/triage.ts";
+const COSIGN_RULES = "src/lib/cosign-state-rules.ts";
 const USAGE_MODEL = "src/lib/usage/model.ts";
 const USAGE_PANEL = "src/components/UsagePanel.tsx";
 const ROLES = "src/lib/auth/roles.ts";
@@ -473,6 +474,18 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Over 30 days", TRIAGE],
     ["Past its decide-by day", TRIAGE],
     ["Payment waiting for a decision", TRIAGE],
+    // Bills to co-sign and addresses to confirm (docs/superpowers/specs/2026-10-22-accountant-queue-design.md AQ8).
+    ["Waiting for your co-sign", TRIAGE],
+    ["Address to confirm", TRIAGE],
+    ["Counterparties", APP_NAV],
+    ["Co-sign", "src/components/ApprovalCard.tsx"],
+    ["Waiting for a verdict in shadow mode", COSIGN_RULES],
+    ["Someone disagreed with it in shadow mode", COSIGN_RULES],
+    ["Being decided right now", COSIGN_RULES],
+    ["Screened high risk", COSIGN_RULES],
+    ["The payee is frozen", COSIGN_RULES],
+    ["Confirm the address first", COSIGN_RULES],
+    ["Waiting for the payee lock's wait to end", COSIGN_RULES],
     ["Customer says paid", TRIAGE],
     ["Disputed by the customer", TRIAGE],
     ["Payment to book", TRIAGE],
@@ -3383,6 +3396,21 @@ describe.each(Object.entries(QUOTED) as Array<[GuideSlug, Array<readonly [string
   it("names Arc testnet plainly, without disclaimers", () => {
     expect(guide).toMatch(/Arc testnet/);
     for (const disclaimer of DISCLAIMERS) expect(guide).not.toMatch(disclaimer);
+  });
+});
+
+describe("the accountant console's header", () => {
+  const paragraph = (file: string) => {
+    const source = sourceFile(file);
+    const at = source.indexOf("Every workspace you are a member of");
+    expect(at, file).toBeGreaterThan(-1);
+    return source.slice(at, source.indexOf("</p>", at)).replace(/\s+/g, " ").trim();
+  };
+
+  it("names bills to co-sign and addresses to confirm among what the queue holds, alike on the page and its pictures (accountant queue AQ8)", () => {
+    const page = paragraph(ACCOUNTANT_PAGE);
+    expect(page).toContain("payments waiting for a decision, bills to co-sign, addresses to confirm, payments to book");
+    for (const twin of ["src/app/docs-shots/accountant/[state]/page.tsx", "src/app/docs-shots/onboarding/[state]/page.tsx"]) expect(paragraph(twin), twin).toBe(page);
   });
 });
 

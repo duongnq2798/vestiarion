@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { TENANT_TABLES } from "@/lib/dal";
+import { TENANT_RPCS, TENANT_TABLES } from "@/lib/dal";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { signedOrgs } from "./support/signed-org";
 
@@ -185,6 +185,13 @@ describe("readPortfolio", () => {
     ]);
   });
 
+  it("lists no address to confirm to an accountant while co-signing is off", async () => {
+    const { fake, read } = world(INVITED);
+    const portfolio = await read();
+    expect(portfolio.items.some((item) => item.kind === "confirm_address" || item.kind === "cosign")).toBe(false);
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/counterparties" && sent.params.get("address_changed_at"))).toBe(false);
+  });
+
   it("keeps listing a workspace whose data cannot be read, and says so, without hiding the others", async () => {
     const broken = fakeSupabase((sent): FakeReply => {
       if (sent.path === "/rest/v1/memberships") return { body: [{ role: "accountant", orgs: { id: WORKSPACES[0].id, slug: WORKSPACES[0].slug, name: WORKSPACES[0].name, mode: "live", network: "arc-testnet" } }] };
@@ -193,5 +200,208 @@ describe("readPortfolio", () => {
     });
     const portfolio = await runWith({ config, db: broken.client, fetch: broken.fetch }, () => readPortfolio(ACCOUNTANT, NOW));
     expect(portfolio.workspaces).toEqual([expect.objectContaining({ slug: "harbor-bakery", items: [], unread: ["this workspace"] })]);
+  });
+});
+
+/**
+ * Bills waiting for the accountant's co-sign and addresses to confirm (docs/superpowers/specs/2026-10-22-accountant-queue-design.md
+ * AQ3, AQ4): Harbor Bakery lets its accountants co-sign above 500 USDC; Lumen Studio and Pine Dental do not.
+ */
+describe("readPortfolio: what waits for the accountant", () => {
+  const HARBOR = WORKSPACES[0];
+  const ADDRESS = "0xabc0000000000000000000000000000000000001";
+  const payable = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    amount: "1250",
+    currency: "USDC",
+    due_date: "2026-10-20",
+    status: "held",
+    decided_at: "2026-10-10T08:00:00Z",
+    created_at: "2026-10-09T08:00:00Z",
+    early_pay_discount_pct: null,
+    discount_due_date: null,
+    counterparty_id: `cp-${id}`,
+    counterparties: { name: `Payee ${id}`, risk_level: "low", address: ADDRESS },
+    ...over,
+  });
+
+  type Options = {
+    cosignOn?: boolean;
+    payables?: unknown[];
+    counterparties?: unknown[];
+    frozen?: string[];
+    failing?: string;
+  };
+
+  /** Harbor's answers; the other workspaces answer as before, with co-signing off. */
+  const harbor =
+    (options: Options = {}) =>
+    (sent: RecordedRequest): FakeReply | null => {
+      const inHarbor = claimsOf(sent)?.org_id === HARBOR.id;
+      if (options.failing && sent.path === options.failing && inHarbor) return { status: 500, body: { message: "down" } };
+      if (sent.path === "/rest/v1/approval_policies") {
+        return { body: inHarbor ? [{ two_approvals_above: "500", accountant_cosigns: options.cosignOn ?? true, payee_lock: false, payee_lock_cooling_hours: 0 }] : [] };
+      }
+      if (!inHarbor) return null;
+      if (sent.path === "/rest/v1/invoices" && sent.params.get("direction") === "eq.payable") return { body: options.payables ?? [payable("big"), payable("small", { amount: "200" })] };
+      if (sent.path === "/rest/v1/counterparties" && sent.params.get("frozen_at")) return { body: (options.frozen ?? []).map((id) => ({ id })) };
+      if (sent.path === "/rest/v1/counterparties" && sent.params.get("address_changed_at")) return { body: options.counterparties ?? [] };
+      if (sent.path === "/rest/v1/rpc/approvers_among") return { body: (sent.body as { p_users: string[] }).p_users };
+      if (sent.path === "/rest/v1/rpc/approvers_besides") return { body: 1 };
+      if (sent.path === "/rest/v1/rpc/cosigners_besides") return { body: 1 };
+      return null;
+    };
+
+  const harborItems = <T extends { workspace: { slug: string } }>(items: T[]): T[] => items.filter((item) => item.workspace.slug === HARBOR.slug);
+
+  it("makes a bill the accountant can co-sign theirs to act on, in place of its decision item, and leaves the one below the figure", async () => {
+    const { read } = world(INVITED, harbor());
+    const portfolio = await read();
+    const items = harborItems(portfolio.items);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({
+      key: "harbor-bakery:cosign:big",
+      kind: "cosign",
+      canAct: true,
+      who: "You can co-sign it",
+      detail: "Payments above 500 USDC need two approvals. No one has approved it yet. Decide by Oct 20, 2026.",
+      amount: { value: 1250, currency: "USDC" },
+      since: "2026-10-10T08:00:00Z",
+      href: "/o/harbor-bakery/approvals#payable-big",
+    });
+    expect(items[1]).toMatchObject({ kind: "decision", title: "Payee small", canAct: false, detail: "Held for a person. Decide by Oct 20, 2026." });
+    // One item per bill: counted once on the card, and once among what the accountant can act on.
+    const card = portfolio.workspaces.find((workspace) => workspace.slug === HARBOR.slug)!;
+    expect(card.items.map((item) => item.kind)).toEqual(["cosign", "decision"]);
+    expect(card.unread).toEqual([]);
+    expect(portfolio.items.filter((item) => item.canAct)).toHaveLength(1);
+    // The workspaces that do not co-sign keep their decision items.
+    expect(portfolio.items.find((item) => item.workspace.slug === "lumen-studio")).toMatchObject({ kind: "decision", canAct: false });
+  });
+
+  it("reads the co-sign facts through the workspace's own tenant token, naming the accountant, never the service role", async () => {
+    const { fake, read } = world(INVITED, harbor());
+    await read();
+    const harborReads = fake.requests.filter((sent) => sent.path !== "/rest/v1/memberships" && sent.path !== "/rest/v1/orgs" && claimsOf(sent)?.org_id === HARBOR.id);
+    expect(harborReads.map((sent) => sent.path)).toEqual(expect.arrayContaining(["/rest/v1/approval_policies", "/rest/v1/payment_intents", "/rest/v1/payment_approvals", "/rest/v1/rpc/approvers_besides"]));
+    const tenant = (request: RecordedRequest) =>
+      request.path.startsWith("/rest/v1/rpc/")
+        ? (TENANT_RPCS as readonly string[]).includes(request.path.replace("/rest/v1/rpc/", ""))
+        : (TENANT_TABLES as readonly string[]).includes(request.path.replace("/rest/v1/", ""));
+    // Every co-sign fact is a tenant table or function: nothing here reads as the platform.
+    expect(harborReads.every(tenant)).toBe(true);
+    for (const sent of fake.requests.filter(tenant)) {
+      const claims = claimsOf(sent);
+      expect(claims?.role, sent.path).toBe("vestiarion_tenant");
+      expect(claims?.sub, sent.path).toBe(ACCOUNTANT);
+      if (sent.method === "GET") expect(sent.params.get("org_id"), sent.path).toBe(`eq.${String(claims?.org_id)}`);
+      if (sent.path.startsWith("/rest/v1/rpc/")) expect((sent.body as { p_org_id?: string }).p_org_id, sent.path).toBe(claims?.org_id);
+    }
+  });
+
+  it("still ages a co-sign from the decide-by day it passed, and says when the accountant already co-signed one", async () => {
+    const { read } = world(
+      INVITED,
+      (sent) =>
+        (sent.path === "/rest/v1/payment_approvals" && claimsOf(sent)?.org_id === HARBOR.id
+          ? { body: [{ source_id: "mine", id: "a1", approved_by: ACCOUNTANT, approved_at: "2026-10-12T08:00:00Z", amount: "1250", currency: "USDC", address: ADDRESS }] }
+          : null) ?? harbor({ payables: [payable("late", { due_date: "2026-10-10" }), payable("mine")] })(sent)
+    );
+    const items = harborItems((await read()).items);
+    expect(items.find((item) => item.key.endsWith(":late"))).toMatchObject({ kind: "cosign", since: "2026-10-10", detail: "Payments above 500 USDC need two approvals. No one has approved it yet. Its decide-by day was Oct 10, 2026." });
+    expect(items.find((item) => item.key.endsWith(":mine"))).toMatchObject({
+      kind: "decision",
+      canAct: false,
+      detail: "You co-signed it. An owner, admin or approver pays it. Held for a person. Decide by Oct 20, 2026.",
+    });
+  });
+
+  it("leaves a bill the server would refuse as a decision item that says why", async () => {
+    const { read } = world(INVITED, harbor({ payables: [payable("risky", { counterparties: { name: "Payee risky", risk_level: "high", address: ADDRESS } })] }));
+    expect(harborItems((await read()).items)).toEqual([
+      expect.objectContaining({ kind: "decision", canAct: false, detail: "Screened high risk. Held for a person. Decide by Oct 20, 2026." }),
+    ]);
+  });
+
+  it("keeps today's items for another role, and while co-signing is off, without reading a co-sign fact", async () => {
+    const asApprover = world(
+      INVITED.map((row) => (row.user === ACCOUNTANT && row.org.slug === HARBOR.slug ? { ...row, role: "approver" } : row)),
+      harbor()
+    );
+    const approverItems = harborItems((await asApprover.read()).items).filter((item) => item.kind !== "confirm_address");
+    expect(approverItems.map((item) => [item.kind, item.who])).toEqual([
+      ["decision", "You can decide it"],
+      ["decision", "You can decide it"],
+    ]);
+    expect(asApprover.fake.requests.some((sent) => sent.path === "/rest/v1/payment_approvals")).toBe(false);
+
+    const off = world(INVITED, harbor({ cosignOn: false }));
+    expect(harborItems((await off.read()).items).map((item) => item.kind)).toEqual(["decision", "decision"]);
+    expect(off.fake.requests.some((sent) => sent.path === "/rest/v1/payment_approvals" || sent.path === "/rest/v1/payment_intents")).toBe(false);
+  });
+
+  it("keeps the decision items, and names the part, when the co-sign facts cannot be read", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { read } = world(INVITED, harbor({ failing: "/rest/v1/payment_intents" }));
+    const portfolio = await read();
+    expect(harborItems(portfolio.items).map((item) => item.kind)).toEqual(["decision", "decision"]);
+    expect(portfolio.workspaces.find((workspace) => workspace.slug === HARBOR.slug)?.unread).toEqual(["bills to co-sign"]);
+  });
+
+  it("counts co-signing as off when the setting cannot be read, and names it", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { fake, read } = world(INVITED, harbor({ failing: "/rest/v1/approval_policies", counterparties: [{ id: "cp-1", name: "Northwind", address_changed_at: "2026-10-12T08:00:00Z", address_confirmed_at: null }] }));
+    const portfolio = await read();
+    expect(harborItems(portfolio.items).map((item) => item.kind)).toEqual(["decision", "decision"]);
+    expect(portfolio.workspaces.find((workspace) => workspace.slug === HARBOR.slug)?.unread).toEqual(["the co-sign setting"]);
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/counterparties" && sent.params.get("address_changed_at"))).toBe(false);
+  });
+
+  it("lists each changed address no one confirmed, without the address, and a frozen payee as waiting on an owner or admin", async () => {
+    const counterparties = [
+      { id: "cp-new", name: "Northwind", address_changed_at: "2026-10-12T08:00:00Z", address_confirmed_at: null },
+      { id: "cp-done", name: "Confirmed Co", address_changed_at: "2026-10-11T08:00:00Z", address_confirmed_at: "2026-10-11T09:00:00Z" },
+      { id: "cp-frozen", name: "Frozen Ltd", address_changed_at: "2026-10-01T08:00:00Z", address_confirmed_at: "2026-09-01T08:00:00Z" },
+    ];
+    const { fake, read } = world(INVITED, harbor({ payables: [], counterparties, frozen: ["cp-frozen"] }));
+    const items = harborItems((await read()).items);
+    expect(items).toEqual([
+      expect.objectContaining({
+        key: "harbor-bakery:confirm_address:cp-new",
+        kind: "confirm_address",
+        title: "Northwind",
+        detail: "Its address changed on Oct 12, 2026. The agent pays nothing to it until someone confirms it.",
+        amount: null,
+        since: "2026-10-12T08:00:00Z",
+        href: "/o/harbor-bakery/counterparties#counterparty-cp-new",
+        canAct: true,
+        who: "You can confirm it",
+      }),
+      expect.objectContaining({
+        kind: "confirm_address",
+        title: "Frozen Ltd",
+        detail: "Its address changed on Oct 1, 2026, and its contact said they did not make the change. It is unfrozen before it is confirmed.",
+        canAct: false,
+        who: "Waiting on an owner or admin of this workspace",
+      }),
+    ]);
+    for (const item of items) expect(item.detail).not.toMatch(/0x/i);
+    const asked = fake.requests.find((sent) => sent.path === "/rest/v1/counterparties" && sent.params.get("address_changed_at"))!;
+    expect(asked.params.get("address_changed_at")).toBe("not.is.null");
+    expect(asked.params.get("select")).not.toContain("address,");
+    expect(asked.params.get("limit")).toBe("200");
+  });
+
+  it("lists changed addresses to whoever decides payments, and lets an owner unfreeze a frozen one", async () => {
+    const counterparties = [
+      { id: "cp-new", name: "Northwind", address_changed_at: "2026-10-12T08:00:00Z", address_confirmed_at: null },
+      { id: "cp-frozen", name: "Frozen Ltd", address_changed_at: "2026-10-01T08:00:00Z", address_confirmed_at: null },
+    ];
+    const asOwner = INVITED.map((row) => (row.user === ACCOUNTANT && row.org.slug === HARBOR.slug ? { ...row, role: "owner" } : row));
+    const { read } = world(asOwner, harbor({ cosignOn: false, payables: [], counterparties, frozen: ["cp-frozen"] }));
+    expect(harborItems((await read()).items).map((item) => [item.title, item.canAct, item.who])).toEqual([
+      ["Frozen Ltd", true, "You can unfreeze it once you have checked with them, then confirm it"],
+      ["Northwind", true, "You can confirm it"],
+    ]);
   });
 });

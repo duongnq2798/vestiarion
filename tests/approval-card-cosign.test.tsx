@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import ApprovalCard from "@/components/ApprovalCard";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import type { WaitingPayable } from "@/lib/agent/approvals";
+import { COSIGN_BLOCKED, type CosignState } from "@/lib/cosign-state-rules";
 import { cosignDescription } from "@/lib/two-approvals";
 
 /**
@@ -57,8 +58,8 @@ const payable: WaitingPayable = {
   twoApprovals: { above: 500, approvals: [], excluded: [OWNER], excludedSlots: 1, approvers: 2 },
 };
 
-const card = (over: Partial<WaitingPayable> = {}, canCosign = true) =>
-  text(html(<ApprovalCard orgSlug="acme" payable={{ ...payable, ...over }} canDecide={false} viewerId={ACCOUNTANT} sandbox={false} canCosign={canCosign} />));
+const card = (over: Partial<WaitingPayable> = {}, canCosign = true, cosign?: CosignState) =>
+  text(html(<ApprovalCard orgSlug="acme" payable={{ ...payable, ...over }} canDecide={false} viewerId={ACCOUNTANT} sandbox={false} canCosign={canCosign} cosign={cosign} />));
 
 describe("Co-sign on the approval card", () => {
   it("gives a co-signing accountant Co-sign on a payment above the figure, and no way to pay, reject or return it", () => {
@@ -77,6 +78,39 @@ describe("Co-sign on the approval card", () => {
   it("offers nothing to an accountant while co-signing is off, or on a payment one approval pays", () => {
     expect(card({}, false)).not.toContain("Co-sign");
     expect(card({ twoApprovals: undefined })).not.toContain("Co-sign");
+  });
+
+  it("shows Co-sign only where the co-sign can be given now, as the accountant console says it (accountant queue AQ5)", () => {
+    expect(card({}, true, { state: "can_cosign", above: 500, approvals: 0 })).toContain("Co-sign");
+    // The page's read is what counts: no Co-sign where the approvals standing already pay it, whatever the card's facts.
+    const needless = card({}, true, { state: "not_needed" });
+    expect(needless).not.toContain("Co-sign");
+    expect(needless).not.toContain("co-signed");
+  });
+
+  it.each(Object.values(COSIGN_BLOCKED))("shows %j in place of Co-sign where the server would refuse it", (reason) => {
+    const shown = card({}, true, { state: "blocked", reason });
+    expect(shown).toContain(reason);
+    expect(shown).not.toContain("Co-sign");
+    expect(shown).not.toContain("You co-signed it");
+  });
+
+  it("offers no Co-sign on a bill held for a shadow-mode verdict, which the server refuses with verdict_needed", () => {
+    const shown = card({ heldForVerdict: true, verdictEntry: { seq: 41, ts: "2026-10-22T10:00:00.000Z" } }, true, { state: "blocked", reason: COSIGN_BLOCKED.verdict });
+    expect(shown).toContain("Waiting for a verdict in shadow mode.");
+    expect(shown).not.toContain("Co-sign");
+  });
+
+  it("links the address to confirm from the card", () => {
+    const markup = html(
+      <ApprovalCard orgSlug="acme" payable={payable} canDecide={false} viewerId={ACCOUNTANT} sandbox={false} canCosign cosign={{ state: "blocked", reason: COSIGN_BLOCKED.unconfirmed }} />
+    );
+    expect(text(markup)).toContain("Confirm the address first on Counterparties .");
+    expect(markup).toContain(`href="/o/acme/counterparties#counterparty-${payable.counterpartyId}"`);
+  });
+
+  it("says they co-signed it when the page read so", () => {
+    expect(card({}, true, { state: "cosigned" })).toContain("You co-signed it. An owner, admin or approver's Approve and pay pays it.");
   });
 
   it("confirms what a co-sign does before it is given", () => {

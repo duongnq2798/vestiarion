@@ -2,9 +2,10 @@ import { can, type OrgRole, type Permission } from "../auth/roles";
 import type { UsageLimit } from "../usage/model";
 
 /**
- * The accountant console's triage queue (docs/superpowers/specs/2026-10-13-accountant-console-design.md A3 to A6), as
- * pure functions: what each item is, who can act on it, how old it is, and the order the queue shows. The reading is in
- * `read.ts`; nothing here touches a database.
+ * The accountant console's triage queue (docs/superpowers/specs/2026-10-13-accountant-console-design.md A3 to A6, and
+ * 2026-10-22-accountant-queue-design.md AQ2 for bills to co-sign and addresses to confirm), as pure functions: what each
+ * item is, who can act on it, how old it is, and the order the queue shows. The reading is in `read.ts`; nothing here
+ * touches a database.
  *
  * Amounts stay with their own item and currency. Nothing here adds money across items, currencies or workspaces: the
  * console counts items, never a balance.
@@ -13,6 +14,8 @@ import type { UsageLimit } from "../usage/model";
 export const TRIAGE_KINDS = [
   "past_decide_by",
   "decision",
+  "cosign",
+  "confirm_address",
   "customer_says_paid",
   "disputed",
   "to_book",
@@ -25,6 +28,8 @@ export type TriageKind = (typeof TRIAGE_KINDS)[number];
 export const KIND_TITLES: Record<TriageKind, { one: string; many: string }> = {
   past_decide_by: { one: "Past its decide-by day", many: "Past their decide-by day" },
   decision: { one: "Payment waiting for a decision", many: "Payments waiting for a decision" },
+  cosign: { one: "Waiting for your co-sign", many: "Bills waiting for your co-sign" },
+  confirm_address: { one: "Address to confirm", many: "Addresses to confirm" },
   customer_says_paid: { one: "Customer says paid", many: "Customers say paid" },
   disputed: { one: "Disputed by the customer", many: "Disputed by customers" },
   to_book: { one: "Payment to book", many: "Payments to book" },
@@ -33,10 +38,16 @@ export const KIND_TITLES: Record<TriageKind, { one: string; many: string }> = {
   limit: { one: "Limit reached", many: "Limits reached" },
 };
 
-/** Which permission acts on each kind; a limit's depends on the limit. */
+/**
+ * Which permission acts on each kind; a limit's depends on the limit. A co-sign is an accountant's, and so is confirming
+ * an address when the viewer is one: the console lists either only while the workspace's accountants co-sign
+ * (docs/superpowers/specs/2026-10-22-accountant-queue-design.md AQ2, AQ4), which these pure functions cannot see.
+ */
 const ACTS: Record<Exclude<TriageKind, "limit">, Permission> = {
   past_decide_by: "approval.decide",
   decision: "approval.decide",
+  cosign: "approval.cosign",
+  confirm_address: "approval.decide",
   customer_says_paid: "receivables.reconcile",
   disputed: "receivables.reconcile",
   to_book: "accounting.book",
@@ -55,6 +66,7 @@ const LIMIT_ACTS: Record<UsageLimit["key"], Permission> = {
 /** Who holds each permission, in words, for an item the viewer cannot act on. */
 const HOLDERS: Partial<Record<Permission, string>> = {
   "approval.decide": "an owner, admin or approver",
+  "approval.cosign": "a co-signing accountant",
   "receivables.reconcile": "an owner, admin or accountant",
   "accounting.book": "an owner, admin or accountant",
   "integrations.manage": "an owner or admin",
@@ -67,6 +79,8 @@ const HOLDERS: Partial<Record<Permission, string>> = {
 const DOING: Record<Exclude<TriageKind, "limit">, string> = {
   past_decide_by: "decide it",
   decision: "decide it",
+  cosign: "co-sign it",
+  confirm_address: "confirm it",
   customer_says_paid: "check it and apply the payment or answer",
   disputed: "answer the customer",
   to_book: "review and book it",
@@ -95,13 +109,16 @@ export interface TriageItem {
   who: string;
 }
 
-export function permissionFor(kind: TriageKind, limit?: UsageLimit["key"]): Permission {
-  return kind === "limit" ? LIMIT_ACTS[limit ?? "connector"] : ACTS[kind];
+export function permissionFor(kind: TriageKind, limit?: UsageLimit["key"], role?: OrgRole): Permission {
+  if (kind === "limit") return LIMIT_ACTS[limit ?? "connector"];
+  // An accountant confirms a changed address as a co-signer (accountant co-sign CS6); the others as deciders.
+  if (kind === "confirm_address" && role === "accountant") return "approval.cosign";
+  return ACTS[kind];
 }
 
 /** Whether the viewer acts, and the words: "You can decide it", or "An owner, admin or approver decides it here". */
 export function routeTo(role: OrgRole, kind: TriageKind, limit?: UsageLimit["key"]): { canAct: boolean; who: string } {
-  const permission = permissionFor(kind, limit);
+  const permission = permissionFor(kind, limit, role);
   if (can(role, permission)) {
     return { canAct: true, who: kind === "limit" ? "You can act on it" : `You can ${DOING[kind as Exclude<TriageKind, "limit">]}` };
   }
@@ -148,9 +165,9 @@ export function ageWords(since: string, now: Date): string {
 }
 
 /**
- * The queue's order: what the viewer can act on first, then by kind (past its day, waiting decisions, what customers
- * said, bookings, overdue receivables, connectors, limits), then the oldest first, then by workspace and title so the
- * order never depends on the order the workspaces answered in.
+ * The queue's order: what the viewer can act on first, then by kind (past its day, waiting decisions, bills to co-sign,
+ * addresses to confirm, what customers said, bookings, overdue receivables, connectors, limits), then the oldest first,
+ * then by workspace and title so the order never depends on the order the workspaces answered in.
  */
 export function sortTriage(items: readonly TriageItem[]): TriageItem[] {
   const rank = (kind: TriageKind) => TRIAGE_KINDS.indexOf(kind);

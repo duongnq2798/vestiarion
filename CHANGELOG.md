@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **What waits for your accountant, in their console.** Where an owner lets accountants co-sign, the accountant console
+  now lists each bill the accountant can co-sign now as **Waiting for your co-sign**, in place of its decision item, so
+  it is counted once, and each changed address no one has confirmed as **Address to confirm**. Owners, admins and
+  approvers see the addresses to confirm too; a frozen payee waits on an owner or admin. A bill already co-signed, or
+  one that cannot be co-signed yet, says why. The month's hand-off lists co-signs among the decisions, marked
+  `co-sign`. Nothing new to run.
+
 - **Your accountant as the second person on larger bills.** In Settings, under Two approvals, an owner can now choose
   **Let accountants co-sign**. An accountant then sees **Co-sign** on a bill above the figure: it records one of the two
   approvals and never pays, even when another approval stands, so the approval that pays is always an owner's, admin's
@@ -146,6 +153,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   should arrive in well under a second, down from up to three. What it shows is unchanged.
 
 ### Fixed
+
+- **Co-sign only where it would be taken.** An accountant's card in Approvals offered **Co-sign** on a bill held for a
+  shadow-mode verdict, which was then refused, and on bills two approvals already covered. It now shows Co-sign only
+  when the co-sign can be given, and otherwise says why in its place: waiting for a verdict, being decided right now,
+  screened high risk, a frozen payee, or an address to confirm or still in the payee lock's wait.
 
 - **Approvals and Contractors on a phone.** At a phone's width the approval card showed only the start of the address
   **Approve and pay** sends to; it now shows the whole address. The buttons that decide a payment (Approve and pay,

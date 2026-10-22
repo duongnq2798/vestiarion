@@ -33,8 +33,11 @@ function workspace(slug: string, name: string, role: OrgRole, inputs: ItemInput[
   return { slug, name, role, mode: "live", network: "arc-testnet", items: sortTriage(items), unread: [], ...extra };
 }
 
+// Harbor Bakery lets its accountant co-sign payments above 2500 USDC (docs/superpowers/specs/2026-10-22-accountant-queue-design.md).
 const HARBOR = workspace("harbor-bakery", "Harbor Bakery", "accountant", [
   { kind: "past_decide_by", id: "b1", title: "Coastal Flour Mill", detail: "Held for a person. Its decide-by day was Oct 10, 2026, to keep the early-payment discount.", amount: [2480, "USDC"], since: "2026-10-10", path: "/approvals#payable-b1" },
+  { kind: "cosign", id: "b3", title: "Brightline Ovens", detail: "Payments above 2500 USDC need two approvals. No one has approved it yet. Decide by Oct 20, 2026.", amount: [4200, "USDC"], since: "2026-10-12T10:20:00.000Z", path: "/approvals#payable-b3" },
+  { kind: "confirm_address", id: "c1", title: "Northwind Packaging", detail: "Its address changed on Oct 12, 2026. The agent pays nothing to it until someone confirms it.", since: "2026-10-12T16:45:00.000Z", path: "/counterparties#counterparty-c1" },
   { kind: "to_book", id: "p1", title: "A payment of Oct 11, 2026", detail: "Waiting for review before it is booked in Xero.", amount: [640, "USDC"], since: "2026-10-12T15:20:00.000Z", path: "/invoices?review=book-xero" },
   { kind: "to_book", id: "p2", title: "A payment of Oct 12, 2026", detail: "Waiting for review before it is booked in Xero.", amount: [1175.5, "USDC"], since: "2026-10-13T06:05:00.000Z", path: "/invoices?review=book-xero" },
   { kind: "receivable_overdue", id: "r1", title: "Seaside Cafe Group", detail: "Was due Sep 2, 2026.", amount: [3200, "USDC"], since: "2026-09-02", path: "/invoices?tab=receivables&open=r1" },
