@@ -1,7 +1,8 @@
 /**
- * The app's Content Security Policy, sent report-only (docs/superpowers/specs/2026-10-21-csp-report-only-design.md
- * CSP1-CSP3): browsers report what it would block and block nothing, until the reports show it fits every page and it
- * is enforced. `next.config.ts` sends it on every response; `/api/csp-report` receives the reports.
+ * The app's Content Security Policy (docs/superpowers/specs/2026-10-21-csp-report-only-design.md CSP1-CSP4), enforced in a
+ * production build but for `form-action`, which stays report-only beside it
+ * (docs/superpowers/specs/2026-10-22-csp-enforce-design.md CE1-CE3). `next.config.ts` sends `cspHeaders` on every
+ * response; `/api/csp-report` receives the reports.
  *
  * `next.config.ts` imports it, so it imports only the network profiles and the site's links, which import nothing.
  * `tests/csp.test.ts` holds each origin here to the code that reaches it: the connect forms' OAuth hosts, Circle's Iris,
@@ -70,6 +71,8 @@ const VERCEL_PREVIEW = {
 
 export interface CspEnv {
   NODE_ENV?: string;
+  /** Set where the docs screenshot pages are served, which a local file frames (CE2). */
+  DOCS_SCREENSHOTS?: string;
   VERCEL_ENV?: string;
   NEXT_PUBLIC_SUPABASE_URL?: string;
   NEXT_PUBLIC_MODULAR_WALLETS_CLIENT_URL?: string;
@@ -90,11 +93,20 @@ function httpsOrigin(value: string | undefined): string | null {
 const unique = (values: readonly (string | null)[]) => [...new Set(values.filter((value): value is string => value !== null))];
 
 /**
- * The policy as one header value. Scripts and styles may be inline: Next.js inlines its own, and a nonce would make every
- * page render per request. Development also allows `eval`, which React uses there for its error overlay. A Vercel
- * preview also allows its toolbar.
+ * Where a form may send someone stays report-only (CE1): a tool's consent screen may pass the person on to a sign-in host
+ * before they agree, which only reports from real connections show, and a blocked one would stop the connection.
  */
-export function contentSecurityPolicy(env: CspEnv = process.env): string {
+export const REPORT_ONLY_DIRECTIVES: ReadonlySet<string> = new Set(["form-action"]);
+
+/** The reporting directives, which go with every header that carries the policy. */
+const REPORTING = new Set(["report-uri", "report-to"]);
+
+/**
+ * The policy as one header value, or the directives `keep` names, with the reporting ones always. Scripts and styles may
+ * be inline: Next.js inlines its own, and a nonce would make every page render per request. Development also allows
+ * `eval`, which React uses there for its error overlay. A Vercel preview also allows its toolbar.
+ */
+export function contentSecurityPolicy(env: CspEnv = process.env, keep: (directive: string) => boolean = () => true): string {
   const dev = env.NODE_ENV === "development";
   const preview = (key: keyof typeof VERCEL_PREVIEW) => (env.VERCEL_ENV === "preview" ? VERCEL_PREVIEW[key] : []);
   const directives: [string, readonly string[]][] = [
@@ -124,7 +136,27 @@ export function contentSecurityPolicy(env: CspEnv = process.env): string {
     ["report-uri", [CSP_REPORT_PATH]],
     ["report-to", ["csp"]],
   ];
-  return directives.map(([name, sources]) => `${name} ${sources.join(" ")}`).join("; ");
+  return directives
+    .filter(([name]) => REPORTING.has(name) || keep(name))
+    .map(([name, sources]) => `${name} ${sources.join(" ")}`)
+    .join("; ");
+}
+
+/**
+ * The headers that carry the policy (CE1, CE2). A production build enforces it, but for `form-action`, sent report-only
+ * beside it. Development, and a deployment serving the docs screenshot pages, which a local file frames, send all of it
+ * report-only, as before. Every one reports to `/api/csp-report`.
+ */
+export function cspHeaders(env: CspEnv = process.env): { key: string; value: string }[] {
+  const reporting = { key: "Reporting-Endpoints", value: CSP_REPORTING_ENDPOINTS };
+  if (env.NODE_ENV !== "production" || env.DOCS_SCREENSHOTS === "1") {
+    return [{ key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy(env) }, reporting];
+  }
+  return [
+    { key: "Content-Security-Policy", value: contentSecurityPolicy(env, (directive) => !REPORT_ONLY_DIRECTIVES.has(directive)) },
+    { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy(env, (directive) => REPORT_ONLY_DIRECTIVES.has(directive)) },
+    reporting,
+  ];
 }
 
 /** One violation, as the report route logs it: nothing that could carry a token, an address or what someone typed. */
@@ -135,6 +167,8 @@ export interface CspViolation {
   blocked: string;
   /** The page's first path segment only (`/o`, `/p`, `/docs`): a payee link's or a workspace's rest stays out. */
   page: string;
+  /** Whether the browser blocked it (`enforce`) or only reported it (`report`), as it says (CE3). */
+  disposition: "enforce" | "report" | "unknown";
 }
 
 const DIRECTIVE = /^[a-z-]{1,40}$/;
@@ -176,11 +210,12 @@ function pageOf(value: unknown): string {
   }
 }
 
-function violationOf(fields: { directive: unknown; blocked: unknown; page: unknown }): CspViolation | null {
+function violationOf(fields: { directive: unknown; blocked: unknown; page: unknown; disposition: unknown }): CspViolation | null {
   const blocked = blockedOf(fields.blocked);
   if (blocked === null) return null;
   const directive = typeof fields.directive === "string" ? fields.directive.trim().split(/\s+/)[0] ?? "" : "";
-  return { directive: DIRECTIVE.test(directive) ? directive : "unknown", blocked, page: pageOf(fields.page) };
+  const disposition = fields.disposition === "enforce" || fields.disposition === "report" ? fields.disposition : "unknown";
+  return { directive: DIRECTIVE.test(directive) ? directive : "unknown", blocked, page: pageOf(fields.page), disposition };
 }
 
 /** At most this many violations are read from one request: the Reporting API sends them in batches. */
@@ -201,6 +236,7 @@ export function cspViolations(body: unknown): CspViolation[] {
       directive: legacy["effective-directive"] ?? legacy["violated-directive"],
       blocked: legacy["blocked-uri"],
       page: legacy["document-uri"],
+      disposition: legacy.disposition,
     });
     if (violation) reports.push(violation);
     return reports;
@@ -210,7 +246,12 @@ export function cspViolations(body: unknown): CspViolation[] {
     const report = record(entry);
     const fields = record(report?.body);
     if (report?.type !== "csp-violation" || !fields) continue;
-    const violation = violationOf({ directive: fields.effectiveDirective, blocked: fields.blockedURL, page: fields.documentURL ?? report.url });
+    const violation = violationOf({
+      directive: fields.effectiveDirective,
+      blocked: fields.blockedURL,
+      page: fields.documentURL ?? report.url,
+      disposition: fields.disposition,
+    });
     if (violation) reports.push(violation);
   }
   return reports;

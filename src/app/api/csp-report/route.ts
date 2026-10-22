@@ -32,9 +32,10 @@ async function readCapped(request: Request, limit: number): Promise<{ text: stri
 }
 
 /**
- * Where browsers send what the report-only Content Security Policy would have blocked
- * (docs/superpowers/specs/2026-10-21-csp-report-only-design.md CSP4). Each violation is one line in the server log:
- * the directive, the blocked origin or keyword, and the page's first path segment. Nothing else from the report is kept,
+ * Where browsers send what the Content Security Policy blocked, or would have where it is report-only
+ * (docs/superpowers/specs/2026-10-21-csp-report-only-design.md CSP4, docs/superpowers/specs/2026-10-22-csp-enforce-design.md
+ * CE3). Each violation is one line in the server log: the directive, the blocked origin or keyword, the page's first path
+ * segment, and whether the browser blocked it. Nothing else from the report is kept,
  * not its full addresses, sample, referrer or the client's address, and nothing is stored. Browsers send reports
  * without cookies, from any page of this site, so it needs no session.
  *
@@ -52,6 +53,6 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     return new Response(null, { status: 400 });
   }
-  for (const violation of cspViolations(body)) console.warn("csp report-only", JSON.stringify(violation));
+  for (const violation of cspViolations(body)) console.warn("csp report", JSON.stringify(violation));
   return new Response(null, { status: 204 });
 }
