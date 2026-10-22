@@ -81,6 +81,8 @@ export interface ChainConfig {
   walletTreasuryAvailable?: boolean;
   /** Replaces the public Arc mainnet RPC for the server's reads (ARC_MAINNET_RPC_URL), as ARC_RPC_URL does Arc testnet's. */
   arcMainnetRpcUrl?: string;
+  /** Replaces PublicNode's Ethereum node for looking up ENS names and Basenames (ENS_RPC_URL, ENS address names EN1). */
+  ensRpcUrl?: string;
   /**
    * Whether this deployment has the hosted pair, so the hosted choice can be
    * offered. Set only by `orgConfig`: an organization's configuration never
@@ -361,6 +363,7 @@ export function configFromEnv(env: EnvLike = process.env): VestiarionConfig {
       mainnetAgentCircleApiKey: trimmed(env.MAINNET_AGENT_CIRCLE_API_KEY),
       mainnetAgentCircleEntitySecret: trimmed(env.MAINNET_AGENT_CIRCLE_ENTITY_SECRET),
       arcMainnetRpcUrl: trimmed(env.ARC_MAINNET_RPC_URL),
+      ensRpcUrl: trimmed(env.ENS_RPC_URL),
     },
     llm,
     compliance: {

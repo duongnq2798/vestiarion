@@ -4,6 +4,7 @@
  * one and not the other fails there.
  */
 
+import { ENS_GATEWAY_HOSTS, ENS_RPC_DEFAULT } from "./ens-hosts";
 import { NETWORKS } from "./network";
 
 /** The day this list was last checked against the code. */
@@ -20,6 +21,10 @@ export const ARC_RPC_HOSTS: readonly string[] = PROFILES.map((profile) => hostOf
  * The other nodes the server reads from: those of the chains a payee is paid on, where a receipt of a payout is read
  * (`src/lib/receipts/onchain.ts`). The chains USDC can be brought from are handed to the person's wallet instead.
  */
+/** Ethereum's node an address field looks names up on (ENS address names EN4), and the one gateway a Basename goes through. */
+export const ENS_RPC_HOST = new URL(ENS_RPC_DEFAULT).hostname;
+export { ENS_GATEWAY_HOSTS };
+
 export const PAYEE_CHAIN_RPC_HOSTS: readonly string[] = PROFILES.flatMap((profile) => profile.payeeChains)
   .map((chain) => hostOf(chain.rpcUrl))
   .filter((host, index, hosts) => !ARC_RPC_HOSTS.includes(host) && hosts.indexOf(host) === index);
@@ -108,8 +113,8 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     name: "RPC nodes",
     privacyEntry: "RPC nodes",
     names: ["RPC nodes", "PublicNode"],
-    purpose: `answer the server's reads of balances, fees and receipts: Arc's node (${listed(ARC_RPC_HOSTS)}, and, where set, the ones ARC_RPC_URL and ARC_MAINNET_RPC_URL name, which take some reads, while receipts stay on the public node), and, for a receipt of a payout to another chain from Arc testnet, ${listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode's among them`,
-    data: "the wallet addresses and transaction hashes read, which are already public on chain",
+    purpose: `answer the server's reads of balances, fees and receipts: Arc's node (${listed(ARC_RPC_HOSTS)}, and, where set, the ones ARC_RPC_URL and ARC_MAINNET_RPC_URL name, which take some reads, while receipts stay on the public node), and, for a receipt of a payout to another chain from Arc testnet, ${listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode's among them; and, to look up an ENS name or Basename typed into an address field, Ethereum's node at ${ENS_RPC_HOST} (or the one ENS_RPC_URL names) and, for a Basename, Coinbase's gateway at ${ENS_GATEWAY_HOSTS.join(" and ")}`,
+    data: "the wallet addresses and transaction hashes read, which are already public on chain, and a name or address looked up",
     when: "",
   },
   {

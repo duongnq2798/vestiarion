@@ -604,6 +604,20 @@ document keeps the 0x address the document asked to be paid to in `invoices.docu
   (`invoice-pay-to-rules.ts`, pure, for the browser). `approveRefusal` refuses Approve and pay from Slack or Telegram
   for it (`open_in_console`). The agent never pays the document's address.
 
+**Names in an address field** (`docs/superpowers/specs/2026-10-22-ens-address-names-design.md`). `AddressNameHint`, under
+the add form's and **Edit address**'s field, asks `lookupAddressNameAction` (records.write, `takeAddressNameToken`:
+thirty at once, then one every 2 seconds per member) about what the field holds: an ENS name or Basename
+(`isAddressName`) resolves through `resolveAddressName`, an address through `primaryName`, both in `src/lib/ens.ts` on
+Ethereum mainnet through PublicNode or `ENS_RPC_URL` (one try, 5 seconds a call, 10 seconds a lookup), cached ten
+minutes. `primaryName` drops a reverse record that is not plain ASCII in ENS's normal form, since its owner writes it
+freely and a hidden character would read as the payee's name. **Use this address** puts the address in the field;
+`parseAddressInput` refuses a name, so only an address is ever saved, and **Edit address** reads the address on file
+again each time it opens. `nameMatchesPayee` turns a name unlike the payee's into a warning, never a refusal: whole words
+between hyphens, or the payee's name run together, with words every business uses left out. A resolver's CCIP-read
+gateway goes through `gatewayRequest`, which fetches only https on `ENS_GATEWAY_HOSTS` (Coinbase's, for Basenames),
+with `redirect: "error"` and a 5-second signal, so a crafted name cannot make the server fetch an address of its
+choosing.
+
 **Was this you?** (`docs/superpowers/specs/2026-10-22-address-change-check-design.md`, `src/lib/address-change-check.ts`).
 `changeCounterpartyAddress` asks the payee's notice email after any change to a new address
 (`askContactAboutAddressChange`, never throws, deferred with `after` by the console and the payee link):

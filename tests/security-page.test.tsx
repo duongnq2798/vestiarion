@@ -27,7 +27,7 @@ import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
 import { publicOrigin } from "@/lib/public-origin";
 import { ISSUES_URL, RELEASES_URL, SECURITY_ADVISORY_URL, SECURITY_POLICY_URL } from "@/lib/site-links";
 import { SLACK_SIGNATURE_TOLERANCE_S } from "@/lib/slack/verify";
-import { MODEL_PROVIDER_TERMS, SUBPROCESSORS, SUBPROCESSORS_AS_OF } from "@/lib/subprocessors";
+import { ENS_RPC_HOST, MODEL_PROVIDER_TERMS, SUBPROCESSORS, SUBPROCESSORS_AS_OF } from "@/lib/subprocessors";
 import { WEBHOOK_DISABLE_AFTER, WEBHOOK_MAX_ATTEMPTS, WEBHOOK_TIMEOUT_MS } from "@/lib/webhooks/deliver";
 
 /**
@@ -184,9 +184,12 @@ describe("the subprocessors", () => {
       expect(text).not.toMatch(/or the ones/);
       expect(text).toMatch(/receipts (are always read from|stay on) (Arc's )?(the )?public node/);
     }
+    // Ethereum's node is also read for ENS names typed into an address field (src/lib/ens.ts), so it is named.
+    expect(nodes).toContain(ENS_RPC_HOST);
+    expect(privacyNodes).toContain(ENS_RPC_HOST);
     // The chains USDC can be brought from are handed to the person's own wallet; the server never calls their nodes.
     const sources: ReadonlyArray<{ rpcUrl: string }> = Object.values(NETWORKS).flatMap((profile) => profile.inbound?.sources ?? []);
-    const walletOnly = new Set(sources.map((chain) => new URL(chain.rpcUrl).host).filter((host) => !served.has(host)));
+    const walletOnly = new Set(sources.map((chain) => new URL(chain.rpcUrl).host).filter((host) => !served.has(host) && host !== ENS_RPC_HOST));
     expect(walletOnly.size).toBeGreaterThan(0);
     for (const host of walletOnly) {
       expect(nodes, host).not.toContain(host);

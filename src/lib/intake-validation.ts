@@ -1,4 +1,5 @@
 import { addressProblem } from "./address-checksum";
+import { isAddressName, NAME_NOT_ADDRESS } from "./ens-words";
 import { z } from "zod";
 import { ALL_PAYEE_CHAIN_IDS, ALL_PAYEE_CHAIN_LABELS, ChainNotOnNetworkError, chainOn, paidAcrossChains } from "./payee-chains";
 import type { Network } from "./network";
@@ -89,7 +90,8 @@ export const counterpartyInputSchema = z.object({
     .string()
     .trim()
     .superRefine((value, context) => {
-      const problem = value === "" ? null : addressProblem(value);
+      // A name is looked up beside the field and never saved (ENS address names EN2).
+      const problem = value === "" ? null : isAddressName(value) ? NAME_NOT_ADDRESS : addressProblem(value);
       if (problem) context.addIssue({ code: "custom", message: problem });
     })
     .transform((value) => value || null),

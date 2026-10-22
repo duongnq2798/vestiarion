@@ -125,12 +125,16 @@ describe("parseAddressInput", () => {
     });
   });
 
-  it.each(["0x123", "1111111111111111111111111111111111111111", `${NEW}0`, "0xZZ22222222222222222222222222222222222222", "vitalik.eth"])(
+  it.each(["0x123", "1111111111111111111111111111111111111111", `${NEW}0`, "0xZZ22222222222222222222222222222222222222"])(
     "refuses %s",
     (raw) => {
       expect(parseAddressInput(raw)).toEqual({ ok: false, message: "Enter an Arc address: 0x followed by 40 hex characters.", checksum: false });
     }
   );
+
+  it("refuses a name with its own sentence: the address it points to is what is saved (ENS address names EN2)", () => {
+    expect(parseAddressInput("vitalik.eth")).toEqual({ ok: false, message: "That is a name, not an address. Choose Use this address under the field to take the address it points to.", checksum: false });
+  });
 });
 
 describe("addressUnconfirmed", () => {

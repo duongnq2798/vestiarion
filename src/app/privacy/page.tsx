@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalLink, LegalPage, LegalSection } from "@/components/vx/LegalPage";
 import { HOSTED_MODEL_PROVIDER } from "@/lib/connectors/consent";
 import { ISSUES_URL } from "@/lib/site-links";
-import { ARC_RPC_HOSTS, listed, MODEL_PROVIDER_TERMS, PAYEE_CHAIN_RPC_HOSTS } from "@/lib/subprocessors";
+import { ARC_RPC_HOSTS, ENS_GATEWAY_HOSTS, ENS_RPC_HOST, listed, MODEL_PROVIDER_TERMS, PAYEE_CHAIN_RPC_HOSTS } from "@/lib/subprocessors";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -309,8 +309,10 @@ export default function PrivacyPage() {
             reads: Arc&apos;s node, {ARC_RPC_HOSTS.join(" and ")}, and, where this deployment sets them, the ones named by <code>ARC_RPC_URL</code> and{" "}
             <code>ARC_MAINNET_RPC_URL</code>, which take some of those reads; receipts are always read from Arc&apos;s public node; and, for a receipt of a payout to another chain from Arc testnet,{" "}
             {listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode&apos;s among them. These are already public on chain, and nothing else about you or your workspace goes
-            with them. The other chains&apos; nodes named for bringing USDC from another chain are handed to your own wallet in your browser; the
-            server never calls them.
+            with them. To look up an ENS name or a Basename typed into an address field, or the ENS name of an address typed there, the server asks
+            Ethereum&apos;s node at {ENS_RPC_HOST}, or the one <code>ENS_RPC_URL</code> names, and, for a Basename, Coinbase&apos;s gateway at{" "}
+            {ENS_GATEWAY_HOSTS.join(" and ")}, which receive that name or address only. The other chains&apos; nodes named for bringing USDC from
+            another chain are handed to your own wallet in your browser; the server never calls them.
           </li>
           <li>
             <strong>GitHub</strong> is asked for a pull request&apos;s status when a milestone is verified by its link, and, when a page shows a pull

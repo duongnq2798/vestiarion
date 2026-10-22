@@ -14,6 +14,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **ENS names and Basenames in an address field.** Type `northwind.eth` or `northwind.base.eth` where a payee's
+  address goes, on Add counterparty or Edit address, and the field shows the address the name points to, with **Use
+  this address**. An address typed or pasted shows its ENS name. When the name does not look like the payee's, the hint
+  says to check it with them. Only the address is saved, never the name.
+
 - **Payee address changes in the weekly brief.** In a week when a payee's address changed, Monday's email has a
   **Payee addresses** section: a payee frozen because their contact said the change was not theirs, first; the
   addresses changed and confirmed; the payments the agent held for an address; and the contacts asked "Was this you?"

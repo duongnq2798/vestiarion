@@ -3,6 +3,7 @@
 import { ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { createCounterpartyAction, type IntakeActionResult } from "@/app/actions/intake";
+import { AddressNameHint } from "./AddressNameHint";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -57,8 +58,19 @@ export default function CounterpartyIntake({
   initialName?: string;
 }) {
   const [role, setRole] = useState("vendor");
+  // The name and the address, held here for the address field's hint (ENS address names EN1, EN3).
+  const [name, setName] = useState(initialName ?? "");
+  const [address, setAddress] = useState("");
   // The form clears on success, its role back to Vendor.
-  const { state, formProps } = useActionForm(createCounterpartyAction, INITIAL, { resetOnSuccess: true, toastOnSuccess: true, onSuccess: () => setRole("vendor") });
+  const { state, formProps } = useActionForm(createCounterpartyAction, INITIAL, {
+    resetOnSuccess: true,
+    toastOnSuccess: true,
+    onSuccess: () => {
+      setRole("vendor");
+      setName("");
+      setAddress("");
+    },
+  });
 
   return (
     <Card asChild className={framed ? "p-4 sm:p-6" : "border-0 bg-transparent p-0 shadow-none"}>
@@ -66,7 +78,7 @@ export default function CounterpartyIntake({
         <input type="hidden" name="orgSlug" value={orgSlug} />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field id="cp-name" label="Legal or trading name">
-            <Input name="name" required maxLength={160} autoComplete="organization" defaultValue={initialName} />
+            <Input name="name" required maxLength={160} autoComplete="organization" value={name} onChange={(event) => setName(event.target.value)} />
           </Field>
           <Field id="cp-role" label="Role">
             <Select name="role" defaultValue="vendor" onValueChange={setRole}>
@@ -97,9 +109,12 @@ export default function CounterpartyIntake({
               </SelectContent>
             </Select>
           </Field>
-          <Field id="cp-address" label="Payment address" description="Optional until payment setup">
-            <Input name="address" maxLength={200} autoComplete="off" className="font-mono" />
+          <Field id="cp-address" label="Payment address" description="Optional until payment setup. An ENS name or Basename is looked up.">
+            <Input name="address" maxLength={200} autoComplete="off" className="font-mono" value={address} onChange={(event) => setAddress(event.target.value)} />
           </Field>
+          <div className="sm:col-span-2">
+            <AddressNameHint orgSlug={orgSlug} value={address} payeeName={name} onUse={setAddress} />
+          </div>
           <Field id="cp-jurisdiction" label="Jurisdiction" optional description="ISO code or country name">
             <Input name="jurisdiction" maxLength={80} placeholder="US" />
           </Field>
