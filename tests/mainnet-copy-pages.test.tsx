@@ -57,7 +57,9 @@ describe("the shell on the workspace's network (mainnet copy C1, C3; workspace s
   // Shadow mode and screening are read inside the workspace's scope (workspace shell design S5): out of it, screening
   // would be the deployment's settings, not the workspace's.
   it.each(PAGES)("is handed shadow mode and screening by the %s page", (name) => {
-    expect(squash(page(name))).toMatch(/<ProductShell [^>]*status=\{await shellStatus\(\)\}/);
+    // Bills & receivables reads it at once with its other reads, still inside the scope (bills page parallel reads R1).
+    const handed = name === "invoices" ? /return inOrg\(access, async \(\) => \{.*\bshellStatus\(\),.*<ProductShell [^>]*status=\{status\}/ : /<ProductShell [^>]*status=\{await shellStatus\(\)\}/;
+    expect(squash(page(name))).toMatch(handed);
   });
 
   it("reads Held from the rule the status API reads: the workspace's capability (capability and reasons R4)", () => {

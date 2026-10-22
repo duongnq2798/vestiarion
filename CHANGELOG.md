@@ -105,6 +105,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   out no longer holds a red row one slip below **Sign out**. **Delete account** is now under **Danger zone** at the
   end of a workspace's **Settings**, for every member, and of a new **Your account** page, which **Account settings**
   in the account menu opens, with or without a workspace. The dialog and its rules are unchanged.
+- **Bills & receivables opens faster.** The page used to read its data one piece after another, each waiting for the
+  one before even when it did not need its answer. It now asks for everything that does not depend on something else
+  at once, starts each remaining read the moment what it needs is in, and reads the workspace's members and each
+  accounting tool's connection once instead of up to five times and twice. With about a hundred invoices the whole page
+  should arrive in well under a second, down from up to three. What it shows is unchanged.
 
 ### Fixed
 

@@ -2211,6 +2211,14 @@ deals); then **Bills**,
 - **Only the tab shown is built.** The figures, the strip and the New forms read on every tab, with one
   `ledger_entries_for_targets` call for every invoice as before; the plan (and the chain balance it reads) only on its
   tab; payment intents, shared receipts and pay links only for the 25 rows on the page and an open detail.
+- **Reads at once** (docs/superpowers/specs/2026-10-22-bills-page-parallel-reads-design.md). Every read that needs only
+  the workspace and the address starts together, and a read that needs another's answer starts when that one answers
+  (the entries after the invoices, the verdicts after the entries, a deal's costs and collections after the deals). Once
+  the decisions say which tab, page and cards are shown, the cards' reads and the tab's own run together; only the shared
+  receipts wait, on the payment intents. The members and each accounting tool's connection are read once per page, by a
+  promise the page keeps rather than React `cache()`, since the same functions serve server actions and jobs.
+  `offersView`, `verdictFacts` and `readCollections` read their independent parts at once too.
+  `tests/bills-page-parallel.test.ts` counts the page's rounds of reads against a database that answers in waves.
 - **Rows and cards** (`src/components/bills/`, `build.tsx`). The tabs are WAI-ARIA tabs that are links, with manual
   activation. A list has quick filters (`billFilterMatches`, `receivableFilterMatches`, which the figures count with
   too), the search, an order and 25 rows a page (`pageOf`). A row names what stands in a bill's way and the next
