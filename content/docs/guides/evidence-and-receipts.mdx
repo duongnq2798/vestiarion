@@ -1,0 +1,186 @@
+Two records leave the workspace for people outside it. The payee lock's evidence pack is for an insurer, a broker or an auditor: every payout address change in a period, who entered it, how it was checked and by whom, what was held back, and the first payment. A shared receipt is for the payee or their bookkeeper: one payment, what it cost and who paid the fees, what arrived, and three checks anyone can run. Both rest on the workspace's signed ledger, so the reader does not have to take Vestiarion's word. Both work the same on Arc testnet and on Arc mainnet.
+
+This page walks through finding, reading, downloading and checking each. How the payee lock itself works is in [Payee lock](/docs/guides/first-payment#payee-lock), and one payment's whole evidence, from the purchase order to the receipt, is in [Why a payment was paid](/docs/guides/evidence).
+
+## Who does what
+
+| What | Who |
+|---|---|
+| Open the evidence pack, print it, download its CSV or signed JSON | Every member of the workspace, viewers and accountants included |
+| Turn the payee lock on or off, and choose its wait | An owner. Anyone else reads "An owner of this workspace can change it." |
+| Confirm a changed address on **Counterparties** | Owners, admins and approvers, with **Confirm address** |
+| Share a receipt, make a new link, stop sharing | Owners and admins. Nobody else sees **Share receipt**. |
+| Open a shared receipt and check it | Anyone with its link, with no account |
+
+## 1. Open the evidence pack
+
+1. Open **Settings**, and go to **Security**.
+2. Under **Payee lock**, choose **Open the evidence pack**. The page, **Payee lock evidence**, opens on the last 30 days.
+3. Choose **Last 30 days**, **This year** or **All time**, or type days into **From** and **To** and choose **Show this period**. Days are whole days in UTC. Leave one end empty to leave it open.
+4. The heading under the buttons names the period, such as "2026-10-01 to 2026-10-21" or "All time".
+
+A day that cannot be read, a **From** after the **To**, or a period given twice in the address shows the last 30 days and says "That period could not be read, so this shows the last 30 days. Choose days with the From and To fields."
+
+Each read checks the signatures of the entries the pack cites, so a member can open the page twenty times at once, then once every 3 seconds. Past that it says "The evidence pack was read many times in a row. Try again in a minute."
+
+The page reads; it writes nothing. Opening it, printing it and downloading it change nothing and add no ledger entry.
+
+## 2. Read the summary
+
+Under the period, one line says how the payee lock is set now, such as "Now the payee lock is off." or "Now the payee lock is on, with no wait after an address changes." It is the setting today: the changes in the period may have been made under another. **Changes to the payee lock**, near the foot of the page, lists each time someone changed it in the period, when and by whom, with its entry. It is left out when nobody did.
+
+Then five counts:
+
+| Count | What it counts |
+|---|---|
+| **Address changes** | Each change in the period that set a payout address. Clearing an address is not one, and neither is a mirror address Vestiarion made in shadow mode. |
+| **Confirmed with a record** | Confirmations that recorded how the address was checked, out of all confirmations. |
+| **By a second person** | Confirmations known to come from someone other than whoever entered the address, out of all confirmations. |
+| **With a payment held** | Changes with at least one payment held for the new address. |
+| **Paid only after confirming** | Changes whose first payment came after the confirmation, out of the changes paid. |
+
+A period with no change says "No payout address changed in this period" and "Changes appear here once a payee's address is changed, on Counterparties, a payee link or GitHub."
+
+## 3. Read each address change
+
+Under **Address changes**, each change is a card named for the payee. Its facts, in the page's words:
+
+- **Changed**: when, by whom, and on which chain.
+- **From** and **To**: the address before and after, in full.
+- **Confirmed**: when, by whom, and how: with **Confirm address**, or by "approving a payment to it". "Not confirmed" while nobody has.
+- **How it was checked**: the method the person confirming chose, such as **Called them on a number we had before**, then the contact used and the note. "Not recorded" when they gave none, which can happen only while the lock is off.
+- **Contact on file before the change**: Yes or No, as the person confirming ticked it.
+- **Confirmed by a second person**: Yes, No or "Not known". It reads No when whoever entered the address confirmed it, and adds "(no one else could confirm it)" when they confirmed it alone because nobody else could. With the lock on, the confirmation itself checked who gave the address, so it answers Yes or No, unless it could not tell who gave it. With the lock off, it is Yes only when a different member confirmed it. An address given through a payee link or GitHub with the lock off is "Not known".
+- **Payee lock wait**: the wait recorded with the confirmation, and from when the address could be paid. Shown only when there was a wait.
+- **Lookalike warning**: the warning **Confirm address** showed, when the address looked like another payee's or an earlier one of the same payee.
+- **Held for the address**: each payment the agent held for this address, with when and why: "address not yet confirmed", "the payee lock's wait" or "new payee check". Otherwise "No payment was held".
+- **First payment**: the amount, when, and whether it was paid "by the agent" or "approved by a person", with the transaction hash written out and a link to the explorer. "Not paid yet" until then.
+- **Signed entries**: the ledger entry numbers each fact above rests on.
+
+Who did a step is named by email for a member, as "a former member" with the first 8 characters of their id for someone no longer in the workspace, as "the payee, through a payee link", or as GitHub with the login.
+
+A change's holds and its first payment run until the payee's next address change, which can fall after the period ends. A payment to a vendor's bank account is never a first payment here: the payee lock covers addresses on chain only. Neither is a transfer that was already sent to the earlier address, even when it is matched or approved after the change.
+
+## 4. Read what insurers ask
+
+Insurers' questionnaires on payment-change fraud ask about the same few controls, each in its own words. Under **What insurers ask, and what these records show**, the page asks seven questions in its own words and answers each from the period's records. It names no insurer and quotes no form. Find the question on your insurer's form that asks about the same control, and answer it from the matching row.
+
+| The page asks | A change counts when | Out of |
+|---|---|---|
+| "Before paying changed payment details, do you call or message the payee on contact details you already held?" | Its confirmation recorded a call or a message, with the contact ticked as on file before the change. A check in person or another way does not count. | Confirmations |
+| "Is each change confirmed by someone other than the person who requested or entered it?" | **Confirmed by a second person** is Yes. Those not known are said apart. | Confirmations |
+| "Do you keep a record of each check: who made it, when, and how?" | Its confirmation recorded how the address was checked. | Confirmations |
+| "Are payments to changed payment details held until the change is confirmed?" | Its first payment came after the confirmation. With nothing paid yet, any hold counts. | First payments |
+| "Do changed payment details wait a set time before the first payment?" | Its first payment came after the wait recorded with its confirmation had ended. | First payments |
+| "Do you look for payment details made to resemble a known payee's?" | It was confirmed with **Confirm address**, which checks for lookalikes. Approving a payment shows no warning, so it does not count. The answer says how many warned. | Confirmations |
+| "Can you produce these records, and can someone outside check them?" | Each entry the pack cites verifies against the workspace's keys. | Cited entries |
+
+Each answer is one of four words:
+
+- **Yes**: every case counted passes.
+- **Partly**: some do.
+- **No**: none do.
+- **Nothing to show yet**: there is no case to count.
+
+Under each answer, a line says what the records show, with the figures, and a second line says how Vestiarion works today, which may differ from when a change was made. The answers count the changes' own records, never today's setting. A period with no change answers nothing as Yes, and a lock turned on after a change does not make that change pass.
+
+<Callout kind="note" title="Counted from records">
+Beside the answers the page says: "Counted from these records, not a completed questionnaire. A confirmation's method and whether its contact was on file before the change are what the person confirming recorded." The ledger proves who recorded a call and when; that the call was made is what that person said.
+</Callout>
+
+## 5. Download it as a PDF, a CSV or signed JSON
+
+The three buttons above the summary take the period on screen.
+
+- **Print or save as PDF** opens your browser's print dialog. Choose Save as PDF there. The printed page leaves out the workspace's menus, banners and footer, the period fields and the buttons. It adds a line at the top, "Vestiarion payee lock evidence", with the workspace, its network, the period and when it was read. Each change and each answer stays on one page where it fits, and each transaction hash is written out, so a paper copy keeps it.
+- **Download CSV** gives one row per address change, for a spreadsheet. Its columns follow the card: the payee (`counterparty`, `counterparty_id`), the change (`changed_at`, `from_address`, `to_address`, `chain`, `entered_by`), the confirmation (`confirmed_at`, `confirmed_by`, `confirmed_with`, `check_method`, `contact_used`, `contact_on_file_before`, `check_note`, `second_person`, `confirmed_alone`), the wait (`wait_hours`, `payable_from`), the warnings (`lookalike_of`, `looks_like_earlier`), the holds by rule and count (`holds`), the first payment (`first_payment_at`, `amount`, `currency`, `tx_ref`, `tx_url`, `decided_by`, `paid_after_confirmation`, `paid_after_wait`), and the entry numbers (`change_entry`, `confirmation_entry`, `hold_entries`, `payment_entry`). Checks read yes or no, and stay empty when they do not apply. A cell that starts like a spreadsheet formula is prefixed with `'`, so it never runs, and the file starts with a byte-order mark, so Excel reads it as UTF-8. The CSV carries no signatures: its entry numbers point into the JSON.
+- **Download signed JSON** gives the file that can be checked, in the format `vestiarion-payee-lock-evidence/1`. **Download the evidence pack**, under **Payee lock** in Settings, gives the same file for all time.
+
+Files are named for the workspace and the period, with `all` and `now` for an open end: `vestiarion-payee-lock-evidence-your-workspace-2026-10-01-2026-10-21.csv`, or `.json`.
+
+Every member can download them, six times a minute. A seventh download in the minute answers "Too many downloads. Try again in a minute." Someone signed out is told "Sign in to download this evidence." The files name members by email and payees by name, as the page does: share them with whoever should see that.
+
+## 6. Check the signed JSON offline
+
+At the foot of the page, Vestiarion's own check reads, for example, "12 of 12 signed ledger entries this pack cites verified against the workspace's keys." To check without trusting Vestiarion, use the JSON file:
+
+1. **Read what it holds.** `format` and `exportedAt`, when it was made; `workspace`, `network` and `period`; `lock`, the setting when the file was made (`now`) and its changes in the period; `summary`, the counts; `changes`, one per address change with its `counterparty`, `change`, `confirmation`, `holds`, `firstPayment` and `checks`, each fact naming its entry by `seq`; `checkAnEntry`, how to check an entry; `keys`, the workspace's public keys; and `entries`, every cited entry in full.
+2. **Compare the keys.** Each key has an `id`, a `status` (`active` or `retired`) and its `publicKeyPem`. Compare the ids with the ones the workspace's **Audit log** page shows beside **Ledger signing public key**, as [Verify an audit export](/docs/guides/audit-export#4-compare-the-key-id-and-the-head) explains. A file can only agree with itself; the key ids tie it to the workspace.
+3. **Check each entry alone.** Every entry carries `body_hash`, `signature`, `prev_hash`, `hash` and `signing_key_id`, and `check`, the server's own result, which you need not trust. Its `body_hash` must be the SHA-256 of the canonical JSON of its `actor`, `domain`, `action`, `summary` and `detail`, keys sorted; its `signature` must be the Ed25519 signature over the 32 bytes of that hash, by the key `signing_key_id` names; and its `hash` must be the SHA-256 of `prev_hash`, `body_hash` and `signature` joined. A developer can run each entry through the [SDK's](/docs/get-started/sdk#webhooks) `verifyLedgerEntry`, with `body_hash`, `prev_hash` and `signing_key_id` named `bodyHash`, `prevHash` and `signingKeyId`, and the keys as a map of id to PEM.
+4. **Place the entries in the whole ledger.** The pack carries only the entries it cites, so each one's `prev_hash` points at an entry not in the file. To show none was left out or reordered, download the workspace's audit export and check it with the standalone verifier, as [Verify an audit export](/docs/guides/audit-export) describes. Each pack entry must then have the same `seq` and `hash` as that entry in the export. Unlike the pack, an audit export is recorded in the ledger, as `ledger_exported`.
+5. **Read the facts against the entries.** An address change is a `counterparty_address_changed` entry, its confirmation a `counterparty_address_confirmed` entry whose `detail` holds the check that was recorded, and a change to the lock a `payee_lock_changed` entry.
+
+## 7. Share a receipt
+
+A receipt opens one payment to someone outside the workspace, without opening the ledger.
+
+1. On **Bills & receivables**, under **Paid and closed**, open a paid bill.
+2. Its card's footer shows **Share receipt** to an owner or admin. Choose it.
+3. The link appears on the card, beside its copy button. Under it: "Receipt shared. Copy the link now: it is shown only once." and "Anyone with this link sees the amount, the payee's address and the transactions, and can check them. It shows no names." Copy it then.
+4. Send the link to the payee, or whoever asked, your own way. Vestiarion does not send it.
+
+The first share signs a `receipt_shared` entry into the ledger. It holds only what the receipt shows, so anyone can check it in full, and it names the earlier entry that recorded the payment. Who shared it is kept apart, not in the entry.
+
+Only a payment on chain has a receipt:
+
+- A bill paid in a live workspace, whose transaction is on the payee's chain. A payout through CCTP has one once the payee's chain has minted it; until then sharing says "The payee's chain has not minted this payout yet."
+- A sandbox's payments are simulated: "A simulated payment has nothing on chain to show." In a workspace that is not live, sharing says "A receipt is for a payment on chain, which a live workspace makes."
+- A bill not paid yet says "This invoice is not paid yet."
+- A contractor's milestone and a receivable have no receipt.
+
+## 8. What the payee sees
+
+The link opens a public page, **Payment receipt**, with no sign-in. Search engines are asked not to index it.
+
+**The headline.** The amount and token, paid on the payee's chain, then "Confirmed by Circle:" and when. A badge sums up the checks: "All three checks pass", "A check does not pass", "One check could not be made just now" or "Some checks could not be made just now". **Save as PDF** sits beside it.
+
+**The payment.**
+
+- **Status**: how far the payment is known to have gone, and from which source. See [On a shared receipt](/docs/guides/where-a-payment-is#on-a-shared-receipt).
+- **Paid to**: the payee's address, in full. It is public on the chain anyway, and the payee needs to recognise it.
+- **Route**: a transfer on Arc, "Through CCTP from" Arc to another chain, or "From a Circle Gateway balance".
+- **Transfer**, or **Mint on** the payee's chain: the transaction, linked to its explorer. For CCTP, **Burn on** Arc as well.
+
+**Amounts.** One row each, as it applies:
+
+| Row | What it says |
+|---|---|
+| **Invoice** | The invoice number, as the vendor wrote it, when the bill has one. |
+| **Invoice amount** | When the invoice was for more than was paid: its amount, "less" the difference "for paying early". |
+| **Amount paid** | The amount and token. |
+| **CCTP fee** | For a payout through CCTP: "up to" the most the fee could be. What Circle did not charge reaches the payee. |
+| **Gateway fee** | For a payout from a Gateway balance: "about" the fee, Gateway's estimate when it was paid. |
+| **Fees** | "Paid by the sender, on top of the amount. None was taken from the payee's payment." Without a route fee, only "None was taken from the payee's payment." |
+| **Left the sender** | For a payment in USDC: the amount plus the route's fee. On Arc mainnet, where the business's wallet pays its own small network fee, it adds "and Arc mainnet's network fee". On Arc testnet, Circle's Gas Station pays it, and a Gateway payout sends no transaction from the business's wallet on Arc. |
+| **Payee received** | What arrived, read on the payee's chain. A CCTP payout can read slightly more than the amount. When the chain does not answer, the amount as stated, saying the chain "did not answer just now". |
+
+A receipt shared before receipts listed their amounts keeps what it stated: its **Route** row names the route's fee, and **Amounts** shows what was paid and received.
+
+**The checks.** Each says whether it passes, and why:
+
+1. **Signed by the paying workspace.** The receipt's own entry: its body hash, its Ed25519 signature with the workspace's key, and its chain hash, with the key id named. The reader's browser then checks it again and says "Checked again in your browser: the body hash, the signature and the chain hash all verify." When it cannot, it gives the reason after "Checked again in your browser:", such as "This browser could not run the check.", and the server's result stands.
+2. **Recorded when it was paid.** The entry the workspace wrote when it paid, checked and found to name the transaction. It ends "records this transaction. Its content stays private.": that entry holds names and reasoning, so it is never shown.
+3. **On** the payee's chain. The chain's own record holds a transfer of the amount to the payee in that transaction, in the block it names. It does not pass when the transaction failed or holds no such transfer, and is not checked when the chain does not answer, which points to the explorer instead.
+
+**Check it yourself**, folded, holds the signed entry in full, its hashes, the key id and the public key, with the three formulas, so anyone can repeat the first check without Vestiarion.
+
+**No names.** The page shows no business, payee or person names, no reasoning, and no invoice or user ids. It ends "This receipt shows no names." A receipt with an invoice number says instead "Apart from the invoice number, as the vendor wrote it, this receipt shows no names.", since a vendor's number can carry a name.
+
+## 9. Save the receipt as a PDF
+
+**Save as PDF** opens the browser's print dialog. Choose Save as PDF there. The saved copy is the receipt alone: it leaves out the site's header and footer, the button and **Check it yourself**. It prints one line more than the page shows: the signed entry's number, its hash and the key that signed it.
+
+To check a filed copy later, open the live link and compare the entry number and hash. If the link no longer opens, the same entry is still in the workspace's ledger: any member can find it by its number in the **Audit log** or an audit export.
+
+## 10. Make a new link or stop sharing
+
+Once shared, the bill's card reads **Receipt shared**, with two actions for an owner or admin:
+
+- **New link** makes a new link and shows it once: "New link made. The earlier link no longer opens the receipt. Copy it now: it is shown only once." Use it when a link was lost or sent to the wrong person. The ledger records `receipt_link_renewed`.
+- **Stop sharing** turns the link off: "The receipt's link no longer opens it." The ledger records `receipt_revoked`. Sharing again later with **Share receipt** makes a new link.
+
+Either way the receipt's facts stay as they were: its signed entry is written once, the first time it is shared.
+
+A link that was stopped or replaced, or never existed, shows one sentence and names nothing: "This receipt link is no longer valid." A page that could not load says "This receipt could not load. Try again in a moment."
+
+A link is never shown again after it is made: only its hash is kept. On the bill's evidence page, [The receipt](/docs/guides/evidence#the-links-in-order) step says whether the receipt is shared, by whom, and whether its link still opens.

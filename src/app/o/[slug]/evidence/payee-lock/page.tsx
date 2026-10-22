@@ -63,7 +63,7 @@ export default async function PayeeLockEvidencePage({ params, searchParams }: Pa
           sub="Every payout address change: who entered it, how it was checked and by whom, what was held back, and the first payment, each fact resting on signed ledger entries."
           right={
             <div className="print:hidden">
-              <DocsLink href="/docs/guides/first-payment#payee-lock" topic="the payee lock's evidence pack" />
+              <DocsLink href="/docs/guides/evidence-and-receipts" topic="the payee lock's evidence pack" />
             </div>
           }
         />

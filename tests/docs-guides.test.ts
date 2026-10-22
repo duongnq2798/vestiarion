@@ -52,6 +52,7 @@ type GuideSlug =
   | "guides/asana"
   | "guides/audit-export"
   | "guides/evidence"
+  | "guides/evidence-and-receipts"
   | "guides/controls"
   | "guides/apply-payments"
   | "guides/customer-portal"
@@ -368,6 +369,26 @@ const CAPTURE_COMMANDS = "src/lib/commands/invoice-drafts.ts";
 const CAPTURE_TOKENS = "src/lib/extension/tokens.ts";
 const CAPTURE_ENV = "src/lib/extension/settings.ts";
 const CAPTURE_MANIFEST = "extensions/chrome-invoice-capture/extension/manifest.json";
+
+/**
+ * The payee lock's evidence pack (docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md) and shared receipts
+ * (docs/superpowers/specs/2026-10-01-payment-receipts-design.md, 2026-10-22-receipt-v2-design.md).
+ */
+const SETTINGS_PAGE = "src/app/o/[slug]/settings/page.tsx";
+const PAYEE_LOCK_PANEL = "src/components/PayeeLockPanel.tsx";
+const PAYEE_LOCK_PAGE = "src/app/o/[slug]/evidence/payee-lock/page.tsx";
+const PAYEE_LOCK_VIEW = "src/components/PayeeLockEvidenceView.tsx";
+const PAYEE_LOCK_REPORT = "src/lib/payee-lock-evidence-report.ts";
+const PAYEE_LOCK_EVIDENCE = "src/lib/payee-lock-evidence.ts";
+const PAYEE_LOCK_ROUTE = "src/app/api/evidence/payee-lock/route.ts";
+const PAYEE_LOCK_RULES = "src/lib/payee-lock-rules.ts";
+const PRINT_BUTTON = "src/components/PrintButton.tsx";
+const RECEIPT_ACTIONS = "src/app/actions/receipts.ts";
+const RECEIPT_FACTS = "src/lib/receipts/facts.ts";
+const RECEIPT_AMOUNTS = "src/lib/receipts/amounts.ts";
+const RECEIPT_PAGE = "src/app/receipt/[token]/page.tsx";
+const RECEIPT_BROWSER_CHECK = "src/components/receipt/BrowserCheck.tsx";
+const RECEIPT_PDF = "src/components/receipt/SavePdfButton.tsx";
 
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/collections": [
@@ -3116,6 +3137,144 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Share receipt", RECEIPT_CONTROL],
     ["Verify hash chain", VERIFY_BADGE],
   ],
+  // The evidence pack and shared receipts, for people outside the workspace (payee lock evidence EP1-EP10, receipts P3-P6, RV4-RV5).
+  "guides/evidence-and-receipts": [
+    // Who does what.
+    ["An owner of this workspace can change it.", PAYEE_LOCK_PANEL],
+    ["Counterparties", APP_NAV],
+    ["Confirm address", ADDRESS_CONTROLS],
+    // Opening the pack and choosing a period.
+    ["Settings", APP_NAV],
+    ["Security", SETTINGS_PAGE],
+    ["Payee lock", PAYEE_LOCK_PANEL],
+    ["Open the evidence pack", PAYEE_LOCK_PANEL],
+    ["Payee lock evidence", PAYEE_LOCK_PAGE],
+    ["Last 30 days", PAYEE_LOCK_PAGE],
+    ["This year", PAYEE_LOCK_PAGE],
+    ["All time", PAYEE_LOCK_PAGE],
+    ["Show this period", PAYEE_LOCK_VIEW],
+    ["That period could not be read, so this shows the last 30 days. Choose days with the From and To fields.", PAYEE_LOCK_PAGE],
+    ["The evidence pack was read many times in a row. Try again in a minute.", PAYEE_LOCK_PAGE],
+    // The summary.
+    ["Now the payee lock is off.", PAYEE_LOCK_VIEW],
+    ["Now the payee lock is on, with no wait after an address changes.", PAYEE_LOCK_VIEW],
+    ["Changes to the payee lock", PAYEE_LOCK_VIEW],
+    ["Address changes", PAYEE_LOCK_VIEW],
+    ["Confirmed with a record", PAYEE_LOCK_VIEW],
+    ["By a second person", PAYEE_LOCK_VIEW],
+    ["With a payment held", PAYEE_LOCK_VIEW],
+    ["Paid only after confirming", PAYEE_LOCK_VIEW],
+    ["No payout address changed in this period", PAYEE_LOCK_VIEW],
+    ["Changes appear here once a payee's address is changed, on Counterparties, a payee link or GitHub.", PAYEE_LOCK_VIEW],
+    // Each address change.
+    ["Changed", PAYEE_LOCK_VIEW],
+    ["approving a payment to it", PAYEE_LOCK_REPORT],
+    ["Not confirmed", PAYEE_LOCK_VIEW],
+    ["How it was checked", PAYEE_LOCK_VIEW],
+    ["Called them on a number we had before", PAYEE_LOCK_RULES],
+    ["Not recorded", PAYEE_LOCK_VIEW],
+    ["Contact on file before the change", PAYEE_LOCK_VIEW],
+    ["Confirmed by a second person", PAYEE_LOCK_VIEW],
+    ["Not known", PAYEE_LOCK_VIEW],
+    ["(no one else could confirm it)", PAYEE_LOCK_VIEW],
+    ["Payee lock wait", PAYEE_LOCK_VIEW],
+    ["Lookalike warning", PAYEE_LOCK_VIEW],
+    ["Held for the address", PAYEE_LOCK_VIEW],
+    ["address not yet confirmed", PAYEE_LOCK_VIEW],
+    ["the payee lock's wait", PAYEE_LOCK_VIEW],
+    ["new payee check", PAYEE_LOCK_VIEW],
+    ["No payment was held", PAYEE_LOCK_VIEW],
+    ["First payment", PAYEE_LOCK_VIEW],
+    ["by the agent", PAYEE_LOCK_VIEW],
+    ["approved by a person", PAYEE_LOCK_VIEW],
+    ["Not paid yet", PAYEE_LOCK_VIEW],
+    ["Signed entries", PAYEE_LOCK_VIEW],
+    ["a former member", PAYEE_LOCK_REPORT],
+    ["the payee, through a payee link", PAYEE_LOCK_REPORT],
+    // What insurers ask.
+    ["What insurers ask, and what these records show", PAYEE_LOCK_VIEW],
+    ["Before paying changed payment details, do you call or message the payee on contact details you already held?", PAYEE_LOCK_REPORT],
+    ["Is each change confirmed by someone other than the person who requested or entered it?", PAYEE_LOCK_REPORT],
+    ["Do you keep a record of each check: who made it, when, and how?", PAYEE_LOCK_REPORT],
+    ["Are payments to changed payment details held until the change is confirmed?", PAYEE_LOCK_REPORT],
+    ["Do changed payment details wait a set time before the first payment?", PAYEE_LOCK_REPORT],
+    ["Do you look for payment details made to resemble a known payee's?", PAYEE_LOCK_REPORT],
+    ["Can you produce these records, and can someone outside check them?", PAYEE_LOCK_REPORT],
+    ["Partly", PAYEE_LOCK_REPORT],
+    ["Nothing to show yet", PAYEE_LOCK_REPORT],
+    [
+      "Counted from these records, not a completed questionnaire. A confirmation's method and whether its contact was on file before the change are what the person confirming recorded.",
+      PAYEE_LOCK_REPORT,
+    ],
+    // The downloads.
+    ["Print or save as PDF", PRINT_BUTTON],
+    ["Vestiarion payee lock evidence", PAYEE_LOCK_VIEW],
+    ["Download CSV", PAYEE_LOCK_VIEW],
+    ["contact_on_file_before", PAYEE_LOCK_REPORT],
+    ["paid_after_confirmation", PAYEE_LOCK_REPORT],
+    ["hold_entries", PAYEE_LOCK_REPORT],
+    ["Download signed JSON", PAYEE_LOCK_VIEW],
+    ["vestiarion-payee-lock-evidence/1", PAYEE_LOCK_EVIDENCE],
+    ["Download the evidence pack", PAYEE_LOCK_PANEL],
+    ["Too many downloads. Try again in a minute.", PAYEE_LOCK_ROUTE],
+    ["Sign in to download this evidence.", PAYEE_LOCK_ROUTE],
+    // Checking it offline.
+    ["signed ledger entries this pack cites verified against the workspace", PAYEE_LOCK_VIEW],
+    ["Audit log", APP_NAV],
+    ["Ledger signing public key", AUDIT_PAGE],
+    // Sharing a receipt.
+    ["Bills & receivables", APP_NAV],
+    ["Paid and closed", BILLS_VIEW],
+    ["Share receipt", RECEIPT_CONTROL],
+    ["Receipt shared. Copy the link now: it is shown only once.", RECEIPT_ACTIONS],
+    [
+      "Anyone with this link sees the amount, the payee's address and the transactions, and can check them. It shows no names.",
+      RECEIPT_CONTROL,
+      "Anyone with this link sees the amount, the payee&apos;s address and the transactions, and can check them. It shows no names.",
+    ],
+    ["The payee's chain has not minted this payout yet.", RECEIPT_FACTS],
+    ["A simulated payment has nothing on chain to show.", RECEIPT_FACTS],
+    ["A receipt is for a payment on chain, which a live workspace makes.", RECEIPT_ACTIONS],
+    ["This invoice is not paid yet.", RECEIPT_FACTS],
+    // What the payee sees.
+    ["Payment receipt", RECEIPT_VIEW],
+    ["Confirmed by Circle:", RECEIPT_VIEW],
+    ["All three checks pass", RECEIPT_VIEW],
+    ["A check does not pass", RECEIPT_VIEW],
+    ["One check could not be made just now", RECEIPT_VIEW],
+    ["Some checks could not be made just now", RECEIPT_VIEW],
+    ["Paid to", RECEIPT_VIEW],
+    ["Route", RECEIPT_VIEW],
+    ["Through CCTP from", RECEIPT_VIEW],
+    ["From a Circle Gateway balance", RECEIPT_VIEW],
+    ["Amounts", RECEIPT_VIEW],
+    ["Invoice amount", RECEIPT_AMOUNTS],
+    ["for paying early", RECEIPT_AMOUNTS],
+    ["Amount paid", RECEIPT_AMOUNTS],
+    ["CCTP fee", RECEIPT_AMOUNTS],
+    ["Gateway fee", RECEIPT_AMOUNTS],
+    ["Paid by the sender, on top of the amount. None was taken from the payee's payment.", RECEIPT_AMOUNTS],
+    ["Left the sender", RECEIPT_AMOUNTS],
+    ["Payee received", RECEIPT_AMOUNTS],
+    ["did not answer just now", RECEIPT_AMOUNTS],
+    ["Signed by the paying workspace", RECEIPT_VIEW],
+    ["Checked again in your browser: the body hash, the signature and the chain hash all verify.", RECEIPT_BROWSER_CHECK],
+    ["This browser could not run the check.", RECEIPT_BROWSER_CHECK],
+    ["Recorded when it was paid", RECEIPT_VIEW],
+    ["records this transaction. Its content stays private.", RECEIPT_VIEW],
+    ["Check it yourself", RECEIPT_VIEW],
+    ["This receipt shows no names.", RECEIPT_VIEW],
+    ["Apart from the invoice number, as the vendor wrote it, this receipt shows no names.", RECEIPT_VIEW],
+    ["Save as PDF", RECEIPT_PDF],
+    // A new link, or none.
+    ["Receipt shared", RECEIPT_CONTROL],
+    ["New link", RECEIPT_CONTROL],
+    ["Stop sharing", RECEIPT_CONTROL],
+    ["New link made. The earlier link no longer opens the receipt. Copy it now: it is shown only once.", RECEIPT_ACTIONS],
+    ["The receipt's link no longer opens it.", RECEIPT_ACTIONS],
+    ["This receipt link is no longer valid.", RECEIPT_PAGE],
+    ["This receipt could not load. Try again in a moment.", RECEIPT_PAGE],
+  ],
 };
 
 /**
@@ -3201,6 +3360,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/asana": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,
+  "guides/evidence-and-receipts": 20,
   "guides/apply-payments": 20,
   "guides/customer-portal": 20,
   "guides/collections": 20,
