@@ -15,8 +15,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 ### Added
 
 - **Receipts say what the payee got, and save as a PDF.** A shared receipt now lists its amounts: the invoice and
-  its number, what an early-payment discount took off, each fee, that the business paid them on top of the amount,
-  what left the business, and what the payee received, read from their chain. **Save as PDF** saves the receipt alone,
+  its number, what an early-payment discount took off, the route's fee, that no fee was taken from the payee's
+  payment, what left the business, and what the payee received, read from their chain. **Save as PDF** saves the receipt alone,
   with its signed entry's number and hash. The invoice form has an optional **Invoice number**, filled in when an
   invoice is read from a document, by email, or in Telegram or Slack; imports, captured drafts and accounting
   connectors already brought theirs.

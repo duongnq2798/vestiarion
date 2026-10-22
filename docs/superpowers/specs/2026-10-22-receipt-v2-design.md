@@ -28,10 +28,13 @@ Today the receipt shows one amount and, for a payout to another chain, a fee, wi
   provider's name). Absent when there is none.
 - `invoiceAmount`: the invoice's amount, only when it was for more than was paid, which an early-payment discount
   does.
-- `networkFeeUsdc`: Arc's network fee for the payment's transaction, only when it was read from the chain. An estimate
-  is never stated.
 - `feesPaidBy: "sender"`: every fee is paid by the business that paid, on top of the amount. The payee's amount is never
   reduced by one. A CCTP fee is burned at most what Iris quoted, and what Circle did not charge reaches the payee too.
+
+Arc's own network fee is not stated as a figure:
+- on Arc testnet, Circle's Gas Station pays it, so it never leaves the sender;
+- the fee recorded for a batch payout is the batch's share, and for a CCTP payout it is the burn's alone, without the
+  approve's, so neither is one transaction's fee.
 
 Receipts shared before this change keep what they stated.
 
@@ -42,11 +45,14 @@ A CCTP payout can read slightly more than the amount, by what Circle did not cha
 **RV4. The page.** Under the headline, an **Amounts** list:
 - the invoice and its number;
 - the invoice's amount and the discount, when it was for more;
-- each fee, and that the sender paid it on top;
-- what left the sender: the amount and every fee;
+- the CCTP fee, as the most it could be, or Gateway's fee, as its estimate;
+- that no fee was taken from the payee's payment, and that the sender paid any fee on top;
+- what left the sender: the amount and the route's fee. On Arc mainnet, whose wallets pay their own gas, it adds "and
+  Arc mainnet's network fee". A Gateway payout sends no transaction of the sender's on Arc, so it adds nothing.
 - what the payee received, read on chain, or the amount as stated while the chain does not answer.
 
-It names no one, as before.
+It names no one, as before. An invoice number is the vendor's own string and can carry a name, so a receipt with one
+says "Apart from the invoice number, as the vendor wrote it, this receipt shows no names."
 
 **RV5. A PDF.** **Save as PDF** opens the browser's print dialog, where the receipt saves as a PDF. When printed:
 - the site's header and footer, the button and the "Check it yourself" disclosure are left out;
@@ -61,11 +67,14 @@ It names no one, as before.
 ## Tests
 
 - `tests/receipts-facts.test.ts`:
-  - the new facts: invoice number from each source, the invoice amount only above what was paid, the network fee only
-    when read from the chain, `feesPaidBy`;
+  - the new facts: invoice number from each source, the invoice amount only above what was paid, `feesPaidBy`, and no
+    network fee;
   - an older receipt's facts unchanged.
 - `tests/receipts-onchain.test.ts`: the amount received, at 6 and 18 decimals, and a CCTP mint above the amount.
 - `tests/receipts-page.test.tsx`: the Amounts list, what the payee received or the stated amount, Save as PDF and
   the print-only lines.
 - `tests/receipts-share.test.ts`: the columns read.
-- Invoice form, schema, document prefill, chat draft and `create_invoice`: the number, from each way a bill arrives.
+- `tests/receipts-amounts.test.ts`: the Amounts rows on Arc testnet and mainnet, for CCTP, Gateway and EURC, and for an
+  older receipt.
+- Invoice form, schema, document prefill, chat draft, captured draft and `create_invoice`: the number, from each way a
+  bill arrives, the one typed winning over a captured draft's.

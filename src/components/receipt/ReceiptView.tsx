@@ -191,8 +191,9 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
       </div>
 
       <p className="text-xs leading-5 text-ink-3">
-        This receipt shows no names. The business that paid chose to share it, and can stop sharing it at any time. Vestiarion signs every payment
-        decision into a hash-chained ledger.
+        {/* An invoice number is the vendor's own string, which can carry a name (receipts v2 RV4). */}
+        {facts.invoiceNumber ? "Apart from the invoice number, as the vendor wrote it, this receipt shows no names." : "This receipt shows no names."} The
+        business that paid chose to share it, and can stop sharing it at any time. Vestiarion signs every payment decision into a hash-chained ledger.
       </p>
     </article>
   );

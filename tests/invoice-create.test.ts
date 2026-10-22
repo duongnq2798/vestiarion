@@ -121,6 +121,12 @@ describe("createInvoice", () => {
 
     const { requests: none } = await run([{ id: COUNTERPARTY, name: "Acme Supplies" }], () => createInvoice({ actorId: USER, invoice, document: null }));
     expect(ledgerDetails(none)[0].p_detail).not.toHaveProperty("invoiceNumber");
+    // A captured draft's number stands unless the person kept or typed another in the form.
+    const draft = { invoiceDraftId: "1a1a1a1a-0000-4000-8000-0000000000d1", invoiceNumber: "CAP-1" };
+    const { requests: captured } = await run([{ id: COUNTERPARTY, name: "Acme Supplies" }], () => createInvoice({ actorId: USER, invoice, document: null, captured: draft }));
+    expect(ledgerDetails(captured)[0].p_detail).toMatchObject({ invoiceNumber: "CAP-1", invoiceDraftId: draft.invoiceDraftId });
+    const { requests: retyped } = await run([{ id: COUNTERPARTY, name: "Acme Supplies" }], () => createInvoice({ actorId: USER, invoice: numbered, document: null, captured: draft }));
+    expect(ledgerDetails(retyped)[0].p_detail).toMatchObject({ invoiceNumber: "INV-2207" });
     // Blank is none, and a number past 100 characters is refused, as the form says.
     expect(invoiceInputSchema.parse({ ...typed, invoiceNumber: "  " }).invoiceNumber).toBeNull();
     expect(invoiceInputSchema.safeParse({ ...typed, invoiceNumber: "x".repeat(101) }).success).toBe(false);

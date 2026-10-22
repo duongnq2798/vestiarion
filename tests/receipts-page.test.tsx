@@ -136,18 +136,19 @@ describe("a receipt", () => {
 
 describe("a receipt since receipts v2 (docs/superpowers/specs/2026-10-22-receipt-v2-design.md RV4, RV5)", () => {
   const v2 = view({
-    facts: { ...view().facts, chain: "ARC-TESTNET", route: "direct", feeUsdc: undefined, invoiceNumber: "INV-2207", networkFeeUsdc: 0.003214, feesPaidBy: "sender" },
+    facts: { ...view().facts, chain: "ARC-TESTNET", route: "direct", feeUsdc: undefined, invoiceNumber: "INV-2207", feesPaidBy: "sender" },
     checks: { signed: { ok: true }, recorded: { ok: true }, onChain: { state: "matches", block: 314579095, received: 2 } },
   });
 
-  it("lists the invoice, the fee, who paid it, what left the sender and what the payee received, read on chain", () => {
+  it("lists the invoice, that no fee was taken from the payee, what left the sender and what the payee received, read on chain", () => {
     const markup = text(renderToStaticMarkup(<ReceiptView view={v2} />));
     expect(markup).toContain("Amounts");
     expect(markup).toContain("Invoice INV-2207");
-    expect(markup).toContain("Arc testnet network fee 0.003214 USDC");
-    expect(markup).toContain("Fees paid by The sender, on top of the amount.");
-    expect(markup).toContain("Left the sender 2.003214 USDC");
+    expect(markup).toContain("Fees None was taken from the payee's payment.");
+    expect(markup).toContain("Left the sender 2 USDC");
     expect(markup).toContain("Payee received 2 USDC, read on Arc testnet");
+    // The invoice number is the vendor's own string, so the page no longer says it shows no names at all.
+    expect(markup).toContain("Apart from the invoice number, as the vendor wrote it, this receipt shows no names.");
   });
 
   it("names a route's fee under Amounts, not beside the route", () => {
@@ -155,7 +156,7 @@ describe("a receipt since receipts v2 (docs/superpowers/specs/2026-10-22-receipt
     const markup = text(renderToStaticMarkup(<ReceiptView view={gateway} />));
     expect(markup).toContain("From a Circle Gateway balance");
     expect(markup).not.toContain("with a 0.107811 USDC fee");
-    expect(markup).toContain("Gateway fee 0.107811 USDC");
+    expect(markup).toContain("Gateway fee about 0.107811 USDC");
   });
 
   it("saves as a PDF through the browser's print, which leaves the site's chrome and the disclosure out and prints the entry", async () => {

@@ -132,12 +132,10 @@ describe("what a receipt states since receipts v2 (docs/superpowers/specs/2026-1
     expect(same.ok && same.facts.invoiceAmount).toBe(undefined);
   });
 
-  it("states Arc's network fee only when it was read from the chain, and that the sender paid the fees", () => {
-    const read = buildReceipt({ invoice: INVOICE, intent: intent({ fee_usd: "0.003214", fee_source: "chain_reported" }), entries: [paid] });
-    expect(read).toMatchObject({ ok: true, facts: { networkFeeUsdc: 0.003214, feesPaidBy: "sender" } });
-    const estimated = buildReceipt({ invoice: INVOICE, intent: intent({ fee_usd: "0.01", fee_source: "provider_estimate" }), entries: [paid] });
-    expect(estimated.ok && estimated.facts.networkFeeUsdc).toBe(undefined);
-    expect(estimated).toMatchObject({ ok: true, facts: { feesPaidBy: "sender" } });
+  it("states that the sender paid the fees, and no network fee: Gas Station pays it on testnet, and a batch's or a bridge's is not one transaction's", () => {
+    const built = buildReceipt({ invoice: INVOICE, intent: intent(), entries: [paid] });
+    expect(built).toMatchObject({ ok: true, facts: { feesPaidBy: "sender" } });
+    expect(built.ok && Object.keys(built.facts)).not.toContain("networkFeeUsdc");
   });
 });
 

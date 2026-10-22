@@ -346,9 +346,11 @@ record; it writes nothing and nothing that moves money imports it (`tests/settle
 - A shared receipt (`docs/superpowers/specs/2026-10-22-receipt-v2-design.md`) states, beside the payment's own facts
   (`intentFacts`, which the evidence chain shares), what `buildReceipt` adds: the invoice's number (`invoiceNumberOf`,
   from its `create_invoice` entry: `invoiceNumber`, or an accounting connector's under its provider's name), the
-  invoice's amount when a discount took something off, Arc's network fee when `payment_intents.fee_source` is
-  `chain_reported`, and `feesPaidBy: "sender"`. The on-chain check returns what the matched transfer moved
-  (`received`), and `receiptAmounts` (`src/lib/receipts/amounts.ts`) turns both into the page's Amounts list. **Save
+  invoice's amount when a discount took something off, and `feesPaidBy: "sender"`. Arc's network fee is never stated: Gas
+  Station pays it on testnet, and `fee_usd` is a batch's share or a bridge's burn alone. The on-chain check returns what
+  the matched transfer moved (`received`), and `receiptAmounts` (`src/lib/receipts/amounts.ts`) turns both into the
+  page's Amounts list, adding "and the network fee" to what left the sender only where the network's wallets are EOAs
+  that pay their own gas (`walletAccountType`), never for Gateway. **Save
   as PDF** is the browser's print: the page marks the site's chrome, the button and the disclosure `print:hidden`, and
   prints the entry's seq and hash.
 

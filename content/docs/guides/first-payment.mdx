@@ -657,14 +657,14 @@ A payee, an accountant or anyone else can check a payment without an account: sh
 
 - **Sharing it.** On **Bills & receivables**, under **Paid and closed**, open a paid bill: one with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once. At its foot, as on every page Vestiarion sends your counterparties, a line says it was sent with Vestiarion and links to Vestiarion's site, tagged with the kind of page only, never your business or theirs.
 - **What the page shows.** The amount, the payee's chain and address, and how it was paid. It also shows the transaction, linked to its explorer; for a CCTP payout, the burn on Arc testnet as well.
-- **Amounts.** The invoice and its number, if it has one, and the invoice's amount when an early-payment discount took something off. Each fee: Arc's network fee when it was read from the chain, and the CCTP or Gateway fee. That your business paid them on top of the amount, so nothing was taken from the payee's payment. What left your business, and what the payee received, read from their chain. A CCTP payout can show slightly more received than the amount: the part of the fee Circle did not charge reaches the payee.
+- **Amounts.** The invoice and its number, if it has one, and the invoice's amount when an early-payment discount took something off. The CCTP fee, as the most it could be, or Gateway's fee, as its estimate. That no fee was taken from the payee's payment: your business paid any fee on top. What left your business: the amount and the route's fee, and on Arc mainnet, where your wallet pays its own small network fee, that fee too. What the payee received, read from their chain. A CCTP payout can show slightly more received than the amount: the part of the fee Circle did not charge reaches the payee.
 - **Save as PDF.** It opens the browser's print dialog, where the receipt saves as a PDF. The copy leaves out the site's header and footer and the **Check it yourself** section, and prints the signed entry's number and hash, to find it again.
 - **The three checks the page makes.**
   - **Signed by the paying workspace.** The receipt is a ledger entry the workspace signed when it was shared. Its signature, body hash and chain hash are checked, and checked again in the reader's browser.
   - **Recorded when it was paid.** The entry that recorded the payment is checked and found to name its transaction. Its content stays private.
   - **On the payee's chain.** The chain shows a transfer of the amount to the payee in that transaction.
 - **Check it yourself.** This section holds the signed entry, its hashes and the workspace's public key, for checking without Vestiarion.
-- **No names.** The page shows no business, payee or person names, and no reasoning.
+- **No names.** The page shows no business, payee or person names, and no reasoning. An invoice number shows as the vendor wrote it, so the page then says so.
 - **Changing the link.** A shared receipt shows **Receipt shared**:
   - **New link** makes a new link, and the old one stops working.
   - **Stop sharing** turns the link off.

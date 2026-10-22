@@ -31,9 +31,11 @@ export interface ReceiptFacts {
   invoiceNumber?: string;
   /** The invoice's amount, only when it was for more than was paid: an early-payment discount (RV2). */
   invoiceAmount?: number;
-  /** Arc's network fee for the payment's transaction, in USDC, only when it was read from the chain (RV2). */
-  networkFeeUsdc?: number;
-  /** Who paid the fees: the sender, on top of the amount. On every receipt shared since receipts v2 (RV2). */
+  /**
+   * Who paid the fees: the sender, on top of the amount, and never the payee. On every receipt shared since receipts v2
+   * (RV2). Arc's own network fee is not stated: Circle's Gas Station pays it on Arc testnet, and the fee recorded for a
+   * batch or a bridge is not one transaction's.
+   */
   feesPaidBy?: "sender";
 }
 
@@ -51,9 +53,6 @@ export interface ReceiptIntent {
   bridge_fee: string | number | null;
   payout_route: string | null;
   confirmed_at: string | null;
-  /** Arc's network fee for the transaction, and where it came from: only `chain_reported` is stated (RV2). */
-  fee_usd?: string | number | null;
-  fee_source?: string | null;
   /** The network the payment was made on (0075); absent or null on a row from before it, which is Arc testnet. */
   network?: string | null;
 }
@@ -101,17 +100,15 @@ export function buildReceipt(input: {
   const records = recordingEntry({ invoiceId: invoice.id }, input.entries, stated.facts.txHash, stated.facts.sourceTxHash ?? null);
   if (!records) return refuse("No ledger entry records this payment's transaction.");
 
-  // What a receipt states beside the payment itself (RV2): the invoice it pays, what a discount took off, Arc's fee when
-  // it was read from the chain, and who paid the fees. The evidence chain reads `intentFacts` without them.
+  // What a receipt states beside the payment itself (RV2): the invoice it pays, what a discount took off, and who paid
+  // the fees. The evidence chain reads `intentFacts` without them.
   const amount = stated.facts.amount;
   const invoiceNumber = invoiceNumberOf(invoice.id, input.entries);
   const invoiceAmount = invoice.amount == null ? null : Number(invoice.amount);
-  const networkFee = intent.fee_source === "chain_reported" && intent.fee_usd != null ? Number(intent.fee_usd) : null;
   const facts: ReceiptFacts = {
     ...stated.facts,
     ...(invoiceNumber ? { invoiceNumber } : {}),
     ...(invoiceAmount !== null && Number.isFinite(invoiceAmount) && round6(invoiceAmount) > round6(amount) ? { invoiceAmount: round6(invoiceAmount) } : {}),
-    ...(networkFee !== null && Number.isFinite(networkFee) && networkFee >= 0 ? { networkFeeUsdc: round6(networkFee) } : {}),
     feesPaidBy: "sender",
   };
   return { ok: true, facts, records: { seq: records.seq, hash: records.hash } };
