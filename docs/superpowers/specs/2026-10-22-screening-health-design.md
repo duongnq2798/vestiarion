@@ -42,10 +42,13 @@ and SH1 can tell these apart:
 `applyScreening` keeps the provider's error as its wrapper's `cause`, and `screeningHttpFailure` finds it behind one.
 `failureKindOfNote` reads the kind back from a failed check's recorded note.
 
-**SH3. The last successful live lookup.**
+**SH3. The last successful live lookup.** A live check here means a lookup of the screening provider: a
+`compliance_checks` row with `screening_mode = 'live'` and a source other than `ofac-sdn` (`OFAC_ADDRESS_SOURCE`,
+`src/lib/sanctioned-wallets.ts`). A verdict on a payout address on OFAC's list (sanctioned wallets SW4) is written as
+live, since OFAC's own list decided it, but it calls no provider, so it says nothing about the key and every read below
+leaves it out. Its `live` mode still decides when a counterparty is due for screening.
 - **The admin page.** It also shows, platform-wide: the last complete live check, and the last failed live check with
-  its note's first 120 characters, plus counts over 24 h and 7 d, from `compliance_checks` where
-  `screening_mode = 'live'`. `platformDb()` reaches no tenant table, so this is `screening_health()` (migration 0139), a
+  its note's first 120 characters, plus counts over 24 h and 7 d, from those rows. `platformDb()` reaches no tenant table, so this is `screening_health()` (migration 0139), a
   security-definer function for the service role only, read by `readPlatformScreeningHealth`
   (`src/lib/screening/platform-health.ts`), which only the team's page imports. It names each workspace by its slug: no
   counterparty, no person. The note is shown with the deployment's keys and addresses taken out, and with what its HTTP
@@ -55,14 +58,20 @@ and SH1 can tell these apart:
   workspace's own scope. "none yet" when there is none, "could not be read" when the read fails.
 
 **SH4. The header stops saying Live when lookups fail.** `shellStatus` reads the workspace's newest live check, in
-scope (`readNewestLiveCheck`):
+scope (`readNewestLiveCheck`), as SH3 counts them: provider lookups, never an OFAC address verdict, so a sweep that
+finds a listed address while every name lookup fails still says the last lookup failed:
 - when it failed, the screening fact reads "Live, last lookup failed" in the held tone;
 - when it succeeded or there is none, the fact is "Live" as today;
 - when it cannot be read, "Live" as today (the configured fact; nothing is paid on it), logged.
 
 The read is one `limit 1` query, run at the same time as the shadow mode read, and not at all for a workspace that does
 not screen live. Migration 0139 adds the partial index `compliance_checks_live_newest (org_id, created_at desc) where
-screening_mode = 'live'` it reads from; before it runs, the same query reads the same rows through the `org_id` index.
+screening_mode = 'live'` it reads from (the source filter is applied on top of it); before it runs, the same query reads
+the same rows through the `org_id` index.
+
+After a key is changed, Check now (SH1) proves it but writes no check, so a workspace's header keeps saying "Live, last
+lookup failed", and Compliance its old time, until that workspace's next live lookup: its next agent cycle. The runbook
+says so (SH5).
 
 **SH5. A runbook.** In `docs/self-hosting.md`, "Changing the screening key", with a pointer on `/admin/screening`; the
 workspace guide names the new header value. How to rotate the key:
@@ -78,7 +87,8 @@ Never print the key.
 ## Migration
 
 `0139_screening_health.sql`: the two partial indexes on live checks (`compliance_checks_live_newest` by workspace,
-`compliance_checks_live_recent` by time) and `screening_health()`. Additive and idempotent. The code works before it
+`compliance_checks_live_recent` by time) and `screening_health()`, whose four reads leave out `source = 'ofac-sdn'`
+(SH3); the indexes keep the plain `screening_mode = 'live'` predicate. Additive and idempotent. The code works before it
 runs: the header and Compliance read the same rows without the index, and the admin page says its platform read is not
 there yet.
 
@@ -99,10 +109,14 @@ there yet.
   - the action's output shape;
   - nothing written: no table, no function but the gate, no workspace database, one log line;
   - key and URL never in the output or logs, with a fake provider whose error quotes both.
-- SH3: the reads' queries are live-mode only (`tests/shell-status.test.ts`), `screening_health()` counts live checks only
-  and runs for the service role only (`tests/screening-health-migration.test.ts`), and the platform read is used on the
-  admin page only.
+- SH3: the reads' queries are live-mode only and leave out OFAC address verdicts, so a newer one never hides the older
+  provider lookup (`tests/shell-status.test.ts`); `screening_health()` counts live provider lookups only, never an
+  `ofac-sdn` row, a sandbox's included, and runs for the service role only (`tests/screening-health-migration.test.ts`);
+  the platform read is used on the admin page only; and the Compliance line is shown to owners and admins of a live
+  workspace only, with no read for anyone else, in the sweep's callout or on its own
+  (`tests/compliance-page-screening-line.test.tsx`).
 - SH4: the header's tone and words for a failed newest check, for an ok one, and for none (`tests/workspace-status.test.ts`,
-  `tests/shell-status.test.ts`), and no read where screening is not live.
+  `tests/shell-status.test.ts`), a failed lookup still said when an OFAC address verdict is newer, and no read where
+  screening is not live.
 - The runbook's commands match `package.json` scripts, its variable names are the config's, and its page and log line
   are the code's (`tests/screening-runbook.test.ts`).

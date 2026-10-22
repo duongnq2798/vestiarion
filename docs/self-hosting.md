@@ -374,8 +374,15 @@ existing counterparties keep their last verdict, and new ones stay unscreened. T
    fictitious company "Zenith Trading Example LLC" with the deployment's own provider and key, and
    shows the provider, the origin, whether a key is set, which variables are in use, OK or the HTTP
    status, the time and the verdict. It adds no counterparty, writes no compliance check and
-   nothing to any ledger. The page also shows the last complete and last failed live check across
-   workspaces, once migration 0139 has run.
+   nothing to any ledger. So it does not clear what the failure left behind: a live workspace's
+   header keeps saying **Live, last lookup failed**, and its Compliance page keeps the old "Last
+   successful live screening" time, until that workspace's next live lookup. That is its next
+   agent cycle: a change starts one, the schedule runs one every 6 hours, or press **Run cycle
+   now** in the agent controls. Until then, a stale header is not a failed rotation; the Check now
+   result and the log line in step 5 are the proof. The page also shows the last complete and last
+   failed live lookup across workspaces, once migration 0139 has run; those too move only with the
+   next lookups. A verdict on a payout address on OFAC's list calls no provider, so none of these
+   count it.
 5. Read the deployment's logs (`vercel logs`): each check writes one line, `screening check:
    provider=… origin=… ok=… status=… ms=…`, never the key or the full address. Look for no
    `ConfigError` after the deploy.

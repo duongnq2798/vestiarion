@@ -8,6 +8,10 @@
 --    characters, and how many of each in the last 24 hours and 7 days. Workspace slugs only; no counterparty, no
 --    person. The service role only.
 --
+-- Live means a lookup of the screening provider. A verdict on a payout address on OFAC's list (source 'ofac-sdn',
+-- sanctioned wallets SW4) is written with screening_mode 'live' but calls no provider, so the header, the Compliance
+-- page and screening_health() all leave it out by its source; the indexes still serve those reads.
+--
 -- Additive and idempotent: scripts/migrate.ts re-runs every file each time. Until it runs, the header and the
 -- Compliance page read the same rows without the index, and /admin/screening says the platform read is not there yet.
 
@@ -21,7 +25,8 @@ create index if not exists compliance_checks_live_recent
 
 -- One object: lastComplete and lastFailed (each null when there is none) with when, the workspace's slug and the
 -- source; lastFailed also with its note's first 120 characters; and day and week, the complete and failed live checks
--- in the last 24 hours and 7 days. Simulated checks, a sandbox's bundled list, are never counted.
+-- in the last 24 hours and 7 days. Simulated checks, a sandbox's bundled list, are never counted, and neither are
+-- verdicts on a payout address on OFAC's list ('ofac-sdn'), which call no provider.
 create or replace function public.screening_health() returns jsonb
 language sql
 stable
@@ -33,7 +38,7 @@ as $$
       select jsonb_build_object('at', c.created_at, 'slug', o.slug, 'source', c.source)
         from public.compliance_checks c
         join public.orgs o on o.id = c.org_id
-       where c.screening_mode = 'live' and c.status = 'complete'
+       where c.screening_mode = 'live' and c.source <> 'ofac-sdn' and c.status = 'complete'
        order by c.created_at desc
        limit 1
     ),
@@ -41,19 +46,19 @@ as $$
       select jsonb_build_object('at', c.created_at, 'slug', o.slug, 'source', c.source, 'note', left(c.notes, 120))
         from public.compliance_checks c
         join public.orgs o on o.id = c.org_id
-       where c.screening_mode = 'live' and c.status = 'failed'
+       where c.screening_mode = 'live' and c.source <> 'ofac-sdn' and c.status = 'failed'
        order by c.created_at desc
        limit 1
     ),
     'day', (
       select jsonb_build_object('complete', count(*) filter (where c.status = 'complete'), 'failed', count(*) filter (where c.status = 'failed'))
         from public.compliance_checks c
-       where c.screening_mode = 'live' and c.created_at >= now() - interval '24 hours'
+       where c.screening_mode = 'live' and c.source <> 'ofac-sdn' and c.created_at >= now() - interval '24 hours'
     ),
     'week', (
       select jsonb_build_object('complete', count(*) filter (where c.status = 'complete'), 'failed', count(*) filter (where c.status = 'failed'))
         from public.compliance_checks c
-       where c.screening_mode = 'live' and c.created_at >= now() - interval '7 days'
+       where c.screening_mode = 'live' and c.source <> 'ofac-sdn' and c.created_at >= now() - interval '7 days'
     )
   )
 $$;

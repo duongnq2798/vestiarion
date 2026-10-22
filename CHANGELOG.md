@@ -17,7 +17,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **The header says when screening lookups fail.** When a live workspace's newest screening lookup failed, the
   Screening row of Workspace status says **Live, last lookup failed** instead of **Live**: new counterparties stay
   unscreened until a lookup works, and the others keep their last verdict. Owners and admins also see on Compliance,
-  beside the latest sweep, when a live screening last worked. Migration 0139 adds the index both read from; they work
+  beside the latest sweep, when a live screening last worked. Both count lookups of the screening provider only: a
+  payout address found on OFAC's list calls no provider, so it never makes a failing key look like it works. After a
+  key change, both move with the workspace's next agent cycle. Migration 0139 adds the index both read from; they work
   before it runs.
 
 - **Check the screening key on a running deployment.** `/admin/screening`, for the platform team only, shows the
@@ -25,8 +27,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   **Check now** screens one fictitious company with the deployment's own key: OK or the HTTP status and what it means
   (the key refused, over quota, the provider down), the time and the verdict. It adds no counterparty and writes no
   check or ledger entry, only one log line, never the key. The page also shows the last complete and last failed live
-  check across workspaces once migration 0139 has run. `docs/self-hosting.md` now says how to change the key, step by
-  step.
+  lookup across workspaces once migration 0139 has run, leaving out OFAC payout-address verdicts, which call no
+  provider. `docs/self-hosting.md` now says how to change the key, step by step.
 
 - **Your accountant as the second person on larger bills.** In Settings, under Two approvals, an owner can now choose
   **Let accountants co-sign**. An accountant then sees **Co-sign** on a bill above the figure: it records one of the two

@@ -1181,6 +1181,11 @@ would find.
     beside shadow mode, only where screening is live: one `limit 1` query on migration 0139's partial index
     `compliance_checks_live_newest`. When it failed, the header's Screening row says "Live, last lookup failed" in
     the held tone. Compliance shows owners and admins "Last successful live screening" (`lastLiveSuccessLine`).
+  - Live means a lookup of the provider. A verdict on a payout address on OFAC's list (source `ofac-sdn`,
+    `OFAC_ADDRESS_SOURCE` in `src/lib/sanctioned-wallets.ts`) is written as live but calls no provider, so both reads
+    and `screening_health()` leave it out by its source; its `live` mode still decides when a counterparty is due.
+  - Check now writes no check, so after a key change a workspace's header and Compliance line move only with its next
+    live lookup, its next agent cycle (`docs/self-hosting.md`, "Changing the screening key").
   - `/admin/screening`, for the platform team: see the founder dashboard below.
 - **Sanctioned payout addresses** (`docs/superpowers/specs/2026-10-21-sanctioned-wallets-design.md`,
   `src/lib/sanctioned-wallets.ts`): `parseSdnWallets` reads the EVM "Digital Currency Address" entries from OFAC's
@@ -3972,7 +3977,8 @@ the deployment's screening setup from its environment (`screeningSetup`: provide
 is set, which variable set is read) without calling anyone, and live checks across workspaces from
 `screening_health()` (migration 0139, service role only, read by `src/lib/screening/platform-health.ts`, which no other
 module imports): the last complete and last failed live check with the failed one's note cut to 120 characters, and the
-counts over 24 hours and 7 days, workspace slugs only. **Check now** screens the fixed fictitious name "Zenith Trading
+counts over 24 hours and 7 days, workspace slugs only. Live checks there are provider lookups: OFAC address verdicts
+(source `ofac-sdn`), written as live without calling a provider, are left out, a sandbox's included. **Check now** screens the fixed fictitious name "Zenith Trading
 Example LLC" with the deployment's provider and key and shows the outcome. It writes no counterparty, no compliance
 check and no ledger entry, only one `console.info` line, `screening check: provider=… origin=… ok=… status=… ms=…`,
 never the key or the full address. The key's runbook is in `docs/self-hosting.md`.

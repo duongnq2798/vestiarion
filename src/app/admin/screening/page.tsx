@@ -63,7 +63,7 @@ export default async function ScreeningHealthPage() {
         <ScreeningCheck name={HEALTH_CHECK_NAME} />
       </Section>
 
-      <Section id="live" title="Live checks across workspaces" meta="Every workspace's compliance checks, live only">
+      <Section id="live" title="Live checks across workspaces" meta="Every workspace's provider lookups: no bundled list, no OFAC address verdict">
         {health === null ? (
           <Callout tone="held" title="The platform read is not there yet">
             Migration 0139 has not run on this database, or the read failed. Check now still works.
@@ -96,6 +96,8 @@ export default async function ScreeningHealthPage() {
         <p className="max-w-3xl text-sm leading-relaxed text-ink-2">
           Follow &ldquo;Changing the screening key&rdquo; in docs/self-hosting.md: check the new key locally with <code>npm run screening:check</code>, replace
           only the key&apos;s value in Production, redeploy, then Check now here and read the deployment&apos;s logs for its <code>screening check:</code> line.
+          Check now writes no check, so a workspace&apos;s header keeps saying &ldquo;Live, last lookup failed&rdquo;, and the tiles above keep their
+          times, until that workspace&apos;s next agent cycle makes a live lookup: that is not a failed rotation.
         </p>
       </Section>
     </main>

@@ -10,7 +10,8 @@ import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } fr
  * What a workspace page's header reads in the workspace's scope (workspace shell design S5), and the newest live check
  * beside it (docs/superpowers/specs/2026-10-22-screening-health-design.md SH4): one `limit 1` query on the workspace's
  * live checks, run with the shadow mode read and only where screening is live. And the Compliance page's last successful
- * live screening (SH3), from the same rows. Live checks only, the workspace's own only.
+ * live screening (SH3), from the same rows. Live lookups of the provider only, the workspace's own only: a verdict on a
+ * payout address on OFAC's list is written as live but calls no provider, so it says nothing about the key.
  */
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000005c01";
@@ -32,6 +33,35 @@ function workspace(config: typeof LIVE, checks: Responder, shadow: unknown[] = [
 
 const checkReads = (requests: RecordedRequest[]) => requests.filter((request) => request.path === "/rest/v1/compliance_checks");
 
+type LiveRow = { status: "complete" | "failed"; created_at: string; source: string };
+
+/**
+ * Answers from the workspace's own live checks as PostgREST would: the `status` and `source` filters the read sends,
+ * newest first, its limit and its columns. A filter it does not know fails the test rather than being ignored.
+ */
+function liveChecks(rows: LiveRow[]): Responder {
+  return (request) => {
+    const keep = (row: LiveRow, column: "status" | "source") => {
+      const filter = request.params.get(column);
+      if (filter === null) return true;
+      if (filter.startsWith("eq.")) return row[column] === filter.slice(3);
+      if (filter.startsWith("neq.")) return row[column] !== filter.slice(4);
+      throw new Error(`unexpected filter ${column}=${filter}`);
+    };
+    const columns = (request.params.get("select") ?? "").split(",") as Array<keyof LiveRow>;
+    const matched = rows
+      .filter((row) => keep(row, "status") && keep(row, "source"))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(0, Number(request.params.get("limit") ?? rows.length));
+    return { body: matched.map((row) => Object.fromEntries(columns.map((column) => [column, row[column]]))) };
+  };
+}
+
+// A provider lookup that worked, one that failed after it, and a verdict on an address on OFAC's list newer than both.
+const PROVIDER_OK: LiveRow = { status: "complete", created_at: "2026-10-22T11:40:00Z", source: "opensanctions:yente" };
+const PROVIDER_FAILED: LiveRow = { status: "failed", created_at: "2026-10-30T06:17:00Z", source: "opensanctions:yente" };
+const ADDRESS_VERDICT: LiveRow = { status: "complete", created_at: "2026-10-30T09:05:00Z", source: "ofac-sdn" };
+
 let errors: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -49,9 +79,16 @@ describe("the header's screening fact, read in scope (SH4)", () => {
       select: "status,created_at",
       org_id: `eq.${ORG}`,
       screening_mode: "eq.live",
+      source: "neq.ofac-sdn",
       order: "created_at.desc",
       limit: "1",
     });
+  });
+
+  it("still says the last lookup failed when a verdict on an address on OFAC's list is newer", async () => {
+    const { requests, run } = workspace(LIVE, liveChecks([PROVIDER_OK, PROVIDER_FAILED, ADDRESS_VERDICT]));
+    expect((await run(() => shellStatus())).screening).toEqual({ live: true, source: "OpenSanctions", lastLookupFailed: true });
+    expect(checkReads(requests)[0].params.get("source")).toBe("neq.ofac-sdn");
   });
 
   it("stays Live when the newest live lookup succeeded, or there is none yet", async () => {
@@ -82,10 +119,19 @@ describe("the Compliance page's last successful live screening (SH3)", () => {
       select: "created_at",
       org_id: `eq.${ORG}`,
       screening_mode: "eq.live",
+      source: "neq.ofac-sdn",
       status: "eq.complete",
       order: "created_at.desc",
       limit: "1",
     });
+  });
+
+  it("gives the last provider lookup that worked, not a newer verdict on an address on OFAC's list", async () => {
+    const { run } = workspace(LIVE, liveChecks([PROVIDER_OK, PROVIDER_FAILED, ADDRESS_VERDICT]));
+    expect(await run(() => lastLiveSuccessLine(db()))).toBe("Last successful live screening: Oct 22, 2026, 11:40 UTC");
+    // An address verdict alone is no lookup that worked.
+    const verdictOnly = workspace(LIVE, liveChecks([PROVIDER_FAILED, ADDRESS_VERDICT]));
+    expect(await verdictOnly.run(() => lastLiveSuccessLine(db()))).toBe("Last successful live screening: none yet");
   });
 
   it("says none yet, and says so when it could not be read rather than none", async () => {

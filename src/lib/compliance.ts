@@ -4,6 +4,7 @@ import { currentConfig } from "./context";
 import {
   cachedSanctionedWallets,
   loadSanctionedWallets,
+  OFAC_ADDRESS_SOURCE,
   sanctionedWallet,
   type SanctionedWallet,
   type SanctionedWalletList,
@@ -211,7 +212,7 @@ export function walletScreening(wallet: SanctionedWallet): ScreeningResult {
   return {
     riskLevel: "high",
     notes: `Its payout address ${wallet.address} is on OFAC's SDN list as a digital currency address (${wallet.currencies.join(", ")}) of ${wallet.name}, entry ${wallet.entityNumber}. Nothing is paid to it.`,
-    source: "ofac-sdn",
+    source: OFAC_ADDRESS_SOURCE,
     screeningMode: "live",
     rawScore: 1,
     matchedEntityId: `ofac-sdn-${wallet.entityNumber}`,
@@ -316,7 +317,7 @@ async function applyScreening(cp: CounterpartyScreeningRow, dismissed?: Readonly
     return {
       riskLevel: "high",
       notes: "Kept: its payout address was on OFAC's SDN list when the list was last read live, and only a live read can clear it.",
-      source: "ofac-sdn",
+      source: OFAC_ADDRESS_SOURCE,
       screeningMode: "live",
       rawScore: 1,
       matchedEntityId: cp.risk_entity_id ?? null,

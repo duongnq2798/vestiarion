@@ -1,12 +1,14 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { OFAC_ADDRESS_SOURCE } from "@/lib/sanctioned-wallets";
 import { applyMigrations, asRole, asServiceRole, asTenant, createDatabase, createOrg } from "./support/pglite";
 
 /**
  * Migration 0139 (docs/superpowers/specs/2026-10-22-screening-health-design.md SH3, SH4): the index a workspace's
  * newest live check is read from on every page, one for the team's read by time, and `screening_health()`, live
  * screening across workspaces for the team's /admin/screening: the last complete and the last failed live check, and
- * how many of each in 24 hours and 7 days. Live checks only, workspace slugs only, for the service role only.
+ * how many of each in 24 hours and 7 days. Live lookups of the provider only (no verdict on a payout address on OFAC's
+ * list), workspace slugs only, for the service role only.
  */
 
 let db: PGlite;
@@ -80,6 +82,18 @@ describe("screening_health (0139)", () => {
     expect(read.week).toEqual({ complete: 3, failed: 2 });
     // No counterparty and no person: only the slug, the source, the note and the time.
     expect(JSON.stringify(read)).not.toMatch(/Northwind|Lumen/);
+  });
+
+  it("leaves out verdicts on a payout address on OFAC's list, written as live but calling no provider, even a sandbox's", async () => {
+    const before = await health();
+    expect(before.lastComplete).not.toBeNull();
+    expect(before.lastFailed).not.toBeNull();
+    const sandbox = await createOrg(db, "health-address-sandbox");
+    const cp = await counterparty(sandbox, "Listed Address Co");
+    // Newer than every check above: counted, each would be the last of its kind and add one to both windows.
+    await check(sandbox, cp, { status: "complete", mode: "live", hoursAgo: 0, source: OFAC_ADDRESS_SOURCE });
+    await check(sandbox, cp, { status: "failed", mode: "live", hoursAgo: 0, source: OFAC_ADDRESS_SOURCE, notes: "not a lookup" });
+    expect(await health()).toEqual(before);
   });
 
   it("runs for the service role only, as a definer with an empty search path", async () => {
