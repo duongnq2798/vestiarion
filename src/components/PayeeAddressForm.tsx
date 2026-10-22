@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
-import { groupAddress, looksLikeAddress, moveOn, NOT_AN_ADDRESS, type PayeeLinkStatus } from "@/lib/payee-journey";
+import { groupAddress, looksLikeAddress, moveOn, NOT_AN_ADDRESS, PAID_IN_FULL, type PayeeLinkStatus } from "@/lib/payee-journey";
 
 const INITIAL: PayeeAddressResult = { ok: false, message: "" };
 
@@ -77,7 +77,7 @@ export default function PayeeAddressForm({
   orgName: string;
   intro?: ReactNode;
   passkey?: boolean;
-  chains?: ReadonlyArray<{ id: string; label: string }>;
+  chains?: ReadonlyArray<{ id: string; label: string; note?: string }>;
   /** The chain on file, chosen first when it is one of `chains`. */
   defaultChain?: string;
   passkeyChains?: readonly string[];
@@ -134,9 +134,11 @@ export default function PayeeAddressForm({
             // A box ticked for one chain says nothing of another.
             setChecked(checks.map(() => false));
           }}
-          options={chains.map((entry) => ({ value: entry.id, label: entry.label }))}
+          options={chains.map((entry) => ({ value: entry.id, label: entry.label, ...(entry.note ? { description: entry.note } : {}) }))}
         />
-        <p className="text-xs leading-5 text-ink-3">Choose the network your wallet shows your USDC on. Not sure? Ask {orgName} before you send your address.</p>
+        <p className="text-xs leading-5 text-ink-3">
+          {chains.some((entry) => entry.note) ? `${PAID_IN_FULL} ` : ""}Choose the network your wallet shows your USDC on. Not sure? Ask {orgName} before you send your address.
+        </p>
         <Button type="submit">Continue</Button>
       </form>
     );

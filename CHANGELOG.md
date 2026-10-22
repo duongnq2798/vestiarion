@@ -21,6 +21,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   those. Run the migration that allows Arbitrum vendors. The TypeScript SDK 0.3.6 accepts `ARB` for a counterparty's
   chain.
 
+- **A payee choosing their network sees what each costs you.** On a payee link that lets a vendor choose where they
+  are paid, each network now says what sending there costs your business, as Circle quotes it when the page opens,
+  and that the vendor gets the full amount on any of them.
+
 - **What a payment costs, on the approval card.** Before you approve, each card waiting for Approve and pay shows the
   invoice, an early-payment discount that still applies, the CCTP or Gateway fee for a payee on another chain, what
   leaves the wallet in all, and what the payee receives. On Arc mainnet a note gives Arc's network fee, about 0.00319

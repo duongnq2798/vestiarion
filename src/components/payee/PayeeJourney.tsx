@@ -14,6 +14,7 @@ import { utcDay, utcMinute } from "@/lib/copy";
 import { SIMULATED_PAYMENT } from "@/lib/capability";
 import {
   amountsLine,
+  chainFeeNote,
   invoiceOpen,
   maskAddress,
   payeeStage,
@@ -127,7 +128,12 @@ function AddressStep({ token, status, simulated, onSent }: { token: string; stat
   // A passkey wallet, the secondary way, for a payee paid on Arc testnet when Modular Wallets are set up (P1, P6).
   const passkey = passkeyWalletOffered(status.chain, config);
   // The chains the payee may choose among, when the link lets it (payee invoice link P2).
-  const choices = (status.chainChoices ?? []).map((id) => ({ id, label: chainById(id).label }));
+  const choices = (status.chainChoices ?? []).map((id, index) => ({
+    id,
+    label: chainById(id).label,
+    // What sending there costs the business, the network's own first and free (payee link chain fees CF1).
+    note: chainFeeNote(status.orgName, index === 0, status.chainFees?.[id]),
+  }));
   const choosing = choices.length > 1;
   const asksInvoice = status.asksInvoice === true;
   const steps = [

@@ -5,8 +5,10 @@ import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { notifyPayeeAddress } from "../notifications/payee-address";
+import { bridgeFee } from "../circle/cctp";
 import { choosablePayeeChains } from "../payee-chain-choice";
-import { chainById } from "../payee-chains";
+import { networkProfile } from "../network";
+import { chainById, networkOfChain } from "../payee-chains";
 import type { PayeeLinkStatus, PayeePayment } from "../payee-journey";
 import type { Provenance } from "../provenance";
 
@@ -241,15 +243,41 @@ export async function previewPayeeLink(token: string, options: { withChain?: boo
  * link's own row: the workspace's network and how it pays decide them. Empty when anything could not be read, and the
  * page then names the chain on file, as before.
  */
-async function chainChoicesFor(hash: string): Promise<string[]> {
+async function chainChoicesFor(hash: string, amount: number): Promise<{ ids: string[]; fees: Record<string, number | null> }> {
   try {
     const row = await platformDb().from("payee_links").select("org_id").eq("token_hash", hash).limit(1);
     const orgId = ((row.data ?? []) as Array<{ org_id?: string }>)[0]?.org_id;
-    if (row.error || !orgId) return [];
-    return await withOrg(orgId, async () => (await choosablePayeeChains()).map((chain) => chain.id));
+    if (row.error || !orgId) return { ids: [], fees: {} };
+    return await withOrg(orgId, async () => {
+      const chains = await choosablePayeeChains();
+      if (chains.length < 2) return { ids: [], fees: {} };
+      // The network of the chains offered, the workspace's own first.
+      const network = networkProfile(networkOfChain(chains[0].id));
+      // What sending to each other chain costs the business, as Circle quotes it now (payee link chain fees CF2): read
+      // together, each within FEE_READ_MS, and left out when Circle does not answer in time, never guessed.
+      const quoted = await Promise.all(
+        chains.slice(1).map(async (chain) => [chain.id, await feeWithin(() => bridgeFee(network, chain.id, amount).then((fee) => fee.feeUsdc))] as const)
+      );
+      return { ids: chains.map((chain) => chain.id), fees: Object.fromEntries(quoted) };
+    });
   } catch (error) {
     console.error("payee link: chains to choose not read", error instanceof Error ? error.message : "unknown error");
-    return [];
+    return { ids: [], fees: {} };
+  }
+}
+
+/** How long a payee's page waits for one chain's fee: the page shows the choice without it after that (CF3). */
+const FEE_READ_MS = 3_000;
+
+async function feeWithin(read: () => Promise<number>): Promise<number | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), FEE_READ_MS);
+  });
+  try {
+    return await Promise.race([read().catch(() => null), late]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -279,14 +307,18 @@ export async function payeeLinkStatus(token: string): Promise<PayeeLinkStatus | 
     settledAt: typeof payment.settledAt === "string" ? payment.settledAt : null,
     scheduledFor: typeof payment.scheduledFor === "string" ? payment.scheduledFor : null,
   }));
-  const chainChoices = chainOpen === true ? await chainChoicesFor(hash) : [];
+  // The fee is quoted for what is owed in USDC and not paid yet: only USDC crosses chains (CF2).
+  const owed = payments.filter((payment) => payment.currency === "USDC" && payment.status !== "paid").reduce((sum, payment) => sum + payment.amount, 0);
+  const choices = chainOpen === true ? await chainChoicesFor(hash, owed) : { ids: [], fees: {} };
+  const choosing = choices.ids.length > 1;
   return {
     ...row,
     asksInvoice: row.asksInvoice === true,
     offersChain: row.offersChain === true,
     invoiceSent: row.invoiceSent === true,
     addressMirror: row.addressMirror === true,
-    chainChoices: chainChoices.length > 1 ? chainChoices : [],
+    chainChoices: choosing ? choices.ids : [],
+    ...(choosing ? { chainFees: choices.fees } : {}),
     payments,
   };
 }

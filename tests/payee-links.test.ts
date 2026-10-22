@@ -26,13 +26,15 @@ import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } fr
  * workspace scope and the ledger are faked here.
  */
 
-const { changeMock, withOrgMock, ledgerMock, notifyMock, choosableMock } = vi.hoisted(() => ({
+const { changeMock, withOrgMock, ledgerMock, notifyMock, choosableMock, bridgeFeeMock } = vi.hoisted(() => ({
   changeMock: vi.fn(),
   withOrgMock: vi.fn(),
   ledgerMock: vi.fn(),
   notifyMock: vi.fn(),
   choosableMock: vi.fn(),
+  bridgeFeeMock: vi.fn(),
 }));
+vi.mock("@/lib/circle/cctp", () => ({ bridgeFee: bridgeFeeMock }));
 vi.mock("@/lib/notifications/payee-address", () => ({ notifyPayeeAddress: notifyMock }));
 vi.mock("@/lib/payee-chain-choice", () => ({ choosablePayeeChains: choosableMock }));
 vi.mock("@/lib/counterparty-address", async (importOriginal) => ({
@@ -65,6 +67,7 @@ beforeEach(() => {
   ledgerMock.mockReset().mockResolvedValue(undefined);
   notifyMock.mockReset().mockResolvedValue(1);
   choosableMock.mockReset().mockResolvedValue(ARC_MAINNET.payeeChains);
+  bridgeFeeMock.mockReset().mockResolvedValue({ feeUsdc: 0.054668, maxFeeUnits: 54_668n, domain: 6 });
 });
 
 describe("tokens", () => {
@@ -467,10 +470,37 @@ describe("payeeLinkStatus and the link's options (payee invoice link P2, P4)", (
       (request) => (rpc(request, "payee_link_status") ? { body: { ...STATUS, chainOpen: true } } : request.path === "/rest/v1/payee_links" ? { body: [{ org_id: ORG }] } : { body: [] })
     );
     const status = await result;
-    expect(status).toMatchObject({ asksInvoice: true, offersChain: true, invoiceSent: false, chainChoices: ["ARC", "BASE", "ARB"] });
+    expect(status).toMatchObject({ asksInvoice: true, offersChain: true, invoiceSent: false, chainChoices: ["ARC", "BASE", "ARB"], chainFees: { BASE: 0.054668, ARB: 0.054668 } });
+    // Quoted on Arc mainnet for what is owed in USDC (payee link chain fees CF2): nothing yet.
+    expect(bridgeFeeMock).toHaveBeenCalledWith(ARC_MAINNET, "BASE", 0);
+    expect(bridgeFeeMock).toHaveBeenCalledWith(ARC_MAINNET, "ARB", 0);
     expect(status).not.toHaveProperty("chainOpen");
     expect(withOrgMock).toHaveBeenCalledWith(ORG, expect.any(Function));
     expect(fake.requests.find((request) => request.path === "/rest/v1/payee_links")?.params.get("token_hash")).toBe(`eq.${HASH}`);
+  });
+
+  it("quotes the fee for what is owed in USDC and not paid, and leaves out one Circle does not give in time (CF2, CF3)", async () => {
+    const payments = [
+      { kind: "invoice", title: "a", amount: 2, currency: "USDC", status: "pending" },
+      { kind: "invoice", title: "b", amount: 5, currency: "EURC", status: "pending" },
+      { kind: "invoice", title: "c", amount: 3, currency: "USDC", status: "paid" },
+    ];
+    const respond = (request: RecordedRequest): FakeReply =>
+      rpc(request, "payee_link_status") ? { body: { ...STATUS, payments, chainOpen: true } } : { body: [{ org_id: ORG }] };
+    bridgeFeeMock.mockRejectedValueOnce(new Error("Iris answered 503"));
+    const status = await platform(() => payeeLinkStatus(TOKEN), respond).result;
+    expect(status).toMatchObject({ chainChoices: ["ARC", "BASE", "ARB"], chainFees: { BASE: null, ARB: 0.054668 } });
+    expect(bridgeFeeMock).toHaveBeenCalledWith(ARC_MAINNET, "BASE", 2);
+
+    vi.useFakeTimers();
+    try {
+      bridgeFeeMock.mockImplementationOnce(() => new Promise(() => {}));
+      const slow = platform(() => payeeLinkStatus(TOKEN), respond).result;
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(await slow).toMatchObject({ chainChoices: ["ARC", "BASE", "ARB"], chainFees: { BASE: null, ARB: 0.054668 } });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("names none, and reads nothing more, when the choice is not open", async () => {
