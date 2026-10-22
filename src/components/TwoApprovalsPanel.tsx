@@ -62,7 +62,8 @@ function CosignSection({ orgSlug, on, canChange }: { orgSlug: string; on: boolea
       <p className="text-sm font-medium text-ink">{on ? "Accountants co-sign: on." : "Accountants co-sign: off."}</p>
       <p className="text-sm text-ink-2">
         With it on, an accountant gives one of the two approvals of a bill above the figure, and confirms changed addresses on Counterparties. A co-sign
-        sends nothing: an owner&apos;s, admin&apos;s or approver&apos;s Approve and pay pays it. Contractors&apos; milestones are not co-signed.
+        sends nothing: an owner&apos;s, admin&apos;s or approver&apos;s Approve and pay pays it. Contractors&apos; milestones are not co-signed, so a milestone
+        above the figure still needs two people who can approve payments.
       </p>
       {canChange ? (
         <form id={COSIGN_FORM_ID} {...form.formProps} className="space-y-2">
@@ -82,7 +83,7 @@ function CosignSection({ orgSlug, on, canChange }: { orgSlug: string; on: boolea
                 </Button>
               }
               title="Let accountants co-sign?"
-              description="Your accountants can then give one of the two approvals of a bill above the figure, and confirm changed addresses. They still pay nothing, and reject or return nothing."
+              description="Your accountants can then give one of the two approvals of a bill above the figure, and confirm changed addresses, after which the agent pays to that address as usual. They never approve the payment that pays, and reject or return nothing."
               confirmLabel="Let them co-sign"
             />
           )}

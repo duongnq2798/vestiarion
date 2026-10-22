@@ -339,7 +339,7 @@ function world(options: {
       const body = request.body as Record<string, unknown>;
       return { status: 201, body: { id: "appr-new", approved_by: body.approved_by, approved_at: "2026-10-05T09:00:00.000Z", amount: String(body.amount), currency: body.currency, address: body.address } };
     }
-    if (request.path === "/rest/v1/rpc/approvers_among") return { body: (request.body as { p_users: string[] }).p_users };
+    if (request.path === "/rest/v1/rpc/approvers_among" || request.path === "/rest/v1/rpc/deciders_among") return { body: (request.body as { p_users: string[] }).p_users };
     if (request.path === "/rest/v1/rpc/approvers_besides") {
       const excluded = (request.body as { p_excluded: string[] }).p_excluded;
       const count = options.approversBesides;

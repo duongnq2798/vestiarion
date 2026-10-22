@@ -49,6 +49,7 @@ const payable: WaitingPayable = {
   discount: null,
   currency: "USDC",
   payeeChain: "ARC-TESTNET",
+  bridgeFeeUsdc: null,
   poReference: "PO-7",
   goodsReceived: true,
   addedSinceDecision: null,

@@ -69,6 +69,12 @@ describe("approval_policies' accountant_cosigns", () => {
     expect(await among(org, [accountant])).toEqual([]);
   });
 
+  it("leaves accountants out of deciders_among, a milestone's count, even while co-signing is on", async () => {
+    await setting(org, true);
+    const deciders = await asTenant(db, org, (tx) => tx.query<{ deciders_among: string[] }>("select public.deciders_among($1, $2::uuid[])", [org, [owner, accountant, viewer]]));
+    expect(deciders.rows[0].deciders_among).toEqual([owner]);
+  });
+
   it("answers for the caller's own workspace only", async () => {
     await setting(org, true);
     expect(await among(other, [owner, accountant])).toEqual([]);

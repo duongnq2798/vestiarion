@@ -45,7 +45,7 @@ describe("Accountants co-sign (accountant co-sign CS1, CS8)", () => {
     const words = cosign(false);
     expect(words).toContain("Accountants co-sign: off.");
     expect(words).toContain(
-      "With it on, an accountant gives one of the two approvals of a bill above the figure, and confirms changed addresses on Counterparties. A co-sign sends nothing: an owner's, admin's or approver's Approve and pay pays it. Contractors' milestones are not co-signed."
+      "With it on, an accountant gives one of the two approvals of a bill above the figure, and confirms changed addresses on Counterparties. A co-sign sends nothing: an owner's, admin's or approver's Approve and pay pays it. Contractors' milestones are not co-signed, so a milestone above the figure still needs two people who can approve payments."
     );
     expect(words).toContain("Let accountants co-sign");
   });

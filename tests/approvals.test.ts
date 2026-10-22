@@ -3201,6 +3201,11 @@ describe("an accountant's co-sign (docs/superpowers/specs/2026-10-22-accountant-
       p_detail: { approvals: [{ by: ACCOUNTANT, at: "2026-10-05T08:00:00.000Z" }, { by: CREATOR, at: expect.any(String) }] },
     });
 
+    // Two co-signing accountants fill one approval at most, so the founder still gives the one that pays (review 1).
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", amountPaid: 150, discountTaken: 0, operatingBalance: 0 });
+    const twoAccountants = approvalsFake({ ...founder, cosignersBesides: 2, approvals: [approval(ACCOUNTANT)] });
+    expect((await twoAccountants.run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+
     const alone = approvalsFake({ ...founder, cosignersBesides: 0 });
     await expect(alone.run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).rejects.toThrow(/only one person in this workspace can approve payments/);
   });

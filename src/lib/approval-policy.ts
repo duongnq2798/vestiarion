@@ -98,10 +98,14 @@ export async function cosignersBesides(excluded: string[]): Promise<number> {
   return !result.error && typeof result.data === "number" ? result.data : 0;
 }
 
-/** Who can give one of a bill's two approvals besides those named: owners, admins and approvers, and co-signing accountants (CS5). */
+/**
+ * How many of a bill's two approvals people besides those named can give (CS5): each owner, admin and approver, and one
+ * co-signing accountant at most, since a co-sign is never the approval that pays. With two accountants and no other
+ * approver, a founder still gives the approval that pays (review 1).
+ */
 export async function billApproversBesides(excluded: string[]): Promise<number> {
   const [approvers, cosigners] = await Promise.all([approversBesides(excluded), cosignersBesides(excluded)]);
-  return approvers + cosigners;
+  return approvers + Math.min(1, cosigners);
 }
 
 /**

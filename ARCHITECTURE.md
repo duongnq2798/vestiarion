@@ -797,7 +797,8 @@ plan, on Arc testnet).
     - the figure's `too_few_approvers`;
     - the payee lock's `giver_confirms`.
 
-    Milestones keep `approversBesides`.
+    It counts one accountant at most, since a co-sign never pays. Milestones keep `approversBesides`, and read their
+    approvals with `deciders_among` (owners, admins and approvers; `approvers_among` before 0138).
   - **Addresses:** `confirmCounterpartyAddressAction` takes whoever decides payments or a co-signing accountant.
 
 **Trying a limit on past decisions** (`docs/superpowers/specs/2026-10-10-policy-replay-design.md`).

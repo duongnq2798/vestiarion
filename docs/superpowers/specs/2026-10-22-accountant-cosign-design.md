@@ -51,8 +51,9 @@ returns there, and a guard refuses any co-sign that reaches the claim.
 - while its giver is still an accountant of the workspace;
 - while it agrees with the payment's amount, currency and address.
 
-`approvers_among`, which the paying approval and the database's claim both ask, counts accountants only while the
-setting is on (migration 0138 redefines it). Turning the setting off or changing the person's role leaves the co-sign
+`approvers_among`, which the paying approval and the database's claim both ask for a bill, counts accountants only
+while the setting is on (migration 0138 redefines it). A milestone's approvals are read with the new `deciders_among`,
+owners, admins and approvers only, so an approver moved to accountant gives no milestone approval that counts. Turning the setting off or changing the person's role leaves the co-sign
 on file, counting for nothing, as an approval by someone removed does.
 
 **CS5. Who counts as a second person.** For bills, with the setting on, accountants count among the people who can give
@@ -62,14 +63,22 @@ one of the two approvals, through the new `cosigners_besides`:
 - in the Settings line that counts who can approve;
 - when an owner lowers the figure or turns it on.
 
-A founder alone with a co-signing accountant can turn on two approvals, and pay above the figure with the
-accountant's co-sign. Contractors' milestones are not co-signed, so for them nothing changes. A count that cannot be
+A co-sign is never the approval that pays, so accountants fill one of a bill's two approvals at most. However many
+co-sign, they count as one:
+- when an approval is refused because only one person can approve;
+- when whoever entered a bill gives one of its approvals because too few others can.
+
+So with two accountants and no other approver, the founder still gives the approval that pays. A founder alone with a
+co-signing accountant can turn on two approvals, and pay above the figure with the accountant's co-sign. Settings counts
+every co-signing accountant in its line of who can approve. It also says that a milestone above the figure still needs two
+people who can approve payments. Contractors' milestones are not co-signed, so for them nothing changes. A count that cannot be
 read is taken as zero: the workspace then behaves as it did before co-signing.
 
 **CS6. Confirming addresses.** With the setting on, an accountant may **Confirm address** on Counterparties:
 - the confirmation takes the same record of how the address was checked as anyone else's (payee lock PL2);
 - it counts as another member's confirmation, for the payee lock's second-person rule (PL3), the evidence pack, and the
-  new payee check (N4);
+  new payee check (N4), so the agent then pays that address as usual, a first payment included, within its limits;
+  turning co-signing on says so;
 - whoever entered an address may confirm it alone only when no one else may, and a co-signing accountant counts as
   someone else.
 

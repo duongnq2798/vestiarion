@@ -8,7 +8,9 @@
 --    approvals now. It now counts the workspace's accountants too, while `accountant_cosigns` is on, so a co-sign stands
 --    for the approval that pays and for claim_invoice_decision's check (0118), and stops counting the moment the setting
 --    is turned off or the person's role changes. Owners, admins and approvers count as before.
--- 3. cosigners_besides(org, excluded): how many accountants co-sign besides those named, 0 while the setting is off.
+-- 3. deciders_among(org, people): 0076's approvers_among, owners, admins and approvers only, for a milestone's approvals,
+--    which are not co-signed: an approver moved to accountant gives no milestone approval that counts.
+-- 4. cosigners_besides(org, excluded): how many accountants co-sign besides those named, 0 while the setting is off.
 --    Definer, because the tenant role has no access to memberships (0021); it reveals one number, and only for the
 --    caller's own workspace, as approvers_besides (0076) does. approvers_besides itself is unchanged: milestones and the
 --    sole approver rule still count owners, admins and approvers only.
@@ -34,6 +36,20 @@ $$;
 
 revoke execute on function public.approvers_among(uuid, uuid[]) from public, anon, authenticated;
 grant execute on function public.approvers_among(uuid, uuid[]) to vestiarion_tenant, service_role;
+
+create or replace function public.deciders_among(p_org_id uuid, p_users uuid[]) returns uuid[]
+language sql stable
+security definer
+set search_path = ''
+as $$
+  select coalesce(array_agg(user_id), '{}'::uuid[]) from public.memberships
+   where (public.request_org_id() is null or p_org_id = public.request_org_id())
+     and org_id = p_org_id and role in ('owner', 'admin', 'approver')
+     and user_id = any(coalesce(p_users, '{}'::uuid[]))
+$$;
+
+revoke execute on function public.deciders_among(uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.deciders_among(uuid, uuid[]) to vestiarion_tenant, service_role;
 
 create or replace function public.cosigners_besides(p_org_id uuid, p_excluded uuid[]) returns integer
 language sql stable

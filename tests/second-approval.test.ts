@@ -96,6 +96,20 @@ describe("standingApprovals", () => {
     expect(asked?.body).toEqual({ p_org_id: ORG, p_users: [ANNA, CHI] });
   });
 
+  it("counts a milestone's approvals by owners, admins and approvers only, and before migration 0138 as approvers_among does (accountant co-sign CS4)", async () => {
+    const MILESTONE = { type: "milestone" as const, id: INVOICE };
+    fake = fakeSupabase((r) => (r.path === "/rest/v1/rpc/deciders_among" ? { body: [ANNA] } : workspace({ open: [row(ANNA), row(CHI)], approvers: [ANNA, CHI] })(r)));
+    expect((await run(() => standingApprovals(MILESTONE, PAYMENT))).map((approval) => approval.by)).toEqual([ANNA]);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/rpc/approvers_among")).toBe(false);
+
+    fake = fakeSupabase((r) =>
+      r.path === "/rest/v1/rpc/deciders_among"
+        ? { status: 404, body: { code: "PGRST202", message: "Could not find the function public.deciders_among" } }
+        : workspace({ open: [row(ANNA), row(CHI)], approvers: [ANNA] })(r)
+    );
+    expect((await run(() => standingApprovals(MILESTONE, PAYMENT))).map((approval) => approval.by)).toEqual([ANNA]);
+  });
+
   it("asks nothing more when no open approval agrees", async () => {
     fake = fakeSupabase(workspace({ open: [row(BAO, { currency: "EURC" })] }));
     expect(await run(() => standingApprovals(SOURCE, PAYMENT))).toEqual([]);

@@ -84,7 +84,15 @@ export function approvalAgrees(approval: ApprovedPayment, payment: ApprovedPayme
 }
 
 /** Of the people named, those who may approve payments in the workspace now (`approvers_among`, migration 0076). */
-async function approversAmong(users: string[]): Promise<Set<string>> {
+async function approversAmong(users: string[], type: PaymentSource["type"]): Promise<Set<string>> {
+  // A bill counts co-signing accountants (`approvers_among`, migration 0138); a milestone, which is not co-signed, counts
+  // owners, admins and approvers only (`deciders_among`), so an approver moved to accountant gives no milestone approval
+  // that counts. Before 0138 `deciders_among` is missing, and `approvers_among` is that same count.
+  if (type === "milestone") {
+    const deciders = await db().rpc("deciders_among", { p_org_id: currentOrgId(), p_users: users });
+    if (!deciders.error) return new Set((deciders.data as string[] | null) ?? []);
+    if (deciders.error.code !== "PGRST202" && deciders.error.code !== "42883") throw new Error(deciders.error.message);
+  }
   const result = await db().rpc("approvers_among", { p_org_id: currentOrgId(), p_users: users });
   if (result.error) throw new Error(result.error.message);
   return new Set((result.data as string[] | null) ?? []);
@@ -94,7 +102,7 @@ async function approversAmong(users: string[]): Promise<Set<string>> {
 export async function standingApprovals(source: PaymentSource, payment: ApprovedPayment): Promise<GivenApproval[]> {
   const agreeing = (await openApprovals(source)).filter((approval) => approvalAgrees(approval, payment));
   if (agreeing.length === 0) return [];
-  const approvers = await approversAmong([...new Set(agreeing.map((approval) => approval.by))]);
+  const approvers = await approversAmong([...new Set(agreeing.map((approval) => approval.by))], source.type);
   return agreeing.filter((approval) => approvers.has(approval.by));
 }
 
@@ -234,7 +242,7 @@ export async function twoApprovalsFacts(
     );
   }
   const givers = [...new Set([...agreeing.values()].flat().map((approval) => approval.by))];
-  const approvers = givers.length > 0 ? await approversAmong(givers) : new Set<string>();
+  const approvers = givers.length > 0 ? await approversAmong(givers, type) : new Set<string>();
   // How many people can approve payments at all: with fewer than two, nothing above the figure can be paid.
   const everyone = await approversFor(type, []);
 
