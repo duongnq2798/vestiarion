@@ -29,16 +29,16 @@ describe("matchTransfer", () => {
       log("0xfffffffffffffffffffffffffffffffffffffffe", WALLET, PAYEE, BigInt("2000000000000000000")),
       log("0xfffffffffffffffffffffffffffffffffffffffe", "0x0000000071727de22e5e9d8baf0edac6f37da032", BUNDLER, BigInt("7179354338750000")),
     ];
-    expect(matchTransfer(facts(), receipt(logs))).toEqual({ state: "matches", block: 500 });
+    expect(matchTransfer(facts(), receipt(logs))).toEqual({ state: "matches", block: 500, received: 2 });
   });
 
   it("finds USDC's ERC-20 transfer at 6 decimals", () => {
-    expect(matchTransfer(facts(), receipt([log("0x3600000000000000000000000000000000000000", WALLET, PAYEE, BigInt(2_000_000))]))).toEqual({ state: "matches", block: 500 });
+    expect(matchTransfer(facts(), receipt([log("0x3600000000000000000000000000000000000000", WALLET, PAYEE, BigInt(2_000_000))]))).toEqual({ state: "matches", block: 500, received: 2 });
   });
 
   it("finds a EURC transfer from EURC's contract", () => {
     const eurc = facts({ token: "EURC", amount: 1.9 });
-    expect(matchTransfer(eurc, receipt([log("0x89b50855aa3be2f677cd6303cec089b5f319d72a", WALLET, PAYEE, BigInt(1_900_000))]))).toEqual({ state: "matches", block: 500 });
+    expect(matchTransfer(eurc, receipt([log("0x89b50855aa3be2f677cd6303cec089b5f319d72a", WALLET, PAYEE, BigInt(1_900_000))]))).toEqual({ state: "matches", block: 500, received: 1.9 });
     // USDC moved instead of EURC is not this payment.
     expect(matchTransfer(eurc, receipt([log("0x3600000000000000000000000000000000000000", WALLET, PAYEE, BigInt(1_900_000))]))).toMatchObject({ state: "mismatch" });
   });
@@ -46,7 +46,7 @@ describe("matchTransfer", () => {
   it("finds a mint on the payee's chain, from the zero address", () => {
     const minted = facts({ chain: "ARB-SEPOLIA", route: "gateway" });
     const logs = [log("0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d", "0x0000000000000000000000000000000000000000", PAYEE, BigInt(2_000_000))];
-    expect(matchTransfer(minted, receipt(logs))).toEqual({ state: "matches", block: 500 });
+    expect(matchTransfer(minted, receipt(logs))).toEqual({ state: "matches", block: 500, received: 2 });
   });
 
   it("does not take the gas transfer, another amount, another payee or another chain's token for the payment", () => {
@@ -62,8 +62,8 @@ describe("matchTransfer", () => {
   it("takes a CCTP mint that also carries the part of the fee Circle did not charge, never one above the fee (receipts review #3)", () => {
     const cctp = facts({ chain: "BASE-SEPOLIA", route: "cctp", feeUsdc: 0.054604 });
     const mint = (value: number) => receipt([log("0x036CbD53842c5426634e7929541eC2318f3dCF7e", "0x0000000000000000000000000000000000000000", PAYEE, BigInt(value))]);
-    expect(matchTransfer(cctp, mint(2_000_300))).toEqual({ state: "matches", block: 500 });
-    expect(matchTransfer(cctp, mint(2_054_604))).toEqual({ state: "matches", block: 500 });
+    expect(matchTransfer(cctp, mint(2_000_300))).toEqual({ state: "matches", block: 500, received: 2.0003 });
+    expect(matchTransfer(cctp, mint(2_054_604))).toEqual({ state: "matches", block: 500, received: 2.054604 });
     expect(matchTransfer(cctp, mint(2_054_605))).toMatchObject({ state: "mismatch" });
     expect(matchTransfer(cctp, mint(1_999_999))).toMatchObject({ state: "mismatch" });
     // Gateway mints exactly the amount: its fee is taken from the balance, not the mint.
@@ -87,7 +87,7 @@ describe("readOnChain", () => {
 
   it("reads the transaction's receipt from the chain's RPC and matches it", async () => {
     const fetch = rpc({ jsonrpc: "2.0", id: 1, result: receipt([log("0x3600000000000000000000000000000000000000", WALLET, PAYEE, BigInt(2_000_000))]) });
-    expect(await readOnChain(facts(), { fetch: fetch as unknown as typeof globalThis.fetch, rpcUrl: () => "https://rpc.example" })).toEqual({ state: "matches", block: 500 });
+    expect(await readOnChain(facts(), { fetch: fetch as unknown as typeof globalThis.fetch, rpcUrl: () => "https://rpc.example" })).toEqual({ state: "matches", block: 500, received: 2 });
     const body = JSON.parse(String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body));
     expect(body).toMatchObject({ method: "eth_getTransactionReceipt", params: [TX] });
   });
@@ -104,8 +104,8 @@ describe("readOnChain", () => {
     const fetch = rpc(mined);
     const once = facts({ txHash: `0x${"5".repeat(64)}` });
     const options = { fetch: fetch as unknown as typeof globalThis.fetch, rpcUrl: () => "https://rpc.example" };
-    expect(await readOnChain(once, options)).toEqual({ state: "matches", block: 500 });
-    expect(await readOnChain(once, options)).toEqual({ state: "matches", block: 500 });
+    expect(await readOnChain(once, options)).toEqual({ state: "matches", block: 500, received: 2 });
+    expect(await readOnChain(once, options)).toEqual({ state: "matches", block: 500, received: 2 });
     // A different claim about the same transaction is matched afresh against the receipt read before.
     expect(await readOnChain({ ...once, amount: 3 }, options)).toMatchObject({ state: "mismatch" });
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -136,7 +136,7 @@ describe("readOnChain", () => {
 describe("a receipt on Arc mainnet (mainnet limits L5)", () => {
   it("finds the native USDC transfer its system emitter logs, as on Arc testnet (EIP-7708, since genesis)", () => {
     const logs = [log("0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE", WALLET, PAYEE, BigInt("2000000000000000000"))];
-    expect(matchTransfer(facts({ chain: "ARC" }), receipt(logs))).toEqual({ state: "matches", block: 500 });
-    expect(matchTransfer(facts({ chain: "ARC" }), receipt([log("0x3600000000000000000000000000000000000000", WALLET, PAYEE, BigInt(2_000_000))]))).toEqual({ state: "matches", block: 500 });
+    expect(matchTransfer(facts({ chain: "ARC" }), receipt(logs))).toEqual({ state: "matches", block: 500, received: 2 });
+    expect(matchTransfer(facts({ chain: "ARC" }), receipt([log("0x3600000000000000000000000000000000000000", WALLET, PAYEE, BigInt(2_000_000))]))).toEqual({ state: "matches", block: 500, received: 2 });
   });
 });

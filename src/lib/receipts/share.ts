@@ -19,7 +19,7 @@ export class ReceiptError extends Error {
 }
 
 const INTENT_COLUMNS =
-  "status, provider_mode, token, amount, destination, tx_hash, chain, destination_chain, mint_tx_hash, bridge_fee, payout_route, confirmed_at, network";
+  "status, provider_mode, token, amount, destination, tx_hash, chain, destination_chain, mint_tx_hash, bridge_fee, payout_route, confirmed_at, network, fee_usd, fee_source";
 
 interface ReceiptRow {
   id: string;
@@ -57,10 +57,11 @@ export async function shareReceipt(input: { actorId: string; invoiceId: string }
     return { token, receiptId: existing.id, renewed: true };
   }
 
-  const invoice = (await db().from("invoices").select("id, status, direction").eq("id", input.invoiceId).maybeSingle()).data as {
+  const invoice = (await db().from("invoices").select("id, status, direction, amount").eq("id", input.invoiceId).maybeSingle()).data as {
     id: string;
     status: string;
     direction: string;
+    amount: string | number;
   } | null;
   if (!invoice) throw new ReceiptError("That invoice is not in this workspace.");
   const intent = unwrap(

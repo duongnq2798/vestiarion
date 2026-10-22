@@ -28,6 +28,8 @@ export interface ChatDraftFields {
   dueDate: string;
   earlyPayDiscountPct: string;
   discountDeadline: string;
+  /** The vendor's own number, as read (receipts v2 RV1); absent from a draft stored before it. */
+  invoiceNumber?: string;
 }
 
 /** A draft as a chat stores it: the fields, and where they were read from, with the address it asked payment to (IP1). */
@@ -58,6 +60,7 @@ export function chatDraftOf(read: InvoiceDraftRead): { reasons: string[]; stored
     dueDate: draft.dueDate ?? "",
     earlyPayDiscountPct: draft.earlyPayDiscountPct ?? "",
     discountDeadline: draft.discountDeadline ?? "",
+    invoiceNumber: draft.invoiceNumber ?? "",
   };
   const parsed = invoiceInputSchema.safeParse({ direction: "payable", ...fields, goodsReceived: false });
   if (!parsed.success) return { reasons: [invoiceFormRefusal(parsed.error).message], stored: null };

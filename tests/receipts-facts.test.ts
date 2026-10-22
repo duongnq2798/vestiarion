@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReceipt, receiptSummary, type ReceiptIntent } from "@/lib/receipts/facts";
+import { buildReceipt, invoiceNumberOf, receiptSummary, type ReceiptIntent } from "@/lib/receipts/facts";
 import { generateReceiptToken, receiptTokenHash } from "@/lib/receipts/token";
 import type { LedgerEntry } from "@/lib/ledger";
 
@@ -46,7 +46,7 @@ describe("buildReceipt", () => {
     });
     expect(built).toEqual({
       ok: true,
-      facts: { amount: 2, token: "USDC", paidAt: "2026-10-01T08:28:26.857Z", payee: PAYEE, chain: "ARC-TESTNET", txHash: tx(1), route: "direct" },
+      facts: { amount: 2, token: "USDC", paidAt: "2026-10-01T08:28:26.857Z", payee: PAYEE, chain: "ARC-TESTNET", txHash: tx(1), route: "direct", feesPaidBy: "sender" },
       records: { seq: 580, hash: "580".padStart(64, "h") },
     });
   });
@@ -64,7 +64,7 @@ describe("buildReceipt", () => {
     });
     expect(built).toEqual({
       ok: true,
-      facts: { amount: 2, token: "USDC", paidAt: "2026-10-01T08:28:26.857Z", payee: PAYEE, chain: "BASE-SEPOLIA", txHash: tx(2), route: "cctp", sourceTxHash: tx(1), feeUsdc: 0.054604 },
+      facts: { amount: 2, token: "USDC", paidAt: "2026-10-01T08:28:26.857Z", payee: PAYEE, chain: "BASE-SEPOLIA", txHash: tx(2), route: "cctp", sourceTxHash: tx(1), feeUsdc: 0.054604, feesPaidBy: "sender" },
       records: { seq: 590, hash: "590".padStart(64, "h") },
     });
   });
@@ -110,6 +110,34 @@ describe("buildReceipt", () => {
 
   it("is summarised with no names", () => {
     expect(receiptSummary({ amount: 2, token: "USDC", paidAt: "", payee: PAYEE, chain: "ARB-SEPOLIA", txHash: tx(3), route: "gateway" })).toBe("Receipt: 2 USDC paid on Arbitrum Sepolia");
+  });
+});
+
+describe("what a receipt states since receipts v2 (docs/superpowers/specs/2026-10-22-receipt-v2-design.md RV1, RV2)", () => {
+  const paid = entry(580, "ap_pay", { invoiceId: "inv-1", execution: { txRef: tx(1) } });
+
+  it("states the invoice's number from its create_invoice entry: typed, imported, captured, or under its connector's name", () => {
+    for (const detail of [{ invoiceNumber: " INV-2207 " }, { xero: { billId: "b", invoiceNumber: "INV-2207" } }, { quickbooks: { invoiceNumber: "INV-2207" } }, { zohobooks: { invoiceNumber: "INV-2207" } }]) {
+      const built = buildReceipt({ invoice: INVOICE, intent: intent(), entries: [entry(570, "create_invoice", { invoiceId: "inv-1", ...detail }), paid] });
+      expect(built, JSON.stringify(detail)).toMatchObject({ ok: true, facts: { invoiceNumber: "INV-2207" } });
+    }
+    expect(invoiceNumberOf("inv-1", [entry(570, "create_invoice", { invoiceId: "inv-2", invoiceNumber: "OTHER" })])).toBeNull();
+    expect(invoiceNumberOf("inv-1", [entry(570, "create_invoice", { invoiceId: "inv-1", invoiceNumber: "  " })])).toBeNull();
+  });
+
+  it("states the invoice's amount only when it was for more than was paid, as after an early-payment discount", () => {
+    const discounted = buildReceipt({ invoice: { ...INVOICE, amount: "2.040000" }, intent: intent(), entries: [paid] });
+    expect(discounted).toMatchObject({ ok: true, facts: { amount: 2, invoiceAmount: 2.04 } });
+    const same = buildReceipt({ invoice: { ...INVOICE, amount: "2.000000" }, intent: intent(), entries: [paid] });
+    expect(same.ok && same.facts.invoiceAmount).toBe(undefined);
+  });
+
+  it("states Arc's network fee only when it was read from the chain, and that the sender paid the fees", () => {
+    const read = buildReceipt({ invoice: INVOICE, intent: intent({ fee_usd: "0.003214", fee_source: "chain_reported" }), entries: [paid] });
+    expect(read).toMatchObject({ ok: true, facts: { networkFeeUsdc: 0.003214, feesPaidBy: "sender" } });
+    const estimated = buildReceipt({ invoice: INVOICE, intent: intent({ fee_usd: "0.01", fee_source: "provider_estimate" }), entries: [paid] });
+    expect(estimated.ok && estimated.facts.networkFeeUsdc).toBe(undefined);
+    expect(estimated).toMatchObject({ ok: true, facts: { feesPaidBy: "sender" } });
   });
 });
 

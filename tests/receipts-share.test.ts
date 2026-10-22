@@ -99,7 +99,7 @@ describe("sharing a receipt the first time", () => {
       action: "receipt_shared",
       summary: "Receipt: 2 USDC paid on Arbitrum Sepolia",
       detail: {
-        receipt: { amount: 2, token: "USDC", paidAt: "2026-10-01T08:28:26.857Z", payee: PAYEE, chain: "ARB-SEPOLIA", txHash: MINT, route: "gateway", feeUsdc: 0.107811 },
+        receipt: { amount: 2, token: "USDC", paidAt: "2026-10-01T08:28:26.857Z", payee: PAYEE, chain: "ARB-SEPOLIA", txHash: MINT, route: "gateway", feeUsdc: 0.107811, feesPaidBy: "sender" },
         records: { seq: 580, hash: "h".repeat(64) },
       },
     });

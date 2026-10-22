@@ -113,6 +113,19 @@ describe("createInvoice", () => {
     expect(entry.p_detail).toMatchObject({ via: "telegram", document });
   });
 
+  it("records the vendor's own invoice number when one was given, and none otherwise (receipts v2 RV1)", async () => {
+    const typed = { direction: "payable", counterpartyId: COUNTERPARTY, amount: "10.50", currency: "USDC", memo: "", poReference: "", goodsReceived: false, dueDate: "2026-10-31", earlyPayDiscountPct: "", discountDeadline: "" };
+    const numbered = invoiceInputSchema.parse({ ...typed, invoiceNumber: " INV-2207 " });
+    const { requests } = await run([{ id: COUNTERPARTY, name: "Acme Supplies" }], () => createInvoice({ actorId: USER, invoice: numbered, document: null }));
+    expect(ledgerDetails(requests)[0].p_detail).toMatchObject({ invoiceNumber: "INV-2207" });
+
+    const { requests: none } = await run([{ id: COUNTERPARTY, name: "Acme Supplies" }], () => createInvoice({ actorId: USER, invoice, document: null }));
+    expect(ledgerDetails(none)[0].p_detail).not.toHaveProperty("invoiceNumber");
+    // Blank is none, and a number past 100 characters is refused, as the form says.
+    expect(invoiceInputSchema.parse({ ...typed, invoiceNumber: "  " }).invoiceNumber).toBeNull();
+    expect(invoiceInputSchema.safeParse({ ...typed, invoiceNumber: "x".repeat(101) }).success).toBe(false);
+  });
+
   it("records that it came from Slack, and the member's link it came through (Slack design S15)", async () => {
     const document = { kind: "pdf" as const, sha256: "b".repeat(64), reader: "heuristic" as const, changed: [] };
     const { requests } = await run([{ id: COUNTERPARTY, name: "Acme Supplies" }], () =>

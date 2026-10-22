@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-22: Receipts state the fees, who paid them and the invoice number
+
+- **`receipt_shared`** entries' `receipt` can now also carry `invoiceNumber` (the invoice's own number, as on its `create_invoice` entry), `invoiceAmount` (the invoice's amount, only when it was for more than was paid, as after an early-payment discount), `networkFeeUsdc` (Arc's network fee for the payment's transaction, only when read from the chain) and `feesPaidBy: "sender"` (every fee was paid by the business on top of the amount). Receipts shared before keep what they stated.
+- **`create_invoice`** entries now carry `invoiceNumber` for an invoice typed into the invoice form with one, or read from a document, an email, or in Telegram or Slack, as they already did for imports and captured drafts. An accounting connector's bill keeps it under the provider's name.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-22: The weekly brief counts payee address changes
 
 - **`weekly_brief_sent`** now carries `payees: { lockOn, changed, confirmed, held, asked, notMe, frozen }` for the last 7 days: whether the payee lock is on, the addresses set and confirmed, the agent's decisions held for an address (`guardrailRule` `counterparty.address_unconfirmed`, `counterparty.cooling_off` or `invoice.pay_to_differs`), the payees' contacts asked "Was this you?" and those who answered `not_me`, and the payees frozen now. It is absent when they could not be read. A week with only these to tell now sends the brief, where before it sent none.

@@ -270,6 +270,7 @@ Open **Bills & receivables**, choose **New**, then **Bill to pay**. **New** also
 - **Due date**.
 - **Early-payment discount (%)** and **Discount deadline**, if the vendor offers one. See [When the agent pays](#5-when-the-agent-pays).
 - **Memo**, if you like.
+- **Invoice number**, the vendor's own number for the bill, if you like. It is recorded with the bill, and its receipt states it. An invoice read from a document fills it in.
 - **PO reference**, and tick **Goods or services received**. Without confirmed receipt, or without a purchase order from a counterparty that needs one, the three-way match is incomplete, and the agent asks for more information instead of paying. Every counterparty needs a purchase order until it is marked as paid without them: see [Pay a counterparty without purchase orders](#pay-a-counterparty-without-purchase-orders).
 
 <Screenshot
@@ -655,7 +656,9 @@ To check a signature yourself, see [Verifying signatures](/docs/webhooks/verify)
 A payee, an accountant or anyone else can check a payment without an account: share its receipt.
 
 - **Sharing it.** On **Bills & receivables**, under **Paid and closed**, open a paid bill: one with a transaction on chain shows **Share receipt** to an owner or admin. It makes a link to a public page. Copy the link then: it is shown only once. At its foot, as on every page Vestiarion sends your counterparties, a line says it was sent with Vestiarion and links to Vestiarion's site, tagged with the kind of page only, never your business or theirs.
-- **What the page shows.** The amount, the payee's chain and address, and how it was paid, with the fee. It also shows the transaction, linked to its explorer; for a CCTP payout, the burn on Arc testnet as well.
+- **What the page shows.** The amount, the payee's chain and address, and how it was paid. It also shows the transaction, linked to its explorer; for a CCTP payout, the burn on Arc testnet as well.
+- **Amounts.** The invoice and its number, if it has one, and the invoice's amount when an early-payment discount took something off. Each fee: Arc's network fee when it was read from the chain, and the CCTP or Gateway fee. That your business paid them on top of the amount, so nothing was taken from the payee's payment. What left your business, and what the payee received, read from their chain. A CCTP payout can show slightly more received than the amount: the part of the fee Circle did not charge reaches the payee.
+- **Save as PDF.** It opens the browser's print dialog, where the receipt saves as a PDF. The copy leaves out the site's header and footer and the **Check it yourself** section, and prints the signed entry's number and hash, to find it again.
 - **The three checks the page makes.**
   - **Signed by the paying workspace.** The receipt is a ledger entry the workspace signed when it was shared. Its signature, body hash and chain hash are checked, and checked again in the reader's browser.
   - **Recorded when it was paid.** The entry that recorded the payment is checked and found to name its transaction. Its content stays private.

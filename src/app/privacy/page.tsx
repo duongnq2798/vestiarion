@@ -103,9 +103,9 @@ export default function PrivacyPage() {
           and how much USDC they moved. It never names a workspace or a person, and never lists a customer&apos;s payment.
         </p>
         <p>
-          An owner or admin can share one paid payment&apos;s receipt as a link. Anyone with the link sees that payment&apos;s amount, the payee&apos;s
-          chain and address, its transactions and its signed ledger entry, which already sit on a public chain or in the workspace&apos;s own ledger. It
-          shows no names. The link stops working when they stop sharing it or make a new one.
+          An owner or admin can share one paid payment&apos;s receipt as a link. Anyone with the link sees that payment&apos;s amount, its fees, the
+          invoice&apos;s number if it has one, the payee&apos;s chain and address, its transactions and its signed ledger entry, which already sit on a
+          public chain or in the workspace&apos;s own ledger. It shows no names. The link stops working when they stop sharing it or make a new one.
         </p>
         <p>
           An owner or admin can also share the workspace&apos;s report as a link, choosing whether it shows suppliers&apos; names or labels, amounts or
