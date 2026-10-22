@@ -293,7 +293,8 @@ export default function PrivacyPage() {
             <strong>Discord</strong>, for a workspace an owner or admin connects to a Discord channel with its webhook, receives what Vestiarion
             posts to that channel: the workspace&apos;s name and, for each bill the agent holds or flags for a person, the counterparty&apos;s name,
             the amount, the agent&apos;s reason and a link to review it in the app. It receives no email address or key, and no wallet address in
-            full: one is shortened to its first and last four characters. The app reads nothing from Discord. It keeps the webhook&apos;s id and
+            full: one is shortened to its first and last four characters. The app reads no message in Discord: when Discord is connected, it asks
+            Discord only for the webhook&apos;s own details, its name and its channel&apos;s and server&apos;s ids. It keeps the webhook&apos;s id and
             name, the channel&apos;s and the server&apos;s ids, and the webhook&apos;s URL, encrypted; disconnecting Discord deletes them, and the
             signed ledger keeps only the ids.
           </li>

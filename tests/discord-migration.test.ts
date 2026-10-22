@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { applyMigrations, asRole, asServiceRole, asTenant, createDatabase, createOrg, createUser, MIGRATIONS_DIR } from "./support/pglite";
 
 /**
- * Migration 0139 (docs/superpowers/specs/2026-10-22-discord-design.md DC2): a workspace's Discord channel webhook, a
+ * Migration 0140 (docs/superpowers/specs/2026-10-22-discord-design.md DC2): a workspace's Discord channel webhook, a
  * platform table only the service role touches, as slack_installs (0067) is. One per workspace, going with it; Discord's
  * ids held to their form; the person who connected it forgotten with their account, the connection kept.
  */
@@ -40,7 +40,7 @@ afterAll(async () => {
   await db.close();
 });
 
-describe("discord_webhooks (0139, DC2)", () => {
+describe("discord_webhooks (0140, DC2)", () => {
   it("starts the cursor and the failures at zero, with no error", async () => {
     const row = (await db.query<{ seq: string; failures: number; last_error: string | null; connected_at: Date | null }>(
       "select notified_seq::text as seq, failures, last_error, connected_at from public.discord_webhooks where org_id = $1",
@@ -113,7 +113,7 @@ describe("discord_webhooks (0139, DC2)", () => {
     const count = async () => (await db.query<{ n: number }>("select count(*)::int as n from public.discord_webhooks")).rows[0].n;
     const before = await count();
     expect(before).toBeGreaterThan(0);
-    await db.exec(readFileSync(path.join(MIGRATIONS_DIR, "0139_discord.sql"), "utf8"));
+    await db.exec(readFileSync(path.join(MIGRATIONS_DIR, "0140_discord.sql"), "utf8"));
     expect(await count()).toBe(before);
     await expect(asTenant(db, orgA, (tx) => tx.query("select * from public.discord_webhooks"))).rejects.toThrow(/permission denied/);
   });

@@ -15,16 +15,21 @@ const { ORG, USER, mocks } = vi.hoisted(() => ({
   USER: "0b6c1c9e-4a4f-4a7e-9b1e-000000000da2",
   mocks: {
     authorize: vi.fn(), revalidate: vi.fn(), readConnection: vi.fn(), saveConnection: vi.fn(), removeConnection: vi.fn(), clearFailure: vi.fn(),
-    webhookUrlOf: vi.fn(), postToDiscord: vi.fn(), readDiscordWebhook: vi.fn(),
+    webhookUrlOf: vi.fn(), postToDiscord: vi.fn(), readDiscordWebhook: vi.fn(), takeDiscordCallToken: vi.fn(),
   },
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: mocks.authorize }));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: mocks.revalidate }));
-vi.mock("@/lib/discord/connections", () => ({
+vi.mock("@/lib/discord/connections", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/discord/connections")>()),
   readConnection: mocks.readConnection, saveConnection: mocks.saveConnection, removeConnection: mocks.removeConnection, clearFailure: mocks.clearFailure,
   webhookUrlOf: mocks.webhookUrlOf,
+}));
+vi.mock("@/lib/rate-limit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/rate-limit")>()),
+  takeDiscordCallToken: mocks.takeDiscordCallToken,
 }));
 vi.mock("@/lib/discord/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/discord/api")>();
@@ -61,7 +66,18 @@ beforeEach(() => {
   mocks.postToDiscord.mockResolvedValue(OK);
   mocks.saveConnection.mockResolvedValue(CONNECTION);
   mocks.webhookUrlOf.mockReturnValue(CANONICAL);
+  mocks.takeDiscordCallToken.mockReturnValue(true);
 });
+
+const SLOW_DOWN = { ok: false, message: "Too many tries at once. Try again in a minute." };
+let burst = 0;
+/** The real buckets, at a moment far from any other test's, so each burst starts with every token. */
+async function realBuckets() {
+  const { takeDiscordCallToken } = await vi.importActual<typeof import("@/lib/rate-limit")>("@/lib/rate-limit");
+  burst += 1;
+  const at = Date.now() + burst * 3_600_000;
+  mocks.takeDiscordCallToken.mockImplementation((key: string) => takeDiscordCallToken(key, at));
+}
 
 describe("connectDiscordAction", () => {
   it("asks for integrations.manage, reads the canonical URL, posts a test message, then saves", async () => {
@@ -70,7 +86,9 @@ describe("connectDiscordAction", () => {
     expect(result).toEqual({ ok: true, message: "Discord is connected. A test message was posted to the channel." });
     expect(mocks.authorize).toHaveBeenCalledWith("acme", "integrations.manage");
     expect(mocks.readDiscordWebhook).toHaveBeenCalledWith(CANONICAL);
-    expect(mocks.postToDiscord).toHaveBeenCalledWith(CANONICAL, { content: expect.stringContaining("Vestiarion is connected to **Acme Studio**.") });
+    // Posted before the save, so it says it checks the webhook, never that the channel is connected.
+    expect(mocks.postToDiscord).toHaveBeenCalledWith(CANONICAL, { content: expect.stringContaining("A test message from Vestiarion for **Acme Studio**, checking this webhook.") });
+    expect(mocks.takeDiscordCallToken.mock.calls).toEqual([[`org:${ORG}`], [`user:${USER}`]]);
     expect(mocks.saveConnection).toHaveBeenCalledWith({ orgId: ORG, connectedBy: USER, webhook: { id: WEBHOOK_ID, token: TOKEN, url: CANONICAL }, info: INFO });
     // The test post comes before the save.
     expect(mocks.postToDiscord.mock.invocationCallOrder[0]).toBeLessThan(mocks.saveConnection.mock.invocationCallOrder[0]);
@@ -92,6 +110,8 @@ describe("connectDiscordAction", () => {
     expect(result.message).toContain("That is not a Discord webhook URL.");
     expect(mocks.readDiscordWebhook).not.toHaveBeenCalled();
     expect(mocks.postToDiscord).not.toHaveBeenCalled();
+    // A typo spends no try.
+    expect(mocks.takeDiscordCallToken).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -119,7 +139,7 @@ describe("connectDiscordAction", () => {
     expect(mocks.revalidate).not.toHaveBeenCalled();
   });
 
-  it("says Discord is not set up yet before migration 0139, and that it is connected already", async () => {
+  it("says Discord is not set up yet before migration 0140, and that it is connected already", async () => {
     mocks.readConnection.mockResolvedValue({ ready: false });
     expect(await connectDiscordAction(INITIAL, form({ webhookUrl: CANONICAL }))).toEqual({ ok: false, message: "Discord is not set up on this deployment yet." });
     mocks.readConnection.mockResolvedValue({ ready: true, connection: CONNECTION });
@@ -127,6 +147,34 @@ describe("connectDiscordAction", () => {
       ok: false, message: "Discord is already connected. Disconnect it first to post to another channel.",
     });
     expect(mocks.postToDiscord).not.toHaveBeenCalled();
+    expect(mocks.takeDiscordCallToken).not.toHaveBeenCalled();
+  });
+
+  it("says another channel was connected at the same moment when the save finds one, and that the test message can be ignored", async () => {
+    const { DiscordAlreadyConnectedError } = await vi.importActual<typeof import("@/lib/discord/connections")>("@/lib/discord/connections");
+    mocks.saveConnection.mockRejectedValue(new DiscordAlreadyConnectedError());
+    expect(await connectDiscordAction(INITIAL, form({ webhookUrl: CANONICAL }))).toEqual({
+      ok: false,
+      message:
+        "Someone connected another Discord channel to this workspace at the same moment, so this one was not saved. The test message in this channel can be ignored.",
+    });
+    expect(mocks.postToDiscord).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows five tries at once per person, then asks them to slow down without calling Discord", async () => {
+    await realBuckets();
+    for (let i = 0; i < 5; i += 1) expect((await connectDiscordAction(INITIAL, form({ webhookUrl: CANONICAL }))).ok).toBe(true);
+    expect(await connectDiscordAction(INITIAL, form({ webhookUrl: CANONICAL }))).toEqual(SLOW_DOWN);
+    expect(mocks.readDiscordWebhook).toHaveBeenCalledTimes(5);
+    expect(mocks.postToDiscord).toHaveBeenCalledTimes(5);
+  });
+
+  it("allows five tries at once per workspace, whoever makes them", async () => {
+    await realBuckets();
+    for (let i = 0; i < 5; i += 1) expect((await connectDiscordAction(INITIAL, form({ webhookUrl: CANONICAL }))).ok).toBe(true);
+    mocks.authorize.mockResolvedValue({ ...access("owner"), user: { id: "0b6c1c9e-4a4f-4a7e-9b1e-000000000da3", email: null } });
+    expect(await connectDiscordAction(INITIAL, form({ webhookUrl: CANONICAL }))).toEqual(SLOW_DOWN);
+    expect(mocks.readDiscordWebhook).toHaveBeenCalledTimes(5);
   });
 
   it("refuses a webhook whose answer names another id", async () => {
@@ -162,8 +210,23 @@ describe("sendDiscordTestAction", () => {
     mocks.readConnection.mockResolvedValue({ ready: true, connection: CONNECTION });
     mocks.postToDiscord.mockResolvedValue({ ok: false, status: 404, retryAfterMs: null, code: 10015 });
     const result = await sendDiscordTestAction(INITIAL, form({}));
-    expect(result).toEqual({ ok: false, message: "Discord says this webhook no longer exists, so Discord was disconnected. Connect a new webhook." });
+    // Tagged, so the panel shows it beside Connect, the view the revalidated page swaps in.
+    expect(result).toEqual({
+      ok: false,
+      disconnected: true,
+      message: "Discord says this webhook no longer exists, so Discord was disconnected. Connect a new webhook.",
+    });
     expect(mocks.removeConnection).toHaveBeenCalledWith(CONNECTION, "discord", null);
+  });
+
+  it("allows five tests at once, then asks to slow down without posting, and spends no try when nothing is connected", async () => {
+    await realBuckets();
+    expect(await sendDiscordTestAction(INITIAL, form({}))).toEqual({ ok: false, message: "Discord is not connected to this workspace." });
+    expect(mocks.takeDiscordCallToken).not.toHaveBeenCalled();
+    mocks.readConnection.mockResolvedValue({ ready: true, connection: CONNECTION });
+    for (let i = 0; i < 5; i += 1) expect((await sendDiscordTestAction(INITIAL, form({}))).ok).toBe(true);
+    expect(await sendDiscordTestAction(INITIAL, form({}))).toEqual(SLOW_DOWN);
+    expect(mocks.postToDiscord).toHaveBeenCalledTimes(5);
   });
 
   it("says why a test did not go, and changes nothing", async () => {
@@ -201,5 +264,26 @@ describe("removeDiscordAction", () => {
   it("says when nothing is connected", async () => {
     expect(await removeDiscordAction(INITIAL, form({}))).toEqual({ ok: true, message: "Discord is not connected to this workspace." });
     expect(mocks.removeConnection).not.toHaveBeenCalled();
+  });
+
+  it("calls Discord nothing, so it spends no try", async () => {
+    mocks.readConnection.mockResolvedValue({ ready: true, connection: CONNECTION });
+    mocks.removeConnection.mockResolvedValue(true);
+    await removeDiscordAction(INITIAL, form({}));
+    expect(mocks.takeDiscordCallToken).not.toHaveBeenCalled();
+  });
+});
+
+describe("takeDiscordCallToken", () => {
+  it("gives five at once per key, then one every 12 seconds", async () => {
+    const { takeDiscordCallToken } = await vi.importActual<typeof import("@/lib/rate-limit")>("@/lib/rate-limit");
+    const at = 1_000_000;
+    for (let i = 0; i < 5; i += 1) expect(takeDiscordCallToken("bucket-test:a", at)).toBe(true);
+    expect(takeDiscordCallToken("bucket-test:a", at)).toBe(false);
+    expect(takeDiscordCallToken("bucket-test:b", at)).toBe(true);
+    expect(takeDiscordCallToken("bucket-test:a", at + 12_000)).toBe(true);
+    expect(takeDiscordCallToken("bucket-test:a", at + 12_000)).toBe(false);
+    for (let i = 0; i < 5; i += 1) takeDiscordCallToken("bucket-test:c", at);
+    expect(takeDiscordCallToken("bucket-test:c", at + 11_000)).toBe(false);
   });
 });

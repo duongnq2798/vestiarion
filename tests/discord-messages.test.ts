@@ -22,6 +22,11 @@ const bill = (n: number, fields: Partial<WaitingBill> = {}): WaitingBill => ({
 const escapedAt = (text: string, index: number) => (/\\+$/.exec(text.slice(0, index))?.[0].length ?? 0) % 2 === 1;
 /** Every occurrence of `character` in `text` is escaped. */
 const allEscaped = (text: string, character: string) => [...text].every((c, i) => c !== character || escapedAt(text, i));
+/** Characters by code point, built at run time so the source holds no invisible ones. */
+const at = (...points: number[]) => String.fromCodePoint(...points);
+const EMOJI = at(0x1f600);
+/** No half of a surrogate pair stands alone: one would not survive a round trip through UTF-8. */
+const wellFormed = (text: string) => Buffer.from(text, "utf8").toString("utf8") === text;
 
 describe("discordText", () => {
   it("escapes a masked link, so it cannot become a link", () => {
@@ -60,6 +65,35 @@ describe("discordText", () => {
     const said = discordText("abc[def", 5);
     expect(said).toBe("abc…");
     expect(discordText("ab\\cd", 5)).toBe("ab\\\\…");
+  });
+
+  it("never clips between the two halves of an emoji, and drops half of one an earlier cut left", () => {
+    const split = discordText(`${"A".repeat(98)}${EMOJI}bbbb`, 100);
+    expect(split).toBe(`${"A".repeat(98)}…`);
+    expect(wellFormed(split)).toBe(true);
+    // An emoji that fits whole is kept whole.
+    const whole = discordText(`${"A".repeat(97)}${EMOJI}bbbb`, 100);
+    expect(whole).toBe(`${"A".repeat(97)}${EMOJI}…`);
+    expect(wellFormed(whole)).toBe(true);
+    // A reason another cut already split, its high half before the ellipsis.
+    const reason = discordText(`The invoice is late ${String.fromCharCode(0xd83d)}…`);
+    expect(reason).toBe("The invoice is late …");
+    expect(wellFormed(reason)).toBe(true);
+  });
+
+  it("removes invisible bidi and zero-width characters, so a line cannot read reversed or hide a word", () => {
+    expect(discordText(`Acme Ltd${at(0x202e)}evil`)).toBe("Acme Ltdevil");
+    expect(discordText(`Ac${at(0x200b)}me ${at(0x2066)}Ltd${at(0x2069)}${at(0x200e)}`)).toBe("Acme Ltd");
+    expect(discordText(`${at(0xfeff)}Acme${at(0x00ad)} Ltd${at(0x061c)}`)).toBe("Acme Ltd");
+  });
+
+  it("turns control characters that are not whitespace into a space too", () => {
+    expect(discordText(`Acme${at(0x85)}Ltd${at(0x07)}Pay`)).toBe("Acme Ltd Pay");
+  });
+
+  it("keeps the combining marks of a real name", () => {
+    const name = `Nguy${at(0x65, 0x302, 0x303)}n V${at(0x103)}n`.normalize("NFD");
+    expect(discordText(name)).toBe(name);
   });
 });
 
@@ -125,12 +159,26 @@ describe("waitingMessage", () => {
     // Every link left unescaped is Vestiarion's own, inside <…>.
     expect([...message.matchAll(/(?<!\\)<(https?:[^>]*)>/g)].map((match) => match[1].startsWith(`${ORIGIN}/o/acme/approvals`))).toEqual([true]);
   });
+
+  it("carries no bidi override or zero-width character from a payee's name or a reason", () => {
+    const message = waitingMessage(
+      WORKSPACE,
+      buildWaitingNotice([bill(1, { payee: `Acme Ltd${at(0x202e)}lanigiro${at(0x200b)}`, reasoning: `Check${at(0x2067)} the bank details.` })]),
+      ORIGIN
+    );
+    for (const hidden of [0x202e, 0x200b, 0x2067]) expect(message).not.toContain(at(hidden));
+    expect(message).toContain("· Acme Ltdlanigiro · held: Check the bank details. ·");
+  });
 });
 
 describe("the connection messages", () => {
   it("name the workspace, escaped, and say a link never approves", () => {
     expect(connectedMessage("Acme_Studio")).toContain("**Acme\\_Studio**");
     expect(connectedMessage("Acme")).toContain(NEVER_APPROVES);
+    // Posted before the save, which can still fail: it checks the webhook, and never says the channel is connected.
+    expect(connectedMessage("Acme")).toContain("A test message from Vestiarion for **Acme**, checking this webhook.");
+    expect(connectedMessage("Acme")).toContain("Once Settings says Discord is connected,");
+    expect(connectedMessage("Acme")).not.toMatch(/is connected to/);
     expect(testMessage("Acme")).toContain("A test message from Vestiarion for **Acme**.");
     expect(testMessage("Acme")).toContain(NEVER_APPROVES);
   });

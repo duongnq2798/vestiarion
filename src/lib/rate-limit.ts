@@ -211,3 +211,15 @@ const addressNameBuckets = new Map<string, Bucket>();
 export function takeAddressNameToken(userId: string, now = Date.now()): boolean {
   return take(addressNameBuckets, userId, 30, 2_000, now);
 }
+
+const discordCallBuckets = new Map<string, Bucket>();
+
+/**
+ * Calls Settings makes to Discord (Discord DC1, DC6): Connect reads the webhook and posts to it, and Send test message
+ * posts. Five at once, then one every 12 seconds, per key; the actions take one per workspace and one per person. This
+ * keeps anyone from sending Discord a stream of refused calls from the server, since Discord blocks an IP after too
+ * many. Single-instance, like the others.
+ */
+export function takeDiscordCallToken(key: string, now = Date.now()): boolean {
+  return take(discordCallBuckets, key, 5, 12_000, now);
+}

@@ -22,16 +22,24 @@ simplest one to connect, since a channel webhook needs no app install.
 - **Saving.** `connectDiscordAction` (`src/app/actions/discord.ts`) first reads the webhook with a GET
   (`readDiscordWebhook`: its channel, server and name, and that its id is the one parsed), then posts a test message, and
   saves the connection only on a 2xx (`saveConnection`, an insert: a workspace already connected is told to disconnect
-  first, and nothing is replaced). The URL is stored encrypted (the existing `encryptSecret` / `decryptSecret` envelope,
-  column `discord_webhooks.webhook_url_enc`). It is never returned to the browser, logged or put in the ledger. The
-  cursor starts at the ledger's head, so the channel is never sent the past.
+  first, and nothing is replaced). The test message says it checks the webhook and that bills are posted once Settings
+  says Discord is connected, so it claims nothing a failed save would undo. Two people connecting at once: the second
+  insert fails on the unique `org_id` (`DiscordAlreadyConnectedError`), and that person is told someone connected another
+  channel at the same moment and the test message can be ignored. The URL is stored encrypted (the existing
+  `encryptSecret` / `decryptSecret` envelope, column `discord_webhooks.webhook_url_enc`). It is never returned to the
+  browser, logged or put in the ledger. The cursor starts at the ledger's head, so the channel is never sent the past.
+- **Tries.** Connect and Send test message each call Discord, so each takes a token from `takeDiscordCallToken` first
+  (five at once, then one every 12 seconds, per workspace and per person), after the URL is parsed and the connection
+  read, so a typo or an already connected workspace spends none. Past that: "Too many tries at once. Try again in a
+  minute.", and nothing is called. Discord blocks an IP after too many refused calls, which would stop every
+  workspace's posts.
 - **Signing.** `discord_connected { by, webhookId, channelId }` (actor `human`) and
   `discord_disconnected { by, webhookId, via }` (`via`: "settings" | "discord", the latter when Discord says the webhook
   is gone, actor `system` and `by: null`).
 - **The webhook stays Discord's.** Disconnecting forgets the URL; it does not delete the webhook in Discord. Settings,
   the guide and the security page say to delete it in the channel's settings to revoke it.
 
-**DC2. The table.** Migration `0139_discord.sql`, applied by the partner after merge: a platform table
+**DC2. The table.** Migration `0140_discord.sql`, applied by the partner after merge: a platform table
 `public.discord_webhooks`.
 - **Columns:**
   - `id`, plus `org_id`, unique, cascading on delete;
@@ -52,7 +60,9 @@ simplest one to connect, since a channel webhook needs no app install.
 
 **DC3. What is posted.** A new cycle stage, `discord`, comes after `slack` in CYCLE_STAGES, the last, with no
 requirement (`src/lib/discord/notify.ts`).
-- **Which bills.** Like Slack's notifier, it reads the workspace's activity after `notified_seq` and keeps the payables
+- **Which bills.** Like Slack's notifier, it reads the workspace's activity after `notified_seq`, page after page (a read
+  returns 20 entries at most) up to the ledger's head while less than 8 of the stage's 20 seconds have gone, so the
+  post's 10-second deadline still fits; the cursor then moves only past what was read. It keeps the payables
   the agent stopped for a person whose link is Approvals, re-read in one query, still held or flagged. A bill decided
   since, a request for details (decided with Add details) and a payment held for a verdict in shadow mode (which carries
   no `invoiceId`) are left out. Nothing waiting moves the cursor past what was read, posting nothing.
@@ -71,15 +81,19 @@ requirement (`src/lib/discord/notify.ts`).
   (`src/lib/discord/messages.ts`); Telegram's Review-link message (D10) will reuse them.
 
 **DC4. Safe text.**
-- **Escaping.** `discordText(value)` (`src/lib/discord/escape.ts`) turns every newline and whitespace run into one
-  space, so no heading or quote can start. It backslash-escapes Discord markdown and mention characters
-  (`\ * _ ~ \` | > # - [ ] ( ) < @ :`), then clips, never inside an escape. Every interpolated value goes through it:
-  the workspace name, payee, reason and amount text. Only Vestiarion's own URL is added raw, inside `<…>`.
+- **Escaping.** `discordText(value)` (`src/lib/discord/escape.ts`) first removes invisible format characters (Unicode's
+  Cf: bidi embeddings, overrides and isolates, direction marks, zero-width spaces and joiners, the byte-order mark, the
+  soft hyphen), so text from an invoice cannot show the rest of its line reversed or hide a word, and any half of an
+  emoji an earlier cut left alone. Spaces and combining marks stay: real names carry them. It turns every newline,
+  control character and whitespace run into one space, so no heading or quote can start. It backslash-escapes Discord
+  markdown and mention characters (`\ * _ ~ \` | > # - [ ] ( ) < @ :`), then clips by UTF-16 units, never inside an
+  escape and never between the two halves of an emoji. Every interpolated value goes through it: the workspace name,
+  payee, reason and amount text. Only Vestiarion's own URL is added raw, inside `<…>`.
 - **The post.** It sends:
   - `allowed_mentions: { parse: [] }`;
   - `flags: 4`, which suppresses embeds;
   - `username: "Vestiarion"`;
-  - content of 2000 characters at most.
+  - content of 2000 characters at most, clipped never between the two halves of an emoji.
 - **Addresses.** Payee addresses are shortened, as in Telegram's messages.
 
 **DC5. Delivery.** `postToDiscord` (`src/lib/discord/api.ts`) POSTs to `${url}?wait=true` with `redirect: "error"` and a
@@ -100,7 +114,9 @@ Send test message handles a gone webhook the same way. Logs carry the status and
   viewer connected it (the page reads no other member's email for it); the last error and when. Never the URL.
 - **Actions.**
   - **Connect**, with a field for the URL. It posts the test message and saves.
-  - **Send test message.**
+  - **Send test message.** When Discord says the webhook is gone, the connection is removed and the page swaps to
+    Connect in the same render, so the panel keeps the answer and shows it beside Connect until Connect or Disconnect
+    next answers.
   - **Disconnect**, behind a confirmation.
 - **Who sees what.** A member without `integrations.manage` sees the status and "An owner or admin can connect
   Discord."
@@ -139,14 +155,14 @@ Send test message handles a gone webhook the same way. Logs carry the status and
 - `postToDiscord` and `readDiscordWebhook` (`tests/discord-api.test.ts`): each response class in DC5,
   `redirect: "error"`, the URL never logged.
 - The connection (`tests/discord-connections.test.ts`): envelope, cursor at the head, ledger entries with ids only,
-  scope, before 0139, and the panel's view.
+  scope, before 0140, and the panel's view.
 - The notifier (`tests/discord-notify.test.ts`):
   - only held or flagged payables are posted;
   - more than 10 bills collapse to "…and N more";
   - the two-approvals and co-sign wording;
   - the cursor on success and on each failure;
   - the connection is removed on 404 or 10015;
-  - nothing happens before 0139.
+  - nothing happens before 0140.
 - Actions (`tests/discord-actions.test.ts`): `integrations.manage`, a test post before saving, and nothing saved on
   failure.
 - The migration (PGlite, `tests/discord-migration.test.ts`): the table's posture, and re-runnability.

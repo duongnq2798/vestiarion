@@ -207,7 +207,7 @@ async function populated(slug: string): Promise<string> {
     [extensionCode, orgId, member, crypto.randomBytes(32).toString("base64url")]
   );
   expect(extensionGrant).toBeTruthy();
-  // The workspace's Discord channel webhook goes with it (0139).
+  // The workspace's Discord channel webhook goes with it (0140).
   await db.query(
     "insert into public.discord_webhooks (org_id, webhook_id, channel_id, name, webhook_url_enc, connected_by) values ($1, '1234567890123456789', '3234567890123456789', 'Finance', $2::jsonb, $3)",
     [orgId, JSON.stringify(ENVELOPE), member]

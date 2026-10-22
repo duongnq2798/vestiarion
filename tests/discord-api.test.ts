@@ -51,6 +51,17 @@ describe("postToDiscord", () => {
     expect((JSON.parse(String(sent[0].init.body)) as { content: string }).content).toHaveLength(DISCORD_CONTENT_MAX);
   });
 
+  it("never clips between the two halves of an emoji", async () => {
+    const { sent, fetchImpl } = fakeFetch(() => json({}));
+    // The cut at 1,999 units falls inside the emoji.
+    await postToDiscord(URL_, { content: `${"a".repeat(1998)}${String.fromCodePoint(0x1f600)}bbb` }, fetchImpl);
+    const { content } = JSON.parse(String(sent[0].init.body)) as { content: string };
+    expect(content).toBe(`${"a".repeat(1998)}…`);
+    expect(content.length).toBeLessThanOrEqual(DISCORD_CONTENT_MAX);
+    // A lone surrogate does not survive a round trip through UTF-8.
+    expect(Buffer.from(content, "utf8").toString("utf8")).toBe(content);
+  });
+
   it.each([
     ["another host", "https://example.com/api/webhooks/1/2"],
     ["discordapp.com, which is only ever parsed, never called", URL_.replace("discord.com", "discordapp.com")],

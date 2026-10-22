@@ -283,7 +283,7 @@ export default async function SettingsPage({
     });
     const asanaOutcome = ((await searchParams) as { asana?: string | string[] }).asana;
     // Discord (Discord design DC6): on every deployment, since a channel webhook needs no app; best effort, like Slack's.
-    // Before migration 0139 the section says Discord is not set up yet. Never the webhook's URL.
+    // Before migration 0140 the section says Discord is not set up yet. Never the webhook's URL.
     const discord = await discordPanelView(membership.orgId, access.user.id).catch((error: unknown) => {
       console.error("settings: Discord status not loaded", error instanceof Error ? error.message : error);
       return null;

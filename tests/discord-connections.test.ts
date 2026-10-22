@@ -3,7 +3,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
 import {
-  clearFailure, moveCursor, readConnection, recordFailure, removeConnection, saveConnection, webhookUrlOf, type DiscordConnection,
+  clearFailure, DiscordAlreadyConnectedError, moveCursor, readConnection, recordFailure, removeConnection, saveConnection, webhookUrlOf, type DiscordConnection,
 } from "@/lib/discord/connections";
 import { discordPanelView } from "@/lib/discord/panel";
 import { decryptSecret, encryptSecret, parseMasterKeys } from "@/lib/secrets";
@@ -13,7 +13,7 @@ import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 /**
  * A workspace's Discord channel webhook (docs/superpowers/specs/2026-10-22-discord-design.md DC1, DC2, DC5, DC6): the URL
  * kept only as an envelope bound to the workspace and column; the cursor at the ledger's head so the channel is never
- * sent the past; connecting and disconnecting in the ledger with Discord's ids only; and, before migration 0139, no
+ * sent the past; connecting and disconnecting in the ledger with Discord's ids only; and, before migration 0140, no
  * table and no failure.
  */
 
@@ -85,7 +85,7 @@ describe("readConnection", () => {
     expect(await run(() => readConnection(ORG))).toEqual({ ready: true, connection: null });
   });
 
-  it("says it is not ready before migration 0139, and throws on any other failure", async () => {
+  it("says it is not ready before migration 0140, and throws on any other failure", async () => {
     expect(await world((sent) => (sent.path === "/rest/v1/discord_webhooks" ? MISSING : undefined)).run(() => readConnection(ORG))).toEqual({ ready: false });
     const relation = { status: 404, body: { code: "42P01", message: 'relation "public.discord_webhooks" does not exist' } };
     expect(await world((sent) => (sent.path === "/rest/v1/discord_webhooks" ? relation : undefined)).run(() => readConnection(ORG))).toEqual({ ready: false });
@@ -121,6 +121,24 @@ describe("saveConnection", () => {
     expect(entry).toMatchObject({ p_action: "discord_connected", p_actor: "human", p_detail: { by: USER, webhookId: WEBHOOK_ID, channelId: CHANNEL } });
     expect(JSON.stringify(ledger(fake.requests))).not.toContain(TOKEN);
     expect(JSON.stringify(ledger(fake.requests))).not.toContain("discord.com");
+  });
+
+  it("says another channel was saved first when the one-per-workspace key refuses the insert, and records nothing", async () => {
+    const duplicate: FakeReply = {
+      status: 409,
+      body: { code: "23505", message: 'duplicate key value violates unique constraint "discord_webhooks_org_id_key"' },
+    };
+    const { fake, run } = world((sent) => (sent.path === "/rest/v1/discord_webhooks" && sent.method === "POST" ? duplicate : undefined));
+    const save = () =>
+      saveConnection({ orgId: ORG, connectedBy: USER, webhook: { id: WEBHOOK_ID, token: TOKEN, url: URL_ }, info: { id: WEBHOOK_ID, channelId: CHANNEL, guildId: null, name: "x" } }, keys());
+    await expect(run(save)).rejects.toBeInstanceOf(DiscordAlreadyConnectedError);
+    expect(ledger(fake.requests)).toEqual([]);
+
+    // Any other failure is thrown as it is.
+    const other = world((sent) => (sent.path === "/rest/v1/discord_webhooks" && sent.method === "POST" ? { status: 500, body: { code: "XX000", message: "boom" } } : undefined));
+    const failed = other.run(save);
+    await expect(failed).rejects.toThrow("boom");
+    await expect(failed).rejects.not.toBeInstanceOf(DiscordAlreadyConnectedError);
   });
 
   it("refuses to write another workspace's connection", async () => {
@@ -186,7 +204,7 @@ describe("discordPanelView", () => {
     expect(await run(() => discordPanelView(ORG, OTHER_ORG))).toMatchObject({ connectedByYou: false });
   });
 
-  it("says not connected, or not available before migration 0139", async () => {
+  it("says not connected, or not available before migration 0140", async () => {
     expect(await world().run(() => discordPanelView(ORG, USER))).toEqual({ available: true, connected: false });
     expect(await world((sent) => (sent.path === "/rest/v1/discord_webhooks" ? MISSING : undefined)).run(() => discordPanelView(ORG, USER))).toEqual({ available: false });
   });

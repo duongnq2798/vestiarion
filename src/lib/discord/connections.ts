@@ -7,12 +7,12 @@ import type { DiscordWebhookUrl } from "./webhook-url";
 
 /**
  * A workspace's Discord channel webhook (docs/superpowers/specs/2026-10-22-discord-design.md DC1, DC2, DC5), in a
- * platform row the service role alone reads and writes (migration 0139). The webhook's URL is kept only as an envelope
+ * platform row the service role alone reads and writes (migration 0140). The webhook's URL is kept only as an envelope
  * under the master key, bound to the workspace and its column, and is never returned to the browser, logged or put in
  * the ledger. Connecting and disconnecting are recorded in the workspace's own ledger, with Discord's ids only; those
  * functions run inside that workspace's scope.
  *
- * Before migration 0139 runs, the table is not there: a read says so (`ready: false`), and nothing fails.
+ * Before migration 0140 runs, the table is not there: a read says so (`ready: false`), and nothing fails.
  */
 
 export interface DiscordConnection {
@@ -54,7 +54,7 @@ interface ConnectionRow {
 const COLUMNS =
   "id, org_id, webhook_id, channel_id, guild_id, name, connected_by, connected_at, notified_seq, last_error, last_error_at, failures, webhook_url_enc";
 const WEBHOOK_COLUMN = "discord_webhooks.webhook_url_enc";
-/** The most of an error a row keeps (0139's check). */
+/** The most of an error a row keeps (0140's check). */
 export const LAST_ERROR_MAX = 300;
 
 const toConnection = (row: ConnectionRow): DiscordConnection => ({
@@ -74,13 +74,13 @@ const toConnection = (row: ConnectionRow): DiscordConnection => ({
 });
 
 type PostgrestError = { code?: string; message?: string } | null;
-/** Before migration 0139 runs, its table is not there: Discord is not available yet, and nothing fails. */
+/** Before migration 0140 runs, its table is not there: Discord is not available yet, and nothing fails. */
 export const discordNotReady = (error: PostgrestError) =>
   ["PGRST205", "42P01"].includes(error?.code ?? "") || (/discord_webhooks/.test(error?.message ?? "") && /schema cache|does not exist/.test(error?.message ?? ""));
 
 export type ConnectionRead = { ready: false } | { ready: true; connection: DiscordConnection | null };
 
-/** The workspace's connection, or none; `ready: false` before migration 0139. Any other failure throws. */
+/** The workspace's connection, or none; `ready: false` before migration 0140. Any other failure throws. */
 export async function readConnection(orgId: string): Promise<ConnectionRead> {
   const result = await platformDb().from("discord_webhooks").select(COLUMNS).eq("org_id", orgId).limit(1);
   if (result.error) {
@@ -105,10 +105,18 @@ async function ledgerHead(): Promise<number> {
   return Number(rows[0]?.seq ?? 0);
 }
 
+/** Another channel was saved for the workspace between the check and the save: two people connected at once. */
+export class DiscordAlreadyConnectedError extends Error {
+  constructor() {
+    super("The workspace already has a Discord connection");
+    this.name = "DiscordAlreadyConnectedError";
+  }
+}
+
 /**
  * Saves a webhook Discord took a test message on (DC1): the canonical URL as an envelope, what Discord said of its
  * channel, and the cursor at the ledger's head, so the channel is never sent the past. A workspace has one connection:
- * a second insert fails on 0139's unique key, and nothing is replaced.
+ * a second insert fails on 0140's unique key, nothing is replaced, and `DiscordAlreadyConnectedError` says so.
  */
 export async function saveConnection(
   input: { orgId: string; connectedBy: string; webhook: DiscordWebhookUrl; info: DiscordWebhookInfo },
@@ -127,7 +135,9 @@ export async function saveConnection(
     connected_at: new Date().toISOString(),
     notified_seq: await ledgerHead(),
   };
-  const [saved] = unwrap(await platformDb().from("discord_webhooks").insert(row).select(COLUMNS)) as unknown as ConnectionRow[];
+  const inserted = await platformDb().from("discord_webhooks").insert(row).select(COLUMNS);
+  if (inserted.error?.code === "23505" && /discord_webhooks_org_id_key/.test(inserted.error.message ?? "")) throw new DiscordAlreadyConnectedError();
+  const [saved] = unwrap(inserted) as unknown as ConnectionRow[];
   await appendLedgerEntryBestEffort(orgId, {
     actor: "human",
     domain: "system",

@@ -1,6 +1,7 @@
 "use client";
 
 import { Plug, Send, Unplug } from "lucide-react";
+import { useState } from "react";
 import { connectDiscordAction, removeDiscordAction, sendDiscordTestAction, type DiscordActionResult } from "@/app/actions/discord";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -29,9 +30,13 @@ function Refusal({ state }: { state: DiscordActionResult }) {
 
 type ActionForm = ReturnType<typeof useActionForm<DiscordActionResult>>;
 
-/** The webhook's URL, pasted once: posted to with a test message, and saved only if Discord took it (DC1). */
-function ConnectForm({ orgSlug, form }: { orgSlug: string; form: ActionForm }) {
-  const { state, formProps } = form;
+/**
+ * The webhook's URL, pasted once: posted to with a test message, and saved only if Discord took it (DC1). Until Connect
+ * answers, `gone` says why the last webhook was disconnected, when Send test message found it deleted in Discord.
+ */
+function ConnectForm({ orgSlug, form, gone }: { orgSlug: string; form: ActionForm; gone: string | null }) {
+  const { formProps } = form;
+  const state = gone ? { ok: false, message: gone } : form.state;
   return (
     <form {...formProps} className="space-y-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />
@@ -52,15 +57,16 @@ function ConnectForm({ orgSlug, form }: { orgSlug: string; form: ActionForm }) {
   );
 }
 
-function SendTest({ orgSlug }: { orgSlug: string }) {
-  const { state, formProps } = useActionForm(sendDiscordTestAction, INITIAL, { toastOnSuccess: true });
+function SendTest({ orgSlug, form }: { orgSlug: string; form: ActionForm }) {
+  const { state, formProps } = form;
   return (
     <form {...formProps} className="flex flex-wrap items-center gap-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <SubmitButton variant="secondary" size="sm" pendingLabel="Sending…" icon={<Send aria-hidden />}>
         Send test message
       </SubmitButton>
-      <Refusal state={state} />
+      {/* A test that disconnected Discord says so beside Connect: never again beside a webhook connected since. */}
+      <Refusal state={state.disconnected ? INITIAL : state} />
     </form>
   );
 }
@@ -87,16 +93,23 @@ function Disconnect({ orgSlug, form }: { orgSlug: string; form: ActionForm }) {
 }
 
 /**
- * The Discord section of Settings (docs/superpowers/specs/2026-10-22-discord-design.md DC6). Before migration 0139 it
+ * The Discord section of Settings (docs/superpowers/specs/2026-10-22-discord-design.md DC6). Before migration 0140 it
  * says Discord is not set up yet. Not connected: an owner or admin pastes a channel webhook's URL and connects it.
  * Connected: the webhook's name and channel, when it was connected, and the last post Discord did not take; an owner or
  * admin sends a test message or disconnects it. Anyone else sees the status and who can connect it. `view` carries no
- * URL. Connect and Disconnect keep their results here, in the panel the page keeps mounted: the revalidated page swaps
- * the form that was submitted for the other one in the same render, and its toast would go with it.
+ * URL. Connect, Send test message and Disconnect keep their results here, in the panel the page keeps mounted: the
+ * revalidated page swaps the form that was submitted for the other one in the same render, and its toast would go with
+ * it. Send test message swaps the view too when Discord says the webhook is gone: that answer, a refusal with no toast,
+ * is shown beside Connect until Connect or Disconnect next answers, so it never comes back after a later disconnect.
  */
 export default function DiscordPanel({ orgSlug, view, canManage }: { orgSlug: string; view: DiscordPanelView; canManage: boolean }) {
-  const connect = useActionForm(connectDiscordAction, INITIAL, { toastOnSuccess: true, resetOnSuccess: true });
-  const disconnect = useActionForm(removeDiscordAction, INITIAL, { toastOnSuccess: true });
+  const [gone, setGone] = useState<string | null>(null);
+  const connect = useActionForm(connectDiscordAction, INITIAL, { toastOnSuccess: true, resetOnSuccess: true, onResult: () => setGone(null) });
+  const test = useActionForm(sendDiscordTestAction, INITIAL, {
+    toastOnSuccess: true,
+    onResult: (state) => setGone(state.disconnected ? state.message : null),
+  });
+  const disconnect = useActionForm(removeDiscordAction, INITIAL, { toastOnSuccess: true, onResult: () => setGone(null) });
   return (
     <section aria-labelledby="discord-title" id="discord">
       <SectionHeader id="discord-title" title="Discord" action={<DocsLink href="/docs/guides/discord" topic="Discord" />} />
@@ -109,7 +122,7 @@ export default function DiscordPanel({ orgSlug, view, canManage }: { orgSlug: st
               Post the bills the agent holds for approval to a Discord channel, each with a link to review it in Vestiarion. Opening a link
               never approves anything: bills are approved in Vestiarion.
             </p>
-            {canManage ? <ConnectForm orgSlug={orgSlug} form={connect} /> : <p className="text-sm text-ink-3">An owner or admin can connect Discord.</p>}
+            {canManage ? <ConnectForm orgSlug={orgSlug} form={connect} gone={gone} /> : <p className="text-sm text-ink-3">An owner or admin can connect Discord.</p>}
           </div>
         ) : (
           <div className="space-y-4 [&>*+*]:border-t [&>*+*]:border-line [&>*+*]:pt-4">
@@ -136,7 +149,7 @@ export default function DiscordPanel({ orgSlug, view, canManage }: { orgSlug: st
             </p>
             {canManage ? (
               <div className="flex flex-wrap items-start gap-3">
-                <SendTest orgSlug={orgSlug} />
+                <SendTest orgSlug={orgSlug} form={test} />
                 <Disconnect orgSlug={orgSlug} form={disconnect} />
               </div>
             ) : (

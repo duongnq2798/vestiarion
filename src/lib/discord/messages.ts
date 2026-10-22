@@ -47,9 +47,12 @@ export function waitingMessage(workspace: { name: string; slug: string }, notice
   return `${message}${left > 0 ? `\n${more(left)}` : ""}\n${NEVER_APPROVES}`;
 }
 
-/** What connecting posts, so the channel sees it worked (DC1). */
+/**
+ * What connecting posts before the connection is saved (DC1), so it claims nothing the save could still undo: it checks
+ * the webhook, and says the channel hears more once Settings says Discord is connected.
+ */
 export function connectedMessage(workspaceName: string): string {
-  return `Vestiarion is connected to **${discordText(workspaceName, 100)}**. Bills the agent holds for approval will be posted here, each with a link to review it in Vestiarion. ${NEVER_APPROVES}`;
+  return `A test message from Vestiarion for **${discordText(workspaceName, 100)}**, checking this webhook. Once Settings says Discord is connected, bills the agent holds for approval are posted here, each with a link to review it in Vestiarion. ${NEVER_APPROVES}`;
 }
 
 /** What Send test message posts (DC6). */

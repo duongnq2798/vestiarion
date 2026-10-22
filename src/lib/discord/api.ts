@@ -1,3 +1,4 @@
+import { sliceUnits } from "./escape";
 import { DISCORD_WEBHOOKS } from "./webhook-url";
 
 /**
@@ -76,7 +77,8 @@ export interface DiscordMessage {
  * makes Discord answer only once the message exists.
  */
 export async function postToDiscord(url: string, message: DiscordMessage, fetchImpl: typeof fetch = fetch): Promise<DiscordResult> {
-  const content = message.content.length <= DISCORD_CONTENT_MAX ? message.content : `${message.content.slice(0, DISCORD_CONTENT_MAX - 1)}…`;
+  // Clipped by UTF-16 units, as Discord counts, never between the two halves of an emoji.
+  const content = message.content.length <= DISCORD_CONTENT_MAX ? message.content : `${sliceUnits(message.content, DISCORD_CONTENT_MAX - 1)}…`;
   const { result } = await call(
     `${url}?wait=true`,
     {

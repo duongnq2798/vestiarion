@@ -2711,15 +2711,24 @@ deployment setting: an owner or admin (`integrations.manage`,
 `/api[/vN]/webhooks/{id}/{token}`, and rebuilds it as
 `https://discord.com/api/webhooks/{id}/{token}`: only that string is stored and
 called, so no DNS check is needed. Connecting reads the webhook (its channel,
-server and name), posts a test message, and only then `saveConnection` stores
-the URL as an envelope (`discord_webhooks.webhook_url_enc`, migration `0139`: a
-platform table, one row per workspace) with the cursor at the ledger's head, and
-signs `discord_connected { by, webhookId, channelId }`. Every call
+server and name), posts a test message that says it is checking the webhook (so
+it claims nothing a failed save would undo), and only then `saveConnection`
+stores the URL as an envelope (`discord_webhooks.webhook_url_enc`, migration
+`0140`: a platform table, one row per workspace) with the cursor at the ledger's
+head, and signs `discord_connected { by, webhookId, channelId }`; a second
+channel connected at the same moment fails on the unique key as
+`DiscordAlreadyConnectedError`, and its person is told so. Connect and **Send
+test message** each take a token from `takeDiscordCallToken`
+(`src/lib/rate-limit.ts`: five at once, then one every 12 seconds, per workspace
+and per person) before calling Discord, so no one can make the server send
+Discord a stream of refused calls. Every call
 (`src/lib/discord/api.ts`) goes only under that prefix, with `redirect: "error"`
 and ten seconds; a post sends `allowed_mentions: { parse: [] }`, flag 4 (no
 embeds), the username Vestiarion and at most 2,000 characters. The cycle's last
 stage, `discord` (`src/lib/discord/notify.ts`), reads the agent's activity after
-`discord_webhooks.notified_seq`, keeps the stopped payables whose link is
+`discord_webhooks.notified_seq`, page after page up to the ledger's head while
+less than 8 of its 20 seconds have gone (`READ_BUDGET_MS`, so the post's own
+deadline still fits), keeps the stopped payables whose link is
 Approvals, reads them again in one query and keeps those still held or flagged,
 and posts one message (`src/lib/discord/messages.ts`) built from
 `buildWaitingNotice` (`src/lib/notifications/waiting-notice.ts`, structured
@@ -2727,15 +2736,18 @@ entries any chat can format): at most ten bills, as many as fit, each with its
 amount, payee, first sentence of reasoning, "needs two approvals" (and that an
 accountant can co-sign while co-signing is on) and a Review link to
 `/approvals#payable-<id>` that carries no token. Every value goes through
-`discordText` (whitespace to one space, addresses shortened, Discord's markup and
-mention characters backslash-escaped, then clipped); only the app's own links are
-added raw, inside `<…>`. A 2xx moves the cursor and clears `last_error`; a 429
+`discordText` (invisible format characters, Unicode's Cf such as bidi overrides
+and zero-width spaces, and half of an emoji left alone removed; whitespace and
+control characters to one space; addresses shortened; Discord's markup and
+mention characters backslash-escaped; then clipped by UTF-16 units, never
+between the two halves of an emoji); only the app's own links are added raw,
+inside `<…>`. A 2xx moves the cursor and clears `last_error`; a 429
 asking for 2 seconds or less is waited out once inside a 20-second budget, any
 other keeps the cursor; a 5xx or no answer keeps it and records `last_error` and
 `failures`, which Settings shows; a 400 is recorded and passed over; a 401, 403,
 404 or Discord code 10015 or 50027 deletes the connection and signs
 `discord_disconnected { by: null, webhookId, via: "discord" }`, as **Disconnect**
-does with `via: "settings"`. Before 0139 every read sees the missing table
+does with `via: "settings"`. Before 0140 every read sees the missing table
 (PGRST205/42P01) as not available: Settings says so and the stage does nothing.
 It is not part of the transfer watch's posts: a stuck payment is no bill waiting
 for approval.

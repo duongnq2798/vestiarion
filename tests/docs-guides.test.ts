@@ -1988,6 +1988,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["That is not a Discord webhook URL.", DISCORD_ACTIONS],
     ["Discord says this webhook does not exist.", DISCORD_ACTIONS],
     ["Discord is already connected. Disconnect it first to post to another channel.", DISCORD_ACTIONS],
+    [
+      "Someone connected another Discord channel to this workspace at the same moment, so this one was not saved. The test message in this channel can be ignored.",
+      DISCORD_ACTIONS,
+    ],
+    ["Too many tries at once. Try again in a minute.", DISCORD_ACTIONS],
+    ["Discord says this webhook no longer exists, so Discord was disconnected. Connect a new webhook.", DISCORD_ACTIONS],
     ["An owner or admin can connect Discord.", DISCORD_PANEL],
     ["Discord is not set up on this deployment yet.", DISCORD_PANEL],
     ["2 bills wait for approval", DISCORD_MESSAGES, "bills wait`} for approval"],
@@ -2013,7 +2019,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["discord_disconnected", DISCORD_CONNECTIONS],
     ["Discord said the workspace's channel webhook is gone, so Discord was disconnected", DISCORD_NOTIFY],
     ["https://discord.com/api/webhooks/", "src/lib/discord/webhook-url.ts"],
-    ["0139_discord.sql", "supabase/migrations/0139_discord.sql", "create table if not exists public.discord_webhooks"],
+    ["0140_discord.sql", "supabase/migrations/0140_discord.sql", "create table if not exists public.discord_webhooks"],
   ],
   "guides/api-invoices": [
     ["Settings", APP_NAV],

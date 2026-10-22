@@ -231,6 +231,10 @@ describe("the subprocessors", () => {
     expect(discord).toContain("the workspace's name and, for each bill the agent holds or flags for a person");
     expect(discord).toContain("It receives no email address or key");
     expect(discord).toContain("the webhook's URL, encrypted; disconnecting Discord deletes them");
+    // Connecting reads the webhook (its name, channel and server) with a GET, and nothing else is ever read.
+    expect(discord).toContain("The app reads no message in Discord: when Discord is connected, it asks Discord only for the webhook's own details");
+    expect(discord).not.toContain("reads nothing from Discord");
+    expect(source("src/lib/discord/api.ts")).toContain('await call(url, { method: "GET" }, fetchImpl)');
     // Every value goes through discordText, which shortens addresses as Telegram's messages do.
     expect(source("src/lib/discord/escape.ts")).toContain("shortenAddresses(");
     expect(source("src/lib/discord/connections.ts")).toContain('const WEBHOOK_COLUMN = "discord_webhooks.webhook_url_enc";');
@@ -715,6 +719,9 @@ describe("claims narrowed to what the code does", () => {
     expect(api).toContain('redirect: "error"');
     expect(api).toContain("allowed_mentions: { parse: [] }");
     expect(source("src/lib/discord/notify.ts")).toContain('await removeConnection(connection, "discord", null);');
+    // Disconnecting, or deleting the workspace, forgets the webhook here; only Discord can revoke it.
+    expect(connectors).toContain("A Discord webhook is revoked only by deleting it in the channel's settings in Discord");
+    expect(connectors).not.toContain("so disconnect each tool first to revoke its grant there");
   });
 
   it("names Pipedrive's uninstall notice, Circle's unchecked test, the scheduled routes' token, and the demo reset apart", () => {

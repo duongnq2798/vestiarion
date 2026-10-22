@@ -5,7 +5,7 @@ import { CYCLE_STAGES, STAGE_REQUIRES } from "@/lib/agent/journal";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
-import { sendDiscordWaiting, STAGE_BUDGET_MS } from "@/lib/discord/notify";
+import { READ_BUDGET_MS, sendDiscordWaiting, STAGE_BUDGET_MS } from "@/lib/discord/notify";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
@@ -14,7 +14,7 @@ import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
  * The cycle's `discord` stage (docs/superpowers/specs/2026-10-22-discord-design.md DC3, DC5): the channel is told the
  * payables the agent stopped for a person after its cursor, still held or flagged, in one message; the cursor moves once
  * Discord took it, or refused it outright; a failure is recorded for Settings; a webhook Discord says is gone is
- * disconnected; and nothing happens before migration 0139.
+ * disconnected; and nothing happens before migration 0140.
  */
 
 const { readActivityMock, usdcValueMock } = vi.hoisted(() => ({ readActivityMock: vi.fn(), usdcValueMock: vi.fn() }));
@@ -43,7 +43,7 @@ const stopped = (seq: number, n: number) => item(seq, { text: `Held Vendor ${n}.
 const PAID = item(51, { text: "Paid Centronex 0.35 USDC.", tone: "done" });
 /** A request for details: stopped, about a payable, but decided by adding details, not in Approvals. */
 const ASKED = item(55, { text: "Asked for details.", path: `/invoices?invoice=${INVOICE(3)}`, pathLabel: "Add details", invoiceId: INVOICE(3) });
-const activity = (items: ActivityItem[], through: number): AgentActivity => ({ running: null, head: through, lastCycleAt: null, items, through });
+const activity = (items: ActivityItem[], through: number, head: number = through): AgentActivity => ({ running: null, head, lastCycleAt: null, items, through });
 
 const invoice = (n: number, fields: Record<string, unknown> = {}) => ({
   id: INVOICE(n), amount: "120.00", currency: "USDC", status: "held", direction: "payable", agent_reasoning: "The invoice has no purchase order. It waits for a person.",
@@ -108,7 +108,7 @@ function stage(replies: Array<() => Response> = [() => Response.json({ id: "1" }
 const json = (body: unknown, status: number) => () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
 describe("sendDiscordWaiting", () => {
-  it("does nothing before migration 0139, or without a connection", async () => {
+  it("does nothing before migration 0140, or without a connection", async () => {
     connectionReply = { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.discord_webhooks' in the schema cache" } };
     const before = stage();
     expect(await before.run()).toEqual([]);
@@ -158,6 +158,53 @@ describe("sendDiscordWaiting", () => {
     const reads = fake.requests.filter((sent) => sent.path === "/rest/v1/invoices");
     expect(reads).toHaveLength(1);
     expect(reads[0].params.get("id")).toBe(`in.(${INVOICE(1)},${INVOICE(2)})`);
+  });
+
+  it("reads page after page up to the head, then posts every waiting bill in one message", async () => {
+    connection = connectionRow();
+    // A full page (20 entries, one of them a held bill) with more after it, then the rest up to the head.
+    const first = [stopped(41, 1), ...Array.from({ length: 19 }, (_, i) => item(42 + i, { text: "Paid.", tone: "done" }))];
+    readActivityMock.mockResolvedValueOnce(activity(first, 60, 85)).mockResolvedValueOnce(activity([stopped(70, 2)], 85, 85));
+    invoices = [invoice(1), invoice(2)];
+    const { fake, run, posts, cursor } = stage();
+    expect(await run()).toEqual([{ domain: "system", message: "Told the workspace's Discord channel that 2 bills wait for approval" }]);
+    expect(readActivityMock.mock.calls).toEqual([[40], [60]]);
+    expect(posts).toHaveLength(1);
+    const bills = posts[0].body.content.split("\n").filter((line) => line.startsWith("• "));
+    expect(bills).toHaveLength(2);
+    expect(bills[0]).toContain("Vendor 1");
+    expect(bills[1]).toContain("Vendor 2");
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/invoices")).toHaveLength(1);
+    expect(cursor()).toEqual([85]);
+  });
+
+  it("stops reading once the stage has spent its time for reading, and moves the cursor only past what was read", async () => {
+    connection = connectionRow();
+    readActivityMock.mockResolvedValueOnce(activity([stopped(41, 1)], 60, 85)).mockResolvedValueOnce(activity([stopped(70, 2)], 85, 85));
+    invoices = [invoice(1), invoice(2)];
+    let clock = 0;
+    const { run, posts, cursor } = stage(undefined, {
+      now: () => {
+        const at = clock;
+        clock = READ_BUDGET_MS;
+        return at;
+      },
+    });
+    expect(await run()).toEqual([{ domain: "system", message: "Told the workspace's Discord channel that 1 bill waits for approval" }]);
+    expect(readActivityMock.mock.calls).toEqual([[40]]);
+    expect(posts[0].body.content).toContain("Vendor 1");
+    expect(posts[0].body.content).not.toContain("Vendor 2");
+    expect(cursor()).toEqual([60]);
+  });
+
+  it("stops at a page that makes no progress", async () => {
+    connection = connectionRow();
+    readActivityMock.mockResolvedValue(activity([], 40, 85));
+    const { run, posts, cursor } = stage();
+    expect(await run()).toEqual([]);
+    expect(readActivityMock).toHaveBeenCalledTimes(1);
+    expect(posts).toEqual([]);
+    expect(cursor()).toEqual([]);
   });
 
   it("moves past what was read, posting nothing, when no bill waits", async () => {

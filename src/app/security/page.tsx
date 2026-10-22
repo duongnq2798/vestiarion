@@ -334,7 +334,9 @@ export default function SecurityPage() {
           </li>
           <li>
             <strong>Deleting a workspace</strong>, from its Settings or with its last member&apos;s account, deletes its tokens, its Slack and Discord
-            connections and its GitHub record without calling any provider or uninstalling the Slack app, so disconnect each tool first to revoke its grant there.
+            connections and its GitHub record without calling any provider or uninstalling the Slack app, so disconnect each OAuth tool and Slack
+            first to revoke its grant there. A Discord webhook is revoked only by deleting it in the channel&apos;s settings in Discord, and the
+            GitHub app only by uninstalling it on GitHub.
           </li>
         </ul>
         <p>

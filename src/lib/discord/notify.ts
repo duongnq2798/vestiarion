@@ -1,5 +1,5 @@
 import type { ActivityItem } from "../agent-activity";
-import { readAgentActivity, type AgentActivity } from "../agent-activity-read";
+import { readAgentActivity } from "../agent-activity-read";
 import { usdcValueOfLatestDecision } from "../agent/second-approval";
 import { readAccountantCosign, readTwoApprovalsAbove } from "../approval-policy";
 import { siteOrigin } from "../auth/env";
@@ -15,16 +15,21 @@ import { waitingMessage } from "./messages";
 /**
  * The cycle's `discord` stage (docs/superpowers/specs/2026-10-22-discord-design.md DC3, DC5): the workspace's Discord
  * channel is told which payables the agent stopped for a person since its cursor, read the way the Slack and Telegram
- * stages read the agent's decisions, and kept only while each is still held or flagged, re-read in one query. One
- * message a cycle; the cursor then moves past everything read, but only once Discord took it, or refused it outright so
- * that one bad message cannot jam the channel. A webhook Discord says is gone is disconnected. Runs inside the
- * workspace's scope; quietly does nothing before migration 0139 or without a connection.
+ * stages read the agent's decisions, page after page up to the ledger's head, and kept only while each is still held or
+ * flagged, re-read in one query. One message a cycle; the cursor then moves past everything read, but only once Discord
+ * took it, or refused it outright so that one bad message cannot jam the channel. A webhook Discord says is gone is
+ * disconnected. Runs inside the workspace's scope; quietly does nothing before migration 0140 or without a connection.
  */
 
 /** No wait starts that would end after this long: the cycle has a row to close. */
 export const STAGE_BUDGET_MS = 20_000;
 /** The longest a 429 is waited out, once, in the stage; anything longer is left to the next cycle. */
 export const WAIT_AT_MOST_MS = 2_000;
+/**
+ * Another page of activity is read only while less than this much of the stage has gone, so the post's own 10-second
+ * deadline (DC5) and its one short wait still fit in the budget.
+ */
+export const READ_BUDGET_MS = STAGE_BUDGET_MS - 12_000;
 
 export interface DiscordNotifyDeps {
   fetchImpl?: typeof fetch;
@@ -121,9 +126,9 @@ function failureText(posted: DiscordResult): string {
   return `Discord refused the message (${posted.status}${posted.code !== null ? `, code ${posted.code}` : ""}). Those bills wait in Approvals.`;
 }
 
-async function settle(connection: DiscordConnection, read: AgentActivity, posted: DiscordResult, total: number): Promise<NoticeLine[]> {
+async function settle(connection: DiscordConnection, through: number, posted: DiscordResult, total: number): Promise<NoticeLine[]> {
   if (posted.ok) {
-    await moveCursor(connection.id, read.through);
+    await moveCursor(connection.id, through);
     if (connection.failures > 0 || connection.lastError !== null) await clearFailure(connection.id);
     return [{ domain: "system", message: `Told the workspace's Discord channel that ${total === 1 ? "1 bill waits" : `${total} bills wait`} for approval` }];
   }
@@ -144,8 +149,26 @@ async function settle(connection: DiscordConnection, read: AgentActivity, posted
   }
   // Refused outright (400, or another refusal of the message itself): passed over, so it cannot hold the cursor for ever.
   console.error("discord: waiting bills refused, passed over", connection.orgId, posted.status, posted.code);
-  await moveCursor(connection.id, read.through);
+  await moveCursor(connection.id, through);
   return [];
+}
+
+/**
+ * The agent's activity after the cursor, page after page, up to the ledger's head: one read returns a page at most, and a
+ * cycle that wrote more would otherwise leave the rest of its held bills to the next cycle, which may be hours away. Stops
+ * early, at the last entry read, once the stage has spent its time for reading, so the post still fits in the budget.
+ */
+async function readSinceCursor(since: number, started: number, now: () => number): Promise<{ items: ActivityItem[]; through: number }> {
+  const items: ActivityItem[] = [];
+  let through = since;
+  for (;;) {
+    const page = await readAgentActivity(through);
+    items.push(...page.items);
+    // No progress, or every entry up to the head is read.
+    if (page.through <= through || page.through >= page.head) return { items, through: Math.max(through, page.through) };
+    through = page.through;
+    if (now() - started >= READ_BUDGET_MS) return { items, through };
+  }
 }
 
 export async function sendDiscordWaiting(deps: DiscordNotifyDeps = {}): Promise<NoticeLine[]> {
@@ -156,7 +179,7 @@ export async function sendDiscordWaiting(deps: DiscordNotifyDeps = {}): Promise<
 
   const now = deps.now ?? Date.now;
   const started = now();
-  const read = await readAgentActivity(connection.notifiedSeq);
+  const read = await readSinceCursor(connection.notifiedSeq, started, now);
   const bills = await waitingBills(read.items);
   if (bills.length === 0) {
     if (read.through > connection.notifiedSeq) await moveCursor(connection.id, read.through);
@@ -175,5 +198,5 @@ export async function sendDiscordWaiting(deps: DiscordNotifyDeps = {}): Promise<
     await (deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))))(posted.retryAfterMs);
     posted = await postToDiscord(url, { content }, deps.fetchImpl);
   }
-  return settle(connection, read, posted, notice.total);
+  return settle(connection, read.through, posted, notice.total);
 }

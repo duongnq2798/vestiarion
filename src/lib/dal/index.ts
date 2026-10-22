@@ -130,7 +130,7 @@ export const PLATFORM_TABLES = [
   "asana_webhooks",
   // The Chrome extension's connections and one-time codes (migration 0121): read by token before any workspace is known.
   "extension_grants", "extension_auth_codes",
-  // A workspace's Discord channel webhook, its URL kept only as an envelope (migration 0139).
+  // A workspace's Discord channel webhook, its URL kept only as an envelope (migration 0140).
   "discord_webhooks",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];

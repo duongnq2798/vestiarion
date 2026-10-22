@@ -18,9 +18,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   channel webhook's URL and chooses **Connect**: Vestiarion posts a test message, and saves the connection only once
   Discord took it. After each cycle, the bills the agent held or flagged for a person are posted to that channel in one
   message, each with its amount, payee, the agent's reason, whether it needs two approvals (and that an accountant can
-  co-sign, when co-signing is on), and a link to review it in Approvals. Opening a link never approves anything. Names
-  and reasons are shown as plain text, nothing pings anyone, and the URL is kept encrypted. **Send test message**,
-  **Disconnect**, and the last error Discord gave are in the same section. Needs migration 0139.
+  co-sign, when co-signing is on), and a link to review it in Approvals; a cycle that held many bills has them all
+  posted, not only the first page. Opening a link never approves anything. Names and reasons are shown as plain text,
+  with hidden direction and zero-width characters removed, nothing pings anyone, and the URL is kept encrypted.
+  Vestiarion reads no message in Discord, only the webhook's name and its channel's and server's ids when it is
+  connected. **Send test message**, **Disconnect**, and the last error Discord gave are in the same section; Connect and
+  **Send test message** allow a few tries a minute. Needs migration 0140.
 
 - **Your accountant as the second person on larger bills.** In Settings, under Two approvals, an owner can now choose
   **Let accountants co-sign**. An accountant then sees **Co-sign** on a bill above the figure: it records one of the two

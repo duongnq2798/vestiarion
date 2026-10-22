@@ -15,10 +15,12 @@ The URL is a password for that channel: anyone who has it can post there. Paste 
 An owner or admin connects Discord, once per workspace. Open **Settings** and find the **Discord** section, under Integrations.
 
 1. Paste the URL into **Webhook URL**.
-2. Choose **Connect**. Vestiarion asks Discord which channel the webhook posts to, posts a test message there, and saves the connection only once Discord took it. Settings then says "Discord is connected. A test message was posted to the channel."
+2. Choose **Connect**. Vestiarion asks Discord which channel the webhook posts to, posts a test message there that says it is checking the webhook, and saves the connection only once Discord took it. Settings then says "Discord is connected. A test message was posted to the channel."
 3. The section now names the webhook and the channel's id, and says when it was connected. The ledger records `discord_connected`, with the webhook's and the channel's ids, never its URL.
 
-Vestiarion accepts only a Discord webhook's URL. Anything else, a link to another site among them, is refused with "That is not a Discord webhook URL." and nothing is called. If the webhook was deleted in Discord, you see "Discord says this webhook does not exist." and nothing is saved. A workspace posts to one channel: to move to another, disconnect first, or Vestiarion says "Discord is already connected. Disconnect it first to post to another channel."
+Vestiarion accepts only a Discord webhook's URL. Anything else, a link to another site among them, is refused with "That is not a Discord webhook URL." and nothing is called. If the webhook was deleted in Discord, you see "Discord says this webhook does not exist." and nothing is saved. A workspace posts to one channel: to move to another, disconnect first, or Vestiarion says "Discord is already connected. Disconnect it first to post to another channel." If two people connect different channels at the same moment, only the first is saved, and the second sees "Someone connected another Discord channel to this workspace at the same moment, so this one was not saved. The test message in this channel can be ignored."
+
+**Connect** and **Send test message** each call Discord, so they allow a few tries a minute for a workspace and for a person. Past that, Vestiarion says "Too many tries at once. Try again in a minute." and calls nothing.
 
 Anyone else in the workspace sees whether Discord is connected, and "An owner or admin can connect Discord." On a deployment that has not run the migration that adds Discord yet, the section says "Discord is not set up on this deployment yet."
 
@@ -64,12 +66,12 @@ An owner or admin chooses **Disconnect**, then **Disconnect Discord** to confirm
 
 The webhook itself belongs to your Discord server: it stays in the channel's settings until someone deletes it there. Delete it in Discord too if you no longer want anything able to post through it.
 
-If someone deletes the webhook in Discord first, Vestiarion disconnects it the next time it posts or sends a test message, and the cycle says "Discord said the workspace's channel webhook is gone, so Discord was disconnected". The ledger records `discord_disconnected` as the system's, with no person.
+If someone deletes the webhook in Discord first, Vestiarion disconnects it the next time it posts or sends a test message, and the cycle says "Discord said the workspace's channel webhook is gone, so Discord was disconnected". After **Send test message**, the section switches to **Connect** and says beside it "Discord says this webhook no longer exists, so Discord was disconnected. Connect a new webhook." The ledger records `discord_disconnected` as the system's, with no person.
 
 ## What Discord receives
 
-The workspace's name, and for each bill posted, the payee's name, the amount, the agent's reason and a link to the bill in Vestiarion. A wallet address only shortened to its first and last four characters; never an email, a key or a full address. Vestiarion reads nothing from Discord: it only posts to the one channel the webhook belongs to.
+The workspace's name, and for each bill posted, the payee's name, the amount, the agent's reason and a link to the bill in Vestiarion. A wallet address only shortened to its first and last four characters; never an email, a key or a full address. Vestiarion reads no message in Discord: when you connect, it asks Discord only for the webhook's name and its channel's and server's ids, and after that it only posts to the one channel the webhook belongs to.
 
 ## For the person who runs the deployment
 
-Discord needs no setting and no app: it works once migration `0139_discord.sql` has run. Before that, the section says Discord is not set up, and the cycle's `discord` stage does nothing. The webhook's URL is kept encrypted under the master key, and Vestiarion only ever calls it at `https://discord.com/api/webhooks/`, rebuilt from the webhook's id and token, never at the address pasted.
+Discord needs no setting and no app: it works once migration `0140_discord.sql` has run. Before that, the section says Discord is not set up, and the cycle's `discord` stage does nothing. The webhook's URL is kept encrypted under the master key, and Vestiarion only ever calls it at `https://discord.com/api/webhooks/`, rebuilt from the webhook's id and token, never at the address pasted.
