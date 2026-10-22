@@ -552,6 +552,16 @@ describe("the payee's page", () => {
     expect(markup).not.toMatch(/<input[^>]*name="address"/);
   });
 
+  it("says what sending to each network costs the business, and that the payee is paid in full (payee link chain fees CF1, CF3)", async () => {
+    lib.payeeLinkStatus.mockResolvedValue(status({ chain: "ARC", offersChain: true, chainChoices: ["ARC", "BASE"], chainFees: { BASE: 0.054668 } }));
+    const page = text(await render());
+    expect(page).toContain("No fee to send it here.");
+    expect(page).toContain("Acme pays about 0.055 USDC to send it here.");
+    expect(page).toContain("You get the full amount on any of them: no fee is taken from what you are paid.");
+    lib.payeeLinkStatus.mockResolvedValue(status({ chain: "ARC", offersChain: true, chainChoices: ["ARC", "BASE"], chainFees: { BASE: null } }));
+    expect(text(await render())).toContain("Acme pays a small fee to send it here.");
+  });
+
   it("says the same neutral thing for any unusable link, naming no one", async () => {
     lib.payeeLinkStatus.mockResolvedValue(null);
     const page = text(await render());

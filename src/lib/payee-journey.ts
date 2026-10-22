@@ -44,7 +44,25 @@ export interface PayeeLinkStatus {
   addressMirror?: boolean;
   /** The chains the payee may choose among, its network's own first; empty or absent when it may not choose (P2). */
   chainChoices?: string[];
+  /**
+   * What sending to each chosen chain but the network's own costs the paying business, in USDC, as Circle quoted it when
+   * the link was read; null for one not read (payee link chain fees CF1, CF2). Absent when the payee may not choose.
+   */
+  chainFees?: Record<string, number | null>;
 }
+
+/**
+ * What a chain's choice says of its fee (CF1, CF3): none on the network's own chain; on another, about what the business
+ * pays to send it there, or only that it pays one when the fee was not read. Never a figure that was not read.
+ */
+export function chainFeeNote(orgName: string, home: boolean, feeUsdc: number | null | undefined): string {
+  if (home) return "No fee to send it here.";
+  if (feeUsdc == null) return `${orgName} pays a small fee to send it here.`;
+  return `${orgName} pays about ${Math.round(feeUsdc * 1000) / 1000} USDC to send it here.`;
+}
+
+/** Under the choices (CF1): whatever the network, the payee is paid in full. */
+export const PAID_IN_FULL = "You get the full amount on any of them: no fee is taken from what you are paid.";
 
 /**
  * Step 1 `address`, then `invoice` when the link asks for one not yet sent (P4), then `confirming`, `paying`, and
@@ -118,6 +136,7 @@ export function payeeView(status: PayeeLinkStatus): PayeeLinkStatus {
     asksInvoice: status.asksInvoice === true,
     invoiceSent: status.invoiceSent === true,
     chainChoices: [...(status.chainChoices ?? [])],
+    ...(status.chainFees ? { chainFees: { ...status.chainFees } } : {}),
   };
 }
 
