@@ -210,6 +210,8 @@ function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { org
                 discountDeadline: draft.extracted?.discountDeadline ?? null,
                 memo: startingMemo(fields.invoiceNumber, fields.memo),
                 poReference: fields.poReference,
+                // Its own field too, which its entry and its receipt state (receipts v2 RV1).
+                invoiceNumber: fields.invoiceNumber,
               }}
             />
           </Disclosure>

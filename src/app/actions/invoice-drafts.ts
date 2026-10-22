@@ -46,6 +46,7 @@ export async function confirmInvoiceDraftAction(_previous: IntakeActionResult, f
     currency: formString(formData, "currency"),
     memo: formString(formData, "memo"),
     poReference: formString(formData, "poReference"),
+    invoiceNumber: formString(formData, "invoiceNumber"),
     goodsReceived: formData.get("goodsReceived") === "on",
     dueDate: formString(formData, "dueDate"),
     earlyPayDiscountPct: formString(formData, "earlyPayDiscountPct"),

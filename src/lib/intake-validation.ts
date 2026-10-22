@@ -182,6 +182,8 @@ export const invoiceInputSchema = z
     currency: invoiceCurrencySchema,
     memo: optionalText(280),
     poReference: optionalText(100),
+    // The vendor's own number for it (receipts v2 RV1): recorded on its entry, and stated on its receipt.
+    invoiceNumber: optionalText(100).optional(),
     goodsReceived: z.boolean(),
     dueDate: dueDateSchema,
     earlyPayDiscountPct: optionalText(10),
@@ -217,6 +219,7 @@ export const INVOICE_FIELD_LABELS = {
   discountDeadline: "Discount deadline",
   memo: "Memo",
   poReference: "PO reference",
+  invoiceNumber: "Invoice number",
 } as const;
 
 export type InvoiceField = keyof typeof INVOICE_FIELD_LABELS;

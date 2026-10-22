@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Receipts say what the payee got, and save as a PDF.** A shared receipt now lists its amounts: the invoice and
+  its number, what an early-payment discount took off, the route's fee, that no fee was taken from the payee's
+  payment, what left the business, and what the payee received, read from their chain. **Save as PDF** saves the receipt alone,
+  with its signed entry's number and hash. The invoice form has an optional **Invoice number**, filled in when an
+  invoice is read from a document, by email, or in Telegram or Slack; imports, captured drafts and accounting
+  connectors already brought theirs.
+
 - **ENS names and Basenames in an address field.** Type `northwind.eth` or `northwind.base.eth` where a payee's
   address goes, on Add counterparty or Edit address, and the field shows the address the name points to, with **Use
   this address**. An address typed or pasted shows its ENS name. When the name does not look like the payee's, the hint

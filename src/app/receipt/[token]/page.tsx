@@ -39,7 +39,10 @@ export default async function ReceiptPage({ params }: ReceiptPageProps) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <SiteHeader />
+      {/* Saved as a PDF, a receipt is the receipt alone (receipts v2 RV5). */}
+      <div className="print:hidden">
+        <SiteHeader />
+      </div>
       <PublicMain width="record">
           {failed ? (
             <EmptyState icon={<CloudOff />} titleAs="h1" title="This receipt could not load. Try again in a moment." />
@@ -49,7 +52,9 @@ export default async function ReceiptPage({ params }: ReceiptPageProps) {
             <ReceiptView view={view} />
           )}
       </PublicMain>
-      <SiteFooter compact loop="receipt" networkLabel={view ? homeChain(networkOfChain(view.facts.chain)).label : undefined} />
+      <div className="print:hidden">
+        <SiteFooter compact loop="receipt" networkLabel={view ? homeChain(networkOfChain(view.facts.chain)).label : undefined} />
+      </div>
     </div>
   );
 }

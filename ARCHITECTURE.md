@@ -343,6 +343,16 @@ record; it writes nothing and nothing that moves money imports it (`tests/settle
   and lists them as **Payments in flight**, aged against the network's `stuckAfterMinutes`. Both reads are best effort, in
   the page's organization scope: one that fails hides only these parts. The shared receipt says Reconciled only when its
   own three checks pass, and Confirmed with the reason otherwise (`src/lib/receipts/status.ts`).
+- A shared receipt (`docs/superpowers/specs/2026-10-22-receipt-v2-design.md`) states, beside the payment's own facts
+  (`intentFacts`, which the evidence chain shares), what `buildReceipt` adds: the invoice's number (`invoiceNumberOf`,
+  from its `create_invoice` entry: `invoiceNumber`, or an accounting connector's under its provider's name), the
+  invoice's amount when a discount took something off, and `feesPaidBy: "sender"`. Arc's network fee is never stated: Gas
+  Station pays it on testnet, and `fee_usd` is a batch's share or a bridge's burn alone. The on-chain check returns what
+  the matched transfer moved (`received`), and `receiptAmounts` (`src/lib/receipts/amounts.ts`) turns both into the
+  page's Amounts list, adding "and the network fee" to what left the sender only where the network's wallets are EOAs
+  that pay their own gas (`walletAccountType`), never for Gateway. **Save
+  as PDF** is the browser's print: the page marks the site's chrome, the button and the disclosure `print:hidden`, and
+  prints the entry's seq and hash.
 
 **Payments that do not settle** (`src/lib/payment-exceptions.ts`,
 `docs/superpowers/specs/2026-10-14-payment-exceptions-design.md`) are words over the read model and the payment intent,

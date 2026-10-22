@@ -96,6 +96,7 @@ function FinishForm({ orgSlug, email, counterparties }: { orgSlug: string; email
           discountDeadline: read?.discountDeadline ?? null,
           memo: read?.memo ?? null,
           poReference: read?.poReference ?? null,
+          invoiceNumber: read?.invoiceNumber ?? null,
         }}
       />
     </Disclosure>
