@@ -602,6 +602,28 @@ document keeps the 0x address the document asked to be paid to in `invoices.docu
   (`invoice-pay-to-rules.ts`, pure, for the browser). `approveRefusal` refuses Approve and pay from Slack or Telegram
   for it (`open_in_console`). The agent never pays the document's address.
 
+**Was this you?** (`docs/superpowers/specs/2026-10-22-address-change-check-design.md`, `src/lib/address-change-check.ts`).
+`changeCounterpartyAddress` asks the payee's notice email after any change to a new address
+(`askContactAboutAddressChange`, never throws, deferred with `after` by the console and the payee link):
+- a live workspace only, not in shadow mode, with a notice email;
+- with no address on file, the one before is read from the payee's signed entries (`earlierAddress`), so clearing and
+  then setting still asks;
+- `create_address_change_check` (migration `0137`) keeps one open check per payee and only the `vxw_` token's SHA-256,
+  and makes nothing for an ask that runs after the address changed again;
+- the email goes out, then `mark_address_change_check_sent` and `address_change_check_sent`.
+
+`/address-change/[token]` previews by token and answers on a POST only. `answer_address_change_check` takes the answer
+once. On "not me", while the address in question is still on file, it sets `counterparties.frozen_at` and withdraws
+`address_confirmed_at` in the same statement. The `counterparties_frozen_guard` trigger then refuses any confirmation
+while frozen. `confirmCounterpartyAddress` refuses `frozen` before writing, and maps the trigger's error to it.
+`payeeLockRefusal` refuses a frozen payee lock or not. Approve and pay checks a bank-paid one too, and both it and Pay
+now check again after their claim, so no approval pays one; the agent holds it as unconfirmed. The trigger also refuses
+the tenant role any change to the freeze. `unfreeze_counterparty` runs for an owner or admin with a note, not for the
+member whose edit was disputed while another can; its `counterparty_unfrozen` entry is strict, and
+`restore_counterparty_freeze` puts the freeze back when it is not written.
+`readAddressChecks` feeds Counterparties (`AddressCheckNote`) and Approvals (`payeeFrozen`). Every read of 0137's
+columns treats their absence as none.
+
 **Ask every payee at once** (`docs/superpowers/specs/2026-10-18-ask-every-payee-design.md`). `askablePayees`
 (`src/lib/address-requests.ts`) lists, for an owner or admin on Counterparties, the vendors and contractors with no
 address of their own (a mirror address counts as none), no unused link out and no sample flag, 25 at most by name.

@@ -1,3 +1,4 @@
+import { counterpartyFrozen, frozenRefusal } from "../address-change-check";
 import { currentConfig, currentOrgId } from "../context";
 import { db } from "../dal";
 import { chainModes, getChainProvider } from "../circle";
@@ -764,6 +765,14 @@ export async function payHeldMilestone(input: {
   }
 
   await claim(milestone.id, input.actorId);
+
+  // Frozen since the check before the claim (address change check AC3): the contractor's contact disputed the address
+  // while this was on its way, so nothing is sent and the milestone is let go.
+  if (!alreadySent && (await counterpartyFrozen(milestone.contractorId))) {
+    const released = await db().from("milestones").update(RELEASED).eq("id", milestone.id);
+    if (released.error) console.error("milestone decision: claim not released", milestone.id, released.error.message);
+    raise("payee_locked", frozenRefusal(milestone.facts.contractor.name));
+  }
 
   // The cash comes back now that the decision is claimed, and before any approval is used (approval cash R3, R7).
   let fromReserveUsdc: number | null = null;

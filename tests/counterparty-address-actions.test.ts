@@ -111,7 +111,8 @@ describe("updateCounterpartyAddressAction", () => {
 
     const result = await run(() => updateCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS })));
 
-    expect(changeMock).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY_ID, raw: ADDRESS });
+    // The payee's contact is asked after this answer (address change check AC1).
+    expect(changeMock).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY_ID, raw: ADDRESS, defer: expect.any(Function) });
     expect(result).toEqual({ ok: true, message: "Acme's address changed. The next payment to it waits for a person to approve it." });
     expect(revalidatePathMock).toHaveBeenCalled();
   });

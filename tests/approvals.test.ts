@@ -2585,6 +2585,50 @@ describe("approveAndPay under the payee lock (payee lock PL4, PL5)", () => {
   });
 });
 
+describe("approveAndPay to a frozen payee (address change check AC3)", () => {
+  const FROZEN = "Acme Supplies is frozen: their contact on file said they did not make the change to its address. An owner or admin unfreezes it on Counterparties after checking with them.";
+
+  it("refuses before any claim, with the payee lock off", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
+    const { fake, run } = approvalsFake({
+      counterparty: { id: COUNTERPARTY_ID, name: "Acme Supplies", address: "0xdead", address_changed_at: "2026-10-22T09:00:00+00:00", address_confirmed_at: null, frozen_at: "2026-10-22T10:00:00+00:00" },
+    });
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
+
+    await expect(attempt).rejects.toMatchObject({ code: "payee_locked" });
+    await expect(attempt).rejects.toThrow(FROZEN);
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when the payee is frozen while the approval is on its way, and gives the decision back", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", operatingBalance: 350 });
+    let seen: { path: string }[] = [];
+    const counterparty = {
+      id: COUNTERPARTY_ID,
+      name: "Acme Supplies",
+      address: "0xdead",
+      address_changed_at: "2026-10-22T09:00:00+00:00",
+      address_confirmed_at: null,
+      // Frozen once the decision is claimed: the payee's answer landed meanwhile.
+      get frozen_at() {
+        return seen.some((request) => request.path === "/rest/v1/rpc/claim_invoice_decision") ? "2026-10-22T10:00:00+00:00" : null;
+      },
+    };
+    const { fake, run } = approvalsFake({ counterparty });
+    seen = fake.requests;
+
+    const attempt = run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
+
+    await expect(attempt).rejects.toMatchObject({ code: "payee_locked" });
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(1);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    const given = fake.requests.filter((request) => request.path === "/rest/v1/invoices" && request.method === "PATCH").map((request) => request.body as Record<string, unknown>);
+    expect(given.some((body) => body.status === "held" && String(body.agent_reasoning).includes("the payee was frozen while this approval was on its way"))).toBe(true);
+  });
+});
+
 describe("approveAndPay and the first payment to an address (new payee check N4)", () => {
   const gaveAddress = (by: string) => [{ action: "create_counterparty", detail: { by, counterpartyId: COUNTERPARTY_ID, address: "0xdead" } }];
   // A live workspace whose operating wallet, read from the chain, holds enough for the bill.

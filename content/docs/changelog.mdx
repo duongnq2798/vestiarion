@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-22: "Was this you?" and frozen payees
+
+- Four new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, all in the `compliance` domain:
+  - **`address_change_check_sent`** (actor `system`): the payee's billing email on file was asked whether they changed its address. It carries `counterpartyId`, `checkId`, `from`, `to`, `via` (`member`, `payee_link` or `github`) and `contact: "notice_email"`, never the email itself.
+  - **`address_change_answered`** (actor `human`, `by: null`, `via: "address_check"`): the payee answered. It carries `counterpartyId`, `checkId`, `answer` (`me` or `not_me`), `from` and `to`.
+  - **`counterparty_frozen`** (actor `system`): a `not_me` answer froze the payee while the address in question was on file. It carries `counterpartyId`, `checkId`, `address` and `reason: "address_change_disputed"`.
+  - **`counterparty_unfrozen`** (actor `human`): an owner or admin unfroze the payee. It carries `by`, `counterpartyId`, `checkId` (the check that froze it) and `note`, how they checked. Whoever made the disputed change unfreezes it only when no other owner or admin can, and an unfreeze whose entry could not be written is undone, so every unfreeze has its entry.
+- A frozen payee's address is no longer confirmed, so the agent holds payments to it as for any address no one has confirmed (`guardrailRule: "counterparty.address_unconfirmed"`), until someone confirms it after it is unfrozen.
+- Nothing in `/api/v1` request bodies or the webhooks' shapes changes.
+
 ## 2026-10-21: A screening verdict names the service that gave it
 
 - `screen_counterparty`, `risk_level_changed` and `compliance_sweep` can now carry `source: "yente:self-hosted"`, and so can the screening history `GET /api/v1/counterparties/{id}` returns: the counterparty was screened by a self-hosted yente server the deployment names, rather than OpenSanctions' hosted API (`opensanctions:yente`, as before). Both are judged by the same rules.

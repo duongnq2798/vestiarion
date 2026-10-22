@@ -169,6 +169,14 @@ export default function SecurityPage() {
             A bounty typed by its own pull request&apos;s author names no member.
           </li>
           <li>
+            <strong>Was this you?</strong> When a payee&apos;s address changes to a new one in a live workspace, its billing email on file is
+            asked, through a one-time link, whether they made the change. &ldquo;No, this wasn&apos;t me&rdquo; freezes the payee in the same database step: its
+            address&apos;s confirmation is withdrawn, and a database trigger refuses any confirmation of it, and any change to the freeze outside Vestiarion&apos;s own
+            functions, until an owner or admin unfreezes it, saying how they checked; whoever made the change does so only when no one else can. No approval
+            pays a frozen payee.
+            Opening the link changes nothing; only a button does.
+          </li>
+          <li>
             <strong>Two approvals.</strong> Above a figure the owner sets, a payment needs two different people, and one person cannot give both. A
             workspace with a single approver cannot pay above the figure until it is raised or another approver joins. On Arc mainnet a workspace
             starts with two approvals above 100 USDC, and the figure can be raised or lowered but not turned off.

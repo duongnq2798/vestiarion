@@ -1,3 +1,4 @@
+import { counterpartyFrozen, frozenRefusal } from "./address-change-check";
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
 import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
@@ -49,9 +50,12 @@ export async function readPayeeLock(orgDb: OrgDb): Promise<PayeeLock> {
 /**
  * Why a person may not pay this counterparty now under the payee lock, or null when they may (PL4, PL5): an address
  * waiting for confirmation is confirmed on Counterparties with a record of how it was checked, never by approving a
- * payment; and a changed address waits out its cooling-off. Read before anything is claimed. The lock off, nothing.
+ * payment; and a changed address waits out its cooling-off. Read before anything is claimed. The lock off, nothing, but
+ * for a frozen payee, which no approval pays, lock or not (docs/superpowers/specs/2026-10-22-address-change-check-design.md AC3).
  */
 export async function payeeLockRefusal(counterpartyId: string, payeeName: string, now: number = Date.now()): Promise<string | null> {
+  // A frozen payee is never paid by a person's approval, lock or not (address change check AC3).
+  if (await counterpartyFrozen(counterpartyId)) return frozenRefusal(payeeName);
   const lock = await readPayeeLock(db());
   if (!lock.on) return null;
   const found = await db().from("counterparties").select("address_changed_at, address_confirmed_at").eq("id", counterpartyId).maybeSingle();

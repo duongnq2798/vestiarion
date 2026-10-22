@@ -126,6 +126,7 @@ export const TENANT_TABLES = [
   "customer_discount_offers", "customer_discount_reviews",
   "payment_term_requests", "payment_term_request_reviews",
   "supplier_status_links",
+  "address_change_checks",
 ] as const;
 
 export interface SeededRows {
@@ -334,6 +335,13 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
   await db.query(
     "insert into supplier_status_links (org_id, counterparty_id, token_hash, expires_at) values ($1, $2, encode(sha256(convert_to($3, 'utf8')), 'hex'), now() + interval '30 days')",
     [orgId, counterpartyId, `supplier-status-${tag}`]
+  );
+  // A "Was this you?" asked of the vendor's contact about its address (0137).
+  await db.query(
+    `insert into address_change_checks (org_id, counterparty_id, from_address, to_address, via, sent_to, token_hash, expires_at)
+     values ($1, $2, '0x1111111111111111111111111111111111111111', '0x2222222222222222222222222222222222222222', 'member', 'ap@payee.example',
+             encode(sha256(convert_to($3, 'utf8')), 'hex'), now() + interval '7 days')`,
+    [orgId, counterpartyId, `address-check-${tag}`]
   );
   // That customer's collection rules, a task about its invoice, and a reminder email recorded as sent (0110).
   await db.query(

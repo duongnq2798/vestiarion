@@ -1,3 +1,4 @@
+import { counterpartyFrozen, frozenRefusal, readFrozenPayees } from "../address-change-check";
 import { currentConfig, currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
 import { chainModes, getChainProvider, type Stablecoin } from "../circle";
@@ -457,6 +458,11 @@ export interface WaitingPayable {
    * never sends there: the card shows it beside the address it pays, so the person approving sees a mismatch.
    */
   documentPayTo?: string | null;
+  /**
+   * The payee's contact said they did not make the change to its address (address change check AC3, AC5): Approve and
+   * pay is refused, and the card says so. Absent before migration 0137.
+   */
+  payeeFrozen?: boolean;
   /** The last payment attempt, when Circle ended it in a terminal failure (Approve and pay sends a new transfer) or it is still in flight; else null. */
   lastAttempt: LastPaymentAttempt;
   /** The invoice's early-payment discount, read as `payInvoice` applies it, so the approval dialog can say what will leave; null without one. */
@@ -593,6 +599,8 @@ export async function listWaitingPayables(
   const bankAccounts = rows.length > 0 ? await bankAccountsOf(rows.map((row) => row.counterparty_id)) : new Map<string, CounterpartyBankAccount>();
   // What each invoice's document asked to be paid to (invoice pay-to hold IP3): none before migration 0136.
   const documentPayTo = rows.length > 0 ? await readDocumentPayTo(rows.map((row) => row.id)) : new Map<string, string>();
+  // The payees frozen by their contact's answer (address change check AC5): none before migration 0137.
+  const frozenPayees = rows.length > 0 ? await readFrozenPayees([...new Set(rows.map((row) => row.counterparty_id))]) : new Set<string>();
   const quotes = new Map<string, PayoutQuotes>();
   await Promise.all(
     rows
@@ -700,6 +708,7 @@ export async function listWaitingPayables(
       paymentSent: paymentWasSent(intent),
       address: row.counterparties?.address ?? null,
       documentPayTo: documentPayTo.get(row.id) ?? null,
+      ...(frozenPayees.has(row.counterparty_id) ? { payeeFrozen: true } : {}),
       lastAttempt: lastAttemptOf(intent, currencyOf(row.currency)),
       discount: invoiceDiscount(row),
       currency: currencyOf(row.currency),
@@ -1075,6 +1084,10 @@ export async function approveAndPay(
   // The payee lock (PL4, PL5): with it on, an address waiting for confirmation is confirmed on Counterparties with a
   // record of how it was checked, never by this approval, and a changed address waits out its cooling-off. A transfer
   // already sent is only recorded; a bank payout pays no address.
+  // A frozen payee (address change check AC3) is paid by no approval, to its bank account either.
+  if (!alreadySent && invoice.bankAccount && (await counterpartyFrozen(invoice.counterpartyId))) {
+    throw new ApprovalError("payee_locked", frozenRefusal(invoice.counterpartyName));
+  }
   if (!alreadySent && !invoice.bankAccount) {
     const locked = await payeeLockRefusal(invoice.counterpartyId, invoice.counterpartyName);
     if (locked) throw new ApprovalError("payee_locked", locked);
@@ -1277,6 +1290,12 @@ export async function approveAndPay(
     } catch (error) {
       console.error("approval: counterparty address not confirmed", invoice.id, (error as Error).message);
     }
+  }
+  // Frozen since the check before the claim (address change check AC3): the payee's contact disputed the address while
+  // this approval was on its way, so nothing is sent.
+  if (!alreadySent && (await counterpartyFrozen(invoice.counterpartyId))) {
+    await giveBackAfterClaim(invoice, "the payee was frozen while this approval was on its way");
+    throw new ApprovalError("payee_locked", frozenRefusal(invoice.counterpartyName));
   }
 
   const previous = invoice.status;

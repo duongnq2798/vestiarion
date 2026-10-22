@@ -83,6 +83,8 @@ export const TENANT_TABLES = [
   "payment_term_requests", "payment_term_request_reviews",
   // Suppliers' payment status links (migration 0131, supplier status V1).
   "supplier_status_links",
+  // Asking a payee's contact whether they changed its address (migration 0137, address change check AC1).
+  "address_change_checks",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -160,6 +162,10 @@ export const PLATFORM_RPCS = [
   "counter_term_request", "answer_term_counter",
   // A supplier's payment status page, looked up by its link (0131, supplier status V4).
   "supplier_status_by_token",
+  // "Was this you?" (0137, address change check AC1-AC4): made and marked sent for a workspace, previewed and answered by
+  // token, and a frozen payee unfrozen.
+  "create_address_change_check", "mark_address_change_check_sent", "address_change_check_preview", "answer_address_change_check",
+  "unfreeze_counterparty", "restore_counterparty_freeze",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

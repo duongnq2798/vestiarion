@@ -396,6 +396,8 @@ export async function submitPayeeAddress(token: string, raw: string, options: { 
         counterpartyId: link.counterparty_id,
         raw: parsed.address as string,
         ...(chain !== undefined ? { chain } : {}),
+        // The payee's contact on file is asked after the payee has its answer (address change check AC1).
+        ...(options.defer ? { defer: options.defer } : {}),
       });
     });
   } catch (error) {
