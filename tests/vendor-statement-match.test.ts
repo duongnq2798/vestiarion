@@ -104,6 +104,17 @@ describe("payments", () => {
     expect(result.unknownPayments).toEqual([expect.objectContaining({ on: "2026-10-20", amount: 999 })]);
   });
 
+  it("name a bill they did not list, and its payment, by the number at the head of its memo, as written", () => {
+    const result = matchStatement({
+      lines: [charge("2026-10-15", "CC-2026-1024", 50), payment("2026-10-20", 999)],
+      bills: [bill("listed", null, 50, "2026-10-15", { memo: "CC-2026-1024 backups" }), bill("unlisted", null, 30, "2026-10-17", { memo: "CC-2026-1023 archive storage", status: "paid" })],
+      payments: [paid("unlisted", 30, "2026-10-18")],
+      currency: "USD",
+    });
+    expect(result.notListed).toEqual([expect.objectContaining({ billId: "unlisted", number: "CC-2026-1023" })]);
+    expect(result.paidNotListed).toEqual([expect.objectContaining({ billId: "unlisted", number: "CC-2026-1023" })]);
+  });
+
   it("leave out a payment of ours outside the statement's days", () => {
     const result = matchStatement({ lines: [charge("2026-10-01", "INV-1", 10)], bills: [bill("a", "INV-1", 10, "2026-10-01")], payments: [paid("a", 10, "2026-11-30")], currency: "USD" });
     expect(result.paidNotListed).toEqual([]);

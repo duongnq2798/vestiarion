@@ -83,6 +83,7 @@ differences.
     which a statement listed newest first writes first;
   - ours is what our open bills added by the statement's last day add up to, in its currency, saying how many open
     bills in another currency that leaves out.
+- Each bill of ours is named by its number: its own, or the one at the head of its memo, as written.
 - Everything that matched is counted, not listed one by one.
 
 **VS5. Recorded.** Each check signs `vendor_statement_checked`, in domain `ap`, actor `human`. It carries `by`,

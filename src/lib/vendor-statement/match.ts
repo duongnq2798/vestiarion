@@ -67,8 +67,15 @@ export function sameNumber(value: string | null | undefined): string {
  * or more letters and digits and at least one digit, so neither "Design" nor a lone "12" is taken for one.
  */
 export function memoNumber(memo: string | null): string {
-  const head = sameNumber((memo ?? "").trim().split(/[\s·,;:|]+/)[0]);
+  const head = sameNumber(memoHead(memo));
   return head.length >= 4 && /\d/.test(head) ? head : "";
+}
+
+const memoHead = (memo: string | null) => (memo ?? "").trim().split(/[\s·,;:|]+/)[0];
+
+/** A bill's number as a person reads it: its own, or the one at the head of its memo as written; null when it has none. */
+function shownNumber(bill: BookBill): string | null {
+  return bill.number ?? (memoNumber(bill.memo) ? memoHead(bill.memo) : null);
 }
 
 /** USD and USDC are one currency to compare in, EUR and EURC another (VS3). */
@@ -194,13 +201,16 @@ export function matchStatement(input: { lines: readonly VendorStatementLine[]; b
   }
 
   const within = (day: string) => period !== null && day >= period.from && day <= period.to;
-  const numberOf = (id: string) => input.bills.find((bill) => bill.id === id)?.number ?? null;
+  const numberOf = (id: string) => {
+    const bill = input.bills.find((candidate) => candidate.id === id);
+    return bill ? shownNumber(bill) : null;
+  };
   const paidNotListed = paid
     .filter((payment) => !usedPayments.has(payment.index) && within(payment.paidOn))
     .map((payment) => ({ billId: payment.invoiceId, number: numberOf(payment.invoiceId), amount: payment.inCurrency as number, paidOn: payment.paidOn, txUrl: payment.txUrl }));
   const notListed = bills
     .filter((bill) => !used.has(bill.id) && within(bill.addedOn))
-    .map((bill) => ({ billId: bill.id, number: bill.number, amount: amountIn(bill, currency), addedOn: bill.addedOn, status: bill.status }));
+    .map((bill) => ({ billId: bill.id, number: shownNumber(bill), amount: amountIn(bill, currency), addedOn: bill.addedOn, status: bill.status }));
 
   // Their balance: the latest day's, and on that day the line written last, which a statement listed newest first writes
   // first. Ours: our open bills added by the statement's last day, in its currency.
