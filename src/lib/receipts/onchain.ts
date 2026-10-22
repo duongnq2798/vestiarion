@@ -19,7 +19,8 @@ export interface TxReceipt {
   logs: Array<{ address: string; topics: string[]; data: string }>;
 }
 
-export type OnChainCheck = { state: "matches"; block: number } | { state: "mismatch"; reason: string } | { state: "unreadable" };
+/** `received`: what the transfer to the payee moved, in the token (receipts v2 RV3). */
+export type OnChainCheck = { state: "matches"; block: number; received?: number } | { state: "mismatch"; reason: string } | { state: "unreadable" };
 
 const TRANSFER = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 const RPC_TIMEOUT_MS = 4_000;
@@ -77,25 +78,31 @@ function value(data: string): bigint | null {
 export function matchTransfer(facts: ReceiptFacts, receipt: TxReceipt): OnChainCheck {
   if (receipt.status !== "0x1") return { state: "mismatch", reason: "This transaction failed on chain." };
   const payee = facts.payee.toLowerCase();
-  const found = tokenContracts(facts).some(({ address, decimals }) => {
+  let received: number | null = null;
+  for (const { address, decimals } of tokenContracts(facts)) {
     const expected = units(facts.amount, decimals);
     // A CCTP mint also carries the part of the most the fee could be that Circle did not charge (CCTP payouts
     // R3): the payee receives the amount, and at most the fee on top (review #3). Every other route is exact.
     const most = facts.route === "cctp" && facts.feeUsdc ? expected + units(facts.feeUsdc, decimals) : expected;
-    return receipt.logs.some((log) => {
+    for (const log of receipt.logs) {
       const moved = value(log.data);
-      return (
+      if (
         log.address.toLowerCase() === address.toLowerCase() &&
         log.topics[0] === TRANSFER &&
         topicAddress(log.topics[2]) === payee &&
         moved !== null &&
         moved >= expected &&
         moved <= most
-      );
-    });
-  });
-  if (!found) return { state: "mismatch", reason: `No transfer of ${facts.amount} ${facts.token} to ${facts.payee} is in this transaction.` };
-  return { state: "matches", block: Number(BigInt(receipt.blockNumber)) };
+      ) {
+        // In millionths, whatever the token's decimals: a transfer is never stated finer than the token's 6.
+        received = Number(moved / BigInt(10) ** BigInt(decimals - 6)) / 1_000_000;
+        break;
+      }
+    }
+    if (received !== null) break;
+  }
+  if (received === null) return { state: "mismatch", reason: `No transfer of ${facts.amount} ${facts.token} to ${facts.payee} is in this transaction.` };
+  return { state: "matches", block: Number(BigInt(receipt.blockNumber)), received };
 }
 
 /** Reads the transaction's receipt from its chain and matches it; anything short of an answer is `unreadable`. */

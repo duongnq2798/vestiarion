@@ -101,6 +101,8 @@ describe("an invoice read from a document", () => {
     expect(markup).toContain('value="2"');
     expect(markup).toContain('value="2026-10-11"');
     expect(markup).toContain('value="Managed hosting, October"');
+    // The vendor's own number, for its entry and its receipt (receipts v2 RV1).
+    expect(markup).toContain('value="INV-2207"');
   });
 
   it("selects the matched counterparty", async () => {

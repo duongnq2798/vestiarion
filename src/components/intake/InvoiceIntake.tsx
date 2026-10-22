@@ -58,6 +58,7 @@ export interface InvoiceFormInitial {
   discountDeadline?: string | null;
   memo?: string | null;
   poReference?: string | null;
+  invoiceNumber?: string | null;
 }
 
 /** The document an invoice was read from, recorded on its ledger entry (D8). `read` is the JSON of the values read. */
@@ -308,6 +309,9 @@ export default function InvoiceIntake({
         </Field>
         <Field id={id("po")} label="PO reference" optional error={fieldError("poReference")}>
           <Input name="poReference" maxLength={100} placeholder="PO-100" defaultValue={start(initial?.poReference)} />
+        </Field>
+        <Field id={id("number")} label="Invoice number" optional error={fieldError("invoiceNumber")}>
+          <Input name="invoiceNumber" maxLength={100} placeholder="INV-1042" autoComplete="off" defaultValue={start(initial?.invoiceNumber)} />
         </Field>
         {direction === "payable" && <ProjectSelectField projects={projects} id={id("project")} />}
       </div>

@@ -85,6 +85,8 @@ export async function createInvoice(input: {
   captured?: CapturedDraft;
 }): Promise<{ id: string; counterpartyName: string } | null> {
   const { id, actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, deal, external, captured } = input;
+  // The vendor's own number (receipts v2 RV1): as typed or read from a document, else as the import or the captured draft had it.
+  const invoiceNumber = invoice.invoiceNumber ?? imported?.invoiceNumber ?? captured?.invoiceNumber ?? null;
   const lookup = await db()
     .from("counterparties")
     .select("id, name")
@@ -142,19 +144,19 @@ export async function createInvoice(input: {
       dueDate: invoice.dueDate,
       poReference: invoice.poReference,
       goodsReceived: invoice.goodsReceived,
+      ...(invoiceNumber ? { invoiceNumber } : {}),
       ...(document ? { document } : {}),
       ...(via ? { via } : {}),
       ...(apiKeyId ? { apiKeyId } : {}),
       ...(linkId ? { linkId } : {}),
       ...(inboxEmailId ? { inboxEmailId } : {}),
       ...(original ? { bill: original } : {}),
-      ...(imported ? { importFile: imported.file, importRow: imported.row, ...(imported.invoiceNumber ? { invoiceNumber: imported.invoiceNumber } : {}) } : {}),
+      ...(imported ? { importFile: imported.file, importRow: imported.row } : {}),
       ...(deal ? { via: "deal", deal } : {}),
       ...(external ? { via: external.provider, [external.provider]: external.ids } : {}),
       ...(captured
         ? {
             invoiceDraftId: captured.invoiceDraftId,
-            ...(captured.invoiceNumber ? { invoiceNumber: captured.invoiceNumber } : {}),
             ...(captured.payeeLinkId !== undefined ? { payeeLinkId: captured.payeeLinkId } : {}),
           }
         : {}),

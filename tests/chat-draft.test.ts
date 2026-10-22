@@ -33,7 +33,7 @@ describe("chatDraftOf", () => {
       stored: {
         draft: {
           counterpartyId: COUNTERPARTY, amount: "0.75", currency: "USDC", memo: "Design review session", poReference: "", dueDate: "2026-10-10",
-          earlyPayDiscountPct: "", discountDeadline: "",
+          earlyPayDiscountPct: "", discountDeadline: "", invoiceNumber: "TFA-2026-1003",
         },
         document: { kind: "pdf", sha256: "a".repeat(64), reader: "heuristic" },
       },
@@ -58,6 +58,11 @@ describe("invoiceOfDraft", () => {
     const { stored } = chatDraftOf(read());
     expect(invoiceOfDraft(stored!, true)).toMatchObject({ direction: "payable", counterpartyId: COUNTERPARTY, amount: "0.75", currency: "USDC", goodsReceived: true });
     expect(invoiceOfDraft(stored!, false)).toMatchObject({ goodsReceived: false });
+    // The vendor's number, as read, goes with it to its entry and its receipt (receipts v2 RV1); a draft stored before has none.
+    expect(invoiceOfDraft(stored!, false)).toMatchObject({ invoiceNumber: "TFA-2026-1003" });
+    const { invoiceNumber: _left, ...before } = stored!.draft;
+    void _left;
+    expect(invoiceOfDraft({ ...stored!, draft: before }, false)?.invoiceNumber).toBeUndefined();
   });
 
   it("is nothing for a stored draft the form no longer accepts", () => {

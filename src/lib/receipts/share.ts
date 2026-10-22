@@ -57,10 +57,11 @@ export async function shareReceipt(input: { actorId: string; invoiceId: string }
     return { token, receiptId: existing.id, renewed: true };
   }
 
-  const invoice = (await db().from("invoices").select("id, status, direction").eq("id", input.invoiceId).maybeSingle()).data as {
+  const invoice = (await db().from("invoices").select("id, status, direction, amount").eq("id", input.invoiceId).maybeSingle()).data as {
     id: string;
     status: string;
     direction: string;
+    amount: string | number;
   } | null;
   if (!invoice) throw new ReceiptError("That invoice is not in this workspace.");
   const intent = unwrap(

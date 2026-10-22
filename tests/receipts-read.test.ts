@@ -76,7 +76,7 @@ describe("readReceipt", () => {
       entry: RECEIPT,
       publicKeys: KEYS,
       records: { seq: 580, signingKeyId: KEY_ID },
-      checks: { signed: { ok: true }, recorded: { ok: true }, onChain: { state: "matches", block: 314575767 } },
+      checks: { signed: { ok: true }, recorded: { ok: true }, onChain: { state: "matches", block: 314575767, received: FACTS.amount } },
     });
     expect(fake.requests[0].body).toEqual({ p_token_hash: receiptTokenHash(TOKEN) });
   });

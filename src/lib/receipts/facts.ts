@@ -27,6 +27,16 @@ export interface ReceiptFacts {
   sourceTxHash?: string;
   /** CCTP and Gateway: the route's fee, in USDC. */
   feeUsdc?: number;
+  /** The invoice's own number, as the vendor wrote it, from its `create_invoice` entry (receipts v2 RV1, RV2). */
+  invoiceNumber?: string;
+  /** The invoice's amount, only when it was for more than was paid: an early-payment discount (RV2). */
+  invoiceAmount?: number;
+  /**
+   * Who paid the fees: the sender, on top of the amount, and never the payee. On every receipt shared since receipts v2
+   * (RV2). Arc's own network fee is not stated: Circle's Gas Station pays it on Arc testnet, and the fee recorded for a
+   * batch or a bridge is not one transaction's.
+   */
+  feesPaidBy?: "sender";
 }
 
 /** The payment intent's columns a receipt is built from. */
@@ -56,8 +66,28 @@ export const RECORDING_ACTIONS: ReadonlySet<string> = new Set(["ap_pay", "approv
 
 const refuse = (reason: string): BuiltReceipt => ({ ok: false, reason });
 
+/** The accounting connectors whose bills name their number under the provider's name on `create_invoice` (Xero connector X11). */
+const CONNECTORS = ["xero", "quickbooks", "zohobooks"] as const;
+
+const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+
+/**
+ * The invoice's own number (RV1), from its `create_invoice` entry: typed in or read from a document, imported, captured,
+ * or under the accounting connector's name. Null when it has none.
+ */
+export function invoiceNumberOf(invoiceId: string, entries: LedgerEntry[]): string | null {
+  const created = entries.find((entry) => entry.action === "create_invoice" && entry.detail.invoiceId === invoiceId);
+  if (!created) return null;
+  const candidates = [created.detail.invoiceNumber, ...CONNECTORS.map((provider) => (isRecord(created.detail[provider]) ? created.detail[provider].invoiceNumber : undefined))];
+  const found = candidates.find((value): value is string => typeof value === "string" && value.trim() !== "");
+  return found ? found.trim().slice(0, 100) : null;
+}
+
+const round6 = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
+
 export function buildReceipt(input: {
-  invoice: { id: string; status: string; direction: string };
+  /** `amount`, the invoice's own, states what an early-payment discount took off (RV2). */
+  invoice: { id: string; status: string; direction: string; amount?: string | number };
   intent: ReceiptIntent | null;
   entries: LedgerEntry[];
 }): BuiltReceipt {
@@ -69,7 +99,19 @@ export function buildReceipt(input: {
 
   const records = recordingEntry({ invoiceId: invoice.id }, input.entries, stated.facts.txHash, stated.facts.sourceTxHash ?? null);
   if (!records) return refuse("No ledger entry records this payment's transaction.");
-  return { ok: true, facts: stated.facts, records: { seq: records.seq, hash: records.hash } };
+
+  // What a receipt states beside the payment itself (RV2): the invoice it pays, what a discount took off, and who paid
+  // the fees. The evidence chain reads `intentFacts` without them.
+  const amount = stated.facts.amount;
+  const invoiceNumber = invoiceNumberOf(invoice.id, input.entries);
+  const invoiceAmount = invoice.amount == null ? null : Number(invoice.amount);
+  const facts: ReceiptFacts = {
+    ...stated.facts,
+    ...(invoiceNumber ? { invoiceNumber } : {}),
+    ...(invoiceAmount !== null && Number.isFinite(invoiceAmount) && round6(invoiceAmount) > round6(amount) ? { invoiceAmount: round6(invoiceAmount) } : {}),
+    feesPaidBy: "sender",
+  };
+  return { ok: true, facts, records: { seq: records.seq, hash: records.hash } };
 }
 
 /**

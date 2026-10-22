@@ -8,9 +8,11 @@ import { canonicalJson } from "@/lib/canonical-json";
 import { chainById, homeChain, networkOfChain } from "@/lib/payee-chains";
 import type { ReceiptView as ReceiptViewData } from "@/lib/platform/receipts";
 import type { ReceiptFacts } from "@/lib/receipts/facts";
+import { receiptAmounts } from "@/lib/receipts/amounts";
 import { receiptStatus, receiptTime } from "@/lib/receipts/status";
 import type { EntryCheck } from "@/lib/receipts/verify";
 import { BrowserCheck } from "./BrowserCheck";
+import { SavePdfButton } from "./SavePdfButton";
 
 /**
  * A shared payment receipt (docs/superpowers/specs/2026-10-01-payment-receipts-design.md P5): what was paid,
@@ -19,7 +21,8 @@ import { BrowserCheck } from "./BrowserCheck";
  */
 
 function routeText(facts: ReceiptFacts): string {
-  const fee = facts.feeUsdc != null ? `, with a ${facts.feeUsdc} USDC fee` : "";
+  // A receipt that says who paid the fees lists them under Amounts (receipts v2 RV4); an earlier one names it here.
+  const fee = facts.feeUsdc != null && facts.feesPaidBy !== "sender" ? `, with a ${facts.feeUsdc} USDC fee` : "";
   if (facts.route === "gateway") return `From a Circle Gateway balance${fee}`;
   // The network the payment left, by name: a mainnet payout's burn is on Arc mainnet (capability and reasons R8).
   if (facts.route === "cctp") return `Through CCTP from ${homeChain(networkOfChain(facts.chain)).label}${fee}`;
@@ -64,15 +67,19 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
   // Where the payment is, and from which source (settlement lifecycle L7, I17): confirmed by Circle, reconciled by the checks.
   const status = receiptStatus(view);
   const confirmedAt = receiptTime(facts.paidAt);
+  const amounts = receiptAmounts(facts, checks.onChain);
 
   return (
     <article className="space-y-6">
       <section className="rounded-2xl border border-line bg-surface p-6 shadow-flat sm:p-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Eyebrow className="text-agent">Payment receipt</Eyebrow>
-          <Badge tone={headline.tone} dot>
-            {headline.text}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={headline.tone} dot>
+              {headline.text}
+            </Badge>
+            <SavePdfButton />
+          </div>
         </div>
         <h1 className="mt-3 text-2xl font-semibold tracking-[-0.02em] text-ink">
           {facts.amount} {facts.token} paid on {chain.label}
@@ -101,6 +108,19 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
             </>
           )}
         </dl>
+        <h2 className="mt-6 text-base font-semibold text-ink">Amounts</h2>
+        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-y-3">
+          {amounts.map((row) => (
+            <div key={row.label} className="contents">
+              <dt className="mt-2 text-ink-3 first:mt-0 sm:mt-0">{row.label}</dt>
+              <dd className="text-ink">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+        {/* On paper, what the link checks: the signed entry, to find it again (RV5). */}
+        <p className="mt-6 hidden break-all font-mono text-xs text-ink-2 print:block">
+          Ledger entry #{entry.seq}, hash {entry.hash}, signed with key {keyId ?? "(none)"}.
+        </p>
       </section>
 
       <section className="rounded-2xl border border-line bg-surface p-6 shadow-flat sm:p-8">
@@ -135,6 +155,7 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
         </ol>
       </section>
 
+      <div className="print:hidden">
       <Disclosure summary="Check it yourself" summaryClassName="px-6 py-4 text-base font-semibold text-ink" contentClassName="px-6 pb-6">
         <div className="space-y-4 text-sm text-ink-2">
           <p>The workspace signed this entry into its ledger when it shared the receipt. Anyone can check it:</p>
@@ -167,10 +188,12 @@ export function ReceiptView({ view }: { view: ReceiptViewData }) {
           ))}
         </div>
       </Disclosure>
+      </div>
 
       <p className="text-xs leading-5 text-ink-3">
-        This receipt shows no names. The business that paid chose to share it, and can stop sharing it at any time. Vestiarion signs every payment
-        decision into a hash-chained ledger.
+        {/* An invoice number is the vendor's own string, which can carry a name (receipts v2 RV4). */}
+        {facts.invoiceNumber ? "Apart from the invoice number, as the vendor wrote it, this receipt shows no names." : "This receipt shows no names."} The
+        business that paid chose to share it, and can stop sharing it at any time. Vestiarion signs every payment decision into a hash-chained ledger.
       </p>
     </article>
   );
