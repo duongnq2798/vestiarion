@@ -293,6 +293,16 @@ workspace's only approver approved it.
   and the mint on Base,
   [`0x9ea0fe5a…150c`](https://basescan.org/tx/0x9ea0fe5aa1b57f799595a48f336d1e008971e9a1d067dac1707ce02ff656150c).
 
+On **Oct 22, 2026** the same test workspace on its own Circle account made the first payout from Arc mainnet to
+**Arbitrum** ([#498](https://github.com/duongnq2798/vestiarion/pull/498)). The agent read Circle's live fee to
+Arbitrum, 0.077 USDC, weighed it against the 10% cap on a 1 USDC bill, and chose the due date again; code held it
+as a first payment to a new address, and the workspace's only approver approved it. The burn on Arc,
+[`0xce0a7911…d7b8`](https://explorer.arc.io/tx/0xce0a7911791ba04b6ff79c2dee4cdfc213f7fd914c5a29d6b58ae5a4b19bd7b8),
+and the mint on Arbitrum,
+[`0x385363d4…f987`](https://arbiscan.io/tx/0x385363d4912e5ddce757984a789a39bf983d6a7177a943add36d7e604fadf987):
+1 USDC to the payee, the 0.077084 USDC fee on top. Its shared receipt checks the mint on Arbitrum and states the
+invoice number, the fee and who paid it.
+
 Arc mainnet has no customer workspace yet; [Open numbers](https://www.vestiarion.xyz/open) shows the current count.
 
 ### Proof on Arc testnet
