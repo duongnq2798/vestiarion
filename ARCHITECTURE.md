@@ -994,7 +994,9 @@ phase 1b).
     `agent_budgets` row is missing or holds neither figure, since the tenant role can delete that row: the agent
     never pays on Arc mainnet without a limit, as `readTwoApprovalsAbove` never reads no figure there.
   - It also starts with two approvals above 100 USDC (`approval_policies`, phase 2b), which `changeTwoApprovals` keeps
-    on there. `org_created` records the starting limits.
+    on there, and the payee lock on with no wait (`MAINNET_STARTING_PAYEE_LOCK`, in the same row; the figure alone before
+    0135). `org_created` records the starting limits, the lock among them. The owner's checklist adds
+    `payee_lock` after the payee (`readPayeeLockUsed`: done once a confirmation carried `payeeLock` or the lock changed).
 - **Held until live.** `orgConfig` sets `chain.networkHold`: `MAINNET_OFF` while the deployment has it off (and the
   credentials are withheld), `MAINNET_NOT_LIVE` until the workspace is live.
   - `paymentsHold()` (`src/lib/payments-switch.ts`) reads the hold before the platform's switch, and

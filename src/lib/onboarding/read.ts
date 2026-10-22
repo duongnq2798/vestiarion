@@ -152,6 +152,31 @@ export async function billWaitingOnApprovals(): Promise<boolean> {
 }
 
 /** Whether a person set the workspace's limits: its spending limit or its two-approval figure. Never throws. */
+/**
+ * Whether a person has used the payee lock (payee lock mainnet default LD2): confirmed an address under it, its
+ * `counterparty_address_confirmed` entry carrying `payeeLock`, or changed it (`payee_lock_changed`). Never throws.
+ */
+export async function readPayeeLockUsed(): Promise<boolean> {
+  try {
+    const result = await db()
+      .from("ledger_entries")
+      .select("action, detail")
+      .in("action", ["payee_lock_changed", "counterparty_address_confirmed"])
+      .eq("actor", "human")
+      .order("seq", { ascending: false })
+      .limit(200);
+    if (result.error) {
+      console.error("onboarding: payee lock use not read", result.error.message);
+      return false;
+    }
+    const rows = (Array.isArray(result.data) ? result.data : []) as Array<{ action: string; detail: Record<string, unknown> | null }>;
+    return rows.some((row) => row.action === "payee_lock_changed" || Boolean(row.detail?.payeeLock));
+  } catch (error) {
+    console.error("onboarding: payee lock use not read", error instanceof Error ? error.message : "unknown error");
+    return false;
+  }
+}
+
 export async function readLimitsSet(): Promise<boolean> {
   try {
     const result = await db().from("ledger_entries").select("seq").in("action", [...LIMIT_ACTIONS]).eq("actor", "human").limit(1);

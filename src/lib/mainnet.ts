@@ -26,6 +26,13 @@ export const MAINNET_STARTING_TWO_APPROVALS = 100;
 export const MAINNET_STARTING_BUDGET = { dailyUsdc: 50, weeklyUsdc: 150 } as const;
 
 /**
+ * The payee lock a mainnet workspace starts with (docs/superpowers/specs/2026-10-22-payee-lock-mainnet-default-design.md
+ * LD1): on, so a changed payout address is paid only after a second person records how they checked it, and with no
+ * wait, so a payee's first address through its link is not held a day. An owner changes either in Settings.
+ */
+export const MAINNET_STARTING_PAYEE_LOCK = { on: true, coolingHours: 0 } as const;
+
+/**
  * Arc mainnet is on, and open to this address (M1): it is on the allowlist, or the allowlist holds `*`, which opens Arc
  * mainnet to everyone once a pilot is done. `*` is never implied: an empty allowlist opens it to no one. No address is
  * never allowed.

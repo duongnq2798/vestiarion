@@ -8,7 +8,7 @@ import { signedOrgs } from "./support/signed-org";
 
 vi.mock("server-only", () => ({}));
 
-import { billWaitingOnApprovals, readLimitsSet, readOnboardingMarks, readPersonActs, recordOnboardingMarks } from "@/lib/onboarding/read";
+import { billWaitingOnApprovals, readLimitsSet, readOnboardingMarks, readPayeeLockUsed, readPersonActs, recordOnboardingMarks } from "@/lib/onboarding/read";
 import { accountantVisitMarks, readAccountantOnboarding } from "@/lib/onboarding/accountant";
 
 /**
@@ -124,6 +124,18 @@ describe("readLimitsSet", () => {
     expect(fake.requests[0].params.get("actor")).toBe("eq.human");
     expect(fake.requests[0].params.get("action")).toBe("in.(agent_budget_changed,approval_policy_changed)");
     expect(await inScope(() => ({ body: [] }), () => readLimitsSet()).run()).toBe(false);
+  });
+});
+
+describe("readPayeeLockUsed (payee lock mainnet default LD2)", () => {
+  it("is true once a person changed the lock, or confirmed an address under it, and false for a confirmation without it", async () => {
+    const changed = inScope(() => ({ body: [{ action: "payee_lock_changed", detail: {} }] }), () => readPayeeLockUsed());
+    expect(await changed.run()).toBe(true);
+    expect(changed.fake.requests[0].params.get("actor")).toBe("eq.human");
+    expect(changed.fake.requests[0].params.get("action")).toBe("in.(payee_lock_changed,counterparty_address_confirmed)");
+    expect(await inScope(() => ({ body: [{ action: "counterparty_address_confirmed", detail: { payeeLock: { coolingHours: 0 } } }] }), () => readPayeeLockUsed()).run()).toBe(true);
+    expect(await inScope(() => ({ body: [{ action: "counterparty_address_confirmed", detail: {} }] }), () => readPayeeLockUsed()).run()).toBe(false);
+    expect(await inScope(() => ({ status: 500, body: { code: "XX000", message: "down" } }), () => readPayeeLockUsed()).run()).toBe(false);
   });
 });
 
