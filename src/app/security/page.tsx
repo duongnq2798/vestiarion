@@ -581,9 +581,9 @@ export default function SecurityPage() {
             Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota, and API reads are not limited.
           </li>
           <li>
-            The app sends its Content Security Policy report-only: browsers report what it would block, and it blocks nothing yet, except{" "}
-            <code>frame-ancestors &apos;none&apos;</code> on the Chrome extension&apos;s sign-in page, so that page cannot be framed. It allows inline
-            scripts, since pages carry no nonce.
+            The app enforces its Content Security Policy: scripts only from the site itself and Google Analytics, connections only to the services it
+            names, no plugins, and no other site framing its pages. It allows inline scripts, since pages carry no nonce. Where a form may send someone
+            (<code>form-action</code>) is still report-only, since a tool&apos;s consent screen may pass the person on to a sign-in host first.
           </li>
         </ul>
       </LegalSection>

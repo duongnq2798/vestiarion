@@ -78,9 +78,11 @@ less work in a run, never a run past its limit.
 
 ## Content Security Policy
 
-`next.config.ts` sends `Content-Security-Policy-Report-Only` on every response, with `Reporting-Endpoints`
-(`docs/superpowers/specs/2026-10-21-csp-report-only-design.md`). Browsers report what it would block and block nothing;
-it is enforced once production's reports show it fits every page.
+`next.config.ts` sends `cspHeaders` on every response, with `Reporting-Endpoints`
+(`docs/superpowers/specs/2026-10-21-csp-report-only-design.md`, `docs/superpowers/specs/2026-10-22-csp-enforce-design.md`).
+A production build enforces the policy as `Content-Security-Policy`, but for `form-action`, sent beside it as
+`Content-Security-Policy-Report-Only` (`REPORT_ONLY_DIRECTIVES`). Development, and a deployment with
+`DOCS_SCREENSHOTS=1`, whose screenshot pages a local file frames, send all of it report-only.
 - The policy is `contentSecurityPolicy` (`src/lib/security/csp.ts`). The config imports it, so it imports only the
   network profiles and the site's links, which import nothing; Iris's origins and Product Hunt's badge come from them.
 - Scripts and styles may be inline, since Next.js inlines its own and a nonce would end static rendering.
@@ -91,7 +93,7 @@ it is enforced once production's reports show it fits every page.
 - A Vercel preview also allows Vercel's toolbar.
 - `tests/csp.test.ts` holds each origin to the code that reaches it, and fails on a connect route whose consent screen
   is not named.
-- `POST /api/csp-report` logs each violation as one line, `csp report-only {"directive","blocked","page"}`: the blocked
+- `POST /api/csp-report` logs each violation as one line, `csp report {"directive","blocked","page","disposition"}`: the blocked
   origin or keyword, bounded in length, and the page's first path segment, nothing else from the report. A browser
   extension's violations are dropped. It reads at most 64 KB of body, is rate-limited per client and per instance
   (`takeCspReportToken`, a dropped report still answered 204 so the browser does not resend it) and stores nothing.

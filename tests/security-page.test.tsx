@@ -799,21 +799,21 @@ describe("what it does not claim, still true of the code", () => {
     expect(notClaimed).toContain("no SOC 2 report or ISO 27001 certification");
   });
 
-  it("a Content Security Policy sent report-only, but the extension sign-in page's frame rule: when it is enforced, this page says so", () => {
+  it("a Content Security Policy enforced but for form-action, and inline scripts allowed, as the config sends it", () => {
     const config = source("next.config.ts");
-    // The one policy enforced is frame-ancestors 'none', on the Chrome extension's sign-in page; the app's is report-only
-    // (CSP report-only design CSP3), with inline scripts allowed.
-    expect(config.match(/"Content-Security-Policy"[^\n]*/g)).toEqual([`"Content-Security-Policy", value: "frame-ancestors 'none'" },`]);
+    // The policy goes out through cspHeaders (CSP enforce design CE1, CE2); the extension sign-in page keeps its frame rule.
+    expect(config).toContain("headers: cspHeaders(),");
     expect(config.split('source: "/extension/:path*"')[1]?.split("source:")[0]).toContain("frame-ancestors 'none'");
-    expect(config.match(/"Content-Security-Policy-Report-Only"[^\n]*/g)).toEqual([`"Content-Security-Policy-Report-Only", value: contentSecurityPolicy() },`]);
-    expect(source("src/lib/security/csp.ts")).toMatch(/\["script-src", \["'self'", "'unsafe-inline'"/);
+    const csp = source("src/lib/security/csp.ts");
+    expect(csp).toContain('key: "Content-Security-Policy", value: contentSecurityPolicy(env, (directive) => !REPORT_ONLY_DIRECTIVES.has(directive))');
+    expect(csp).toContain('new Set(["form-action"])');
+    expect(csp).toMatch(/\["script-src", \["'self'", "'unsafe-inline'"/);
     // vercel.json sets only where the functions run (ARCHITECTURE.md, "Where it runs"): no header, so no policy there.
     const vercel = existsSync(path.join(process.cwd(), "vercel.json")) ? (JSON.parse(source("vercel.json")) as Record<string, unknown>) : {};
     expect(Object.keys(vercel).filter((key) => key !== "$schema" && key !== "regions")).toEqual([]);
-    expect(notClaimed).toContain(
-      "sends its Content Security Policy report-only: browsers report what it would block, and it blocks nothing yet, except frame-ancestors 'none' on the Chrome extension's sign-in page, so that page cannot be framed"
-    );
+    expect(notClaimed).toContain("enforces its Content Security Policy");
     expect(notClaimed).toContain("It allows inline scripts, since pages carry no nonce.");
+    expect(notClaimed).toMatch(/\(\s*form-action\s*\) is still report-only/);
   });
 
   it("review and CI before each merge, main protected, and no required human second approval", () => {

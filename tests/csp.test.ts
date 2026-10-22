@@ -9,7 +9,7 @@ import { PIPEDRIVE_AUTHORIZE } from "@/lib/pipedrive/http";
 import { INTUIT_AUTHORIZE } from "@/lib/quickbooks/http";
 import { takeCspReportToken } from "@/lib/rate-limit";
 import { PRODUCT_HUNT_BADGE } from "@/lib/site-links";
-import { contentSecurityPolicy, CSP_REPORT_PATH, CSP_REPORTING_ENDPOINTS, CSP_REPORTS_PER_REQUEST, cspViolations } from "@/lib/security/csp";
+import { contentSecurityPolicy, CSP_REPORT_PATH, CSP_REPORTING_ENDPOINTS, CSP_REPORTS_PER_REQUEST, cspHeaders, cspViolations, REPORT_ONLY_DIRECTIVES } from "@/lib/security/csp";
 import { XERO_AUTHORIZE } from "@/lib/xero/http";
 import { ZOHO_REGIONS } from "@/lib/zohobooks/regions";
 
@@ -115,20 +115,38 @@ describe("the policy (CSP1, CSP2)", () => {
   });
 });
 
-describe("the header (CSP3)", () => {
-  it("is sent report-only on every response, with the Reporting API's endpoint", async () => {
-    const headers = await nextConfig.headers!();
-    expect(headers[0]).toEqual({
-      source: "/:path*",
-      headers: [
-        { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy(process.env) },
+describe("the header (CSP3, CSP enforce CE1, CE2)", () => {
+  const production = { NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: "https://abc.supabase.co" };
+  const directivesOf = (value: string) => value.split("; ").map((directive) => directive.split(" ")[0]);
+
+  it("is enforced in a production build, but for form-action, which goes report-only beside it", () => {
+    const [enforced, reportOnly, reporting] = cspHeaders(production);
+    expect(enforced.key).toBe("Content-Security-Policy");
+    expect(directivesOf(enforced.value)).not.toContain("form-action");
+    expect(enforced.value).toMatch(/^default-src 'self'; script-src .*; frame-ancestors 'none'; report-uri \/api\/csp-report; report-to csp$/);
+    expect(reportOnly).toEqual({ key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy(production, (directive) => directive === "form-action") });
+    expect(directivesOf(reportOnly.value)).toEqual(["form-action", "report-uri", "report-to"]);
+    expect(reportOnly.value).toContain("https://abc.supabase.co");
+    expect(reporting).toEqual({ key: "Reporting-Endpoints", value: CSP_REPORTING_ENDPOINTS });
+    // Between them, every directive of the policy.
+    expect(new Set([...directivesOf(enforced.value), ...directivesOf(reportOnly.value)])).toEqual(new Set(directivesOf(contentSecurityPolicy(production))));
+    expect(REPORT_ONLY_DIRECTIVES).toEqual(new Set(["form-action"]));
+  });
+
+  it("stays report-only in development and where the docs screenshot pages are served, which a local file frames", () => {
+    for (const env of [{ NODE_ENV: "development" }, { NODE_ENV: "test" }, { ...production, DOCS_SCREENSHOTS: "1" }]) {
+      expect(cspHeaders(env)).toEqual([
+        { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy(env) },
         { key: "Reporting-Endpoints", value: CSP_REPORTING_ENDPOINTS },
-      ],
-    });
-    expect(headers[0].headers[0].value).toMatch(/^default-src 'self'; script-src .*; frame-ancestors 'none'; report-uri \/api\/csp-report; report-to csp$/);
-    // Nothing enforces it yet but the extension sign-in page's frame rule.
-    const enforced = headers.flatMap((entry) => entry.headers.filter((header) => header.key === "Content-Security-Policy").map(() => entry.source));
-    expect(enforced).toEqual(["/extension/:path*"]);
+      ]);
+    }
+  });
+
+  it("is sent on every response, and the extension sign-in page keeps its own frame rule", async () => {
+    const headers = await nextConfig.headers!();
+    expect(headers[0]).toEqual({ source: "/:path*", headers: cspHeaders(process.env) });
+    const extension = headers.find((entry) => entry.source === "/extension/:path*");
+    expect(extension?.headers).toContainEqual({ key: "Content-Security-Policy", value: "frame-ancestors 'none'" });
   });
 });
 
@@ -146,7 +164,15 @@ describe("reading reports (CSP4)", () => {
           "script-sample": "alert(document.cookie)",
         },
       })
-    ).toEqual([{ directive: "script-src-elem", blocked: "https://cdn.evil.test", page: "/p" }]);
+    ).toEqual([{ directive: "script-src-elem", blocked: "https://cdn.evil.test", page: "/p", disposition: "unknown" }]);
+  });
+
+  it("says whether the browser blocked it or only reported it (CSP enforce CE3)", () => {
+    const legacy = (disposition: unknown) =>
+      cspViolations({ "csp-report": { "blocked-uri": "eval", "effective-directive": "script-src", "document-uri": "https://vestiarion.xyz/docs/x", disposition } })[0];
+    expect(legacy("enforce")).toEqual({ directive: "script-src", blocked: "eval", page: "/docs", disposition: "enforce" });
+    expect(legacy("report").disposition).toBe("report");
+    expect(legacy("anything else").disposition).toBe("unknown");
   });
 
   it("reads the Reporting API's batches, csp-violation reports only, at most twenty", () => {
@@ -156,8 +182,8 @@ describe("reading reports (CSP4)", () => {
       body: { documentURL, blockedURL, effectiveDirective: "connect-src", disposition: "report", sample: "secret" },
     });
     expect(cspViolations([report("https://api.example.test/v1/thing"), { type: "deprecation", body: {} }, report("inline", "https://vestiarion.xyz/")])).toEqual([
-      { directive: "connect-src", blocked: "https://api.example.test", page: "/o" },
-      { directive: "connect-src", blocked: "inline", page: "/" },
+      { directive: "connect-src", blocked: "https://api.example.test", page: "/o", disposition: "report" },
+      { directive: "connect-src", blocked: "inline", page: "/", disposition: "report" },
     ]);
     expect(cspViolations(Array.from({ length: 50 }, () => report("eval")))).toHaveLength(CSP_REPORTS_PER_REQUEST);
   });
@@ -166,9 +192,9 @@ describe("reading reports (CSP4)", () => {
     expect(cspViolations({ "csp-report": { "blocked-uri": "chrome-extension://abcdef/inject.js", "effective-directive": "script-src" } })).toEqual([]);
     expect(
       cspViolations({ "csp-report": { "blocked-uri": "javascript:alert(1) and more text", "effective-directive": "script-src; drop", "document-uri": "https://x.test/<b>/a" } })
-    ).toEqual([{ directive: "unknown", blocked: "javascript", page: "unknown" }]);
+    ).toEqual([{ directive: "unknown", blocked: "javascript", page: "unknown", disposition: "unknown" }]);
     expect(cspViolations({ "csp-report": { "blocked-uri": "data:image/png;base64,AAAA", "violated-directive": "img-src 'self'" } })).toEqual([
-      { directive: "img-src", blocked: "data", page: "unknown" },
+      { directive: "img-src", blocked: "data", page: "unknown", disposition: "unknown" },
     ]);
     expect(cspViolations({ nothing: true })).toEqual([]);
     expect(cspViolations("text")).toEqual([]);
@@ -176,14 +202,16 @@ describe("reading reports (CSP4)", () => {
 
   it("never logs more than a short origin, and reads an about: page as no page of this site's", () => {
     const long = `https://${"a".repeat(3000)}.example.test/x`;
-    expect(cspViolations({ "csp-report": { "blocked-uri": long, "effective-directive": "img-src" } })).toEqual([{ directive: "img-src", blocked: "unknown", page: "unknown" }]);
+    expect(cspViolations({ "csp-report": { "blocked-uri": long, "effective-directive": "img-src" } })).toEqual([
+      { directive: "img-src", blocked: "unknown", page: "unknown", disposition: "unknown" },
+    ]);
     expect(cspViolations({ "csp-report": { "blocked-uri": `${"z".repeat(40)}:thing`, "effective-directive": "img-src" } })[0].blocked).toBe("unknown");
     expect(cspViolations({ "csp-report": { "blocked-uri": "https://cdn.example.test:8443/a", "document-uri": "about:srcdoc" } })[0]).toMatchObject({
       blocked: "https://cdn.example.test:8443",
       page: "unknown",
     });
     const batch = Array.from({ length: 20 }, () => ({ type: "csp-violation", body: { blockedURL: long, effectiveDirective: "img-src", documentURL: long } }));
-    expect(JSON.stringify(cspViolations(batch)).length).toBeLessThan(20 * 80);
+    expect(JSON.stringify(cspViolations(batch)).length).toBeLessThan(20 * 105);
   });
 });
 
@@ -207,7 +235,7 @@ describe("POST /api/csp-report (CSP4)", () => {
     const response = await post(JSON.stringify({ "csp-report": { "document-uri": "https://vestiarion.xyz/docs/x", "effective-directive": "img-src", "blocked-uri": "https://img.example.test/a.png" } }));
     expect(response.status).toBe(204);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith("csp report-only", JSON.stringify({ directive: "img-src", blocked: "https://img.example.test", page: "/docs" }));
+    expect(warn).toHaveBeenCalledWith("csp report", JSON.stringify({ directive: "img-src", blocked: "https://img.example.test", page: "/docs", disposition: "unknown" }));
   });
 
   it("refuses what is not JSON or too large, and logs nothing for either", async () => {

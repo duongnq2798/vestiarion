@@ -1,7 +1,7 @@
 import createMDX from "@next/mdx";
 import type { NextConfig } from "next";
 import { legacyRedirects } from "./src/lib/auth/org-paths";
-import { contentSecurityPolicy, CSP_REPORTING_ENDPOINTS } from "./src/lib/security/csp";
+import { cspHeaders } from "./src/lib/security/csp";
 
 const nextConfig: NextConfig = {
   // An invoice document of up to 4 MB is read through a Server Action
@@ -36,13 +36,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // The Content Security Policy, report-only (CSP report-only design CSP1-CSP3): browsers report to /api/csp-report
-        // what it would block, and block nothing, until it is enforced.
+        // The Content Security Policy (CSP enforce design CE1-CE3): enforced in a production build but for form-action,
+        // report-only beside it, and all of it report-only in development and for the docs screenshot pages. Browsers
+        // report to /api/csp-report.
         source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy-Report-Only", value: contentSecurityPolicy() },
-          { key: "Reporting-Endpoints", value: CSP_REPORTING_ENDPOINTS },
-        ],
+        headers: cspHeaders(),
       },
       { source: "/docs-md/:path*", headers: [{ key: "X-Robots-Tag", value: "noindex" }] },
       {

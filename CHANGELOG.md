@@ -55,9 +55,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   card for a milestone in the wait now says the agent decides within five minutes after it. Turning the payee lock
   off, or choosing a shorter wait, decides what it held back at once.
 
-- **A Content Security Policy, report-only.** Every page now sends one, describing where scripts may come from, where
-  data may be sent, which site may frame a page and where forms may go. Browsers report what it would block and it
-  blocks nothing yet; once the reports show it fits every page, it will be enforced. The security page says so.
+- **A Content Security Policy, enforced.** Every page now sends one, describing where scripts may come from, where
+  data may be sent and which site may frame a page, and browsers block what it does not allow. Where forms may go is
+  still report-only, since a tool's consent screen may pass the person on to a sign-in host first. The reports
+  production sent while all of it was report-only showed nothing of the site's own blocked: only browser extensions'
+  attempts to run code from text. The security page says so.
 
 - **A free address lookalike checker** at [/check-address](https://www.vestiarion.xyz/check-address). Paste the address
   you are about to pay and the addresses you know. It says if the address is made to look like one of them, the
