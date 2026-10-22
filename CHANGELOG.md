@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Pay a vendor on Arbitrum from Arc mainnet.** Arbitrum joins Base as a chain Arc mainnet pays across to through
+  CCTP, in real USDC: give a vendor an Arbitrum address, or let them choose Arbitrum on their payee link. Circle
+  quoted about 0.077 USDC to forward a payout there on Oct 22, paid on top of the invoice. A contract from your own
+  wallet deployed before Oct 22 pays Base only: Vestiarion reads which chains your contract pays and offers only
+  those. Run the migration that allows Arbitrum vendors. The TypeScript SDK 0.3.6 accepts `ARB` for a counterparty's
+  chain.
+
 - **A payee choosing their network sees what each costs you.** On a payee link that lets a vendor choose where they
   are paid, each network now says what sending there costs your business, as Circle quotes it when the page opens,
   and that the vendor gets the full amount on any of them.

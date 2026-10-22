@@ -307,7 +307,7 @@ export default function PrivacyPage() {
           <li>
             <strong>RPC nodes</strong> receive the wallet addresses and transaction hashes whose balances, fees and receipts Vestiarion&apos;s server
             reads: Arc&apos;s node, {ARC_RPC_HOSTS.join(" and ")}, and, where this deployment sets them, the ones named by <code>ARC_RPC_URL</code> and{" "}
-            <code>ARC_MAINNET_RPC_URL</code>, which take some of those reads; receipts are always read from Arc&apos;s public node; and, for a receipt of a payout to another chain from Arc testnet,{" "}
+            <code>ARC_MAINNET_RPC_URL</code>, which take some of those reads; receipts are always read from Arc&apos;s public node; and, for a receipt of a payout to another chain from Arc,{" "}
             {listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode&apos;s among them. These are already public on chain, and nothing else about you or your workspace goes
             with them. To look up an ENS name or a Basename typed into an address field, or the ENS name of an address typed there, the server asks
             Ethereum&apos;s node at {ENS_RPC_HOST}, or the one <code>ENS_RPC_URL</code> names, and, for a Basename, Coinbase&apos;s gateway at{" "}

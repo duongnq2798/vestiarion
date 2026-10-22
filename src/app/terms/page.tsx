@@ -31,7 +31,7 @@ export default function TermsPage() {
           </li>
           <li>
             <strong>Arc testnet</strong>: the workspace pays in testnet USDC and EURC from Circle&apos;s faucet. Shadow mode, hosted wallets, the USYC reserve,
-            milestone escrow and the EURC swap run here only. Payouts to other chains run here, and on Arc mainnet to Base from a
+            milestone escrow and the EURC swap run here only. Payouts to other chains run here, and on Arc mainnet to Base and Arbitrum from a
             workspace&apos;s own Circle account.
           </li>
         </ul>

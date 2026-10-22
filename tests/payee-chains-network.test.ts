@@ -25,7 +25,7 @@ describe("each network's payee chains (P3)", () => {
     ]);
   });
 
-  it("lists Arc mainnet's own chain, with its CCTP domain and native USDC emitter (mainnet limits L5), then Base (mainnet Base payouts B1)", () => {
+  it("lists Arc mainnet's own chain, with its CCTP domain and native USDC emitter (mainnet limits L5), then Base (mainnet Base payouts B1) and Arbitrum (arbitrum mainnet AR1)", () => {
     expect(ARC_MAINNET.payeeChains).toEqual([
       {
         id: "ARC",
@@ -44,7 +44,22 @@ describe("each network's payee chains (P3)", () => {
         rpcUrl: "https://mainnet.base.org",
         explorerTx: "https://basescan.org/tx/",
       },
+      {
+        id: "ARB",
+        label: "Arbitrum",
+        domain: 3,
+        usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        rpcUrl: "https://arb1.arbitrum.io/rpc",
+        explorerTx: "https://arbiscan.io/tx/",
+      },
     ]);
+  });
+
+  it("keeps Arbitrum's USDC, domain and node equal to what Arc mainnet already brings USDC in from (arbitrum mainnet AR1)", () => {
+    const arbitrum = ARC_MAINNET.inbound.sources.find((source) => source.id === "Arbitrum");
+    expect(chainOn("arc-mainnet", "ARB")).toMatchObject({ usdc: arbitrum?.usdc, domain: arbitrum?.domain, rpcUrl: arbitrum?.rpcUrl, explorerTx: arbitrum?.explorerTx });
+    expect(paidAcrossChains("ARB")).toBe(true);
+    expect(networkOfChain("ARB")).toBe("arc-mainnet");
   });
 
   it("keeps Base's USDC and domain equal to what Arc mainnet already brings USDC in from (add USDC from another chain B1)", () => {
@@ -72,7 +87,7 @@ describe("a chain on a network (P3)", () => {
     expect(chainOn("arc-testnet", null)).toBe(ARC_TESTNET.payeeChains[0]);
     expect(chainOn("arc-mainnet", undefined)).toBe(ARC_MAINNET.payeeChains[0]);
     expect(chainOn("arc-testnet", "BASE-SEPOLIA").domain).toBe(6);
-    expect(chainsOn("arc-mainnet").map((chain) => chain.id)).toEqual(["ARC", "BASE"]);
+    expect(chainsOn("arc-mainnet").map((chain) => chain.id)).toEqual(["ARC", "BASE", "ARB"]);
   });
 
   it("refuses a chain from another network, or one no network lists, in plain words (Review Focus 3)", () => {

@@ -47,10 +47,11 @@ describe("a workspace on Arc mainnet", () => {
     expect(runWithConfig(BASE, () => networkRpcUrl(ARC_MAINNET))).toBe("https://rpc.mainnet.arc.io");
   });
 
-  it("pays its own chain, ARC, and Base across chains (mainnet Base payouts B1), and no Sepolia chain", () => {
+  it("pays its own chain, ARC, and Base and Arbitrum across chains (mainnet Base payouts B1, arbitrum mainnet AR1), and no Sepolia chain", () => {
     expect(homeChain("arc-mainnet").id).toBe("ARC");
-    expect(chainsOn("arc-mainnet").map((chain) => chain.id)).toEqual(["ARC", "BASE"]);
+    expect(chainsOn("arc-mainnet").map((chain) => chain.id)).toEqual(["ARC", "BASE", "ARB"]);
     expect(chainOn("arc-mainnet", "BASE").domain).toBe(6);
+    expect(chainOn("arc-mainnet", "ARB").domain).toBe(3);
     for (const chain of ["BASE-SEPOLIA", "ARB-SEPOLIA", "ETH-SEPOLIA", "ARC-TESTNET"]) {
       expect(() => chainOn("arc-mainnet", chain)).toThrow(`${chain} is not a chain this workspace pays on`);
       expect(counterpartyChainProblem("arc-mainnet", chain)).toBe(`${chain} is not a chain this workspace pays on`);

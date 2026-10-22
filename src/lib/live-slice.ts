@@ -113,11 +113,12 @@ function addressOf(row: AddressRow): SliceAddress {
 }
 
 /**
- * The chain on Arc mainnet a vendor paid across chains in shadow mode keeps (mainnet Base payouts B7): one on Base
- * Sepolia is a vendor on Base, so its Base address, once given, is paid on Base and never on Arc. Its testnet address is
- * not carried. Any other chain is not one Arc mainnet pays, so the vendor goes over on Arc mainnet's own chain.
+ * The chain on Arc mainnet a vendor paid across chains in shadow mode keeps (mainnet Base payouts B7, arbitrum mainnet
+ * AR1): one on Base Sepolia is a vendor on Base, and one on Arbitrum Sepolia a vendor on Arbitrum, so its address there,
+ * once given, is paid there and never on Arc. Its testnet address is not carried. Any other chain is not one Arc mainnet
+ * pays, so the vendor goes over on Arc mainnet's own chain.
  */
-const MAINNET_CHAIN_OF: Readonly<Record<string, string>> = { "BASE-SEPOLIA": "BASE" };
+const MAINNET_CHAIN_OF: Readonly<Record<string, string>> = { "BASE-SEPOLIA": "BASE", "ARB-SEPOLIA": "ARB" };
 
 const limitOf = (row: Pick<VendorRow, "baseline_payment_limit">): number | null =>
   row.baseline_payment_limit === null || !(Number(row.baseline_payment_limit) > 0) ? null : Number(row.baseline_payment_limit);

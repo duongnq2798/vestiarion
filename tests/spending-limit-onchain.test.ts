@@ -1,7 +1,7 @@
 import { decodeFunctionData, encodeErrorResult, encodeFunctionResult, type Abi, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import artifact from "@/lib/spending-limit/artifact.json";
-import { readSpendingLimit, spendingLimitRef, spendingLimitVerdict, usdcUnits } from "@/lib/spending-limit/onchain";
+import { contractAllowedDomains, forgetAllowedDomains, readSpendingLimit, spendingLimitRef, spendingLimitVerdict, usdcUnits } from "@/lib/spending-limit/onchain";
 import { ARC_TESTNET } from "@/lib/network";
 
 /**
@@ -127,5 +127,30 @@ describe("readSpendingLimit", () => {
   it("says unreadable when any of it cannot be read", async () => {
     const { fetch } = node(() => ({ status: 500, json: {} }));
     expect(await readSpendingLimit(CONTRACT, { fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toEqual({ state: "unreadable" });
+  });
+});
+
+describe("contractAllowedDomains (arbitrum mainnet AR3)", () => {
+  const v2 = artifact.v2.abi as Abi;
+
+  it("reads the domains a version 2 contract was deployed for, once: they never change", async () => {
+    forgetAllowedDomains();
+    const { fetch, sent } = node((body) => {
+      const call = body.params[0] as Record<string, string>;
+      const { functionName } = decodeFunctionData({ abi: v2, data: call.data as Hex });
+      return { json: { jsonrpc: "2.0", id: 1, result: encodeFunctionResult({ abi: v2, functionName, result: 1n << 6n }) } };
+    });
+    expect(await contractAllowedDomains(CONTRACT, { fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toBe(64n);
+    expect(await contractAllowedDomains(CONTRACT.toLowerCase(), { fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toBe(64n);
+    expect(sent).toHaveLength(1);
+    expect(decodeFunctionData({ abi: v2, data: (sent[0].body.params[0] as Record<string, string>).data as Hex }).functionName).toBe("allowedDomains");
+  });
+
+  it("is null when the contract does not answer, and asks again next time", async () => {
+    forgetAllowedDomains();
+    const { fetch, sent } = node(() => ({ status: 500, json: {} }));
+    expect(await contractAllowedDomains(CONTRACT, { fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toBeNull();
+    expect(await contractAllowedDomains(CONTRACT, { fetch, rpcUrl: ARC_TESTNET.rpcUrl })).toBeNull();
+    expect(sent).toHaveLength(2);
   });
 });

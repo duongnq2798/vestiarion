@@ -37,6 +37,7 @@ const NONE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c3";
 const NO_LIMIT = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c4";
 const ON_BASE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c5";
 const UNCONFIRMED = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c6";
+const ON_ARBITRUM = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005c8";
 const ADDRESS = "0x97f85033BBd83870A841cF7153f35B387746b6B6";
 const config = configFromEnv({
   NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid",
@@ -164,6 +165,13 @@ describe("startLiveSlice", () => {
     expect(calls.map((call) => call.counterparty.address)).toEqual([null, null]);
     // A vendor on Base Sepolia goes over as a vendor on Base, so its Base address is paid on Base (mainnet Base payouts B7).
     expect(calls.map((call) => call.counterparty.chain)).toEqual(["BASE", undefined]);
+  });
+
+  it("carries a vendor on Arbitrum Sepolia over as a vendor on Arbitrum, with no address (arbitrum mainnet AR1)", async () => {
+    const { run } = workspace({ vendors: [vendor(ON_ARBITRUM, "Atlas Freight", { address: ADDRESS, chain: "ARB-SEPOLIA" })] });
+    await run(() => startLiveSlice({ userId: USER, vendorIds: [ON_ARBITRUM] }));
+    const call = createCounterpartyMock.mock.calls.at(-1)?.[0] as { counterparty: Record<string, unknown> };
+    expect(call.counterparty).toMatchObject({ name: "Atlas Freight", address: null, chain: "ARB" });
   });
 
   it("leaves behind, and names, a vendor the checks refuse or that fails to be added, and carries the rest", async () => {

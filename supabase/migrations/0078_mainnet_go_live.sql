@@ -3,7 +3,8 @@
 -- 1. A payee may be on ARC, Arc mainnet's chain, whatever its role; the Sepolia chains stay vendor-only (0044). 0044's
 --    rewrite of unknown chains keeps ARC, so db:migrate's re-run of it leaves an ARC payee as it is. BASE, which Arc
 --    mainnet pays across to through CCTP, is vendor-only like the Sepolia chains, and 0044 keeps it too
---    (docs/superpowers/specs/2026-10-19-mainnet-base-payouts-design.md B6).
+--    (docs/superpowers/specs/2026-10-19-mainnet-base-payouts-design.md B6). So is ARB, Arbitrum One
+--    (docs/superpowers/specs/2026-10-22-arbitrum-mainnet-design.md AR2).
 -- 2. A workspace's network is fixed once it has any account (0075's lock, widened). createWorkspace sets it right after
 --    create_org, before the first account, so a sandbox whose account rows name ARC-TESTNET can no longer be moved to
 --    Arc mainnet by hand.
@@ -14,7 +15,7 @@
 alter table public.counterparties drop constraint if exists counterparties_chain_check;
 alter table public.counterparties
   add constraint counterparties_chain_check
-  check (chain in ('ARC-TESTNET', 'ARC', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA', 'BASE') and (chain in ('ARC-TESTNET', 'ARC') or role = 'vendor'));
+  check (chain in ('ARC-TESTNET', 'ARC', 'BASE-SEPOLIA', 'ARB-SEPOLIA', 'ETH-SEPOLIA', 'BASE', 'ARB') and (chain in ('ARC-TESTNET', 'ARC') or role = 'vendor'));
 
 create or replace function public.orgs_network_locked() returns trigger
 language plpgsql
