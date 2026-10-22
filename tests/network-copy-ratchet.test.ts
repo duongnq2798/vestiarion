@@ -34,8 +34,7 @@ const ALLOWED: Record<string, number> = {
   "src/app/terms/page.tsx": 11,
   // The privacy page's seventh, and the security page's list of services: the payee chains a receipt is read on for a
   // payout to another chain, which only Arc testnet has.
-  "src/app/privacy/page.tsx": 7,
-  "src/lib/subprocessors.ts": 1,
+  "src/app/privacy/page.tsx": 6,
   // The rule that books a payment only into books of the same reality, which names Arc testnet on either network: a
   // payment on Arc testnet or in shadow mode is booked only into a demo company (accounting write-back W1).
   "src/lib/connectors/posting.ts": 1,

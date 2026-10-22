@@ -86,6 +86,10 @@ export async function personPaymentThroughContract(
         throw new ContractRefusal(`Paying ${paying} would pass the contract's ${which} limit of ${verdict.limit} USDC: ${verdict.spent} USDC paid so far.`);
       }
       if (verdict.error === "FeeTooHigh") throw new ContractRefusal("The CCTP fee for this payout is above the most your wallet's contract lets a payout pay; nothing was paid.");
+      // A contract names the chains it may pay when it is deployed: one set up before a chain was added refuses it (AR3).
+      if (verdict.error === "DomainNotAllowed") {
+        throw new ContractRefusal(`Your wallet's contract was deployed before it could pay ${chainOn(network.id, input.destinationChain).label}, so it refuses this payout; nothing was paid. Pay this vendor on a chain it pays, or from your own Circle account.`);
+      }
       throw new ContractRefusal(`The contract on ${network.label} refused this payment (${verdict.error}).`);
     }
     if (verdict.state === "unreadable") throw new ContractRefusal(`The contract on ${network.label} could not be read; nothing was paid. Try again in a moment.`);

@@ -70,6 +70,18 @@ describe("a vendor on Base, paid from Arc mainnet (mainnet Base payouts B4, B6)"
   });
 });
 
+describe("a vendor on Arbitrum, paid from Arc mainnet (arbitrum mainnet AR2)", () => {
+  it("is accepted for a vendor, refused for a contractor, and stays when 0044 and 0078 run again", async () => {
+    const main = await org("main-arb", "arc-mainnet");
+    await counterparty(main, "Arbitrum vendor", "vendor", "ARB");
+    await expect(counterparty(main, "Arbitrum builder", "contractor", "ARB")).rejects.toThrow(/counterparties_chain_check/);
+    await db.exec(readFileSync(path.join(MIGRATIONS_DIR, "0044_cctp_payouts.sql"), "utf8"));
+    await db.exec(readFileSync(path.join(MIGRATIONS_DIR, "0078_mainnet_go_live.sql"), "utf8"));
+    const row = await db.query<{ chain: string }>("select chain from public.counterparties where org_id = $1", [main]);
+    expect(row.rows[0].chain).toBe("ARB");
+  });
+});
+
 describe("the network is fixed once a workspace has an account (M3)", () => {
   it("may change while there is none, as createWorkspace sets it", async () => {
     const fresh = await org("fresh");

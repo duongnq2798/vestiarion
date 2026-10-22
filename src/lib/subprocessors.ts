@@ -113,7 +113,7 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     name: "RPC nodes",
     privacyEntry: "RPC nodes",
     names: ["RPC nodes", "PublicNode"],
-    purpose: `answer the server's reads of balances, fees and receipts: Arc's node (${listed(ARC_RPC_HOSTS)}, and, where set, the ones ARC_RPC_URL and ARC_MAINNET_RPC_URL name, which take some reads, while receipts stay on the public node), and, for a receipt of a payout to another chain from Arc testnet, ${listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode's among them; and, to look up an ENS name or Basename typed into an address field, Ethereum's node at ${ENS_RPC_HOST} (or the one ENS_RPC_URL names) and, for a Basename, Coinbase's gateway at ${ENS_GATEWAY_HOSTS.join(" and ")}`,
+    purpose: `answer the server's reads of balances, fees and receipts: Arc's node (${listed(ARC_RPC_HOSTS)}, and, where set, the ones ARC_RPC_URL and ARC_MAINNET_RPC_URL name, which take some reads, while receipts stay on the public node), and, for a receipt of a payout to another chain from Arc, ${listed(PAYEE_CHAIN_RPC_HOSTS)}, PublicNode's among them; and, to look up an ENS name or Basename typed into an address field, Ethereum's node at ${ENS_RPC_HOST} (or the one ENS_RPC_URL names) and, for a Basename, Coinbase's gateway at ${ENS_GATEWAY_HOSTS.join(" and ")}`,
     data: "the wallet addresses and transaction hashes read, which are already public on chain, and a name or address looked up",
     when: "",
   },

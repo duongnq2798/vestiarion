@@ -113,6 +113,14 @@ describe("personPaymentThroughContract with a version 2 contract (spending limit
     await expect(inScope(external, () => personPaymentThroughContract(acrossChains, { crossChainVerdict: feeTooHigh }))).rejects.toThrow(/above the most your wallet's contract lets a payout pay/);
   });
 
+  it("says a contract deployed before a chain joined its network does not pay it (arbitrum mainnet AR3)", async () => {
+    const domainNotAllowed = vi.fn(async () => ({ state: "refused" as const, error: "DomainNotAllowed" }));
+    await expect(inScope(external, () => personPaymentThroughContract({ ...acrossChains, destinationChain: "ARB" }, { crossChainVerdict: domainNotAllowed }))).rejects.toThrow(
+      "Your wallet's contract was deployed before it could pay Arbitrum, so it refuses this payout; nothing was paid. Pay this vendor on a chain it pays, or from your own Circle account."
+    );
+    expect(domainNotAllowed).toHaveBeenCalledWith(expect.objectContaining({ domain: 3 }));
+  });
+
   it("is refused when the fee could not be read, and never asks the contract without it", async () => {
     const crossChainVerdict = vi.fn();
     await expect(inScope(external, () => personPaymentThroughContract({ ...acrossChains, bridgeFeeUsdc: null }, { crossChainVerdict }))).rejects.toThrow(/fee for this payout could not be read/);

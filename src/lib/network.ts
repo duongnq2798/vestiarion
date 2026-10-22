@@ -252,8 +252,8 @@ export const ARC_MAINNET = {
       // events): a receipt reads a native transfer from it, as on Arc testnet (mainnet limits L5).
       nativeUsdc: "0xfffffffffffffffffffffffffffffffffffffffe",
     },
-    // Base alone for now, where contractors' USDC is (mainnet Base payouts B1): Circle's CCTP tables, and Iris's fast
-    // forwarded route from domain 26 to 6 on 2026-10-19 (0 bps, about 0.054 USDC to forward).
+    // Base, where contractors' USDC is (mainnet Base payouts B1): Circle's CCTP tables, and Iris's fast forwarded route
+    // from domain 26 to 6 on 2026-10-19 (0 bps, about 0.054 USDC to forward).
     {
       id: "BASE",
       label: "Base",
@@ -261,6 +261,16 @@ export const ARC_MAINNET = {
       usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
       rpcUrl: "https://mainnet.base.org",
       explorerTx: "https://basescan.org/tx/",
+    },
+    // Arbitrum One (docs/superpowers/specs/2026-10-22-arbitrum-mainnet-design.md AR1): Circle's native USDC there, and
+    // Iris's fast forwarded route from domain 26 to 3 on 2026-10-22 (0 bps, about 0.077 USDC to forward).
+    {
+      id: "ARB",
+      label: "Arbitrum",
+      domain: 3,
+      usdc: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+      rpcUrl: "https://arb1.arbitrum.io/rpc",
+      explorerTx: "https://arbiscan.io/tx/",
     },
   ],
   // TokenMessengerV2 is the same contract on Arc mainnet as on Base and every mainnet CCTP V2 serves.

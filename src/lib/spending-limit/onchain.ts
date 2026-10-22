@@ -130,6 +130,34 @@ export async function spendingLimitCrossChainVerdict(
   );
 }
 
+/** Each version 2 contract's allowed CCTP domains, read once: fixed when it was deployed (spending limit v2 V3). */
+const allowedDomainsRead = new Map<string, bigint>();
+
+/**
+ * The CCTP domains a version 2 contract may burn for, one bit each, as it was deployed (docs/superpowers/specs/2026-10-22-
+ * arbitrum-mainnet-design.md AR3): a contract set up before a chain joined its network names it not, and refuses to pay
+ * it. Null when the contract does not answer.
+ */
+export async function contractAllowedDomains(contract: string, options: SpendingLimitReadOptions = {}): Promise<bigint | null> {
+  const key = contract.toLowerCase();
+  const known = allowedDomainsRead.get(key);
+  if (known !== undefined) return known;
+  try {
+    const outcome = await ethCall({ to: checksummed(contract), data: encodeFunctionData({ abi: SPENDING_LIMIT_V2_ABI, functionName: "allowedDomains" }) }, options);
+    if (!outcome.ok) return null;
+    const allowed = decodeFunctionResult({ abi: SPENDING_LIMIT_V2_ABI, functionName: "allowedDomains", data: outcome.result }) as bigint;
+    allowedDomainsRead.set(key, allowed);
+    return allowed;
+  } catch {
+    return null;
+  }
+}
+
+/** For tests: forget the contracts' domains read. */
+export function forgetAllowedDomains(): void {
+  allowedDomainsRead.clear();
+}
+
 /** An EVM address as the 32 bytes CCTP takes for a recipient. */
 export function recipientBytes32(address: string): Hex {
   return `0x${"0".repeat(24)}${checksummed(address).slice(2).toLowerCase()}`;

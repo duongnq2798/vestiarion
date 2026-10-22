@@ -470,9 +470,10 @@ describe("payeeLinkStatus and the link's options (payee invoice link P2, P4)", (
       (request) => (rpc(request, "payee_link_status") ? { body: { ...STATUS, chainOpen: true } } : request.path === "/rest/v1/payee_links" ? { body: [{ org_id: ORG }] } : { body: [] })
     );
     const status = await result;
-    expect(status).toMatchObject({ asksInvoice: true, offersChain: true, invoiceSent: false, chainChoices: ["ARC", "BASE"], chainFees: { BASE: 0.054668 } });
+    expect(status).toMatchObject({ asksInvoice: true, offersChain: true, invoiceSent: false, chainChoices: ["ARC", "BASE", "ARB"], chainFees: { BASE: 0.054668, ARB: 0.054668 } });
     // Quoted on Arc mainnet for what is owed in USDC (payee link chain fees CF2): nothing yet.
     expect(bridgeFeeMock).toHaveBeenCalledWith(ARC_MAINNET, "BASE", 0);
+    expect(bridgeFeeMock).toHaveBeenCalledWith(ARC_MAINNET, "ARB", 0);
     expect(status).not.toHaveProperty("chainOpen");
     expect(withOrgMock).toHaveBeenCalledWith(ORG, expect.any(Function));
     expect(fake.requests.find((request) => request.path === "/rest/v1/payee_links")?.params.get("token_hash")).toBe(`eq.${HASH}`);
@@ -488,7 +489,7 @@ describe("payeeLinkStatus and the link's options (payee invoice link P2, P4)", (
       rpc(request, "payee_link_status") ? { body: { ...STATUS, payments, chainOpen: true } } : { body: [{ org_id: ORG }] };
     bridgeFeeMock.mockRejectedValueOnce(new Error("Iris answered 503"));
     const status = await platform(() => payeeLinkStatus(TOKEN), respond).result;
-    expect(status).toMatchObject({ chainChoices: ["ARC", "BASE"], chainFees: { BASE: null } });
+    expect(status).toMatchObject({ chainChoices: ["ARC", "BASE", "ARB"], chainFees: { BASE: null, ARB: 0.054668 } });
     expect(bridgeFeeMock).toHaveBeenCalledWith(ARC_MAINNET, "BASE", 2);
 
     vi.useFakeTimers();
@@ -496,7 +497,7 @@ describe("payeeLinkStatus and the link's options (payee invoice link P2, P4)", (
       bridgeFeeMock.mockImplementationOnce(() => new Promise(() => {}));
       const slow = platform(() => payeeLinkStatus(TOKEN), respond).result;
       await vi.advanceTimersByTimeAsync(3_000);
-      expect(await slow).toMatchObject({ chainChoices: ["ARC", "BASE"], chainFees: { BASE: null } });
+      expect(await slow).toMatchObject({ chainChoices: ["ARC", "BASE", "ARB"], chainFees: { BASE: null, ARB: 0.054668 } });
     } finally {
       vi.useRealTimers();
     }
