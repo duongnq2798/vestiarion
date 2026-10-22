@@ -20,7 +20,7 @@ What each role may do:
 
 - **Owners and admins invite an accountant,** as they invite an approver or a viewer. An accountant invites nobody and changes no role.
 - **To give your accountant more,** change their role on **Members**: as an approver they decide payments, as an admin they also manage the workspace. One person holds one role in a workspace.
-- **Deciding payments stays with your people.** An accountant's card in **Approvals** shows who can decide each bill; the accountant can read it all and act on none of it.
+- **Deciding payments stays with your people.** An accountant's card in **Approvals** shows who can decide each bill; the accountant can read it all and pay, reject or return none of it. An owner can let accountants co-sign larger bills as the second person: see [Co-sign a larger bill](#co-sign-a-larger-bill).
 
 ### Your first steps
 
@@ -40,6 +40,7 @@ The **Accountant console** shows a new accountant **Get started as an accountant
 - **Answer what customers said** on their statement links, under **From customers** on the **Receivables** tab: reply, mark a payment found, or close it as not received. See [Share a statement with a customer](/docs/guides/customer-portal). Making and stopping a statement link stays with owners and admins.
 - **Get an email when a customer writes,** with the switch in **Settings**, under **Notifications**: "Email me when a customer writes on its statement link".
 - **Check a vendor's statement** against the bills and the payments made to them: see [Check a vendor's statement](#check-a-vendor-s-statement).
+- **Co-sign a larger bill** and confirm a changed address, where an owner lets accountants co-sign: see [Co-sign a larger bill](#co-sign-a-larger-bill).
 - **Read everything else,** the ledger, the report, Treasury and the audit export included.
 
 ### Check a vendor's statement
@@ -59,6 +60,16 @@ At month end a vendor sends a statement of account: the invoices they billed, th
    - Their last printed balance beside what your open bills to them add up to by the statement's last day. A charge matched to a bill in another currency is named, since its amount was not compared.
 
 Nothing is paid or changed, and the file is not kept. The check is signed into the ledger as `vendor_statement_checked`, with its counts and balances only.
+
+### Co-sign a larger bill
+
+Above the workspace's figure for two approvals, a bill needs two people. A founder who runs the workspace alone has only one, so an owner can make the accountant the second: in **Settings**, under **Two approvals**, choose **Let accountants co-sign**. Each change is signed as `accountant_cosign_changed`. With it on:
+
+- **Co-sign.** A bill above the figure shows the accountant **Co-sign** in **Approvals**. It asks first, then records one of the bill's two approvals for its amount, currency and address as they stand, and says "Co-signed. An owner, admin or approver's Approve and pay pays it." It is signed as `approval_given`, with `cosign: true`.
+- **It never pays.** A co-sign sends nothing, even when another approval is already given. The approval that pays is always an owner's, admin's or approver's **Approve and pay**, and the `approval_paid` entry names both. Below the figure one approval pays, so there is nothing to co-sign.
+- **The accountant counts as a second person** for bills. A founder alone with their accountant can turn two approvals on, and pay a bill they entered once the accountant has co-signed it.
+- **Confirm address.** The accountant also confirms a changed address on **Counterparties**, with the same record of how it was checked, as the second person the [payee lock](/docs/guides/first-payment#payee-lock) asks for. The agent then pays that address as usual, within its limits.
+- **What it does not cover.** Contractors' milestones are not co-signed: above the figure, a milestone still needs two people who can approve payments. Turning it off, or changing the accountant's role, makes their co-signs count for nothing.
 
 ## 3. Open the console
 

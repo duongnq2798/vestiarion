@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { ApprovalPolicyError, changeTwoApprovals, readTwoApprovalsAbove, twoApprovalsStatus } from "@/lib/approval-policy";
+import { ApprovalPolicyError, changeAccountantCosign, changeTwoApprovals, cosignsNow, readAccountantCosign, readTwoApprovalsAbove, twoApprovalsStatus } from "@/lib/approval-policy";
 import { can } from "@/lib/auth/roles";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -22,12 +22,13 @@ const OWNER = "a1b2c3d4-0000-4000-8000-0000000000d1";
 let fake: ReturnType<typeof fakeSupabase>;
 const run = <T,>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG, userId: OWNER }), fn);
 
-function workspace(over: { policy?: unknown[]; running?: unknown[]; approvers?: number; upsert?: FakeReply } = {}) {
+function workspace(over: { policy?: unknown[]; running?: unknown[]; approvers?: number; cosigners?: number; upsert?: FakeReply } = {}) {
   return (r: RecordedRequest): FakeReply => {
     if (r.path === "/rest/v1/approval_policies" && r.method === "GET") return { body: over.policy ?? [] };
     if (r.path === "/rest/v1/approval_policies" && r.method === "POST") return over.upsert ?? { status: 201, body: null };
     if (r.path === "/rest/v1/cycle_runs") return { body: over.running ?? [] };
     if (r.path === "/rest/v1/rpc/approvers_besides") return { body: over.approvers ?? 2 };
+    if (r.path === "/rest/v1/rpc/cosigners_besides") return { body: over.cosigners ?? 0 };
     return { body: [] };
   };
 }
@@ -138,7 +139,55 @@ describe("changeTwoApprovals", () => {
 describe("twoApprovalsStatus", () => {
   it("is the figure and how many people can approve payments", async () => {
     fake = fakeSupabase(workspace({ policy: [{ two_approvals_above: "75" }], approvers: 3 }));
-    expect(await run(() => twoApprovalsStatus())).toEqual({ above: 75, approvers: 3 });
+    expect(await run(() => twoApprovalsStatus())).toEqual({ above: 75, approvers: 3, cosigners: 0, cosign: { on: false, ready: true } });
+  });
+
+  it("counts co-signing accountants among who can approve, while co-signing is on (accountant co-sign CS5)", async () => {
+    fake = fakeSupabase(workspace({ policy: [{ two_approvals_above: "75", accountant_cosigns: true }], approvers: 1, cosigners: 1 }));
+    expect(await run(() => twoApprovalsStatus())).toEqual({ above: 75, approvers: 2, cosigners: 1, cosign: { on: true, ready: true } });
+  });
+});
+
+describe("accountant co-sign (docs/superpowers/specs/2026-10-22-accountant-cosign-design.md CS1, CS5)", () => {
+  const missingColumn: FakeReply = { status: 400, body: { code: "42703", message: "column approval_policies.accountant_cosigns does not exist" } };
+
+  it("reads off with no row and before migration 0138, which it says is not ready", async () => {
+    fake = fakeSupabase(workspace());
+    expect(await run(() => readAccountantCosign(db()))).toEqual({ on: false, ready: true });
+    fake = fakeSupabase((r) => (r.path === "/rest/v1/approval_policies" ? missingColumn : { body: [] }));
+    expect(await run(() => readAccountantCosign(db()))).toEqual({ on: false, ready: false });
+  });
+
+  it("turns on as the workspace's one row, and signs the change", async () => {
+    fake = fakeSupabase(workspace());
+    expect(await run(() => changeAccountantCosign({ actorId: OWNER, on: true }))).toEqual({ from: false, to: true });
+    expect(posted()[0].body).toMatchObject({ accountant_cosigns: true, updated_by: OWNER });
+    expect(ledgerMock).toHaveBeenCalledWith(ORG, expect.objectContaining({ action: "accountant_cosign_changed", domain: "system", detail: { by: OWNER, from: false, to: true } }));
+  });
+
+  it("refuses what is already so, and turning it on before migration 0138", async () => {
+    fake = fakeSupabase(workspace({ policy: [{ accountant_cosigns: true }] }));
+    await expect(run(() => changeAccountantCosign({ actorId: OWNER, on: true }))).rejects.toThrow("Accountants already co-sign.");
+    fake = fakeSupabase((r) => (r.path === "/rest/v1/approval_policies" ? missingColumn : { body: [] }));
+    await expect(run(() => changeAccountantCosign({ actorId: OWNER, on: true }))).rejects.toThrow("Co-signing is not available in this workspace yet.");
+    expect(ledgerMock).not.toHaveBeenCalled();
+  });
+
+  it("lets a founder alone with a co-signing accountant turn two approvals on", async () => {
+    fake = fakeSupabase(workspace({ approvers: 1, cosigners: 1 }));
+    expect(await run(() => changeTwoApprovals({ actorId: OWNER, value: "500" }))).toEqual({ from: null, to: 500 });
+    fake = fakeSupabase(workspace({ approvers: 1, cosigners: 0 }));
+    await expect(run(() => changeTwoApprovals({ actorId: OWNER, value: "500" }))).rejects.toThrow(/two people who can approve/);
+  });
+
+  it("lets an accountant co-sign only while it is on, and no other role, which it never reads for", async () => {
+    fake = fakeSupabase(workspace({ policy: [{ accountant_cosigns: true }] }));
+    expect(await run(() => cosignsNow("accountant"))).toBe(true);
+    fake = fakeSupabase(workspace({ policy: [{ accountant_cosigns: false }] }));
+    expect(await run(() => cosignsNow("accountant"))).toBe(false);
+    fake = fakeSupabase(workspace({ policy: [{ accountant_cosigns: true }] }));
+    for (const role of ["owner", "admin", "approver", "viewer"] as const) expect(await run(() => cosignsNow(role))).toBe(false);
+    expect(fake.requests).toEqual([]);
   });
 });
 

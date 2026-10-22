@@ -23,6 +23,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: 
 vi.mock("@/app/actions/verdicts", () => ({ giveVerdictAction: vi.fn() }));
 vi.mock("@/app/actions/approvals", () => ({
   approveInvoiceAction: actions.approve,
+  cosignInvoiceAction: vi.fn(),
   rejectInvoiceAction: actions.reject,
   returnInvoiceAction: actions.giveBack,
   addInvoiceDetailsAction: actions.details,

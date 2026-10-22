@@ -31,7 +31,7 @@ import { utcDay, utcMinute } from "@/lib/copy";
  */
 
 vi.mock("@/app/actions/approvals", () => ({
-  approveInvoiceAction: vi.fn(),
+  approveInvoiceAction: vi.fn(), cosignInvoiceAction: vi.fn(),
   rejectInvoiceAction: vi.fn(),
   returnInvoiceAction: vi.fn(),
   addInvoiceDetailsAction: vi.fn(),

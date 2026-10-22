@@ -92,6 +92,10 @@ export const TENANT_RPCS = [
   "append_ledger_entry", "advance_sim_day", "claim_payment_intent", "ledger_entries_for_targets",
   "begin_cycle_run", "agent_paused", "claim_invoice_decision", "begin_payment_retry", "claim_milestone_decision",
   "sole_approver", "approvers_besides", "approvers_among",
+  // How many accountants co-sign besides those named (migration 0138, accountant co-sign CS5).
+  "cosigners_besides",
+  // Of those named, the owners, admins and approvers, for a milestone's approvals (migration 0138).
+  "deciders_among",
   "create_deal", "revise_deal",
   "reserve_project_budget", "project_figures",
   "accept_asana_task", "hold_asana_acceptance",

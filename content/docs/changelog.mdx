@@ -1,5 +1,11 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-22: An accountant's co-sign
+
+- A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`accountant_cosign_changed`**, domain `system`, actor `human`, when an owner turns accountants' co-signing on or off. It carries `by`, `from` and `to`, each `true` or `false`.
+- **`approval_given`** carries `cosign: true` when the approval is an accountant's co-sign. A co-sign is one of a bill's two approvals and never the one that pays: the `approval_paid` entry that follows names it among its `approvals`.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-22: A vendor's statement checked
 
 - A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`vendor_statement_checked`**, domain `ap`, actor `human`, when a person checks a vendor's statement of account against its bills. It carries `by`, `counterpartyId`, `period` (`{ from, to }`), `currency`, the numbers of `lines`, `charges`, `payments`, `matchedCharges` and `matchedPayments`, how many were `missing`, `rejected`, `twice`, `differs`, `notCompared`, `paidNotListed`, `unknownPayments` and `notListed`, and `theirBalance` and `ourBalance`. It never carries the statement or its lines.

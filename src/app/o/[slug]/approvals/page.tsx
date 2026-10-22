@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cosignsNow } from "@/lib/approval-policy";
 import { Inbox } from "lucide-react";
 import { dismissChecklistAction } from "@/app/actions/onboarding";
 import ApprovalCard from "@/components/ApprovalCard";
@@ -40,7 +41,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
   return inOrg(access, async () => {
     const { user, membership } = access;
     const canDecide = can(membership.role, "approval.decide");
-    const [waiting, dashboardStats, proposals, soleApprover] = await Promise.all([
+    const [waiting, dashboardStats, proposals, soleApprover, canCosign] = await Promise.all([
       listWaitingPayables(),
       stats(),
       // Best effort: suggestions that cannot be read hide their section, nothing else.
@@ -50,6 +51,8 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
       }),
       // Whether this person may approve what they entered themselves (sole approver R5).
       canDecide ? isSoleApprover(user.id) : Promise.resolve(false),
+      // An accountant co-signs a payment above the figure while an owner has turned it on (accountant co-sign CS2).
+      cosignsNow(membership.role),
     ]);
     // A payment held in shadow mode waits for a person's verdict, which pays it when they agree (shadow mode S4): the
     // agent's decision each one waits on, and any verdict given. Best effort, as the cards elsewhere read them.
@@ -139,6 +142,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
                 verdict={verdictFor(payable)}
                 exception={exceptionOf(payable)}
                 viewerEmail={user.email}
+                canCosign={canCosign}
               />
             ))}
           </div>

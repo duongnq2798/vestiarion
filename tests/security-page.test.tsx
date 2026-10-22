@@ -586,6 +586,9 @@ describe("claims narrowed to what the code does", () => {
     const access = section("access");
     expect(access).toContain("applies money received, checks vendors");
     expect(access).toContain("statements and answers customers");
+    // A co-sign is one of two approvals and never the one that pays (accountant co-sign CS7).
+    expect(PERMISSIONS["approval.cosign"]).toEqual(["accountant"]);
+    expect(access).toContain("co-signs a bill above the figure for two approvals, which never pays it");
     expect(access).toContain("pause the agent");
     expect(access).toContain("A viewer reads, and changes only their own settings and links");
   });

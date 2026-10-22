@@ -2,7 +2,7 @@
 
 import { ShieldOff } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { setTwoApprovalsAction } from "@/app/actions/approval-policy";
+import { setAccountantCosignAction, setTwoApprovalsAction } from "@/app/actions/approval-policy";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -25,10 +25,15 @@ import { DocsLink } from "@/components/DocsLink";
  * mainnet a figure always stays (mainnet limits L2), so the panel offers no Turn off there and says so (mainnet copy C11).
  * A figure can be tried on past decisions first and applied from the result (policy replay §2); trying it off leaves
  * turning it off to Turn off, behind its confirmation, which then records the replay.
+ *
+ * Under it, **Accountants co-sign** (docs/superpowers/specs/2026-10-22-accountant-cosign-design.md CS1, CS8): what it lets
+ * an accountant do and never do, how many it adds, and, for the owner, the switch, turning it on behind a confirmation.
+ * Before migration 0138 the section is left out.
  */
 export interface TwoApprovalsPanelProps {
   orgSlug: string;
-  status: { above: number | null; approvers: number };
+  /** `approvers` counts co-signing accountants, `cosigners` of them; `cosign` is the setting (CS1). */
+  status: { above: number | null; approvers: number; cosigners?: number; cosign?: { on: boolean; ready: boolean } };
   canChange: boolean;
   /** Whether the workspace keeps a figure: one on Arc mainnet does. */
   keepsFigure: boolean;
@@ -38,11 +43,57 @@ const KEEPS_FIGURE = "A workspace on Arc mainnet keeps two approvals above a fig
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const save = withSuccessToast(setTwoApprovalsAction);
+const saveCosign = withSuccessToast(setAccountantCosignAction);
+const COSIGN_FORM_ID = "accountant-cosign";
 const OFF_FORM_ID = "turn-off-two-approvals";
 
-/** How many people can give an approval: owners, admins and approvers. */
-function approversLine(count: number): string {
-  return `${count} ${count === 1 ? "person can" : "people can"} approve payments here.`;
+/** How many people can give an approval: owners, admins and approvers, and accountants while they co-sign. */
+function approversLine(count: number, cosigners = 0): string {
+  const line = `${count} ${count === 1 ? "person can" : "people can"} approve payments here`;
+  if (cosigners === 0) return `${line}.`;
+  return `${line}, ${cosigners === 1 ? "1 of them an accountant who co-signs" : `${cosigners} of them accountants who co-sign`} bills.`;
+}
+
+/** Accountants co-sign (CS1, CS8): what it allows, and the owner's switch. */
+function CosignSection({ orgSlug, on, canChange }: { orgSlug: string; on: boolean; canChange: boolean }) {
+  const form = useActionForm(saveCosign, INITIAL);
+  return (
+    <div className="space-y-2 border-t border-line pt-4">
+      <p className="text-sm font-medium text-ink">{on ? "Accountants co-sign: on." : "Accountants co-sign: off."}</p>
+      <p className="text-sm text-ink-2">
+        With it on, an accountant gives one of the two approvals of a bill above the figure, and confirms changed addresses on Counterparties. A co-sign
+        sends nothing: an owner&apos;s, admin&apos;s or approver&apos;s Approve and pay pays it. Contractors&apos; milestones are not co-signed, so a milestone
+        above the figure still needs two people who can approve payments.
+      </p>
+      {canChange ? (
+        <form id={COSIGN_FORM_ID} {...form.formProps} className="space-y-2">
+          <input type="hidden" name="orgSlug" value={orgSlug} />
+          <input type="hidden" name="on" value={on ? "false" : "true"} />
+          {on ? (
+            <SubmitButton variant="secondary" size="sm" pendingLabel="Turning off…">
+              Turn off co-signing
+            </SubmitButton>
+          ) : (
+            <ConfirmDialog
+              formId={COSIGN_FORM_ID}
+              tone="primary"
+              trigger={
+                <Button variant="secondary" size="sm" loading={form.pending}>
+                  Let accountants co-sign
+                </Button>
+              }
+              title="Let accountants co-sign?"
+              description="Your accountants can then give one of the two approvals of a bill above the figure, and confirm changed addresses, after which the agent pays to that address as usual. They never approve the payment that pays, and reject or return nothing."
+              confirmLabel="Let them co-sign"
+            />
+          )}
+          <FormMessage tone={form.state.message && !form.state.ok ? "error" : "neutral"}>{form.state.ok ? null : form.state.message}</FormMessage>
+        </form>
+      ) : (
+        <p className="text-sm text-ink-2">An owner of this workspace can change it.</p>
+      )}
+    </div>
+  );
 }
 
 const TRIED_OFF = "To turn it off, choose Turn off.";
@@ -112,7 +163,7 @@ export default function TwoApprovalsPanel({ orgSlug, status, canChange, keepsFig
             those two give the rest only when no one else can.
           </p>
           {keepsFigure && <p className="text-sm text-ink-2">{KEEPS_FIGURE}</p>}
-          <p className="text-xs text-ink-3">{approversLine(status.approvers)}</p>
+          <p className="text-xs text-ink-3">{approversLine(status.approvers, status.cosigners ?? 0)}</p>
         </div>
         <div className="border-t border-line pt-4">
           {canChange ? (
@@ -121,6 +172,7 @@ export default function TwoApprovalsPanel({ orgSlug, status, canChange, keepsFig
             <p className="text-sm text-ink-2">An owner of this workspace can change it.</p>
           )}
         </div>
+        {status.cosign?.ready && <CosignSection orgSlug={orgSlug} on={status.cosign.on} canChange={canChange} />}
       </Card>
     </section>
   );
