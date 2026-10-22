@@ -11,6 +11,7 @@ import type { Definition } from "@/lib/growth/definitions";
 import { REVIEW_WORDS, STAGE_WORDS, words, type ReviewStatus, type Stage } from "@/lib/growth/fields";
 import { FUNNEL_STAGES, minutesToFirstDecision, NOT_ENOUGH_DATA, secondBillWithin7Days, workspaceSource, type LeadFunnel, type Ratio, type WorkspaceRow } from "@/lib/growth/metrics";
 import type { Lead, LeadEventRow } from "@/lib/growth/read";
+import { RETENTION_WEEKS, type RetentionCohort } from "@/lib/growth/retention";
 import { networkOf, networkProfile } from "@/lib/network";
 import { funnelRows, type FunnelSide } from "@/lib/platform/funnel";
 import type { SideKey } from "@/lib/platform/open-numbers";
@@ -85,6 +86,54 @@ const SECOND_BILL = { yes: "Yes", no: "No", too_early: "Too early" } as const;
 
 function usdc(amount: number): string {
   return amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * Retention by week (docs/superpowers/specs/2026-10-22-growth-retention-design.md R2): one row per week the workspaces
+ * opened, oldest first, and for each of their first weeks the share active, with its count. A week no workspace has
+ * reached is a dash; one still running for some workspace is marked "so far".
+ */
+export function RetentionTable({ cohorts }: { cohorts: RetentionCohort[] }) {
+  return (
+    <Table label="Retention by week" containerClassName="rounded-xl border border-line bg-surface" className="min-w-[48rem] text-[0.8125rem]">
+      <TableHeader>
+        <TableRow>
+          <TableHead className="px-3">Opened in the week of</TableHead>
+          <TableHead className="px-3 text-right">Workspaces</TableHead>
+          {Array.from({ length: RETENTION_WEEKS }, (_, week) => (
+            <TableHead key={week} className="px-3 text-right">
+              Week {week}
+            </TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {cohorts.map((cohort) => (
+          <TableRow key={cohort.weekOf}>
+            <TableCell className="whitespace-nowrap px-3 text-ink-2">{cohort.weekOf}</TableCell>
+            <TableCell className="px-3 text-right tabular-nums">{cohort.size}</TableCell>
+            {cohort.cells.map((cell, week) => (
+              <TableCell key={week} className="px-3 text-right tabular-nums">
+                {cell.value === null ? (
+                  <span className="text-ink-3" aria-label="Not reached yet">
+                    &ndash;
+                  </span>
+                ) : (
+                  <>
+                    <span className="block text-ink">{Math.round(cell.value * 100)}%</span>
+                    <span className="block text-xs text-ink-3">
+                      {cell.active} / {cell.eligible}
+                      {cell.partial ? ", so far" : ""}
+                    </span>
+                  </>
+                )}
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
 }
 
 export function WorkspacesTable({ workspaces, now }: { workspaces: WorkspaceRow[]; now: Date }) {

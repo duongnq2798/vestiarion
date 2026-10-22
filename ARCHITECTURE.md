@@ -3853,6 +3853,8 @@ else, signed in or not, with `notFound()`, so it never says it exists, and every
 be indexed. It shows `open_funnel` per network, the workspaces from `growth_workspaces(p_since)` (customers apart from
 ours by `open_funnel`'s rule, with the first decision and the second real bill by `0089`'s definitions, and no email or
 person's name), figures with their numerators and denominators ("Not enough data yet" where a denominator is 0),
+retention by week (`retentionCohorts`, `src/lib/growth/retention.ts`: each workspace active in its week k when a real bill
+was added or a person decided a payment, read from its own records in its own scope by `readRetentionActivity`),
 breakdowns by source, segment and campaign, the leads with their trails, an approval queue, a CSV import that previews
 every row and never overwrites a lead, and forms for campaigns, spend and revenue. The calculations live in
 `src/lib/growth/metrics.ts` and `csv.ts`, and the page's Definitions section (`src/lib/growth/definitions.ts`) says
