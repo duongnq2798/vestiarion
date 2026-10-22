@@ -201,3 +201,13 @@ const cspReportAll = new Map<string, Bucket>();
 export function takeCspReportToken(key: string, now = Date.now()): boolean {
   return take(cspReportBuckets, key, 20, 3_000, now) && take(cspReportAll, "all", 300, 200, now);
 }
+
+const addressNameBuckets = new Map<string, Bucket>();
+
+/**
+ * Lookups of a name typed into an address field (ENS address names EN1): thirty at once, then one every 2 seconds, per
+ * member, so typing never runs out and no one sends Ethereum's node a stream of names from the server. Single-instance.
+ */
+export function takeAddressNameToken(userId: string, now = Date.now()): boolean {
+  return take(addressNameBuckets, userId, 30, 2_000, now);
+}

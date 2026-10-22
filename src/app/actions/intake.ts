@@ -24,6 +24,7 @@ import { unfreezeCounterparty, UnfreezeError } from "@/lib/address-change-check"
 import { addressProblem, ARC_ADDRESS } from "@/lib/address-checksum";
 import { primaryName, resolveAddressName } from "@/lib/ens";
 import { isAddressName, nameMatchesPayee } from "@/lib/ens-words";
+import { takeAddressNameToken } from "@/lib/rate-limit";
 import {
   changeCounterpartyAddress,
   confirmCounterpartyAddress,
@@ -150,6 +151,7 @@ export interface AddressNameLookup {
 export async function lookupAddressNameAction(orgSlug: string, query: string, payeeName: string): Promise<AddressNameLookup> {
   const auth = await authorize(orgSlug, "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
+  if (!takeAddressNameToken(auth.user.id)) return { ok: false, message: "Too many lookups at once. Wait a moment, or paste the address." };
   return inOrg(auth, async () => {
     const value = typeof query === "string" ? query.trim().slice(0, 255) : "";
     const payee = typeof payeeName === "string" ? payeeName.slice(0, 160) : "";

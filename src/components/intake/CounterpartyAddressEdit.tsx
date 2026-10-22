@@ -119,14 +119,19 @@ export default function CounterpartyAddress({
 
 function EditAddress({ orgSlug, counterparty }: { orgSlug: string; counterparty: CounterpartyAddressProps["counterparty"] }) {
   const [open, setOpen] = useState(false);
-  // Held here so a looked-up name can fill it (ENS address names EN1).
+  // Held here so a looked-up name can fill it (ENS address names EN1), and read again from the address on file each time
+  // the dialog opens: what was typed and cancelled is not left in the field to pass for it.
   const [address, setAddress] = useState(counterparty.address ?? "");
   const close = useCallback(() => setOpen(false), []);
   const { state, formProps } = useActionForm(update, INITIAL, { onSuccess: close });
   const fieldId = `address-${counterparty.id}`;
+  const openChange = (next: boolean) => {
+    if (next) setAddress(counterparty.address ?? "");
+    setOpen(next);
+  };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={openChange}>
       <DialogTrigger asChild>
         <Button size="sm" variant="ghost" icon={<PencilLine />} className="shrink-0">
           Edit address

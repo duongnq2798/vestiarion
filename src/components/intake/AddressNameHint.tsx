@@ -16,7 +16,7 @@ const WAIT_MS = 450;
  * question to check, never a refusal. The field keeps an address only: a name is never saved.
  */
 export function AddressNameHint({ orgSlug, value, payeeName, onUse }: { orgSlug: string; value: string; payeeName: string; onUse: (address: string) => void }) {
-  const [lookup, setLookup] = useState<{ query: string; result: AddressNameLookup } | null>(null);
+  const [lookup, setLookup] = useState<{ query: string; payee: string; result: AddressNameLookup } | null>(null);
   const query = value.trim();
   const wanted = isAddressName(query) || ARC_ADDRESS.test(query);
 
@@ -26,10 +26,10 @@ export function AddressNameHint({ orgSlug, value, payeeName, onUse }: { orgSlug:
     const timer = setTimeout(() => {
       lookupAddressNameAction(orgSlug, query, payeeName)
         .then((result) => {
-          if (current) setLookup({ query, result });
+          if (current) setLookup({ query, payee: payeeName, result });
         })
         .catch(() => {
-          if (current) setLookup({ query, result: { ok: false, message: "The name could not be looked up. Try again, or paste the address." } });
+          if (current) setLookup({ query, payee: payeeName, result: { ok: false, message: "The name could not be looked up. Try again, or paste the address." } });
         });
     }, WAIT_MS);
     return () => {
@@ -38,8 +38,8 @@ export function AddressNameHint({ orgSlug, value, payeeName, onUse }: { orgSlug:
     };
   }, [orgSlug, query, payeeName, wanted]);
 
-  // Only the answer for what the field holds now.
-  const result = wanted && lookup?.query === query ? lookup.result : null;
+  // Only the answer for what the field holds now, compared with the payee's name as it reads now.
+  const result = wanted && lookup?.query === query && lookup.payee === payeeName ? lookup.result : null;
   if (!result) return null;
   if (!result.ok) return <p className="text-xs text-ink-3">{result.message}</p>;
   const warn = result.matches === false && payeeName.trim() !== "";

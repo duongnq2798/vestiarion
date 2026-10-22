@@ -14,29 +14,43 @@ export function isAddressName(value: string): boolean {
 /** What a field says when someone types a name where an address goes (EN2). */
 export const NAME_NOT_ADDRESS = "That is a name, not an address. Choose Use this address under the field to take the address it points to.";
 
-/** The words of a payee's name that can identify it: letters and digits, three or more, without the usual company words. */
-const COMMON = new Set(["inc", "llc", "ltd", "co", "corp", "company", "the", "and", "studio", "studios", "group", "limited", "gmbh", "sas"]);
+/**
+ * Words too common in business names to tell one from another: a name that shares only these with the payee, such as
+ * cheap-usdc-supply.eth for Northwind Supply, does not look like it.
+ */
+const COMMON = new Set([
+  "inc", "llc", "ltd", "co", "corp", "company", "the", "and", "studio", "studios", "group", "limited", "gmbh", "sas",
+  "pay", "payment", "payments", "billing", "invoice", "invoices", "finance", "wallet", "usdc", "usd", "crypto",
+  "supply", "supplies", "service", "services", "solutions", "logistics", "global", "international", "holdings",
+  "partners", "tech", "labs", "digital", "systems", "trading", "consulting", "agency", "media", "design", "shop", "store",
+]);
+
+/** A payee's name as words: letters and digits, accents taken off. */
 function words(value: string): string[] {
   return value
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .split(/[^a-z0-9]+/)
-    .filter((word) => word.length >= 3 && !COMMON.has(word));
+    .filter(Boolean);
 }
 
 /**
- * Whether a name looks like the payee (EN3): its registered label, the one before `.base.eth` or `.eth`, contains one of the payee's
- * words, or they read the same with spaces and hyphens taken out. A different name is worth a question, not a refusal: a
+ * Whether a name looks like the payee (EN3), judged by its registered label, the one before `.base.eth` or `.eth`: the
+ * payee's name run together (acmestudio.eth for Acme Studio), or a part of the label, between hyphens, that is one of the
+ * payee's own words or begins with one of four letters or more (pay-northwind.eth, northwindpay.eth). A word inside
+ * another (notacme.eth, tsunami.eth for Sun) does not count. A different name is worth a question, not a refusal: a
  * person may own a name unlike their business's.
  */
 export function nameMatchesPayee(name: string, payeeName: string): boolean {
   const label = name.trim().toLowerCase().replace(/(\.base)?\.eth$/, "").split(".").pop() ?? "";
-  const squashed = label.replace(/-/g, "");
-  const payee = words(payeeName);
-  if (payee.length === 0 || squashed.length === 0) return true;
-  if (payee.join("") === squashed) return true;
-  return payee.some((word) => squashed.includes(word));
+  const parts = label.split("-").filter(Boolean);
+  const squashed = parts.join("");
+  const every = words(payeeName);
+  const own = every.filter((word) => word.length >= 3 && !COMMON.has(word));
+  if (own.length === 0 || squashed.length === 0) return true;
+  if (squashed === every.join("") || squashed === own.join("")) return true;
+  return parts.some((part) => own.some((word) => part === word || (word.length >= 4 && part.startsWith(word))));
 }
 
 /** An address shortened to its first 6 and last 4 characters, as the hint shows it. */
