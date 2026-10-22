@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Your accountant as the second person on larger bills.** In Settings, under Two approvals, an owner can now choose
+  **Let accountants co-sign**. An accountant then sees **Co-sign** on a bill above the figure: it records one of the two
+  approvals and never pays, even when another approval stands, so the approval that pays is always an owner's, admin's
+  or approver's. Accountants count among the people who can approve bills, so a founder alone with their accountant can
+  use two approvals, and they confirm changed addresses as a second person. Off by default; milestones are not
+  co-signed. Needs migration 0138.
+
 - **Check a vendor's statement against your books.** On Counterparties, a vendor's **Check their statement** reads
   their statement of account, pasted or as a CSV, and matches each line to your bills and the payments you made them.
   It lists what is missing here (with an Add for each), what is listed twice, amounts that differ, payments of yours

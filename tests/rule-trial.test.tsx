@@ -16,7 +16,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
  */
 
 vi.mock("@/app/actions/policy-replay", () => ({ tryRuleAction: vi.fn() }));
-vi.mock("@/app/actions/approval-policy", () => ({ setTwoApprovalsAction: vi.fn() }));
+vi.mock("@/app/actions/approval-policy", () => ({ setTwoApprovalsAction: vi.fn(), setAccountantCosignAction: vi.fn() }));
 
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
