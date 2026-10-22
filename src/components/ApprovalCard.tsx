@@ -28,6 +28,7 @@ import { bankAccountLine, bankQuoteLine } from "@/lib/bank-payouts/words";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
 import { agentResumes, CASH_SHORTFALL, SHADOW_VERDICT, counterpartyPath, ruleNextStep } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
+import { approvalCost } from "@/lib/approval-cost";
 import type { ExceptionFacts } from "@/lib/exceptions";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
@@ -39,6 +40,27 @@ const INITIAL: ActionResult = { ok: false, message: "" };
 const approve = withPaymentReceipt(approveInvoiceAction);
 const reject = withSuccessToast(rejectInvoiceAction);
 const giveBack = withSuccessToast(returnInvoiceAction);
+
+/**
+ * The card's cost lines (approval total cost TC1, TC2): the invoice, a discount that still applies, the route's fee, what
+ * leaves and what the payee receives, read as Approve and pay would pay it now.
+ */
+function CostBreakdown({ payable }: { payable: WaitingPayable }) {
+  const cost = approvalCost(payable);
+  return (
+    <div className="mt-3 rounded-lg border border-line bg-raised px-3 py-2 text-xs">
+      <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
+        {cost.lines.map((line) => (
+          <div key={line.label} className="contents">
+            <dt className={line.total ? "font-medium text-ink" : "text-ink-3"}>{line.label}</dt>
+            <dd className={`text-right tabular-nums ${line.total ? "font-semibold text-ink" : "text-ink-2"}`}>{line.value}</dd>
+          </div>
+        ))}
+      </dl>
+      {cost.note && <p className="mt-1.5 text-ink-3">{cost.note}</p>}
+    </div>
+  );
+}
 
 /**
  * What Approve and pay asks before it pays: the amount that will leave, which
@@ -278,6 +300,8 @@ export default function ApprovalCard({
               {paidAcrossChains(payable.payeeChain) && ` on ${chainById(payable.payeeChain as string).label}`}
             </p>
           )}
+          {/* What Approve and pay would cost, before anyone approves (approval total cost TC1): not for a payment already sent. */}
+          {!payable.bank && !processing && !payable.paymentSent && payable.lastAttempt?.state !== "in_flight" && <CostBreakdown payable={payable} />}
           {!payable.bank && payToDiffers(payable.documentPayTo, payable.address) && (
             // The invoice asked to be paid somewhere else (invoice pay-to hold IP3): Approve and pay still pays the address on file.
             <Callout tone="held" className="mt-2">

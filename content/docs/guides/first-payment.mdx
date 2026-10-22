@@ -526,6 +526,16 @@ Each of these reasons is optional, one line, and never stops what you are doing.
   caption="A held payable, with the three decisions a person can make."
 />
 
+Under "Pays to", each card waiting for **Approve and pay** shows what it would cost if you chose it now:
+
+- **Invoice**: the invoice's amount.
+- **Early-payment discount**: its percent, its deadline and what it takes off, only while it still applies.
+- **CCTP fee, about** or **Gateway fee, about**: for a payee on another chain, the fee of the route it would take, or "not read just now".
+- **Leaves the operating wallet**, or **Leaves the Gateway balance** for a Gateway payout: what is paid and the fee, in all.
+- What the payee **receives**, on their chain. For a CCTP payout, "at least" that much: the part of the fee Circle does not charge reaches the payee too.
+
+On Arc mainnet, where your wallets pay their own gas, a note adds Arc's network fee, about 0.00319 USDC a transaction, which is not read until the transfer is made. On Arc testnet Circle pays it. The box is not shown for a payment already sent or in flight, one the agent is paying, or a payout to a bank account, whose card says what the vendor receives in pesos.
+
 Where payments are real, **Approve and pay** also refuses a payee with no address yet: "This payee has no payment address yet. Add it on Counterparties, or ask them for it with a one-time link."
 
 **Approve and pay** is disabled in two cases, and the card says why, and what you can do instead:
