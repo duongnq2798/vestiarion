@@ -45,7 +45,8 @@ export default function PrivacyPage() {
           <li>invoices, with their amounts, memos, purchase order references and due dates;</li>
           <li>
             counterparties: their names, wallet addresses, screening results and payment limits, and their billing email when a member gives one, where
-            payment notices, reminders, the agent&apos;s early-payment offers, its discounts for paying early and its requests for more time go;
+            payment notices, reminders, the agent&apos;s early-payment offers, its discounts for paying early, its requests for more time and the question whether
+            they changed their payment address go;
           </li>
           <li>contractor milestones, with any GitHub pull request link used to verify one;</li>
           <li>the agent&apos;s settings and its treasury records;</li>
@@ -196,7 +197,9 @@ export default function PrivacyPage() {
             on, with the offer&apos;s one-time link, and its answer when the supplier proposes a smaller discount, the discounts for paying early the agent offers a
             customer while bills are held for cash, once an owner or admin turns them on, with the offer&apos;s one-time link, the requests for more time the agent sends a
             supplier once an owner or admin turns them on, with the request&apos;s one-time link, and a note to a workspace&apos;s owners and admins when a customer writes
-            on its statement link, with at most 140 characters of what it wrote and no link it wrote. It receives each recipient&apos;s email address and the message. When the
+            on its statement link, with at most 140 characters of what it wrote and no link it wrote, the question to a payee&apos;s billing email, when its payment address
+            changes to a new one in a live workspace, whether they made the change, with a one-time link to answer, and a note to the owners and admins
+            when the payee answers that they did not. It receives each recipient&apos;s email address and the message. When the
             team has turned it on, it also sends the team a short note about each new guided setup request, described below.
           </li>
           <li>
@@ -446,8 +449,8 @@ export default function PrivacyPage() {
           <li>
             an invitation address becomes <code>/invite/:token</code>, a payee link <code>/payee/:token</code>, a client&apos;s pay link{" "}
             <code>/pay/:token</code>, a receipt link <code>/receipt/:token</code>, a shared report <code>/report/:token</code>, a customer&apos;s statement{" "}
-            <code>/statement/:token</code>, a supplier&apos;s payment status <code>/supplier/:token</code>, an early-payment offer <code>/offer/:token</code> a customer&apos;s discount <code>/discount/:token</code> and a request for more time{" "}
-            <code>/more-time/:token</code>, and a
+            <code>/statement/:token</code>, a supplier&apos;s payment status <code>/supplier/:token</code>, an early-payment offer <code>/offer/:token</code> a customer&apos;s discount <code>/discount/:token</code>, a request for more time{" "}
+            <code>/more-time/:token</code> and a question about a payee&apos;s address change <code>/address-change/:token</code>, and a
             workspace address has the workspace&apos;s slug
             replaced, as <code>/o/:org</code>;
           </li>

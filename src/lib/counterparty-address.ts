@@ -1,3 +1,4 @@
+import { askContactAboutAddressChange, counterpartyFrozen } from "./address-change-check";
 import { CHECKSUM_MISMATCH, addressProblem, ARC_ADDRESS, NOT_AN_ARC_ADDRESS } from "./address-checksum";
 import { approversBesides } from "./approval-policy";
 import { currentOrgId } from "./context";
@@ -46,7 +47,9 @@ export type CounterpartyAddressErrorCode =
   // The payee lock's (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL2–PL4).
   | "verification_required"
   | "giver_confirms"
-  | "lock_requires_confirm";
+  | "lock_requires_confirm"
+  // The payee's contact said they did not make the change (docs/superpowers/specs/2026-10-22-address-change-check-design.md AC3).
+  | "frozen";
 
 const MESSAGES: Record<CounterpartyAddressErrorCode, string> = {
   invalid: NOT_AN_ARC_ADDRESS,
@@ -59,6 +62,8 @@ const MESSAGES: Record<CounterpartyAddressErrorCode, string> = {
   verification_required: "Record how you checked this address: the payee lock needs it.",
   giver_confirms: "You entered or asked for this address, so someone else confirms it.",
   lock_requires_confirm: "Confirm this address on Counterparties first, and record how you checked it.",
+  frozen:
+    "This payee is frozen: their contact on file said they did not make this address change. An owner or admin unfreezes it on Counterparties after checking with them.",
 };
 
 export class CounterpartyAddressError extends Error {
@@ -146,6 +151,11 @@ export type AddressChangeInput = (
   counterpartyId: string;
   raw: string;
   chain?: string;
+  /**
+   * Runs the email asking the payee's contact whether they made the change (address change check AC1) after the caller's
+   * answer, as a payee link's page does with `after`; without it, the email is awaited.
+   */
+  defer?: (work: () => Promise<unknown>) => void;
 };
 
 export async function changeCounterpartyAddress(
@@ -212,6 +222,33 @@ export async function changeCounterpartyAddress(
     },
   });
 
+  // The payee's billing email is asked whether they made a change to a new address (address change check AC1): from the
+  // address on file, or, with none on file, from one cleared earlier. It never throws, and never undoes the change.
+  if (parsed.address) {
+    const orgId = currentOrgId();
+    const from = current.address;
+    const to = parsed.address;
+    const ask = () =>
+      askContactAboutAddressChange({
+        orgId,
+        counterpartyId: current.id,
+        from,
+        to,
+        via: onGitHub ? "github" : byPayee ? "payee_link" : "member",
+        githubLogin: onGitHub?.login ?? null,
+        changedBy: "actorId" in input ? input.actorId : null,
+      });
+    if (input.defer) {
+      try {
+        input.defer(ask);
+      } catch {
+        await ask();
+      }
+    } else {
+      await ask();
+    }
+  }
+
   return { name: current.name, from: current.address, to: parsed.address };
 }
 
@@ -245,6 +282,8 @@ export async function confirmCounterpartyAddress(input: {
     throw new CounterpartyAddressError("stale");
   }
   if (!addressUnconfirmed(current.address_changed_at, current.address_confirmed_at)) return false;
+  // A frozen payee's address is confirmed by no one until an owner or admin unfreezes it (address change check AC3).
+  if (await counterpartyFrozen(current.id)) throw new CounterpartyAddressError("frozen");
 
   // The payee lock (PL2–PL4), read before anything is written; a lock that cannot be read refuses the confirmation.
   const lock = await readPayeeLock(db());
@@ -282,7 +321,10 @@ export async function confirmCounterpartyAddress(input: {
   const confirmedAt = new Date(Math.max(Date.now(), Date.parse(current.address_changed_at as string) + 1)).toISOString();
   const update = db().from("counterparties").update({ address_confirmed_at: confirmedAt }).eq("id", current.id).eq("address_changed_at", current.address_changed_at as string);
   const guarded = current.address === null ? update.is("address", null) : update.eq("address", current.address);
-  const rows = unwrap(await guarded.select("id")) as Array<{ id: string }>;
+  const written = await guarded.select("id");
+  // Frozen between the read and this write: the database refuses it (migration 0137's counterparties_frozen_guard).
+  if (written.error && /counterparty_frozen/.test(written.error.message)) throw new CounterpartyAddressError("frozen");
+  const rows = unwrap(written) as Array<{ id: string }>;
   if (rows.length === 0) throw new CounterpartyAddressError("stale");
 
   // Who confirmed it is what the new payee check reads (new payee check N2): a confirmation no entry names would leave a

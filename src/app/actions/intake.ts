@@ -3,6 +3,7 @@
 import "server-only";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { authorize } from "@/lib/auth/authorize";
@@ -19,6 +20,7 @@ import {
   INVOICE_CURRENCIES,
 } from "@/lib/intake-validation";
 import { changeCounterpartyNoticeEmail } from "@/lib/payment-notices";
+import { unfreezeCounterparty, UnfreezeError } from "@/lib/address-change-check";
 import {
   changeCounterpartyAddress,
   confirmCounterpartyAddress,
@@ -136,7 +138,13 @@ export async function updateCounterpartyAddressAction(
     const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
     if (!id.success) return { ok: false, message: "Counterparty not found." };
     try {
-      const result = await changeCounterpartyAddress({ actorId: auth.user.id, counterpartyId: id.data, raw: formString(formData, "address") });
+      // The payee's contact is asked whether they made the change after this answer (address change check AC1).
+      const result = await changeCounterpartyAddress({
+        actorId: auth.user.id,
+        counterpartyId: id.data,
+        raw: formString(formData, "address"),
+        defer: (work) => after(work),
+      });
       revalidateOrgPages();
       return {
         ok: true,
@@ -304,6 +312,37 @@ export async function confirmCounterpartyAddressAction(
       };
     } catch (error) {
       return addressFailure(error, "counterparty address confirmation failed");
+    }
+  });
+}
+
+/**
+ * Unfreezes a payee whose contact on file said they did not make an address change (address change check AC4), for an
+ * owner or admin, with a note of how they settled it. Its address still needs confirming before anything is paid.
+ */
+export async function unfreezeCounterpartyAction(
+  _previous: IntakeActionResult,
+  formData: FormData
+): Promise<IntakeActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
+    if (!id.success) return { ok: false, message: "Counterparty not found." };
+    try {
+      await unfreezeCounterparty({
+        orgId: auth.membership.orgId,
+        actorId: auth.user.id,
+        role: auth.membership.role,
+        counterpartyId: id.data,
+        note: formString(formData, "note"),
+      });
+      revalidateOrgPages();
+      return { ok: true, message: "Unfrozen. Its address still needs confirming before it is paid." };
+    } catch (error) {
+      if (error instanceof UnfreezeError) return { ok: false, message: error.message };
+      console.error("unfreeze failed", error instanceof Error ? error.message : "unknown error");
+      return { ok: false, message: "That did not work. Try again in a moment." };
     }
   });
 }

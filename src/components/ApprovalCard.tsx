@@ -286,6 +286,13 @@ export default function ApprovalCard({
               </span>
             </Callout>
           )}
+          {payable.payeeFrozen && (
+            // The payee's contact said they did not make the change to its address (address change check AC5).
+            <Callout tone="refused" className="mt-2">
+              {payable.counterpartyName} is frozen: their contact on file said they did not make the change to this address. Approve and pay is refused until an
+              owner or admin checks with them and unfreezes them on Counterparties.
+            </Callout>
+          )}
           {two && <p className="mt-2 text-sm text-ink-2">{twoApprovalsLine(two, viewerId, memberEmails)}</p>}
           {two && canDecide && two.approvers < 2 && (
             <Callout tone="held" className="mt-2">

@@ -14,6 +14,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **"Was this you?": the payee's own contact checks an address change.** When a payee's address changes to a new
+  one, its billing email on file is asked by email whether they made the change, through a one-time link that needs
+  no account. "Yes" shows on the payee's row and confirms nothing. "No, this wasn't me" freezes the payee: its
+  address is no longer confirmed, no one can confirm it, and no approval pays it, until an owner or admin checks with
+  them and unfreezes it, saying how. Whoever made the change unfreezes it only when no one else can. Owners and admins
+  are emailed when it happens. Nothing is asked for a first address, a sandbox, shadow mode or a payee with no billing
+  email. Migration `0137_address_change_checks.sql`.
+
 - **Choose the screening service by its settings.** A deployment names the service that screens counterparties with
   `SCREENING_PROVIDER`: OpenSanctions' hosted API, or a self-hosted yente server, each with its address and key.
   Both are judged by the same rules, and each verdict, the console and the evidence chain say which one screened.

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
+import { AddressCheckNote } from "@/components/address-change/AddressCheckNote";
 import { CounterpartyRow, readiness } from "@/components/CounterpartyRow";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
@@ -43,6 +44,7 @@ import { plural } from "@/lib/copy";
 import { listCounterparties, stats } from "@/lib/queries";
 import { readShadowMode } from "@/lib/shadow-mode";
 import { earlierLookalike, lookalikes, PAYEE_LOCK_OFF, readPayeeLock } from "@/lib/payee-lock";
+import { readAddressChecks, type AddressCheckView } from "@/lib/address-change-check";
 import { loadNewPayeeFacts } from "@/lib/new-payee-facts";
 import { workspaceNetwork } from "@/lib/workspace-network";
 import { shellStatus } from "@/lib/shell-status";
@@ -114,6 +116,12 @@ export default async function CounterpartiesPage({
         console.error("counterparties: earlier addresses not read", error instanceof Error ? error.message : error);
       }
     }
+    // Each payee's freeze and the latest "Was this you?" sent to its contact (address change check AC5). Best effort: none
+    // when unread, and none before migration 0137.
+    const addressChecks = await readAddressChecks(counterparties.map((counterparty) => counterparty.id)).catch((error: unknown) => {
+      console.error("counterparties: address checks not read", error instanceof Error ? error.message : error);
+      return new Map<string, AddressCheckView>();
+    });
     // Only those who may send a payee link see which ones are out.
     const payeeLinks = canWrite ? await listActivePayeeLinks(access.membership.orgId) : new Map<string, { id: string; expiresAt: string }>();
     // The payees with no address of their own to ask at once (ask every payee A1, A2).
@@ -282,6 +290,12 @@ export default async function CounterpartiesPage({
                         payeeLockOn={payeeLock.on}
                         lookalikes={alike.get(counterparty.id) ?? []}
                         earlierLookalike={earlierAlike.get(counterparty.id) ?? null}
+                      />
+                      <AddressCheckNote
+                        orgSlug={slug}
+                        counterparty={{ id: counterparty.id, name: counterparty.name, address: counterparty.address }}
+                        view={addressChecks.get(counterparty.id) ?? null}
+                        canUnfreeze={canWrite}
                       />
                       {bankPayoutsOn && counterparty.role === "vendor" && (
                         <CounterpartyBankAccount

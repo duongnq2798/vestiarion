@@ -1,5 +1,5 @@
 /**
- * The path Google Analytics may see: invite, payee-link, pay-link, receipt, shared-report, statement, supplier status, early-payment offer, customer discount and term request tokens
+ * The path Google Analytics may see: invite, payee-link, pay-link, receipt, shared-report, statement, supplier status, early-payment offer, customer discount, term request and address-change check tokens
  * and organization slugs are replaced, and callers pass a pathname only, so no query string or hash.
  */
 export function redactPath(pathname: string): string {
@@ -13,6 +13,7 @@ export function redactPath(pathname: string): string {
   if (/^\/offer\/[^/]+/.test(pathname)) return "/offer/:token";
   if (/^\/discount\/[^/]+/.test(pathname)) return "/discount/:token";
   if (/^\/more-time\/[^/]+/.test(pathname)) return "/more-time/:token";
+  if (/^\/address-change\/[^/]+/.test(pathname)) return "/address-change/:token";
   return pathname.replace(/^\/o\/[^/]+/, "/o/:org");
 }
 

@@ -235,6 +235,27 @@ The payee lock covers addresses on Arc and the chains it pays. A payout to a ven
 
 The ledger records each change to the lock as `payee_lock_changed`, and the check behind each confirmation in its `counterparty_address_confirmed` entry.
 
+### Was this you?
+
+When a payee's address changes to a new one, Vestiarion emails the payee's billing email on file and asks: "Did you change where" your business "pays you?" The email shows the address before, shortened, and the new address in full. It also says when the address changed and how:
+- by someone in your workspace;
+- through the payee's own link;
+- on GitHub.
+
+Its link opens a page with **Yes, I made this change** and **No, this wasn't me**. It takes one answer, works for 7 days and needs no account. Opening the page changes nothing: only a button does.
+
+- **Yes** shows on the payee's row on Counterparties: "Their contact on file said they made this change." It confirms nothing: someone still confirms the address.
+- **No, this wasn't me** freezes the payee, while that address is still the one on file:
+  - its address is no longer confirmed, so the agent holds every payment to it, as for any address no one has confirmed;
+  - no one can confirm it, and no approval pays it, to its address or its bank account: **Approve and pay** and **Pay now** are refused, with "is frozen: their contact on file said they did not make the change to its address";
+  - the owners and admins get an email;
+  - the payee's row and its approval card say it is frozen.
+- **To unfreeze**, an owner or admin checks with the payee by a contact you had before, then chooses **Unfreeze** on its row and says how they checked. Whoever made the disputed change cannot, while another owner or admin can. The address still needs confirming afterwards, under the payee lock's rules when it is on. To put the old address back, edit it as usual: the billing email is asked again, and the payee stays frozen until someone unfreezes it.
+
+Nothing is asked for a payee's first address, a cleared address, a payee with no billing email, a sandbox or a workspace in shadow mode. Clearing an address and then setting a new one still asks, about the address it had before. A newer change asks again, and the older link stops working. The email goes to the billing email on file when the address changes: check the billing email itself too, if it changed recently.
+
+The ledger records `address_change_check_sent`, `address_change_answered`, `counterparty_frozen` and `counterparty_unfrozen`.
+
 Anyone who may not add records sees "Only an owner or admin of this workspace can add counterparties." instead of the form.
 
 ## 2. Add an invoice

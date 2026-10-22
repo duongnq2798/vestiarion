@@ -21,6 +21,7 @@ describe("redactPath", () => {
     ["/offer/vxo_secret", "/offer/:token"],
     ["/discount/vxd_secret", "/discount/:token"],
     ["/more-time/vxt_secret", "/more-time/:token"],
+    ["/address-change/vxw_secret", "/address-change/:token"],
     ["/o/acme", "/o/:org"],
     ["/o/acme/", "/o/:org/"],
     ["/o/acme/audit", "/o/:org/audit"],
