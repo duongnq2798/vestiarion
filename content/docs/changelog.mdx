@@ -1,5 +1,13 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-22: Bills waiting for approval in Discord
+
+- Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in the `system` domain:
+  - **`discord_connected`**, actor `human`: an owner or admin connected a Discord channel webhook from **Settings**, after Discord took a test message on it. It carries `by`, `webhookId` and `channelId`, Discord's ids, never the webhook's URL or token.
+  - **`discord_disconnected`**: the workspace's Discord was disconnected. Actor `human` when an owner or admin chose **Disconnect** (`via: "settings"`); actor `system` when Discord answered that the webhook is gone (`via: "discord"`), with `by` `null`. It carries `by`, `webhookId` and `via`.
+- A cycle's journal has a new stage, `discord`, after `slack`, the last. It needs no other stage to have succeeded.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-22: An accountant's co-sign
 
 - A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`accountant_cosign_changed`**, domain `system`, actor `human`, when an owner turns accountants' co-signing on or off. It carries `by`, `from` and `to`, each `true` or `false`.

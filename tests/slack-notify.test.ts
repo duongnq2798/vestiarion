@@ -254,8 +254,8 @@ describe("sendSlackDecisions", () => {
 });
 
 describe("the slack stage in the cycle", () => {
-  it("comes last, after telegram, and needs no other stage to have succeeded", () => {
-    expect(CYCLE_STAGES.slice(-2)).toEqual(["telegram", "slack"]);
+  it("comes after telegram, just before discord, the last, and needs no other stage to have succeeded", () => {
+    expect(CYCLE_STAGES.slice(-3)).toEqual(["telegram", "slack", "discord"]);
     expect(STAGE_REQUIRES.slack).toEqual([]);
   });
 });

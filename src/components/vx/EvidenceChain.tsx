@@ -409,7 +409,7 @@ export function EvidenceAccess({ kind, receipt, role, canShare }: { kind: Chain[
               </>
             )}
             <p>{WAYS_OUT}</p>
-            <p>{"A connected Slack channel and each member's own Telegram chat are told the agent's decisions."}</p>
+            <p>{"A connected Slack channel and each member's own Telegram chat are told the agent's decisions, and a connected Discord channel the bills held for approval."}</p>
           </dd>
         </dl>
         <p className="mt-4 border-t border-line pt-3 text-xs text-ink-3">Nothing on this page shares or changes anything: Download evidence is its only action.</p>

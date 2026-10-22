@@ -75,6 +75,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "guides/invoice-capture": () => import("../../../content/docs/guides/invoice-capture.mdx"),
   "guides/payment-plan": () => import("../../../content/docs/guides/payment-plan.mdx"),
   "guides/slack": () => import("../../../content/docs/guides/slack.mdx"),
+  "guides/discord": () => import("../../../content/docs/guides/discord.mdx"),
   "guides/api-invoices": () => import("../../../content/docs/guides/api-invoices.mdx"),
   "guides/api-milestones": () => import("../../../content/docs/guides/api-milestones.mdx"),
   "guides/github": () => import("../../../content/docs/guides/github.mdx"),

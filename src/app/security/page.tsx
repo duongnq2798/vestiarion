@@ -20,7 +20,7 @@ export default function SecurityPage() {
     <LegalPage
       eyebrow="Trust"
       title="Security"
-      updated="2026-10-16"
+      updated="2026-10-22"
       intro="How Vestiarion protects the data and the money it handles, for anyone reviewing the app, its API or its integrations. Every statement describes what the code does today, and the code is public, so each one can be checked against it. What we do not claim is at the end."
     >
       <LegalSection id="architecture" title="Architecture and data flow">
@@ -118,6 +118,7 @@ export default function SecurityPage() {
           <li>each webhook endpoint&apos;s signing secret, and the secret of each webhook Asana sends;</li>
           <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM and Asana;</li>
           <li>a Slack connection&apos;s bot token and posting address, bound to the workspace and the field;</li>
+          <li>a Discord channel webhook&apos;s URL, bound to the workspace and the field;</li>
           <li>
             a client pay link&apos;s token, so the link can be shown again on its card and the customer&apos;s statement page and sent in
             reminders; it is also hashed, and looked up by the hash.
@@ -321,12 +322,19 @@ export default function SecurityPage() {
             revokes both, and deletes them; Slack&apos;s own uninstall and revocation notices delete them too.
           </li>
           <li>
+            <strong>Discord</strong> is a channel webhook an owner or admin pastes, with no OAuth. Only a Discord webhook&apos;s address is accepted,
+            and Vestiarion keeps and calls only the one it rebuilds on discord.com from the webhook&apos;s id and token, never the text pasted, without
+            following a redirect, so no other host can be reached through it. It is saved, encrypted, only once Discord took a test message, and a post
+            mentions no one. Disconnecting deletes it, and so does Discord answering that the webhook is gone; the webhook itself is revoked by
+            deleting it in the channel&apos;s settings in Discord.
+          </li>
+          <li>
             <strong>GitHub</strong> is a GitHub App, and Vestiarion stores no token for it. Disconnecting deletes the installation&apos;s record; the
             app&apos;s access ends when it is uninstalled on GitHub.
           </li>
           <li>
-            <strong>Deleting a workspace</strong>, from its Settings or with its last member&apos;s account, deletes its tokens, its Slack connection and
-            its GitHub record without calling any provider or uninstalling the Slack app, so disconnect each tool first to revoke its grant there.
+            <strong>Deleting a workspace</strong>, from its Settings or with its last member&apos;s account, deletes its tokens, its Slack and Discord
+            connections and its GitHub record without calling any provider or uninstalling the Slack app, so disconnect each tool first to revoke its grant there.
           </li>
         </ul>
         <p>

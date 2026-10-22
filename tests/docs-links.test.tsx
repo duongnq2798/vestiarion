@@ -31,6 +31,7 @@ const SECTIONS: Array<[string, string]> = [
   ["src/components/GoLivePanel.tsx", "/docs/guides/go-live"],
   ["src/components/UsycReservePanel.tsx", "/docs/guides/go-live#earn-on-idle-cash-with-usyc"],
   ["src/components/SlackPanel.tsx", "/docs/guides/slack"],
+  ["src/components/DiscordPanel.tsx", "/docs/guides/discord"],
   ["src/components/GitHubPanel.tsx", "/docs/guides/github"],
   ["src/components/EmailInboxPanel.tsx", "/docs/guides/email-invoices"],
   ["src/components/intake/BillImport.tsx", "/docs/guides/import-bills"],

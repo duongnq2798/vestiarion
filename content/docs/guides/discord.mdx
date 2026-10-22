@@ -1,0 +1,75 @@
+Connect your workspace to a Discord channel, and the bills the agent holds or flags for a person are posted there after each cycle, each with a link to review it in Vestiarion. Nothing is decided in Discord: a link opens the bill in Approvals, and opening it approves nothing. Discord needs no app to install: an owner or admin pastes a channel webhook's URL once, and it works the same for a workspace on Arc testnet or on Arc mainnet.
+
+## 1. Create a webhook in Discord
+
+Someone who can manage the channel in your Discord server makes the webhook:
+
+1. Open the channel's settings, then **Integrations**, then **Webhooks**.
+2. Choose **New Webhook**. Give it a name your team will recognise, such as "Vestiarion", and check it posts to the channel you want. A private channel your finance people are in is a good choice: everyone in it sees the bills.
+3. Choose **Copy Webhook URL**.
+
+The URL is a password for that channel: anyone who has it can post there. Paste it only into Vestiarion, and do not share it in a chat.
+
+## 2. Connect it in Vestiarion
+
+An owner or admin connects Discord, once per workspace. Open **Settings** and find the **Discord** section, under Integrations.
+
+1. Paste the URL into **Webhook URL**.
+2. Choose **Connect**. Vestiarion asks Discord which channel the webhook posts to, posts a test message there, and saves the connection only once Discord took it. Settings then says "Discord is connected. A test message was posted to the channel."
+3. The section now names the webhook and the channel's id, and says when it was connected. The ledger records `discord_connected`, with the webhook's and the channel's ids, never its URL.
+
+Vestiarion accepts only a Discord webhook's URL. Anything else, a link to another site among them, is refused with "That is not a Discord webhook URL." and nothing is called. If the webhook was deleted in Discord, you see "Discord says this webhook does not exist." and nothing is saved. A workspace posts to one channel: to move to another, disconnect first, or Vestiarion says "Discord is already connected. Disconnect it first to post to another channel."
+
+Anyone else in the workspace sees whether Discord is connected, and "An owner or admin can connect Discord." On a deployment that has not run the migration that adds Discord yet, the section says "Discord is not set up on this deployment yet."
+
+## 3. What the channel receives
+
+After each cycle, when the agent has held or flagged a bill for a person since the last message, the channel gets one message listing those bills:
+
+```text
+**Acme Studio** · 2 bills wait for approval
+
+• **1,250.00 USDC** · Northwind Hosting · held: The invoice is above Northwind Hosting's 1,000.00 USDC payment limit. · needs two approvals, an accountant can co-sign · Review: <https://www.vestiarion.xyz/o/acme/approvals#payable-…>
+• **75.50 EURC** · Jiren Studio · flagged: The bank details on the invoice differ from the ones on file. · Review: <https://www.vestiarion.xyz/o/acme/approvals#payable-…>
+Opening a link never approves anything.
+```
+
+- Each bill takes one line: the amount and its currency, the payee, whether the agent held or flagged it and the first sentence of its reason, and **Review:** with the bill's own link.
+- A bill above the workspace's figure for two approvals says "needs two approvals". While an owner lets accountants co-sign, it says "needs two approvals, an accountant can co-sign".
+- Only bills that still wait are posted: one a person approved, rejected or returned between the agent's decision and the message is left out. A bill the agent asked details for is decided with **Add details** on its card, not in Approvals, and is not posted; nor is a payment held for your verdict in shadow mode, which you settle with **Give your verdict**.
+- A message lists at most ten bills, as many as fit in Discord's 2,000 characters, then "…and 3 more in Approvals", with a link to Approvals, for the rest.
+- The channel is told only about bills held after Discord was connected.
+
+Every value from a bill, such as a payee's name or the agent's reason, is shown as plain text: it cannot become a link, a heading or a mention, and the message pings no one, not even `@everyone`. A wallet address is shortened to its first and last four characters, and Discord shows no preview of a link.
+
+## 4. Review a bill
+
+**Review** opens the bill's card on **Approvals** in Vestiarion. Discord's links carry no token: you sign in as usual, and the card shows what you can do with your role. Opening a link never approves anything. You decide the bill there, with **Approve and pay**, **Reject** or **Return to agent**, under every check Vestiarion makes; Discord never decides a payment.
+
+## 5. Send a test message, and see what went wrong
+
+Once connected, an owner or admin can choose **Send test message** to post a test message to the channel. Settings answers "A test message was posted to the Discord channel."
+
+When Discord does not take a message:
+
+- Discord down, or not reached: the bills are posted again with the next cycle, and nothing is lost. The section shows **Last error**, "Discord could not be reached. The bills are posted again with the next cycle.", or the status Discord answered, with when.
+- Discord asking Vestiarion to slow down: a wait of up to 2 seconds is waited out at once, and a longer one leaves the message to the next cycle.
+- Discord refusing the message itself: **Last error** says why and "Those bills wait in Approvals.", and the next message carries on with new bills, so one message Discord refuses cannot stop the rest.
+
+The next message Discord takes clears **Last error**.
+
+## 6. Disconnect
+
+An owner or admin chooses **Disconnect**, then **Disconnect Discord** to confirm. Settings answers "Discord is disconnected. Bills waiting for approval are no longer posted there." Vestiarion deletes the webhook's URL, and the ledger records `discord_disconnected`.
+
+The webhook itself belongs to your Discord server: it stays in the channel's settings until someone deletes it there. Delete it in Discord too if you no longer want anything able to post through it.
+
+If someone deletes the webhook in Discord first, Vestiarion disconnects it the next time it posts or sends a test message, and the cycle says "Discord said the workspace's channel webhook is gone, so Discord was disconnected". The ledger records `discord_disconnected` as the system's, with no person.
+
+## What Discord receives
+
+The workspace's name, and for each bill posted, the payee's name, the amount, the agent's reason and a link to the bill in Vestiarion. A wallet address only shortened to its first and last four characters; never an email, a key or a full address. Vestiarion reads nothing from Discord: it only posts to the one channel the webhook belongs to.
+
+## For the person who runs the deployment
+
+Discord needs no setting and no app: it works once migration `0139_discord.sql` has run. Before that, the section says Discord is not set up, and the cycle's `discord` stage does nothing. The webhook's URL is kept encrypted under the master key, and Vestiarion only ever calls it at `https://discord.com/api/webhooks/`, rebuilt from the webhook's id and token, never at the address pasted.

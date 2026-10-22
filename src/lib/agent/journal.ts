@@ -42,6 +42,7 @@ export const CYCLE_STAGES = [
   "notices",
   "telegram",
   "slack",
+  "discord",
 ] as const;
 
 export type CycleStage = (typeof CYCLE_STAGES)[number];
@@ -94,8 +95,12 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *               the end, so it never delays a payment (Telegram bot design R8).
  *   slack       Nothing. It tells the workspace's Slack channel what the agent decided, with a
  *               stopped payable's card when deciding from Slack is on; the card itself moves
- *               nothing, and a channel not told now is told by the next cycle. Last, so it never
- *               delays a payment (Slack design S7).
+ *               nothing, and a channel not told now is told by the next cycle. Near the end, so it
+ *               never delays a payment (Slack design S7).
+ *   discord     Nothing. It tells the workspace's Discord channel which bills the agent stopped for
+ *               a person, each with a link to review it; the link approves nothing, and a channel
+ *               not told now is told by the next cycle. Last, so it never delays a payment
+ *               (Discord design DC3).
  */
 export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   reconcile: [],
@@ -124,6 +129,7 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   notices: [],
   telegram: [],
   slack: [],
+  discord: [],
 };
 
 export interface StageRecord {

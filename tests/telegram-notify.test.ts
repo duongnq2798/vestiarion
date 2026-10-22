@@ -152,8 +152,8 @@ describe("sendAgentDecisions", () => {
 });
 
 describe("the telegram stage in the cycle", () => {
-  it("comes after every stage that moves money, just before slack, and needs no other stage to have succeeded", () => {
-    expect(CYCLE_STAGES.slice(-2)).toEqual(["telegram", "slack"]);
+  it("comes after every stage that moves money, just before slack and discord, and needs no other stage to have succeeded", () => {
+    expect(CYCLE_STAGES.slice(-3)).toEqual(["telegram", "slack", "discord"]);
     expect(STAGE_REQUIRES.telegram).toEqual([]);
   });
 });

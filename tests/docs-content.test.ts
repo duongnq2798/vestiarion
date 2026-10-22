@@ -233,6 +233,7 @@ describe("the docs navigation", () => {
       ["guides/github", "Show payments on GitHub"],
       ["guides/slack", "Get the agent's decisions in Slack"],
       ["guides/telegram", "Get the agent's decisions in Telegram"],
+      ["guides/discord", "Get bills waiting for approval in Discord"],
       ["guides/invoice-capture", "Capture invoices from Chrome"],
     ]);
     expect([...new Set(groupsOf("Connect your tools"))]).toEqual(["All tools", "Accounting", "Sales and CRM", "Delivered work", "Team chat", "Your browser"]);

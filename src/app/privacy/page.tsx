@@ -20,7 +20,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-16"
+      updated="2026-10-22"
       intro="Vestiarion is an AI agent for bills and payments on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -288,6 +288,14 @@ export default function PrivacyPage() {
             It keeps the Slack workspace&apos;s and the channel&apos;s ids and names, the app&apos;s token and the channel&apos;s posting address,
             encrypted, and the Slack user id of each member who connects their own account; disconnecting Slack deletes them, and the signed ledger
             keeps only the ids. A Slack username given to connect an account is kept until that request is used or expires, and cleared when the next one is made.
+          </li>
+          <li>
+            <strong>Discord</strong>, for a workspace an owner or admin connects to a Discord channel with its webhook, receives what Vestiarion
+            posts to that channel: the workspace&apos;s name and, for each bill the agent holds or flags for a person, the counterparty&apos;s name,
+            the amount, the agent&apos;s reason and a link to review it in the app. It receives no email address or key, and no wallet address in
+            full: one is shortened to its first and last four characters. The app reads nothing from Discord. It keeps the webhook&apos;s id and
+            name, the channel&apos;s and the server&apos;s ids, and the webhook&apos;s URL, encrypted; disconnecting Discord deletes them, and the
+            signed ledger keeps only the ids.
           </li>
           <li>
             <strong>Resend</strong>, for a workspace that turns on invoices by email, receives the emails sent to its invoice address, as it
