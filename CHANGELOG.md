@@ -14,6 +14,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A bank payout's card compares it with USDC.** Before you approve a payout to a vendor's bank account, its card
+  shows the invoice, BlindPay's fees taken from it and what leaves the wallet, and what the vendor would receive in
+  USDC to a wallet instead: the full amount, no fee taken.
+
 - **What a payment costs, on the approval card.** Before you approve, each card waiting for Approve and pay shows the
   invoice, an early-payment discount that still applies, the CCTP or Gateway fee for a payee on another chain, what
   leaves the wallet in all, and what the payee receives. On Arc mainnet a note gives Arc's network fee, about 0.00319

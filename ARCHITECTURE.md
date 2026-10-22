@@ -727,7 +727,10 @@ up as Approve and pay would pay now: the invoice, a discount `amountToPay` still
 listing, what leaves the balance that pays it, and what the payee receives ("at least" for CCTP). Arc's network fee is a
 note at `ARC_FEE_USD`, never added (it is not read before the transfer), only where the network's wallets are EOAs
 that pay their own gas (`walletAccountType`), and never for Gateway. The box is not shown for a payment already
-sent, in flight, processing, or a bank payout.
+sent, in flight or processing. A bank payout's is `bankPayoutCost` (docs/superpowers/specs/2026-10-22-bank-route-comparison-design.md):
+the invoice, BlindPay's `feesSender` (its quote takes them from what the vendor receives) and what leaves, with what
+USDC to a wallet would give the vendor; none without the listing's quote, or while a discount applies, since the quote
+is read for the full amount.
 
 **A payee with no wallet creates one with a passkey** (`docs/superpowers/specs/2026-10-05-payee-passkey-wallet-design.md`).
 - **On a payee link:** the address field stays the primary path. On Arc testnet, when
