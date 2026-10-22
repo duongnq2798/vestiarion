@@ -336,7 +336,8 @@ async function applyScreening(cp: CounterpartyScreeningRow, dismissed?: Readonly
     try {
       result = await screenName(cp.name, cp.jurisdiction, dismissed);
     } catch (error) {
-      throw new ScreeningLookupError(error instanceof Error ? error.message : "Unknown screening failure");
+      // The provider's own error stays as the cause, so a caller can still read its HTTP status (screening health SH2).
+      throw new ScreeningLookupError(error instanceof Error ? error.message : "Unknown screening failure", { cause: error });
     }
   }
   const plan = planScreening(cp, result);

@@ -277,6 +277,19 @@ export function screeningSettingsFromEnv(env: Record<string, string | undefined>
   throw new ConfigError(`SCREENING_PROVIDER="${named}" is not one of opensanctions, yente.`);
 }
 
+/** The screening variables' two sets, as the team's check names them (screening health SH1). */
+export type ScreeningVariableSet = "SCREENING_*" | "OPENSANCTIONS_*";
+
+/**
+ * Which set `screeningSettingsFromEnv` reads: `SCREENING_*` as soon as any of its three is set, else the older
+ * `OPENSANCTIONS_*` pair when either is, else none. Names only, never a value.
+ */
+export function screeningVariableSet(env: Record<string, string | undefined>): ScreeningVariableSet | null {
+  if ([env.SCREENING_PROVIDER, env.SCREENING_API_URL, env.SCREENING_API_KEY].some((value) => trimmed(value) !== undefined)) return "SCREENING_*";
+  if ([env.OPENSANCTIONS_API_URL, env.OPENSANCTIONS_API_KEY].some((value) => trimmed(value) !== undefined)) return "OPENSANCTIONS_*";
+  return null;
+}
+
 export class ConfigError extends Error {
   constructor(message: string) {
     super(message);

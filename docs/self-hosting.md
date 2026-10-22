@@ -138,7 +138,7 @@ Two independent upgrades from there, in either order:
 | `npm run status -- <org-slug>` | Balances, wallets, open invoices, ledger height |
 | `npm run traction-digest -- <org-slug> --since YYYY-MM-DD` | That workspace's shadow mode decisions since the day: each verdict, what it paid with its Arc testnet transaction ("Paid later by a person" on a decision not to pay), and the agreement rate, in ASCII with no blank line for a traction post. `--hide-payees` names each supplier by a letter |
 | `npm run circle:doctor -- <org-slug>` / `agent:doctor` | Reports exactly which parts are live |
-| `npm run screening:check -- "<name>"` | Screens one name with the screening provider the environment names, to check a key before it is set; never prints the key |
+| `npm run screening:check -- "<name>"` | Screens one name with the screening provider the environment names, to check a key before it is set; never prints the key. On the deployment itself, **Check now** on `/admin/screening` does the same (see [Changing the screening key](#changing-the-screening-key)) |
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
 | `npm run telegram:setup -- <https origin>` | Registers the Telegram bot's webhook and command menu, once the three `TELEGRAM_*` variables are set (see `.env.example`) |
 | `npm run docs:screenshots` | Rebuilds the user guides’ step screenshots in `public/docs/guides/` with local headless Edge. Run it after changing a screen a guide shows (Go live, the counterparty or invoice form, a decision or approval card, the audit log), then look at each PNG before committing |
@@ -351,7 +351,36 @@ which produced each entry:
   Without a provider, a sandbox screens against the small bundled watchlist, labelled as
   simulated, and a live workspace gets no verdict at all: its counterparties stay unscreened, and
   the agent pays them nothing. Provider errors create an incomplete check and retain the previous
-  verdict; they never silently clear a counterparty.
+  verdict; they never silently clear a counterparty. When a live workspace's newest lookup failed,
+  its header says **Live, last lookup failed** instead of **Live**, and owners and admins see on
+  Compliance when a live lookup last worked.
+
+### Changing the screening key
+
+A key that stops working breaks nothing loudly: every live lookup fails with HTTP 401 or 403,
+existing counterparties keep their last verdict, and new ones stay unscreened. To change it:
+
+1. Check the new key on your machine first: put it in `.env.local` in place of the old one, then
+   run `npm run screening:check -- "Zenith Trading Example LLC"`. It prints the provider, the
+   address's origin, whether a key is set and the verdict, exits 0 when the lookup worked, and
+   never prints the key.
+2. Replace only the value of `OPENSANCTIONS_API_KEY` in the deployment's Production environment
+   (on Vercel, mark it Sensitive), keeping `OPENSANCTIONS_API_URL` as it is. Setting any
+   `SCREENING_*` variable alone switches to the new set and fails at start, taking every page with
+   it; a deployment on the new names replaces `SCREENING_API_KEY` instead.
+3. Redeploy: the configuration is read once per server instance, so the old key is sent until a
+   new deployment runs. Reload open tabs afterwards.
+4. Open `/admin/screening` as a person on `platform_team` and press **Check now**. It screens the
+   fictitious company "Zenith Trading Example LLC" with the deployment's own provider and key, and
+   shows the provider, the origin, whether a key is set, which variables are in use, OK or the HTTP
+   status, the time and the verdict. It adds no counterparty, writes no compliance check and
+   nothing to any ledger. The page also shows the last complete and last failed live check across
+   workspaces, once migration 0139 has run.
+5. Read the deployment's logs (`vercel logs`): each check writes one line, `screening check:
+   provider=… origin=… ok=… status=… ms=…`, never the key or the full address. Look for no
+   `ConfigError` after the deploy.
+
+Never print the key, in a terminal, a log or a message.
 
 ## Bringing your own business
 

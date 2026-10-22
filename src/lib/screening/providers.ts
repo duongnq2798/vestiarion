@@ -36,6 +36,55 @@ export interface ProviderSettings {
 /** OpenSanctions' hosted API, the default address for the `opensanctions` provider. */
 export const OPENSANCTIONS_API_URL = "https://api.opensanctions.org";
 
+/** What an HTTP failure from a provider means (screening health SH2): its key refused, over quota, the provider down. */
+export type ScreeningFailureKind = "key_refused" | "over_quota" | "provider_down" | "other";
+
+export function screeningFailureKind(status: number): ScreeningFailureKind {
+  if (status === 401 || status === 403) return "key_refused";
+  if (status === 429) return "over_quota";
+  if (status >= 500) return "provider_down";
+  return "other";
+}
+
+/** Each kind in a few words, for the team's check and the last failure it shows (/admin/screening). */
+export const SCREENING_FAILURE_WORDS: Record<ScreeningFailureKind, string> = {
+  key_refused: "the key is refused",
+  over_quota: "over quota",
+  provider_down: "the provider is down",
+  other: "the provider refused the request",
+};
+
+/**
+ * A provider's answer with an HTTP error status (SH2). The message is the one a failed lookup always had, so the notes a
+ * failed check records and the words a person sees are unchanged; the status and its kind are there for code to read.
+ */
+export class ScreeningHttpError extends Error {
+  readonly kind: ScreeningFailureKind;
+
+  constructor(
+    label: string,
+    readonly status: number
+  ) {
+    super(`${label} screening failed with HTTP ${status}`);
+    this.name = "ScreeningHttpError";
+    this.kind = screeningFailureKind(status);
+  }
+}
+
+/** The kind a failed check's recorded note names by its HTTP status ("… screening failed with HTTP 401"), or null. */
+export function failureKindOfNote(note: string): ScreeningFailureKind | null {
+  const status = / failed with HTTP (\d{3})\b/.exec(note)?.[1];
+  return status ? screeningFailureKind(Number(status)) : null;
+}
+
+/** The HTTP failure behind an error, itself or one it wraps as its `cause`; null for any other failure. */
+export function screeningHttpFailure(error: unknown): ScreeningHttpError | null {
+  for (let current = error, depth = 0; current && depth < 5; current = (current as { cause?: unknown }).cause, depth += 1) {
+    if (current instanceof ScreeningHttpError) return current;
+  }
+  return null;
+}
+
 const yenteMatchSchema = z.object({
   responses: z.record(
     z.string(),
@@ -105,7 +154,7 @@ function yenteProvider(id: ScreeningProviderId, label: string, source: string, s
         signal: AbortSignal.timeout(10_000),
         cache: "no-store",
       });
-      if (!response.ok) throw new Error(`${label} screening failed with HTTP ${response.status}`);
+      if (!response.ok) throw new ScreeningHttpError(label, response.status);
       const parsed = yenteMatchSchema.safeParse(await response.json());
       if (!parsed.success) throw new Error(`${label} returned an invalid match response`);
       const query = parsed.data.responses.counterparty;
