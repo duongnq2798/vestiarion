@@ -51,6 +51,8 @@ export type GettingStartedStepId =
   | "payable"
   | "decision"
   | "limits"
+  // The payee lock a mainnet workspace starts with (payee lock mainnet default LD2).
+  | "payee_lock"
   | "payment"
   | "suppliers"
   | "bills"
@@ -113,6 +115,11 @@ export interface GettingStartedInput {
   limits?: { confirmed: boolean; dailyUsdc: number | null; weeklyUsdc: number | null } | null;
   /** This person dismissed the owner's checklist for good (`dismissed_owner`, R4). */
   dismissed?: boolean;
+  /**
+   * The payee lock on Arc mainnet (payee lock mainnet default LD2): whether it is on, and whether a person has used it
+   * yet (confirmed an address under it, or changed it). Null or absent elsewhere: no step.
+   */
+  payeeLock?: { on: boolean; used: boolean } | null;
 }
 
 export interface GettingStartedStep {
@@ -170,6 +177,27 @@ const WORKSPACE_STEP: GettingStartedStep = {
 };
 
 const usdc = (value: number) => `${value.toFixed(2)} USDC`;
+
+/** Where the payee lock is set, and explained (payee lock PL1). */
+export const PAYEE_LOCK_PATH = "/settings#payee-lock-title";
+
+/**
+ * "Check payees with the payee lock" (payee lock mainnet default LD2): what the lock a mainnet workspace starts with does,
+ * done once a person confirmed an address under it or changed it.
+ */
+function payeeLockStep(lock: { on: boolean; used: boolean }): GettingStartedStep {
+  return {
+    id: "payee_lock",
+    title: "Check payees with the payee lock",
+    body: lock.on
+      ? "The payee lock is on: a payee's new address is paid only after someone records how they checked it, by a contact you had before, and whoever gave the address does not confirm it while someone else can. Confirm your first payee's address on Counterparties, or change the lock in Settings."
+      : "The payee lock is off: confirming a changed address takes no record of how it was checked. Turn it on in Settings.",
+    path: PAYEE_LOCK_PATH,
+    done: lock.used,
+    ownerOnly: false,
+    needs: null,
+  };
+}
 
 /** "Set or confirm the limits" (R1): the agent's spending limit as it stands, set by a person or kept as it is. */
 function limitsStep(limits: GettingStartedInput["limits"]): GettingStartedStep {
@@ -335,6 +363,8 @@ export function gettingStarted(input: GettingStartedInput): GettingStarted {
       ownerOnly: false,
       needs: "records.write",
     },
+    // On Arc mainnet, the payee lock it starts with, right after the first payee (LD2).
+    ...(input.payeeLock ? [payeeLockStep(input.payeeLock)] : []),
     {
       id: "payable",
       title: "Add or import a first bill",

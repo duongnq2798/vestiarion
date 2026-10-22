@@ -6,7 +6,8 @@ import { appendLedgerEntry } from "../ledger";
 import { ledgerKeyId } from "../ledger-keys";
 import { encryptSecret, masterKeysFromEnv } from "../secrets";
 import { currentConfig } from "../context";
-import { MAINNET_OFF, MAINNET_STARTING_BUDGET, MAINNET_STARTING_TWO_APPROVALS } from "../mainnet";
+import { MAINNET_OFF, MAINNET_STARTING_BUDGET, MAINNET_STARTING_PAYEE_LOCK, MAINNET_STARTING_TWO_APPROVALS } from "../mainnet";
+import { payeeLockColumnsMissing } from "../payee-lock";
 import { networkProfile, type Network } from "../network";
 import { homeChain } from "../payee-chains";
 import { workspaceNetwork } from "../workspace-network";
@@ -136,6 +137,8 @@ export async function createWorkspace(input: {
   if (!created) throw new Error("Could not find a free address for this workspace; try a different name.");
 
   const { orgId, slug, publicKey } = created;
+  // Whether the payee lock was written on: false only on a deployment before migration 0135 (LD1).
+  let lockStarted = true;
   try {
     // create_org wrote the network on insert, before the first account exists: once one does, it never changes (0078,
     // M3). The scope below reads it from the row, as every later scope does.
@@ -152,7 +155,15 @@ export async function createWorkspace(input: {
             updated_by: userId,
           });
           if (budget.error) throw new Error(budget.error.message);
-          const policy = await db().from("approval_policies").insert({ two_approvals_above: MAINNET_STARTING_TWO_APPROVALS, updated_by: userId });
+          // The payee lock starts on (payee lock mainnet default LD1); before migration 0135 the figure alone is written.
+          const figure = { two_approvals_above: MAINNET_STARTING_TWO_APPROVALS, updated_by: userId };
+          let policy = await db()
+            .from("approval_policies")
+            .insert({ ...figure, payee_lock: MAINNET_STARTING_PAYEE_LOCK.on, payee_lock_cooling_hours: MAINNET_STARTING_PAYEE_LOCK.coolingHours });
+          if (policy.error && payeeLockColumnsMissing(policy.error)) {
+            lockStarted = false;
+            policy = await db().from("approval_policies").insert(figure);
+          }
           if (policy.error) throw new Error(policy.error.message);
         }
         await appendLedgerEntry({
@@ -167,7 +178,14 @@ export async function createWorkspace(input: {
             network: own,
             // Every figure a mainnet workspace starts with, on record (mainnet limits L4).
             ...(own === "arc-mainnet"
-              ? { startingLimits: { dailyUsdc: MAINNET_STARTING_BUDGET.dailyUsdc, weeklyUsdc: MAINNET_STARTING_BUDGET.weeklyUsdc, twoApprovalsAbove: MAINNET_STARTING_TWO_APPROVALS } }
+              ? {
+                  startingLimits: {
+                    dailyUsdc: MAINNET_STARTING_BUDGET.dailyUsdc,
+                    weeklyUsdc: MAINNET_STARTING_BUDGET.weeklyUsdc,
+                    twoApprovalsAbove: MAINNET_STARTING_TWO_APPROVALS,
+                    ...(lockStarted ? { payeeLock: { ...MAINNET_STARTING_PAYEE_LOCK } } : {}),
+                  },
+                }
               : {}),
             ledgerKeyId: ledgerKeyId(publicKey),
           },
