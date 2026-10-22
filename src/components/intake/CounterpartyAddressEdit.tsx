@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
+import { AddressNameHint } from "./AddressNameHint";
 import { Input, Textarea } from "@/components/ui/Input";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { SubmitButton } from "@/components/ui/SubmitButton";
@@ -118,6 +119,8 @@ export default function CounterpartyAddress({
 
 function EditAddress({ orgSlug, counterparty }: { orgSlug: string; counterparty: CounterpartyAddressProps["counterparty"] }) {
   const [open, setOpen] = useState(false);
+  // Held here so a looked-up name can fill it (ENS address names EN1).
+  const [address, setAddress] = useState(counterparty.address ?? "");
   const close = useCallback(() => setOpen(false), []);
   const { state, formProps } = useActionForm(update, INITIAL, { onSuccess: close });
   const fieldId = `address-${counterparty.id}`;
@@ -136,9 +139,18 @@ function EditAddress({ orgSlug, counterparty }: { orgSlug: string; counterparty:
         <form {...formProps} className="grid gap-5">
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="counterpartyId" value={counterparty.id} />
-          <Field id={fieldId} label="Arc address" description="0x followed by 40 hex characters. Leave it empty to clear the address.">
-            <Input name="address" defaultValue={counterparty.address ?? ""} maxLength={200} autoComplete="off" spellCheck={false} className="font-mono" />
+          <Field id={fieldId} label="Arc address" description="0x followed by 40 hex characters, or an ENS name or Basename to look up. Leave it empty to clear the address.">
+            <Input
+              name="address"
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              maxLength={200}
+              autoComplete="off"
+              spellCheck={false}
+              className="font-mono"
+            />
           </Field>
+          <AddressNameHint orgSlug={orgSlug} value={address} payeeName={counterparty.name} onUse={setAddress} />
           <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
           <DialogFooter>
             <DialogClose asChild>

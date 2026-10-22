@@ -21,6 +21,9 @@ import {
 } from "@/lib/intake-validation";
 import { changeCounterpartyNoticeEmail } from "@/lib/payment-notices";
 import { unfreezeCounterparty, UnfreezeError } from "@/lib/address-change-check";
+import { addressProblem, ARC_ADDRESS } from "@/lib/address-checksum";
+import { primaryName, resolveAddressName } from "@/lib/ens";
+import { isAddressName, nameMatchesPayee } from "@/lib/ens-words";
 import {
   changeCounterpartyAddress,
   confirmCounterpartyAddress,
@@ -125,6 +128,47 @@ function addressFailure(error: unknown, what: string): IntakeActionResult {
   }
   console.error(what, error instanceof Error ? error.message : "unknown error");
   return { ok: false, message: "That did not work. Try again in a moment." };
+}
+
+/** What an address field's hint shows (ENS address names EN1, EN3). */
+export interface AddressNameLookup {
+  ok: boolean;
+  message?: string;
+  /** `name`: the field holds a name, and `address` is where it points (absent when nowhere). `address`: it holds an address, and `name` is its ENS name, if any. */
+  kind?: "name" | "address";
+  name?: string | null;
+  address?: string;
+  /** Whether the name looks like the payee's: false is a question to check, never a refusal. */
+  matches?: boolean;
+}
+
+/**
+ * Looks up the ENS name or Basename typed into an address field, or an address's ENS name (ENS address names EN1, EN3),
+ * for whoever may add or change a payee. It reads Ethereum mainnet, and stores and signs nothing: the field saves an
+ * address only.
+ */
+export async function lookupAddressNameAction(orgSlug: string, query: string, payeeName: string): Promise<AddressNameLookup> {
+  const auth = await authorize(orgSlug, "records.write");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const value = typeof query === "string" ? query.trim().slice(0, 255) : "";
+    const payee = typeof payeeName === "string" ? payeeName.slice(0, 160) : "";
+    try {
+      if (isAddressName(value)) {
+        const found = await resolveAddressName(value);
+        if (!found) return { ok: true, kind: "name", name: value.toLowerCase() };
+        return { ok: true, kind: "name", name: found.name, address: found.address, matches: payee ? nameMatchesPayee(found.name, payee) : true };
+      }
+      if (ARC_ADDRESS.test(value) && !addressProblem(value)) {
+        const name = await primaryName(value);
+        return { ok: true, kind: "address", name, matches: name && payee ? nameMatchesPayee(name, payee) : true };
+      }
+      return { ok: true };
+    } catch (error) {
+      console.error("address name lookup failed", error instanceof Error ? error.message.slice(0, 120) : "unknown error");
+      return { ok: false, message: "The name could not be looked up. Try again, or paste the address." };
+    }
+  });
 }
 
 /** Sets, changes or clears a counterparty's Arc address. The next payment to a changed address waits for a person. */

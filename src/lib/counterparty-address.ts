@@ -1,5 +1,6 @@
 import { askContactAboutAddressChange, counterpartyFrozen } from "./address-change-check";
 import { CHECKSUM_MISMATCH, addressProblem, ARC_ADDRESS, NOT_AN_ARC_ADDRESS } from "./address-checksum";
+import { isAddressName, NAME_NOT_ADDRESS } from "./ens-words";
 import { approversBesides } from "./approval-policy";
 import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
@@ -79,6 +80,8 @@ export function parseAddressInput(
 ): { ok: true; address: string | null } | { ok: false; message: string; /** The shape is right, but its capital letters do not match its checksum (A3). */ checksum: boolean } {
   const trimmed = raw.trim();
   if (trimmed === "") return { ok: true, address: null };
+  // A name is looked up beside the field, never stored: the address it points to is what is saved (ENS address names EN2).
+  if (isAddressName(trimmed)) return { ok: false, message: NAME_NOT_ADDRESS, checksum: false };
   const problem = addressProblem(trimmed);
   return problem ? { ok: false, message: problem, checksum: ARC_ADDRESS.test(trimmed) } : { ok: true, address: trimmed };
 }
