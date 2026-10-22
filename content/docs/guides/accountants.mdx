@@ -4,7 +4,7 @@ An outside accountant who looks after several small businesses should not have t
 
 An owner or admin opens **Members** and, under the invitation form, chooses the role **accountant**. While you run the workspace alone, **Treasury** offers the same invitation under **Bring in a second person**: see [Bring in a second person](/docs/guides/workspace#bring-in-a-second-person). The form says what each role may do before you send it. For the accountant:
 
-> Reads everything, books payments in Xero, applies money received and answers customers. Decides no payment, and changes no treasury, limit, integration or member.
+> Reads everything, books payments in Xero, applies money received, checks vendors' statements and answers customers. Decides no payment, and changes no treasury, limit, integration or member.
 
 The accountant accepts the invitation with the address it was sent to, as any member does, and lands on the **Accountant console**, at their first step.
 
@@ -15,7 +15,7 @@ What each role may do:
 | Owner | Everything an admin does, and connects Circle, sets the two-approval figure and can delete the workspace. |
 | Admin | Everything an approver and an accountant do, and adds bills and receivables, runs and resumes the agent, and manages members, API keys, webhooks, integrations and treasury. |
 | Approver | Decides the payments the agent held, and pauses the agent. Adds no records. |
-| Accountant | Reads everything, books payments in Xero, applies money received and answers customers. Decides no payment, and changes no treasury, limit, integration or member. |
+| Accountant | Reads everything, books payments in Xero, applies money received, checks vendors' statements and answers customers. Decides no payment, and changes no treasury, limit, integration or member. |
 | Viewer | Reads the workspace. |
 
 - **Owners and admins invite an accountant,** as they invite an approver or a viewer. An accountant invites nobody and changes no role.
@@ -39,7 +39,26 @@ The **Accountant console** shows a new accountant **Get started as an accountant
 - **Apply money received to receivables,** record a fee, and reverse a mistake. See [Apply money received to invoices](/docs/guides/apply-payments). Anyone else reads "Only an owner, admin or accountant of this workspace can apply payments."
 - **Answer what customers said** on their statement links, under **From customers** on the **Receivables** tab: reply, mark a payment found, or close it as not received. See [Share a statement with a customer](/docs/guides/customer-portal). Making and stopping a statement link stays with owners and admins.
 - **Get an email when a customer writes,** with the switch in **Settings**, under **Notifications**: "Email me when a customer writes on its statement link".
+- **Check a vendor's statement** against the bills and the payments made to them: see [Check a vendor's statement](#check-a-vendor-s-statement).
 - **Read everything else,** the ledger, the report, Treasury and the audit export included.
+
+### Check a vendor's statement
+
+At month end a vendor sends a statement of account: the invoices they billed, the payments they received, and what they say is owed. On **Counterparties**, a vendor's row has **Check their statement**, for owners, admins and accountants:
+
+1. **Give it the statement.** Choose its CSV, or paste its table from their portal, a spreadsheet or a PDF. It is read as a bank statement is: the delimiter, the header row and the columns are found, and when a date or an amount reads two ways, you are asked. The columns are the date, the invoice number, a description if it has one, the charges and the payments, or one amount column, where a charge is a positive amount unless you say otherwise, and the balance, where DR is what you owe. Type its currency when no column gives it.
+2. **Check against your books.** Each charge is matched to the vendor's bill with the same invoice number, ignoring spaces, dashes and case, or whose memo starts with it. Only a charge with no number, or a bill with none, is matched by amount instead: the bill of the same amount added closest in time, within 45 days. Each payment they list is matched to one of yours of the same amount within 10 days: what you recorded you paid, where you did, as in shadow mode, or else a payment made here. USD is compared with USDC, EUR with EURC, and a bill written in your own currency in shadow mode by that figure.
+3. **Read what is left.**
+   - **Missing here**: their charges with no bill. An owner or admin can add each from the line, with its number, amount and description filled in; it goes through every check, as a bill typed in.
+   - **Rejected here**: their charges for a bill you rejected, to tell them why or ask them to take it off.
+   - **Listed twice**: the same number twice on their statement, or on two of your bills.
+   - **Amount differs**: theirs, yours and the difference.
+   - **Paid, not on their statement**: what you paid them in those days that they have not listed. A payment on Arc mainnet comes with its transaction's link, to send them.
+   - **A payment you have no record of**: one they list that matches none of yours.
+   - **Not on their statement**: your bills added in those days that they do not list.
+   - Their last printed balance beside what your open bills to them add up to by the statement's last day. A charge matched to a bill in another currency is named, since its amount was not compared.
+
+Nothing is paid or changed, and the file is not kept. The check is signed into the ledger as `vendor_statement_checked`, with its counts and balances only.
 
 ## 3. Open the console
 

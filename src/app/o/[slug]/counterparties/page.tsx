@@ -25,6 +25,7 @@ import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
+import { VendorStatementCheck } from "@/components/VendorStatementCheck";
 import { requireMembership } from "@/lib/auth/membership";
 import { shellModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
@@ -74,12 +75,14 @@ export default async function CounterpartiesPage({
     const network = workspaceNetwork().id;
     // A live match names the entity it matched, which Not this person dismisses (dismiss screening match R6).
     const liveScreening = screeningMode() === "live";
-    const [counterparties, dashboardStats, entries, canWrite, canConfirm, shadow] = await Promise.all([
+    const [counterparties, dashboardStats, entries, canWrite, canConfirm, canReconcile, shadow] = await Promise.all([
       listCounterparties(),
       stats(),
       listLedgerEntries(1),
       viewerCan(slug, "records.write"),
       viewerCan(slug, "approval.decide"),
+      // Checking a vendor's statement (vendor statement VS1): owners, admins and accountants.
+      viewerCan(slug, "payables.reconcile"),
       // In shadow mode a payee with no Arc address can be given a mirror address (shadow mode S7), and a new supplier is
       // asked whether it sends purchase orders. Best effort.
       readShadowMode(db()).catch((error: unknown) => {
@@ -297,6 +300,11 @@ export default async function CounterpartiesPage({
                         view={addressChecks.get(counterparty.id) ?? null}
                         canUnfreeze={canWrite}
                       />
+                      {canReconcile && counterparty.role === "vendor" && (
+                        <div className="mt-2">
+                          <VendorStatementCheck orgSlug={slug} vendor={{ id: counterparty.id, name: counterparty.name }} canAddBills={canWrite} />
+                        </div>
+                      )}
                       {bankPayoutsOn && counterparty.role === "vendor" && (
                         <CounterpartyBankAccount
                           orgSlug={slug}

@@ -579,11 +579,13 @@ describe("claims narrowed to what the code does", () => {
 
   it("the roles do what roles.ts lets them, and a viewer only reads the workspace", () => {
     expect(PERMISSIONS["receivables.reconcile"]).toContain("accountant");
+    expect(PERMISSIONS["payables.reconcile"]).toContain("accountant");
     expect(PERMISSIONS["agent.pause"]).toContain("approver");
     const viewer = Object.entries(PERMISSIONS).filter(([, roles]) => (roles as readonly string[]).includes("viewer")).map(([permission]) => permission);
     expect(viewer).toEqual(["workspace.read"]);
     const access = section("access");
-    expect(access).toContain("applies money received and answers customers");
+    expect(access).toContain("applies money received, checks vendors");
+    expect(access).toContain("statements and answers customers");
     expect(access).toContain("pause the agent");
     expect(access).toContain("A viewer reads, and changes only their own settings and links");
   });
