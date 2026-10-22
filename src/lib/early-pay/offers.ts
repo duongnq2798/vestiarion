@@ -56,8 +56,12 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
   const ready = await db().rpc("early_payment_offers_ready");
   if (ready.error) return null;
   const soonest = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 3)).toISOString();
-  const invoices = unwrap(
-    await db()
+  const offersRead = (columns: string) => db().from("early_payment_offers").select(columns).order("created_at", { ascending: false }).limit(60);
+  // Read at once, as none waits on another (bills page parallel reads R4): the bills worth an offer, the offers made with
+  // each counter (0127), the reserve, and the agent's setting. Their answers are still taken in that order, so a read
+  // that fails is the one that failed first before.
+  const [invoicesRead, withCounters, reserveRead, agent] = await Promise.all([
+    db()
       .from("invoices")
       .select("id, amount, currency, due_date, memo, status, counterparties(name)")
       .eq("direction", "payable")
@@ -65,26 +69,28 @@ export async function offersView(now: Date = new Date()): Promise<OffersView | n
       .is("early_pay_discount_pct", null)
       .gte("due_date", soonest)
       .order("due_date", { ascending: true })
-      .limit(40)
-  ) as unknown as InvoiceRow[];
+      .limit(40),
+    offersRead("id, invoice_id, discount_pct, amount, offered_amount, counter_pct, status, expires_at, decided_at, counterparties(name)"),
+    db().from("accounts").select("apy").eq("kind", "reserve").maybeSingle<{ apy: string | null }>(),
+    agentOffersSetting(),
+  ]);
+  const invoices = unwrap(invoicesRead) as unknown as InvoiceRow[];
   const ids = invoices.map((row) => row.id);
-  const started = ids.length
-    ? new Set((unwrap(await db().from("payment_intents").select("source_id").eq("source_type", "invoice").in("source_id", ids)) as Array<{ source_id: string }>).map((row) => row.source_id))
-    : new Set<string>();
-  const offersRead = (columns: string) => db().from("early_payment_offers").select(columns).order("created_at", { ascending: false }).limit(60);
-  // With each counter (0127); before that migration runs, as before.
-  const withCounters = await offersRead("id, invoice_id, discount_pct, amount, offered_amount, counter_pct, status, expires_at, decided_at, counterparties(name)");
-  const offers = (withCounters.error ? unwrap(await offersRead("id, invoice_id, discount_pct, amount, offered_amount, status, expires_at, decided_at, counterparties(name)")) : withCounters.data) as unknown as OfferRow[];
+  // Then, at once, what waits on those: the bills a payment has started for; the offers without counters, before 0127
+  // runs, as before; and the offers the agent made (0126), read best effort, so an offer out says who made it.
+  const [startedRead, withoutCounters, reviews] = await Promise.all([
+    ids.length ? db().from("payment_intents").select("source_id").eq("source_type", "invoice").in("source_id", ids) : null,
+    withCounters.error ? offersRead("id, invoice_id, discount_pct, amount, offered_amount, status, expires_at, decided_at, counterparties(name)") : null,
+    agent ? db().from("early_payment_offer_reviews").select("offer_id").not("offer_id", "is", null).limit(500) : null,
+  ]);
+  const started = startedRead ? new Set((unwrap(startedRead) as Array<{ source_id: string }>).map((row) => row.source_id)) : new Set<string>();
+  const offers = (withoutCounters ? unwrap(withoutCounters) : withCounters.data) as unknown as OfferRow[];
   // A workspace with no reserve earns nothing by waiting, as the agent reads it; only a failed read is an error.
-  const reserveRead = await db().from("accounts").select("apy").eq("kind", "reserve").maybeSingle<{ apy: string | null }>();
   if (reserveRead.error) throw new Error(reserveRead.error.message);
   const reserve = reserveRead.data;
   const reserveApy = reserve?.apy != null && Number.isFinite(Number(reserve.apy)) ? Number(reserve.apy) : 0;
   // An offer out, or one a supplier countered that the agent has not answered yet (offer counters N7).
   const openBy = new Map(offers.filter((row) => (row.status === "open" && Date.parse(row.expires_at) > now.getTime()) || row.status === "countered").map((row) => [row.invoice_id, row] as const));
-  const agent = await agentOffersSetting();
-  // The offers the agent made (0126): read best effort, so an offer out says who made it.
-  const reviews = agent ? await db().from("early_payment_offer_reviews").select("offer_id").not("offer_id", "is", null).limit(500) : null;
   const byAgent = new Set(((reviews && !reviews.error ? reviews.data : []) as Array<{ offer_id: string | null }>).map((row) => row.offer_id));
   const candidates = invoices
     .filter((row) => !started.has(row.id) && Number(row.amount) > 0)

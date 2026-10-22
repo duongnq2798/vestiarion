@@ -310,9 +310,9 @@ export async function readShadowSummary(orgDb: OrgDb, shadow: ShadowMode): Promi
  */
 export async function verdictFacts(orgDb: OrgDb, entries: Array<{ seq: number; actor: string; action: string }>, canGive: boolean): Promise<VerdictFacts> {
   try {
-    const shadow = await readShadowMode(orgDb);
     const decisions = entries.filter((entry) => entry.actor === "agent" && (AGENT_DECISION_ACTIONS as readonly string[]).includes(entry.action)).map((entry) => entry.seq);
-    const read = await readVerdicts(orgDb, decisions);
+    // Shadow mode and the verdicts given wait on neither: read at once (bills page parallel reads R4).
+    const [shadow, read] = await Promise.all([readShadowMode(orgDb), readVerdicts(orgDb, decisions)]);
     const given = new Map([...read].map(([seq, verdict]) => [seq, { verdict: verdict.verdict, reason: verdict.reason }] as const));
     // What agreeing pays, in the words of the workspace's capability: on chain, simulated, or nothing right now and why.
     const capability = await readCapabilitySafely({ shadow: shadow !== null });

@@ -168,19 +168,24 @@ export function buildCollections(input: CollectionsInput): CollectionsView {
  * the page shows the tab without the panel.
  */
 export async function readCollections(
-  input: Omit<CollectionsInput, "links" | "said" | "policies" | "tasks" | "crm" | "sentThisWeek" | "promises" | "tasksFrom"> & {
+  input: Omit<CollectionsInput, "links" | "said" | "policies" | "tasks" | "crm" | "sentThisWeek" | "promises" | "tasksFrom" | "members"> & {
     linkStates: (invoiceIds: string[]) => Promise<Map<string, PayLinkState>>;
+    /** The members, or their read under way: the reads here start without waiting for it (bills page parallel reads R4). */
+    members: CollectionsInput["members"] | Promise<CollectionsInput["members"]>;
   }
 ): Promise<CollectionsView> {
   const orgDb = db();
   const today = todayOf(input.now);
+  // Awaited with the last reads below, so a read of the members that fails is thrown there, as any other read's is.
+  const membersRead = Promise.resolve(input.members);
+  membersRead.catch(() => undefined);
   const open = await readTasks(orgDb, { openOnly: true });
   const withTasks = new Set(open.available ? open.tasks.map((task) => task.invoiceId) : []);
   const chosen = inCollections(input.invoices, today, input.focus, withTasks);
   const ids = chosen.map((invoice) => invoice.id);
   const weekAgo = new Date(input.now - 7 * 86_400_000).toISOString();
   const promisedFrom = new Date(input.now - 90 * 86_400_000).toISOString().slice(0, 10);
-  const [links, said, policies, tasks, crm, sentThisWeek, promised, start] = await Promise.all([
+  const [links, said, policies, tasks, crm, sentThisWeek, promised, start, members] = await Promise.all([
     input.linkStates(ids),
     readSaid(orgDb, ids, new Date(input.now - 90 * 86_400_000).toISOString()),
     readPolicies(orgDb, [...new Set(chosen.map((invoice) => invoice.counterparty_id))]),
@@ -190,6 +195,7 @@ export async function readCollections(
     orgDb.from("customer_requests").select("invoice_id, promised_on, outcome").eq("kind", "promise").gte("promised_on", promisedFrom).limit(1000),
     // Read, never set: before the stage's first run, tasks begin today at the earliest.
     readTaskStart(orgDb),
+    membersRead,
   ]);
   const settled = new Map(input.invoices.map((invoice) => [invoice.id, invoice.settled_at ?? null]));
   const promises: PromiseOutcome[] = promised.error
@@ -201,6 +207,7 @@ export async function readCollections(
       }));
   return buildCollections({
     ...input,
+    members,
     links,
     said,
     policies,

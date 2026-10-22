@@ -71,7 +71,7 @@ import { needsTwoApprovals } from "@/lib/two-approvals";
 import { inOrg } from "@/lib/dal/scope";
 import { inboxEmailsToDecide } from "@/lib/email-inbox/list";
 import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
-import { connectionFor, NotSetUpError } from "@/lib/connectors/connections";
+import { connectionFor, NotSetUpError, type Connection } from "@/lib/connectors/connections";
 import { PROVIDER_LABELS, PROVIDERS, type ProviderId } from "@/lib/connectors/provider";
 import { accountingReview, type ReviewView } from "@/lib/connectors/review";
 import { accountingProvider, accountingProviderOn } from "@/lib/accounting-providers";
@@ -105,7 +105,7 @@ import { readDealCosts } from "@/lib/deals/costs-read";
 import { exceptionFacts } from "@/lib/exceptions";
 import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { readDealCollections } from "@/lib/deals/collection-read";
-import { dealLinksOf, plannedLinesOf, readDeals, type DealLink } from "@/lib/deals/read";
+import { dealLinksOf, plannedLinesOf, readDeals, type DealLink, type DealRecord } from "@/lib/deals/read";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { pipedriveSettingsFromEnv } from "@/lib/pipedrive/settings";
 import { pipedriveReady } from "@/lib/pipedrive/store";
@@ -117,7 +117,7 @@ import { listPortalLinks, type PortalLink } from "@/lib/customer-portal/links";
 import { todayOf, type CustomerRequest } from "@/lib/customer-portal/model";
 import { readCustomerRequests } from "@/lib/customer-portal/requests";
 import { customerNote, fromCustomerItems, statementLinkRows } from "@/lib/customer-portal/view";
-import { listMembers } from "@/lib/platform/members";
+import { listMembers, type Member } from "@/lib/platform/members";
 import { CollectionsPanel } from "@/components/collections/CollectionsPanel";
 import { NextAction } from "@/components/collections/NextAction";
 import { readCollections, type CollectionsView } from "@/lib/collection-context/page";
@@ -155,10 +155,11 @@ type InvoicePageProps = {
 /**
  * The bills an accounting tool brought in, waiting for a person (Xero connector X11, X19; QuickBooks connector Q19), on
  * a deployment where the tool is set up: hidden before migration 0101, without a connection, and when it cannot be read.
+ * The connection is the page's one read of it, which the tool's payments to book share.
  */
-function broughtIn(provider: ProviderId): Promise<ReviewView> {
+function broughtIn(provider: ProviderId, connectionOf: (provider: ProviderId) => Promise<Connection | null>): Promise<ReviewView> {
   if (!accountingProviderOn(provider)) return Promise.resolve({ state: "hidden" });
-  return connectionFor(provider)
+  return connectionOf(provider)
     .then(accountingReview)
     .catch((error: unknown): ReviewView => {
       if (!(error instanceof NotSetUpError)) console.error(`invoices: bills from ${PROVIDER_LABELS[provider]} not loaded`, error instanceof Error ? error.message : error);
@@ -170,15 +171,24 @@ function broughtIn(provider: ProviderId): Promise<ReviewView> {
  * The payments made on Arc to book in an accounting tool, each for a person to review (accounting write-back W6, W10),
  * for a tool that books: hidden before migration 0106, without a connection, and when it cannot be read.
  */
-function toBookIn(provider: ProviderId): Promise<BookingsView> {
+function toBookIn(provider: ProviderId, connectionOf: (provider: ProviderId) => Promise<Connection | null>): Promise<BookingsView> {
   if (!accountingProviderOn(provider)) return Promise.resolve({ state: "hidden" });
-  return connectionFor(provider)
+  return connectionOf(provider)
     .then((connection) => accountingBookings(connection, accountingProvider(provider)))
     .catch((error: unknown): BookingsView => {
       if (!(error instanceof NotSetUpError)) console.error(`invoices: bookings in ${PROVIDER_LABELS[provider]} not loaded`, error instanceof Error ? error.message : error);
       return { state: "hidden" };
     });
 }
+
+type TabContent = Pick<Parameters<typeof BillsScreen>[0], "bills" | "plan" | "receivables">;
+
+/** What the tab shown reads and builds beside the cards (B5): all of it but its list, which the cards make. */
+type TabParts = {
+  bills?: Omit<NonNullable<TabContent["bills"]>, "list">;
+  plan?: TabContent["plan"];
+  receivables?: Omit<NonNullable<TabContent["receivables"]>, "list">;
+};
 
 export default async function InvoicesPage({ params, searchParams }: InvoicePageProps) {
   const { slug } = await params;
@@ -187,144 +197,177 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const network = workspaceNetwork().id;
     const raw = await searchParams;
     const query = readBillsQuery(raw);
-    // Every tab: what the figures, the strip and the New forms need (B5).
-    const [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, fromZohoBooks, dealsRead, fromHubSpot, fromPipedrive, fromZohoCrm] = await Promise.all([
-      listInvoices(),
-      listCounterparties(),
-      listLedgerEntries(1),
-      stats(),
-      viewerCan(slug, "records.write"),
-      viewerCan(slug, "approval.decide"),
-      // Applying received money and answering customers: an accountant does these too (accountant console A1).
-      viewerCan(slug, "receivables.reconcile"),
-      // Best effort: a list that cannot be read hides its section, nothing else.
-      listRecurringPayables().catch((error: unknown) => {
-        console.error("invoices: recurring payments not loaded", error instanceof Error ? error.message : error);
-        return [];
-      }),
-      // A cycle running now is deciding the payables not yet decided: they say so (decision trail R1). Best effort.
-      hasRunningCycle().catch(() => false),
-      // The invoices that arrived by email and wait for a person, on a deployment that receives them (email invoices E7).
-      inboxSettingsFromEnv()
-        ? inboxEmailsToDecide().catch((error: unknown) => {
-            console.error("invoices: emailed invoices not loaded", error instanceof Error ? error.message : error);
-            return [];
-          })
-        : [],
-      // The bills Xero and QuickBooks brought in, waiting for a person (Xero connector X11, X19; QuickBooks connector
-      // Q19), each on a deployment where it is set up; hidden before migration 0101, without a connection, and when it
-      // cannot be read.
-      broughtIn("xero"),
-      broughtIn("quickbooks"),
-      // And Zoho Books' (Zoho Books connector Z1), hidden before migration 0122 the same way.
-      broughtIn("zohobooks"),
-      // The workspace's deals and their schedules (deal schedule). Best effort: before migration 0104 runs the section
-      // says deals are not set up, and a read that fails hides only the section.
-      readDeals().catch((error: unknown) => {
-        console.error("invoices: deals not loaded", error instanceof Error ? error.message : error);
-        return "unread" as const;
-      }),
-      // HubSpot's won deals, to plan collections from (HubSpot connector H20), on a deployment where HubSpot is set up;
-      // hidden before migration 0105, without a connection, and when they cannot be read.
-      hubspotSettingsFromEnv()
-        ? connectionFor("hubspot")
-            .then(async (connection) => {
-              await crmReady();
-              return crmReview(connection);
-            })
-            .catch((error: unknown): CrmReviewView => {
-              if (!(error instanceof NotSetUpError)) console.error("invoices: deals from HubSpot not loaded", error instanceof Error ? error.message : error);
-              return { state: "hidden" };
-            })
-        : ({ state: "hidden" } as CrmReviewView),
-      // Pipedrive's won deals the same way (Pipedrive connector P20): hidden before migration 0116 and without a connection.
-      pipedriveSettingsFromEnv()
-        ? connectionFor("pipedrive")
-            .then(async (connection) => {
-              await pipedriveReady();
-              return crmReview(connection);
-            })
-            .catch((error: unknown): CrmReviewView => {
-              if (!(error instanceof NotSetUpError)) console.error("invoices: deals from Pipedrive not loaded", error instanceof Error ? error.message : error);
-              return { state: "hidden" };
-            })
-        : ({ state: "hidden" } as CrmReviewView),
-      // And Zoho CRM's (Zoho CRM connector C16): hidden before migration 0123 and without a connection.
-      zohoCrmSettingsFromEnv()
-        ? connectionFor("zohocrm")
-            .then(async (connection) => {
-              await zohoCrmReady();
-              return crmReview(connection);
-            })
-            .catch((error: unknown): CrmReviewView => {
-              if (!(error instanceof NotSetUpError)) console.error("invoices: deals from Zoho CRM not loaded", error instanceof Error ? error.message : error);
-              return { state: "hidden" };
-            })
-        : ({ state: "hidden" } as CrmReviewView),
-    ]);
-    const deals = dealsRead === "unread" ? "unread" : dealsRead.available ? dealsRead.deals : "not_ready";
-    // Each deal's costs, for its cash badge (deal cash readiness K8). Best effort: before migration 0108, or when they
-    // cannot be read, no badge is shown.
-    const dealCosts =
-      Array.isArray(deals) && deals.length > 0
-        ? await readDealCosts(deals)
-            .then((read) => (read.available ? read.byDeal : null))
-            .catch((error: unknown) => {
-              console.error("invoices: deal costs not loaded", error instanceof Error ? error.message : error);
-              return null;
-            })
-        : null;
-    // What customers said on their statement links and wait for an answer (customer portal P8). Best effort: before
-    // migration 0109 runs, or when it cannot be read, nothing waits and the Receivables tab says statements are not set up.
-    const customerSaid = await readCustomerRequests(db(), { openOnly: true }).catch((error: unknown) => {
-      console.error("invoices: customer requests not read", error instanceof Error ? error.message : error);
-      return { available: false as const };
-    });
-    const openRequests: CustomerRequest[] = customerSaid.available ? customerSaid.requests : [];
-    const saidBy = new Map<string, CustomerRequest[]>();
-    for (const request of openRequests) saidBy.set(request.invoiceId, [...(saidBy.get(request.invoiceId) ?? []), request]);
-    // The payments made on Arc to book in each accounting tool, for a person to review (accounting write-back W6, W10).
-    // And the invoices captured with the Chrome extension and sent for review (invoice capture C5). Best effort: before
-    // migration 0121, or when they cannot be read, nothing is shown.
-    const [toBook, canBook, captured] = await Promise.all([
-      Promise.all(PROVIDERS.map(toBookIn)),
-      viewerCan(slug, "accounting.book"),
-      capturedDraftsToReview().catch((error: unknown) => {
-        console.error("invoices: captured drafts not loaded", error instanceof Error ? error.message : error);
-        return { available: false as const };
-      }),
-    ]);
-    // Each receivable a deal line became names its deal (deal schedule).
-    const dealLinks = Array.isArray(deals) ? dealLinksOf(deals) : new Map<string, DealLink>();
-    const search = parseSearch(query.q ?? undefined);
-    // The payments applied to receivables (allocations L11). Best effort: a read that fails shows receivables as before.
-    const book = await readAllocationBook(db()).catch((error: unknown) => {
-      console.error("invoices: payments applied not read", error instanceof Error ? error.message : error);
-      return null;
-    });
-    const receivablesIn = invoices.filter((invoice) => invoice.direction === "receivable").map(toReceivableIn);
-    const allocations = book ? receivableViews(book, receivablesIn) : new Map<string, ReceivableView>();
-    const appliedPayments = book ? paymentsByReceivable(book) : new Map<string, PaymentIn[]>();
-    // One read of the entries about every invoice, as before: Needs you counts the bills code refused, which only the
-    // entries say, and the cards' verdicts come from them.
-    const entries = await listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) });
-    // In shadow mode, each card carries a person's verdict on the agent's decision, given or to give (shadow mode S3).
-    const verdicts = await verdictFacts(db(), entries, canDecide);
-    const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
-    const invoicesById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
     const asOf = Date.now();
     const today = new Date(asOf).toISOString().slice(0, 10);
     const inAWeek = new Date(asOf + 7 * 86_400_000).toISOString().slice(0, 10);
-    // What each deal collected: its Paid and Outstanding, the same figures its own page shows (CRM receipts R1). Best
-    // effort: a read that fails leaves those two out of the list, nothing else.
-    const dealsCollected = Array.isArray(deals)
-      ? await readDealCollections(deals, today)
-          .then((read) => new Map([...read].map(([dealId, { collection }]) => [dealId, collection])))
-          .catch((error: unknown) => {
-            console.error("invoices: what the deals collected was not read", error instanceof Error ? error.message : error);
-            return null;
-          })
-      : null;
+    // Read once for the page, however many of its parts ask (bills page parallel reads R5): the members, who name the
+    // bills waiting, the drafts captured, the collections, the links and the plan's order; and each accounting tool's
+    // connection, which its bills brought in and its payments to book share.
+    let membersOnce: Promise<Member[]> | undefined;
+    const memberList = () => (membersOnce ??= listMembers(access.membership.orgId));
+    const connections = new Map<ProviderId, Promise<Connection | null>>();
+    const connectionOf = (provider: ProviderId): Promise<Connection | null> => {
+      const read = connections.get(provider) ?? connectionFor(provider);
+      connections.set(provider, read);
+      return read;
+    };
+
+    // Every read that waits on nothing but the workspace and the address starts at once, and a read that waits on one of
+    // them starts the moment that one answers, not when they all have (bills page parallel reads R1, R2). These four are
+    // named first for the reads that wait on them.
+    const invoicesRead = listInvoices();
+    const canWriteRead = viewerCan(slug, "records.write");
+    const canDecideRead = viewerCan(slug, "approval.decide");
+    // The workspace's deals and their schedules (deal schedule). Best effort: before migration 0104 runs the section
+    // says deals are not set up, and a read that fails hides only the section.
+    const dealsRead = readDeals().catch((error: unknown) => {
+      console.error("invoices: deals not loaded", error instanceof Error ? error.message : error);
+      return "unread" as const;
+    });
+    const dealsShown = dealsRead.then((read): DealRecord[] | "unread" | "not_ready" => (read === "unread" ? "unread" : read.available ? read.deals : "not_ready"));
+    // One read of the entries about every invoice, as before: Needs you counts the bills code refused, which only the
+    // entries say, and the cards' verdicts come from them.
+    const entriesRead = invoicesRead.then((invoices) => listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }));
+    const [
+      [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, fromZohoBooks, deals, fromHubSpot, fromPipedrive, fromZohoCrm],
+      [entries, verdicts, dealCosts, dealsCollected, customerSaid, toBook, canBook, captured, book, projectOptions, status],
+    ] = await Promise.all([
+      // Every tab: what the figures, the strip and the New forms need (B5).
+      Promise.all([
+        invoicesRead,
+        listCounterparties(),
+        listLedgerEntries(1),
+        stats(),
+        canWriteRead,
+        canDecideRead,
+        // Applying received money and answering customers: an accountant does these too (accountant console A1).
+        viewerCan(slug, "receivables.reconcile"),
+        // Best effort: a list that cannot be read hides its section, nothing else.
+        listRecurringPayables().catch((error: unknown) => {
+          console.error("invoices: recurring payments not loaded", error instanceof Error ? error.message : error);
+          return [];
+        }),
+        // A cycle running now is deciding the payables not yet decided: they say so (decision trail R1). Best effort.
+        hasRunningCycle().catch(() => false),
+        // The invoices that arrived by email and wait for a person, on a deployment that receives them (email invoices E7).
+        inboxSettingsFromEnv()
+          ? inboxEmailsToDecide().catch((error: unknown) => {
+              console.error("invoices: emailed invoices not loaded", error instanceof Error ? error.message : error);
+              return [];
+            })
+          : [],
+        // The bills Xero and QuickBooks brought in, waiting for a person (Xero connector X11, X19; QuickBooks connector
+        // Q19), each on a deployment where it is set up; hidden before migration 0101, without a connection, and when it
+        // cannot be read.
+        broughtIn("xero", connectionOf),
+        broughtIn("quickbooks", connectionOf),
+        // And Zoho Books' (Zoho Books connector Z1), hidden before migration 0122 the same way.
+        broughtIn("zohobooks", connectionOf),
+        dealsShown,
+        // HubSpot's won deals, to plan collections from (HubSpot connector H20), on a deployment where HubSpot is set up;
+        // hidden before migration 0105, without a connection, and when they cannot be read.
+        hubspotSettingsFromEnv()
+          ? connectionFor("hubspot")
+              .then(async (connection) => {
+                await crmReady();
+                return crmReview(connection);
+              })
+              .catch((error: unknown): CrmReviewView => {
+                if (!(error instanceof NotSetUpError)) console.error("invoices: deals from HubSpot not loaded", error instanceof Error ? error.message : error);
+                return { state: "hidden" };
+              })
+          : ({ state: "hidden" } as CrmReviewView),
+        // Pipedrive's won deals the same way (Pipedrive connector P20): hidden before migration 0116 and without a connection.
+        pipedriveSettingsFromEnv()
+          ? connectionFor("pipedrive")
+              .then(async (connection) => {
+                await pipedriveReady();
+                return crmReview(connection);
+              })
+              .catch((error: unknown): CrmReviewView => {
+                if (!(error instanceof NotSetUpError)) console.error("invoices: deals from Pipedrive not loaded", error instanceof Error ? error.message : error);
+                return { state: "hidden" };
+              })
+          : ({ state: "hidden" } as CrmReviewView),
+        // And Zoho CRM's (Zoho CRM connector C16): hidden before migration 0123 and without a connection.
+        zohoCrmSettingsFromEnv()
+          ? connectionFor("zohocrm")
+              .then(async (connection) => {
+                await zohoCrmReady();
+                return crmReview(connection);
+              })
+              .catch((error: unknown): CrmReviewView => {
+                if (!(error instanceof NotSetUpError)) console.error("invoices: deals from Zoho CRM not loaded", error instanceof Error ? error.message : error);
+                return { state: "hidden" };
+              })
+          : ({ state: "hidden" } as CrmReviewView),
+      ]),
+      // And what every tab reads besides, each the moment what it needs is in.
+      Promise.all([
+        entriesRead,
+        // In shadow mode, each card carries a person's verdict on the agent's decision, given or to give (shadow mode S3).
+        Promise.all([entriesRead, canDecideRead]).then(([read, can]) => verdictFacts(db(), read, can)),
+        // Each deal's costs, for its cash badge (deal cash readiness K8). Best effort: before migration 0108, or when they
+        // cannot be read, no badge is shown.
+        dealsShown.then((read) =>
+          Array.isArray(read) && read.length > 0
+            ? readDealCosts(read)
+                .then((costs) => (costs.available ? costs.byDeal : null))
+                .catch((error: unknown) => {
+                  console.error("invoices: deal costs not loaded", error instanceof Error ? error.message : error);
+                  return null;
+                })
+            : null
+        ),
+        // What each deal collected: its Paid and Outstanding, the same figures its own page shows (CRM receipts R1). Best
+        // effort: a read that fails leaves those two out of the list, nothing else.
+        dealsShown.then((read) =>
+          Array.isArray(read)
+            ? readDealCollections(read, today)
+                .then((collected) => new Map([...collected].map(([dealId, { collection }]) => [dealId, collection])))
+                .catch((error: unknown) => {
+                  console.error("invoices: what the deals collected was not read", error instanceof Error ? error.message : error);
+                  return null;
+                })
+            : null
+        ),
+        // What customers said on their statement links and wait for an answer (customer portal P8). Best effort: before
+        // migration 0109 runs, or when it cannot be read, nothing waits and the Receivables tab says statements are not set up.
+        readCustomerRequests(db(), { openOnly: true }).catch((error: unknown) => {
+          console.error("invoices: customer requests not read", error instanceof Error ? error.message : error);
+          return { available: false as const };
+        }),
+        // The payments made on Arc to book in each accounting tool, for a person to review (accounting write-back W6, W10).
+        Promise.all(PROVIDERS.map((provider) => toBookIn(provider, connectionOf))),
+        viewerCan(slug, "accounting.book"),
+        // And the invoices captured with the Chrome extension and sent for review (invoice capture C5). Best effort: before
+        // migration 0121, or when they cannot be read, nothing is shown.
+        capturedDraftsToReview().catch((error: unknown) => {
+          console.error("invoices: captured drafts not loaded", error instanceof Error ? error.message : error);
+          return { available: false as const };
+        }),
+        // The payments applied to receivables (allocations L11). Best effort: a read that fails shows receivables as before.
+        readAllocationBook(db()).catch((error: unknown) => {
+          console.error("invoices: payments applied not read", error instanceof Error ? error.message : error);
+          return null;
+        }),
+        // The projects a new bill may go in (project budgets P3): for New ▾'s Bill to pay. Best effort: none on failure.
+        canWriteRead.then((can) => (can ? readProjectOptions() : null)),
+        // What the header says beside the chain modes, read in the workspace's scope as on every page (workspace shell S5).
+        shellStatus(),
+      ]),
+    ]);
+    const openRequests: CustomerRequest[] = customerSaid.available ? customerSaid.requests : [];
+    const saidBy = new Map<string, CustomerRequest[]>();
+    for (const request of openRequests) saidBy.set(request.invoiceId, [...(saidBy.get(request.invoiceId) ?? []), request]);
+    // Each receivable a deal line became names its deal (deal schedule).
+    const dealLinks = Array.isArray(deals) ? dealLinksOf(deals) : new Map<string, DealLink>();
+    const search = parseSearch(query.q ?? undefined);
+    const receivablesIn = invoices.filter((invoice) => invoice.direction === "receivable").map(toReceivableIn);
+    const allocations = book ? receivableViews(book, receivablesIn) : new Map<string, ReceivableView>();
+    const appliedPayments = book ? paymentsByReceivable(book) : new Map<string, PaymentIn[]>();
+    const counterpartiesById = new Map(counterparties.map((counterparty) => [counterparty.id, counterparty]));
+    const invoicesById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
 
     // Every invoice's decision, without its payment's track: what the filters, counts and rows read. The rows shown get
     // their track below, from the payments read for them alone.
@@ -372,25 +415,51 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const detailIds = [...new Set([...page.rows.map((row) => row.id), ...(view.open ? [view.open] : [])])];
     const detailInvoices = detailIds.map((id) => invoicesById.get(id)).filter((invoice): invoice is InvoiceRow => invoice !== undefined);
 
+    // A payable waiting for a person: the purchase order and goods receipt on file, and what a person added since
+    // the agent's decision. Its row says what it needs; its card lets an owner or admin add it, and opens it in
+    // Approvals (complete held invoice).
+    const waiting = new Map(
+      invoices
+        .filter((invoice) => invoice.direction === "payable" && WAITING_STATUSES.has(invoice.status))
+        .map((invoice) => {
+          const onFile = {
+            poReference: invoice.po_reference ?? null,
+            goodsReceived: invoice.goods_received === true,
+            // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
+            purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false,
+          };
+          return [invoice.id, { onFile, added: addedSince(recordedFacts(latestDecision(entries, invoice.id)), onFile) }] as const;
+        })
+    );
+    const sortAsked = query.sort;
+    const slugHref = (path: string) => orgHref(slug, path);
+    const here = viewHref(slugHref, view, sortAsked);
+    // The customers, as the New deal form offers them; and the currencies a deal may be in.
+    const customers = counterparties
+      .filter((counterparty) => counterparty.role === "client")
+      .map(({ id, name }) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const dealCurrencies = ["USDC", "EURC", ...(billCurrencyOf(verdicts.shadow) ? [billCurrencyOf(verdicts.shadow) as string] : [])];
+
+    // The cards shown, what the bills waiting need, and the tab shown are read from here, at once. Only the receipts wait
+    // on another of these reads: the payments, which say whether a card offers one (bills page parallel reads R3).
     // Where each payable shown is in its payment, from its payment intent, the entries about it and the bill (settlement
     // lifecycle L7, L8). Read only with a payable to show. Best effort: a read that fails is logged and the cards show no track.
-    const payments = detailInvoices.some((invoice) => invoice.direction === "payable")
-      ? await readInvoicePayments(db()).catch((error: unknown) => {
+    const paymentsRead = detailInvoices.some((invoice) => invoice.direction === "payable")
+      ? readInvoicePayments(db()).catch((error: unknown) => {
           console.error("invoices: payment intents not read", error instanceof Error ? error.message : error);
           return new Map<string, PaymentRecord>();
         })
-      : new Map<string, PaymentRecord>();
-    // The entries answer in one request, newest first: one cut at its limit may hold no entry for an older payable.
-    const settlements = settlementsByBill({ payments: payments.values(), invoices: detailInvoices.filter((invoice) => invoice.direction === "payable"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf });
+      : Promise.resolve(new Map<string, PaymentRecord>());
     // The FX variance of each paid bill shown that was converted at a rate (currency provenance M6, M9), as the hourly
     // rates job recorded it, or unknown with why. Reads only: nothing is written while the page renders. Best effort: a
     // read that fails shows the cards without it.
     const convertedPaid = detailInvoices
       .filter((invoice) => invoice.direction === "payable" && invoice.status === "paid" && invoice.original_currency && invoice.original_currency !== "USD")
       .map((invoice) => invoice.id);
-    const variances =
+    const variancesRead =
       convertedPaid.length > 0
-        ? await readFxVarianceState(db(), { invoiceIds: convertedPaid })
+        ? readFxVarianceState(db(), { invoiceIds: convertedPaid })
             .then((read) =>
               read.available
                 ? { recorded: new Map(read.recorded.map((row) => [row.invoiceId, row])), unknown: new Map(read.unknown.map((row) => [row.invoiceId, row])) }
@@ -400,24 +469,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               console.error("invoices: FX variances not read", error instanceof Error ? error.message : error);
               return undefined;
             })
-        : undefined;
-    const decisionOf = (invoice: InvoiceRow) =>
-      invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, settlements, asOf, allocations, variances });
-    const shownDecisions = new Map(detailInvoices.map((invoice) => [invoice.id, decisionOf(invoice)]));
-
-    // The projects a new bill may go in (project budgets P3): for New ▾'s Bill to pay. Best effort: none on failure.
-    const projectOptions = canWrite ? await readProjectOptions() : null;
-
-    // A paid payable with a transaction on chain offers its receipt to an owner or admin (payment receipts P6).
-    const shareable = canWrite
-      ? new Set(
-          detailInvoices
-            .filter((invoice) => invoice.direction === "payable" && receiptShareable(invoice, shownDecisions.get(invoice.id) as Decision))
-            .map((invoice) => invoice.id)
-        )
-      : new Set<string>();
-    const shared = await sharedReceipts([...shareable]);
-    const receiptFor = (decision: Decision) => (shareable.has(decision.id) ? <ReceiptControl orgSlug={slug} invoiceId={decision.id} shared={shared.has(decision.id)} /> : undefined);
+        : Promise.resolve(undefined);
     // An open receivable in a live workspace offers a pay link for its client (receivables on Arc §2);
     // a sandbox has no real wallet to be paid into (R4).
     const payLinkable = new Set(
@@ -426,16 +478,16 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         : []
     );
     // Its link, kept so it can be copied again, and the agent's reminders to the client (collections R1, R2). Best effort.
-    const linkStates = await payLinkStates([...payLinkable]).catch((error: unknown) => {
+    const linkStatesRead = payLinkStates([...payLinkable]).catch((error: unknown) => {
       console.error("invoices: pay links not read", error instanceof Error ? error.message : error);
       return new Map<string, PayLinkState>();
     });
     // Each receivable's next step from its customer's context, and the tab's Collections panel (collections context C8):
     // on the Receivables tab, and for a receivable opened on any tab. Best effort: a read that fails leaves both out.
     const receivableDetails = detailInvoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => invoice.id);
-    const collections: CollectionsView | null =
+    const collectionsRead: Promise<CollectionsView | null> =
       view.tab === "receivables" || receivableDetails.length > 0
-        ? await readCollections({
+        ? readCollections({
             orgName: access.membership.name,
             network,
             origin: publicOrigin(),
@@ -446,7 +498,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
               const allocation = allocations.get(invoice.id);
               return { owed: stillOwed(invoice as InvoiceRow, book?.rows ?? []), received: allocation ? allocation.paid : 0 };
             },
-            members: await listMembers(access.membership.orgId).catch(() => null),
+            members: memberList().catch(() => null),
             focus: receivableDetails,
             href: (invoiceId) => viewHref((path) => orgHref(slug, path), view, query.sort)({ open: invoiceId }),
             linkStates: (ids) => (access.membership.mode === "live" ? payLinkStates(ids) : Promise.resolve(new Map<string, PayLinkState>())),
@@ -454,7 +506,326 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
             console.error("invoices: collections not read", error instanceof Error ? error.message : error);
             return null;
           })
-        : null;
+        : Promise.resolve(null);
+    // Each bill waiting for a person: its priority, the day it must be decided by, and who can act (deal cash readiness
+    // E1-E3). The members are read once, only while a bill waits, and best effort: a list that fails leaves the rows as before.
+    const waitingMembersRead =
+      waiting.size > 0
+        ? memberList().catch((error: unknown) => {
+            console.error("invoices: members not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : Promise.resolve(null);
+    // Whoever a first payment's address leaves out of approving it, where payments are real and one approval pays it
+    // (new payee check N4), as the Approvals card names them: read once, best effort, only while a bill waits. Above the
+    // figure for two approvals, two different people approve it, whoever they are.
+    const firstPaymentsRead = waitingMembersRead.then((members) =>
+      members && chainModes().mode === "live"
+        ? Promise.all([
+            readTwoApprovalsAbove(db()),
+            loadNewPayeeFacts(db(), [...new Set(invoices.filter((invoice) => waiting.has(invoice.id)).map((invoice) => invoice.counterparty_id))]),
+          ]).catch((error: unknown) => {
+            console.error("invoices: first payments not read", error instanceof Error ? error.message : error);
+            return null;
+          })
+        : null
+    );
+    // Who captured each draft sent for review, by email (invoice capture C5): read only with a draft to show.
+    const capturersRead = captured.available && captured.drafts.length > 0 ? memberList().catch(() => []) : Promise.resolve([]);
+    // Each card's decision with its payment's track, and the receipts the cards offer: a paid payable with a transaction on
+    // chain offers its receipt to an owner or admin (payment receipts P6). Started last, with the tab below, so nothing
+    // that may throw runs between them and the wait for them all.
+    const cardsRead = Promise.all([paymentsRead, variancesRead]).then(async ([payments, variances]) => {
+      // The entries answer in one request, newest first: one cut at its limit may hold no entry for an older payable.
+      const settlements = settlementsByBill({ payments: payments.values(), invoices: detailInvoices.filter((invoice) => invoice.direction === "payable"), entries, entriesComplete: !ledgerReadMayBeCut(entries), now: asOf });
+      const decisionOf = (invoice: InvoiceRow) =>
+        invoiceDecision(invoice, counterpartiesById.get(invoice.counterparty_id), entries, { network, deciding, verdicts, settlements, asOf, allocations, variances });
+      const shownDecisions = new Map(detailInvoices.map((invoice) => [invoice.id, decisionOf(invoice)]));
+      const shareable = canWrite
+        ? new Set(
+            detailInvoices
+              .filter((invoice) => invoice.direction === "payable" && receiptShareable(invoice, shownDecisions.get(invoice.id) as Decision))
+              .map((invoice) => invoice.id)
+          )
+        : new Set<string>();
+      return { shownDecisions, shareable, shared: await sharedReceipts([...shareable]) };
+    });
+    // The tab shown, and only it, is read and built (B5), beside the cards: all of it but its list, which the cards make.
+    const tabRead = (async (): Promise<TabParts> => {
+      if (view.tab === "bills") {
+        // Read at once, each best effort: the bills worth paying early for a discount (early-payment offers E1, E2; none
+        // before 0125), requests for more time on bills held for cash (term requests X1; none before 0128), and vendors'
+        // payment status links not stopped (supplier status V1, V6; none before 0131), with who made each. A read that
+        // fails hides only its part.
+        const supplierLinksRead = listSupplierLinks(db(), asOf).catch((error: unknown) => {
+          console.error("invoices: supplier status links not read", error instanceof Error ? error.message : error);
+          return null;
+        });
+        const [offers, terms, supplierLinks, linkMakers] = await Promise.all([
+          offersView().catch((error: unknown) => {
+            console.error("invoices: early-payment offers not read", error instanceof Error ? error.message : error);
+            return null;
+          }),
+          termRequestsView().catch((error: unknown) => {
+            console.error("invoices: term requests not read", error instanceof Error ? error.message : error);
+            return null;
+          }),
+          supplierLinksRead,
+          supplierLinksRead.then((links) =>
+            links?.available && links.links.length > 0
+              ? memberList()
+                  .then((list) => new Map(list.map((member) => [member.userId, member.email])))
+                  .catch(() => null)
+              : null
+          ),
+        ]);
+        const supplierLinkList = supplierLinks?.available ? supplierLinks.links : [];
+        const suppliers = counterparties
+          .filter((counterparty) => counterparty.role === "vendor")
+          .map(({ id, name }) => ({ id, name }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        const supplierStatus = supplierLinks ? (
+          <SupplierStatusLinks
+            orgSlug={slug}
+            suppliers={suppliers}
+            links={supplierLinkRows(supplierLinkList, new Map(counterparties.map((counterparty) => [counterparty.id, counterparty.name])), linkMakers)}
+            canWrite={canWrite}
+            available={supplierLinks.available}
+          />
+        ) : null;
+        return {
+          bills: {
+            above:
+              offers || terms ? (
+                <>
+                  {offers && <EarlyPaymentOffers orgSlug={slug} view={offers} canOffer={canWrite} />}
+                  {terms && <TermRequests orgSlug={slug} view={terms} canWrite={canWrite} />}
+                </>
+              ) : undefined,
+            below:
+              schedules.length > 0 || supplierStatus ? (
+                <>
+                  {schedules.length > 0 && <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} />}
+                  {supplierStatus}
+                </>
+              ) : undefined,
+          },
+        };
+      } else if (view.tab === "plan") {
+        // Which bill first, when the cash cannot cover every bill due soon (order design O1), and who set that order: read
+        // beside the plan, best effort, as the plan is.
+        const priorityRead = readPriorityView(db(), new Date(asOf)).catch((error: unknown) => {
+          console.error("invoices: cash priority not read", error instanceof Error ? error.message : error);
+          return null;
+        });
+        const setByRead = priorityRead.then((priority) =>
+          priority?.setBy !== null && priority?.setBy !== undefined
+            ? memberList()
+                .then((list) => list.find((member) => member.userId === priority.setBy)?.email ?? "a member")
+                .catch(() => "a member")
+            : null
+        );
+        // The next 14 days of payments, in the order the cash allows (payment plan design P1), from the invoices and
+        // counterparties read above, over every open bill. Best effort: a plan that cannot be read says so, and nothing else changes.
+        const paymentPlan = await readPaymentPlan({
+          invoices,
+          counterparties,
+          // Deal lines not invoiced yet, listed apart from the plan's balances (deal schedule D14).
+          planned: Array.isArray(deals) ? plannedLinesOf(deals) : deals === "not_ready" ? [] : null,
+          // A part-paid receivable, a released deal line among them, is expected for what is still owed (allocations L11).
+          owed: new Map(invoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => [invoice.id, stillOwed(invoice, book?.rows ?? [])] as const)),
+        }).catch((error: unknown) => {
+          console.error("invoices: payment plan not read", error instanceof Error ? error.message : error);
+          return null;
+        });
+        const paymentOutcomes = planOutcomes({ now: asOf, invoices, entries });
+        // Whoever entered a bill approves its day only as the workspace's only approver (payment plan P10); asked only then.
+        const soleApprover =
+          canDecide && paymentPlan?.lines.some((line) => line.move !== null && line.createdBy === access.user.id) ? await isSoleApprover(access.user.id) : false;
+        const [priority, setByEmail] = await Promise.all([priorityRead, setByRead]);
+        return {
+          plan: (
+            <>
+              {priority && (
+                <CashPriorityOrder
+                  key={`${priority.fingerprint}:${priority.setAt}`}
+                  orgSlug={slug}
+                  fingerprint={priority.fingerprint}
+                  basedOn={priority.setAt}
+                  available={priority.available}
+                  bills={priority.bills.map((bill) => ({
+                    id: bill.id,
+                    payee: bill.payee,
+                    amount: bill.amount,
+                    due: utcDay(`${bill.dueOn}T12:00:00Z`),
+                    // Under a person's order the agent's reasons are its earlier notes, which may not match the order now.
+                    reason: bill.reason && priority.setBy ? `The agent's earlier note: ${bill.reason}` : bill.reason,
+                  }))}
+                  setLabel={`Set by ${setByEmail ?? "the agent"} on ${utcDay(priority.setAt)}`}
+                  policyFirst={priority.policyFirst}
+                  canSet={canDecide}
+                />
+              )}
+              <PaymentPlanSection plan={paymentPlan} outcomes={paymentOutcomes} orgSlug={slug} canDecide={canDecide} viewerId={access.user.id} soleApprover={soleApprover} />
+            </>
+          ),
+        };
+      } else {
+        // Customer statements (customer portal P8, P9): the links not stopped, and what customers said, each with its next
+        // step, with the members who made a link or answered; the pay links the requests ask for; and the agent's discounts
+        // for customers who pay early (customer discounts C1; none before 0129). Read beside the CRMs' deals below, each
+        // best effort: a read that fails hides only its part.
+        const portalLinksRead = listPortalLinks(db(), asOf).catch((error: unknown) => {
+          console.error("invoices: statement links not read", error instanceof Error ? error.message : error);
+          return null;
+        });
+        const membersRead = portalLinksRead.then((portalLinks) => {
+          const needMembers = (portalLinks?.available ? portalLinks.links : []).length > 0 || openRequests.some((request) => request.messages.some((message) => message.author === "business"));
+          return needMembers
+            ? memberList()
+                .then((list) => new Map(list.map((member) => [member.userId, member.email])))
+                .catch(() => null)
+            : null;
+        });
+        // The pay links the statements show, for the requests asking for one.
+        const askedPayLink = openRequests.filter((request) => request.kind === "pay_link").map((request) => request.invoiceId);
+        const askedLinksRead =
+          askedPayLink.length > 0 && access.membership.mode === "live"
+            ? payLinkStates([...new Set(askedPayLink)]).catch(() => new Map<string, PayLinkState>())
+            : Promise.resolve(new Map<string, PayLinkState>());
+        const discountsRead = customerOffersView().catch((error: unknown) => {
+          console.error("invoices: customer discounts not read", error instanceof Error ? error.message : error);
+          return null;
+        });
+        // A CRM's deal picked to plan: the New deal form filled in from it (HubSpot connector H11, Pipedrive connector P9).
+        // Read again on confirm. One planned already, right after its Plan collections or from an old link, shows the deal
+        // it became instead.
+        const crmPlans = await Promise.all(
+          (
+            [
+              ["hubspot", fromHubSpot, view.hubspot],
+              ["pipedrive", fromPipedrive, view.pipedrive ?? null],
+              ["zohocrm", fromZohoCrm, view.zohocrm ?? null],
+            ] as const
+          ).map(async ([provider, from, asked]) => {
+            const plan = from.state === "list" ? crmPlanState(asked, from.won) : null;
+            const prefill: CrmPrefillRead | null =
+              plan?.kind === "form" && canWrite && Array.isArray(deals)
+                ? await crmPrefillFor({ rowId: plan.rowId, customers, workspace: { shadowOn: verdicts.shadow !== null }, today }).catch((error: unknown): CrmPrefillRead => {
+                    console.error("invoices: a CRM deal was not read to plan", provider, error instanceof Error ? error.message : error);
+                    return { ok: false, message: "That deal could not be read. Reload the page in a moment." };
+                  })
+                : null;
+            return { provider, from, plan, prefill };
+          })
+        );
+        /** A CRM's part of Deals: its deal being planned, or planned already, and its list. */
+        const crmSection = ({ provider, from, plan, prefill }: (typeof crmPlans)[number]) =>
+          from.state === "list" ? (
+            <Fragment key={provider}>
+              {plan?.kind === "planned" && (
+                <div id={`plan-from-${provider}`} className="scroll-mt-6">
+                  <PlannedFromCrm rowId={plan.rowId} title={plan.title} cancelled={plan.cancelled} dealHref={orgHref(slug, `/invoices/deals/${plan.dealId}`)} />
+                </div>
+              )}
+              {prefill && (
+                <div id={`plan-from-${provider}`} className="scroll-mt-6">
+                  {prefill.ok ? (
+                    <IntakeFold label={`Plan collections: ${prefill.name}`} meta={`from ${prefill.label}: pick how it is billed, check the rest, and confirm`} defaultOpen>
+                      <PlanFromCrmForm rowId={prefill.rowId}>
+                        <DealForm
+                          orgSlug={slug}
+                          customers={customers}
+                          currencies={dealCurrencies.includes(prefill.prefill.currency) ? dealCurrencies : [...dealCurrencies, prefill.prefill.currency]}
+                          idempotencyKey={randomUUID()}
+                          today={today}
+                          prefill={{ crmRowId: prefill.rowId, label: prefill.label, ...prefill.prefill }}
+                        />
+                      </PlanFromCrmForm>
+                    </IntakeFold>
+                  ) : (
+                    <Callout tone="held" className="mb-6">
+                      {prefill.message}
+                    </Callout>
+                  )}
+                </div>
+              )}
+              <CrmDeals
+                provider={provider satisfies CrmListProvider}
+                orgSlug={slug}
+                organisation={from.organisation}
+                won={from.won}
+                open={from.open}
+                emails={from.emails}
+                canWrite={canWrite}
+              />
+            </Fragment>
+          ) : null;
+        const crmSections = crmPlans.filter((part) => part.from.state === "list");
+        const [portalLinks, members, askedLinks, discounts, collections] = await Promise.all([portalLinksRead, membersRead, askedLinksRead, discountsRead, collectionsRead]);
+        const linkList: PortalLink[] = portalLinks?.available ? portalLinks.links : [];
+        const customerItems = fromCustomerItems({
+          requests: openRequests,
+          invoices: new Map(
+            invoices
+              .filter((invoice) => invoice.direction === "receivable")
+              .map((invoice) => [
+                invoice.id,
+                { id: invoice.id, counterpartyName: invoice.counterparty_name, amount: Number(invoice.amount), currency: invoice.currency ?? "USDC", status: invoice.status, dueDate: invoice.due_date, memo: invoice.memo },
+              ])
+          ),
+          owedOf: (invoiceId) => {
+            const invoice = invoicesById.get(invoiceId);
+            return invoice ? stillOwed(invoice, book?.rows ?? []) : 0;
+          },
+          payLinked: new Set([...askedLinks.entries()].filter(([, state]) => state.url !== null).map(([invoiceId]) => invoiceId)),
+          sandbox: access.membership.mode !== "live",
+          today: todayOf(asOf),
+          members,
+          invoiceHref: (invoiceId) => here({ open: invoiceId }),
+        });
+        const statementLinks = statementLinkRows(linkList, new Map(counterparties.map((counterparty) => [counterparty.id, counterparty.name])), members);
+        return {
+          receivables: {
+            above: (
+              <>
+                {collections && <CollectionsPanel panel={collections.panel} available={collections.available} />}
+                {discounts && <CustomerDiscounts orgSlug={slug} view={discounts} canWrite={canWrite} />}
+                <FromCustomers orgSlug={slug} items={customerItems} canWrite={canReconcile} />
+                {/* Before migration 0103 runs, receivables show as before, and say applying payments waits for it (allocations L11). */}
+                {book && !book.available && receivableRows.length > 0 && <p className="text-xs text-ink-3">Applying payments is not set up on this deployment yet.</p>}
+                {toApply.length > 0 && receivableRows.length > 0 && <ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canReconcile} />}
+              </>
+            ),
+            below: (
+              <div className="space-y-10 pt-6">
+                <StatementLinks orgSlug={slug} customers={customers} links={statementLinks} canWrite={canWrite} available={portalLinks?.available ?? false} />
+                <DealsSection
+                  deals={deals}
+                  costs={dealCosts}
+                  orgSlug={slug}
+                  today={today}
+                  collected={dealsCollected}
+                  fromCrm={crmSections.length > 0 ? <>{crmSections.map(crmSection)}</> : undefined}
+                />
+                {/* What partners earn on the money these deals bring in (commissions C10). */}
+                <CommissionsLink href={orgHref(slug, "/invoices/commissions")} />
+              </div>
+            ),
+          },
+        };
+      }
+    })();
+    const [{ shownDecisions, shareable, shared }, linkStates, collections, members, firstPayments, capturers, tabParts] = await Promise.all([
+      cardsRead,
+      linkStatesRead,
+      collectionsRead,
+      waitingMembersRead,
+      firstPaymentsRead,
+      capturersRead,
+      tabRead,
+    ]);
+    const receiptFor = (decision: Decision) => (shareable.has(decision.id) ? <ReceiptControl orgSlug={slug} invoiceId={decision.id} shared={shared.has(decision.id)} /> : undefined);
     const dealContext = (decision: Decision) => {
       const link = dealLinks.get(decision.id);
       return link ? `Deal · ${link.title} · ${link.line}` : undefined;
@@ -534,44 +905,6 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       return [`Part paid · ${money(allocation.outstanding)} still owed`, said].filter(Boolean).join(" · ");
     };
 
-    // A payable waiting for a person: the purchase order and goods receipt on file, and what a person added since
-    // the agent's decision. Its row says what it needs; its card lets an owner or admin add it, and opens it in
-    // Approvals (complete held invoice).
-    const waiting = new Map(
-      invoices
-        .filter((invoice) => invoice.direction === "payable" && WAITING_STATUSES.has(invoice.status))
-        .map((invoice) => {
-          const onFile = {
-            poReference: invoice.po_reference ?? null,
-            goodsReceived: invoice.goods_received === true,
-            // A counterparty paid without purchase orders is never asked for one (three-way match design M2).
-            purchaseOrderRequired: counterpartiesById.get(invoice.counterparty_id)?.purchase_order_required !== false,
-          };
-          return [invoice.id, { onFile, added: addedSince(recordedFacts(latestDecision(entries, invoice.id)), onFile) }] as const;
-        })
-    );
-    // Each bill waiting for a person: its priority, the day it must be decided by, and who can act (deal cash readiness
-    // E1-E3). The members are read once, only while a bill waits, and best effort: a list that fails leaves the rows as before.
-    const members =
-      waiting.size > 0
-        ? await listMembers(access.membership.orgId).catch((error: unknown) => {
-            console.error("invoices: members not read", error instanceof Error ? error.message : error);
-            return null;
-          })
-        : null;
-    // Whoever a first payment's address leaves out of approving it, where payments are real and one approval pays it
-    // (new payee check N4), as the Approvals card names them: read once, best effort, only while a bill waits. Above the
-    // figure for two approvals, two different people approve it, whoever they are.
-    const firstPayments =
-      members && chainModes().mode === "live"
-        ? await Promise.all([
-            readTwoApprovalsAbove(db()),
-            loadNewPayeeFacts(db(), [...new Set(invoices.filter((invoice) => waiting.has(invoice.id)).map((invoice) => invoice.counterparty_id))]),
-          ]).catch((error: unknown) => {
-            console.error("invoices: first payments not read", error instanceof Error ? error.message : error);
-            return null;
-          })
-        : null;
     const leftOutOf = (invoice: InvoiceRow) => {
       if (!firstPayments) return [];
       const [above, facts] = firstPayments;
@@ -629,9 +962,6 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       })
     );
 
-    const sortAsked = query.sort;
-    const slugHref = (path: string) => orgHref(slug, path);
-    const here = viewHref(slugHref, view, sortAsked);
     const pageItems: Page<BillRowItem> = {
       ...page,
       rows: page.rows.map((row) => {
@@ -731,7 +1061,6 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       };
     }
     if (captured.available && captured.drafts.length > 0) {
-      const capturers = await listMembers(access.membership.orgId).catch(() => []);
       // A payee's invoice is named by its payee (payee invoice link P5).
       const payees = captured.drafts.filter((draft) => draft.source === "payee_link").map((draft) => draft.counterpartyName ?? draft.fields.supplierName ?? "a payee");
       waitingItems.push({ key: "captured", review: "captured", label: capturedCountLabel(captured.drafts.length, captured.more, payees) });
@@ -765,274 +1094,16 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       });
     }
 
-    // The customers, as the New deal form offers them; and the currencies a deal may be in.
-    const customers = counterparties
-      .filter((counterparty) => counterparty.role === "client")
-      .map(({ id, name }) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-    const dealCurrencies = ["USDC", "EURC", ...(billCurrencyOf(verdicts.shadow) ? [billCurrencyOf(verdicts.shadow) as string] : [])];
-
-    // The tab shown, and only it, is read and built (B5).
-    let tabContent: Pick<Parameters<typeof BillsScreen>[0], "bills" | "plan" | "receivables"> = {};
-    if (view.tab === "bills") {
-      // Read at once, each best effort: the bills worth paying early for a discount (early-payment offers E1, E2; none
-      // before 0125), requests for more time on bills held for cash (term requests X1; none before 0128), and vendors'
-      // payment status links not stopped (supplier status V1, V6; none before 0131). A read that fails hides only its part.
-      const [offers, terms, supplierLinks] = await Promise.all([
-        offersView().catch((error: unknown) => {
-          console.error("invoices: early-payment offers not read", error instanceof Error ? error.message : error);
-          return null;
-        }),
-        termRequestsView().catch((error: unknown) => {
-          console.error("invoices: term requests not read", error instanceof Error ? error.message : error);
-          return null;
-        }),
-        listSupplierLinks(db(), asOf).catch((error: unknown) => {
-          console.error("invoices: supplier status links not read", error instanceof Error ? error.message : error);
-          return null;
-        }),
-      ]);
-      const supplierLinkList = supplierLinks?.available ? supplierLinks.links : [];
-      const linkMakers =
-        supplierLinkList.length > 0
-          ? await listMembers(access.membership.orgId)
-              .then((list) => new Map(list.map((member) => [member.userId, member.email])))
-              .catch(() => null)
-          : null;
-      const suppliers = counterparties
-        .filter((counterparty) => counterparty.role === "vendor")
-        .map(({ id, name }) => ({ id, name }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      const supplierStatus = supplierLinks ? (
-        <SupplierStatusLinks
-          orgSlug={slug}
-          suppliers={suppliers}
-          links={supplierLinkRows(supplierLinkList, new Map(counterparties.map((counterparty) => [counterparty.id, counterparty.name])), linkMakers)}
-          canWrite={canWrite}
-          available={supplierLinks.available}
-        />
-      ) : null;
-      tabContent = {
-        bills: {
-          list: listOf("bills"),
-          above:
-            offers || terms ? (
-              <>
-                {offers && <EarlyPaymentOffers orgSlug={slug} view={offers} canOffer={canWrite} />}
-                {terms && <TermRequests orgSlug={slug} view={terms} canWrite={canWrite} />}
-              </>
-            ) : undefined,
-          below:
-            schedules.length > 0 || supplierStatus ? (
-              <>
-                {schedules.length > 0 && <RecurringSummary schedules={schedules} orgSlug={slug} canWrite={canWrite} />}
-                {supplierStatus}
-              </>
-            ) : undefined,
-        },
-      };
-    } else if (view.tab === "plan") {
-      // The next 14 days of payments, in the order the cash allows (payment plan design P1), from the invoices and
-      // counterparties read above, over every open bill. Best effort: a plan that cannot be read says so, and nothing else changes.
-      const paymentPlan = await readPaymentPlan({
-        invoices,
-        counterparties,
-        // Deal lines not invoiced yet, listed apart from the plan's balances (deal schedule D14).
-        planned: Array.isArray(deals) ? plannedLinesOf(deals) : deals === "not_ready" ? [] : null,
-        // A part-paid receivable, a released deal line among them, is expected for what is still owed (allocations L11).
-        owed: new Map(invoices.filter((invoice) => invoice.direction === "receivable").map((invoice) => [invoice.id, stillOwed(invoice, book?.rows ?? [])] as const)),
-      }).catch((error: unknown) => {
-        console.error("invoices: payment plan not read", error instanceof Error ? error.message : error);
-        return null;
-      });
-      const paymentOutcomes = planOutcomes({ now: asOf, invoices, entries });
-      // Whoever entered a bill approves its day only as the workspace's only approver (payment plan P10); asked only then.
-      const soleApprover =
-        canDecide && paymentPlan?.lines.some((line) => line.move !== null && line.createdBy === access.user.id) ? await isSoleApprover(access.user.id) : false;
-      // Which bill first, when the cash cannot cover every bill due soon (order design O1); best effort, as the plan is.
-      const priority = await readPriorityView(db(), new Date(asOf)).catch((error: unknown) => {
-        console.error("invoices: cash priority not read", error instanceof Error ? error.message : error);
-        return null;
-      });
-      const setByEmail =
-        priority?.setBy !== null && priority?.setBy !== undefined
-          ? await listMembers(access.membership.orgId)
-              .then((list) => list.find((member) => member.userId === priority.setBy)?.email ?? "a member")
-              .catch(() => "a member")
-          : null;
-      tabContent = {
-        plan: (
-          <>
-            {priority && (
-              <CashPriorityOrder
-                key={`${priority.fingerprint}:${priority.setAt}`}
-                orgSlug={slug}
-                fingerprint={priority.fingerprint}
-                basedOn={priority.setAt}
-                available={priority.available}
-                bills={priority.bills.map((bill) => ({
-                  id: bill.id,
-                  payee: bill.payee,
-                  amount: bill.amount,
-                  due: utcDay(`${bill.dueOn}T12:00:00Z`),
-                  // Under a person's order the agent's reasons are its earlier notes, which may not match the order now.
-                  reason: bill.reason && priority.setBy ? `The agent's earlier note: ${bill.reason}` : bill.reason,
-                }))}
-                setLabel={`Set by ${setByEmail ?? "the agent"} on ${utcDay(priority.setAt)}`}
-                policyFirst={priority.policyFirst}
-                canSet={canDecide}
-              />
-            )}
-            <PaymentPlanSection plan={paymentPlan} outcomes={paymentOutcomes} orgSlug={slug} canDecide={canDecide} viewerId={access.user.id} soleApprover={soleApprover} />
-          </>
-        ),
-      };
-    } else {
-      // A CRM's deal picked to plan: the New deal form filled in from it (HubSpot connector H11, Pipedrive connector P9).
-      // Read again on confirm. One planned already, right after its Plan collections or from an old link, shows the deal
-      // it became instead.
-      const crmPlans = await Promise.all(
-        (
-          [
-            ["hubspot", fromHubSpot, view.hubspot],
-            ["pipedrive", fromPipedrive, view.pipedrive ?? null],
-            ["zohocrm", fromZohoCrm, view.zohocrm ?? null],
-          ] as const
-        ).map(async ([provider, from, asked]) => {
-          const plan = from.state === "list" ? crmPlanState(asked, from.won) : null;
-          const prefill: CrmPrefillRead | null =
-            plan?.kind === "form" && canWrite && Array.isArray(deals)
-              ? await crmPrefillFor({ rowId: plan.rowId, customers, workspace: { shadowOn: verdicts.shadow !== null }, today }).catch((error: unknown): CrmPrefillRead => {
-                  console.error("invoices: a CRM deal was not read to plan", provider, error instanceof Error ? error.message : error);
-                  return { ok: false, message: "That deal could not be read. Reload the page in a moment." };
-                })
-              : null;
-          return { provider, from, plan, prefill };
-        })
-      );
-      /** A CRM's part of Deals: its deal being planned, or planned already, and its list. */
-      const crmSection = ({ provider, from, plan, prefill }: (typeof crmPlans)[number]) =>
-        from.state === "list" ? (
-          <Fragment key={provider}>
-            {plan?.kind === "planned" && (
-              <div id={`plan-from-${provider}`} className="scroll-mt-6">
-                <PlannedFromCrm rowId={plan.rowId} title={plan.title} cancelled={plan.cancelled} dealHref={orgHref(slug, `/invoices/deals/${plan.dealId}`)} />
-              </div>
-            )}
-            {prefill && (
-              <div id={`plan-from-${provider}`} className="scroll-mt-6">
-                {prefill.ok ? (
-                  <IntakeFold label={`Plan collections: ${prefill.name}`} meta={`from ${prefill.label}: pick how it is billed, check the rest, and confirm`} defaultOpen>
-                    <PlanFromCrmForm rowId={prefill.rowId}>
-                      <DealForm
-                        orgSlug={slug}
-                        customers={customers}
-                        currencies={dealCurrencies.includes(prefill.prefill.currency) ? dealCurrencies : [...dealCurrencies, prefill.prefill.currency]}
-                        idempotencyKey={randomUUID()}
-                        today={today}
-                        prefill={{ crmRowId: prefill.rowId, label: prefill.label, ...prefill.prefill }}
-                      />
-                    </PlanFromCrmForm>
-                  </IntakeFold>
-                ) : (
-                  <Callout tone="held" className="mb-6">
-                    {prefill.message}
-                  </Callout>
-                )}
-              </div>
-            )}
-            <CrmDeals
-              provider={provider satisfies CrmListProvider}
-              orgSlug={slug}
-              organisation={from.organisation}
-              won={from.won}
-              open={from.open}
-              emails={from.emails}
-              canWrite={canWrite}
-            />
-          </Fragment>
-        ) : null;
-      const crmSections = crmPlans.filter((part) => part.from.state === "list");
-      // Customer statements (customer portal P8, P9): the links not stopped, and what customers said, each with its next
-      // step. Best effort: a read that fails hides only these parts.
-      const portalLinks = await listPortalLinks(db(), asOf).catch((error: unknown) => {
-        console.error("invoices: statement links not read", error instanceof Error ? error.message : error);
-        return null;
-      });
-      const linkList: PortalLink[] = portalLinks?.available ? portalLinks.links : [];
-      const needMembers = linkList.length > 0 || openRequests.some((request) => request.messages.some((message) => message.author === "business"));
-      const members = needMembers
-        ? await listMembers(access.membership.orgId)
-            .then((list) => new Map(list.map((member) => [member.userId, member.email])))
-            .catch(() => null)
-        : null;
-      // The pay links the statements show, for the requests asking for one.
-      const askedPayLink = openRequests.filter((request) => request.kind === "pay_link").map((request) => request.invoiceId);
-      const askedLinks =
-        askedPayLink.length > 0 && access.membership.mode === "live"
-          ? await payLinkStates([...new Set(askedPayLink)]).catch(() => new Map<string, PayLinkState>())
-          : new Map<string, PayLinkState>();
-      const customerItems = fromCustomerItems({
-        requests: openRequests,
-        invoices: new Map(
-          invoices
-            .filter((invoice) => invoice.direction === "receivable")
-            .map((invoice) => [
-              invoice.id,
-              { id: invoice.id, counterpartyName: invoice.counterparty_name, amount: Number(invoice.amount), currency: invoice.currency ?? "USDC", status: invoice.status, dueDate: invoice.due_date, memo: invoice.memo },
-            ])
-        ),
-        owedOf: (invoiceId) => {
-          const invoice = invoicesById.get(invoiceId);
-          return invoice ? stillOwed(invoice, book?.rows ?? []) : 0;
-        },
-        payLinked: new Set([...askedLinks.entries()].filter(([, state]) => state.url !== null).map(([invoiceId]) => invoiceId)),
-        sandbox: access.membership.mode !== "live",
-        today: todayOf(asOf),
-        members,
-        invoiceHref: (invoiceId) => here({ open: invoiceId }),
-      });
-      const statementLinks = statementLinkRows(linkList, new Map(counterparties.map((counterparty) => [counterparty.id, counterparty.name])), members);
-      // The agent's discounts for customers who pay early (customer discounts C1); best effort, none before 0129.
-      const discounts = await customerOffersView().catch((error: unknown) => {
-        console.error("invoices: customer discounts not read", error instanceof Error ? error.message : error);
-        return null;
-      });
-      tabContent = {
-        receivables: {
-          list: listOf("receivables"),
-          above: (
-            <>
-              {collections && <CollectionsPanel panel={collections.panel} available={collections.available} />}
-              {discounts && <CustomerDiscounts orgSlug={slug} view={discounts} canWrite={canWrite} />}
-              <FromCustomers orgSlug={slug} items={customerItems} canWrite={canReconcile} />
-              {/* Before migration 0103 runs, receivables show as before, and say applying payments waits for it (allocations L11). */}
-              {book && !book.available && receivableRows.length > 0 && <p className="text-xs text-ink-3">Applying payments is not set up on this deployment yet.</p>}
-              {toApply.length > 0 && receivableRows.length > 0 && <ApplyPayments orgSlug={slug} network={network} payments={toApply} canWrite={canReconcile} />}
-            </>
-          ),
-          below: (
-            <div className="space-y-10 pt-6">
-              <StatementLinks orgSlug={slug} customers={customers} links={statementLinks} canWrite={canWrite} available={portalLinks?.available ?? false} />
-              <DealsSection
-                deals={deals}
-                costs={dealCosts}
-                orgSlug={slug}
-                today={today}
-                collected={dealsCollected}
-                fromCrm={crmSections.length > 0 ? <>{crmSections.map(crmSection)}</> : undefined}
-              />
-              {/* What partners earn on the money these deals bring in (commissions C10). */}
-              <CommissionsLink href={orgHref(slug, "/invoices/commissions")} />
-            </div>
-          ),
-        },
-      };
-    }
+    // The tab's list is the cards' (B5), with what the tab read and built beside them.
+    const tabContent: TabContent = tabParts.bills
+      ? { bills: { list: listOf("bills"), ...tabParts.bills } }
+      : tabParts.receivables
+        ? { receivables: { list: listOf("receivables"), ...tabParts.receivables } }
+        : { plan: tabParts.plan };
 
     const needsYouCount = summary.needsYou.count;
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
+      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={status}>
         <PageHead
           title={sectionTitle("invoices")}
           sub="Your bills, what the agent decided on each, and why."
