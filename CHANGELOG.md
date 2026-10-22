@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The payee lock starts on for a new Arc mainnet workspace.** A workspace created on Arc mainnet now has the
+  payee lock on from the start, with no wait: a payee's new address is paid only after someone records how they checked
+  it, and whoever gave it does not confirm it while someone else can. Its **Get started** checklist explains it in
+  **Check payees with the payee lock**, ticked once someone confirms an address under it or changes it. An owner turns
+  it off or adds a wait in Settings. Workspaces already on Arc mainnet keep their setting.
+
 - **"Was this you?": the payee's own contact checks an address change.** When a payee's address changes to a new
   one, its billing email on file is asked by email whether they made the change, through a one-time link that needs
   no account. "Yes" shows on the payee's row and confirms nothing. "No, this wasn't me" freezes the payee: its

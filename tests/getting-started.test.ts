@@ -53,6 +53,18 @@ describe("gettingStarted", () => {
     expect(result.next).toBe("wallet");
   });
 
+  it("explains the payee lock a mainnet workspace starts with, after the payee, ticked once a person used it (payee lock mainnet default LD2)", () => {
+    const fresh = gettingStarted(input({ network: "arc-mainnet", payeeLock: { on: true, used: false } }));
+    const titles = fresh.steps.map((each) => each.title);
+    expect(titles.indexOf("Check payees with the payee lock")).toBe(titles.indexOf("Add a payee with an Arc address") + 1);
+    expect(step(fresh, "payee_lock")).toMatchObject({ done: false, path: "/settings#payee-lock-title", needs: null });
+    expect(step(fresh, "payee_lock").body).toContain("The payee lock is on: a payee's new address is paid only after someone records how they checked it");
+    expect(step(gettingStarted(input({ network: "arc-mainnet", payeeLock: { on: true, used: true } })), "payee_lock").done).toBe(true);
+    expect(step(gettingStarted(input({ network: "arc-mainnet", payeeLock: { on: false, used: true } })), "payee_lock").body).toContain("The payee lock is off");
+    // No step without the lock's facts: on Arc testnet, or when they could not be read.
+    expect(gettingStarted(input({ network: "arc-mainnet" })).steps.some((each) => each.id === "payee_lock")).toBe(false);
+  });
+
   it("keeps that order on Arc testnet once the workspace has a wallet, or is live", () => {
     const order = ["workspace", "wallet", "fund", "live", "payee", "payable", "limits", "payment"];
     expect(gettingStarted(input({ accounts: WALLET })).steps.map((each) => each.id)).toEqual(order);

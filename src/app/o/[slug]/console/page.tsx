@@ -1,3 +1,4 @@
+import { readPayeeLock } from "@/lib/payee-lock";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { confirmLimitsAction, dismissChecklistAction } from "@/app/actions/onboarding";
@@ -48,7 +49,7 @@ import { cookies } from "next/headers";
 import { InviteNudge } from "@/components/vx/InviteNudge";
 import { INVITE_LATER_COOKIE, inviteNudgeShown } from "@/lib/invite-nudge";
 import { listMembers, listOpenInvitations } from "@/lib/platform/members";
-import { readLimitsSet, readOnboardingMarks, readPersonActs } from "@/lib/onboarding/read";
+import { readLimitsSet, readOnboardingMarks, readPayeeLockUsed, readPersonActs } from "@/lib/onboarding/read";
 import { approverChecklist, checklistRoleOf } from "@/lib/onboarding/role-checklists";
 import { ledgerReadMayBeCut, listLedgerEntries, listLedgerEntriesAfter, listLedgerEntriesByDomain, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { pauseStateOf } from "@/lib/platform/pause";
@@ -387,6 +388,14 @@ export default async function DashboardPage({
         : Promise.resolve([null, null, false] as const),
       movableRead,
     ]);
+    // On Arc mainnet the owner's checklist says what the payee lock it starts with does (payee lock mainnet default LD2):
+    // whether it is on, and whether a person has used it yet. Best effort: no step when either cannot be read.
+    const payeeLock =
+      checklistRole === "owner" && network === "arc-mainnet"
+        ? await Promise.all([readPayeeLock(db()), readPayeeLockUsed()])
+            .then(([lock, used]) => ({ on: lock.on, used }))
+            .catch(() => null)
+        : null;
     // The owner's is computed from the rows above (getting-started design G1, G2), until the first payment on Arc testnet
     // (first-payment design §2). Owners and admins add records, and an owner takes the workspace live. In shadow mode it
     // has steps of its own: suppliers, real bills and a first verdict, from the shadow mode and verdicts read above. A
@@ -411,6 +420,7 @@ export default async function DashboardPage({
             : null,
           limits: { confirmed: limitsSet || (marks?.limitsConfirmed ?? false), dailyUsdc: budget?.budget?.dailyUsdc ?? null, weeklyUsdc: budget?.budget?.weeklyUsdc ?? null },
           dismissed: marks?.mine.has("dismissed_owner") ?? false,
+          payeeLock,
         })
       : null;
     const checklist: Checklist | null =

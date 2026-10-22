@@ -349,9 +349,30 @@ describe("a workspace on Arc mainnet (mainnet go-live M2, M9)", () => {
     expect(budget?.body).toMatchObject({ daily_usdc: 50, weekly_usdc: 150, updated_by: USER });
     // Two people above 100 USDC from the start (mainnet limits L1), and every starting figure on record (L4).
     const policy = fake.requests.find((request) => request.method === "POST" && request.path === "/rest/v1/approval_policies");
-    expect(policy?.body).toMatchObject({ two_approvals_above: 100, updated_by: USER });
+    // And the payee lock on, with no wait (payee lock mainnet default LD1).
+    expect(policy?.body).toMatchObject({ two_approvals_above: 100, updated_by: USER, payee_lock: true, payee_lock_cooling_hours: 0 });
     const created = rpcBodies(fake.requests, "append_ledger_entry")[0];
-    expect(created.p_detail).toMatchObject({ network: "arc-mainnet", mode: "sandbox", startingLimits: { dailyUsdc: 50, weeklyUsdc: 150, twoApprovalsAbove: 100 } });
+    expect(created.p_detail).toMatchObject({
+      network: "arc-mainnet",
+      mode: "sandbox",
+      startingLimits: { dailyUsdc: 50, weeklyUsdc: 150, twoApprovalsAbove: 100, payeeLock: { on: true, coolingHours: 0 } },
+    });
+  });
+
+  it("writes the figure alone where the payee lock's columns are not there yet (before migration 0135)", async () => {
+    const { fake, run } = workspaceFake({
+      config: mainnetOn,
+      fail: (request) =>
+        request.method === "POST" && request.path === "/rest/v1/approval_policies" && "payee_lock" in (request.body as Record<string, unknown>)
+          ? { status: 400, body: { code: "PGRST204", message: "Could not find the 'payee_lock' column of 'approval_policies' in the schema cache", details: null, hint: null } }
+          : undefined,
+    });
+    await run(() => createWorkspace({ userId: USER, name: "Acme Mainnet", network: "arc-mainnet" }));
+    const policies = fake.requests.filter((request) => request.method === "POST" && request.path === "/rest/v1/approval_policies");
+    expect(policies).toHaveLength(2);
+    expect(policies[1].body).toMatchObject({ two_approvals_above: 100, updated_by: USER });
+    expect(policies[1].body).not.toHaveProperty("payee_lock");
+    expect((rpcBodies(fake.requests, "append_ledger_entry")[0].p_detail as { startingLimits: Record<string, unknown> }).startingLimits).not.toHaveProperty("payeeLock");
   });
 
   it("leaves Arc testnet as it was: the two simulated accounts, no limit", async () => {
