@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvalCost } from "@/lib/approval-cost";
+import { approvalCost, bankPayoutCost } from "@/lib/approval-cost";
 
 /**
  * What Approve and pay would cost, on the approval card (docs/superpowers/specs/2026-10-22-approval-total-cost-design.md
@@ -64,5 +64,20 @@ describe("approvalCost", () => {
       "Leaves the operating wallet": "1.90 EURC",
       "Atelier receives": "1.90 EURC",
     });
+  });
+});
+
+describe("bankPayoutCost (docs/superpowers/specs/2026-10-22-bank-route-comparison-design.md BR1-BR3)", () => {
+  const bank = { quote: { receiverAmount: 1814, currency: "MXN" as const, rate: 18.35, feesSender: 2.1 } };
+
+  it("gives the invoice, BlindPay's fees taken from it, what leaves, and what USDC to a wallet would give the vendor", () => {
+    const cost = bankPayoutCost({ amount: 100, counterpartyName: "Taller Norte", discount: null, bank }, NOW);
+    expect(cost && lines(cost)).toEqual({ Invoice: "100.00 USDC", "BlindPay's fees, taken from it": "-2.10 USDC", "Leaves the operating wallet": "100.00 USDC" });
+    expect(cost?.note).toBe("Paid in USDC to a wallet instead, Taller Norte would receive the full 100.00 USDC, with no fee taken: ask them for a wallet address with a payee link.");
+  });
+
+  it("is nothing without BlindPay's quote, or while a discount applies, whose amount the quote was not read for", () => {
+    expect(bankPayoutCost({ amount: 100, counterpartyName: "Taller Norte", discount: null, bank: { quote: null } }, NOW)).toBeNull();
+    expect(bankPayoutCost({ amount: 100, counterpartyName: "Taller Norte", discount: { pct: 1, deadline: "2026-10-30T00:00:00Z" }, bank }, NOW)).toBeNull();
   });
 });

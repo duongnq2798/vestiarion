@@ -14,6 +14,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A bank payout's card compares it with USDC.** Before you approve a payout to a vendor's bank account, its card
+  shows the invoice, BlindPay's fees taken from it and what leaves the wallet, and what the vendor would receive in
+  USDC to a wallet instead: the full amount, no fee taken.
+
 - **Pay a vendor on Arbitrum from Arc mainnet.** Arbitrum joins Base as a chain Arc mainnet pays across to through
   CCTP, in real USDC: give a vendor an Arbitrum address, or let them choose Arbitrum on their payee link. Circle
   quoted about 0.077 USDC to forward a payout there on Oct 22, paid on top of the invoice. A contract from your own

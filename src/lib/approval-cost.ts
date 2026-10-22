@@ -68,3 +68,31 @@ export function approvalCost(
     note: gateway || !ownGas ? null : `Arc's network fee, about ${show(ARC_FEE_USD)} USDC a transaction, also leaves the operating wallet.`,
   };
 }
+
+/**
+ * A payout to a vendor's bank account (docs/superpowers/specs/2026-10-22-bank-route-comparison-design.md BR1-BR3): the
+ * invoice, BlindPay's fees, which its quote takes from what the vendor receives, and what leaves the operating wallet,
+ * with what the vendor would receive in USDC to a wallet instead: the full amount, no fee taken. Null without BlindPay's
+ * quote, or while an early-payment discount applies, since the listing's quote is for the invoice's full amount.
+ */
+export function bankPayoutCost(
+  payable: {
+    amount: number;
+    counterpartyName: string;
+    discount: { pct: number; deadline: string } | null;
+    bank?: { quote: { feesSender: number } | null } | null;
+  },
+  now: Date = new Date()
+): ApprovalCost | null {
+  const quote = payable.bank?.quote ?? null;
+  if (!quote) return null;
+  if (amountToPay(payable.amount, payable.discount, now).discountTaken > 0) return null;
+  return {
+    lines: [
+      { label: "Invoice", value: `${show(payable.amount)} USDC` },
+      { label: "BlindPay's fees, taken from it", value: `-${show(quote.feesSender)} USDC` },
+      { label: "Leaves the operating wallet", value: `${show(payable.amount)} USDC`, total: true },
+    ],
+    note: `Paid in USDC to a wallet instead, ${payable.counterpartyName} would receive the full ${show(payable.amount)} USDC, with no fee taken: ask them for a wallet address with a payee link.`,
+  };
+}

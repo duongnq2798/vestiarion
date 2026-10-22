@@ -70,4 +70,12 @@ describe("the approval card's cost", () => {
     expect(card({ status: "processing" })).not.toContain("Leaves the operating wallet");
     expect(card({ bank: { beneficiaryName: "Cobalt SA", quote: null, quoteProblem: "not_set_up" } as unknown as WaitingPayable["bank"] })).not.toContain("Leaves the operating wallet");
   });
+
+  it("shows a bank payout's cost with BlindPay's quote, and what USDC to a wallet would give the vendor (bank route comparison BR1)", () => {
+    const bank = { bankCode: "012", last4: "9716", beneficiaryName: "Ana López", accountStatus: "approved", quote: { receiverAmount: 1814, currency: "MXN", rate: 18.35, feesSender: 2.1 }, quoteProblem: null };
+    const shown = card({ amount: 100, payeeChain: "ARC-TESTNET", bank: bank as WaitingPayable["bank"] });
+    expect(shown).toContain("BlindPay's fees, taken from it -2.10 USDC");
+    expect(shown).toContain("Leaves the operating wallet 100.00 USDC");
+    expect(shown).toContain("Paid in USDC to a wallet instead, Cobalt Cloud would receive the full 100.00 USDC, with no fee taken");
+  });
 });
