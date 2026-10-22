@@ -27,6 +27,10 @@ export const PERMISSIONS = {
   // Its payables twin: checking a vendor's statement of account against the bills and the payments made to them, which
   // reads them and signs that it was checked, and adds nothing (vendor statement VS1).
   "payables.reconcile": ["owner", "admin", "accountant"],
+  // Co-signing a bill above the figure for two approvals, and confirming a changed address, while an owner has turned
+  // co-signing on (accountant co-sign CS2, CS6): the accountant's alone, since the others decide payments outright. A
+  // co-sign is one of the two approvals and never the one that pays.
+  "approval.cosign": ["accountant"],
   "agent.run_cycle": ["owner", "admin"],
   "agent.resume": ["owner", "admin"],
   // The agent's spending limit: loosening it is as deliberate as resuming the agent.

@@ -108,6 +108,17 @@ export function approveFirstDescription(above: number): string {
   return `Payments above ${above} USDC need two approvals. This records your approval and sends nothing; another person's approval pays it.`;
 }
 
+/** What an accountant's co-sign answers once recorded (accountant co-sign CS8). */
+export const COSIGNED = "Co-signed. An owner, admin or approver's Approve and pay pays it.";
+
+/** What a co-sign answers while co-signing is off. */
+export const COSIGN_OFF = "Co-signing is off in this workspace. An owner turns it on in Settings, under Two approvals.";
+
+/** What the co-sign's confirmation says it does (CS8). */
+export function cosignDescription(amount: string, payee: string): string {
+  return `This records your co-sign of ${amount} to ${payee} and sends nothing. An owner, admin or approver's Approve and pay then pays it.`;
+}
+
 /** The paying confirmation's added sentence when it is the second of two approvals. */
 export const SECOND_APPROVAL_PAYS = "Yours is the second of two approvals, so it pays.";
 

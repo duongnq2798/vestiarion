@@ -3,7 +3,7 @@ import { sameAddress } from "../counterparty-address";
 import { db, unwrap } from "../dal";
 import { latestDecision } from "../added-details";
 import { listLedgerEntriesForTargets } from "../ledger";
-import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
+import { approversBesides, billApproversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { excludedSlots, mayApproveNow, type TwoApprovalsFacts } from "../two-approvals";
 
 /**
@@ -38,6 +38,14 @@ const COLUMNS = "id, approved_by, approved_at, amount, currency, address";
 
 function given(row: ApprovalRow): GivenApproval {
   return { id: row.id, by: row.approved_by, at: row.approved_at, amount: Number(row.amount), currency: row.currency, address: row.address };
+}
+
+/**
+ * Who can give one of a payment's approvals besides those named: for a bill, co-signing accountants too (accountant
+ * co-sign CS5); for a milestone, owners, admins and approvers, since milestones are not co-signed.
+ */
+function approversFor(type: PaymentSource["type"], excluded: string[]): Promise<number> {
+  return type === "invoice" ? billApproversBesides(excluded) : approversBesides(excluded);
 }
 
 /** A payment's open approvals, oldest first. */
@@ -168,11 +176,13 @@ export async function mayGiveApproval(input: {
   actorId: string;
   excluded: Array<string | null | undefined>;
   given: ReadonlyArray<{ by: string }>;
+  /** What is approved: a bill counts co-signing accountants among those independent of it; a milestone does not. */
+  type?: PaymentSource["type"];
 }): Promise<boolean> {
   // Members only: a first payment's address may have been given by the payee ("payee"), who is no one here.
   const excluded = memberIds(input.excluded);
   if (!excluded.includes(input.actorId)) return true;
-  const slots = excludedSlots(await approversBesides(excluded));
+  const slots = excludedSlots(await approversFor(input.type ?? "milestone", excluded));
   return mayApproveNow({ excluded, excludedSlots: slots, approvals: input.given.map(({ by }) => ({ by, at: "" })) }, input.actorId);
 }
 
@@ -226,14 +236,14 @@ export async function twoApprovalsFacts(
   const givers = [...new Set([...agreeing.values()].flat().map((approval) => approval.by))];
   const approvers = givers.length > 0 ? await approversAmong(givers) : new Set<string>();
   // How many people can approve payments at all: with fewer than two, nothing above the figure can be paid.
-  const everyone = await approversBesides([]);
+  const everyone = await approversFor(type, []);
 
   // One count per set of people left out, however many payments share it.
   const counts = new Map<string, number>();
   for (const item of needing) {
     const excluded = memberIds(item.excluded);
     const key = [...excluded].sort().join(",");
-    if (excluded.length > 0 && !counts.has(key)) counts.set(key, await approversBesides(excluded));
+    if (excluded.length > 0 && !counts.has(key)) counts.set(key, await approversFor(type, excluded));
     facts.set(item.id, {
       above,
       approvals: (agreeing.get(item.id) ?? []).filter((approval) => approvers.has(approval.by)).map((approval) => ({ by: approval.by, at: approval.at })),

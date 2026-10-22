@@ -779,6 +779,26 @@ plan, on Arc testnet).
     `claim_invoice_decision` lets whoever entered it claim the second approval when another person's is on file. With
     fewer than two approvers in all, no approval is taken.
   - Reject, Return and Close clear the approvals; a transfer already sent is recorded on one approval.
+- **An accountant's co-sign** (`docs/superpowers/specs/2026-10-22-accountant-cosign-design.md`):
+  - **The setting:** `approval_policies.accountant_cosigns`, an owner's, off by default (migration 0138), signed as
+    `accountant_cosign_changed`. `readAccountantCosign` reads it off before 0138.
+  - **Who:** `cosignsNow(role)` holds for the accountant (`approval.cosign`) while it is on.
+    `cosignInvoiceAction` calls `approveAndPay({ cosign: true })`, which:
+    - runs every check an approval does;
+    - refuses a bill one approval pays (`cosign_not_needed`);
+    - records the co-sign in `payment_approvals` as `approval_given` with `cosign: true`, even when another approval
+      stands;
+    - throws before any fee, claim or send if a co-sign ever got past that point.
+  - **Counting:** migration 0138 redefines `approvers_among` to count accountants while the setting is on, so a co-sign
+    stands for the approval that pays and for `claim_invoice_decision`. The new `cosigners_besides` adds them, for
+    bills only, through `billApproversBesides`, to:
+    - the second-approver check;
+    - `mayGiveApproval` and `twoApprovalsFacts`;
+    - the figure's `too_few_approvers`;
+    - the payee lock's `giver_confirms`.
+
+    Milestones keep `approversBesides`.
+  - **Addresses:** `confirmCounterpartyAddressAction` takes whoever decides payments or a co-signing accountant.
 
 **Trying a limit on past decisions** (`docs/superpowers/specs/2026-10-10-policy-replay-design.md`).
 - **What it replays** (`replayDecisions`, `src/lib/policy-replay.ts`, pure): the agent's `ap_*` and `milestone_*`

@@ -4,6 +4,7 @@ import { runWith } from "@/lib/context";
 import {
   addInvoiceDetailsAction,
   approveInvoiceAction,
+  cosignInvoiceAction,
   rejectInvoiceAction,
   returnInvoiceAction,
   type ApprovalActionResult,
@@ -66,7 +67,7 @@ const config = configFromEnv({
   SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
 });
 
-function membership(role: "owner" | "admin" | "approver" | "viewer") {
+function membership(role: "owner" | "admin" | "approver" | "accountant" | "viewer") {
   return { orgId: ORG, slug: "northstar", name: "Northstar", mode: "live" as const, role };
 }
 
@@ -74,8 +75,10 @@ function orgRow() {
   return { id: ORG, slug: "northstar", name: "Northstar", mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null };
 }
 
-function run<T>(fn: () => Promise<T>): Promise<T> {
-  const fake = fakeSupabase((request) => (request.path === "/rest/v1/orgs" ? { body: orgRow() } : { body: [] }));
+function run<T>(fn: () => Promise<T>, policy: Array<Record<string, unknown>> = []): Promise<T> {
+  const fake = fakeSupabase((request) =>
+    request.path === "/rest/v1/orgs" ? { body: orgRow() } : request.path === "/rest/v1/approval_policies" ? { body: policy } : { body: [] }
+  );
   return runWith({ config, db: fake.client, fetch: fake.fetch }, fn);
 }
 
@@ -291,5 +294,41 @@ describe("addInvoiceDetailsAction", () => {
 
     expect(result).toEqual({ ok: false, message: "You do not have permission to do that." });
     expect(addInvoiceDetailsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("cosignInvoiceAction (docs/superpowers/specs/2026-10-22-accountant-cosign-design.md CS2, CS7)", () => {
+  const on = [{ accountant_cosigns: true }];
+  const allow = () => authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: membership("accountant") });
+
+  it("asks for approval.cosign, and records nothing when refused", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "Your role in this workspace (approver) cannot do that." });
+    expect(await run(() => cosignInvoiceAction(INITIAL, form(VALID_ID)), on)).toEqual({ ok: false, message: "Your role in this workspace (approver) cannot do that." });
+    expect(authorizeMock).toHaveBeenCalledWith("northstar", "approval.cosign");
+    expect(approveAndPayMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses while an owner has not turned co-signing on", async () => {
+    allow();
+    expect(await run(() => cosignInvoiceAction(INITIAL, form(VALID_ID)))).toEqual({
+      ok: false,
+      message: "Co-signing is off in this workspace. An owner turns it on in Settings, under Two approvals.",
+    });
+    expect(approveAndPayMock).not.toHaveBeenCalled();
+  });
+
+  it("co-signs the payment as the card showed it, never as an approval that pays", async () => {
+    allow();
+    approveAndPayMock.mockResolvedValueOnce({ status: "approved", txRef: null, note: "" });
+    const result = await run(() => cosignInvoiceAction(INITIAL, form(VALID_ID, { address: "0xDEAD" })), on);
+    expect(approveAndPayMock).toHaveBeenCalledWith({ actorId: USER, invoiceId: VALID_ID, shownAddress: "0xDEAD", cosign: true });
+    expect(result).toEqual({ ok: true, message: "Co-signed. An owner, admin or approver's Approve and pay pays it." });
+    expect(revalidatePathMock).toHaveBeenCalled();
+  });
+
+  it("answers an approval's refusal in its own words", async () => {
+    allow();
+    approveAndPayMock.mockRejectedValueOnce(new ApprovalError("cosign_not_needed", "Only a payment above the figure for two approvals is co-signed."));
+    expect(await run(() => cosignInvoiceAction(INITIAL, form(VALID_ID)), on)).toEqual({ ok: false, message: "Only a payment above the figure for two approvals is co-signed." });
   });
 });

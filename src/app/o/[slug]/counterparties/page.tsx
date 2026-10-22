@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cosignsNow } from "@/lib/approval-policy";
 import AgentControls from "@/components/AgentControls";
 import { AddressCheckNote } from "@/components/address-change/AddressCheckNote";
 import { CounterpartyRow, readiness } from "@/components/CounterpartyRow";
@@ -90,9 +91,12 @@ export default async function CounterpartiesPage({
         return null;
       }),
     ]);
+    // A co-signing accountant confirms changed addresses too (accountant co-sign CS6); a screening match stays with whoever
+    // decides payments.
+    const canConfirmAddress = canConfirm || (await cosignsNow(access.membership.role));
     // The payee lock (payee lock PL2), for the confirm form, best effort; and the payees whose address is another's, or
     // made to look like it (PL6), compared on the chain each is paid on.
-    const payeeLock = canConfirm
+    const payeeLock = canConfirmAddress
       ? await readPayeeLock(db()).catch((error: unknown) => {
           console.error("counterparties: payee lock not read", error instanceof Error ? error.message : error);
           return PAYEE_LOCK_OFF;
@@ -103,7 +107,7 @@ export default async function CounterpartiesPage({
     );
     // For an address waiting for its confirmation, one this payee had or was paid at before that it is made to look like
     // (PL6), read only for those, for whoever may confirm them. Best effort: none when unread.
-    const waitingIds = canConfirm
+    const waitingIds = canConfirmAddress
       ? counterparties.filter((counterparty) => addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at)).map((counterparty) => counterparty.id)
       : [];
     const earlierAlike = new Map<string, string>();
@@ -289,7 +293,7 @@ export default async function CounterpartiesPage({
                           addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at) ? counterparty.address_changed_at : null
                         }
                         canWrite={canWrite}
-                        canConfirm={canConfirm}
+                        canConfirm={canConfirmAddress}
                         payeeLockOn={payeeLock.on}
                         lookalikes={alike.get(counterparty.id) ?? []}
                         earlierLookalike={earlierAlike.get(counterparty.id) ?? null}

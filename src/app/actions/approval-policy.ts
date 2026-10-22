@@ -3,7 +3,7 @@
 import "server-only";
 
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
-import { ApprovalPolicyError, changeTwoApprovals } from "@/lib/approval-policy";
+import { ApprovalPolicyError, changeAccountantCosign, changeTwoApprovals } from "@/lib/approval-policy";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
@@ -46,6 +46,29 @@ export async function setTwoApprovalsAction(_previous: TwoApprovalsActionResult,
     } catch (error) {
       if (error instanceof ApprovalPolicyError || error instanceof RuleReplayError) return { ok: false, message: error.message };
       console.error("two approvals change failed", error instanceof Error ? error.message : "unknown error");
+      return { ok: false, message: "That did not work. Try again in a moment." };
+    }
+  });
+}
+
+/**
+ * Turns accountants' co-signing on or off, from Settings (docs/superpowers/specs/2026-10-22-accountant-cosign-design.md
+ * CS1): an owner's alone, as the figure is. The library refuses it before migration 0138 and writes the signed entry.
+ */
+export async function setAccountantCosignAction(_previous: TwoApprovalsActionResult, formData: FormData): Promise<TwoApprovalsActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "approval.policy");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    try {
+      const { to } = await changeAccountantCosign({ actorId: auth.user.id, on: formString(formData, "on") === "true" });
+      revalidateOrgPages();
+      return {
+        ok: true,
+        message: to ? "Accountants now co-sign bills above the figure, and confirm changed addresses." : "Accountants no longer co-sign or confirm addresses.",
+      };
+    } catch (error) {
+      if (error instanceof ApprovalPolicyError) return { ok: false, message: error.message };
+      console.error("accountant co-sign change failed", error instanceof Error ? error.message : "unknown error");
       return { ok: false, message: "That did not work. Try again in a moment." };
     }
   });

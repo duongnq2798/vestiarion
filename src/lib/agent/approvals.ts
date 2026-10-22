@@ -37,7 +37,7 @@ import { verdictGate } from "../verdicts";
 import { isReclaimable } from "./claim-age";
 import type { Provenance } from "../provenance";
 import { amountFromReserve, bringCashForApproval, CashBackError, cashShortMessage, cctpFeeCushion, reserveCover, type ReserveCover } from "./liquidity";
-import { approversBesides, readTwoApprovalsAbove } from "../approval-policy";
+import { billApproversBesides, readTwoApprovalsAbove } from "../approval-policy";
 import { payeeLockRefusal } from "../payee-lock";
 import { loadSanctionedWallets, sanctionedWallet } from "../sanctioned-wallets";
 import { needsSecondApprover, needsTwoApprovals, type TwoApprovalsFacts } from "../two-approvals";
@@ -131,7 +131,10 @@ export type ApprovalErrorCode =
   // The payee lock refused it (docs/superpowers/specs/2026-10-20-payee-lock-design.md PL4, PL5); its text names why.
   | "payee_locked"
   // The address is on OFAC's sanctioned addresses (docs/superpowers/specs/2026-10-21-sanctioned-wallets-design.md SW6).
-  | "sanctioned_address";
+  | "sanctioned_address"
+  // A co-sign of a bill one approval pays, or a second co-sign by the same accountant (accountant co-sign CS3).
+  | "cosign_not_needed"
+  | "already_cosigned";
 
 /**
  * Every message except `insufficient_funds` and `needs_second_approver`, whose texts name the balance and the figure,
@@ -160,6 +163,8 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_
   bank_not_set_up: "This vendor is paid to a bank account, and bank payouts are not set up on this workspace yet. Set them up under Settings, Bank payouts.",
   bank_unsupported_token: "Only USDC is paid to a bank account, and this invoice is in EURC.",
   sanctioned_address: "This payee's address is on OFAC's sanctions list, so nothing is paid to it.",
+  cosign_not_needed: "Only a payment above the figure for two approvals is co-signed.",
+  already_cosigned: "You already co-signed it. An owner, admin or approver's Approve and pay pays it.",
 };
 
 export class ApprovalError extends Error {
@@ -979,7 +984,19 @@ export function personPaymentNote(status: string, paidNote: string): string {
  * `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none.
  */
 export async function approveAndPay(
-  input: { actorId: string; invoiceId: string; shownAddress?: string; provenance?: Provenance; forVerdict?: boolean },
+  input: {
+    actorId: string;
+    invoiceId: string;
+    shownAddress?: string;
+    provenance?: Provenance;
+    forVerdict?: boolean;
+    /**
+     * An accountant's co-sign (docs/superpowers/specs/2026-10-22-accountant-cosign-design.md CS2, CS3): every check an
+     * approval gets, then recorded as one of the two approvals, and never paid, whatever approvals stand. Who may co-sign
+     * is the caller's check.
+     */
+    cosign?: true;
+  },
   options: {
     bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
     gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
@@ -1028,6 +1045,8 @@ export async function approveAndPay(
   const above = alreadySent ? null : await readTwoApprovalsAbove(db());
   const usdcValue = above !== null && invoice.currency === "EURC" ? await usdcValueOfLatestDecision(invoice.id) : null;
   const twoNeeded = above !== null && needsTwoApprovals({ amount: invoice.amount, currency: invoice.currency, usdcValue }, above);
+  // Below the figure one approval pays, and a co-sign is never that approval (CS3).
+  if (input.cosign && !twoNeeded) raise("cosign_not_needed");
   // Whoever entered it, and whoever a first payment's address rests on: who gave it or asked for it, and, for one no
   // member answers for alone, who confirmed it (new payee check N4).
   const excluded = [invoice.createdBy, ...membersLeftOut(firstPayment)];
@@ -1049,11 +1068,12 @@ export async function approveAndPay(
     // No approval is taken while another person's payment of it is being decided.
     if (invoice.status === "processing" && !isReclaimable(invoice.status, invoice.reviewedAt, Date.now())) raise("already_decided");
     // With fewer than two people who can approve payments, it could never be paid: no approval is taken (T5).
-    if ((await approversBesides([])) < 2) throw new ApprovalError("needs_second_approver", needsSecondApprover(above as number));
+    // A co-signing accountant is one of them (accountant co-sign CS5).
+    if ((await billApproversBesides([])) < 2) throw new ApprovalError("needs_second_approver", needsSecondApprover(above as number));
     standing = (await standingApprovals(source, payment)).filter((approval) => !partners.includes(approval.by));
     // Whoever entered it, or gave its address, gives only the approvals no one independent of it can (T5).
     if (excluded.includes(input.actorId)) {
-      if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing }))) {
+      if (!(await mayGiveApproval({ actorId: input.actorId, excluded, given: standing, type: "invoice" }))) {
         if (invoice.createdBy === input.actorId) raise("self_approval");
         throw new ApprovalError("new_payee_self", newPayeeSelfMessage(firstPayment, input.actorId));
       }
@@ -1137,18 +1157,21 @@ export async function approveAndPay(
     if (hold) throw new ApprovalError("payments_off", hold);
   }
 
-  // Two approvals (T4): the first is recorded and sends nothing; the second, by another person, pays.
+  // Two approvals (T4): the first is recorded and sends nothing; the second, by another person, pays. A co-sign is recorded
+  // and sends nothing even when another person's approval stands (CS2): an owner's, admin's or approver's then pays.
   let approvals: Array<{ by: string; at: string }> = [];
   if (twoNeeded) {
     const other = standing.find((approval) => approval.by !== input.actorId);
-    if (!other) {
-      if (standing.some((approval) => approval.by === input.actorId)) raise("already_approved");
+    if (!other || input.cosign) {
+      if (standing.some((approval) => approval.by === input.actorId)) raise(input.cosign ? "already_cosigned" : "already_approved");
       await giveApproval(source, input.actorId, payment);
       await appendLedgerEntryBestEffort(orgId, {
         actor: "human",
         domain: "ap",
         action: "approval_given",
-        summary: `Approved ${invoice.amount} ${invoice.currency} to ${invoice.counterpartyName}; one more approval pays it (payments above ${above} USDC need two)`,
+        summary: input.cosign
+          ? `Co-signed ${invoice.amount} ${invoice.currency} to ${invoice.counterpartyName}; an owner, admin or approver's approval pays it (payments above ${above} USDC need two)`
+          : `Approved ${invoice.amount} ${invoice.currency} to ${invoice.counterpartyName}; one more approval pays it (payments above ${above} USDC need two)`,
         detail: {
           by: input.actorId,
           invoiceId: invoice.id,
@@ -1160,6 +1183,8 @@ export async function approveAndPay(
           twoApprovalsAbove: above,
           // Given by whoever entered it, or gave its address, as fewer than two others can approve (T5).
           ...(fewApprovers ? { fewApprovers: true } : {}),
+          // An accountant's co-sign (CS8).
+          ...(input.cosign ? { cosign: true } : {}),
           ...input.provenance,
         },
       });
@@ -1170,6 +1195,8 @@ export async function approveAndPay(
     approvals = [{ by: other.by, at: other.at }, { by: input.actorId, at: new Date().toISOString() }];
     if (excluded.includes(other.by)) fewApprovers = true;
   }
+  // A co-sign never pays (CS7): it returned above, and nothing on its behalf reads a fee, claims the bill or sends.
+  if (input.cosign) throw new Error("A co-sign never pays a payment.");
   // A new payment to another chain (approval payout route P1): both routes' fees and the Gateway balance, read now, and
   // the route by the agent's rule, keeping the one an earlier attempt took. A transfer already sent is only reconciled:
   // its decision recorded them.

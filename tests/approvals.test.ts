@@ -197,6 +197,8 @@ function approvalsFake(options: {
   approversAmong?: (users: string[]) => string[];
   /** How many members may approve payments besides those named (`approvers_besides`): one figure, or one per set left out; 2 by default. */
   approversBesides?: number | ((excluded: string[]) => number);
+  /** How many accountants co-sign besides those named (`cosigners_besides`, accountant co-sign CS5); 0 by default. */
+  cosignersBesides?: number | ((excluded: string[]) => number);
   /** The reply to marking approvals used; success by default. */
   approvalsPatch?: FakeReply;
   /** The workspace's reserve account, `{ id, balance }` (approval cash R1); none by default. */
@@ -338,6 +340,11 @@ function approvalsFake(options: {
       const excluded = (request.body as { p_excluded: string[] }).p_excluded;
       const count = options.approversBesides;
       return { body: typeof count === "function" ? count(excluded) : (count ?? 2) };
+    }
+    if (request.path === "/rest/v1/rpc/cosigners_besides") {
+      const excluded = (request.body as { p_excluded: string[] }).p_excluded;
+      const count = options.cosignersBesides;
+      return { body: typeof count === "function" ? count(excluded) : (count ?? 0) };
     }
     if (request.path === "/rest/v1/payment_approvals" && request.method === "PATCH" && options.approvalsPatch) return options.approvalsPatch;
     if (request.path === "/rest/v1/rpc/append_ledger_entry") {
@@ -3136,6 +3143,66 @@ describe("approveAndPay above the workspace's figure for two approvals (two appr
     expect((await eurc(null).run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("approved");
     paid();
     expect((await eurc(99).run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+  });
+});
+
+describe("an accountant's co-sign (docs/superpowers/specs/2026-10-22-accountant-cosign-design.md CS2-CS7)", () => {
+  const ACCOUNTANT = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000ac";
+  const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c3";
+  const approval = (by: string) => ({ id: `appr-${by.slice(-2)}`, approved_by: by, approved_at: "2026-10-05T08:00:00.000Z", amount: "150.000000", currency: "USDC", address: "0xDEAD" });
+  const approvalRequests = (requests: RecordedRequest[], method: string) => requests.filter((r) => r.path === "/rest/v1/payment_approvals" && r.method === method);
+  const cosign = () => approveAndPay({ actorId: ACCOUNTANT, invoiceId: INVOICE_ID, cosign: true });
+
+  it("records the co-sign, bound to the payment and marked as one, and sends nothing", async () => {
+    const { fake, run } = approvalsFake({ twoApprovals: 100, cosignersBesides: 1 });
+
+    expect(await run(cosign)).toEqual({ status: "approved", txRef: null, note: "" });
+    expect(approvalRequests(fake.requests, "POST")[0].body).toMatchObject({ source_type: "invoice", source_id: INVOICE_ID, approved_by: ACCOUNTANT, amount: 150, currency: "USDC", address: "0xdead" });
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+    expect(rpcBodies(fake.requests, "append_ledger_entry")[0]).toMatchObject({
+      p_action: "approval_given",
+      p_summary: "Co-signed 150 USDC to Acme Supplies; an owner, admin or approver's approval pays it (payments above 100 USDC need two)",
+      p_detail: { by: ACCOUNTANT, invoiceId: INVOICE_ID, twoApprovalsAbove: 100, cosign: true },
+    });
+  });
+
+  it("never pays, even with another person's approval standing (CS7)", async () => {
+    const { fake, run } = approvalsFake({ twoApprovals: 100, cosignersBesides: 1, approvals: [approval(OTHER)] });
+
+    expect((await run(cosign)).status).toBe("approved");
+    expect(approvalRequests(fake.requests, "POST")).toHaveLength(1);
+    expect(approvalRequests(fake.requests, "PATCH")).toHaveLength(0);
+    expect(rpcBodies(fake.requests, "claim_invoice_decision")).toHaveLength(0);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/rpc/claim_payment_intent")).toBe(false);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a bill one approval pays, and a second co-sign by the same accountant, recording nothing (CS3)", async () => {
+    const under = approvalsFake({ twoApprovals: 150, cosignersBesides: 1 });
+    await expect(under.run(cosign)).rejects.toThrow("Only a payment above the figure for two approvals is co-signed.");
+    expect(approvalRequests(under.fake.requests, "POST")).toHaveLength(0);
+
+    const again = approvalsFake({ twoApprovals: 100, cosignersBesides: 1, approvals: [approval(ACCOUNTANT)] });
+    await expect(again.run(cosign)).rejects.toThrow("You already co-signed it. An owner, admin or approver's Approve and pay pays it.");
+    expect(approvalRequests(again.fake.requests, "POST")).toHaveLength(0);
+    expect(payInvoiceMock).not.toHaveBeenCalled();
+  });
+
+  it("lets a founder alone pay a bill they entered with their accountant's co-sign standing, and not without one (CS4, CS5)", async () => {
+    payInvoiceMock.mockResolvedValue({ status: "paid", txRef: "0xhash", execution: null, note: "", amountPaid: 150, discountTaken: 0, operatingBalance: 0 });
+    const founder = { twoApprovals: 100, approversBesides: (excluded: string[]) => (excluded.length === 0 ? 1 : 0), cosignersBesides: 1 };
+    const withCosign = approvalsFake({ ...founder, approvals: [approval(ACCOUNTANT)] });
+
+    expect((await withCosign.run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).status).toBe("paid");
+    expect(rpcBodies(withCosign.fake.requests, "claim_invoice_decision")[0]).toMatchObject({ p_by: CREATOR });
+    expect(rpcBodies(withCosign.fake.requests, "append_ledger_entry")[0]).toMatchObject({
+      p_action: "approval_paid",
+      p_detail: { approvals: [{ by: ACCOUNTANT, at: "2026-10-05T08:00:00.000Z" }, { by: CREATOR, at: expect.any(String) }] },
+    });
+
+    const alone = approvalsFake({ ...founder, cosignersBesides: 0 });
+    await expect(alone.run(() => approveAndPay({ actorId: CREATOR, invoiceId: INVOICE_ID }))).rejects.toThrow(/only one person in this workspace can approve payments/);
   });
 });
 

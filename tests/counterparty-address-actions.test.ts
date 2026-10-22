@@ -64,7 +64,7 @@ const config = configFromEnv({
   SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters",
 });
 
-function allow(role: "owner" | "admin" | "approver") {
+function allow(role: "owner" | "admin" | "approver" | "accountant" | "viewer") {
   authorizeMock.mockResolvedValueOnce({
     ok: true,
     user: { id: USER, email: null },
@@ -72,12 +72,12 @@ function allow(role: "owner" | "admin" | "approver") {
   });
 }
 
-function run<T>(fn: () => Promise<T>, lock: { on: boolean; hours?: number; changedAt?: string } = { on: false }): Promise<T> {
+function run<T>(fn: () => Promise<T>, lock: { on: boolean; hours?: number; changedAt?: string; cosign?: boolean } = { on: false }): Promise<T> {
   const fake = fakeSupabase((request) =>
     request.path === "/rest/v1/orgs"
       ? { body: { id: ORG, slug: "northstar", name: "Northstar", mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null } }
       : request.path === "/rest/v1/approval_policies"
-        ? { body: lock.on ? [{ payee_lock: true, payee_lock_cooling_hours: lock.hours ?? 0 }] : [] }
+        ? { body: lock.on || lock.cosign ? [{ payee_lock: lock.on, payee_lock_cooling_hours: lock.hours ?? 0, accountant_cosigns: lock.cosign ?? false }] : [] }
         : request.path === "/rest/v1/counterparties" && lock.changedAt
           ? { body: { address_changed_at: lock.changedAt } }
           : { body: [] }
@@ -157,14 +157,36 @@ describe("updateCounterpartyAddressAction", () => {
 });
 
 describe("confirmCounterpartyAddressAction", () => {
-  it("asks for approval.decide, and confirms nothing when refused", async () => {
-    authorizeMock.mockResolvedValueOnce({ ok: false, message: "You cannot decide approvals here." });
+  it("asks for a member, and confirms nothing when refused", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "You are not a member of this workspace." });
 
     const result = await run(() => confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS })));
 
-    expect(authorizeMock).toHaveBeenCalledWith("northstar", "approval.decide");
+    expect(authorizeMock).toHaveBeenCalledWith("northstar", "workspace.read");
     expect(result.ok).toBe(false);
     expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a viewer, and an accountant while co-signing is off, confirming nothing (accountant co-sign CS6)", async () => {
+    allow("viewer");
+    expect(await run(() => confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS })), { on: false, cosign: true })).toEqual({
+      ok: false,
+      message: "Your role in this workspace (viewer) cannot do that.",
+    });
+    allow("accountant");
+    expect(await run(() => confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS })))).toEqual({
+      ok: false,
+      message: "Your role in this workspace (accountant) cannot do that.",
+    });
+    expect(confirmMock).not.toHaveBeenCalled();
+  });
+
+  it("lets an accountant confirm while co-signing is on (accountant co-sign CS6)", async () => {
+    allow("accountant");
+    confirmMock.mockResolvedValueOnce(true);
+    const result = await run(() => confirmCounterpartyAddressAction(INITIAL, form({ counterpartyId: COUNTERPARTY_ID, address: ADDRESS })), { on: false, cosign: true });
+    expect(confirmMock).toHaveBeenCalledWith({ actorId: USER, counterpartyId: COUNTERPARTY_ID, shownAddress: ADDRESS, via: "confirm", verification: null });
+    expect(result.ok).toBe(true);
   });
 
   it("confirms the address the page showed, as the signed-in person", async () => {

@@ -1,4 +1,5 @@
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
+import { can, type OrgRole } from "./auth/roles";
 import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
@@ -23,13 +24,14 @@ import { PAYEE_LOCK_OFF, payeeLockColumnsMissing, payeeLockFromRow, type PayeeLo
  * records the replay's summary.
  */
 
-export type ApprovalPolicyErrorCode = "invalid" | "unchanged" | "cycle_running" | "too_few_approvers" | "mainnet_keeps_figure" | "stale";
+export type ApprovalPolicyErrorCode = "invalid" | "unchanged" | "cycle_running" | "too_few_approvers" | "mainnet_keeps_figure" | "stale" | "cosign_unavailable";
 
 const MESSAGES: Record<Exclude<ApprovalPolicyErrorCode, "invalid" | "unchanged">, string> = {
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
   too_few_approvers: "Two approvals need two people who can approve payments. Add an approver on Members first.",
   mainnet_keeps_figure: "A workspace on Arc mainnet keeps two approvals above a figure.",
   stale: "The figure for two approvals changed since you tried it. Try it again.",
+  cosign_unavailable: "Co-signing is not available in this workspace yet.",
 };
 
 export class ApprovalPolicyError extends Error {
@@ -84,6 +86,76 @@ export async function approversBesides(excluded: string[]): Promise<number> {
   return result.data;
 }
 
+/**
+ * How many accountants co-sign besides those named (`cosigners_besides`, migration 0138; accountant co-sign CS5): 0 while
+ * co-signing is off. A count that cannot be read, before 0138 included, is 0, so the workspace works as it did before
+ * co-signing: no one more can approve, and whoever entered a bill gives no fewer of its approvals than before.
+ */
+export async function cosignersBesides(excluded: string[]): Promise<number> {
+  const result = await db().rpc("cosigners_besides", { p_org_id: currentOrgId(), p_excluded: excluded });
+  // Before 0138 the function is missing, which is no fault: nothing co-signs yet.
+  if (result.error && result.error.code !== "PGRST202" && result.error.code !== "42883") console.error("cosigners_besides not read", result.error.message);
+  return !result.error && typeof result.data === "number" ? result.data : 0;
+}
+
+/** Who can give one of a bill's two approvals besides those named: owners, admins and approvers, and co-signing accountants (CS5). */
+export async function billApproversBesides(excluded: string[]): Promise<number> {
+  const [approvers, cosigners] = await Promise.all([approversBesides(excluded), cosignersBesides(excluded)]);
+  return approvers + cosigners;
+}
+
+/**
+ * Whether the workspace's accountants co-sign (CS1), and whether the database has the setting at all (`ready`, migration
+ * 0138). With no row, or before 0138, it reads off. Any other failure throws.
+ */
+export async function readAccountantCosign(orgDb: OrgDb): Promise<{ on: boolean; ready: boolean }> {
+  const result = await orgDb.from("approval_policies").select("accountant_cosigns").limit(1);
+  if (result.error) {
+    if (payeeLockColumnsMissing(result.error)) return { on: false, ready: false };
+    throw new Error(`approval_policies not read: ${result.error.message}`);
+  }
+  const row = ((result.data ?? []) as Array<{ accountant_cosigns: boolean | null }>)[0];
+  return { on: row?.accountant_cosigns === true, ready: true };
+}
+
+/**
+ * Whether this role co-signs in the workspace in scope now (CS2, CS6): an accountant, while co-signing is on. A setting
+ * that cannot be read counts as off, so nothing more is allowed than before.
+ */
+export async function cosignsNow(role: OrgRole): Promise<boolean> {
+  if (!can(role, "approval.cosign")) return false;
+  try {
+    return (await readAccountantCosign(db())).on;
+  } catch (error) {
+    console.error("accountant co-sign not read", error instanceof Error ? error.message : error);
+    return false;
+  }
+}
+
+/**
+ * Turns co-signing on or off (CS1): an owner's, as the figure is. Off is always allowed, since fewer people then stand
+ * behind payments; on needs migration 0138. Signed as `accountant_cosign_changed`.
+ */
+export async function changeAccountantCosign(input: { actorId: string; on: boolean }): Promise<{ from: boolean; to: boolean }> {
+  const current = await readAccountantCosign(db());
+  if (!current.ready) throw new ApprovalPolicyError("cosign_unavailable");
+  if (current.on === input.on) throw new ApprovalPolicyError("unchanged", input.on ? "Accountants already co-sign." : "Accountants already do not co-sign.");
+  const write = await db()
+    .from("approval_policies")
+    .upsert({ accountant_cosigns: input.on, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
+  if (write.error) throw new Error(write.error.message);
+  await appendLedgerEntryBestEffort(currentOrgId(), {
+    actor: "human",
+    domain: "system",
+    action: "accountant_cosign_changed",
+    summary: input.on
+      ? "Accountants now co-sign payments above the figure for two approvals, and confirm changed addresses"
+      : "Accountants no longer co-sign payments or confirm addresses",
+    detail: { by: input.actorId, from: current.on, to: input.on },
+  });
+  return { from: current.on, to: input.on };
+}
+
 /** What a change to the figure already in force is told. */
 export function unchangedTwoApprovalsMessage(to: number | null): string {
   return to === null ? "Two approvals are already off." : `Payments above ${to} USDC already need two approvals.`;
@@ -125,9 +197,10 @@ export async function changeTwoApprovals(input: {
   ) as Array<{ id: string }>;
   if (running.length > 0) throw new ApprovalPolicyError("cycle_running");
 
-  // Tighter than before: more payments need two people, so there must be two who can give them.
+  // Tighter than before: more payments need two people, so there must be two who can give them. A co-signing accountant
+  // is one of them for bills (accountant co-sign CS5).
   const tighter = to !== null && (from === null || to < from);
-  if (tighter && (await approversBesides([])) < 2) throw new ApprovalPolicyError("too_few_approvers");
+  if (tighter && (await billApproversBesides([])) < 2) throw new ApprovalPolicyError("too_few_approvers");
 
   // A write that asks for nothing back: only its error says whether it happened.
   const write = await db()
@@ -146,8 +219,12 @@ export async function changeTwoApprovals(input: {
   return { from, to };
 }
 
-/** The figure and how many people can approve payments, for Settings. */
-export async function twoApprovalsStatus(): Promise<{ above: number | null; approvers: number }> {
-  const [above, approvers] = await Promise.all([readTwoApprovalsAbove(db()), approversBesides([])]);
-  return { above, approvers };
+/**
+ * The figure, how many people can give a bill's approvals (co-signing accountants among them), how many of those are
+ * accountants, and the co-sign setting, for Settings.
+ */
+export async function twoApprovalsStatus(): Promise<{ above: number | null; approvers: number; cosigners: number; cosign: { on: boolean; ready: boolean } }> {
+  const [above, approvers, cosign] = await Promise.all([readTwoApprovalsAbove(db()), approversBesides([]), readAccountantCosign(db())]);
+  const cosigners = cosign.on ? await cosignersBesides([]) : 0;
+  return { above, approvers: approvers + cosigners, cosigners, cosign };
 }

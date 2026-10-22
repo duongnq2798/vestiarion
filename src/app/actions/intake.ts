@@ -6,7 +6,9 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
+import { cosignsNow } from "@/lib/approval-policy";
 import { authorize } from "@/lib/auth/authorize";
+import { can } from "@/lib/auth/roles";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { inOrg } from "@/lib/dal/scope";
 import {
@@ -319,9 +321,12 @@ export async function confirmCounterpartyAddressAction(
   _previous: IntakeActionResult,
   formData: FormData
 ): Promise<IntakeActionResult> {
-  const auth = await authorize(formData.get("orgSlug"), "approval.decide");
+  const auth = await authorize(formData.get("orgSlug"), "workspace.read");
   if (!auth.ok) return { ok: false, message: auth.message };
   return inOrg(auth, async () => {
+    // Whoever decides payments confirms an address, and an accountant does while co-signing is on (accountant co-sign CS6).
+    const role = auth.membership.role;
+    if (!can(role, "approval.decide") && !(await cosignsNow(role))) return { ok: false, message: `Your role in this workspace (${role}) cannot do that.` };
     const id = counterpartyIdSchema.safeParse(formString(formData, "counterpartyId"));
     if (!id.success) return { ok: false, message: "Counterparty not found." };
     const shownChain = formString(formData, "chain");

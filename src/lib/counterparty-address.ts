@@ -1,7 +1,7 @@
 import { askContactAboutAddressChange, counterpartyFrozen } from "./address-change-check";
 import { CHECKSUM_MISMATCH, addressProblem, ARC_ADDRESS, NOT_AN_ARC_ADDRESS } from "./address-checksum";
 import { isAddressName, NAME_NOT_ADDRESS } from "./ens-words";
-import { approversBesides } from "./approval-policy";
+import { billApproversBesides } from "./approval-policy";
 import { currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
@@ -305,7 +305,8 @@ export async function confirmCounterpartyAddress(input: {
     earlier = facts.earlier;
     if (giver === null) giverUnknown = true;
     else if (giver === input.actorId) {
-      if ((await approversBesides([giver])) > 0) throw new CounterpartyAddressError("giver_confirms");
+      // A co-signing accountant confirms addresses too, so is someone else here (accountant co-sign CS6).
+      if ((await billApproversBesides([giver])) > 0) throw new CounterpartyAddressError("giver_confirms");
       soloConfirmation = true;
     }
   } else if (input.via === "confirm") {

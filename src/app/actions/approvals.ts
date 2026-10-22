@@ -3,11 +3,15 @@
 import "server-only";
 
 import { z } from "zod";
+import { ApprovalError, approveAndPay } from "@/lib/agent/approvals";
+import { cosignsNow } from "@/lib/approval-policy";
 import { authorize } from "@/lib/auth/authorize";
+import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { consoleActor } from "@/lib/commands/actor";
 import { addPayableDetails, approvePayable, rejectPayable, returnPayable } from "@/lib/commands/payables";
 import { inOrg } from "@/lib/dal/scope";
 import { invoiceDetailsInputSchema, invoiceFormRefusal } from "@/lib/intake-validation";
+import { COSIGN_OFF, COSIGNED } from "@/lib/two-approvals";
 import type { PaymentReceipt } from "@/lib/payment-receipt";
 import { consoleAnswer } from "./command-result";
 
@@ -66,6 +70,31 @@ export async function returnInvoiceAction(_previous: ApprovalActionResult, formD
     const parsed = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
     if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
     return consoleAnswer(await returnPayable(consoleActor(auth), { invoiceId: parsed.data, ...reasonOf(formData) }));
+  });
+}
+
+/**
+ * An accountant's co-sign of a bill above the figure for two approvals (docs/superpowers/specs/2026-10-22-accountant-cosign-design.md
+ * CS2, CS3, CS7): for `approval.cosign`, the accountant's alone, and only while an owner has turned co-signing on. It runs
+ * every check an approval does with the address the card showed, records the co-sign, and pays nothing: an owner's,
+ * admin's or approver's Approve and pay then pays it.
+ */
+export async function cosignInvoiceAction(_previous: ApprovalActionResult, formData: FormData): Promise<ApprovalActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "approval.cosign");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const parsed = invoiceIdSchema.safeParse(formString(formData, "invoiceId"));
+    if (!parsed.success) return { ok: false, message: "That invoice is not waiting for a decision." };
+    if (!(await cosignsNow(auth.membership.role))) return { ok: false, message: COSIGN_OFF };
+    try {
+      await approveAndPay({ actorId: auth.user.id, invoiceId: parsed.data, shownAddress: formString(formData, "address"), cosign: true });
+    } catch (error) {
+      if (error instanceof ApprovalError) return { ok: false, message: error.message };
+      console.error("co-sign failed", error instanceof Error ? error.message : "unknown error");
+      return { ok: false, message: "That did not work. Try again in a moment." };
+    }
+    revalidateOrgPages();
+    return { ok: true, message: COSIGNED };
   });
 }
 

@@ -177,7 +177,7 @@ Owners and admins change a counterparty's address with **Edit address** in its r
 Changing where a counterparty is paid is how payments get redirected to the wrong wallet. So after a change, the row reads **Confirm address** and says "not yet confirmed", and the agent holds every payment to that counterparty, whatever the amount, until a person confirms the new address. There are two ways to confirm it:
 
 - **Approve and pay** on a held payment to it. The approval card shows where the money goes, after "Pays to". If the address changed after the page loaded, the approval is refused with "This counterparty's address changed after this page loaded. Check the new address and try again." With the [payee lock](#payee-lock) on, approving no longer confirms the address.
-- **Confirm address** in the counterparty's row. Owners, admins and approvers see it. It asks how you checked the address, as [Payee lock](#payee-lock) describes. The row and the confirmation name the chain the address is on, and a chain that changed after the page loaded is refused like a changed address. A payment the agent held for the change goes back to it, and it decides that payment again, with every check, in the cycle the confirmation starts.
+- **Confirm address** in the counterparty's row. Owners, admins and approvers see it, and accountants while an owner lets them co-sign (see [Two approvals above a figure](#two-approvals-above-a-figure)). It asks how you checked the address, as [Payee lock](#payee-lock) describes. The row and the confirmation name the chain the address is on, and a chain that changed after the page loaded is refused like a changed address. A payment the agent held for the change goes back to it, and it decides that payment again, with every check, in the cycle the confirmation starts.
 
 <Screenshot
   src="/docs/guides/first-payment-address.png"
@@ -595,6 +595,14 @@ An owner can make larger payments need two people. In **Settings**, under **Two 
 - **On Contractors**, a held milestone above the figure says the same, and **Pay now** reads **Approve** until the approval that pays it.
 - **An approval is of one payment.** It holds the amount, the currency and the payee's address. If any of them changes, or the person who gave it can no longer approve payments, it no longer counts. **Reject**, **Return to agent** and **Close without paying** clear it. A transfer that fails needs two approvals again.
 - **Who gives them.** As many of the two approvals as can must come from people who neither entered the payment nor gave a new payee's address. Those two people give the rest only when no one else can approve. In a workspace with one person who can approve, the button is disabled with "Needs a second approver" beside it: nothing above the figure is paid until the figure is raised or someone else can approve.
+- **Your accountant as the second person.** Under the figure, an owner can choose **Let accountants co-sign**.
+  - An accountant then sees **Co-sign** on a bill above the figure. It records one of the two approvals, signed as `approval_given` with `cosign: true`, and says "Co-signed. An owner, admin or approver's Approve and pay pays it."
+  - A co-sign never pays, even when another approval stands: the approval that pays is always an owner's, admin's or approver's.
+  - Accountants count among the people who can approve bills. So a founder alone with their accountant can turn two approvals on, and pay a bill above the figure once the accountant co-signs it.
+  - Accountants also confirm changed addresses, and a co-signing accountant counts as someone else, so whoever entered an address no longer confirms it alone.
+  - Turning it off, or changing the person's role, makes their co-signs count for nothing.
+  - Milestones are not co-signed.
+  - Each change is signed as `accountant_cosign_changed`.
 - **Raising it or turning it off** brings payments held for two approvals back to the agent within a minute. **Turn off** asks first: "Turn off two approvals?"
 - **Try a figure first.** **Try it on past decisions** counts the payments the agent made on its own that a lower figure would have put before two people: see [Try a limit before you change it](/docs/guides/try-a-rule).
 - **On Arc mainnet** a workspace starts with two approvals above 100 USDC and keeps a figure: the section offers no **Turn off**, and says "A workspace on Arc mainnet keeps two approvals above a figure. Raise it to let one person pay more."

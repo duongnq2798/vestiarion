@@ -1,10 +1,10 @@
 "use client";
 
 import { invoiceAskedFor, payToDiffers } from "@/lib/invoice-pay-to-rules";
-import { Banknote, Undo2, X } from "lucide-react";
+import { Banknote, PenLine, Undo2, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useState, type FormEvent } from "react";
-import { approveInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
+import { approveInvoiceAction, cosignInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { AddDetailsDialog } from "@/components/AddDetailsDialog";
 import { ExceptionLine } from "@/components/ExceptionLine";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
@@ -33,13 +33,14 @@ import type { ExceptionFacts } from "@/lib/exceptions";
 import { utcDay, utcMinute } from "@/lib/copy";
 import { chainById, homeChain, networkOfChain, paidAcrossChains } from "@/lib/payee-chains";
 import { CHECK_FIRST_LABEL, checkFirstTitle, checksFirst, payActionOf } from "@/lib/payment-exceptions";
-import { approveFirstDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
+import { approveFirstDescription, cosignDescription, mayApproveNow, onlyApproverOfTwo, SECOND_APPROVAL_PAYS, twoApprovalsLine } from "@/lib/two-approvals";
 import type { VerdictView } from "@/lib/verdict-view";
 
 const INITIAL: ActionResult = { ok: false, message: "" };
 const approve = withPaymentReceipt(approveInvoiceAction);
 const reject = withSuccessToast(rejectInvoiceAction);
 const giveBack = withSuccessToast(returnInvoiceAction);
+const cosign = withSuccessToast(cosignInvoiceAction);
 
 /**
  * The card's cost lines (approval total cost TC1, TC2): the invoice, a discount that still applies, the route's fee, what
@@ -210,6 +211,9 @@ const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfini
  * the email in `memberEmails`, and Approve and pay reads Approve until the viewer's approval would be the second one,
  * which pays it. Whoever gave the first approval cannot give the second (two approvals T8).
  *
+ * An accountant while the workspace's accountants co-sign (`canCosign`) gets Co-sign on a payment above the figure, which
+ * records one of its two approvals and sends nothing, and the card then says they co-signed it (accountant co-sign CS8).
+ *
  * An owner or admin (`canEdit`) may instead add what the payable is missing —
  * its purchase order, or its goods marked received — while it waits and no
  * payment was sent for it; the agent then decides it again, and until it does
@@ -227,10 +231,13 @@ export default function ApprovalCard({
   verdict,
   exception,
   viewerEmail,
+  canCosign = false,
 }: {
   orgSlug: string;
   payable: WaitingPayable;
   canDecide: boolean;
+  /** The viewer is an accountant and the workspace's accountants co-sign (accountant co-sign CS2). */
+  canCosign?: boolean;
   viewerId: string;
   sandbox: boolean;
   /** The viewer is the only member of the workspace who may approve payments. */
@@ -385,6 +392,8 @@ export default function ApprovalCard({
             )}
             <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} ownAddress={ownAddress} canAddDetails={canAddDetails} />
           </>
+        ) : canCosign && two ? (
+          <CosignControl orgSlug={orgSlug} payable={payable} viewerId={viewerId} />
         ) : exception && exception.owners.length > 0 ? (
           // Someone who cannot decide it still has a next step: who to ask (deal cash readiness E5).
           <CardFooter>
@@ -396,6 +405,41 @@ export default function ApprovalCard({
         ) : null}
       </article>
     </Card>
+  );
+}
+
+/** An accountant's Co-sign (accountant co-sign CS8): one of the two approvals, recorded behind a confirmation, never paid. */
+function CosignControl({ orgSlug, payable, viewerId }: { orgSlug: string; payable: WaitingPayable; viewerId: string }) {
+  const form = useActionForm(cosign, INITIAL);
+  const formId = `cosign-${payable.id}`;
+  if (payable.twoApprovals?.approvals.some((approval) => approval.by === viewerId)) {
+    return (
+      <CardFooter>
+        <p className="text-sm text-ink-2">You co-signed it. An owner, admin or approver&apos;s Approve and pay pays it.</p>
+      </CardFooter>
+    );
+  }
+  return (
+    <CardFooter className="flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <FormMessage tone={form.state.message ? (form.state.ok ? "success" : "error") : "neutral"}>{form.state.message}</FormMessage>
+      <form id={formId} className="contents" {...form.formProps}>
+        <input type="hidden" name="orgSlug" value={orgSlug} />
+        <input type="hidden" name="invoiceId" value={payable.id} />
+        <input type="hidden" name="address" value={payable.address ?? ""} />
+      </form>
+      <ConfirmDialog
+        formId={formId}
+        tone="primary"
+        trigger={
+          <Button size="touch" icon={<PenLine />} loading={form.pending} className="max-sm:w-full">
+            Co-sign
+          </Button>
+        }
+        title={`Co-sign ${payable.counterpartyName}'s invoice?`}
+        description={cosignDescription(`${fmt(payable.amount)} ${payable.currency ?? "USDC"}`, payable.counterpartyName)}
+        confirmLabel="Co-sign"
+      />
+    </CardFooter>
   );
 }
 

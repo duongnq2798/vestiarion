@@ -13,7 +13,7 @@ import type { WaitingPayable } from "@/lib/agent/approvals";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/app/actions/verdicts", () => ({ giveVerdictAction: vi.fn() }));
 vi.mock("@/app/actions/approvals", () => ({
-  approveInvoiceAction: vi.fn(),
+  approveInvoiceAction: vi.fn(), cosignInvoiceAction: vi.fn(),
   rejectInvoiceAction: vi.fn(),
   returnInvoiceAction: vi.fn(),
   addInvoiceDetailsAction: vi.fn(),

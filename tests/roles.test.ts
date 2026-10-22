@@ -12,6 +12,7 @@ const TABLE: Array<[Permission, Row]> = [
   ["records.write",    { owner: true,  admin: true,  approver: false, accountant: false, viewer: false }],
   ["receivables.reconcile", { owner: true, admin: true, approver: false, accountant: true, viewer: false }],
   ["payables.reconcile", { owner: true, admin: true, approver: false, accountant: true, viewer: false }],
+  ["approval.cosign", { owner: false, admin: false, approver: false, accountant: true, viewer: false }],
   ["agent.run_cycle",  { owner: true,  admin: true,  approver: false, accountant: false, viewer: false }],
   ["agent.resume",     { owner: true,  admin: true,  approver: false, accountant: false, viewer: false }],
   ["agent.budget",     { owner: true,  admin: true,  approver: false, accountant: false, viewer: false }],
@@ -46,7 +47,11 @@ describe("can — the §7 permission map", () => {
   });
 
   it("gives the accountant nothing an admin does not hold, so an admin may invite one", () => {
-    for (const [permission, row] of TABLE) if (row.accountant) expect(row.admin, permission).toBe(true);
+    // A co-sign is one of a bill's two approvals and never pays: part of approval.decide, which an admin holds (accountant
+    // co-sign CS7).
+    const partOf: Record<string, string> = { "approval.cosign": "approval.decide" };
+    const admin = (permission: string) => TABLE.find(([name]) => name === permission)?.[1].admin === true;
+    for (const [permission, row] of TABLE) if (row.accountant) expect(admin(permission) || admin(partOf[permission] ?? ""), permission).toBe(true);
   });
 });
 

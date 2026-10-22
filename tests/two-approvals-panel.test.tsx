@@ -14,7 +14,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 
 // Try it on past decisions, inside the setting's form (policy replay §2): a server action, as the form's own.
 vi.mock("@/app/actions/policy-replay", () => ({ tryRuleAction: vi.fn() }));
-vi.mock("@/app/actions/approval-policy", () => ({ setTwoApprovalsAction: vi.fn() }));
+vi.mock("@/app/actions/approval-policy", () => ({ setTwoApprovalsAction: vi.fn(), setAccountantCosignAction: vi.fn() }));
 
 const html = (node: ReactElement) => renderToStaticMarkup(<TooltipProvider>{node}</TooltipProvider>);
 const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/&#x27;/g, "'").trim();
@@ -27,6 +27,41 @@ const panel = (above: number | null, options: { approvers?: number; canChange?: 
       keepsFigure={options.keepsFigure ?? false}
     />
   );
+
+describe("Accountants co-sign (accountant co-sign CS1, CS8)", () => {
+  const cosign = (on: boolean, options: { canChange?: boolean; cosigners?: number; ready?: boolean } = {}) =>
+    text(
+      html(
+        <TwoApprovalsPanel
+          orgSlug="northstar"
+          status={{ above: 500, approvers: 1 + (options.cosigners ?? 0), cosigners: options.cosigners ?? 0, cosign: { on, ready: options.ready ?? true } }}
+          canChange={options.canChange ?? true}
+          keepsFigure={false}
+        />
+      )
+    );
+
+  it("says what co-signing lets an accountant do and never do, and offers the owner to turn it on", () => {
+    const words = cosign(false);
+    expect(words).toContain("Accountants co-sign: off.");
+    expect(words).toContain(
+      "With it on, an accountant gives one of the two approvals of a bill above the figure, and confirms changed addresses on Counterparties. A co-sign sends nothing: an owner's, admin's or approver's Approve and pay pays it. Contractors' milestones are not co-signed."
+    );
+    expect(words).toContain("Let accountants co-sign");
+  });
+
+  it("counts the co-signing accountants among who can approve, and offers to turn it off", () => {
+    const words = cosign(true, { cosigners: 1 });
+    expect(words).toContain("Accountants co-sign: on.");
+    expect(words).toContain("2 people can approve payments here, 1 of them an accountant who co-signs bills.");
+    expect(words).toContain("Turn off co-signing");
+  });
+
+  it("leaves the switch to an owner, and the section out before migration 0138", () => {
+    expect(cosign(false, { canChange: false })).not.toContain("Let accountants co-sign");
+    expect(cosign(false, { ready: false })).not.toContain("Accountants co-sign");
+  });
+});
 
 describe("TwoApprovalsPanel", () => {
   it("is a section titled Two approvals", () => {
