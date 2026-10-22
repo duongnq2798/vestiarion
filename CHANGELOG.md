@@ -14,6 +14,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **What a payment costs, on the approval card.** Before you approve, each card waiting for Approve and pay shows the
+  invoice, an early-payment discount that still applies, the CCTP or Gateway fee for a payee on another chain, what
+  leaves the wallet in all, and what the payee receives. On Arc mainnet a note gives Arc's network fee, about 0.00319
+  USDC a transaction.
+
 - **Receipts say what the payee got, and save as a PDF.** A shared receipt now lists its amounts: the invoice and
   its number, what an early-payment discount took off, the route's fee, that no fee was taken from the payee's
   payment, what left the business, and what the payee received, read from their chain. **Save as PDF** saves the receipt alone,

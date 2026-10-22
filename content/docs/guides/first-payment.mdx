@@ -523,9 +523,19 @@ Each of these reasons is optional, one line, and never stops what you are doing.
 
 <Screenshot
   src="/docs/guides/first-payment-approval.png"
-  alt="An approval card on the Approvals page: Bluebird Logistics, due Oct 9, 2026, 8.00 USDC, marked Held, with the reasoning: Held 8.00 USDC for Bluebird Logistics: no receipt is recorded for PO-2213, so the three-way match is incomplete, and below it Pays to and the counterparty's address. The buttons are Approve and pay, Reject and Return to agent."
+  alt="An approval card on the Approvals page: Bluebird Logistics, due Oct 9, 2026, 8.00 USDC, marked Held, with the reasoning: Held 8.00 USDC for Bluebird Logistics: no receipt is recorded for PO-2213, so the three-way match is incomplete, and below it Pays to and the counterparty's address, then a box of what it would cost: Invoice 8.00 USDC, Leaves the operating wallet 8.00 USDC, and Bluebird Logistics receives 8.00 USDC. The buttons are Approve and pay, Reject and Return to agent."
   caption="A held payable, with the three decisions a person can make."
 />
+
+Under "Pays to", each card waiting for **Approve and pay** shows what it would cost if you chose it now:
+
+- **Invoice**: the invoice's amount.
+- **Early-payment discount**: its percent, its deadline and what it takes off, only while it still applies.
+- **CCTP fee, about** or **Gateway fee, about**: for a payee on another chain, the fee of the route it would take, or "not read just now".
+- **Leaves the operating wallet**, or **Leaves the Gateway balance** for a Gateway payout: what is paid and the fee, in all.
+- What the payee **receives**, on their chain. For a CCTP payout, "at least" that much: the part of the fee Circle does not charge reaches the payee too.
+
+On Arc mainnet, where your wallets pay their own gas, a note adds Arc's network fee, about 0.00319 USDC a transaction, which is not read until the transfer is made. On Arc testnet Circle pays it. The box is not shown for a payment already sent or in flight, one the agent is paying, or a payout to a bank account, whose card says what the vendor receives in pesos.
 
 Where payments are real, **Approve and pay** also refuses a payee with no address yet: "This payee has no payment address yet. Add it on Counterparties, or ask them for it with a one-time link."
 

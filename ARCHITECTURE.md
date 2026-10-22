@@ -721,7 +721,13 @@ A sandbox still simulates the payee's address (`payoutAddress`).
 `choosePayoutRoute` (`src/lib/payout-route.ts`) is the one rule for the AP stage and Approve and pay: Gateway when its
 balance covers the amount and its fee and it costs no more than CCTP, CCTP otherwise, and a route an earlier attempt took
 is kept. `payoutFundsShort` counts what leaves from where it leaves: a CCTP payout's amount and fee from the operating
-wallet, a Gateway payout's from the Gateway balance. The Approvals card names the route and its fee.
+wallet, a Gateway payout's from the Gateway balance. The Approvals card names the route and its fee, and its cost box
+(`approvalCost`, `src/lib/approval-cost.ts`, docs/superpowers/specs/2026-10-22-approval-total-cost-design.md) adds them
+up as Approve and pay would pay now: the invoice, a discount `amountToPay` still applies, the route's fee as read for the
+listing, what leaves the balance that pays it, and what the payee receives ("at least" for CCTP). Arc's network fee is a
+note at `ARC_FEE_USD`, never added (it is not read before the transfer), only where the network's wallets are EOAs
+that pay their own gas (`walletAccountType`), and never for Gateway. The box is not shown for a payment already
+sent, in flight, processing, or a bank payout.
 
 **A payee with no wallet creates one with a passkey** (`docs/superpowers/specs/2026-10-05-payee-passkey-wallet-design.md`).
 - **On a payee link:** the address field stays the primary path. On Arc testnet, when
