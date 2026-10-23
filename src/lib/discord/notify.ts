@@ -1,11 +1,10 @@
 import type { ActivityItem } from "../agent-activity";
 import { readAgentActivity } from "../agent-activity-read";
-import { usdcValueOfLatestDecision } from "../agent/second-approval";
-import { readAccountantCosign, readTwoApprovalsAbove } from "../approval-policy";
 import { siteOrigin } from "../auth/env";
 import { currentOrgId } from "../context";
-import { db, platformDb, unwrap } from "../dal";
-import { buildWaitingNotice, NOTICE_MAX_BILLS, type NoticePolicy, type WaitingBill } from "../notifications/waiting-notice";
+import { platformDb, unwrap } from "../dal";
+import { noticePolicy, waitingBills, withUsdcValues } from "../notifications/waiting-bills";
+import { buildWaitingNotice } from "../notifications/waiting-notice";
 import type { NoticeLine } from "../payment-notices";
 import { masterKeysFromEnv, type MasterKey } from "../secrets";
 import { postToDiscord, webhookGone, type DiscordResult } from "./api";
@@ -37,88 +36,6 @@ export interface DiscordNotifyDeps {
   keys?: MasterKey[];
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
-}
-
-/** As Slack's notifier posts them: held or flagged, or asked for details (a purchase order, a receipt) a person adds. */
-const WAITING = ["held", "flagged", "awaiting_info"];
-
-interface BillRow {
-  id: string;
-  amount: string | number;
-  currency: string | null;
-  status: string;
-  direction: string;
-  agent_reasoning: string | null;
-  counterparties: { name: string } | null;
-}
-
-const messageOf = (error: unknown) => (error instanceof Error ? error.message : "unknown error");
-
-/**
- * The payables the agent stopped for a person among what was read, still held or flagged now, in the order it stopped
- * them: a bill a person decided since is left out, and so is a payment held for a verdict in shadow mode, which the
- * activity gives no `invoiceId`.
- */
-async function waitingBills(items: readonly ActivityItem[]): Promise<WaitingBill[]> {
-  const ids = [
-    ...new Set(items.filter((item) => item.tone === "stopped" && item.invoiceId).map((item) => item.invoiceId as string)),
-  ];
-  if (ids.length === 0) return [];
-  const rows = unwrap(
-    await db().from("invoices").select("id, amount, currency, status, direction, agent_reasoning, counterparties(name)").in("id", ids)
-  ) as unknown as BillRow[];
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  return ids.flatMap((id): WaitingBill[] => {
-    const row = byId.get(id);
-    if (!row || row.direction !== "payable" || !WAITING.includes(row.status)) return [];
-    return [
-      {
-        id,
-        payee: row.counterparties?.name ?? "a payee",
-        amount: Number(row.amount),
-        currency: row.currency === "EURC" ? "EURC" : "USDC",
-        status: row.status as WaitingBill["status"],
-        reasoning: row.agent_reasoning,
-      },
-    ];
-  });
-}
-
-/**
- * The figure for two approvals and whether accountants co-sign, for what the notice says each bill needs. A rule that
- * cannot be read leaves that out of the notice rather than stop it: the bills still wait, and Approvals says the rest.
- */
-async function noticePolicy(): Promise<NoticePolicy> {
-  let twoApprovalsAbove: number | null = null;
-  try {
-    twoApprovalsAbove = await readTwoApprovalsAbove(db());
-  } catch (error) {
-    console.error("discord: the figure for two approvals was not read", currentOrgId(), messageOf(error));
-  }
-  let accountantCosigns = false;
-  if (twoApprovalsAbove !== null) {
-    try {
-      accountantCosigns = (await readAccountantCosign(db())).on;
-    } catch (error) {
-      console.error("discord: accountant co-sign was not read", currentOrgId(), messageOf(error));
-    }
-  }
-  return { twoApprovalsAbove, accountantCosigns };
-}
-
-/** Each listed EURC bill's USDC value as the agent last weighed it, where a figure makes it matter (two approvals T2). */
-async function withUsdcValues(bills: WaitingBill[], policy: NoticePolicy): Promise<WaitingBill[]> {
-  if (policy.twoApprovalsAbove === null) return bills;
-  return Promise.all(
-    bills.map(async (bill, index) => {
-      if (bill.currency !== "EURC" || index >= NOTICE_MAX_BILLS) return bill;
-      try {
-        return { ...bill, usdcValue: await usdcValueOfLatestDecision(bill.id) };
-      } catch {
-        return bill;
-      }
-    })
-  );
 }
 
 /** What Settings shows of a post Discord did not take: its status and code, never the URL. */
@@ -189,7 +106,7 @@ export async function sendDiscordWaiting(deps: DiscordNotifyDeps = {}): Promise<
   }
 
   const workspace = unwrap(await platformDb().from("orgs").select("slug, name").eq("id", orgId).single<{ slug: string; name: string }>());
-  const policy = await noticePolicy();
+  const policy = await noticePolicy("discord");
   const notice = buildWaitingNotice(await withUsdcValues(bills, policy), policy);
   const content = waitingMessage(workspace, notice, deps.origin ?? siteOrigin());
   const url = webhookUrlOf(connection, deps.keys ?? masterKeysFromEnv());
