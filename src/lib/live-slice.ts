@@ -280,8 +280,9 @@ export async function startLiveSlice(input: {
           skipped.push({ counterpartyId: row.id, name: row.name, reason: "not_added" });
         }
       }
-      // The function checks the owner owns both workspaces and that each is an accountant of the shadow one; the role is
-      // always accountant. One that cannot be added is named, and the owner can invite them on its Members.
+      // The function checks the owner owns both workspaces, that this one is the slice just made from the shadow one, and
+      // that each is an accountant of the shadow one; the role is always accountant. One that cannot be added is named,
+      // and the owner can invite them on its Members.
       for (const accountantId of accountantIds) {
         const added = await platformDb().rpc("add_live_slice_accountant", {
           p_from_org_id: sourceOrgId,

@@ -272,25 +272,75 @@ describe("add_live_slice_accountant (AC4)", () => {
   const bring = (fromOrg: string, toOrg: string, actor: string, userId: string) =>
     call<{ added: boolean }>("select public.add_live_slice_accountant($1, $2, $3, $4) as added", [fromOrg, toOrg, actor, userId]);
 
+  /** A live slice as startLiveSlice opens it: made just now by `owner` on Arc mainnet, through create_org. */
+  async function sliceOf(owner: string, slug: string): Promise<string> {
+    const orgId = await ownedBy(owner, slug);
+    await db.query("update public.orgs set network = 'arc-mainnet' where id = $1", [orgId]);
+    return orgId;
+  }
+
   it("adds an accountant of the shadow workspace to its owner's live slice, as accountant", async () => {
     const shadow = await ownedBy(client, "slice-from");
-    await db.query("insert into public.memberships (org_id, user_id, role, invited_by) values ($1, $2, 'accountant', $3)", [shadow, accountant, client]);
-    const live = await ownedBy(client, "slice-to");
+    await db.query("insert into public.memberships (org_id, user_id, role, invited_by) values ($1, $2, 'accountant', $3), ($1, $4, 'accountant', $3)", [shadow, accountant, client, books]);
+    const live = await sliceOf(client, "slice-to");
     expect(await bring(shadow, live, client, accountant)).toEqual([{ added: true }]);
     expect(await roleIn(live, accountant)).toEqual({ role: "accountant", invited_by: client });
     await expect(bring(shadow, live, client, accountant)).rejects.toThrow(/already_a_member/);
+    // A second accountant comes along beside the first.
+    expect(await bring(shadow, live, client, books)).toEqual([{ added: true }]);
+    expect(await roleIn(live, books)).toEqual({ role: "accountant", invited_by: client });
   });
 
   it("refuses anyone but an owner of both, and anyone but an accountant there", async () => {
     const shadow = await ownedBy(client, "slice-refused-from");
     await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'accountant'), ($1, $3, 'viewer')", [shadow, accountant, stranger]);
-    const live = await ownedBy(client, "slice-refused-to");
-    const notTheirs = await ownedBy(stranger, "slice-not-theirs");
+    const live = await sliceOf(client, "slice-refused-to");
+    const notTheirs = await sliceOf(stranger, "slice-not-theirs");
     await expect(bring(shadow, notTheirs, client, accountant)).rejects.toThrow(/not_owner/);
     await expect(bring(shadow, live, stranger, accountant)).rejects.toThrow(/not_owner/);
     await expect(bring(shadow, live, client, stranger)).rejects.toThrow(/not_an_accountant/);
     expect(await roleIn(live, stranger)).toBeUndefined();
     expect(await roleIn(notTheirs, accountant)).toBeUndefined();
+  });
+
+  it("adds only to the slice just opened from the shadow workspace, never to another workspace of its owner", async () => {
+    const shadow = await ownedBy(client, "slice-bound-from");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'accountant'), ($1, $3, 'accountant')", [shadow, accountant, books]);
+    const refused = async (orgId: string, from = shadow) => {
+      await expect(bring(from, orgId, client, accountant)).rejects.toThrow(/not_live_slice/);
+      expect(await roleIn(orgId, accountant)).toBeUndefined();
+    };
+
+    // An older workspace of theirs on Arc mainnet.
+    const older = await sliceOf(client, "slice-bound-older");
+    await db.query("update public.orgs set created_at = now() - interval '2 hours' where id = $1", [older]);
+    await refused(older);
+    // A new one on Arc testnet, as the shadow workspace is.
+    await refused(await ownedBy(client, "slice-bound-testnet"));
+    // One someone else made, where they are an owner too.
+    const coOwned = await sliceOf(stranger, "slice-bound-co-owned");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'owner')", [coOwned, client]);
+    await refused(coOwned);
+    // One someone else made and handed to them, with no one else in it now.
+    const handed = await sliceOf(stranger, "slice-bound-handed");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'owner')", [handed, client]);
+    await db.query("delete from public.memberships where org_id = $1 and user_id = $2", [handed, stranger]);
+    await refused(handed);
+    // A new one of theirs on Arc mainnet with someone in it who did not come from the shadow workspace.
+    const peopled = await sliceOf(client, "slice-bound-peopled");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'viewer')", [peopled, stranger]);
+    await refused(peopled);
+    // Or with an accountant of the shadow workspace in it under another role, which bringing along never gives.
+    const promoted = await sliceOf(client, "slice-bound-promoted");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'admin')", [promoted, books]);
+    await refused(promoted);
+    // Nor from a workspace on Arc mainnet, which never opens a slice (startLiveSlice refuses it).
+    const mainnetFrom = await sliceOf(client, "slice-bound-mainnet-from");
+    await db.query("insert into public.memberships (org_id, user_id, role) values ($1, $2, 'accountant')", [mainnetFrom, accountant]);
+    const live = await sliceOf(client, "slice-bound-live");
+    await refused(live, mainnetFrom);
+    // The slice itself takes them.
+    expect(await bring(shadow, live, client, accountant)).toEqual([{ added: true }]);
   });
 });
 

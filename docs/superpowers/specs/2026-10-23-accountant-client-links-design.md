@@ -48,14 +48,17 @@ There is no second copy of `create_org`.
 **AC4. Going live keeps the accountant.** When the client takes the workspace live, the live slice (`src/lib/live-slice.ts`)
 creates the Arc mainnet workspace with only the owner. Now the go-live step offers "Bring your accountant <email>
 along", on by default, for each accountant member of the testnet workspace. When it is on:
-- the accountant becomes a member of the new workspace with the role `accountant`;
+- the accountant becomes a member of the new workspace with the role `accountant`, and only of that one: the database
+  checks it is on Arc mainnet, made by the owner within the hour from a workspace on Arc testnet, and holds no one but
+  the owner and accountants already brought along;
 - this is signed there as `member_joined { by, role: "accountant", via: "live_slice", grantedBy }`, `by` the accountant.
 
 The owner can turn it off for any of them. One who could not be added is named by email in the result. Before migration
 0143 runs, no accountant is offered.
 
 **AC5. Attribution.**
-- The new workspace's `org_attribution` gets `utm_campaign: "accountant_client"`, with no view redefined.
+- The new workspace's `org_attribution` gets `utm_campaign: "accountant_client"`, with no view redefined. Only the claim
+  writes it: the first-touch cookie drops that campaign, in any case, from an address or a cookie sent back.
 - `/admin/growth` counts workspaces from accountant links with a tile, read through the existing growth read.
 
 **AC6. The accountant's view.** The new workspace appears in their console at once, with its first-steps checklist. The

@@ -66,7 +66,7 @@ export const DEFINITIONS: readonly Definition[] = [
     calculation: "Customer workspaces whose first touch carries utm_campaign accountant_client: a client opened it from an accountant's one-time link, and the accountant joined it as accountant (accountant client links AC5). Of those, the ones with the agent's decision on a real bill.",
     window: WORKSPACES_WINDOW,
     dedupe: `${CUSTOMERS} Each workspace once.`,
-    limits: "A workspace whose accountant was not added (the link used, expired or revoked at that moment) keeps the first touch of the client's own visit instead, and is not counted. The link's first touch replaces any campaign that brought the client before.",
+    limits: "A workspace whose accountant was not added (the link used, expired or revoked at that moment) keeps the first touch of the client's own visit instead, and is not counted. The link's first touch replaces any campaign that brought the client before. Only the link's claim writes that campaign: one a visitor puts in an address or in the first-touch cookie is dropped.",
   },
   {
     metric: "Median minutes to first decision",

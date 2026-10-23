@@ -20,7 +20,9 @@
 -- accountant with the role accountant (never a parameter), marks the link used and records the workspace's first touch
 -- as utm_campaign accountant_client, which growth_workspaces (0099) already reads.
 -- add_live_slice_accountant(p_from_org_id, p_org_id, p_actor, p_user_id): going live keeps the accountant (AC4). An
--- owner of both workspaces adds an accountant of the shadow workspace to the live slice's, as accountant.
+-- owner of both workspaces adds an accountant of the shadow workspace to the live slice's, as accountant. p_org_id must
+-- be that slice: on Arc mainnet, made by the actor within the hour, from a workspace on Arc testnet, and holding no one
+-- but the actor and accountants already brought along, so no other workspace of theirs takes an accountant this way.
 --
 -- No view and no function of an earlier migration is redefined.
 
@@ -194,6 +196,18 @@ as $$
 begin
   if public.member_role(p_from_org_id, p_actor) is distinct from 'owner' or public.member_role(p_org_id, p_actor) is distinct from 'owner' then
     raise exception 'not_owner: only an owner of both workspaces brings an accountant along';
+  end if;
+  -- Only into the live slice just opened from the shadow workspace: one on Arc mainnet the actor made (create_org) within
+  -- the hour, from one on Arc testnet, with no one in it yet but them and accountants brought along from the shadow
+  -- workspace. Never an older workspace of theirs, one someone else made, or one anyone else has joined.
+  if not exists (select 1 from public.orgs o where o.id = p_from_org_id and o.network = 'arc-testnet')
+     or not exists (select 1 from public.orgs o
+                     where o.id = p_org_id and o.created_by = p_actor and o.network = 'arc-mainnet'
+                       and o.created_at > now() - interval '1 hour')
+     or exists (select 1 from public.memberships m
+                 where m.org_id = p_org_id and m.user_id <> p_actor
+                   and (m.role <> 'accountant' or public.member_role(p_from_org_id, m.user_id) is distinct from 'accountant')) then
+    raise exception 'not_live_slice: that workspace is not the live slice just opened from the shadow workspace';
   end if;
   if public.member_role(p_from_org_id, p_user_id) is distinct from 'accountant' then
     raise exception 'not_an_accountant: that person is not an accountant of the shadow workspace';

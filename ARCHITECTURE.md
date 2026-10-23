@@ -1568,10 +1568,12 @@ disagrees with every decision.
   ... along", ticked, and `startLiveSlice` gets the ones left ticked as `accountantIds`. Before `0143` runs, the report
   offers no accountant (`sliceAccountants` reads `clientLinksAvailable` first), rather than one that always fails. For
   each, migration `0143`'s `add_live_slice_accountant(p_from_org_id, p_org_id, p_actor, p_user_id)` checks the actor owns
-  both workspaces and the person is an accountant of the shadow one, and adds them as `accountant`; the new workspace
-  signs `member_joined { by, role: "accountant", via: "live_slice", grantedBy }`. One that fails is named in the result
-  by the email this workspace's members give (`listMembers`, best effort; one no longer a member is counted), and the
-  slice opens all the same.
+  both workspaces, that the new one is the slice (on Arc mainnet, made by the actor within the hour from one on Arc
+  testnet, and holding no one but them and accountants already brought along), so no other workspace of theirs takes
+  an accountant this way, and that the person is an accountant of the shadow one, and adds them as `accountant`; the
+  new workspace signs `member_joined { by, role: "accountant", via: "live_slice", grantedBy }`. One that fails is named
+  in the result by the email this workspace's members give (`listMembers`, best effort; one no longer a member is
+  counted), and the slice opens all the same.
 - **What the business really paid** (`docs/superpowers/specs/2026-10-10-actual-payments-design.md`). An owner or admin
   (`records.write`, as for adding an invoice) records how the business paid a payable outside Vestiarion: the day, the
   amount and currency as paid (the bill's own by default), the method (bank transfer, card, cash, other), a reference and
@@ -4062,6 +4064,8 @@ came from the loop (`growthMetrics().fromLoop`). Member emails carry no link.
 write-once as `record_org_attribution` is; the join action then skips the cookie's first touch. `growth_workspaces` is not
 redefined: it already returns the attribution, and /admin/growth's **From accountants** tile counts customer workspaces
 with that campaign (`growthMetrics().fromAccountants`). A claim that fails records the cookie's first touch instead.
+Only the claim gives a workspace that campaign: `firstTouchFrom` and `parseFirstTouch` drop a `utm_campaign` of
+`accountant_client`, in any case, from an address or a cookie, so a visitor cannot put a workspace in the tile.
 
 **The founder dashboard** at `/admin/growth` is for people on `platform_team` only. `growthTeamUser()`
 (`src/lib/growth/gate.ts`) asks `growth_team_member(p_user)` on every call and fails closed; the page answers anyone
