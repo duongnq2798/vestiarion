@@ -67,6 +67,7 @@ describe("a counterparty page's footer", () => {
     ["pay", "pay_link"],
     ["statement", "statement"],
     ["report", "shared_report"],
+    ["documents", "document_request"],
   ] as const)("is on the %s page, as %s", (route, page) => {
     expect(LOOP_PAGES).toContain(page);
     expect(readFileSync(`src/app/${route}/[token]/page.tsx`, "utf8")).toContain(`<SiteFooter compact loop="${page}"`);
@@ -95,13 +96,14 @@ describe("an email's footer", () => {
     ["term-request", "term_request"],
     ["customer-discount", "customer_discount"],
     ["receivable-reminder", "receivable_reminder"],
+    ["document-request", "document_request"],
   ] as const)("links back from every %s email, as %s", (file, email) => {
     expect(LOOP_EMAILS).toContain(email);
     const source = readFileSync(`src/lib/email/${file}.ts`, "utf8");
     expect(source.split("actionEmailHtml({").length - 1).toBe(source.split(`loop: "${email}"`).length - 1);
   });
 
-  it.each(["decision-escalation", "payee-address", "payee-invoice", "payment-stuck", "collection-task", "customer-wrote", "activation-nudge"])("never from a member's %s email", (file) => {
+  it.each(["decision-escalation", "payee-address", "payee-invoice", "payment-stuck", "collection-task", "customer-wrote", "activation-nudge", "document-received"])("never from a member's %s email", (file) => {
     expect(readFileSync(`src/lib/email/${file}.ts`, "utf8")).not.toContain("loop:");
   });
 });

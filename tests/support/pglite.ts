@@ -127,6 +127,7 @@ export const TENANT_TABLES = [
   "payment_term_requests", "payment_term_request_reviews",
   "supplier_status_links",
   "address_change_checks",
+  "document_requests",
 ] as const;
 
 export interface SeededRows {
@@ -342,6 +343,13 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
      values ($1, $2, '0x1111111111111111111111111111111111111111', '0x2222222222222222222222222222222222222222', 'member', 'ap@payee.example',
              encode(sha256(convert_to($3, 'utf8')), 'hex'), now() + interval '7 days')`,
     [orgId, counterpartyId, `address-check-${tag}`]
+  );
+  // A vendor asked for its bill's purchase order, whose link has since expired (0142).
+  await db.query(
+    `insert into document_requests (org_id, invoice_id, counterparty_id, missing, status, email_domain, send_attempts, sent_at, expires_at, token_hash)
+     values ($1, $2, $3, '["purchase_order"]'::jsonb, 'expired', 'payee.example', 1, now() - interval '15 days', now() - interval '1 day',
+             encode(sha256(convert_to($4, 'utf8')), 'hex'))`,
+    [orgId, invoiceId, counterpartyId, `document-request-${tag}`]
   );
   // That customer's collection rules, a task about its invoice, and a reminder email recorded as sent (0110).
   await db.query(

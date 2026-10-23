@@ -124,6 +124,18 @@ describe("CycleJournal — the fail-closed boundary", () => {
     expect(j.gate("forecast").run).toBe(true);
   });
 
+  it("asks vendors for missing documents only after AP decided, after term requests, and needs no balance (document requests ER2)", () => {
+    expect(CYCLE_STAGES.indexOf("document_requests")).toBe(CYCLE_STAGES.indexOf("term_requests") + 1);
+    expect(STAGE_REQUIRES.document_requests).toEqual(["ap"]);
+    const j = upTo("ap");
+    j.failed("ap", new Error("boom"), 10);
+    expect(j.gate("document_requests")).toEqual({ run: false, because: "ap failed" });
+    const reconcileDown = new CycleJournal();
+    reconcileDown.failed("reconcile", new Error("chain down"), 1);
+    reconcileDown.completed("ap", 1);
+    expect(reconcileDown.gate("document_requests").run).toBe(true);
+  });
+
   it("blames the stage that actually broke, not the nearest dependency", () => {
     // An operator reading "skipped because contractors was skipped" would have
     // to walk a chain of consequences to find the cause.
