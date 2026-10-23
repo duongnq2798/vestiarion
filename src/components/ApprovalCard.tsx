@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useCallback, useState, type FormEvent } from "react";
 import { approveInvoiceAction, cosignInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { AddDetailsDialog } from "@/components/AddDetailsDialog";
+import { DocumentRequestLine } from "@/components/document-requests/DocumentRequestLine";
+import type { DocumentRequestView } from "@/lib/document-requests/rules";
 import { ExceptionLine } from "@/components/ExceptionLine";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import VerdictControl from "@/components/VerdictControl";
@@ -220,7 +222,9 @@ const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfini
  * An owner or admin (`canEdit`) may instead add what the payable is missing —
  * its purchase order, or its goods marked received — while it waits and no
  * payment was sent for it; the agent then decides it again, and until it does
- * the card says what was added (complete held invoice R1, R3, R6).
+ * the card says what was added (complete held invoice R1, R3, R6). Where the agent asked the vendor for the missing
+ * document (`documentRequest`), the card says so, opens what the vendor sent, and fills its purchase order number into
+ * Add details (document requests ER6).
  */
 export default function ApprovalCard({
   orgSlug,
@@ -236,10 +240,13 @@ export default function ApprovalCard({
   viewerEmail,
   canCosign = false,
   cosign,
+  documentRequest,
 }: {
   orgSlug: string;
   payable: WaitingPayable;
   canDecide: boolean;
+  /** The agent's latest request to the vendor for the bill's missing document, as its card shows it (document requests ER6). */
+  documentRequest?: DocumentRequestView;
   /** The viewer is an accountant and the workspace's accountants co-sign (accountant co-sign CS2). */
   canCosign?: boolean;
   /**
@@ -345,6 +352,9 @@ export default function ApprovalCard({
               {addedDetailsSentence(payable.addedSinceDecision)}
             </Callout>
           )}
+          {documentRequest && (
+            <DocumentRequestLine orgSlug={orgSlug} vendorName={payable.counterpartyName} view={documentRequest} canRevoke={canEdit} className="mt-2" />
+          )}
           {unfinished && (
             <p className="mt-2 text-sm text-ink-2">
               An earlier decision did not finish.
@@ -399,7 +409,16 @@ export default function ApprovalCard({
                 <VerdictControl orgSlug={orgSlug} view={verdict} size="touch" />
               </CardFooter>
             )}
-            <Decisions orgSlug={orgSlug} payable={payable} viewerId={viewerId} sandbox={sandbox} ownEntry={ownEntry} ownAddress={ownAddress} canAddDetails={canAddDetails} />
+            <Decisions
+              orgSlug={orgSlug}
+              payable={payable}
+              viewerId={viewerId}
+              sandbox={sandbox}
+              ownEntry={ownEntry}
+              ownAddress={ownAddress}
+              canAddDetails={canAddDetails}
+              suggestedPo={documentRequest?.state === "answered" ? documentRequest.poReference : null}
+            />
           </>
         ) : canCosign && (cosign ? cosign.state !== "not_needed" : two) ? (
           <CosignControl orgSlug={orgSlug} payable={payable} viewerId={viewerId} cosign={cosign} />
@@ -549,6 +568,7 @@ function Decisions({
   ownEntry,
   ownAddress,
   canAddDetails,
+  suggestedPo = null,
 }: {
   orgSlug: string;
   payable: WaitingPayable;
@@ -560,6 +580,8 @@ function Decisions({
   ownAddress: boolean;
   /** An owner or admin, on a payable missing its purchase order or goods receipt with no payment sent. */
   canAddDetails: boolean;
+  /** The purchase order number the vendor typed with its document, filled in under Add details (document requests ER6). */
+  suggestedPo?: string | null;
 }) {
   const approveForm = useActionForm(approve, INITIAL);
   const returnForm = useActionForm(giveBack, INITIAL);
@@ -650,7 +672,7 @@ function Decisions({
               : undefined
           }
         />
-        {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} size="touch" />}
+        {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} size="touch" suggestedPo={suggestedPo} />}
         {(!payable.paymentSent || payable.lastAttempt?.state === "unanswered") && payable.lastAttempt?.state !== "in_flight" && (
           <>
             <RejectDialog orgSlug={orgSlug} payable={payable} />

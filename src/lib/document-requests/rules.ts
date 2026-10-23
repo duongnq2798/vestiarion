@@ -134,6 +134,9 @@ export function documentKindWord(type: string | null | undefined): string {
   return type === "application/pdf" ? "PDF" : type === "image/png" ? "PNG image" : type === "image/jpeg" ? "JPEG image" : "file";
 }
 
+/** What the vendor's page says of an expired, answered, revoked or unknown link: one sentence, naming no one (ER5). */
+export const DOCUMENT_LINK_INVALID = "This link is no longer valid. If the business still needs a document, ask them for a new link.";
+
 export const DOCUMENT_FIELD_MESSAGES = {
   poReference: `A purchase order number has at most ${MAX_DOCUMENT_PO} characters, on one line.`,
   note: `A note has at most ${MAX_DOCUMENT_NOTE} characters.`,
@@ -165,6 +168,11 @@ export type DocumentRequestView =
       fileSize?: number | null;
     }
   | { state: "expired"; missing: MissingDocument[]; sentAt: string; expiresAt: string };
+
+/** Where a member opens a request's document, from its bill's card (ER6): src/app/api/document-requests/[id]/file. */
+export function documentFileHref(orgSlug: string, requestId: string): string {
+  return `/api/document-requests/${encodeURIComponent(requestId)}/file?org=${encodeURIComponent(orgSlug)}`;
+}
 
 /** "Oct 23": the day in UTC, without its year, built as `utcDay` is so a server render and hydration agree. */
 export function shortDay(iso: string): string {

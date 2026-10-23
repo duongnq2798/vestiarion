@@ -23,6 +23,8 @@ import SlackPanel from "@/components/SlackPanel";
 import DiscordPanel from "@/components/DiscordPanel";
 import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
 import PayeeLockPanel from "@/components/PayeeLockPanel";
+import DocumentRequestsPanel from "@/components/DocumentRequestsPanel";
+import { readDocumentRequestsSetting } from "@/lib/document-requests/setting";
 import { readPayeeLockStatus } from "@/lib/payee-lock";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import UsagePanel from "@/components/UsagePanel";
@@ -202,11 +204,18 @@ export default async function SettingsPage({
         return null;
       }),
     ]);
-    // The payee lock (payee lock PL1); best effort, like two approvals: a section that cannot be read is left out.
-    const payeeLock = await readPayeeLockStatus(db()).catch((error: unknown) => {
-      console.error("settings: payee lock not loaded", error instanceof Error ? error.message : error);
-      return null;
-    });
+    // The payee lock (payee lock PL1) and asking vendors for missing documents (document requests ER1), read together; best
+    // effort, like two approvals: a section that cannot be read is left out.
+    const [payeeLock, documentRequests] = await Promise.all([
+      readPayeeLockStatus(db()).catch((error: unknown) => {
+        console.error("settings: payee lock not loaded", error instanceof Error ? error.message : error);
+        return null;
+      }),
+      readDocumentRequestsSetting(db()).catch((error: unknown) => {
+        console.error("settings: document requests not loaded", error instanceof Error ? error.message : error);
+        return null;
+      }),
+    ]);
     // What the workspace's payments do now, which Go live and Shadow mode say in the header's words (capability and
     // reasons R5, R7). Shadow mode as read above; null when it could not be.
     const capability = await readCapability({ shadow: shadow ? shadow.mode !== null : null });
@@ -551,6 +560,14 @@ export default async function SettingsPage({
             id: "payee-lock-title",
             title: "Payee lock",
             content: payeeLock ? <PayeeLockPanel orgSlug={slug} status={payeeLock} canChange={can(membership.role, "approval.policy")} /> : null,
+          },
+          {
+            // Beside the payee lock: an owner's switch for asking vendors for a bill's missing document (document requests ER1).
+            id: "document-requests-title",
+            title: "Ask vendors for missing documents",
+            content: documentRequests ? (
+              <DocumentRequestsPanel orgSlug={slug} status={documentRequests} canChange={can(membership.role, "approval.policy")} />
+            ) : null,
           },
           { id: "ledger-key-title", title: "Ledger signing key", content: <LedgerKeyPanel orgSlug={slug} status={ledgerKey} canAdminister={canAdminister} /> },
         ],

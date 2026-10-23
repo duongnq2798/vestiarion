@@ -64,6 +64,8 @@ import { requireMembership } from "@/lib/auth/membership";
 import { orgHref } from "@/lib/auth/org-paths";
 import { chainModes, shellModes } from "@/lib/circle";
 import { db } from "@/lib/dal";
+import { readDocumentRequests } from "@/lib/document-requests/read";
+import type { DocumentRequestView } from "@/lib/document-requests/rules";
 import { membersLeftOut } from "@/lib/new-payee";
 import { firstPaymentFrom, loadNewPayeeFacts } from "@/lib/new-payee-facts";
 import { readTwoApprovalsAbove } from "@/lib/approval-policy";
@@ -431,6 +433,12 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           return [invoice.id, { onFile, added: addedSince(recordedFacts(latestDecision(entries, invoice.id)), onFile) }] as const;
         })
     );
+    // What the agent asked each waiting bill's vendor for, or would in shadow, and what the vendor sent (document requests
+    // ER3, ER4, ER6), for the cards opened from here. Best effort: unread, the cards show none, as before migration 0142.
+    const documentRequestsRead = readDocumentRequests(detailInvoices.filter((invoice) => waiting.has(invoice.id)).map((invoice) => invoice.id)).catch((error: unknown) => {
+      console.error("invoices: document requests not read", error instanceof Error ? error.message : error);
+      return new Map<string, DocumentRequestView>();
+    });
     const sortAsked = query.sort;
     const slugHref = (path: string) => orgHref(slug, path);
     const here = viewHref(slugHref, view, sortAsked);
@@ -816,7 +824,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         };
       }
     })();
-    const [{ shownDecisions, shareable, shared }, linkStates, collections, members, firstPayments, capturers, tabParts] = await Promise.all([
+    const [{ shownDecisions, shareable, shared }, linkStates, collections, members, firstPayments, capturers, tabParts, documentRequests] = await Promise.all([
       cardsRead,
       linkStatesRead,
       collectionsRead,
@@ -824,6 +832,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       firstPaymentsRead,
       capturersRead,
       tabRead,
+      documentRequestsRead,
     ]);
     const receiptFor = (decision: Decision) => (shareable.has(decision.id) ? <ReceiptControl orgSlug={slug} invoiceId={decision.id} shared={shared.has(decision.id)} /> : undefined);
     const dealContext = (decision: Decision) => {
@@ -930,6 +939,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           canDecide={canDecide}
           rule={ruleOf(decision)}
           canFix={canWrite}
+          documentRequest={documentRequests.get(invoice.id)}
         />
       );
     };
