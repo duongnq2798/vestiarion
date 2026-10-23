@@ -318,6 +318,17 @@ describe("readPortfolio: what waits for the accountant", () => {
     });
   });
 
+  it("gives a bill past its due date the day before its late fee starts, and says so (late fees LF5)", async () => {
+    const late = payable("small", { amount: "200", due_date: "2026-10-10", late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-10-20" });
+    const { read } = world(INVITED, harbor({ payables: [late] }));
+    expect(harborItems((await read()).items)).toEqual([
+      expect.objectContaining({
+        kind: "decision",
+        detail: "Held for a person. Decide by Oct 19, 2026: overdue since Oct 10, 2026; a late fee of 1.5% a month starts Oct 20, 2026.",
+      }),
+    ]);
+  });
+
   it("leaves a bill the server would refuse as a decision item that says why", async () => {
     const { read } = world(INVITED, harbor({ payables: [payable("risky", { counterparties: { name: "Payee risky", risk_level: "high", address: ADDRESS } })] }));
     expect(harborItems((await read()).items)).toEqual([

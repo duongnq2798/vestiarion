@@ -110,7 +110,11 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
     const today = new Date().toISOString().slice(0, 10);
     const exceptionOf = (payable: (typeof waiting)[number]) =>
       members
-        ? exceptionFacts({ dueDate: payable.dueDate, discount: payable.discount, createdBy: payable.createdBy, leftOut: payable.firstPaymentLeftOut }, members, today)
+        ? exceptionFacts(
+            { dueDate: payable.dueDate, discount: payable.discount, lateFee: payable.lateFee, currency: payable.currency, createdBy: payable.createdBy, leftOut: payable.firstPaymentLeftOut },
+            members,
+            today
+          )
         : undefined;
 
     // An approver's checklist (onboarding by role R2): this page open is its first step, and a bill waiting on it, its

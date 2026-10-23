@@ -114,6 +114,14 @@ describe("invoiceDecision: terms evidence", () => {
     expect(decision.evidence).toContainEqual({ label: "Terms", value: "2% off if paid by Oct 10, 2026", state: "neutral" });
   });
 
+  it("names a late fee beside the discount, or alone (late fees LF4)", () => {
+    const late = { late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-11-01" };
+    const both = invoiceDecision(invoice({ amount: 100, early_pay_discount_pct: "2.00", discount_due_date: "2026-10-10T12:00:00.000Z", ...late }), undefined, [], { network: "arc-testnet" });
+    expect(both.evidence).toContainEqual({ label: "Terms", value: "2% off if paid by Oct 10, 2026; late after Oct 31, 2026: 1.5% a month (1.50 USDC)", state: "neutral" });
+    const alone = invoiceDecision(invoice({ amount: 100, ...late, late_fee_kind: "fixed", late_fee_value: "25" }), undefined, [], { network: "arc-testnet" });
+    expect(alone.evidence).toContainEqual({ label: "Terms", value: "Late after Oct 31, 2026: 25.00 USDC", state: "neutral" });
+  });
+
   it("omits it without a discount", () => {
     const decision = invoiceDecision(invoice(), undefined, [], { network: "arc-testnet" });
     expect(decision.evidence.find((item) => item.label === "Terms")).toBeUndefined();

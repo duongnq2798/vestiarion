@@ -30,6 +30,22 @@ describe("the decide-by day and the priority", () => {
     expect(decideByWords({ day: "2026-10-15", reason: "discount" })).toBe("Decide by Oct 15, 2026 to keep the early-payment discount");
   });
 
+  it("is the day before a late fee starts, for a bill past its due date whose fee has not started (late fees LF5)", () => {
+    const lateFee = { kind: "percent_month" as const, value: 1.5, startsOn: "2026-10-20" };
+    const overdue = decideByOf({ dueDate: "2026-10-10T12:00:00Z", lateFee }, TODAY);
+    expect(overdue).toEqual({ day: "2026-10-19", reason: "late_fee", lateFee: { dueOn: "2026-10-10", startsOn: "2026-10-20", rate: "1.5% a month" } });
+    expect(decideByWords(overdue)).toBe("Decide by Oct 19, 2026: overdue since Oct 10, 2026; a late fee of 1.5% a month starts Oct 20, 2026");
+    expect(priorityOf(overdue.day, TODAY)).toBe("week");
+    // Not yet due, or once the fee has started: the due date, as before.
+    expect(decideByOf({ dueDate: "2026-10-15T12:00:00Z", lateFee }, TODAY)).toEqual({ day: "2026-10-15", reason: "due" });
+    expect(decideByOf({ dueDate: "2026-10-01T12:00:00Z", lateFee: { ...lateFee, startsOn: "2026-10-13" } }, TODAY)).toEqual({ day: "2026-10-01", reason: "due" });
+    // A fixed fee in the bill's currency.
+    expect(decideByOf({ dueDate: "2026-10-10T12:00:00Z", currency: "EURC", lateFee: { kind: "fixed", value: 25, startsOn: "2026-10-14" } }, TODAY)).toMatchObject({
+      day: "2026-10-13",
+      lateFee: { rate: "25.00 EURC" },
+    });
+  });
+
   it("is overdue, due today, due this week, or later", () => {
     expect(priorityOf("2026-10-12", TODAY)).toBe("overdue");
     expect(priorityOf(TODAY, TODAY)).toBe("today");
@@ -147,6 +163,8 @@ function escalationFake(
     startsOn?: string | null;
     /** What the members' read answers, by its number in the run (1 first); the members when it answers nothing. */
     membersRead?: (call: number) => FakeReply | null;
+    /** What a read of the invoices answers, in place of `invoices`, when it answers at all. */
+    invoicesRead?: (request: RecordedRequest) => FakeReply | null;
   } = {}
 ) {
   const members = options.members ?? [
@@ -167,6 +185,10 @@ function escalationFake(
           circle_entity_secret_enc: null,
         },
       };
+    }
+    if (request.path === "/rest/v1/invoices" && options.invoicesRead) {
+      const reply = options.invoicesRead(request);
+      if (reply) return reply;
     }
     if (request.path === "/rest/v1/invoices") return { body: options.invoices ?? [payable(LATE), payable(ON_TIME, { due_date: "2026-10-20T00:00:00Z" })] };
     if (request.path === "/rest/v1/approval_escalations" && request.method === "POST") {
@@ -199,6 +221,27 @@ describe("escalateOverdueDecisions", () => {
   it("finds the waiting payables past their decide-by day", async () => {
     const { run } = escalationFake();
     expect((await run(() => pastDecideBy(NOW))).map(({ id, item }) => [id, item.decideBy])).toEqual([[LATE, "2026-10-12"]]);
+  });
+
+  it("waits for the day before a late fee starts on a bill past its due date, and reads before migration 0141 as before (late fees LF5)", async () => {
+    const grace = payable(LATE, { late_fee_kind: "fixed", late_fee_value: "25", late_fee_starts_on: "2026-10-20" });
+    const { run } = escalationFake({ invoices: [grace] });
+    expect(await run(() => pastDecideBy(NOW))).toEqual([]);
+    const started = payable(LATE, { late_fee_kind: "fixed", late_fee_value: "25", late_fee_starts_on: "2026-10-13" });
+    expect((await escalationFake({ invoices: [started] }).run(() => pastDecideBy(NOW))).map(({ item }) => item.decideBy)).toEqual(["2026-10-12"]);
+
+    const refused = vi.fn();
+    const before0141 = escalationFake({
+      invoices: [payable(LATE)],
+      invoicesRead: (request) => {
+        if (!(request.params.get("select") ?? "").includes("late_fee_")) return null;
+        refused();
+        return { status: 400, body: { code: "42703", message: "column invoices.late_fee_kind does not exist" } };
+      },
+    });
+    const found = await before0141.run(() => pastDecideBy(NOW));
+    expect(refused).toHaveBeenCalledTimes(1);
+    expect(found.map(({ id }) => id)).toEqual([LATE]);
   });
 
   it("claims each payable for its day, emails each member whose switch is on, marks the claims and signs it", async () => {

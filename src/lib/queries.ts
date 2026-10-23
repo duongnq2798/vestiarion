@@ -105,6 +105,10 @@ export interface InvoiceRow {
   early_pay_discount_pct: string | number | null;
   /** The last day the discount applies, when there is one. */
   discount_due_date: string | null;
+  /** Its late fee (0141; `select("*")` reads it): absent before it, null without one. */
+  late_fee_kind?: string | null;
+  late_fee_value?: string | number | null;
+  late_fee_starts_on?: string | null;
   /** What actually left when this invoice was paid: the discounted amount when it was paid by the deadline, the full amount otherwise, null until it is paid. */
   paid_amount: number | null;
   /** USDC or EURC (0040); `listInvoices` always sets it. */

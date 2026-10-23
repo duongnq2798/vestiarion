@@ -15,6 +15,8 @@ import { slackSettingsFromEnv, type SlackSettings } from "./settings";
 import { cardToken } from "./state";
 import { workspaceNetwork } from "../workspace-network";
 import { lastAttemptOf, paymentWasSent, type IntentState } from "../agent/approvals";
+import { invoiceLateFee, lateFeeRateWords, lateFeeStarted, readWithLateFee } from "../agent/late-fee";
+import { utcDay } from "../copy";
 import { CHAT_CONFIRM_TITLE, CHECK_FIRST_LABEL, chatConfirmText, checksFirst, payActionOf } from "../payment-exceptions";
 
 /**
@@ -47,6 +49,10 @@ interface CardRow {
   direction: string;
   decided_at: string | null;
   early_pay_discount_pct: string | number | null;
+  /** Its late fee (0141); absent before it. */
+  late_fee_kind?: string | null;
+  late_fee_value?: string | number | null;
+  late_fee_starts_on?: string | null;
   counterparties: { name: string; address: string | null; chain: string | null; address_changed_at: string | null; address_confirmed_at: string | null } | null;
 }
 
@@ -55,11 +61,14 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
   const ids = [...new Set(items.filter((item) => item.tone === "stopped" && item.invoiceId).map((item) => item.invoiceId as string))];
   const views = new Map<string, CardView>();
   if (ids.length === 0) return views;
+  // With each bill's late fee, where migration 0141 has run (late fees LF4).
   const rows = unwrap(
-    await db()
-      .from("invoices")
-      .select("id, amount, currency, status, direction, decided_at, early_pay_discount_pct, counterparties(name, address, chain, address_changed_at, address_confirmed_at)")
-      .in("id", ids)
+    await readWithLateFee((lateFee) =>
+      db()
+        .from("invoices")
+        .select(`id, amount, currency, status, direction, decided_at, early_pay_discount_pct, counterparties(name, address, chain, address_changed_at, address_confirmed_at)${lateFee}`)
+        .in("id", ids)
+    )
   ) as unknown as CardRow[];
   // Each payable's payment intent, as Approvals reads it: Approve on one whose earlier transfer may exist checks it first,
   // and the confirmation says so rather than that it pays (payment exceptions E3).
@@ -96,6 +105,11 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
       "Slack"
     );
     const discount = row.early_pay_discount_pct !== null ? " Its early-payment discount comes off, if still due." : "";
+    // A late fee is named, as the discount is, and never changes what is paid (late fees LF4).
+    const fee = invoiceLateFee(row);
+    const lateFee = fee
+      ? ` A late fee of ${lateFeeRateWords(fee, currency)} ${lateFeeStarted(fee, new Date(now).toISOString()) ? "applies since" : "starts"} ${utcDay(`${fee.startsOn}T00:00:00.000Z`)}; it is never added to what is paid.`
+      : "";
     const intent = intents.get(row.id) ?? null;
     const action = payActionOf({ paymentSent: paymentWasSent(intent), lastAttempt: lastAttemptOf(intent, currency === "EURC" ? "EURC" : "USDC") });
     const what = `${AMOUNT.format(Number(row.amount))} ${currency} to ${shortName(payee?.name ?? "the payee")} on ${workspaceNetwork().label}, to ${address ? shortenAddresses(address) : "no address"}.`;
@@ -105,7 +119,7 @@ async function cardViews(items: ActivityItem[], install: SlackInstall, keys: Mas
       approveRefusal: refusal ? refusal.message : null,
       ...(checksFirst(action)
         ? { confirmText: `${chatConfirmText(action)} It is ${what}`, confirmTitle: CHAT_CONFIRM_TITLE[action], confirmLabel: CHECK_FIRST_LABEL[action] }
-        : { confirmText: `Pays ${what}${discount}` }),
+        : { confirmText: `Pays ${what}${discount}${lateFee}` }),
     });
   }
   return views;

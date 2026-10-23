@@ -10,6 +10,7 @@ import { isTerminalFailure, settleUnknownSend, unknownSend, type UnknownSendAnsw
 import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
 import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
 import { payInvoice, syncOperatingBalance } from "./pay";
+import { invoiceLateFee, readWithLateFee, type LateFee } from "./late-fee";
 import { amountToPay, invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { ContractRefusal, personPaymentThroughContract } from "../treasury/person-payment";
 import type { BankPayoutParams, SpendingLimitPayment } from "../circle/types";
@@ -472,6 +473,8 @@ export interface WaitingPayable {
   lastAttempt: LastPaymentAttempt;
   /** The invoice's early-payment discount, read as `payInvoice` applies it, so the approval dialog can say what will leave; null without one. */
   discount: InvoiceDiscount | null;
+  /** Its late fee (late fees LF4, LF5): shown beside what leaves, never part of it; null without one, or before migration 0141. */
+  lateFee?: LateFee | null;
   /** What the invoice is in, and what Approve and pay sends: USDC or EURC (EURC invoices design E4). */
   currency: Stablecoin;
   /** The chain the payee is paid on (CCTP payouts X1): ARC-TESTNET, or one paid through CCTP. */
@@ -559,15 +562,18 @@ export async function listWaitingPayables(
     bankQuote?: (input: { bankAccountId: string; amount: number }) => Promise<BlindpayQuote>;
   } = {}
 ): Promise<WaitingPayable[]> {
+  // With each bill's late fee, where migration 0141 has run (late fees LF4).
   const rows = unwrap(
-    await db()
-      .from("invoices")
-      .select(
-        "id, amount, currency, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, po_reference, goods_received, counterparties(name, risk_level, address, chain)"
-      )
-      .eq("direction", "payable")
-      .in("status", WAITING_STATUSES)
-      .order("due_date", { ascending: true })
+    await readWithLateFee((lateFee) =>
+      db()
+        .from("invoices")
+        .select(
+          `id, amount, currency, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, po_reference, goods_received, counterparties(name, risk_level, address, chain)${lateFee}`
+        )
+        .eq("direction", "payable")
+        .in("status", WAITING_STATUSES)
+        .order("due_date", { ascending: true })
+    )
   ) as unknown as Array<{
     id: string;
     amount: string;
@@ -581,6 +587,9 @@ export async function listWaitingPayables(
     counterparty_id: string;
     early_pay_discount_pct?: string | number | null;
     discount_due_date?: string | null;
+    late_fee_kind?: string | null;
+    late_fee_value?: string | number | null;
+    late_fee_starts_on?: string | null;
     po_reference?: string | null;
     goods_received?: boolean | null;
     counterparties: { name: string; risk_level: string; address: string | null; chain?: string | null } | null;
@@ -716,6 +725,7 @@ export async function listWaitingPayables(
       ...(frozenPayees.has(row.counterparty_id) ? { payeeFrozen: true } : {}),
       lastAttempt: lastAttemptOf(intent, currencyOf(row.currency)),
       discount: invoiceDiscount(row),
+      ...(invoiceLateFee(row) ? { lateFee: invoiceLateFee(row) } : {}),
       currency: currencyOf(row.currency),
       // Its own chain, as stored: a list shows a payable whatever its chain, and Approve and pay refuses one off the network.
       payeeChain: row.counterparties?.chain ?? homeChain(network.id).id,

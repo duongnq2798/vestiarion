@@ -1,4 +1,5 @@
 import { committedState } from "@/lib/agent/duplicates";
+import { invoiceLateFee, lateFeeLine } from "@/lib/agent/late-fee";
 import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
 import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
@@ -96,12 +97,19 @@ function matchingEntry(entries: LedgerEntry[], key: "invoiceId" | "milestoneId",
 /**
  * The invoice's payment terms, as a fact a person reads next to the decision
  * — not only in the agent's reasoning — when it carries an early-payment
- * discount (payment timing design §1, "What a person sees").
+ * discount (payment timing design §1, "What a person sees"), a late fee
+ * (late fees LF4), or both.
  */
 function termsEvidence(invoice: InvoiceRow): Evidence | null {
   const discount = invoiceDiscount(invoice);
-  if (!discount) return null;
-  return { label: "Terms", value: `${discount.pct}% off if paid by ${utcDay(discount.deadline)}`, state: "neutral" };
+  const fee = invoiceLateFee(invoice);
+  if (!discount && !fee) return null;
+  const late = fee ? lateFeeLine(fee, invoice.amount, invoice.currency ?? "USDC") : null;
+  const lateWords = late ? `${late.label}: ${late.value}` : null;
+  const value = discount
+    ? `${discount.pct}% off if paid by ${utcDay(discount.deadline)}${lateWords ? `; ${lateWords.charAt(0).toLowerCase()}${lateWords.slice(1)}` : ""}`
+    : (lateWords as string);
+  return { label: "Terms", value, state: "neutral" };
 }
 
 /**

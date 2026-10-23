@@ -1,3 +1,4 @@
+import { invoiceLateFee, readWithLateFee } from "../agent/late-fee";
 import { invoiceDiscount } from "../agent/payment-timing";
 import { siteOrigin } from "../auth/env";
 import { currentOrgId } from "../context";
@@ -48,6 +49,10 @@ interface WaitingRow {
   due_date: string;
   early_pay_discount_pct: number | string | null;
   discount_due_date: string | null;
+  /** Its late fee (0141); absent before it. */
+  late_fee_kind?: string | null;
+  late_fee_value?: string | number | null;
+  late_fee_starts_on?: string | null;
   created_by: string | null;
   counterparty_id: string;
   counterparties: { name: string; address?: string | null } | null;
@@ -85,16 +90,19 @@ export async function pastDecideBy(
   from?: string
 ): Promise<Array<{ id: string; createdBy: string | null; counterpartyId: string; address: string | null; item: EscalationItem }>> {
   const today = now.toISOString().slice(0, 10);
+  // With each bill's late fee, where migration 0141 has run: past its due date, a bill waits for the day before it (LF5).
   const rows = unwrap(
-    await db()
-      .from("invoices")
-      .select("id, amount, currency, status, due_date, early_pay_discount_pct, discount_due_date, created_by, counterparty_id, counterparties(name, address)")
-      .eq("direction", "payable")
-      .in("status", WAITING)
-      .order("due_date", { ascending: true })
+    await readWithLateFee((lateFee) =>
+      db()
+        .from("invoices")
+        .select(`id, amount, currency, status, due_date, early_pay_discount_pct, discount_due_date, created_by, counterparty_id, counterparties(name, address)${lateFee}`)
+        .eq("direction", "payable")
+        .in("status", WAITING)
+        .order("due_date", { ascending: true })
+    )
   ) as unknown as WaitingRow[];
   return rows.flatMap((row) => {
-    const decideBy = decideByOf({ dueDate: row.due_date, discount: invoiceDiscount(row) }, today);
+    const decideBy = decideByOf({ dueDate: row.due_date, discount: invoiceDiscount(row), lateFee: invoiceLateFee(row), currency: row.currency }, today);
     if (decideBy.day >= today || (from !== undefined && decideBy.day < from)) return [];
     return [
       {

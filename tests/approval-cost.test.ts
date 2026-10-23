@@ -81,3 +81,28 @@ describe("bankPayoutCost (docs/superpowers/specs/2026-10-22-bank-route-compariso
     expect(bankPayoutCost({ amount: 100, counterpartyName: "Taller Norte", discount: { pct: 1, deadline: "2026-10-30T00:00:00Z" }, bank }, NOW)).toBeNull();
   });
 });
+
+describe("a late fee in the cost box (late fees LF4)", () => {
+  const lateFee = { kind: "percent_month" as const, value: 1.5, startsOn: "2026-10-31" };
+
+  it("names the fee after what the payee receives, and never adds it to what leaves", () => {
+    const cost = approvalCost({ amount: 100, counterpartyName: "Lumen", discount: null, lateFee }, NOW);
+    expect(cost.lines.map((line) => line.label)).toEqual(["Invoice", "Leaves the operating wallet", "Lumen receives", "Late after Oct 30, 2026"]);
+    expect(lines(cost)).toMatchObject({ "Leaves the operating wallet": "100.00 USDC", "Lumen receives": "100.00 USDC", "Late after Oct 30, 2026": "1.5% a month (1.50 USDC)" });
+    expect(cost.lines.find((line) => line.label.startsWith("Late after"))?.total).toBeUndefined();
+    expect(lines(approvalCost({ amount: 100, counterpartyName: "Lumen", currency: "EURC", discount: null, lateFee: { ...lateFee, kind: "fixed", value: 25 } }, NOW))).toMatchObject({
+      "Late after Oct 30, 2026": "25.00 EURC",
+    });
+  });
+
+  it("names it for a bank payout too", () => {
+    const bank = { quote: { receiverAmount: 1814, currency: "MXN" as const, rate: 18.35, feesSender: 2.1 } };
+    const cost = bankPayoutCost({ amount: 100, counterpartyName: "Taller Norte", discount: null, bank, lateFee: { ...lateFee, kind: "fixed", value: 25 } }, NOW);
+    expect(cost && lines(cost)).toEqual({
+      Invoice: "100.00 USDC",
+      "BlindPay's fees, taken from it": "-2.10 USDC",
+      "Leaves the operating wallet": "100.00 USDC",
+      "Late after Oct 30, 2026": "25.00 USDC",
+    });
+  });
+});

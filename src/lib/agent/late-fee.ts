@@ -5,6 +5,8 @@
  * (`YYYY-MM-DD`), as in ./payment-timing.ts.
  */
 
+import { utcDay } from "../copy";
+
 export const LATE_FEE_KINDS = ["percent_month", "fixed"] as const;
 export type LateFeeKind = (typeof LATE_FEE_KINDS)[number];
 
@@ -97,6 +99,14 @@ export function lateFeeClause(fee: LateFee, amount: number, currency = "USDC"): 
  */
 export function lateFeeTerms(fee: LateFee, amount: number): { kind: LateFeeKind; value: number; startsOn: string; aMonth: number } {
   return { kind: fee.kind, value: fee.value, startsOn: fee.startsOn, aMonth: fee.kind === "fixed" ? fee.value : lateFeeOf({ amount, lateFee: fee }, fee.startsOn) };
+}
+
+/**
+ * The fee as the approval card's cost box and the Bills list name it (LF4): "Late after Oct 29, 2026", the last day without
+ * it, and "1.5% a month (1.50 USDC)" or "25.00 USDC".
+ */
+export function lateFeeLine(fee: LateFee, amount: number, currency = "USDC"): { label: string; value: string } {
+  return { label: `Late after ${utcDay(`${lastDayWithoutFee(fee)}T00:00:00.000Z`)}`, value: lateFeeWords(fee, amount, currency) };
 }
 
 /** A column this database does not have yet: Postgres's own code, or PostgREST's for a write naming it. */

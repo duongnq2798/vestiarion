@@ -1,6 +1,7 @@
 import type { WalletHost } from "./config";
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
 import { RECLAIM_AFTER_MS } from "./agent/approvals";
+import { missingColumn } from "./agent/late-fee";
 import { currentOrgId } from "./context";
 import { db, platformDb, unwrap } from "./dal";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
@@ -60,6 +61,10 @@ export interface SampleFixture {
     due_date: string;
     early_pay_discount_pct?: number;
     discount_due_date?: string;
+    /** A late fee (late fees LF8, migration 0141): all three, or none. */
+    late_fee_kind?: "percent_month" | "fixed";
+    late_fee_value?: number;
+    late_fee_starts_on?: string;
     status?: "paid";
     decided_at?: string;
     settled_at?: string;
@@ -122,8 +127,20 @@ export function sampleFixture(now: Date): SampleFixture {
         early_pay_discount_pct: 2,
         discount_due_date: at(10),
       },
-      // Held: a clean invoice over Harbor's 500 USDC limit.
-      { counterparty: "harbor", direction: "payable", amount: 1200, memo: "Standing desks", po_reference: "PO-2210", goods_received: true, due_date: at(6) },
+      // Held: a clean invoice over Harbor's 500 USDC limit, with a late fee of 1.5% a month from the day after its due
+      // date, which its approval card names.
+      {
+        counterparty: "harbor",
+        direction: "payable",
+        amount: 1200,
+        memo: "Standing desks",
+        po_reference: "PO-2210",
+        goods_received: true,
+        due_date: at(6),
+        late_fee_kind: "percent_month",
+        late_fee_value: 1.5,
+        late_fee_starts_on: at(7).slice(0, 10),
+      },
       // History for the next row: already paid, last month.
       {
         counterparty: "kestrel",
@@ -225,12 +242,14 @@ export async function loadSampleData(input: { actorId: string; now?: Date }): Pr
   };
 
   try {
-    const invoices = await db()
-      .from("invoices")
-      .insert(
-        fixture.invoices.map(({ counterparty, ...invoice }) => ({ ...invoice, counterparty_id: idOf(counterparty) })),
-        { defaultToNull: false }
-      );
+    const invoiceRows: Array<Record<string, unknown>> = fixture.invoices.map(({ counterparty, ...invoice }) => ({ ...invoice, counterparty_id: idOf(counterparty) }));
+    let invoices = await db().from("invoices").insert(invoiceRows, { defaultToNull: false });
+    // Before migration 0141 the late fee's columns are not there: the sample loads without its late fee.
+    if (invoices.error && missingColumn(invoices.error)) {
+      console.warn("invoices.late_fee_* not there yet (migration 0141); the sample is loaded without its late fee");
+      const withoutLateFee = invoiceRows.map((row) => Object.fromEntries(Object.entries(row).filter(([column]) => !column.startsWith("late_fee_"))));
+      invoices = await db().from("invoices").insert(withoutLateFee, { defaultToNull: false });
+    }
     if (invoices.error) throw new Error(invoices.error.message);
     const milestones = await db()
       .from("milestones")

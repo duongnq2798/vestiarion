@@ -165,6 +165,17 @@ describe("sendSlackDecisions", () => {
     });
   });
 
+  it("names a late fee on Approve's confirmation, as it names a discount, and that it is not paid (late fees LF4)", async () => {
+    install = installRow({ decisions_limit_usdc: "1" });
+    invoices = [heldInvoice({ late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-10-10" })];
+    readActivityMock.mockResolvedValue(activity([HELD], 57));
+    const { run, posts } = stage();
+    await run();
+    expect(JSON.stringify(posts[0].body)).toContain(
+      "Pays 0.50 USDC to Jiren on Arc testnet, to 0x1111…0000. A late fee of 1.5% a month starts Oct 10, 2026; it is never added to what is paid."
+    );
+  });
+
   it("says Approve checks the earlier transfer first when one may exist, never that it pays (payment exceptions E3)", async () => {
     install = installRow({ decisions_limit_usdc: "1" });
     invoices = [heldInvoice()];

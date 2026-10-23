@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
@@ -169,6 +169,8 @@ describe("sampleFixture", () => {
     });
     // Held: over Harbor's 500 limit.
     expect(byMemo("Standing desks")[0]).toMatchObject({ counterparty: "harbor", amount: 1200 });
+    // A late fee of 1.5% a month from the day after its due date, shown on its approval card (late fees LF8).
+    expect(byMemo("Standing desks")[0]).toMatchObject({ late_fee_kind: "percent_month", late_fee_value: 1.5, late_fee_starts_on: "2026-10-07" });
     expect(fixture.counterparties.find((row) => row.key === "harbor")?.limit).toBe(500);
     // Flagged: the same purchase order and amount as one already paid.
     const [paid, repeat] = byMemo("Brochure print run");
@@ -279,6 +281,25 @@ describe("loadSampleData", () => {
     expect(error.code).toBe("already_loaded");
     expect(error.message).toBe("Sample data is already loaded.");
     expect(ledgerBodies(fake.requests)).toEqual([]);
+  });
+
+  it("loads the invoices without the late fee before migration 0141, and with it after (late fees LF8)", async () => {
+    const withFee = sampleFake();
+    await withFee.run(() => loadSampleData({ actorId: ACTOR, now: NOW }));
+    const [sent] = requestsTo(withFee.fake.requests, "/rest/v1/invoices", "POST");
+    expect((sent.body as Array<Record<string, unknown>>).find((row) => row.memo === "Standing desks")).toMatchObject({ late_fee_kind: "percent_month", late_fee_value: 1.5 });
+
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const before = sampleFake({
+      invoiceInsert: (request) =>
+        (request.body as Array<Record<string, unknown>>).some((row) => "late_fee_kind" in row)
+          ? { status: 400, body: { code: "PGRST204", message: "Could not find the 'late_fee_kind' column of 'invoices' in the schema cache", details: null, hint: null } }
+          : undefined,
+    });
+    expect(await before.run(() => loadSampleData({ actorId: ACTOR, now: NOW }))).toEqual({ counterparties: 6, invoices: 8, milestones: 2 });
+    const attempts = requestsTo(before.fake.requests, "/rest/v1/invoices", "POST");
+    expect(attempts).toHaveLength(2);
+    expect((attempts[1].body as Array<Record<string, unknown>>).some((row) => Object.keys(row).some((key) => key.startsWith("late_fee_")))).toBe(false);
   });
 
   it("removes the counterparties it just inserted when the invoices are refused, then reports the failure", async () => {

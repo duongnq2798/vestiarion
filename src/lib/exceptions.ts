@@ -1,3 +1,4 @@
+import { lastDayWithoutFee, lateFeeRateWords, type LateFee } from "./agent/late-fee";
 import { utcDay } from "./copy";
 
 /**
@@ -21,17 +22,32 @@ const DECIDING_ROLES = ["owner", "admin", "approver"] as const;
 export interface DecideBy {
   /** `YYYY-MM-DD`. */
   day: string;
-  /** Its due date, or its early-payment discount's deadline while that is still ahead and earlier. */
-  reason: "due" | "discount";
+  /**
+   * Its due date; its early-payment discount's deadline while that is still ahead and earlier; or, past its due date,
+   * the day before its late fee starts while that is still ahead (late fees LF5).
+   */
+  reason: "due" | "discount" | "late_fee";
+  /** With `late_fee`: the due date it is past, the fee's first day, and its rate in words ("1.5% a month"). */
+  lateFee?: { dueOn: string; startsOn: string; rate: string };
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10);
 
-/** E1: the due date, or the discount's deadline while it is still to come and before the due date. */
-export function decideByOf(payable: { dueDate: string; discount?: { pct: number; deadline: string } | null }, today: string): DecideBy {
+/**
+ * E1: the due date, or the discount's deadline while it is still to come and before the due date. For a bill past its due
+ * date whose late fee has not started, the day before the fee starts (late fees LF5).
+ */
+export function decideByOf(
+  payable: { dueDate: string; discount?: { pct: number; deadline: string } | null; lateFee?: LateFee | null; currency?: string | null },
+  today: string
+): DecideBy {
   const due = dayOf(payable.dueDate);
   const deadline = payable.discount ? dayOf(payable.discount.deadline) : null;
   if (deadline && deadline >= today && deadline < due) return { day: deadline, reason: "discount" };
+  const fee = payable.lateFee;
+  if (fee && due < today && today < fee.startsOn) {
+    return { day: lastDayWithoutFee(fee), reason: "late_fee", lateFee: { dueOn: due, startsOn: fee.startsOn, rate: lateFeeRateWords(fee, payable.currency ?? "USDC") } };
+  }
   return { day: due, reason: "due" };
 }
 
@@ -71,7 +87,14 @@ export interface ExceptionFacts {
 }
 
 export function exceptionFacts(
-  payable: { dueDate: string; discount?: { pct: number; deadline: string } | null; createdBy: string | null; leftOut?: readonly string[] },
+  payable: {
+    dueDate: string;
+    discount?: { pct: number; deadline: string } | null;
+    lateFee?: LateFee | null;
+    currency?: string | null;
+    createdBy: string | null;
+    leftOut?: readonly string[];
+  },
   members: readonly ActingMember[],
   today: string
 ): ExceptionFacts {
@@ -79,9 +102,18 @@ export function exceptionFacts(
   return { decideBy, priority: priorityOf(decideBy.day, today), owners: whoCanAct(members, payable.createdBy, payable.leftOut).map((member) => member.email) };
 }
 
-/** "Decide by Oct 20, 2026", with the discount named when it sets the day. */
+const dayWords = (day: string) => utcDay(`${day}T00:00:00.000Z`);
+
+/**
+ * "Decide by Oct 20, 2026", with the discount named when it sets the day, or the late fee: "Decide by Oct 29, 2026:
+ * overdue since Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026".
+ */
 export function decideByWords(decideBy: DecideBy): string {
-  return `Decide by ${utcDay(`${decideBy.day}T00:00:00.000Z`)}${decideBy.reason === "discount" ? " to keep the early-payment discount" : ""}`;
+  if (decideBy.reason === "late_fee" && decideBy.lateFee) {
+    const { dueOn, startsOn, rate } = decideBy.lateFee;
+    return `Decide by ${dayWords(decideBy.day)}: overdue since ${dayWords(dueOn)}; a late fee of ${rate} starts ${dayWords(startsOn)}`;
+  }
+  return `Decide by ${dayWords(decideBy.day)}${decideBy.reason === "discount" ? " to keep the early-payment discount" : ""}`;
 }
 
 /** Who can act, in a line: the first `max` by email (two by default), then how many more; the viewer as "you". */
