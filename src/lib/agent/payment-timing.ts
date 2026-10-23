@@ -201,11 +201,8 @@ export function noGainInPayingNow(input: { action: string; timing: PaymentTiming
   return timing.recommendation.payOn > timing.today ? timing.recommendation.payOn : null;
 }
 
-/**
- * The reference sentence, and the late fee the payment comes before when it is paid on or before the day the fee starts
- * (late fees LF7): "…; paying now, before a 1.5% monthly late fee (1.50 USDC) starts Oct 30, 2026."
- */
-function buildReason(args: {
+/** What the reference sentence is written from. */
+interface ReasonFacts {
   input: PaymentTimingInput;
   today: string;
   dueOn: string;
@@ -214,23 +211,20 @@ function buildReason(args: {
   floatValueToDue: number;
   discountWins: boolean;
   targetOn: string;
-}): string {
+}
+
+/**
+ * The reference sentence, and the late fee the payment comes before when it is paid on or before the day the fee starts
+ * (late fees LF7): "…; paying now, before a 1.5% monthly late fee (1.50 USDC) starts Oct 30, 2026."
+ */
+function buildReason(args: ReasonFacts): string {
   const reason = timingReason(args);
   const fee = args.input.lateFee;
   if (!fee || args.targetOn > fee.startsOn) return reason;
   return `${reason.replace(/\.$/, "")}, before ${lateFeeClause(fee, args.input.amount, args.input.currency ?? "USDC")} starts ${utcDay(`${fee.startsOn}T00:00:00.000Z`)}.`;
 }
 
-function timingReason(args: {
-  input: PaymentTimingInput;
-  today: string;
-  dueOn: string;
-  deadlineOn: string | null;
-  discountValue: number | null;
-  floatValueToDue: number;
-  discountWins: boolean;
-  targetOn: string;
-}): string {
+function timingReason(args: ReasonFacts): string {
   const { input, today, dueOn, deadlineOn, discountValue, floatValueToDue, discountWins, targetOn } = args;
   const unit = input.currency ?? "USDC";
 

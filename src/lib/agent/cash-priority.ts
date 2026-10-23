@@ -133,10 +133,10 @@ export function planFrom(order: readonly string[], competing: readonly Competing
 
 /**
  * What the plan was made from (P5): the competing bills, their ids, amounts and due days, and a late fee's cost in the
- * coming month where there is one, so a fee added or changed asks again (a bill without one reads as before). Statuses are left out, so
- * applying the plan, which moves bills between scheduled, held and pending, does not ask again; so is the cash, which
- * moves with every sweep and every cent of yield: the last plan is reused while its order still splits the bills the
- * same way against the cash there is now (`sameSplit`).
+ * coming month where there is one, so a fee added or changed asks again (a bill without one reads as before). Statuses
+ * are left out, so applying the plan, which moves bills between scheduled, held and pending, does not ask again; so is
+ * the cash, which moves with every sweep and every cent of yield: the last plan is reused while its order still splits
+ * the bills the same way against the cash there is now (`sameSplit`).
  */
 export function planFingerprint(competing: readonly Competing[]): string {
   const bills = [...competing]
@@ -162,7 +162,10 @@ export interface PriorityPlan {
   reasons: Record<string, string>;
   /** The member who set this order from the payment plan (order design O3), or null when the agent did. */
   byPerson: string | null;
-  /** Each bill's amount and due day as the order was signed, by id, and its late fee's cost when it had one: what a person's order was set for (O4). */
+  /**
+   * Each bill's amount and due day as the order was signed, by id, and its late fee's cost when it had one: what a
+   * person's order was set for (O4).
+   */
   bills: Record<string, { amount: number | null; dueOn: string | null; lateFee?: number }>;
 }
 
@@ -193,8 +196,8 @@ export function planOf(detail: Record<string, unknown> | null | undefined): Prio
 
 /**
  * A person's order still standing for the bills competing now (order design O4): every one of them was in it, at the same
- * amount, due day and late fee, so the order goes on with the bills that left it (paid, or past the window) taken out. Null for an
- * agent's order, or when a bill is new or changed: the agent then orders the bills again.
+ * amount, due day and late fee, so the order goes on with the bills that left it (paid, or past the window) taken out.
+ * Null for an agent's order, or when a bill is new or changed: the agent then orders the bills again.
  */
 export function carriedOrder(plan: PriorityPlan, competing: readonly Competing[]): string[] | null {
   if (!plan.byPerson) return null;
