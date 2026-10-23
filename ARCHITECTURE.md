@@ -119,8 +119,11 @@ new key; a failure at this stage is rolled back (accounts deleted, then the orga
 unless its first ledger entry already committed, in which case the chain, and the workspace, stay.
 The form also offers shadow mode for an Arc testnet workspace (ticked from `/onboarding?shadow=1`, the landing's "Try it
 on your bills"): once the workspace exists, the action turns it on as Settings does, `authorize(slug, "approval.policy")`
-then `startShadowMode` in USDC with the creator as actor. A refusal leaves the workspace created and sends the console
-`?shadow=not-started`, where it says so until shadow mode is on.
+then `startShadowMode` in USDC with the creator as actor (`startShadowModeAtCreation`,
+`src/lib/shadow-mode-at-creation.ts`). A refusal leaves the workspace created and sends the console
+`?shadow=not-started`, where it says so until shadow mode is on. A client opening a workspace from an accountant's client
+link goes through the same `createWorkspace`, always on Arc testnet and always in shadow mode, and `org_created` carries
+`via: "accountant_link"`: see [The accountant console](#the-accountant-console).
 
 `0020` also adds a trigger, `memberships_keep_an_owner`, that fires before every membership update
 or delete: removing or demoting an organization's last `owner` raises rather than commits, checked
@@ -1559,7 +1562,13 @@ disagrees with every decision.
   second. The shadow workspace signs `live_slice_started { by, liveOrgId, liveSlug, vendors: [{ counterpartyId, name,
   address }], skipped: [{ counterpartyId, name, reason }] }`. `readLiveSlice` reads it back with whether the new
   workspace is live; the report's last step names it, links it for its opener (`by`, at first its only member) and
-  ticks once it is live. No bill, history or verdict moves, and no money. No migration.
+  ticks once it is live. No bill, history or verdict moves, and no money. No migration. Going live keeps the
+  accountant (accountant client links AC4): the report lists the workspace's accountants (`listMembers`, best effort)
+  as "Bring your accountant ... along", ticked, and `startLiveSlice` gets the ones left ticked as `accountantIds`. For
+  each, migration `0143`'s `add_live_slice_accountant(p_from_org_id, p_org_id, p_actor, p_user_id)` checks the actor owns
+  both workspaces and the person is an accountant of the shadow one, and adds them as `accountant`; the new workspace
+  signs `member_joined { by, role: "accountant", via: "live_slice", grantedBy }`. One that fails (before `0143`, the
+  missing function) is named in the result, and the slice opens all the same.
 - **What the business really paid** (`docs/superpowers/specs/2026-10-10-actual-payments-design.md`). An owner or admin
   (`records.write`, as for adding an invoice) records how the business paid a payable outside Vestiarion: the day, the
   amount and currency as paid (the bill's own by default), the method (bank transfer, card, cash, other), a reference and
@@ -4044,6 +4053,13 @@ seconds is logged at most (`src/lib/growth/record.ts`). The privacy page describ
 itself; the landing page's first-touch cookie keeps them, and /admin/growth counts customer workspaces whose first touch
 came from the loop (`growthMetrics().fromLoop`). Member emails carry no link.
 
+**Workspaces from accountants** (accountant client links AC5). When an accountant's client link is claimed, migration
+`0143`'s `claim_client_link` writes the new workspace's `org_attribution` in the same transaction, `utm_source=accountant`,
+`utm_medium=client_link`, `utm_campaign=accountant_client` (`ACCOUNTANT_CLIENT_CAMPAIGN`, `src/lib/growth/attribution.ts`),
+write-once as `record_org_attribution` is; the join action then skips the cookie's first touch. `growth_workspaces` is not
+redefined: it already returns the attribution, and /admin/growth's **From accountants** tile counts customer workspaces
+with that campaign (`growthMetrics().fromAccountants`). A claim that fails records the cookie's first touch instead.
+
 **The founder dashboard** at `/admin/growth` is for people on `platform_team` only. `growthTeamUser()`
 (`src/lib/growth/gate.ts`) asks `growth_team_member(p_user)` on every call and fails closed; the page answers anyone
 else, signed in or not, with `notFound()`, so it never says it exists, and every action in
@@ -4126,6 +4142,10 @@ as a short checklist, ticked from what happened, rendered by one component (`Get
   reads whether a bill waits on the server (`billWaitingOnApprovals`). `/accountant` reads the marks in each workspace
   where the person is an accountant, through `withOrg(orgId, ..., { userId })`, never across tenants
   (`readAccountantOnboarding`), and has the visit recorded in each of those still missing it, one action per workspace.
+  The accountant's optional fifth step, Invite a client (accountant client links AC6), is offered only where client links
+  work (after migration `0143`) and ticked once one of the person's links was used, read by their own user id
+  (`listClientLinks().everUsed`). A step marked `optional` is never `next`, and the checklist shows and counts as done
+  without it.
 - **Marks** (`src/lib/onboarding/read.ts`, migration `0114`): `onboarding_marks (org_id, user_id, mark)`, one row each,
   under the two tenant policies, select and insert only for the tenant role, cascading with the workspace and the
   account. Before `0114` runs, reads answer `available: false` (42P01, PGRST205, 42703), nothing is recorded, and the
@@ -4228,6 +4248,48 @@ with a `section` column (formula-safe through `csvCell`, a BOM first); JSON is `
 appends `handoff_exported` and is braked at 10 a person in 10 minutes, counted from those entries. Nothing is stored:
 removing a member makes their next console load and download answer as for a workspace they never joined, as removing
 them revokes their API keys (`0069`).
+
+**Client invite links** (`docs/superpowers/specs/2026-10-23-accountant-client-links-design.md`). An accountant brings a
+new client in with one link, and the client opens their own workspace with the accountant already in it.
+
+- **The table** (migration `0143`). `accountant_client_links` is a platform table (`PLATFORM_TABLES`): RLS on, no policy,
+  every privilege revoked from `anon`, `authenticated` and `vestiarion_tenant`. A row is the accountant's
+  (`created_by`, cascading with their account), with an optional bound `email` (lowercased, at most 254 characters), the
+  token's `sha256` hex only (`token_hash`, unique, `^[0-9a-f]{64}$`), `expires_at` (7 days), `used_at`, `revoked_at`, and
+  the workspace it opened (`org_id`, set null when that workspace is deleted). Making and revoking a link is signed in no
+  ledger, since no workspace exists yet: the row keeps who and when. Its functions, `service_role` only, definer with an
+  empty `search_path`, are in `PLATFORM_RPCS`.
+- **Making one** (AC1; `createClientLinkAction`, `src/app/accountant/actions.ts`, outside `src/app/actions` because a
+  link belongs to no workspace, gated on the session). `createClientLink` (`src/lib/platform/client-links.ts`) makes a
+  `vxj_` token of 32 random bytes and sends only the SHA-256 of its secret to `create_client_link(p_actor, p_email,
+  p_token_hash)`, which refuses someone who is no workspace's accountant (`not_an_accountant`) and, under an advisory
+  lock per accountant, more than 20 made in a day, revoked ones counted, or 10 open at once. The link
+  (`siteOrigin()/join/<token>`) is returned once and never logged. `/accountant` shows **Invite a client**
+  (`src/components/accountant/ClientLinks.tsx`) to someone with an accountant membership, and lists their 25 newest links
+  (`listClientLinks`) as open, used, expired or revoked; a used one names its workspace only while they are still a
+  member of it. `revoke_client_link(p_actor, p_link_id)` revokes only the actor's own open link.
+- **The client's page** (AC2; `/join/[token]`, `src/app/join/[token]/page.tsx`). `requiresSession` covers `/join/`, as
+  `/invite/`, so nothing shows before sign-in and `vx_after_sign_in` brings the client back. `client_link_preview`
+  returns the state for any known hash, and the accountant's id and address and the bound address for an open link only;
+  `clientLinkPreview` trusts the row only when its hash equals the one asked for, compared in constant time
+  (`sameTokenHash`). `joinView` turns it into what the page offers: the form for an open link bound to no one or to the
+  signed-in address, one sentence for a link bound elsewhere, the accountant's own, or an expired, used or revoked one,
+  naming no one. The page asks not to be indexed, and the analytics see `/join/:token` (`redactPath`).
+- **Opening the workspace** (AC3; `joinFromClientLinkAction`, `src/app/join/actions.ts`, also outside
+  `src/app/actions` and gated on the session). It checks the link first (a dead link opens nothing), then calls
+  `createWorkspace({ network: "arc-testnet", via: "accountant_link" })` whatever the form sent, since Arc mainnet's
+  allowlist is `*` in production and protects nothing. There is no second copy of `create_org`. Then
+  `claim_client_link(p_token_hash, p_user_id, p_org_id)` locks the link and checks it is open, unexpired and bound (if
+  bound) to the client's address, that the accountant is not the client, that the client created and owns `p_org_id`, and
+  that the accountant is not a member yet; it then inserts the accountant's membership with the role `accountant`, a
+  literal never taken from the caller, and `invited_by` the client, marks the link used and records the first touch, in
+  one transaction. `claimClientLink` signs `member_joined { by, role: "accountant", clientLinkId, grantedBy }` in the new
+  workspace only, best effort as an accepted invitation's is; nothing is read or written in the accountant's other
+  workspaces. A claim that fails leaves the workspace, the link open, and the console `?accountant=not-added`, which says
+  "Your accountant was not added." with a link to Members. Shadow mode then starts as at onboarding.
+- **Before `0143` runs.** Production runs ahead of its migrations: a missing table or function (42P01, PGRST205, 42883,
+  PGRST202) reads as `available: false` on the console and `not_ready` on the page, which say client links are not
+  available yet, and the live slice names the accountants it could not bring.
 
 ## Usage metering
 

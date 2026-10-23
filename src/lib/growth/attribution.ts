@@ -14,6 +14,13 @@
  */
 
 export const FIRST_TOUCH_COOKIE = "vx_ft";
+
+/**
+ * The first touch of a workspace an accountant's client link opened (docs/superpowers/specs/2026-10-23-accountant-client-
+ * links-design.md AC5): written by migration 0143's claim_client_link, with utm_source accountant and utm_medium
+ * client_link, rather than from this cookie.
+ */
+export const ACCOUNTANT_CLIENT_CAMPAIGN = "accountant_client";
 export const FIRST_TOUCH_DAYS = 90;
 export const FIRST_TOUCH_MAX_AGE_SECONDS = FIRST_TOUCH_DAYS * 24 * 60 * 60;
 export const TAG_MAX = 100;

@@ -14,6 +14,20 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **An accountant invites a client with one link.** On the accountant console, under **Invite a client**, someone who
+  is an accountant in at least one workspace makes a one-time link that works for 7 days, bound to the client's email
+  when one is given, and copies it from the page: it is shown once, and only its SHA-256 is kept. At most 10 open links
+  and 20 a day. The client opens it signed in, sees the accountant named by the address they sign in with and what an
+  accountant may do, names a workspace and ticks their consent: the workspace opens as theirs, on Arc testnet in shadow
+  mode, with the accountant already in it as accountant. A link bound to another address, the accountant's own, and an
+  expired, used or revoked one offer nothing. If the accountant cannot be added once the workspace exists, the client
+  keeps it and the console says so, with a link to Members. The console lists each link as open, used (with the
+  workspace's name while the accountant is still in it), expired or revoked, with **Revoke**; the accountant's checklist
+  gains an optional **Invite a client** step. Starting a live slice offers to bring each accountant along, ticked.
+  `org_created` carries `via: "accountant_link"`, and the accountant's `member_joined` carries the link's id, or
+  `via: "live_slice"`. The founder dashboard counts workspaces from accountants. Needs migration 0143; before it runs,
+  the console and the link's page say client links are not available yet.
+
 - **Bills waiting for approval in Telegram, each with a Review link.** After each cycle, the message in a member's
   Telegram chat now ends with the bills the agent held or flagged for a person, or asked details for, that still wait:
   one line each with the amount, payee, the agent's reason as the approval card says it, whether it needs two approvals

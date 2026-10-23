@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-23: An accountant's client invite links
+
+- **`org_created`** carries `via: "accountant_link"` for a workspace a client opened from their accountant's client link. Such a workspace is always on Arc testnet, `network: "arc-testnet"`.
+- **`member_joined`** for the accountant follows in that workspace, domain `system`, actor `human`, with `role: "accountant"`, `clientLinkId` (the link's id) and `grantedBy` (the client, the workspace's owner). `by` is the accountant, as for an accepted invitation, which carries `invitationId` instead.
+- **`member_joined`** in a workspace on Arc mainnet opened as a live slice, for each accountant of the shadow workspace its owner brought along, carries `role: "accountant"`, `via: "live_slice"` and `grantedBy` (the owner).
+- Making and revoking a client link is signed in no workspace, since none exists yet. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-22: Bills waiting for approval in Discord
 
 - Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in the `system` domain:

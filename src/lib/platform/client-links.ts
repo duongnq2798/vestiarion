@@ -27,8 +27,6 @@ export const CLIENT_LINKS_LISTED = 25;
 
 /** What `org_created` says opened a workspace from a link (AC3). */
 export const CLIENT_LINK_VIA = "accountant_link";
-/** The campaign a workspace opened from a link carries in its first touch (AC5), written by `claim_client_link`. */
-export const CLIENT_LINK_CAMPAIGN = "accountant_client";
 /** The console's `?accountant=` when the client's workspace opened and their accountant was not added (AC3). */
 export const ACCOUNTANT_NOT_ADDED = "not-added";
 

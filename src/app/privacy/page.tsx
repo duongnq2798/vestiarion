@@ -20,7 +20,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-22"
+      updated="2026-10-23"
       intro="Vestiarion is an AI agent for bills and payments on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -70,6 +70,25 @@ export default function PrivacyPage() {
         <p>
           It is stored in a Supabase Postgres database. Each request for a workspace&apos;s data runs as a database role that row-level security limits to
           that one workspace, so one workspace cannot read another&apos;s rows.
+        </p>
+      </LegalSection>
+
+      <LegalSection id="client-links" title="An accountant's client links">
+        <p>
+          An accountant can send a new client a one-time link from the accountant console, so the client opens their own workspace with the accountant
+          in it. Before the link is used, it belongs to no workspace. What Vestiarion keeps of it:
+        </p>
+        <ul>
+          <li>who made it, as their account&apos;s id;</li>
+          <li>the client&apos;s email address, only when the accountant gives one, so the link works for that address alone;</li>
+          <li>the SHA-256 hash of the link, never the link itself, which is shown to the accountant once;</li>
+          <li>when it was made, when it expires (7 days later), and when it was used or revoked;</li>
+          <li>the workspace it opened, once used.</li>
+        </ul>
+        <p>
+          Only the accountant who made a link sees it, on their console, with the workspace it opened while they are still a member of it. The link&apos;s
+          page shows nothing before you sign in; then it shows the accountant&apos;s sign-in email address, so you know who will see your workspace. A link
+          goes with the account of the accountant who made it. A workspace deleted later leaves the link marked used, naming no workspace.
         </p>
       </LegalSection>
 
@@ -461,8 +480,8 @@ export default function PrivacyPage() {
             an invitation address becomes <code>/invite/:token</code>, a payee link <code>/payee/:token</code>, a client&apos;s pay link{" "}
             <code>/pay/:token</code>, a receipt link <code>/receipt/:token</code>, a shared report <code>/report/:token</code>, a customer&apos;s statement{" "}
             <code>/statement/:token</code>, a supplier&apos;s payment status <code>/supplier/:token</code>, an early-payment offer <code>/offer/:token</code> a customer&apos;s discount <code>/discount/:token</code>, a request for more time{" "}
-            <code>/more-time/:token</code> and a question about a payee&apos;s address change <code>/address-change/:token</code>, and a
-            workspace address has the workspace&apos;s slug
+            <code>/more-time/:token</code>, a question about a payee&apos;s address change <code>/address-change/:token</code> and an
+            accountant&apos;s client link <code>/join/:token</code>, and a workspace address has the workspace&apos;s slug
             replaced, as <code>/o/:org</code>;
           </li>
           <li>only the path is sent, never the query string or anything after a #;</li>
@@ -495,6 +514,10 @@ export default function PrivacyPage() {
           <li>
             When you create a workspace, Vestiarion reads it once and keeps those tags with the workspace, never replaced, so the team can see which
             outreach or page brought it. Only the team sees them, and they are deleted with the workspace.
+          </li>
+          <li>
+            A workspace opened from an accountant&apos;s client link keeps the tags <code>accountant</code>, <code>client_link</code> and{" "}
+            <code>accountant_client</code> instead, and the cookie is not read for it.
           </li>
           <li>When you ask for a guided setup, those tags are kept with your request too, as described below.</li>
           <li>
@@ -661,7 +684,7 @@ export default function PrivacyPage() {
         </ul>
         <p>
           If a workspace cannot be deleted, your account is not deleted. Otherwise your sign-in account is deleted, you are signed out, and your memberships and
-          the invitations you sent go with it, as do the payment approvals you gave, which the ledger keeps, and your Slack and Telegram links. API
+          the invitations and client links you sent go with it, as do the payment approvals you gave, which the ledger keeps, and your Slack and Telegram links. API
           keys you created stop working, and stay, revoked, without your name. Records you added in workspaces you share stay, without your name on them.
           A workspace&apos;s signed ledger is append-only, so entries you caused keep your account&apos;s id (never your email). A workspace deleted with your
           account leaves its tombstone, and a tombstone keeps who deleted it, as your account&apos;s id.

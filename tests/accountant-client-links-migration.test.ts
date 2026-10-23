@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { applyMigrations, asRole, asServiceRole, asTenant, createDatabase, createOrg, createUser, MIGRATIONS_DIR } from "./support/pglite";
+import { applyMigrations, asRole, asServiceRole, asTenant, createDatabase, createUser, MIGRATIONS_DIR } from "./support/pglite";
 
 /**
  * Migration 0143 (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md): an accountant's client invite

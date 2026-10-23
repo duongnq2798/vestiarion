@@ -83,7 +83,9 @@ Under the steps, an owner ticks the vendors to pay in real USDC and chooses **Op
 - **Address not confirmed here: it adds its own there**: an address sent through a payee link or changed, that no one has confirmed yet, is not carried.
 - **No address yet: it adds its own there**, the same way.
 
-A vendor with no payment limit cannot go: set one on **Counterparties** first. Nothing else is carried: no bill, no history, no verdict, and no limit changed here, since the new workspace starts with the usual Arc mainnet limits.
+A vendor with no payment limit cannot go: set one on **Counterparties** first. Nothing else is carried: no bill, no history, no verdict, no other member, and no limit changed here, since the new workspace starts with the usual Arc mainnet limits.
+
+Your accountant comes along. Under **Your accountant**, each accountant of this workspace is listed as "Bring your accountant *their email* along", ticked: they join the new workspace as its accountant, signed there as `member_joined` with `via: "live_slice"`. Untick any to leave them behind. One who could not be added is named in the result, to invite on the new workspace's **Members**.
 
 Once it is open, the owner who opened it sees **Opened**, with the workspace's name, how many vendors went over, and under **Stayed here** any that did not: one with no payment limit, one whose details need fixing on **Counterparties**, or one that could not be added, to add in the new workspace. On its **Counterparties**, **Ask every payee for an address** sends each vendor with no address its own link. It is not live yet: choose **Open its Settings to go live** and take it live with your own or a passkey wallet, its spending limit and USDC, as in [Go live](/docs/guides/go-live#on-arc-mainnet). Then add there the bills you want paid for real. This workspace keeps running alongside it.
 

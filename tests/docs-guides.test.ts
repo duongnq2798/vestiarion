@@ -362,6 +362,11 @@ const COSIGN_RULES = "src/lib/cosign-state-rules.ts";
 const USAGE_MODEL = "src/lib/usage/model.ts";
 const USAGE_PANEL = "src/components/UsagePanel.tsx";
 const ROLES = "src/lib/auth/roles.ts";
+/** An accountant's client invite links (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md). */
+const CLIENT_LINKS_CARD = "src/components/accountant/ClientLinks.tsx";
+const CLIENT_LINKS_LIB = "src/lib/platform/client-links.ts";
+const JOIN_PAGE = "src/app/join/[token]/page.tsx";
+const JOIN_FORM = "src/components/JoinFromClientLinkForm.tsx";
 
 /** Invoice capture for Chrome (docs/superpowers/specs/2026-10-15-invoice-capture-design.md): the extension, the consent, the review. */
 const CAPTURE_POPUP = "extensions/chrome-invoice-capture/extension/popup.html";
@@ -518,6 +523,27 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Agent spending limit", USAGE_MODEL],
     ["Payee history checks (x402)", USAGE_MODEL],
     ["Invitations", USAGE_MODEL],
+    // Invite a client (accountant client links AC1-AC4, AC6).
+    ["Invite a client", CLIENT_LINKS_CARD],
+    ["Invite a client", ROLE_CHECKLISTS],
+    ["Create link", CLIENT_LINKS_CARD],
+    ["Copy link", CLIENT_LINKS_CARD],
+    ["Revoke", CLIENT_LINKS_CARD],
+    ["Used", CLIENT_LINKS_CARD],
+    ["Expired", CLIENT_LINKS_CARD],
+    ["Revoked", CLIENT_LINKS_CARD],
+    ["invites you to keep your books in Vestiarion.", JOIN_PAGE],
+    ["They will be your workspace's accountant:", JOIN_PAGE, "They will be your workspace&apos;s accountant:"],
+    ["Workspace name", JOIN_FORM],
+    ["into this workspace as its accountant. I can remove them from Members at any time.", JOIN_FORM],
+    ["Open my workspace", JOIN_FORM],
+    ["This link was made for a different email address. Sign in with that address to use it.", CLIENT_LINKS_LIB],
+    ["This is your own client link. Send it to your client.", CLIENT_LINKS_LIB],
+    ["Client invite links are not available yet.", CLIENT_LINKS_LIB],
+    ['via: "accountant_link"', "src/lib/platform/workspace.ts", 'via?: "accountant_link"'],
+    ["member_joined", CLIENT_LINKS_LIB],
+    ["Your accountant was not added.", CONSOLE_PAGE],
+    ["Invite them on Members", CONSOLE_PAGE],
   ],
   "guides/customer-portal": [
     ["Bills & receivables", APP_NAV],
@@ -2772,6 +2798,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["An owner can start the live slice.", "src/components/vx/LiveSliceStart.tsx"],
     ["Pay in USDC only where that is lawful", "src/components/vx/LiveSliceStart.tsx"],
     ["live_slice_started", "src/lib/live-slice.ts"],
+    // Your accountant comes along (accountant client links AC4).
+    ["Your accountant", "src/components/vx/LiveSliceStart.tsx"],
+    ["Bring your accountant", "src/components/vx/LiveSliceStart.tsx"],
+    ['via: "live_slice"', "src/lib/live-slice.ts"],
     ["No real bills yet", REPORT],
     // Agent vs what really happened (actual payments A5-A8).
     ["Agent vs what really happened", ACTUALS],
