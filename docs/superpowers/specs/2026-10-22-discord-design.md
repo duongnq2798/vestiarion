@@ -79,7 +79,9 @@ requirement (`src/lib/discord/notify.ts`).
   approves anything."
 - **Shared builder.** The bill list comes from `buildWaitingNotice(items, policy)`
   (`src/lib/notifications/waiting-notice.ts`), which returns structured entries. Discord formats them
-  (`src/lib/discord/messages.ts`); Telegram's Review-link message (D10) will reuse them.
+  (`src/lib/discord/messages.ts`), and so does Telegram's decisions message
+  (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md), which reads the bills through the same
+  `src/lib/notifications/waiting-bills.ts`.
 
 **DC4. Safe text.**
 - **Escaping.** `discordText(value)` (`src/lib/discord/escape.ts`) first removes invisible format characters (Unicode's

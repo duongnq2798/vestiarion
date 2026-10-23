@@ -12,7 +12,10 @@ export type TelegramResult<T> = { ok: true; result: T } | { ok: false; status: n
 
 export interface SendOptions {
   keyboard?: InlineButton[][];
-  /** Sends the text as it is, with no HTML formatting: the fallback for a message Telegram refused to parse. */
+  /**
+   * Sends the text as it is, with no HTML formatting: the fallback for a message Telegram refused to parse. Link previews
+   * stay off, so no address in the text becomes a card.
+   */
   plain?: boolean;
 }
 
@@ -57,8 +60,11 @@ export function telegramClient(settings: TelegramSettings, fetchImpl: typeof fet
     }
   }
 
-  const text = (value: string, options?: SendOptions) =>
-    options?.plain ? { text: value } : { text: value, parse_mode: "HTML", link_preview_options: { is_disabled: true } };
+  const text = (value: string, options?: SendOptions) => ({
+    text: value,
+    ...(options?.plain ? {} : { parse_mode: "HTML" }),
+    link_preview_options: { is_disabled: true },
+  });
   const markup = (options?: SendOptions) => (options?.keyboard ? { reply_markup: { inline_keyboard: options.keyboard } } : {});
 
   return {

@@ -72,10 +72,10 @@ describe("telegramClient", () => {
     ]);
   });
 
-  it("sends plain text with no formatting when asked", async () => {
+  it("sends plain text with no formatting when asked, link previews still off", async () => {
     const { sent, client } = recorder(() => ok({ message_id: 8 }));
     await client.sendMessage(42, "Paid A&B <Ltd>", { plain: true });
-    expect(sent[0].body).toEqual({ chat_id: 42, text: "Paid A&B <Ltd>" });
+    expect(sent[0].body).toEqual({ chat_id: 42, text: "Paid A&B <Ltd>", link_preview_options: { is_disabled: true } });
   });
 
   it("answers a refusal with Telegram's status and description", async () => {

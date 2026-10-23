@@ -2686,7 +2686,28 @@ in `src/lib/agent-activity.ts`, with a supplier's answers the system records,
 `SUPPLIER_ANSWERS`, and never a person's own offer), and then moves
 the cursor past everything read: a failed send keeps it for the next cycle,
 a 403 disconnects the chat, and a message Telegram refuses to parse is sent
-once as plain text and then passed.
+once as plain text, link previews off as on every send, and then passed. The stopped payables among what was read
+that are still held, flagged or awaiting_info, read again in one query per
+cursor through the same `src/lib/notifications/waiting-bills.ts` as Discord's
+stage (the rules for two approvals and co-sign once per stage, and only once a
+bill waits), end the same message as one section built from
+`buildWaitingNotice`, in place of those bills' blocks
+(docs/superpowers/specs/2026-10-23-telegram-review-links-design.md): a line
+each with its amount, payee, status, first sentence of reasoning, "needs two
+approvals" (and that an accountant can co-sign) and a Review link to
+`/approvals#payable-<id>` that carries no token, as many of ten as fit, the
+section taking the room first, then "Opening a link never approves anything."
+once. A shadow-mode verdict hold has no `invoiceId` and keeps its block; bills
+that cannot be read leave every block as it was. Every value in the message
+(the workspace's name, each decision's text and reason, and the section's) and
+in `/waiting` goes through `telegramText` (Unicode's Cf and half of an emoji
+removed, whitespace to one space, addresses shortened, then what Telegram
+would make tappable broken up: a dot before a domain's ending or in an IP
+address written `[.]`, every `@` and every `/` that follows no letter or digit
+in its fullwidth form; then clipped by UTF-16 units without splitting a
+character, and HTML-escaped), and `/waiting` counts what does not fit rather
+than cut its HTML. The transfer watch's post to the chats
+is this same send, so a chat whose cursor lags is told its waiting bills there.
 
 **A workspace can also connect Slack**
 (docs/superpowers/specs/2026-10-03-slack-design.md). One Slack app serves the
@@ -2764,10 +2785,11 @@ stage, `discord` (`src/lib/discord/notify.ts`), reads the agent's activity after
 less than 8 of its 20 seconds have gone (`READ_BUDGET_MS`, so the post's own
 deadline still fits), keeps the stopped payables with an `invoiceId`
 (none for a shadow-mode verdict hold), reads them again in one query and keeps those still held, flagged or
-awaiting_info, as Slack's notifier does,
+awaiting_info, as Slack's notifier does (`src/lib/notifications/waiting-bills.ts`, which Telegram's stage
+reads too),
 and posts one message (`src/lib/discord/messages.ts`) built from
 `buildWaitingNotice` (`src/lib/notifications/waiting-notice.ts`, structured
-entries any chat can format): at most ten bills, as many as fit, each with its
+entries each chat formats in its own markup, as Telegram's decisions message does): at most ten bills, as many as fit, each with its
 amount, payee, first sentence of reasoning, "needs two approvals" (and that an
 accountant can co-sign while co-signing is on) and a Review link to
 `/approvals#payable-<id>` that carries no token. Every value goes through
