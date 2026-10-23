@@ -12,7 +12,7 @@ import { discordText } from "./escape";
 /** Said once in every message: a link opens the bill in Vestiarion, signed in, and decides nothing. */
 export const NEVER_APPROVES = "Opening a link never approves anything.";
 
-const STATUS: Record<WaitingNoticeEntry["status"], string> = { held: "held", flagged: "flagged" };
+const STATUS: Record<WaitingNoticeEntry["status"], string> = { held: "held", flagged: "flagged", awaiting_info: "waiting for details" };
 
 /** A page of the workspace, as an absolute link Discord shows without a preview. */
 const link = (origin: string, slug: string, path: string) => `<${origin}${orgHref(slug, path)}>`;

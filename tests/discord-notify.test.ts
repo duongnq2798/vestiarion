@@ -122,7 +122,7 @@ describe("sendDiscordWaiting", () => {
     expect(readActivityMock).not.toHaveBeenCalled();
   });
 
-  it("posts only the payables still held or flagged, in one message, then moves the cursor past everything read", async () => {
+  it("posts the payables still held, flagged or waiting for details, as Slack does, in one message, then moves the cursor past everything read", async () => {
     connection = connectionRow();
     readActivityMock.mockResolvedValue(activity([PAID, stopped(52, 1), stopped(53, 2), stopped(54, 4), ASKED, stopped(56, 1)], 60));
     invoices = [
@@ -133,16 +133,18 @@ describe("sendDiscordWaiting", () => {
       invoice(4, { status: "paid" }),
     ];
     const { run, posts, cursor, failures } = stage();
-    expect(await run()).toEqual([{ domain: "system", message: "Told the workspace's Discord channel that 2 bills wait for approval" }]);
+    expect(await run()).toEqual([{ domain: "system", message: "Told the workspace's Discord channel that 3 bills wait for approval" }]);
     expect(readActivityMock).toHaveBeenCalledWith(40);
     expect(posts).toHaveLength(1);
     expect(posts[0].url).toBe(`${WEBHOOK}?wait=true`);
     expect(posts[0].body).toMatchObject({ username: "Vestiarion", allowed_mentions: { parse: [] }, flags: 4 });
     const lines = posts[0].body.content.split("\n");
-    expect(lines[0]).toBe("**Acme Studio** · 2 bills wait for approval");
+    expect(lines[0]).toBe("**Acme Studio** · 3 bills wait for approval");
     expect(lines.filter((line) => line.startsWith("• "))).toEqual([
       `• **120.00 USDC** · Vendor 1 · held: The invoice has no purchase order. · Review: <${ORIGIN}/o/acme/approvals#payable-${INVOICE(1)}>`,
       `• **75.50 EURC** · Vendor 2 · flagged: The invoice has no purchase order. · Review: <${ORIGIN}/o/acme/approvals#payable-${INVOICE(2)}>`,
+      // Asked for details: its activity link is the bill, but it waits on Approvals too, where Add details is.
+      `• **120.00 USDC** · Vendor 3 · waiting for details: The invoice has no purchase order. · Review: <${ORIGIN}/o/acme/approvals#payable-${INVOICE(3)}>`,
     ]);
     expect(lines.at(-1)).toBe("Opening a link never approves anything.");
     expect(cursor()).toEqual([60]);
@@ -210,7 +212,8 @@ describe("sendDiscordWaiting", () => {
   it("moves past what was read, posting nothing, when no bill waits", async () => {
     connection = connectionRow();
     readActivityMock.mockResolvedValue(activity([PAID, ASKED], 61));
-    invoices = [invoice(3, { status: "awaiting_info" })];
+    // Its details were added and it was paid since: nothing waits.
+    invoices = [invoice(3, { status: "paid" })];
     const { run, posts, cursor } = stage();
     expect(await run()).toEqual([]);
     expect(posts).toEqual([]);

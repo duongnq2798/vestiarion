@@ -39,7 +39,8 @@ export interface DiscordNotifyDeps {
   sleep?: (ms: number) => Promise<void>;
 }
 
-const WAITING = ["held", "flagged"];
+/** As Slack's notifier posts them: held or flagged, or asked for details (a purchase order, a receipt) a person adds. */
+const WAITING = ["held", "flagged", "awaiting_info"];
 
 interface BillRow {
   id: string;
@@ -55,11 +56,12 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 
 /**
  * The payables the agent stopped for a person among what was read, still held or flagged now, in the order it stopped
- * them: a bill a person decided since, or one waiting for details rather than approval, is left out.
+ * them: a bill a person decided since is left out, and so is a payment held for a verdict in shadow mode, which the
+ * activity gives no `invoiceId`.
  */
 async function waitingBills(items: readonly ActivityItem[]): Promise<WaitingBill[]> {
   const ids = [
-    ...new Set(items.filter((item) => item.tone === "stopped" && item.invoiceId && item.path.startsWith("/approvals")).map((item) => item.invoiceId as string)),
+    ...new Set(items.filter((item) => item.tone === "stopped" && item.invoiceId).map((item) => item.invoiceId as string)),
   ];
   if (ids.length === 0) return [];
   const rows = unwrap(
