@@ -374,6 +374,44 @@ describe("planPaymentTiming", () => {
   });
 });
 
+describe("the written policy's reason names a late fee its payment comes before (late fees LF7)", () => {
+  const input: PaymentTimingInput = {
+    now: new Date("2026-10-25T09:00:00.000Z"),
+    amount: 100,
+    dueDate: "2026-10-20T12:00:00.000Z",
+    discount: null,
+    operatingBalance: 1000,
+    reserveApy: 0,
+    reserveBalance: 0,
+    earlierObligations: 0,
+  };
+  const percent = { kind: "percent_month" as const, value: 1.5, startsOn: "2026-10-30" };
+
+  it("names a fee that has not started on an overdue bill paid now", () => {
+    expect(planPaymentTiming({ ...input, lateFee: percent }).reason).toBe(
+      "Overdue since Oct 20, 2026; paying now, before a 1.5% monthly late fee (1.50 USDC) starts Oct 30, 2026."
+    );
+  });
+
+  it("names a fixed fee that starts the day after a due date it is paid on", () => {
+    const result = planPaymentTiming({ ...input, now: new Date("2026-10-10T09:00:00.000Z"), lateFee: { kind: "fixed", value: 25, startsOn: "2026-10-21" } });
+    expect(result.reason).toBe(
+      "No early-payment discount; paying on the due date, Oct 20, 2026, keeps 100 USDC available until then, before a 25.00 USDC late fee starts Oct 21, 2026."
+    );
+  });
+
+  it("says nothing of a fee that has already started, nor of none", () => {
+    expect(planPaymentTiming({ ...input, now: new Date("2026-11-02T09:00:00.000Z"), lateFee: percent }).reason).toBe("Overdue since Oct 20, 2026; paying now.");
+    expect(planPaymentTiming({ ...input, lateFee: null }).reason).toBe("Overdue since Oct 20, 2026; paying now.");
+  });
+
+  it("changes no figure: a late fee is never part of what is paid", () => {
+    const without = planPaymentTiming({ ...input, now: new Date("2026-10-10T09:00:00.000Z") });
+    const withFee = planPaymentTiming({ ...input, now: new Date("2026-10-10T09:00:00.000Z"), lateFee: percent });
+    expect({ ...withFee, reason: without.reason }).toEqual(without);
+  });
+});
+
 describe("a payment now that gains nothing (noGainInPayingNow)", () => {
   const input: PaymentTimingInput = {
     now: new Date("2026-10-17T00:30:00.000Z"),

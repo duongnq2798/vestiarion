@@ -85,6 +85,12 @@ export function lateFeeWords(fee: LateFee, amount: number, currency = "USDC"): s
   return `${lateFeeRateWords(fee, currency)} (${show(round6((amount * fee.value) / 100))} ${currency})`;
 }
 
+/** The fee as a sentence names it: "a 1.5% monthly late fee (1.50 USDC)", or "a 25.00 USDC late fee". */
+export function lateFeeClause(fee: LateFee, amount: number, currency = "USDC"): string {
+  if (fee.kind === "fixed") return `a ${show(fee.value)} ${currency} late fee`;
+  return `a ${fee.value}% monthly late fee (${show(round6((amount * fee.value) / 100))} ${currency})`;
+}
+
 /**
  * The term as an entry signs it and the model reads it (LF3, LF7): its kind, value and first day, and what a month past
  * its start costs (`aMonth`, the percent of the amount, or the fixed amount).

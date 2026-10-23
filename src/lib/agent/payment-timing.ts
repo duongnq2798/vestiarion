@@ -18,6 +18,7 @@
  */
 
 import { utcDay } from "../copy";
+import { lateFeeClause, type LateFee } from "./late-fee";
 
 export interface PaymentTimingInput {
   now: Date;
@@ -43,6 +44,11 @@ export interface PaymentTimingInput {
   earlierObligations: number;
   /** What the amounts are in, for the reason's wording: USDC unless the invoice is in EURC. */
   currency?: string;
+  /**
+   * The invoice's late fee (late fees LF7), or none. Only the reason names it, when the payment comes before it starts:
+   * it changes no date and no figure, and is never part of what is paid.
+   */
+  lateFee?: LateFee | null;
 }
 
 export interface PaymentTiming {
@@ -195,7 +201,27 @@ export function noGainInPayingNow(input: { action: string; timing: PaymentTiming
   return timing.recommendation.payOn > timing.today ? timing.recommendation.payOn : null;
 }
 
+/**
+ * The reference sentence, and the late fee the payment comes before when it is paid on or before the day the fee starts
+ * (late fees LF7): "…; paying now, before a 1.5% monthly late fee (1.50 USDC) starts Oct 30, 2026."
+ */
 function buildReason(args: {
+  input: PaymentTimingInput;
+  today: string;
+  dueOn: string;
+  deadlineOn: string | null;
+  discountValue: number | null;
+  floatValueToDue: number;
+  discountWins: boolean;
+  targetOn: string;
+}): string {
+  const reason = timingReason(args);
+  const fee = args.input.lateFee;
+  if (!fee || args.targetOn > fee.startsOn) return reason;
+  return `${reason.replace(/\.$/, "")}, before ${lateFeeClause(fee, args.input.amount, args.input.currency ?? "USDC")} starts ${utcDay(`${fee.startsOn}T00:00:00.000Z`)}.`;
+}
+
+function timingReason(args: {
   input: PaymentTimingInput;
   today: string;
   dueOn: string;

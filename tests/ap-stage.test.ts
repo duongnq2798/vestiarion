@@ -1112,6 +1112,45 @@ describe("the AP stage compares the model with the reference on the decision cod
   });
 });
 
+describe("the AP stage and a late fee (late fees LF3, LF4, LF7)", () => {
+  const LATE = { late_fee_kind: "percent_month", late_fee_value: "1.500000", late_fee_starts_on: "2026-11-01" };
+
+  it("tells the model the late fee and signs it in the decision's terms; the fallback names it; the transfer is the amount", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, chain, stage } = apFake({ book: [payable({ early_pay_discount_pct: null, discount_due_date: null, ...LATE })] });
+
+    await stage();
+
+    const lateFee = { kind: "percent_month", value: 1.5, startsOn: "2026-11-01", aMonth: 6 };
+    expect(promptOf().terms).toEqual({ earlyPayDiscount: null, lateFee });
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({ terms: { earlyPayDiscount: null, lateFee }, timing: { amountDueAtTarget: 400 } });
+    expect((entry.p_detail as { decision: { reasoning: string } }).decision.reasoning).toContain(
+      "paying on the due date, Oct 31, 2026, keeps 400 USDC available until then, before a 1.5% monthly late fee (6.00 USDC) starts Nov 1, 2026."
+    );
+    expect(chain.transfers).toEqual([]);
+  });
+
+  it("pays an overdue bill at its amount, never with the fee", async () => {
+    today("2026-11-05T09:00:00.000Z");
+    const { chain, stage } = apFake({ book: [payable({ early_pay_discount_pct: null, discount_due_date: null, ...LATE, late_fee_kind: "fixed", late_fee_value: "25" })] });
+
+    await stage();
+
+    expect(chain.transfers.map((transfer) => transfer.amount)).toEqual([400]);
+  });
+
+  it("names no late fee in the terms or the prompt of a bill without one", async () => {
+    today("2026-10-01T09:00:00.000Z");
+    const { fake, stage } = apFake({ book: [payable()] });
+
+    await stage();
+
+    expect(promptOf().terms).not.toHaveProperty("lateFee");
+    expect((ledger(fake.requests)[0].p_detail as { terms: Record<string, unknown> }).terms).not.toHaveProperty("lateFee");
+  });
+});
+
 describe("the AP stage with no model follows the timing policy", () => {
   it("schedules a correct invoice without terms for its due date, and says why", async () => {
     today("2026-10-01T09:00:00.000Z");
