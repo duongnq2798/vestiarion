@@ -18,7 +18,7 @@
 
 **[Full tour (7:22)](https://youtu.be/ds6cu4__1J4)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Mainnet proof](#mainnet-proof)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** · **[Security](https://www.vestiarion.xyz/security)**
 
-<sub>Built on [Arc](https://www.arc.io) and [Circle](#circle-integrations) · Works with [Xero](https://www.vestiarion.xyz/docs/guides/xero) · [QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks) · [Zoho Books](https://www.vestiarion.xyz/docs/guides/zohobooks) · [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot) · [Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive) · [Zoho CRM](https://www.vestiarion.xyz/docs/guides/zohocrm) · [BlindPay](https://www.vestiarion.xyz/docs/guides/bank-payouts) · [Asana](https://www.vestiarion.xyz/docs/guides/asana) · [GitHub](https://www.vestiarion.xyz/docs/guides/github) · [Slack](https://www.vestiarion.xyz/docs/guides/slack) · [Telegram](https://www.vestiarion.xyz/docs/guides/telegram) · [Chrome](https://www.vestiarion.xyz/docs/guides/invoice-capture) · [@vestiarionhq](https://x.com/vestiarionhq)</sub>
+<sub>Built on [Arc](https://www.arc.io) and [Circle](#circle-integrations) · Works with [Xero](https://www.vestiarion.xyz/docs/guides/xero) · [QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks) · [Zoho Books](https://www.vestiarion.xyz/docs/guides/zohobooks) · [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot) · [Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive) · [Zoho CRM](https://www.vestiarion.xyz/docs/guides/zohocrm) · [BlindPay](https://www.vestiarion.xyz/docs/guides/bank-payouts) · [Asana](https://www.vestiarion.xyz/docs/guides/asana) · [GitHub](https://www.vestiarion.xyz/docs/guides/github) · [Slack](https://www.vestiarion.xyz/docs/guides/slack) · [Telegram](https://www.vestiarion.xyz/docs/guides/telegram) · [Discord](https://www.vestiarion.xyz/docs/guides/discord) · [Chrome](https://www.vestiarion.xyz/docs/guides/invoice-capture) · [@vestiarionhq](https://x.com/vestiarionhq)</sub>
 
 </div>
 
@@ -147,7 +147,7 @@ reads the whole book each time it runs:
 
 The agent cycle: reconcile -> receipts -> compliance -> follow-up -> recurring -> services -> liquidity -> AP ->
 contractors -> treasury -> forecast -> proposals -> collections -> early offers -> customer offers -> term requests ->
-cash alert -> notices -> telegram -> slack, each stage's outcome appended to the ledger.
+cash alert -> notices -> telegram -> slack -> discord, each stage's outcome appended to the ledger.
 
 ## Why it is different
 
@@ -428,6 +428,7 @@ run in production, with its ledger entries and transactions.
 | --- | --- |
 | **[Slack](https://www.vestiarion.xyz/docs/guides/slack)** | Decisions in a channel; `/vestiarion today`, `waiting`, `ledger`; Approve and pay, Reject and Return buttons on Arc testnet within a limit; add an invoice from a message |
 | **[Telegram](https://www.vestiarion.xyz/docs/guides/telegram)** | Each member's own chat: decisions with reasons, `/today`, `/waiting`, `/ledger`, invoices read from a PDF. The bot never approves or pays |
+| **[Discord](https://www.vestiarion.xyz/docs/guides/discord)** | Bills the agent holds or flags for a person, posted to a channel through its webhook after each cycle, each with a link to review it in Approvals. A link never approves |
 | **[REST API](https://www.vestiarion.xyz/docs/api)** | `/api/v1` with per-member keys: read everything, and with write access add counterparties, invoices, milestones and payee links. A key never approves or pays |
 | **[TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk)** | [`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk): a typed client for every `/api/v1` operation, plus webhook and ledger verification |
 | **[CLI](https://www.vestiarion.xyz/docs/get-started/cli)** | [`@vestiarion/cli`](https://www.npmjs.com/package/@vestiarion/cli): the `vestiarion` command for every `/api/v1` operation, asking before each write, plus offline checks of audit exports and webhook signatures |
@@ -586,7 +587,7 @@ simulated.
 ## License
 
 [MIT](LICENSE). Zoho, Zoho Books and Zoho CRM are trademarks of Zoho Corporation Pvt. Ltd. Arc, Circle, Slack, Telegram,
-Xero, QuickBooks, HubSpot, Pipedrive, Asana and npm are trademarks of their respective owners; their names show what
+Discord, Xero, QuickBooks, HubSpot, Pipedrive, Asana and npm are trademarks of their respective owners; their names show what
 Vestiarion is built on and connects to, not an endorsement.
 
 <a href="https://www.producthunt.com/products/vestiarion?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-vestiarion"><img alt="Vestiarion on Product Hunt" width="200" height="43" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1269583&theme=light"></a>

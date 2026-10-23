@@ -202,7 +202,7 @@ describe("who can see this (E10)", () => {
       expect(words).toContain(
         "Webhooks and API keys, which an owner or admin sets up in Settings, also carry the ledger outside: a webhook receives each entry written while it is set up, and an API key can read every entry, these included."
       );
-      expect(words).toContain("A connected Slack channel and each member's own Telegram chat are told the agent's decisions.");
+      expect(words).toContain("A connected Slack channel and each member's own Telegram chat are told the agent's decisions, and a connected Discord channel the bills held for approval.");
     }
   });
 

@@ -42,7 +42,8 @@ export function firstSentence(text: string | null, max: number = DIGEST_REASON_M
   const match = withoutBrackets.match(/^.*?[.!?](?=\s|$)/s);
   const sentence = (match ? match[0] : withoutBrackets).trim();
   if (sentence.length <= max) return sentence;
-  return `${sentence.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+  // Never between the two halves of an emoji: a high surrogate left at the end would be half a character.
+  return `${sentence.slice(0, Math.max(0, max - 1)).replace(/[\uD800-\uDBFF]$/, "").trimEnd()}…`;
 }
 
 function formatAmount(amount: number): string {

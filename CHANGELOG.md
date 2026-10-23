@@ -14,6 +14,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Bills waiting for approval in Discord.** In Settings, under Integrations, an owner or admin pastes a Discord
+  channel webhook's URL and chooses **Connect**: Vestiarion posts a test message, and saves the connection only once
+  Discord took it. After each cycle, the bills the agent held or flagged for a person are posted to that channel in one
+  message, each with its amount, payee, the agent's reason, whether it needs two approvals (and that an accountant can
+  co-sign, when co-signing is on), and a link to review it in Approvals; a cycle that held many bills has them all
+  posted, not only the first page. Opening a link never approves anything. Names and reasons are shown as plain text,
+  with hidden direction and zero-width characters removed, nothing pings anyone, and the URL is kept encrypted.
+  Vestiarion reads no message in Discord, only the webhook's name and its channel's and server's ids when it is
+  connected. **Send test message**, **Disconnect**, and the last error Discord gave are in the same section; Connect and
+  **Send test message** allow a few tries a minute. Needs migration 0140.
+
 - **What waits for your accountant, in their console.** Where an owner lets accountants co-sign, the accountant console
   now lists each bill waiting for the accountant's co-sign as **Waiting for your co-sign**, in place of its decision
   item, so it is counted once, and each changed address no one has confirmed as **Address to confirm**. Owners, admins

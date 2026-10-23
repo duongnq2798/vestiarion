@@ -36,6 +36,13 @@ describe("firstSentence", () => {
     expect(result).toMatch(/…$/);
   });
 
+  it("never cuts between the two halves of an emoji", () => {
+    const result = firstSentence(`${"x".repeat(18)}${String.fromCodePoint(0x1f600)} and more`, 20) as string;
+    expect(result).toBe(`${"x".repeat(18)}…`);
+    // A lone surrogate does not survive a round trip through UTF-8.
+    expect(Buffer.from(result, "utf8").toString("utf8")).toBe(result);
+  });
+
   it("defaults its max to DIGEST_REASON_MAX", () => {
     const long = "x".repeat(300);
     const result = firstSentence(long);

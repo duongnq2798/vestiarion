@@ -37,6 +37,7 @@ import { budgetGate, countedUsdc, exceedsBudget, HELD_FOR_BUDGET, type BudgetGat
 import { sendPaymentNotices } from "../payment-notices";
 import { sendAgentDecisions } from "../telegram/notify";
 import { sendSlackDecisions } from "../slack/notify";
+import { sendDiscordWaiting } from "../discord/notify";
 import { onChainLimitGate, onChainLimitRecord, type OnChainLimitDecisionCheck, type OnChainLimitGate } from "./onchain-limit";
 import { addressUnconfirmed, payeeNotReady } from "../counterparty-address";
 import { SandboxCapReachedError } from "./sandbox-cap";
@@ -4920,6 +4921,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // The workspace's Slack channel is told what the agent decided since it was last told, with a stopped payable's card
   // when deciding from Slack is on (Slack design S7, S8).
   lines.push(...(await sendSlackDecisions()));
+  });
+
+  await stage("discord", async () => {
+  // ---------------------------------------------------------- 10. discord
+  // The workspace's Discord channel is told which bills the agent stopped for a person since it was last told, each
+  // with a link to review it in Approvals that approves nothing (Discord design DC3, DC5).
+  lines.push(...(await sendDiscordWaiting()));
   });
 
   const finishedAt = new Date().toISOString();

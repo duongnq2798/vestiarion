@@ -290,6 +290,15 @@ export default function PrivacyPage() {
             keeps only the ids. A Slack username given to connect an account is kept until that request is used or expires, and cleared when the next one is made.
           </li>
           <li>
+            <strong>Discord</strong>, for a workspace an owner or admin connects to a Discord channel with its webhook, receives what Vestiarion
+            posts to that channel: the workspace&apos;s name and, for each bill the agent holds or flags for a person, the counterparty&apos;s name,
+            the amount, the agent&apos;s reason and a link to review it in the app. It receives no email address or key, and no wallet address in
+            full: one is shortened to its first and last four characters. The app reads no message in Discord: when Discord is connected, it asks
+            Discord only for the webhook&apos;s own details, its name and its channel&apos;s and server&apos;s ids. It keeps the webhook&apos;s id and
+            name, the channel&apos;s and the server&apos;s ids, and the webhook&apos;s URL, encrypted; disconnecting Discord deletes them, and the
+            signed ledger keeps only the ids.
+          </li>
+          <li>
             <strong>Resend</strong>, for a workspace that turns on invoices by email, receives the emails sent to its invoice address, as it
             receives every email at that domain. The app reads each one the way it reads an invoice uploaded to the invoice form and keeps the
             sender, the subject and what was read, with SPF, DKIM and DMARC as Resend reported them, until a person adds or dismisses it. The

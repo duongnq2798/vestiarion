@@ -8,7 +8,7 @@ import { ENS_GATEWAY_HOSTS, ENS_RPC_DEFAULT } from "./ens-hosts";
 import { NETWORKS } from "./network";
 
 /** The day this list was last checked against the code. */
-export const SUBPROCESSORS_AS_OF = "2026-10-16";
+export const SUBPROCESSORS_AS_OF = "2026-10-22";
 
 const hostOf = (url: string) => new URL(url).host;
 
@@ -131,6 +131,14 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     names: ["Slack"],
     purpose: "receives the posts and answers for a workspace connected to a Slack channel",
     data: "the agent's decisions with counterparties' names, amounts and reasons, who decided a payment from Slack, and the sender's email address of an email to the invoice address that names no vendor or cannot be read",
+    when: ONLY_IF_CONNECTED,
+  },
+  {
+    name: "Discord",
+    privacyEntry: "Discord",
+    names: ["Discord"],
+    purpose: "receives the posts for a workspace connected to a Discord channel",
+    data: "the workspace's name and, for each bill held for a person, its counterparty's name, amount, the agent's reason and a link to review it",
     when: ONLY_IF_CONNECTED,
   },
   {

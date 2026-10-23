@@ -38,6 +38,7 @@ type GuideSlug =
   | "guides/get-paid"
   | "guides/telegram"
   | "guides/slack"
+  | "guides/discord"
   | "guides/email-invoices"
   | "guides/invoice-capture"
   | "guides/api-invoices"
@@ -239,6 +240,11 @@ const SLACK_INSTALLS = "src/lib/slack/installs.ts";
 const SLACK_LINKS = "src/lib/slack/links.ts";
 const SLACK_SETTINGS = "src/lib/slack/settings.ts";
 const CHAT_DECISIONS = "src/lib/commands/chat-decisions.ts";
+const DISCORD_PANEL = "src/components/DiscordPanel.tsx";
+const DISCORD_ACTIONS = "src/app/actions/discord.ts";
+const DISCORD_CONNECTIONS = "src/lib/discord/connections.ts";
+const DISCORD_MESSAGES = "src/lib/discord/messages.ts";
+const DISCORD_NOTIFY = "src/lib/discord/notify.ts";
 const INBOX_PANEL = "src/components/EmailInboxPanel.tsx";
 const INBOX_EMAILS = "src/components/InboxEmails.tsx";
 const INBOX_LIBRARY = "src/lib/email-inbox/inboxes.ts";
@@ -1988,6 +1994,49 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["cannot open files in this Slack yet", "src/lib/slack/intake.ts"],
     ["/invite @Vestiarion", "src/lib/slack/intake.ts"],
   ],
+  "guides/discord": [
+    ["Settings", APP_NAV],
+    ["Discord", DISCORD_PANEL],
+    ["Webhook URL", DISCORD_PANEL],
+    ["Connect", DISCORD_PANEL],
+    ["Discord is connected. A test message was posted to the channel.", DISCORD_ACTIONS],
+    ["discord_connected", DISCORD_CONNECTIONS],
+    ["That is not a Discord webhook URL.", DISCORD_ACTIONS],
+    ["Discord says this webhook does not exist.", DISCORD_ACTIONS],
+    ["Discord is already connected. Disconnect it first to post to another channel.", DISCORD_ACTIONS],
+    [
+      "Someone connected another Discord channel to this workspace at the same moment, so this one was not saved. The test message in this channel can be ignored.",
+      DISCORD_ACTIONS,
+    ],
+    ["Too many tries at once. Try again in a minute.", DISCORD_ACTIONS],
+    ["Discord says this webhook no longer exists, so Discord was disconnected. Connect a new webhook.", DISCORD_ACTIONS],
+    ["An owner or admin can connect Discord.", DISCORD_PANEL],
+    ["Discord is not set up on this deployment yet.", DISCORD_PANEL],
+    ["2 bills wait for approval", DISCORD_MESSAGES, "bills wait`} for approval"],
+    ["Review:", DISCORD_MESSAGES],
+    ["needs two approvals", DISCORD_MESSAGES],
+    ["needs two approvals, an accountant can co-sign", DISCORD_MESSAGES],
+    ["Opening a link never approves anything.", DISCORD_MESSAGES],
+    ["…and 3 more in Approvals", DISCORD_MESSAGES, "…and ${n} more in Approvals"],
+    ["Add details", AGENT_ACTIVITY],
+    ["Give your verdict", AGENT_ACTIVITY],
+    ["Approvals", APP_NAV],
+    ["Approve and pay", APPROVAL_CARD],
+    ["Reject", APPROVAL_CARD],
+    ["Return to agent", APPROVAL_CARD],
+    ["Send test message", DISCORD_PANEL],
+    ["A test message was posted to the Discord channel.", DISCORD_ACTIONS],
+    ["Last error", DISCORD_PANEL],
+    ["Discord could not be reached. The bills are posted again with the next cycle.", DISCORD_NOTIFY],
+    ["Those bills wait in Approvals.", DISCORD_NOTIFY],
+    ["Disconnect", DISCORD_PANEL],
+    ["Disconnect Discord", DISCORD_PANEL],
+    ["Discord is disconnected. Bills waiting for approval are no longer posted there.", DISCORD_ACTIONS],
+    ["discord_disconnected", DISCORD_CONNECTIONS],
+    ["Discord said the workspace's channel webhook is gone, so Discord was disconnected", DISCORD_NOTIFY],
+    ["https://discord.com/api/webhooks/", "src/lib/discord/webhook-url.ts"],
+    ["0140_discord.sql", "supabase/migrations/0140_discord.sql", "create table if not exists public.discord_webhooks"],
+  ],
   "guides/api-invoices": [
     ["Settings", APP_NAV],
     ["API keys", API_KEYS_PANEL],
@@ -3145,7 +3194,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
       "Webhooks and API keys, which an owner or admin sets up in Settings, also carry the ledger outside: a webhook receives each entry written while it is set up, and an API key can read every entry, these included.",
       EVIDENCE_VIEW,
     ],
-    ["A connected Slack channel and each member's own Telegram chat are told the agent's decisions.", EVIDENCE_VIEW],
+    ["A connected Slack channel and each member's own Telegram chat are told the agent's decisions, and a connected Discord channel the bills held for approval.", EVIDENCE_VIEW],
     ["Paid in a simulation: nothing moved on chain. This is its evidence as it stands.", EVIDENCE_PAGE],
     ["Paid in a simulation", EVIDENCE_VIEW],
     ["less its early-payment discount", EVIDENCE_VIEW],
@@ -3362,6 +3411,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/get-paid": 20,
   "guides/telegram": 20,
   "guides/slack": 20,
+  "guides/discord": 20,
   "guides/email-invoices": 20,
   "guides/invoice-capture": 20,
   "guides/api-invoices": 10,

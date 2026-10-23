@@ -20,6 +20,7 @@ import { SettingsSections, type SettingsGroup } from "@/components/SettingsSecti
 import ReportingCurrencyPanel from "@/components/ReportingCurrencyPanel";
 import ShadowModePanel from "@/components/ShadowModePanel";
 import SlackPanel from "@/components/SlackPanel";
+import DiscordPanel from "@/components/DiscordPanel";
 import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
 import PayeeLockPanel from "@/components/PayeeLockPanel";
 import { readPayeeLockStatus } from "@/lib/payee-lock";
@@ -52,6 +53,7 @@ import { stats } from "@/lib/queries";
 import { githubInstallations } from "@/lib/github/installs";
 import { githubAppSettingsFromEnv } from "@/lib/github/settings";
 import { slackPanelView } from "@/lib/slack/panel";
+import { discordPanelView } from "@/lib/discord/panel";
 import { slackSettingsFromEnv } from "@/lib/slack/settings";
 import { accountingPanelView } from "@/lib/connectors/panel";
 import { accountingProvider, accountingProviderOn } from "@/lib/accounting-providers";
@@ -280,6 +282,12 @@ export default async function SettingsPage({
       return null;
     });
     const asanaOutcome = ((await searchParams) as { asana?: string | string[] }).asana;
+    // Discord (Discord design DC6): on every deployment, since a channel webhook needs no app; best effort, like Slack's.
+    // Before migration 0140 the section says Discord is not set up yet. Never the webhook's URL.
+    const discord = await discordPanelView(membership.orgId, access.user.id).catch((error: unknown) => {
+      console.error("settings: Discord status not loaded", error instanceof Error ? error.message : error);
+      return null;
+    });
     // The Chrome extensions connected to this workspace (invoice capture C17), on a deployment that allows one: a
     // person's own, or everyone's for an owner or admin. Best effort; before migration 0121 the section says it is not
     // set up yet.
@@ -398,6 +406,11 @@ export default async function SettingsPage({
                 notice={typeof slackOutcome === "string" ? slackOutcome : null}
               />
             ) : null,
+          },
+          {
+            id: "discord-title",
+            title: "Discord",
+            content: discord ? <DiscordPanel orgSlug={slug} view={discord} canManage={canManageIntegrations} /> : null,
           },
           {
             id: "github-title",

@@ -122,6 +122,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/github", group: "Delivered work", title: "Show payments on GitHub", description: "Connect GitHub so a milestone paid for a pull request gets a comment on it, pull requests in private repositories verify, and a maintainer attaches a bounty with a comment." },
       { slug: "guides/slack", group: "Team chat", title: "Get the agent's decisions in Slack", description: "Connect a workspace to a Slack channel: the agent's decisions as it makes them, /vestiarion for what is safe to spend and waiting, and stopped payments decided from Slack when an owner allows it." },
       { slug: "guides/telegram", group: "Team chat", title: "Get the agent's decisions in Telegram", description: "Connect your own Telegram chat to a workspace: the agent's decisions as it makes them, what is safe to spend and waiting, and invoices sent to the bot." },
+      { slug: "guides/discord", group: "Team chat", title: "Get bills waiting for approval in Discord", description: "Connect a Discord channel with a webhook: each bill the agent holds or flags for a person is posted there after the cycle, with a link to review it in Approvals that never approves anything." },
       { slug: "guides/invoice-capture", group: "Your browser", title: "Capture invoices from Chrome", description: "Install Vestiarion Invoice Capture, connect it to your workspace, capture an invoice you select or choose, check its fields and send it as a draft that an owner or admin adds as a bill on Bills & receivables. It never pays." },
     ],
   },

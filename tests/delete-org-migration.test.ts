@@ -39,7 +39,7 @@ const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
   "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes", "github_installations", "github_bounties",
   "growth_leads", "growth_revenue", "org_attribution", "accounting_tokens", "asana_webhooks",
-  "extension_grants", "extension_auth_codes",
+  "extension_grants", "extension_auth_codes", "discord_webhooks",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -207,6 +207,11 @@ async function populated(slug: string): Promise<string> {
     [extensionCode, orgId, member, crypto.randomBytes(32).toString("base64url")]
   );
   expect(extensionGrant).toBeTruthy();
+  // The workspace's Discord channel webhook goes with it (0140).
+  await db.query(
+    "insert into public.discord_webhooks (org_id, webhook_id, channel_id, name, webhook_url_enc, connected_by) values ($1, '1234567890123456789', '3234567890123456789', 'Finance', $2::jsonb, $3)",
+    [orgId, JSON.stringify(ENVELOPE), member]
+  );
   await closeCycles(orgId);
   return orgId;
 }
