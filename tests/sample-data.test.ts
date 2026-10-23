@@ -75,6 +75,8 @@ function sampleFake(options: {
   milestones?: Array<{ id: string }>;
   intents?: Array<{ id: string; status: string }>;
   runningCycles?: Array<{ id: string }>;
+  /** Requests to the sample vendors for a missing document, with the file one sent. */
+  documentRequests?: Array<{ id: string; file_path: string | null }>;
 } = {}) {
   const org: OrgState = { mode: "sandbox", wallet_host: null, api_key_iv: null, ...options.org };
   const fake = fakeSupabase((request) => {
@@ -96,6 +98,8 @@ function sampleFake(options: {
     if (path === "/rest/v1/payment_intents" && method === "GET") return { body: options.intents ?? [] };
     if (path === "/rest/v1/payment_intents" && method === "DELETE") return { body: null };
     if (path === "/rest/v1/ledger_entries" && method === "GET") return { body: [] };
+    if (path === "/rest/v1/document_requests" && method === "GET") return { body: options.documentRequests ?? [] };
+    if (path === "/storage/v1/object/documents" && method === "DELETE") return { body: [] };
     if (path === "/rest/v1/rpc/append_ledger_entry") return LEDGER_REPLY;
     throw new Error(`unexpected request ${method} ${path}`);
   });
@@ -338,6 +342,21 @@ describe("removeSampleData", () => {
     const [entry] = ledgerBodies(fake.requests);
     expect(entry.p_action).toBe("sample_data_removed");
     expect(entry.p_detail).toEqual({ by: ACTOR, counterparties: 2, invoices: 1, milestones: 1, paymentIntents: 1 });
+  });
+
+  it("removes the files vendors sent through the sample counterparties' requests, once the counterparties are gone", async () => {
+    const kept = `${ORG}/document-requests/r-1/${"a".repeat(64)}`;
+    const { fake, run } = sampleFake({ sampleCounterparties: [{ id: "cp-0" }, { id: "cp-1" }], documentRequests: [{ id: "r-1", file_path: kept }, { id: "r-2", file_path: null }] });
+
+    await run(() => removeSampleData({ actorId: ACTOR }));
+
+    const [named] = requestsTo(fake.requests, "/rest/v1/document_requests", "GET");
+    expect(named.params.get("counterparty_id")).toBe("in.(cp-0,cp-1)");
+    const deletes = fake.requests.filter((request) => request.method === "DELETE").map((request) => request.path);
+    expect(deletes).toEqual(["/rest/v1/counterparties", "/storage/v1/object/documents"]);
+    expect(requestsTo(fake.requests, "/storage/v1/object/documents", "DELETE")[0].body).toEqual({
+      prefixes: [`${ORG}/document-requests/r-1/upload`, kept, `${ORG}/document-requests/r-2/upload`],
+    });
   });
 
   it("skips the intent delete when no sample obligation has one", async () => {

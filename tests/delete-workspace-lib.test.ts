@@ -40,6 +40,10 @@ interface Setup {
   accounts?: Array<{ circle_wallet_id: string | null }>;
   /** What `delete_org` raises, as PostgREST reports it; nothing means it succeeds. */
   raise?: string;
+  /** The workspace's requests, as `documentFilesOf` reads them before the delete. */
+  documentRequests?: Array<{ id: string; file_path: string | null }>;
+  /** The private documents bucket, by folder: an entry with no id is a folder, as Storage lists it. */
+  storage?: Record<string, Array<{ name: string; id: string | null }>>;
 }
 
 function one(request: RecordedRequest, rows: unknown[]): FakeReply {
@@ -61,11 +65,28 @@ function database(setup: Setup = {}) {
       if (setup.raise) return { status: 400, body: { code: "P0001", message: setup.raise, details: null, hint: null } };
       return { body: null };
     }
+    if (request.path === "/rest/v1/document_requests" && request.method === "GET") return { body: setup.documentRequests ?? [] };
+    if (request.path === "/storage/v1/object/list/documents") {
+      const { prefix, limit, offset } = request.body as { prefix: string; limit: number; offset: number };
+      return { body: (setup.storage?.[prefix] ?? []).slice(offset, offset + limit) };
+    }
+    if (request.path === "/storage/v1/object/documents" && request.method === "DELETE") return { body: [] };
     return { body: [] };
   });
   const run = <T>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, fn);
   const rpcCalls = () => fake.requests.filter((request) => request.path === "/rest/v1/rpc/delete_org");
-  return { fake, run, rpcCalls };
+  /** Each step on the vendors' files and the delete, in order. */
+  const fileSteps = () =>
+    fake.requests
+      .filter((request) => ["/rest/v1/document_requests", "/rest/v1/rpc/delete_org", "/storage/v1/object/documents"].includes(request.path))
+      .map((request) =>
+        request.path === "/rest/v1/document_requests"
+          ? "read rows"
+          : request.path === "/rest/v1/rpc/delete_org"
+            ? "delete_org"
+            : `remove ${(request.body as { prefixes: string[] }).prefixes.join(",")}`
+      );
+  return { fake, run, rpcCalls, fileSteps };
 }
 
 describe("deleteWorkspace", () => {
@@ -126,6 +147,40 @@ describe("deleteWorkspace", () => {
     const error = await run(() => deleteWorkspace({ orgId: ORG, actorId: ACTOR, confirmSlug: "northstar" })).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(DeleteWorkspaceError);
+  });
+
+  it("removes the files the rows named and every file left under the workspace's folder, once delete_org took it", async () => {
+    const root = `${ORG}/document-requests`;
+    const kept = (request: string, letter: string) => `${root}/${request}/${letter.repeat(64)}`;
+    // r-2's answer failed after its file was kept, and that file could not be removed then: no row names it.
+    const { run, fileSteps } = database({
+      documentRequests: [{ id: "r-1", file_path: kept("r-1", "a") }, { id: "r-2", file_path: null }],
+      storage: {
+        [root]: [
+          { name: "r-1", id: null },
+          { name: "r-2", id: null },
+        ],
+        [`${root}/r-1`]: [{ name: "a".repeat(64), id: "o-1" }],
+        [`${root}/r-2`]: [{ name: "b".repeat(64), id: "o-2" }],
+      },
+    });
+
+    await run(() => deleteWorkspace({ orgId: ORG, actorId: ACTOR, confirmSlug: "northstar" }));
+
+    expect(fileSteps()).toEqual(["read rows", "delete_org", `remove ${root}/r-1/upload,${kept("r-1", "a")},${root}/r-2/upload,${kept("r-2", "b")}`]);
+  });
+
+  it("removes no file when delete_org refuses", async () => {
+    const root = `${ORG}/document-requests`;
+    const { run, fileSteps } = database({
+      raise: "pause_first: northstar is live and its agent is running; pause it first",
+      documentRequests: [{ id: "r-1", file_path: null }],
+      storage: { [root]: [{ name: "r-1", id: null }], [`${root}/r-1`]: [{ name: "upload", id: "o-1" }] },
+    });
+
+    await expect(run(() => deleteWorkspace({ orgId: ORG, actorId: ACTOR, confirmSlug: "northstar" }))).rejects.toThrow(DeleteWorkspaceError);
+
+    expect(fileSteps()).toEqual(["read rows", "delete_org"]);
   });
 
   it("passes any other database error through as a plain Error, for the action to log by name", async () => {

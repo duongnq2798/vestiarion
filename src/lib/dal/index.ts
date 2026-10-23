@@ -85,6 +85,8 @@ export const TENANT_TABLES = [
   "supplier_status_links",
   // Asking a payee's contact whether they changed its address (migration 0137, address change check AC1).
   "address_change_checks",
+  // Asking a bill's vendor for its missing purchase order or goods receipt (migration 0142, document requests ER2-ER6).
+  "document_requests",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -174,6 +176,10 @@ export const PLATFORM_RPCS = [
   // token, and a frozen payee unfrozen.
   "create_address_change_check", "mark_address_change_check_sent", "address_change_check_preview", "answer_address_change_check",
   "unfreeze_counterparty", "restore_counterparty_freeze",
+  // Asking a vendor for a missing document (0142, document requests ER2-ER6): drafted, emailed, closed and revoked for a
+  // workspace, previewed and answered by token.
+  "create_document_request", "claim_document_request_send", "mark_document_request_sent", "release_document_request_send",
+  "close_document_requests", "revoke_document_request", "document_request_preview", "answer_document_request",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 
@@ -301,6 +307,28 @@ export function platformAuth() {
   const client = currentContext().db;
   return {
     deleteUser: (userId: string) => client.auth.admin.deleteUser(userId, false),
+  };
+}
+
+/** The private bucket a vendor's document is kept in (migration 0142, document requests ER5). */
+export const DOCUMENTS_BUCKET = "documents";
+
+/**
+ * The service role's storage, narrowed to the private `documents` bucket and the calls a vendor's document needs
+ * (document requests ER5, ER6): a one-time upload address for the vendor's browser, reading the file back to check it,
+ * moving it to where it is kept, removing a file refused, and a short-lived address for a member to open it; and listing
+ * one folder, a page at a time by name, for what a deleted workspace left there. Every path is the caller's to build under
+ * the workspace's own folder; nothing else of Storage is reachable from here.
+ */
+export function platformStorage() {
+  const bucket = currentContext().db.storage.from(DOCUMENTS_BUCKET);
+  return {
+    uploadUrl: (path: string) => bucket.createSignedUploadUrl(path, { upsert: true }),
+    download: (path: string) => bucket.download(path),
+    move: (from: string, to: string) => bucket.move(from, to),
+    remove: (paths: string[]) => bucket.remove(paths),
+    list: (folder: string, page: { limit: number; offset: number }) => bucket.list(folder, { ...page, sortBy: { column: "name", order: "asc" } }),
+    openUrl: (path: string, seconds: number, fileName: string) => bucket.createSignedUrl(path, seconds, { download: fileName }),
   };
 }
 

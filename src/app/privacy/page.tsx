@@ -45,8 +45,12 @@ export default function PrivacyPage() {
           <li>invoices, with their amounts, memos, purchase order references and due dates;</li>
           <li>
             counterparties: their names, wallet addresses, screening results and payment limits, and their billing email when a member gives one, where
-            payment notices, reminders, the agent&apos;s early-payment offers, its discounts for paying early, its requests for more time and the question whether
-            they changed their payment address go;
+            payment notices, reminders, the agent&apos;s early-payment offers, its discounts for paying early, its requests for more time, its requests for a
+            bill&apos;s missing document and the question whether they changed their payment address go;
+          </li>
+          <li>
+            the documents vendors send through a request&apos;s link for a bill&apos;s missing purchase order or goods receipt: the file, its SHA-256, kind
+            and size, and the purchase order number and note the vendor typed, described below;
           </li>
           <li>contractor milestones, with any GitHub pull request link used to verify one;</li>
           <li>the agent&apos;s settings and its treasury records;</li>
@@ -179,7 +183,8 @@ export default function PrivacyPage() {
             <strong>Vercel</strong> hosts the app.
           </li>
           <li>
-            <strong>Supabase</strong> holds the database and runs sign-in.
+            <strong>Supabase</strong> holds the database and runs sign-in, and keeps the documents vendors send through a request&apos;s link in private
+            storage.
           </li>
           <li>
             <strong>Circle</strong> creates the wallets and moves the payments, through Developer-Controlled Wallets, CCTP, Gateway and its Smart Contract Platform, so it receives wallet addresses and payment amounts. Its Stablecoin Service quotes EURC in USDC and builds the swaps of USDC for EURC, so it receives the operating wallet&apos;s address and the amounts. Gateway also verifies and settles the x402 payments for payee history, so it receives each signed payment: the paying wallet, the payee and the amount.
@@ -199,7 +204,10 @@ export default function PrivacyPage() {
             supplier once an owner or admin turns them on, with the request&apos;s one-time link, and a note to a workspace&apos;s owners and admins when a customer writes
             on its statement link, with at most 140 characters of what it wrote and no link it wrote, the question to a payee&apos;s billing email, when its payment address
             changes to a new one in a live workspace, whether they made the change, with a one-time link to answer, and a note to the owners and admins
-            when the payee answers that they did not. It receives each recipient&apos;s email address and the message. When the
+            when the payee answers that they did not, the request to a vendor&apos;s billing email for a bill&apos;s missing purchase order or goods
+            receipt, once an owner turns it on, with a one-time link (in a sandbox, to the member who turned it on instead), and a note to the
+            owners and admins when the vendor sends it, which says whether they typed a purchase order number but not what they typed. It receives each
+            recipient&apos;s email address and the message. When the
             team has turned it on, it also sends the team a short note about each new guided setup request, described below.
           </li>
           <li>
@@ -461,7 +469,8 @@ export default function PrivacyPage() {
             an invitation address becomes <code>/invite/:token</code>, a payee link <code>/payee/:token</code>, a client&apos;s pay link{" "}
             <code>/pay/:token</code>, a receipt link <code>/receipt/:token</code>, a shared report <code>/report/:token</code>, a customer&apos;s statement{" "}
             <code>/statement/:token</code>, a supplier&apos;s payment status <code>/supplier/:token</code>, an early-payment offer <code>/offer/:token</code> a customer&apos;s discount <code>/discount/:token</code>, a request for more time{" "}
-            <code>/more-time/:token</code> and a question about a payee&apos;s address change <code>/address-change/:token</code>, and a
+            <code>/more-time/:token</code>, a question about a payee&apos;s address change <code>/address-change/:token</code> and a request for a
+            bill&apos;s missing document <code>/documents/:token</code>, and a
             workspace address has the workspace&apos;s slug
             replaced, as <code>/o/:org</code>;
           </li>
@@ -597,6 +606,40 @@ export default function PrivacyPage() {
         </ul>
       </LegalSection>
 
+      <LegalSection id="vendor-documents" title="A vendor's page for a missing document">
+        <p>
+          When an owner turns on vendor requests in Settings, and a bill waits for its purchase order or goods receipt, Vestiarion emails the bill&apos;s
+          vendor at the billing email a member gave, with a one-time link where the vendor sends the document. In shadow, nothing is sent. A
+          sandbox never emails its vendors: its requests go to the member who turned vendor requests on, who answers as the vendor would.
+        </p>
+        <ul>
+          <li>
+            The billing email is used once per request, to send it. The request and the ledger keep only the address&apos;s domain, never the
+            address itself or the link.
+          </li>
+          <li>
+            The page shows the workspace&apos;s name, the vendor&apos;s own invoice number, its amount and due date, and what is missing. It needs no
+            account, and an expired, answered or revoked link shows one sentence and names no one.
+          </li>
+          <li>
+            It collects one file, a PDF, PNG or JPEG of at most 10 MB, a purchase order number if the vendor types one, and a note of at most 500
+            characters. The file goes from the vendor&apos;s browser straight to the workspace&apos;s private storage at Supabase. Vestiarion checks
+            what kind of file it is from its first bytes, keeps it under its SHA-256 with its kind and size, and removes a file it does not take.
+          </li>
+          <li>
+            The vendor&apos;s IP address limits how often the page can be sent. It is held in the server&apos;s memory for minutes, and never kept.
+          </li>
+          <li>
+            The file is read by no model and shown on no Vestiarion page. Any member of the workspace opens it as a download, through an address that
+            works for one minute. Nothing about it changes the bill: a person adds the details, and the agent decides the bill again.
+          </li>
+          <li>
+            Deleting the workspace, by its owner, with its last member&apos;s account or as an idle sandbox, deletes its requests and the files
+            vendors sent. Removing the sample data deletes those of its sample vendors.
+          </li>
+        </ul>
+      </LegalSection>
+
       <LegalSection id="retention" title="How long data is kept">
         <ul>
           <li>
@@ -632,7 +675,7 @@ export default function PrivacyPage() {
         </p>
         <p>
           Deletion removes the workspace&apos;s invoices, counterparties, milestones, treasury records, ledger, API keys, webhooks, members and invitations, in
-          one step, for everyone in it, and cannot be undone. Vestiarion keeps a tombstone that only the platform can read: the workspace&apos;s slug and name,
+          one step, for everyone in it, and cannot be undone. The documents vendors sent through its requests are then removed from its private storage. Vestiarion keeps a tombstone that only the platform can read: the workspace&apos;s slug and name,
           who deleted it and when, and its ledger&apos;s length, head hash and signing key id.
         </p>
         <p>

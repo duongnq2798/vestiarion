@@ -8,7 +8,7 @@ import { ENS_GATEWAY_HOSTS, ENS_RPC_DEFAULT } from "./ens-hosts";
 import { NETWORKS } from "./network";
 
 /** The day this list was last checked against the code. */
-export const SUBPROCESSORS_AS_OF = "2026-10-22";
+export const SUBPROCESSORS_AS_OF = "2026-10-23";
 
 const hostOf = (url: string) => new URL(url).host;
 
@@ -65,8 +65,8 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     name: "Supabase",
     privacyEntry: "Supabase",
     names: ["Supabase"],
-    purpose: "holds the Postgres database and runs sign-in",
-    data: "everything a workspace stores, and each person's sign-in account",
+    purpose: "holds the Postgres database, runs sign-in, and keeps the documents vendors send for a bill in private storage",
+    data: "everything a workspace stores, the documents vendors send through a request's link, and each person's sign-in account",
     when: "",
   },
   {

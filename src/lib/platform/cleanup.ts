@@ -2,6 +2,7 @@ import { IDEMPOTENCY_TTL_MS } from "../api/idempotency";
 import type { WalletHost } from "../config";
 import { currentConfig } from "../context";
 import { platformDb, unwrap } from "../dal";
+import { documentFilesOf, removeWorkspaceDocumentFiles } from "../document-requests/read";
 
 /** Spec §6 "Abandoned sandboxes": a sandbox with no activity this long is deleted by the daily cleanup. */
 export const SANDBOX_IDLE_DAYS = 60;
@@ -94,6 +95,11 @@ async function countHosted(): Promise<number | null> {
  * approval anyway (`has_wallet_approval`, migration 0082), failing the run
  * every day. One whose check fails is counted in `failed`.
  *
+ * The documents vendors sent through a sandbox's requests (migration 0142)
+ * are files in the private storage, not rows: they are named before the
+ * delete and removed once it went through, with whatever else is left under
+ * the sandbox's folder, as deleting a workspace does.
+ *
  * Last, it counts the hosted workspaces left, so the run reports how close
  * the platform is to its hosted limit, freed slots included.
  */
@@ -138,6 +144,7 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
         continue;
       }
     }
+    const files = await documentFilesOf(org.id);
     const { data, error } = await platformDb().rpc("delete_sandbox_org", {
       p_org_id: org.id,
       p_inactive_before: cutoffIso,
@@ -150,6 +157,7 @@ export async function deleteAbandonedSandboxes(now: Date = new Date()): Promise<
     if (data === true) {
       deleted += 1;
       console.log("deleted abandoned sandbox", org.id);
+      await removeWorkspaceDocumentFiles(org.id, files);
     }
   }
 

@@ -10,6 +10,20 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - **`decision_escalated`** entries' `decideBy` can also be the eve of a bill's late fee, the day before it starts: a bill past its due date whose fee starts later than the day after it is escalated once more on that day, besides once its due date has passed, as before. When its due date was not escalated before that day, as on the first day past it, the entry is for the due date, as before, and the eve is not escalated apart: a late fee never delays an escalation. Each is escalated once for its day, and an entry that tells such an eve says in its `summary` how many payments have a late fee from tomorrow. A late fee never moves a bill's decide-by day.
 - The TypeScript SDK 0.3.7 describes `lateFee` on `Invoice` and `CreateInvoiceInput`. Nothing else in `/api/v1` or the webhooks changes.
 
+## 2026-10-23: Asking a vendor for a missing document
+
+- Five new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`document_requests_changed`**, domain `system`, actor `human`: an owner set vendor requests to `off`, `shadow` or `on` in **Settings**. It carries `by`, `from` and `to`.
+  - **`document_request_drafted`**, domain `ap`, actor `agent`: with vendor requests in shadow, a bill waiting for its purchase order or goods receipt was recorded as one the agent would ask its vendor about; nothing was sent. It carries `invoiceId`, `counterpartyId`, `requestId`, `missing` (`purchase_order`, `goods_receipt`, or both) and `emailDomain`, the billing email's domain, never the address. One per bill, not one per cycle.
+  - **`document_requested`**, domain `ap`, actor `agent`: the vendor's billing email was sent a one-time link to send the document. It carries the same fields and `expiresAt`, 14 days after it was sent, never the link or the address.
+  - **`document_received`**, domain `ap`, actor `human`, with `by: null` and `via: "document_request"`: the vendor sent the document through its link. It carries `invoiceId`, `counterpartyId`, `requestId`, `poReference` when the vendor typed one (plain text on one line, of at most 100 characters, with no link), `fileSha256`, `fileType` (`application/pdf`, `image/png` or `image/jpeg`) and `fileSize` in bytes, never the file or the vendor's note.
+  - **`document_request_revoked`**, domain `ap`, actor `human`: an owner or admin revoked an open request, whose link stopped working. It carries `by`, `requestId`, `invoiceId` and `counterpartyId`.
+- In a sandbox, `document_request_drafted` and `document_requested` carry `sandbox: true`: a sandbox never emails its vendors, so the request goes to the member who set vendor requests, and `emailDomain` is that member's email domain.
+- None of them changes the bill: its status, amount, purchase order and address stay as they were, as `GET /api/v1/invoices` returns them. A person still adds the purchase order with **Add details**, recorded as `invoice_details_added`.
+- A cycle's journal has a new stage, `document_requests`, after `term_requests`. It needs the `ap` stage to have succeeded.
+- A `cycle_complete` entry's `events` can also include `document_requests_on`, when an owner set vendor requests to shadow or on.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-22: Bills waiting for approval in Discord
 
 - Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in the `system` domain:

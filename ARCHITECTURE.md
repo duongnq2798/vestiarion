@@ -86,7 +86,8 @@ A production build enforces the policy as `Content-Security-Policy`, but for `fo
 - The policy is `contentSecurityPolicy` (`src/lib/security/csp.ts`). The config imports it, so it imports only the
   network profiles and the site's links, which import nothing; Iris's origins and Product Hunt's badge come from them.
 - Scripts and styles may be inline, since Next.js inlines its own and a nonce would end static rendering.
-- `connect-src` names Circle's Iris and modular wallets client, which the browser calls, and Google Analytics.
+- `connect-src` names Circle's Iris and modular wallets client, which the browser calls, Google Analytics, and the
+  deployment's Supabase, where a vendor's browser puts the document a request asked for (document requests ER5).
 - `img-src` names Product Hunt's badge in the site footer.
 - `form-action` names every connect form's consent screen (each Zoho data center's), Google sign-in and the
   deployment's Supabase, since Chrome checks a form submission's redirects too.
@@ -3085,6 +3086,87 @@ amount on a later day (docs/superpowers/specs/2026-10-17-term-requests-design.md
 - **Told** in the activity toasts, Telegram and Slack: each request, answer, counter and withdrawal
   (`TERM_REQUEST_ACTIONS`, `src/lib/agent-activity.ts`).
 
+## Asking a vendor for a missing document
+
+A bill waiting for its purchase order or goods receipt, and the agent asks the vendor for the document through a
+one-time link that sends it straight to the bill (docs/superpowers/specs/2026-10-23-document-requests-design.md,
+migration 0142). Part 1 asks, collects and shows; it never pays, and changes no bill's status, amount or address.
+
+- **The setting** (`src/lib/document-requests/setting.ts`). `approval_policies.document_requests`, `off`, `shadow` or
+  `on`, off by default; an owner (`approval.policy`) changes it in Settings, beside the payee lock
+  (`DocumentRequestsPanel`, `setDocumentRequestsAction`). An upsert of the workspace's row, refused while a cycle runs,
+  signed best effort as `document_requests_changed { by, from, to }`; shadow or on starts a cycle
+  (`document_requests_on`). Before 0142 the column is missing (42703, PGRST204): it reads off, Settings says it is not
+  available, and the stage does nothing.
+- **The stage** (`src/lib/agent/document-requests.ts`, stage `document_requests`, after `term_requests`, needing `ap`
+  only: it reads the holds the AP stage just wrote and moves no money). Off, it reads the setting and stops. Otherwise, not
+  while paused: `close_document_requests` expires open requests past their date or whose bill no longer waits for
+  information, and drafted ones with three attempts spent. A payable qualifies (`documentRequestAllowed`,
+  `src/lib/document-requests/rules.ts`) when it is `awaiting_info`, `missingDetails` of its current row names a purchase
+  order or a goods receipt, its counterparty has a notice email and is neither frozen (`frozen_at`, read without it
+  before 0137) nor screened high risk, and it has no request drafted or open, none answered or expired in 7 days, and
+  none revoked. It keys on the row, never on `guardrailRule`, which most match holds leave null. At most 20 requests
+  made and 20 emailed in 24 hours per workspace. The bills' earlier requests are read 100 bills at a time (`ID_CHUNK`),
+  so no read's address grows long enough to be refused.
+- **A sandbox** never emails its vendors (`orgs.mode`, read with the workspace's name): the request goes to the member
+  who last set vendor requests to shadow or on, named by the latest `document_requests_changed` and found among the
+  members (`listMembers`), as term requests and early offers send theirs. The email is marked `[Sandbox]` and says whose
+  place they take; the request keeps that member's email domain, and both ledger entries carry `sandbox: true`. With no
+  such entry, or once that member left, a sandbox asks no one. A workspace in shadow mode asks as a live one does: its
+  bills are the business's own, and a request asks for a document, never a payment.
+- **Shadow** drafts the request (`create_document_request`, one drafted or open per bill by a partial unique index) and
+  signs `document_request_drafted { invoiceId, counterpartyId, requestId, missing, emailDomain }`, once per bill: the
+  domain is the only part of the address kept. Nothing is sent; the cards say what Vestiarion would ask.
+- **On** drafts it, or takes the one shadow drafted, and claims an attempt (`claim_document_request_send`, a
+  compare-and-set on `send_attempts`, at most 3) under a new `vxu_` token, of which only the SHA-256 is stored. The email
+  (`documentRequestEmail`, a fixed template, `fromName` the workspace's, so the sender reads "Workspace via Vestiarion"
+  at Vestiarion's own address) goes under a Resend idempotency key per attempt. Sent, `mark_document_request_sent` opens
+  the link for 14 days and the ledger records `document_requested` (with `expiresAt`). Not sent,
+  `release_document_request_send` drops the token, and the request waits for the next cycle, or expires after the third
+  attempt.
+- **The vendor** (`/documents/[token]`, `src/lib/document-requests/intake.ts`). No session; the token is the credential,
+  checked for its shape before any lookup, and `/documents/:token` is redacted for analytics; the page is noindex.
+  `document_request_preview` answers only for an open, unexpired request whose bill still waits for information; any
+  other link shows one sentence naming no one. The file never passes through a server function: `startDocumentUpload`
+  makes a signed upload address (`platformStorage().uploadUrl`) at `<org>/document-requests/<request>/upload` in the
+  private `documents` bucket, and the browser puts the file there (the Supabase origin is in `connect-src`). Sending it
+  (`submitDocument`) reads the file back, refuses it unless its first bytes are a PDF, PNG or JPEG of at most 10 MB
+  (`sniffDocumentType`), and moves it to `<org>/document-requests/<request>/<sha256>`, out of the upload address's reach.
+  The upload address stays good for two hours and may overwrite the upload, so the moved file is read back from where it
+  is kept and taken only when it hashes as the file checked; otherwise it is removed (`failed_check`). The vendor's form
+  reads the file's first 8 bytes too (`sniffDocumentType` is pure), and asks for the upload address and puts the file
+  with that type, so a PDF with no extension, which a browser gives no type, is still taken. `answer_document_request`
+  takes it once, re-checking the path, the kind, the size and the fields; a file it does not take is removed. Both
+  steps take a token from `takeDocumentAddressToken` (per IP, before the lookup) and `takeDocumentLinkToken` (per live
+  link). The purchase order number is plain text on one line of at most 100 characters, with no control or format
+  character, no line or paragraph separator (U+2028, U+2029) and no link; a note's line breaks, those separators among
+  them, are read as `\n` (`readDocumentFields`). The function and the table refuse a control character too, named by
+  code point (C0, DEL, C1 and the two separators) rather than `[[:cntrl:]]`, whose members follow the database's ctype
+  (glibc counts the separators, PGlite does not), so the page never passes what Postgres refuses; and a link. The
+  ledger records `document_received` (`by: null`, `via: "document_request"`, with `poReference`, `fileSha256`, `fileType`,
+  `fileSize`), and `notifyDocumentReceived` emails the owners and admins after the vendor has its page, saying whether a
+  purchase order number came and never what the vendor typed. No model reads the file.
+- **The cards** (`readDocumentRequests`, `src/lib/document-requests/read.ts`; `DocumentRequestLine`). Approvals
+  (`ApprovalCard`) and Bills (`WaitingPayableAction`) show each waiting bill's latest request: what Vestiarion would ask
+  (drafted, while shadow, only for a bill still `awaiting_info`, as what its current row lacks), when it asked and until
+  when (open), what the vendor sent (answered), or a link that expired unanswered. The latest answered request is kept
+  apart: under a newer request as `received`, or alone when the newer one shows nothing, so the vendor's file and
+  purchase order stay on the card. An answered request links any member to `/api/document-requests/[id]/file`, which
+  checks membership and redirects to a one-minute signed download from the storage's own origin; its purchase order is
+  filled into Add details (`suggestedPo`, from `suggestedPoOf`), which still adds it as before. An owner or admin
+  revokes an open request (`revoke_document_request`, `document_request_revoked`); a revoked request is not made again
+  for that bill.
+- **Storage and tenancy.** The tenant role only reads `document_requests` under RLS; every write is a service-role
+  definer function. The bucket has no storage policy: only the service role reaches it, through `platformStorage()`
+  (`src/lib/dal`), narrowed to that bucket. Deleting a workspace, or the account of its last member, names its files
+  before `delete_org`, reading the rows by id in pages of 1000 (PostgREST's `max_rows` cuts a longer answer without an
+  error), and after it removes those and every file left under the workspace's `document-requests` folder, which it
+  lists (`documentFilesOf`, `removeWorkspaceDocumentFiles`): a file kept for an answer that did not go through and could
+  not be removed then, or kept by an answer after the rows were read, is named by no row. So does the daily cleanup
+  around `delete_sandbox_org`, once it deleted an idle sandbox. Removing the sample data removes the files named by the
+  requests to its sample counterparties (`removeDocumentFiles`). Every read of 0142's column, table and functions treats
+  their absence as none.
+
 ## Which bill first when the cash cannot cover them all
 
 docs/superpowers/specs/2026-10-18-cash-priority-design.md; pure rules in `src/lib/agent/cash-priority.ts`, the plan in
@@ -3135,7 +3217,7 @@ activity feed says a member set the order.
 ## Telling the owner before the cash runs short
 
 docs/superpowers/specs/2026-10-17-cash-short-alert-design.md, `src/lib/agent/cash-alert.ts`, stage `cash_alert` after
-`term_requests` (needs `reconcile`). The stage reads the balances, the open invoices (payables still to pay and
+`document_requests` (needs `reconcile`). The stage reads the balances, the open invoices (payables still to pay and
 receivables still owed, so a long paid history never crowds the read past PostgREST's row cap), what customers still owe
 on each (`stillOwed` over `readAllocationRows`, as the console counts it) and the open milestones, maps them with
 `outlookInputOf` (`src/lib/cash-outlook-input.ts`, shared with `todayFacts`) and runs `cashOutlook`, so its figures are

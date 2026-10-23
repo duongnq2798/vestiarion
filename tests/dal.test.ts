@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { NoOrgScopeError, runWith } from "@/lib/context";
-import { db, platformDb, TENANT_RPCS, TENANT_TABLES, type OrgDb } from "@/lib/dal";
+import { db, platformDb, platformStorage, TENANT_RPCS, TENANT_TABLES, type OrgDb } from "@/lib/dal";
 import { carriesOrg, fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 const ORG_A = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
@@ -220,5 +220,35 @@ describe("the table boundary", () => {
     const { fake, result } = scoped(async () => platformDb().rpc("create_org", { p_slug: "northstar" }), null);
     await result;
     expect(fake.requests.map((request) => [request.path, request.body])).toEqual([["/rest/v1/rpc/create_org", { p_slug: "northstar" }]]);
+  });
+});
+
+describe("platformStorage()", () => {
+  it("reaches the private documents bucket only: an upload address that may replace, and a short-lived download address (document requests ER5, ER6)", async () => {
+    const fake = fakeSupabase((request) => {
+      if (request.path.startsWith("/storage/v1/object/upload/sign/")) return { body: { url: "/object/upload/sign/documents/o/r/upload?token=up" } };
+      if (request.path.startsWith("/storage/v1/object/sign/")) return { body: { signedURL: "/object/sign/documents/o/r/f?token=down" } };
+      return { body: {} };
+    });
+    const [upload, open] = await runWith(contextOf(null, fake.client), async () => [
+      await platformStorage().uploadUrl("o/r/upload"),
+      await platformStorage().openUrl("o/r/f", 60, "document-r.pdf"),
+    ]);
+    expect(upload.data?.signedUrl).toBe("https://tests.supabase.invalid/storage/v1/object/upload/sign/documents/o/r/upload?token=up");
+    expect(open.data?.signedUrl).toBe("https://tests.supabase.invalid/storage/v1/object/sign/documents/o/r/f?token=down&download=document-r.pdf");
+    const [signUpload, signDownload] = fake.requests;
+    expect(signUpload.path).toBe("/storage/v1/object/upload/sign/documents/o/r/upload");
+    expect(signUpload.headers.get("x-upsert")).toBe("true");
+    expect(signDownload.path).toBe("/storage/v1/object/sign/documents/o/r/f");
+    expect(signDownload.body).toEqual({ expiresIn: 60 });
+  });
+
+  it("lists one folder of the documents bucket a page at a time, by name, for a deleted workspace's files", async () => {
+    const fake = fakeSupabase(() => ({ body: [{ name: "r-1", id: null }] }));
+    const listed = await runWith(contextOf(null, fake.client), () => platformStorage().list("o/document-requests", { limit: 100, offset: 200 }));
+    expect(listed.data).toEqual([{ name: "r-1", id: null }]);
+    expect(fake.requests.map((request) => [request.method, request.path, request.body])).toEqual([
+      ["POST", "/storage/v1/object/list/documents", { prefix: "o/document-requests", limit: 100, offset: 200, sortBy: { column: "name", order: "asc" } }],
+    ]);
   });
 });

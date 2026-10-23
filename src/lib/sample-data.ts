@@ -4,6 +4,7 @@ import { RECLAIM_AFTER_MS } from "./agent/approvals";
 import { missingColumn } from "./agent/late-fee";
 import { currentOrgId } from "./context";
 import { db, platformDb, unwrap } from "./dal";
+import { documentFilesOf, removeDocumentFiles } from "./document-requests/read";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { networkOf } from "./network";
 import { homeChain } from "./payee-chains";
@@ -19,7 +20,9 @@ import { workspaceNetwork } from "./workspace-network";
  * Only counterparties carry the `sample` mark (S2): an invoice or milestone is
  * sample because its counterparty is, and leaves with it through the
  * `on delete cascade` the tables already have. Payment intents name their
- * invoice or milestone without a foreign key, so removal deletes them first.
+ * invoice or milestone without a foreign key, so removal deletes them first. The requests to a sample vendor for a
+ * missing document (migration 0142) go with it too; the files a vendor sent through them are named first and removed
+ * from the private storage after.
  *
  * Sample data lives only where payments are simulated (S1). A sample
  * counterparty has no address, and a workspace that holds Circle credentials
@@ -327,7 +330,9 @@ export async function removeSampleData(input: { actorId: string }): Promise<Samp
     if (deleted.error) throw new Error(deleted.error.message);
   }
 
+  const files = await documentFilesOf(orgId, counterpartyIds);
   const removed = unwrap(await db().from("counterparties").delete().eq("sample", true).select("id")) as Array<{ id: string }>;
+  await removeDocumentFiles(files);
   const result = {
     counterparties: removed.length,
     invoices: invoices.length,

@@ -21,6 +21,12 @@ export interface EmailMessage {
    * of the event and the recipient (`src/lib/notifications/deliveries.ts`); never an address.
    */
   idempotencyKey?: string;
+  /**
+   * Who the email is from, in words, when it is sent for a business to its counterparty (document requests ER4): the
+   * sender becomes "<name> via Vestiarion", still at Vestiarion's own address. Quotes, angle brackets and control
+   * characters are dropped, so the name never changes the header around it.
+   */
+  fromName?: string;
 }
 
 export type SendResult = { sent: true; id: string } | { sent: false; reason: string };
@@ -83,6 +89,19 @@ async function errorName(response: Response): Promise<string | null> {
   }
 }
 
+/** The configured sender in a business's name: "<name> via Vestiarion" at the same address, or the sender as it is. */
+export function senderFor(from: string, fromName: string | undefined): string {
+  const name = (fromName ?? "")
+    .replace(/[\p{Cc}"\\<>]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60)
+    .trim();
+  if (!name) return from;
+  const address = /<([^<>\s]+)>\s*$/.exec(from)?.[1] ?? from.trim();
+  return `"${name} via Vestiarion" <${address}>`;
+}
+
 async function deliver(message: EmailMessage, settings: { apiKey: string; from: string }, fetchImpl: typeof fetch): Promise<SendResult> {
   try {
     const response = await fetchImpl("https://api.resend.com/emails", {
@@ -92,7 +111,7 @@ async function deliver(message: EmailMessage, settings: { apiKey: string; from: 
         "content-type": "application/json",
         ...(message.idempotencyKey ? { "idempotency-key": message.idempotencyKey } : {}),
       },
-      body: JSON.stringify({ from: settings.from, to: [message.to], subject: message.subject, html: message.html, text: message.text }),
+      body: JSON.stringify({ from: senderFor(settings.from, message.fromName), to: [message.to], subject: message.subject, html: message.html, text: message.text }),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
     if (!response.ok) {

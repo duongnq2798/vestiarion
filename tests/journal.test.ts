@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CycleJournal,
@@ -122,6 +124,27 @@ describe("CycleJournal — the fail-closed boundary", () => {
     expect(j.gate("contractors").run).toBe(true);
     expect(j.gate("treasury").run).toBe(true);
     expect(j.gate("forecast").run).toBe(true);
+  });
+
+  it("asks vendors for missing documents only after AP decided, after term requests, and needs no balance (document requests ER2)", () => {
+    expect(CYCLE_STAGES.indexOf("document_requests")).toBe(CYCLE_STAGES.indexOf("term_requests") + 1);
+    expect(STAGE_REQUIRES.document_requests).toEqual(["ap"]);
+    const j = upTo("ap");
+    j.failed("ap", new Error("boom"), 10);
+    expect(j.gate("document_requests")).toEqual({ run: false, because: "ap failed" });
+    const reconcileDown = new CycleJournal();
+    reconcileDown.failed("reconcile", new Error("chain down"), 1);
+    reconcileDown.completed("ap", 1);
+    expect(reconcileDown.gate("document_requests").run).toBe(true);
+  });
+
+  it("is described in ARCHITECTURE.md with each stage after the one the cycle runs just before it", () => {
+    const architecture = readFileSync(path.join(process.cwd(), "ARCHITECTURE.md"), "utf8");
+    const said = [...architecture.matchAll(/stage `([a-z_]+)`,?\s+after\s+`([a-z_]+)`/g)].map(([, stage, after]) => [stage, after]);
+    expect(said.map(([stage]) => stage)).toContain("cash_alert");
+    for (const [stage, after] of said) {
+      expect([stage, after]).toEqual([stage, CYCLE_STAGES[CYCLE_STAGES.indexOf(stage as CycleStage) - 1]]);
+    }
   });
 
   it("blames the stage that actually broke, not the nearest dependency", () => {
