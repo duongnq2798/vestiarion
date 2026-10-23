@@ -20,7 +20,7 @@ export default function SecurityPage() {
     <LegalPage
       eyebrow="Trust"
       title="Security"
-      updated="2026-10-22"
+      updated="2026-10-23"
       intro="How Vestiarion protects the data and the money it handles, for anyone reviewing the app, its API or its integrations. Every statement describes what the code does today, and the code is public, so each one can be checked against it. What we do not claim is at the end."
     >
       <LegalSection id="architecture" title="Architecture and data flow">
@@ -130,7 +130,7 @@ export default function SecurityPage() {
         </p>
         <p>
           Some secrets are kept only as a SHA-256 hash: an API key&apos;s 256-bit secret, beside its prefix, compared in constant time; the tokens of
-          invitations, payee links, customer statement links, suppliers&apos; payment status links, early-payment offers, customers&apos; discount offers, and shared receipts and reports; the codes that link a Telegram chat or a Slack
+          invitations, payee links, customer statement links, suppliers&apos; payment status links, early-payment offers, customers&apos; discount offers, requests to vendors for a bill&apos;s missing document, and shared receipts and reports; the codes that link a Telegram chat or a Slack
           account; and the Chrome extension&apos;s access and refresh tokens and its one-time sign-in codes. Some are never stored: the GitHub token of the person connecting GitHub is used once and dropped, a GitHub App installation&apos;s
           tokens are made for each run and kept in memory, and the password Pipedrive sends with its webhooks is derived from the master key for each
           company.
@@ -177,6 +177,16 @@ export default function SecurityPage() {
             functions, until an owner or admin unfreezes it, saying how they checked; whoever made the change does so only when no one else can. No approval
             pays a frozen payee.
             Opening the link changes nothing; only a button does.
+          </li>
+          <li>
+            <strong>A vendor&apos;s document.</strong> Once an owner turns on vendor requests, a bill waiting for its purchase order or goods receipt
+            has its vendor&apos;s billing email sent a one-time link (<code>vxu_</code> and 32 random bytes). Only the link&apos;s SHA-256 is kept, the
+            link is checked for its shape before any lookup, and it answers for 14 days, once, while the bill still waits for information; an
+            owner or admin can revoke it. An expired, answered or revoked link names no one. The page is limited per IP address and per link. The
+            file goes straight to private storage, which no browser reads; it is taken only as a PDF, PNG or JPEG of at most 10 MB, known by its
+            first bytes rather than its name, and kept under its SHA-256, out of reach of the upload address. A member opens it as a download from
+            the storage&apos;s own address, for one minute, never on Vestiarion&apos;s pages, and no model reads it. A document changes no bill: a
+            person adds the details, and the agent decides the bill again.
           </li>
           <li>
             <strong>Two approvals.</strong> Above a figure the owner sets, a payment needs two different people, and one person cannot give both. A

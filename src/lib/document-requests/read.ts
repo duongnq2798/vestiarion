@@ -1,6 +1,7 @@
 import { can, type OrgRole } from "../auth/roles";
 import { currentOrgId } from "../context";
 import { db, platformDb, platformStorage, type OrgDb } from "../dal";
+import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { missingOf, type DocumentRequestStatus, type DocumentRequestView } from "./rules";
 import { readDocumentRequestsSetting } from "./setting";
@@ -115,6 +116,51 @@ export async function revokeDocumentRequest(input: { actorId: string; role: OrgR
     summary: "Revoked the request for a missing document; its link no longer works",
     detail: { by: input.actorId, requestId: row.id, invoiceId: row.invoice_id, counterpartyId: row.counterparty_id },
   });
+}
+
+/**
+ * Every file a workspace's requests hold in the private storage, under its own folder: each kept document, and any upload
+ * a vendor started and never sent. Read before the workspace is deleted, whose rows go with it, so its files can follow;
+ * none before migration 0142, or when they cannot be read.
+ */
+export async function documentFilesOf(orgId: string): Promise<string[]> {
+  const read = async () => {
+    const rows = await db().from("document_requests").select("id, file_path").limit(10_000);
+    if (rows.error) {
+      if (!beforeMigration(rows.error)) console.error("document files not read", orgId);
+      return [];
+    }
+    return ((rows.data ?? []) as Array<{ id: string; file_path: string | null }>).flatMap((row) => [
+      `${orgId}/document-requests/${row.id}/upload`,
+      ...(row.file_path ? [row.file_path] : []),
+    ]);
+  };
+  try {
+    return scopedTo(orgId) ? await read() : await withOrg(orgId, read);
+  } catch {
+    console.error("document files not read", orgId);
+    return [];
+  }
+}
+
+function scopedTo(orgId: string): boolean {
+  try {
+    return currentOrgId() === orgId;
+  } catch {
+    return false;
+  }
+}
+
+/** Removes the files `documentFilesOf` named, once their workspace is deleted. Best effort: it never throws. */
+export async function removeDocumentFiles(paths: string[]): Promise<void> {
+  for (let start = 0; start < paths.length; start += 100) {
+    try {
+      const removed = await platformStorage().remove(paths.slice(start, start + 100));
+      if (removed.error) console.error("document files not removed", removed.error.message);
+    } catch {
+      console.error("document files not removed");
+    }
+  }
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

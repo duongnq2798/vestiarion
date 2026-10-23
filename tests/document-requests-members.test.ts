@@ -148,3 +148,27 @@ describe("opening the vendor's file (ER6)", () => {
     expect(storage.openUrl).not.toHaveBeenCalled();
   });
 });
+
+describe("deleting the workspace", () => {
+  it("removes the vendors' files from the private storage once its rows are gone, and none when the delete is refused", async () => {
+    const { deleteWorkspace } = await import("@/lib/platform/delete-workspace");
+    const files = (refuse: boolean) =>
+      fakeSupabase((r: RecordedRequest): FakeReply => {
+        if (r.path === "/rest/v1/orgs") return { body: { slug: "pinecrest", mode: "sandbox", agent_paused_at: null, wallet_host: null } };
+        if (r.path === "/rest/v1/document_requests") return { body: [{ id: "r-1", file_path: `${ORG}/document-requests/r-1/${"a".repeat(64)}` }, { id: "r-2", file_path: null }] };
+        if (r.path === "/rest/v1/rpc/delete_org") return refuse ? { status: 400, body: { code: "P0001", message: "pause_first: pause the agent" } } : { body: null };
+        return { body: [] };
+      });
+    storage.remove.mockReset().mockResolvedValue({ data: [], error: null });
+    const done = files(false);
+    await within(done, () => deleteWorkspace({ orgId: ORG, actorId: ACTOR, confirmSlug: "pinecrest" }));
+    expect(storage.remove).toHaveBeenCalledWith([
+      `${ORG}/document-requests/r-1/upload`,
+      `${ORG}/document-requests/r-1/${"a".repeat(64)}`,
+      `${ORG}/document-requests/r-2/upload`,
+    ]);
+    storage.remove.mockClear();
+    await expect(within(files(true), () => deleteWorkspace({ orgId: ORG, actorId: ACTOR, confirmSlug: "pinecrest" }))).rejects.toThrow();
+    expect(storage.remove).not.toHaveBeenCalled();
+  });
+});

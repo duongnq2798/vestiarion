@@ -1,5 +1,6 @@
 import { platformAuth, platformDb, unwrap } from "../dal";
 import { FOUNDING_ORG_ID } from "../dal/org-config";
+import { documentFilesOf, removeDocumentFiles } from "../document-requests/read";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { activeConnectionsOf, memberConnectionEnded } from "../extension/tokens";
 import { apiKeyRevokedEntry } from "./api-keys";
@@ -152,12 +153,16 @@ export async function deleteAccount(input: { userId: string; confirmText: string
   // does every workspace not yet reached.
   const deleted: string[] = [];
   for (const workspace of plan.soleWorkspaces) {
-    const { error } = await platformDb().rpc("delete_org", { p_org_id: soleIds.get(workspace.slug), p_by: input.userId });
+    const orgId = soleIds.get(workspace.slug) as string;
+    // The vendors' documents are files, not rows: named before the rows go, removed after (document requests ER5).
+    const files = await documentFilesOf(orgId);
+    const { error } = await platformDb().rpc("delete_org", { p_org_id: orgId, p_by: input.userId });
     if (error) {
       const refusal = deleteOrgRefusal(error);
       if (refusal) throw workspaceRefused(workspace.slug, refusal.message, deleted);
       throw new Error(error.message);
     }
+    await removeDocumentFiles(files);
     deleted.push(workspace.slug);
   }
 
