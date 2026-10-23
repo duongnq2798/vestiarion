@@ -3,6 +3,7 @@ import { isAddressName, NAME_NOT_ADDRESS } from "./ens-words";
 import { z } from "zod";
 import { ALL_PAYEE_CHAIN_IDS, ALL_PAYEE_CHAIN_LABELS, ChainNotOnNetworkError, chainOn, paidAcrossChains } from "./payee-chains";
 import type { Network } from "./network";
+import { LATE_FEE_KINDS, LATE_FEE_MAX_PERCENT, type LateFeeKind } from "./agent/late-fee";
 
 const USDC_PATTERN = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
 
@@ -174,6 +175,100 @@ function checkDiscountPair(
   }
 }
 
+/** A positive amount with at most 6 decimals, in millionths; null when it is not one. */
+function micros(value: string): bigint | null {
+  if (!USDC_PATTERN.test(value)) return null;
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole) * BigInt(1_000_000) + BigInt(fraction.padEnd(6, "0"));
+}
+
+// 0 < pct <= 10, at most 2 decimal places (`invoices_late_fee_value_range`, 0141).
+const LATE_FEE_PCT_PATTERN = /^(?:0|[1-9]\d?)(?:\.\d{1,2})?$/;
+
+/**
+ * A late fee as a form, a row or a request gives it (late fees LF2): its kind, its value as typed, and the day it
+ * starts, blank for the day after the due date.
+ */
+const lateFeeInputSchema = z
+  .object({
+    kind: z.string().trim(),
+    value: z.string().trim(),
+    startsOn: optionalText(10).optional(),
+  })
+  .nullable()
+  .optional();
+
+/** A late fee as the schema gives it back: a known kind, the value as typed, and the day it starts, always set. */
+export interface LateFeeTerm {
+  kind: LateFeeKind;
+  value: string;
+  /** `YYYY-MM-DD`. */
+  startsOn: string;
+}
+
+/** The day after a `YYYY-MM-DD` day. */
+function dayAfter(day: string): string {
+  return new Date(Date.parse(`${day}T12:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * The late fee, one rule for every path an invoice is entered by (late fees LF1, LF2), as migration 0141's own checks
+ * have it: on a payable only, a kind it knows, a percent a month of more than 0 and at most 10 or a fixed amount of
+ * more than 0 and at most the invoice's amount, and a real day on or after the due date for it to start. A start given
+ * without a fee is refused, so a term is never half entered.
+ */
+function checkLateFee(
+  context: z.RefinementCtx,
+  invoice: { direction: string; amount: string; dueDate: string; lateFee?: { kind: string; value: string; startsOn?: string | null } | null }
+): void {
+  const fee = invoice.lateFee;
+  if (!fee) return;
+  if (invoice.direction !== "payable") {
+    context.addIssue({ code: "custom", path: ["lateFee"], message: "A late fee is for a bill you pay: leave it out of an invoice you are owed." });
+    return;
+  }
+  if (!(LATE_FEE_KINDS as readonly string[]).includes(fee.kind)) {
+    context.addIssue({ code: "custom", path: ["lateFee", "kind"], message: "Choose a late fee of a percent a month or a fixed amount." });
+    return;
+  }
+  if (fee.value === "" && fee.startsOn) {
+    context.addIssue({ code: "custom", path: ["lateFee", "value"], message: "Enter the late fee, or clear the day it starts." });
+  } else if (fee.kind === "percent_month") {
+    if (!LATE_FEE_PCT_PATTERN.test(fee.value) || !(Number(fee.value) > 0) || Number(fee.value) > LATE_FEE_MAX_PERCENT) {
+      context.addIssue({
+        code: "custom",
+        path: ["lateFee", "value"],
+        message: `Enter a late fee of more than 0% and at most ${LATE_FEE_MAX_PERCENT}% a month, with at most 2 decimal places.`,
+      });
+    }
+  } else {
+    const value = micros(fee.value);
+    const amount = micros(invoice.amount);
+    if (value === null || value <= BigInt(0) || (amount !== null && value > amount)) {
+      context.addIssue({ code: "custom", path: ["lateFee", "value"], message: "Enter a late fee of more than 0 and at most the invoice's amount, with at most 6 decimal places." });
+    }
+  }
+  if (!fee.startsOn) return;
+  if (!isRealCalendarDate(fee.startsOn)) {
+    context.addIssue({ code: "custom", path: ["lateFee", "startsOn"], message: "The day the late fee starts is not a real calendar date." });
+    return;
+  }
+  if (isRealCalendarDate(invoice.dueDate) && fee.startsOn < invoice.dueDate) {
+    context.addIssue({ code: "custom", path: ["lateFee", "startsOn"], message: "The late fee cannot start before the due date." });
+  }
+}
+
+/**
+ * A form's late-fee fields (`lateFeeKind`, `lateFeeValue`, `lateFeeStartsOn`), read by `get`, as the schema takes them:
+ * none while the fee and its start are both blank, whatever kind is chosen; a percent a month when no kind is.
+ */
+export function lateFeeFields(get: (name: string) => string): { kind: string; value: string; startsOn: string } | null {
+  const value = get("lateFeeValue").trim();
+  const startsOn = get("lateFeeStartsOn").trim();
+  if (value === "" && startsOn === "") return null;
+  return { kind: get("lateFeeKind").trim() || "percent_month", value, startsOn };
+}
+
 export const invoiceInputSchema = z
   .object({
     direction: z.enum(["payable", "receivable"]),
@@ -188,10 +283,17 @@ export const invoiceInputSchema = z
     dueDate: dueDateSchema,
     earlyPayDiscountPct: optionalText(10),
     discountDeadline: optionalText(10),
+    // A payable's late fee (late fees LF2): left out, or null, for none.
+    lateFee: lateFeeInputSchema,
   })
   .superRefine((value, context) => {
     checkDiscountPair(context, "earlyPayDiscountPct", "discountDeadline", value.earlyPayDiscountPct, value.discountDeadline, value.dueDate);
-  });
+    checkLateFee(context, value);
+  })
+  // A late fee given without its start starts the day after the due date (LF1); with none, the invoice names none.
+  .transform(({ lateFee, ...invoice }): typeof invoice & { lateFee?: LateFeeTerm } =>
+    lateFee ? { ...invoice, lateFee: { kind: lateFee.kind as LateFeeKind, value: lateFee.value, startsOn: lateFee.startsOn || dayAfter(invoice.dueDate) } } : invoice
+  );
 
 /** What a person may add to a payable the agent stopped on, read as the invoice form reads it (complete held invoice R2). */
 export const invoiceDetailsInputSchema = z.object({
@@ -217,6 +319,7 @@ export const INVOICE_FIELD_LABELS = {
   dueDate: "Due date",
   earlyPayDiscountPct: "Early-payment discount (%)",
   discountDeadline: "Discount deadline",
+  lateFee: "Late fee",
   memo: "Memo",
   poReference: "PO reference",
   invoiceNumber: "Invoice number",

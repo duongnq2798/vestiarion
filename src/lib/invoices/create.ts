@@ -2,11 +2,21 @@ import type { z } from "zod";
 import { db, unwrap } from "../dal";
 import { dueDateIso, type invoiceInputSchema } from "../intake-validation";
 import type { DocumentProvenance } from "../invoice-document/provenance";
+import { missingColumn } from "../agent/late-fee";
 import { appendLedgerEntry } from "../ledger";
 import type { OriginalBill } from "../shadow-bills";
 
 /** An invoice as the form's schema accepts it. */
 export type InvoiceInput = z.output<typeof invoiceInputSchema>;
+
+/**
+ * Columns an invoice is added with that a later migration adds, each group with its migration: production can run code
+ * before the migration does, and the invoice is then added without them, as before it.
+ */
+const LATER_COLUMNS: ReadonlyArray<{ columns: readonly string[]; migration: string }> = [
+  { columns: ["document_pay_to"], migration: "0136" },
+  { columns: ["late_fee_kind", "late_fee_value", "late_fee_starts_on"], migration: "0141" },
+];
 
 /**
  * The deal line a receivable is released from (docs/superpowers/specs/2026-10-12-deal-schedule-design.md D10, D11): the
@@ -117,16 +127,27 @@ export async function createInvoice(input: {
     ...(deal ? { deal_id: deal.dealId, deal_line_id: deal.lineId } : {}),
     // The address its document asked to be paid to, which holds a payment to any other (invoice pay-to hold IP1).
     ...(document?.payTo ? { document_pay_to: document.payTo } : {}),
+    // Its late fee (late fees LF1): information the agent weighs, never part of what is paid.
+    ...(invoice.lateFee
+      ? { late_fee_kind: invoice.lateFee.kind, late_fee_value: invoice.lateFee.value, late_fee_starts_on: invoice.lateFee.startsOn }
+      : {}),
   };
-  let inserted = await db().from("invoices").insert(values).select("id").single<{ id: string }>();
-  // Before migration 0136 the column is not there: the invoice is added without it, as before, and nothing is held for it.
-  if (inserted.error && "document_pay_to" in values && ["PGRST204", "42703"].includes(inserted.error.code ?? "")) {
-    console.warn("invoices.document_pay_to is not there yet (migration 0136); the invoice is added without it");
-    const { document_pay_to: _left, ...without } = values;
-    void _left;
-    inserted = await db().from("invoices").insert(without).select("id").single<{ id: string }>();
+  let row: Record<string, unknown> = values;
+  let inserted = await db().from("invoices").insert(row).select("id").single<{ id: string }>();
+  // A column a later migration adds is not there until it runs: the invoice is added without it, as before, each one the
+  // database lacks in turn. Without document_pay_to nothing is held for it; without the late fee none is weighed.
+  let left = LATER_COLUMNS.filter((group) => group.columns.some((column) => column in row));
+  while (inserted.error && missingColumn(inserted.error) && left.length > 0) {
+    // The group the error names, or else the first still in the row.
+    const named = left.find((group) => group.columns.some((column) => inserted.error?.message?.includes(column))) ?? left[0];
+    left = left.filter((group) => group !== named);
+    console.warn(`invoices.${named.columns.join(", ")} not there yet (migration ${named.migration}); the invoice is added without it`);
+    row = Object.fromEntries(Object.entries(row).filter(([column]) => !named.columns.includes(column)));
+    inserted = await db().from("invoices").insert(row).select("id").single<{ id: string }>();
   }
-  const row = unwrap(inserted);
+  const added = unwrap(inserted);
+  // The term as it was kept: none when the database could not keep it.
+  const lateFee = invoice.lateFee && "late_fee_kind" in row ? invoice.lateFee : null;
 
   await appendLedgerEntry({
     // The agent's cycle releases a deal's line on its day when the deal says so; a person adds every other invoice.
@@ -136,7 +157,7 @@ export async function createInvoice(input: {
     summary: `Added ${invoice.direction} invoice for ${counterparty.name}: ${invoice.amount} ${invoice.currency}${original ? ` (${original.amount} ${original.currency})` : ""}${deal ? `, ${deal.line} of the deal ${deal.title}` : ""}`,
     detail: {
       by: actorId,
-      invoiceId: row.id,
+      invoiceId: added.id,
       counterpartyId: counterparty.id,
       counterpartyName: counterparty.name,
       amount: invoice.amount,
@@ -145,6 +166,8 @@ export async function createInvoice(input: {
       poReference: invoice.poReference,
       goodsReceived: invoice.goodsReceived,
       ...(invoiceNumber ? { invoiceNumber } : {}),
+      // The late fee it was added with (late fees LF3), when it has one.
+      ...(lateFee ? { lateFee } : {}),
       ...(document ? { document } : {}),
       ...(via ? { via } : {}),
       ...(apiKeyId ? { apiKeyId } : {}),
@@ -162,5 +185,5 @@ export async function createInvoice(input: {
         : {}),
     },
   });
-  return { id: row.id, counterpartyName: counterparty.name };
+  return { id: added.id, counterpartyName: counterparty.name };
 }

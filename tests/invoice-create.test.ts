@@ -161,3 +161,80 @@ describe("createInvoice", () => {
     expect(ledgerDetails(requests)).toEqual([]);
   });
 });
+
+describe("createInvoice with a late fee (late fees LF1, LF3)", () => {
+  const withFee = invoiceInputSchema.parse({
+    direction: "payable",
+    counterpartyId: COUNTERPARTY,
+    amount: "100",
+    currency: "USDC",
+    memo: "",
+    poReference: "",
+    goodsReceived: true,
+    dueDate: "2026-10-31",
+    earlyPayDiscountPct: "",
+    discountDeadline: "",
+    lateFee: { kind: "percent_month", value: "1.5" },
+  });
+  const document = { kind: "pdf" as const, sha256: "c".repeat(64), reader: "deepseek" as const, changed: [], payTo: "0x1111111111111111111111111111111111111111" };
+
+  /** A database without the columns `missing` names: an insert naming one is refused as PostgREST refuses it. */
+  async function add(missing: string[], input = withFee) {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fake = fakeSupabase((sent: RecordedRequest) => {
+      if (sent.path === "/rest/v1/invoices" && sent.method === "POST") {
+        const body = sent.body as Record<string, unknown>;
+        bodies.push(body);
+        const absent = missing.find((column) => column in body);
+        if (absent) return { status: 400, body: { code: "PGRST204", details: null, hint: null, message: `Could not find the '${absent}' column of 'invoices' in the schema cache` } };
+      }
+      return database([{ id: COUNTERPARTY, name: "Acme Supplies" }])(sent);
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => createInvoice({ actorId: USER, invoice: input, document }), { userId: USER }));
+    return { result, bodies, entry: ledgerDetails(fake.requests)[0] };
+  }
+
+  it("keeps the term on the invoice, starting the day after the due date, and signs it on the entry", async () => {
+    const { result, bodies, entry } = await add([]);
+    expect(result).toEqual({ id: INVOICE, counterpartyName: "Acme Supplies" });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({ late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-11-01", document_pay_to: document.payTo });
+    expect(entry.p_detail.lateFee).toEqual({ kind: "percent_month", value: "1.5", startsOn: "2026-11-01" });
+  });
+
+  it("names no late fee on a bill without one", async () => {
+    const { bodies, entry } = await add([], invoice);
+    expect(Object.keys(bodies[0]).filter((key) => key.startsWith("late_fee"))).toEqual([]);
+    expect(entry.p_detail).not.toHaveProperty("lateFee");
+  });
+
+  it("adds the invoice without the term before migration 0141, and signs none it did not keep", async () => {
+    const { result, bodies, entry } = await add(["late_fee_kind", "late_fee_value", "late_fee_starts_on"]);
+    expect(result).toEqual({ id: INVOICE, counterpartyName: "Acme Supplies" });
+    expect(bodies).toHaveLength(2);
+    expect(Object.keys(bodies[1]).filter((key) => key.startsWith("late_fee"))).toEqual([]);
+    expect(bodies[1]).toMatchObject({ document_pay_to: document.payTo });
+    expect(entry.p_detail).not.toHaveProperty("lateFee");
+  });
+
+  it("drops each column the database lacks, before both 0136 and 0141, and keeps the rest", async () => {
+    const { result, bodies } = await add(["document_pay_to", "late_fee_starts_on"]);
+    expect(result).toEqual({ id: INVOICE, counterpartyName: "Acme Supplies" });
+    expect(bodies).toHaveLength(3);
+    const last = bodies[2];
+    expect(last).not.toHaveProperty("document_pay_to");
+    expect(Object.keys(last).filter((key) => key.startsWith("late_fee"))).toEqual([]);
+    expect(last).toMatchObject({ amount: "100", due_date: "2026-10-31T12:00:00.000Z" });
+  });
+
+  it("still fails on a column it cannot leave out", async () => {
+    const fake = fakeSupabase((sent: RecordedRequest) => {
+      if (sent.path === "/rest/v1/invoices" && sent.method === "POST") return { status: 400, body: { code: "PGRST204", details: null, hint: null, message: "Could not find the 'memo' column of 'invoices' in the schema cache" } };
+      return database([{ id: COUNTERPARTY, name: "Acme Supplies" }])(sent);
+    });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, () => createInvoice({ actorId: USER, invoice, document: null }), { userId: USER }))).rejects.toThrow(/memo/);
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST")).toHaveLength(1);
+  });
+});

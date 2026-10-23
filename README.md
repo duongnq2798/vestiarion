@@ -8,7 +8,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/duongnq2798/vestiarion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/duongnq2798/vestiarion/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/duongnq2798/vestiarion?include_prereleases&style=flat-square&label=release)](https://github.com/duongnq2798/vestiarion/releases)
-[![npm](https://img.shields.io/badge/%40vestiarion%2Fsdk-v0.3.6-cb3837?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@vestiarion/sdk)
+[![npm](https://img.shields.io/badge/%40vestiarion%2Fsdk-v0.3.7-cb3837?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
 <a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>

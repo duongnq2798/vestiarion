@@ -9,7 +9,7 @@ import {
   type ApiCollection,
 } from "@/lib/api/contract";
 import { withIdempotency } from "@/lib/api/idempotency";
-import { INVOICE_DIRECTIONS, INVOICE_SELECT, INVOICE_STATUSES, mapInvoice, type InvoicePayload } from "@/lib/api/invoices";
+import { INVOICE_DIRECTIONS, INVOICE_STATUSES, mapInvoice, readInvoices, type InvoicePayload } from "@/lib/api/invoices";
 import { CreateInvoiceBodySchema } from "@/lib/api/schemas";
 import { invalidBody, readJsonBody } from "@/lib/api/write";
 import { runCycleSoon } from "@/lib/agent/cycle-soon";
@@ -67,23 +67,26 @@ export async function GET(request: Request) {
     "GET /api/v1/invoices",
     guard.key,
     async (): Promise<ApiCollection<InvoicePayload>> => {
-      let query = db()
-        .from("invoices")
-        .select(INVOICE_SELECT)
-        .order("created_at", { ascending: false })
-        .order("id", { ascending: false })
-        .limit(limitResult.limit + 1);
+      const rows = unwrap(
+        await readInvoices((select) => {
+          let query = db()
+            .from("invoices")
+            .select(select)
+            .order("created_at", { ascending: false })
+            .order("id", { ascending: false })
+            .limit(limitResult.limit + 1);
 
-      if (cursor) {
-        query = query.or(
-          `created_at.lt.${cursor.k},and(created_at.eq.${cursor.k},id.lt.${cursor.id})`
-        );
-      }
-      if (direction) query = query.eq("direction", direction);
-      if (status) query = query.eq("status", status);
-      if (counterpartyId) query = query.eq("counterparty_id", counterpartyId);
-
-      const rows = unwrap(await query) as unknown as Array<Record<string, unknown>>;
+          if (cursor) {
+            query = query.or(
+              `created_at.lt.${cursor.k},and(created_at.eq.${cursor.k},id.lt.${cursor.id})`
+            );
+          }
+          if (direction) query = query.eq("direction", direction);
+          if (status) query = query.eq("status", status);
+          if (counterpartyId) query = query.eq("counterparty_id", counterpartyId);
+          return query;
+        })
+      ) as unknown as Array<Record<string, unknown>>;
       const invoices = rows.map(mapInvoice);
 
       return paginate(invoices, limitResult.limit, (invoice) => ({
@@ -94,7 +97,7 @@ export async function GET(request: Request) {
   );
 }
 
-/** The invoice form's fields as the API names them, where the two differ. */
+/** The invoice form's fields as the API names them, where the two differ (the late fee's are named alike). */
 const FORM_FIELDS = { earlyPayDiscountPct: "earlyPayDiscount.percent", discountDeadline: "earlyPayDiscount.deadline" };
 
 /**
@@ -113,7 +116,7 @@ export async function POST(request: Request) {
 
   const shape = CreateInvoiceBodySchema.safeParse(body.value);
   if (!shape.success) return invalidBody(shape.error);
-  const { earlyPayDiscount } = shape.data;
+  const { earlyPayDiscount, lateFee } = shape.data;
   const parsed = invoiceInputSchema.safeParse({
     direction: shape.data.direction ?? "payable",
     counterpartyId: shape.data.counterpartyId,
@@ -125,6 +128,7 @@ export async function POST(request: Request) {
     dueDate: shape.data.dueDate,
     earlyPayDiscountPct: earlyPayDiscount ? String(earlyPayDiscount.percent) : "",
     discountDeadline: earlyPayDiscount?.deadline ?? "",
+    lateFee: lateFee ? { kind: lateFee.kind, value: String(lateFee.value), startsOn: lateFee.startsOn ?? "" } : null,
   });
   if (!parsed.success) return invalidBody(parsed.error, FORM_FIELDS);
   const invoice = parsed.data;
@@ -136,7 +140,7 @@ export async function POST(request: Request) {
       // A payable starts the agent's cycle, as one typed in does.
       if (invoice.direction === "payable") runCycleSoon(cycleEventOf(guard.actor, "invoice_added"));
 
-      const row = unwrap(await db().from("invoices").select(INVOICE_SELECT).eq("id", created.id).single()) as Record<string, unknown>;
+      const row = unwrap(await readInvoices((select) => db().from("invoices").select(select).eq("id", created.id).single())) as unknown as Record<string, unknown>;
       return NextResponse.json({ data: mapInvoice(row) }, { status: 201 });
     })
   );

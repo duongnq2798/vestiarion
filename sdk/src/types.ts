@@ -86,6 +86,15 @@ export interface Invoice {
     percent: number;
     deadline: string;
   } | null;
+  /** The late fee a payable carries, if any. The agent weighs it when a bill waits and when cash is short; it is never added to what is paid. */
+  lateFee: {
+    /** `percent_month`, a percent a month of what is still owed, or `fixed`, an amount in `currency`. */
+    kind: "percent_month" | "fixed";
+    /** The percent a month, or the fixed amount. */
+    value: number;
+    /** The first day the fee applies, as `YYYY-MM-DD`. */
+    startsOn: string;
+  } | null;
   decidedAt: string | null;
   settledAt: string | null;
   escalatedAt: string | null;
@@ -344,6 +353,15 @@ export interface CreateInvoiceInput {
     /** The last day it applies, as `YYYY-MM-DD`, on or before `dueDate`. */
     deadline: string;
   };
+  /** A late fee the invoice charges once it is paid late, for a payable only. The agent weighs it when a bill waits and when cash is short; it never adds it to what is paid. */
+  lateFee?: {
+    /** `percent_month`, a percent a month of what is still owed, or `fixed`, an amount in `currency`. */
+    kind: "percent_month" | "fixed";
+    /** The percent a month, more than 0 and at most 10, with at most 2 decimal places; or the fixed amount, more than 0 and at most `amount`, with at most 6. */
+    value: string | number;
+    /** The first day the fee applies, as `YYYY-MM-DD`, on or after `dueDate`. Defaults to the day after `dueDate`. */
+    startsOn?: string;
+  } | null;
 }
 
 /** A counterparty to add. It is screened as one added in the console. */
