@@ -732,7 +732,8 @@ that pay their own gas (`walletAccountType`), and never for Gateway. The box is 
 sent, in flight or processing. A bank payout's is `bankPayoutCost` (docs/superpowers/specs/2026-10-22-bank-route-comparison-design.md):
 the invoice, BlindPay's `feesSender` (its quote takes them from what the vendor receives) and what leaves, with what
 USDC to a wallet would give the vendor; none without the listing's quote, or while a discount applies, since the quote
-is read for the full amount.
+is read for the full amount. Both end with a bill's late fee (`lateFeeLine`: "Late after" the day before it starts, and
+a month's fee), never added to what leaves.
 
 **A payee with no wallet creates one with a passkey** (`docs/superpowers/specs/2026-10-05-payee-passkey-wallet-design.md`).
 - **On a payee link:** the address field stays the primary path. On Arc testnet, when
@@ -2185,7 +2186,8 @@ each carrying the acting person's user id, never an address.
 **Each waiting payable is an exception someone owns**
 (`docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md` E1-E5). `exceptionFacts` (`src/lib/exceptions.ts`,
 pure) gives its decide-by day (the due date, or the early-payment discount's deadline while it is still ahead and
-earlier), its priority (`overdue`, `today`, `week`, `later`) and who can act: the members whose role holds
+earlier, or, for a bill past its due date whose late fee has not started, the day before the fee starts: reason
+`late_fee`, which `decideByWords` spells out), its priority (`overdue`, `today`, `week`, `later`) and who can act: the members whose role holds
 `approval.decide`, less whoever entered it unless nobody else may. The Approvals page and the Bills rows read the members
 once (`listMembers`) and show it through `ExceptionLine`; someone who cannot decide reads whom to ask.
 
@@ -2466,6 +2468,39 @@ Each open receivable gets one next step from what is known about its customer
   reminders resumed.
 - **Before 0110 runs** rules and tasks read as none (`notThereYet`: `PGRST205`, `42P01`, `42703`, `PGRST204`),
   deliveries are not recorded, the owner is left out, and the card says rules are not set up.
+
+## Late fees
+
+docs/superpowers/specs/2026-10-23-late-fees-design.md. A payable's late-payment term is three nullable columns on
+`invoices` (migration 0141): `late_fee_kind` (`percent_month` or `fixed`), `late_fee_value` (a percent a month,
+more than 0 and at most 10, or an amount in the invoice's currency up to its amount) and `late_fee_starts_on`, the first
+day it applies, on or after the due date's UTC day. Checks keep all three or none, the value's range, the start and
+payables only. A trigger (`invoices_late_fee_start`, 0141's own function) sets a missing start to the day after the due
+date, and moves the start by as many days as the due date moves when the due date alone changes (`accept_term_request`,
+`answer_term_counter`), so a supplier's extra days keep the term's grace and the after-due check.
+
+- **Entry.** `invoiceInputSchema` takes `lateFee { kind, value, startsOn? }`, checked by `checkLateFee` and given back
+  with its start set; every path builds it: the invoice form (`lateFeeFields`), `POST /api/v1/invoices`, CSV import
+  (`lateFeePercent`, `lateFeeAmount`, `lateFeeStartsOn`), the email and Chrome drafts and the chats' drafts (the read
+  fields `lateFeeKind`, `lateFeeValue`, `lateFeeStartsOn`, named only when one was read), and the accounting imports
+  (`lateFee: null`). Document capture asks the model for `lateFeePercentPerMonth`, `lateFeeAmount` and
+  `lateFeeStartsOn`; the rule-based reader takes "x% per month" or "x% monthly" on a line about paying late, and "late
+  fee of N". `normalizeExtraction` keeps a percent the text states (`statesPercent`), at most 10, or an amount it
+  contains, never both, and DOCUMENT_FIELDS counts a changed fee. `createInvoice` writes the columns and signs
+  `lateFee` on `create_invoice` when it kept them.
+- **Reading.** `invoiceLateFee` and `lateFeeOf` (`src/lib/agent/late-fee.ts`, pure): a term the database would refuse
+  is no fee; `lateFeeOf(invoice, on)` is a month's fee past its start, the percent of the amount, or a fixed fee while it
+  is still ahead (one already started is owed, so 0). `mapInvoice` reports it as `lateFee`.
+- **Never paid.** No amount, payment limit, transfer or on-chain limit reads it: a bill paid late is paid at its amount.
+- **What it changes.** The approval card's cost box and the Bills list's terms line name it; Slack's Approve confirmation
+  names it; `decideByOf` gives `late_fee` (above); the AP prompt's `terms.lateFee` (`lateFeeTerms`, with `aMonth`)
+  and the ledger's `ap_*` `terms` carry it, and `buildReason` names it when the bill is paid on or before its start;
+  the cash step's written order (`referenceOrder`) puts first, among the bills due or overdue, the heaviest `lateFeeOf`
+  in USDC, its facts carry each fee, and `planFingerprint` and `carriedOrder` count a fee where there is one.
+- **Before 0141 runs.** `createInvoice` drops each later column the database lacks in turn (`LATER_COLUMNS`:
+  `document_pay_to`, then the late fee's); every explicit read of the columns goes through `readWithLateFee`, which
+  reads again without them on `42703` or `PGRST204`; the AP stage's `select("*")` and `listInvoices` need nothing;
+  sample data loads without its fee.
 
 ## The payment plan
 
@@ -3042,7 +3077,7 @@ committed (matched payables, verified milestones not in escrow, scheduled bills 
 bills (`competingBills`: USDC, not
 bank-paid, pending, scheduled or held with `heldBecause: cash_shortfall` on its latest decision, due within 14 days or
 overdue). When they exceed what is left (`needsPlan`), it reuses the last `cash_priority_set` whose `fingerprint` (bill
-ids, amounts, due days; not statuses, not cash) matches and whose order still splits the same way (`sameSplit`), or asks
+ids, amounts, due days, and a late fee's cost where there is one; not statuses, not cash) matches and whose order still splits the same way (`sameSplit`), or asks
 the model (`decide`, purpose `cash_priority`,
 refs B1..Bn in the written policy's order, which is the fallback; a ref or a dollar amount left in a reason or the
 reasoning becomes the bill's payee and amount in USDC before signing, `namedRefs`, since people read them and never see a

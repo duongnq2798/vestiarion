@@ -271,6 +271,7 @@ Open **Bills & receivables**, choose **New**, then **Bill to pay**. **New** also
 - **Currency**: USDC, or EURC for a vendor that bills in euros. See [Invoices in EURC](#invoices-in-eurc).
 - **Due date**.
 - **Early-payment discount (%)** and **Discount deadline**, if the vendor offers one. See [When the agent pays](#5-when-the-agent-pays).
+- **Late fee**, if the vendor charges one for paying late: its value, whether the **Late fee is** "% a month" or "A fixed amount", and **Starting on**, the first day it applies. Left blank, it starts the day after the due date. See [A late fee](#a-late-fee).
 - **Memo**, if you like.
 - **Invoice number**, the vendor's own number for the bill, if you like. It is recorded with the bill, and its receipt states it. An invoice read from a document fills it in.
 - **PO reference**, and tick **Goods or services received**. Without confirmed receipt, or without a purchase order from a counterparty that needs one, the three-way match is incomplete, and the agent asks for more information instead of paying. Every counterparty needs a purchase order until it is marked as paid without them: see [Pay a counterparty without purchase orders](#pay-a-counterparty-without-purchase-orders).
@@ -285,7 +286,7 @@ Choose **Add invoice**. The page confirms with "Invoice added for *Name*. The ag
 
 ### Read an invoice from a document
 
-Instead of typing an invoice in, choose **New**, then **From a document**. Choose a PDF or an email, or paste the invoice's text under **Or paste the invoice's text**, then choose **Read invoice**. The workspace's model reads the vendor, the amount, the currency, the due date, the purchase order, any early-payment discount and the address the invoice asks to be paid to. It fills in the invoice form below with them. Nothing is added until you check the form and choose **Add invoice**.
+Instead of typing an invoice in, choose **New**, then **From a document**. Choose a PDF or an email, or paste the invoice's text under **Or paste the invoice's text**, then choose **Read invoice**. The workspace's model reads the vendor, the amount, the currency, the due date, the purchase order, any early-payment discount, any late fee and the address the invoice asks to be paid to. It fills in the invoice form below with them. Nothing is added until you check the form and choose **Add invoice**.
 
 <Screenshot
   src="/docs/guides/first-payment-document.png"
@@ -304,6 +305,7 @@ What the model read is checked before you see it:
 - Once the invoice is added, the address it asked for stays with it. If it is not the address on file, the agent holds the payment for a person, with both addresses in its reason: a changed payment detail on an invoice is how payment redirection usually arrives. Check with the vendor, by a contact you had before, which address is theirs. **Approve and pay** pays the address on file, and its card shows the address the invoice asked for. To pay the invoice's address instead, change the counterparty's address to it: the change goes through **Confirm address** and, where it is on, the payee lock, and the agent decides the payment again once the two match. Such a payment is approved in Approvals, never from Slack. This holds for invoices added from a document, by email, from Telegram or Slack, and from the Chrome extension.
 - **Goods or services received** is never ticked for you: "A document cannot say this; tick it only if you received them."
 - An early-payment discount whose percent the document states is filled in even when its deadline cannot be used, and the form then asks you for the deadline: "The discount deadline was left blank: the invoice does not give one that could be read. Enter the last day the discount applies, or clear the discount."
+- A late fee is filled in only when the document states it: a percent a month written as a percent, such as "1.5% per month on overdue balances", or a fixed amount the invoice contains, such as "a late fee of 25 USDC". Otherwise it is left out, and the form says why: "The late fee was left out: the document does not state that percent." A percent above 10 a month is left out for you to check. Its start is the day the invoice gives, on or after the due date, or else the day after the due date. A late fee you change from what was read is recorded among the fields you changed.
 
 A PDF is read from its text, and an email (an `.eml` file) from its own text and the PDFs attached to it. A scanned PDF has no text: "This PDF has no text to read; it may be a scan. Paste the invoice's text instead." A file can be up to 4 MB, and a workspace can read five a minute. The document itself is not kept. The invoice's ledger entry records the document's SHA-256 hash, which model read it, which fields you changed, and the address the document asked to be paid to.
 
@@ -436,7 +438,19 @@ A discount needs its deadline. Once you enter a percent, **Discount deadline** i
 
 A scheduled invoice's decision card reads "Scheduled for *date*", with the agent's reasoning for choosing that day. On the day itself, the next cycle checks everything again before anything moves: the counterparty's risk level, its payment limit, whether its address is confirmed, and whether the agent is paused. Pausing the agent stops a scheduled payment exactly as it stops any other.
 
-An invoice with an early-payment discount shows its terms on its card as "*pct*% off if paid by *date*". Until the agent has decided a payable, its card reads "Not yet decided", and while its transfer is in flight, "Payment in flight". The console's **Scheduled payments** section lists what the agent will pay next, soonest first: the date, the counterparty, the amount it will actually transfer — discounted, when the discount will still apply that day — and why.
+An invoice with an early-payment discount shows its terms on its card as "*pct*% off if paid by *date*", and a late fee beside it. Until the agent has decided a payable, its card reads "Not yet decided", and while its transfer is in flight, "Payment in flight". The console's **Scheduled payments** section lists what the agent will pay next, soonest first: the date, the counterparty, the amount it will actually transfer — discounted, when the discount will still apply that day — and why.
+
+### A late fee
+
+Many invoices charge for paying late: "1.5% per month on overdue balances", or a flat fee. Give a payable its late fee in the invoice form, as **Late fee**, with whether the **Late fee is** "% a month" or "A fixed amount", and **Starting on**, the first day it applies. As the form says, "As the invoice states it. Shown when you approve; never added to what is paid." A percent a month can be more than 0 and at most 10; a fixed amount, more than 0 and at most the invoice's amount; and it starts on or after the due date: "The late fee cannot start before the due date." An invoice you are owed takes none. When a supplier agrees to more time, the fee's start moves with the due date.
+
+A late fee is never added to a transfer. A bill paid late is paid at its amount, and you settle any fee with the vendor. What the fee changes is what the agent weighs, and what you see:
+
+- **The approval card.** Its cost box ends with the fee: "Late after *date*", the day before it starts, and "1.5% a month (1.50 USDC)", what a month of it costs, or the fixed amount. A bank payout's box names it too.
+- **Its terms.** The bill's card on **Bills & receivables** names the fee beside an early-payment discount.
+- **Its decide-by day.** A bill past its due date whose fee has not started is to be decided by the day before the fee starts, and says so: "Decide by Oct 29, 2026: overdue since Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026". Approvals, the bill's row, the accountant console and the escalation emails go by that day.
+- **Short cash.** When the cash cannot cover every bill due soon, the written policy pays first, among the bills due or overdue, the one whose late fee costs most in the coming month. See [Which bill first when cash is short](/docs/guides/payment-plan).
+- **The agent's reasoning.** The agent is told the fee, and names the one a payment avoids, as its written policy does: "before a 1.5% monthly late fee (1.50 USDC) starts Oct 30, 2026".
 
 ### Pay something every period
 
@@ -536,6 +550,7 @@ Under "Pays to", each card waiting for **Approve and pay** shows what it would c
 - **CCTP fee, about** or **Gateway fee, about**: for a payee on another chain, the fee of the route it would take, or "not read just now".
 - **Leaves the operating wallet**, or **Leaves the Gateway balance** for a Gateway payout: what is paid and the fee, in all.
 - What the payee **receives**, on their chain. For a CCTP payout, "at least" that much: the part of the fee Circle does not charge reaches the payee too.
+- **Late after** a day, for a bill with a late fee: the fee a month of waiting would cost. It is never part of what leaves. See [A late fee](#a-late-fee).
 
 On Arc mainnet, where your wallets pay their own gas, a note adds Arc's network fee, about 0.00319 USDC a transaction, which is not read until the transfer is made. On Arc testnet Circle pays it. The box is not shown for a payment already sent or in flight, or one the agent is paying. A payout to a bank account has a box of its own: see [Bank payouts](/docs/guides/bank-payouts#3-approve-the-payout).
 

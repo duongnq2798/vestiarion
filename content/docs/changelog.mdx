@@ -1,5 +1,14 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-23: Late fees on bills
+
+- **`POST /api/v1/invoices`** accepts `lateFee`, the late fee a payable charges once it is paid late, or `null` for none: `kind` is `percent_month`, a percent a month of what is still owed, more than 0 and at most 10, or `fixed`, an amount in `currency`, more than 0 and at most `amount`; `value` is the percent or the amount; `startsOn`, the first day it applies as `YYYY-MM-DD`, is on or after `dueDate`, and defaults to the day after it. A receivable with a late fee is refused with `400`, as is a value out of range (`lateFee.value`) or a start before the due date (`lateFee.startsOn`).
+- **`GET /api/v1/invoices`**, and the invoice a write answers with, carry `lateFee`: `{ kind, value, startsOn }`, or `null`.
+- **`create_invoice`** entries carry `lateFee` (`{ kind, value, startsOn }`, `value` as entered) when the invoice was added with one.
+- The agent's **`ap_*`** decisions carry `lateFee` in their `terms` when the bill has one: `{ kind, value, startsOn, aMonth }`, where `aMonth` is what a month past its start costs, in the invoice's currency. A late fee is never added to what is paid: `amountPaid` is the invoice's amount, less an early-payment discount, as before.
+- **`cash_priority_set`** entries' `order` items carry `lateFee`, what the bill's late fee costs in USDC in the coming month, when it has one. Their `referenceOrder` now puts first, among the bills due or overdue, the one whose late fee costs most in the coming month.
+- The TypeScript SDK 0.3.7 describes `lateFee` on `Invoice` and `CreateInvoiceInput`. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-22: Bills waiting for approval in Discord
 
 - Two new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, both in the `system` domain:

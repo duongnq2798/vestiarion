@@ -34,7 +34,7 @@ Vestiarion reads the first PDF, `.eml` or `.txt` file attached, of at most 4 MB,
 - **Could not be read** says why: a scan with no text, a file over 4 MB, or nothing to read. A scanned PDF says "Its PDF has no text to read; it may be a scan. Ask the sender for the invoice as a PDF with text, or type it in with Finish and add."
 - An invoice sent as a photo or picture is not read. Its email says so first: "Its invoice is attached as an image (…), which Vestiarion cannot read yet. Ask the sender for the PDF, or type it in with Finish and add."
 
-The invoice can be laid out any way and written in any language: the model reads it. Amounts written with a decimal comma, such as 3,50 USDC or 1.200,00 EUR, are read as 3.50 and 1200.00. When the due date comes from a date written in numbers whose day and month could swap, such as 03/11/2026, a note says which day was taken and which it can also mean, so you can "Check it against the invoice."
+The invoice can be laid out any way and written in any language: the model reads it, a late fee it states included, checked against the text as an early-payment discount is. Amounts written with a decimal comma, such as 3,50 USDC or 1.200,00 EUR, are read as 3.50 and 1200.00. When the due date comes from a date written in numbers whose day and month could swap, such as 03/11/2026, a note says which day was taken and which it can also mean, so you can "Check it against the invoice."
 
 Each says whether the sender passed SPF, DKIM and DMARC, and whether it is the billing email the counterparty has on file. That is a check for you, never permission: Vestiarion adds nothing by itself.
 

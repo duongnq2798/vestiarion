@@ -346,7 +346,8 @@ run in production, with its ledger entries and transactions.
 ## Product capabilities
 
 - **AP automation** — invoices typed in, imported from a bill list in its own columns, dates and currency, read from a PDF, forwarded by email, captured
-  from the browser with the Chrome extension, or sent through the API; recurring payables; early-payment discounts taken when they pay.
+  from the browser with the Chrome extension, or sent through the API; recurring payables; early-payment discounts taken when they pay;
+  late fees weighed when a bill waits and when cash is short, never added to what is paid.
 - **Approvals inbox** — approve and pay, reject, or return to the agent; claims keep two people from deciding the
   same row.
 - **Try a limit first** — see which past bills a new payment limit, two-approvals figure or spending limit would have

@@ -14,6 +14,19 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Late fees on bills.** A bill can carry the late fee its supplier charges for paying late: a percent a month, such as
+  1.5%, or a fixed amount, from the first day it applies, the day after the due date unless you say otherwise. Enter it
+  in the invoice form (**Late fee**), through the API, in an imported list (`late_fee_percent_month`,
+  `late_fee_amount`, `late_fee_starts_on`), or let Vestiarion read it from a document, an email, the Chrome extension
+  or a chat, checked against the text as a discount is. A late fee is never added to what is paid: it shows what waiting
+  costs. The approval card's cost box ends with "Late after *date*" and what a month of the fee costs, for a bank payout
+  too; the bill's terms on Bills & receivables and Slack's Approve confirmation name it. A bill past its due date whose
+  fee has not started is to be decided by the day before the fee starts, and says so. When cash is short, the written
+  policy pays first, among the bills due or overdue, the one whose fee costs most in the coming month, and the agent is
+  told each fee and names the one a payment avoids. When a supplier agrees to more time, the fee's start moves with the
+  due date. The sample data gives one supplier bill a late fee. The TypeScript SDK 0.3.7 describes `lateFee`. Needs
+  migration 0141; until it runs, bills are added and read without a late fee, as before.
+
 - **Bills waiting for approval in Telegram, each with a Review link.** After each cycle, the message in a member's
   Telegram chat now ends with the bills the agent held or flagged for a person, or asked details for, that still wait:
   one line each with the amount, payee, the agent's reason as the approval card says it, whether it needs two approvals
