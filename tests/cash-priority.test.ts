@@ -42,7 +42,32 @@ describe("the bills competing for the same cash (P1)", () => {
 describe("the order (P2, P3)", () => {
   it("is the written policy's by default: overdue first, then by due day, the smaller first on the same day", () => {
     const competing = competingBills([...BOOK, row({ id: "same-day-small", amount: 4, dueDate: "2026-10-22T08:00:00Z" })], TODAY);
-    expect(referenceOrder(competing)).toEqual(["same-day-small", "render-140", "cluster-150", "hosting-45", "storage-45"]);
+    expect(referenceOrder(competing, TODAY)).toEqual(["same-day-small", "render-140", "cluster-150", "hosting-45", "storage-45"]);
+  });
+
+  it("puts first, among bills due or overdue, the one whose late fee costs most in USDC in the coming month, then keeps that order (late fees LF6)", () => {
+    const competing = competingBills(
+      [
+        row({ id: "overdue-plain", amount: 5, dueDate: "2026-10-10T12:00:00Z" }),
+        row({ id: "overdue-1.5pct", amount: 100, dueDate: "2026-10-15T12:00:00Z", lateFee: { kind: "percent_month", value: 1.5, startsOn: "2026-10-25" } }),
+        row({ id: "due-fixed-3", amount: 50, dueDate: "2026-10-17T12:00:00Z", lateFee: { kind: "fixed", value: 3, startsOn: "2026-10-18" } }),
+        row({ id: "overdue-fixed-started", amount: 40, dueDate: "2026-10-12T12:00:00Z", lateFee: { kind: "fixed", value: 20, startsOn: "2026-10-13" } }),
+        // Not due yet: its fee does not move it ahead of what is due now.
+        row({ id: "later-5pct", amount: 200, dueDate: "2026-10-20T12:00:00Z", lateFee: { kind: "percent_month", value: 5, startsOn: "2026-10-21" } }),
+        row({ id: "later-plain", amount: 1, dueDate: "2026-10-19T12:00:00Z" }),
+      ],
+      TODAY
+    );
+    expect(competing.map((bill) => [bill.id, bill.lateFee])).toEqual([
+      ["overdue-plain", 0],
+      ["overdue-1.5pct", 1.5],
+      ["due-fixed-3", 3],
+      // A fixed fee that has started is owed already: paying first saves none of it.
+      ["overdue-fixed-started", 0],
+      ["later-5pct", 10],
+      ["later-plain", 0],
+    ]);
+    expect(referenceOrder(competing, TODAY)).toEqual(["due-fixed-3", "overdue-1.5pct", "overdue-plain", "overdue-fixed-started", "later-plain", "later-5pct"]);
   });
 
   it("keeps the model's order, drops what it does not know or names twice, and appends what it left out", () => {
@@ -70,6 +95,20 @@ describe("the plan, signed and read back (P5)", () => {
     const moved = competingBills(BOOK.map((bill) => (bill.id === "hosting-45" ? { ...bill, status: "pending" } : bill)), TODAY);
     expect(planFingerprint(moved)).toBe(planFingerprint(competing));
     expect(planFingerprint(competing.filter((bill) => bill.id !== "storage-45"))).not.toBe(planFingerprint(competing));
+  });
+
+  it("keeps a plan's fingerprint for bills without a late fee, and takes a new one when a fee is added or changes", () => {
+    const competing = competingBills(BOOK, TODAY);
+    const withFee = competingBills(BOOK.map((bill) => (bill.id === "hosting-45" ? { ...bill, lateFee: { kind: "fixed" as const, value: 5, startsOn: "2026-10-25" } } : bill)), TODAY);
+    expect(planFingerprint(competingBills(BOOK.map((bill) => ({ ...bill, lateFee: null })), TODAY))).toBe(planFingerprint(competing));
+    expect(planFingerprint(withFee)).not.toBe(planFingerprint(competing));
+    // A person's order is set again once a bill's fee changed (order design O4).
+    const plan = { ...planOf({ fingerprint: "f1", decisionMode: "person", by: "member-1", order: competing.map((bill) => ({ invoiceId: bill.id, keep: true, amount: bill.amount, dueOn: bill.dueOn })) })! };
+    expect(carriedOrder(plan, competing)).toEqual(competing.map((bill) => bill.id));
+    expect(carriedOrder(plan, withFee)).toBeNull();
+    const signedWithFee = planOf({ fingerprint: "f2", decisionMode: "person", by: "member-1", order: withFee.map((bill) => ({ invoiceId: bill.id, keep: true, amount: bill.amount, dueOn: bill.dueOn, ...(bill.lateFee > 0 ? { lateFee: bill.lateFee } : {}) })) })!;
+    expect(signedWithFee.bills["hosting-45"]).toEqual({ amount: 45, dueOn: "2026-10-24", lateFee: 5 });
+    expect(carriedOrder(signedWithFee, withFee)).toEqual(withFee.map((bill) => bill.id));
   });
 
   it("stands while its order splits the bills the same way against the cash there is now (review of the plan)", () => {
@@ -179,3 +218,10 @@ describe("a person's order carried on (order design O4)", () => {
   });
 });
 
+
+describe("the cash step's question weighs late fees (late fees LF6)", () => {
+  it("tells the model to weigh a late fee and its start, and that the written policy puts the heaviest first among bills due", () => {
+    expect(PRIORITY_SYSTEM_PROMPT).toContain("a late fee (lateFee) is charged from its first day (startsOn)");
+    expect(PRIORITY_SYSTEM_PROMPT).toContain("puts first, among the bills due or overdue, the one whose late fee costs most in the coming month");
+  });
+});

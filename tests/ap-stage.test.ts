@@ -2328,6 +2328,22 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
     expect(lines.some((line) => line.message === "Contoso: held, the cash goes to the bills chosen first (140 USDC)")).toBe(true);
   });
 
+  it("tells the model each bill's late fee and its start, and signs what a month of it costs (late fees LF6)", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    await modelOrders(["B2", "B3", "B1"], {});
+    const withFee = { ...render(), late_fee_kind: "fixed", late_fee_value: "10", late_fee_starts_on: "2026-10-25" };
+    const { fake, stage } = apFake({ book: [withFee, heldBill(HOSTING, "GPU hosting", "2026-10-24"), heldBill(STORAGE, "Storage", "2026-10-25")], decisions });
+
+    await stage(150.03);
+
+    const asked = JSON.parse((priorityCalls()[0][0] as DecideParams<unknown>).userPrompt) as { bills: Array<Record<string, unknown>> };
+    expect(asked.bills.map((bill) => bill.lateFee)).toEqual([{ kind: "fixed", value: 10, startsOn: "2026-10-25", costsInTheComingMonth: 10 }, null, null]);
+    const [plan] = entries(fake.requests, "cash_priority_set");
+    const order = (plan.p_detail as { order: Array<Record<string, unknown>> }).order;
+    expect(order.find((item) => item.invoiceId === OTHER_INVOICE_ID)).toMatchObject({ lateFee: 10 });
+    expect(order.find((item) => item.invoiceId === HOSTING)).not.toHaveProperty("lateFee");
+  });
+
   it("names each bill by payee and amount in USDC where the model wrote its ref or a dollar sign (live test, Oct 18)", async () => {
     today("2026-10-17T09:00:00.000Z");
     await modelOrders(

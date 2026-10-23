@@ -48,7 +48,7 @@ export async function readPriorityView(orgDb: OrgDb, now: Date = new Date()): Pr
   const available = Math.max(0, facts.available);
   const byId = new Map(facts.competing.map((bill) => [bill.id, bill] as const));
   const payee = (id: string) => facts.byId.get(id)?.counterparties?.name ?? "A supplier";
-  const policyFirst = planFrom(referenceOrder(facts.competing), facts.competing, available).keep.map(payee);
+  const policyFirst = planFrom(referenceOrder(facts.competing, facts.today), facts.competing, available).keep.map(payee);
   return {
     fingerprint: facts.fingerprint,
     available,
