@@ -10,7 +10,7 @@ import { confirmInvoiceDraft, discardInvoiceDraft } from "@/lib/commands/invoice
 import { inOrg } from "@/lib/dal/scope";
 import { CaptureNotSetUpError } from "@/lib/extension/tokens";
 import { capturedText } from "@/lib/invoice-drafts/store";
-import { invoiceFormRefusal, invoiceInputSchema } from "@/lib/intake-validation";
+import { invoiceFormRefusal, invoiceInputSchema, lateFeeFields } from "@/lib/intake-validation";
 
 /**
  * A draft the Chrome extension captured, decided on Bills & receivables (docs/superpowers/specs/2026-10-15-invoice-
@@ -51,6 +51,7 @@ export async function confirmInvoiceDraftAction(_previous: IntakeActionResult, f
     dueDate: formString(formData, "dueDate"),
     earlyPayDiscountPct: formString(formData, "earlyPayDiscountPct"),
     discountDeadline: formString(formData, "discountDeadline"),
+    lateFee: lateFeeFields((name) => formString(formData, name)),
   });
   if (!parsed.success) return { ok: false, ...invoiceFormRefusal(parsed.error) };
   const invoice = parsed.data;

@@ -13,7 +13,19 @@ import type { DecisionMode } from "@/lib/agent/decide";
  * pays the address on file, and holds a payment whose document asked for another.
  */
 
-export const DOCUMENT_FIELDS = ["amount", "currency", "dueDate", "poReference", "earlyPayDiscountPct", "discountDeadline", "memo", "counterpartyId"] as const;
+export const DOCUMENT_FIELDS = [
+  "amount",
+  "currency",
+  "dueDate",
+  "poReference",
+  "earlyPayDiscountPct",
+  "discountDeadline",
+  "lateFeeKind",
+  "lateFeeValue",
+  "lateFeeStartsOn",
+  "memo",
+  "counterpartyId",
+] as const;
 export type DocumentField = (typeof DOCUMENT_FIELDS)[number];
 
 export interface DocumentProvenance {
@@ -37,10 +49,21 @@ export function documentPayToOf(read: { payToAddress?: unknown } | null | undefi
 }
 
 const READERS: readonly DecisionMode[] = ["anthropic", "openai", "deepseek", "heuristic"];
-const NUMERIC: ReadonlySet<DocumentField> = new Set(["amount", "earlyPayDiscountPct"]);
+const NUMERIC: ReadonlySet<DocumentField> = new Set(["amount", "earlyPayDiscountPct", "lateFeeValue"]);
 
 /** The fields as a member submitted them, each a string or null. */
 export type Submitted = Record<DocumentField, string | null>;
+
+/**
+ * A late fee as a member submitted it (late fees LF2), as the three fields a reading names: all null with none, and a
+ * start left blank as null, so a fee read without a start and kept so is not a change.
+ */
+export function submittedLateFee(
+  lateFee: { kind: string; value: string; startsOn?: string | null } | null | undefined
+): Pick<Submitted, "lateFeeKind" | "lateFeeValue" | "lateFeeStartsOn"> {
+  if (!lateFee) return { lateFeeKind: null, lateFeeValue: null, lateFeeStartsOn: null };
+  return { lateFeeKind: lateFee.kind || null, lateFeeValue: lateFee.value || null, lateFeeStartsOn: lateFee.startsOn || null };
+}
 
 function blank(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;

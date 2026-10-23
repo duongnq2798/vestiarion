@@ -4,6 +4,7 @@ import { FileText, ScanText, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useRef, useState } from "react";
 import { readInvoiceDocumentAction, type DocumentReadResult } from "@/app/actions/invoice-document";
+import { lateFeeFieldsOf } from "@/lib/invoice-document/normalize";
 import InvoiceIntake, { ADD_COUNTERPARTY_PATH, type IntakeCounterparty } from "@/components/intake/InvoiceIntake";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -68,6 +69,7 @@ export function DocumentDraft({
     poReference: draft.poReference,
     earlyPayDiscountPct: draft.earlyPayDiscountPct,
     discountDeadline: draft.discountDeadline,
+    ...lateFeeFieldsOf(draft),
     memo: draft.memo,
     counterpartyId: draft.counterpartyId,
   };

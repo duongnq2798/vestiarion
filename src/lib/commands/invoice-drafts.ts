@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { runCycleSoon } from "../agent/cycle-soon";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { DocumentReadError } from "../invoice-document/read";
-import { changedFields, documentPayToOf, isReader, type DocumentProvenance, type Submitted } from "../invoice-document/provenance";
+import { changedFields, documentPayToOf, isReader, submittedLateFee, type DocumentProvenance, type Submitted } from "../invoice-document/provenance";
 import type { InvoiceInput } from "../invoices/create";
 import { captureRequestHash, isPicture, readCapture, type CaptureInput } from "../invoice-drafts/capture";
 import { draftDuplicates } from "../invoice-drafts/duplicates";
@@ -166,6 +166,7 @@ function capturedProvenance(draft: DraftRow, invoice: InvoiceInput): DocumentPro
     poReference: invoice.poReference,
     earlyPayDiscountPct: invoice.earlyPayDiscountPct,
     discountDeadline: invoice.discountDeadline,
+    ...submittedLateFee(invoice.lateFee),
     memo: invoice.memo,
     counterpartyId: invoice.counterpartyId,
   };

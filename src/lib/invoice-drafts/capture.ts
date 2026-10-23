@@ -1,6 +1,7 @@
 import { documentPayToOf } from "../invoice-document/provenance";
 import { createHash } from "node:crypto";
 import { readInvoiceDocument } from "../invoice-document/draft";
+import { lateFeeFieldsOf } from "../invoice-document/normalize";
 import { MAX_DOCUMENT_BYTES } from "../invoice-document/read";
 import { firstCharacters, MAX_CAPTURED_CHARS, PICTURE_NOTE, startingMemo, storableText, type DraftFields, type StoredRead } from "./model";
 
@@ -115,6 +116,7 @@ async function read(input: CaptureInput, today: string): Promise<CaptureRead> {
         poReference: draft.poReference,
         earlyPayDiscountPct: draft.earlyPayDiscountPct,
         discountDeadline: draft.discountDeadline,
+        ...lateFeeFieldsOf(draft),
         memo: startingMemo(draft.invoiceNumber, draft.memo),
       },
     },

@@ -10,7 +10,7 @@ import { consoleActor } from "@/lib/commands/actor";
 import { addFromInbox, dismissFromInbox, finishFromInbox } from "@/lib/commands/inbox";
 import { inOrg } from "@/lib/dal/scope";
 import { changeInboxAddress, turnInboxOff, turnInboxOn } from "@/lib/email-inbox/inboxes";
-import { invoiceFormRefusal, invoiceInputSchema } from "@/lib/intake-validation";
+import { invoiceFormRefusal, invoiceInputSchema, lateFeeFields } from "@/lib/intake-validation";
 
 export interface InboxActionResult {
   ok: boolean;
@@ -57,6 +57,7 @@ export async function finishInboxEmailAction(_previous: IntakeActionResult, form
     dueDate: formString(formData, "dueDate"),
     earlyPayDiscountPct: formString(formData, "earlyPayDiscountPct"),
     discountDeadline: formString(formData, "discountDeadline"),
+    lateFee: lateFeeFields((name) => formString(formData, name)),
   });
   if (!parsed.success) return { ok: false, ...invoiceFormRefusal(parsed.error) };
   const invoice = parsed.data;

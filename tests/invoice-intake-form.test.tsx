@@ -120,6 +120,32 @@ describe("the invoice form's early-payment discount", () => {
   });
 });
 
+describe("the invoice form's late fee (late fees LF2)", () => {
+  it("asks for a late fee on a payable: its value, % a month or a fixed amount, and the day it starts, all optional", () => {
+    const markup = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} initial={{ dueDate: "2026-10-05" }} />);
+    expect(markup).toMatch(/<label for="invoice-late-fee"[^>]*>Late fee/);
+    expect(input(markup, "lateFeeValue")).not.toContain("required");
+    // Radix renders its options only on the client; the hidden native select carries the field's name.
+    expect(markup).toMatch(/<select[^>]*name="lateFeeKind"/);
+    expect(markup).toMatch(/<label for="invoice-late-fee-kind"[^>]*>Late fee is</);
+    expect(input(markup, "lateFeeStartsOn")).toContain('min="2026-10-05"');
+    expect(markup).toContain("never added to what is paid");
+  });
+
+  it("starts from a late fee read from the document", () => {
+    const markup = renderToStaticMarkup(
+      <InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} initial={{ dueDate: "2026-10-05", lateFeeKind: "fixed", lateFeeValue: "25.00", lateFeeStartsOn: "2026-10-15" }} />
+    );
+    expect(input(markup, "lateFeeValue")).toContain('value="25.00"');
+    expect(input(markup, "lateFeeStartsOn")).toContain('value="2026-10-15"');
+  });
+
+  it("asks for none on an invoice the business is owed", () => {
+    const markup = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={COUNTERPARTIES} initialDirection="receivable" />);
+    expect(markup).not.toContain('name="lateFeeValue"');
+  });
+});
+
 describe("InvoiceIntake with no counterparty yet", () => {
   it("says every invoice is against one, and links to adding one, with Add counterparty open", () => {
     const empty = renderToStaticMarkup(<InvoiceIntake orgSlug="acme" counterparties={[]} />);

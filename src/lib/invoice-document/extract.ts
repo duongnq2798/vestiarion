@@ -23,6 +23,9 @@ Reply with ONLY one JSON object with these keys, each a string or null:
 - poReference: the buyer's purchase order number.
 - earlyPayDiscountPct: the early-payment discount in percent, for example "2" for "2/10 net 30".
 - discountDeadline: YYYY-MM-DD, the last day the discount applies: the date written, or the issue date plus the discount's days.
+- lateFeePercentPerMonth: a late-payment fee charged as a percent a month on what is overdue, for example "1.5" for "1.5% per month on overdue balances". A yearly rate is not a monthly one: leave it null.
+- lateFeeAmount: a late-payment fee of a fixed amount, without the currency, for example "25" for "a late fee of 25 USDC".
+- lateFeeStartsOn: YYYY-MM-DD, the first day the late fee applies: the date written, or the due date plus the days of grace the invoice gives. Null when it says neither.
 - payToAddress: the 0x wallet address the invoice asks to be paid to.
 - payToChain: the chain named for the payment.
 - memo: what is billed, in at most 120 characters.
@@ -63,6 +66,11 @@ function currencyFigure(line: string): string | null {
   return last;
 }
 
+/** A line about paying late, and the percent a month or the fixed fee it charges. */
+const LATE_WORDS = /\b(?:late|overdue|past due|unpaid|interest)\b/i;
+const MONTHLY_PERCENT = /(\d+(?:\.\d+)?)\s*%\s*(?:per\s+month|a\s+month|each\s+month|monthly|\/\s*month)/i;
+const FIXED_LATE_FEE = /late\s+(?:payment\s+)?fee\s+of\s+(?:USDC|EURC|USD|EUR|US\$|[$€])?\s*(\d[\d,]*(?:\.\d+)?)/i;
+
 /**
  * The reader used without a model: regular expressions for the parts of an
  * invoice that have a usual shape. It is also what the model's reading is
@@ -95,6 +103,11 @@ export function ruleBasedExtraction(text: string): RawExtraction {
     if (net && issueDate) dueDate ??= addDays(issueDate, Number(net[1]));
   }
 
+  // A late fee (late fees LF2): "1.5% per month" or "2% monthly" on a line about paying late, or "a late fee of 25".
+  const lateLine = lines.find((line) => LATE_WORDS.test(line) && MONTHLY_PERCENT.test(line));
+  const lateFeePercentPerMonth = lateLine?.match(MONTHLY_PERCENT)?.[1] ?? null;
+  const lateFeeAmount = lateFeePercentPerMonth === null ? (text.match(FIXED_LATE_FEE)?.[1] ?? null) : null;
+
   const po =
     text.match(/purchase order[^:\n]*:\s*([A-Z0-9][A-Z0-9\-/]*)/i)?.[1] ??
     text.match(/\bPO[-#:\s]?\d[A-Z0-9-]*/)?.[0] ??
@@ -110,6 +123,9 @@ export function ruleBasedExtraction(text: string): RawExtraction {
     poReference: po,
     earlyPayDiscountPct,
     discountDeadline,
+    lateFeePercentPerMonth,
+    lateFeeAmount,
+    lateFeeStartsOn: null,
     payToAddress: text.match(/0x[0-9a-fA-F]{40}(?![0-9a-fA-F])/)?.[0] ?? null,
     payToChain: null,
     memo: null,

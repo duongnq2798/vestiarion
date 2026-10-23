@@ -10,6 +10,7 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import type { InboxEmailView } from "@/lib/email-inbox/list";
+import { lateFeeFieldsOf } from "@/lib/invoice-document/normalize";
 
 const INITIAL: InboxActionResult = { ok: false, message: "" };
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
@@ -94,6 +95,7 @@ function FinishForm({ orgSlug, email, counterparties }: { orgSlug: string; email
           dueDate: read?.dueDate ?? null,
           earlyPayDiscountPct: read?.earlyPayDiscountPct ?? null,
           discountDeadline: read?.discountDeadline ?? null,
+          ...lateFeeFieldsOf(read),
           memo: read?.memo ?? null,
           poReference: read?.poReference ?? null,
           invoiceNumber: read?.invoiceNumber ?? null,

@@ -4,6 +4,7 @@ import { db, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { chatDraftOf } from "../invoice-document/chat-draft";
 import { readInvoiceDraft, type InvoiceDraftRead } from "../invoice-document/draft";
+import { lateFeeFieldsOf } from "../invoice-document/normalize";
 import { DocumentReadError, MAX_DOCUMENT_BYTES, type DocumentInput, type DocumentReadErrorCode } from "../invoice-document/read";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { maskEmail } from "../payment-notices";
@@ -123,6 +124,7 @@ function shown(read: InvoiceDraftRead, known: boolean): ShownRead {
     counterpartyId: draft.counterpartyId,
     earlyPayDiscountPct: draft.earlyPayDiscountPct,
     discountDeadline: draft.discountDeadline,
+    ...lateFeeFieldsOf(draft),
     document: { kind: read.document.kind, sha256: read.document.sha256 },
     ...(documentPayToOf(draft) ? { payTo: documentPayToOf(draft) as string } : {}),
   };

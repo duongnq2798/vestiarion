@@ -103,7 +103,10 @@ describe("what each path keeps (IP1)", () => {
     form.set("documentKind", "pdf");
     form.set("documentReader", "deepseek");
     form.set("documentRead", JSON.stringify({ amount: "50", payToAddress: ASKED }));
-    const submitted = { amount: "50", currency: "USDC", dueDate: null, poReference: null, earlyPayDiscountPct: null, discountDeadline: null, memo: null, counterpartyId: null };
+    const submitted = {
+      amount: "50", currency: "USDC", dueDate: null, poReference: null, earlyPayDiscountPct: null, discountDeadline: null,
+      lateFeeKind: null, lateFeeValue: null, lateFeeStartsOn: null, memo: null, counterpartyId: null,
+    };
     expect(documentProvenance(form, submitted)).toMatchObject({ payTo: ASKED });
     form.set("documentRead", JSON.stringify({ amount: "50" }));
     expect(documentProvenance(form, submitted)).not.toHaveProperty("payTo");

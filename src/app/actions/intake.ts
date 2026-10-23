@@ -16,6 +16,7 @@ import {
   firstZodMessage,
   invoiceFormRefusal,
   invoiceInputSchema,
+  lateFeeFields,
   noticeEmailSchema,
   type InvoiceField,
   counterpartyChainProblem,
@@ -36,7 +37,7 @@ import { changeCounterpartyLimit, CounterpartyLimitError } from "@/lib/counterpa
 import { limitApplied } from "@/lib/policy-replay-apply";
 import { RuleReplayError } from "@/lib/policy-replay-read";
 import { changeCounterpartyPurchaseOrders, CounterpartyPurchaseOrdersError } from "@/lib/counterparty-purchase-orders";
-import { documentProvenance } from "@/lib/invoice-document/provenance";
+import { documentProvenance, submittedLateFee } from "@/lib/invoice-document/provenance";
 import { createCounterparty } from "@/lib/counterparties/create";
 import { createInvoice } from "@/lib/invoices/create";
 import { consoleActor } from "@/lib/commands/actor";
@@ -421,6 +422,8 @@ export async function createInvoiceAction(
         throw error;
       }
     }
+    // A late fee as typed (late fees LF2): none while its fee and start are blank.
+    const lateFee = lateFeeFields((name) => formString(formData, name));
     const parsed = invoiceInputSchema.safeParse({
       direction: formString(formData, "direction"),
       counterpartyId: formString(formData, "counterpartyId"),
@@ -433,6 +436,7 @@ export async function createInvoiceAction(
       dueDate: formString(formData, "dueDate"),
       earlyPayDiscountPct: formString(formData, "earlyPayDiscountPct"),
       discountDeadline: formString(formData, "discountDeadline"),
+      lateFee,
     });
     if (!parsed.success) return { ok: false, ...invoiceFormRefusal(parsed.error) };
 
@@ -446,6 +450,7 @@ export async function createInvoiceAction(
         poReference: input.poReference,
         earlyPayDiscountPct: input.earlyPayDiscountPct,
         discountDeadline: input.discountDeadline,
+        ...submittedLateFee(input.lateFee),
         memo: input.memo,
         counterpartyId: input.counterpartyId,
       });

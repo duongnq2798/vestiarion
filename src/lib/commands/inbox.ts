@@ -1,7 +1,7 @@
 import { db, unwrap } from "../dal";
 import type { ShownRead } from "../email-inbox/list";
 import { invoiceOfDraft, type StoredChatDraft } from "../invoice-document/chat-draft";
-import { changedFields, isReader, type DocumentProvenance, type Submitted } from "../invoice-document/provenance";
+import { changedFields, isReader, submittedLateFee, type DocumentProvenance, type Submitted } from "../invoice-document/provenance";
 import type { InvoiceInput } from "../invoices/create";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import type { Actor } from "./actor";
@@ -79,6 +79,7 @@ function finishedProvenance(row: FinishableRow, invoice: InvoiceInput): Document
     poReference: invoice.poReference,
     earlyPayDiscountPct: invoice.earlyPayDiscountPct,
     discountDeadline: invoice.discountDeadline,
+    ...submittedLateFee(invoice.lateFee),
     memo: invoice.memo,
     counterpartyId: invoice.counterpartyId,
   };

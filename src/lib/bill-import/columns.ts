@@ -18,6 +18,9 @@ export const IMPORT_FIELDS = [
   "direction",
   "discountPct",
   "discountDeadline",
+  "lateFeePercent",
+  "lateFeeAmount",
+  "lateFeeStartsOn",
 ] as const;
 
 export type ImportField = (typeof IMPORT_FIELDS)[number];
@@ -38,6 +41,9 @@ export const FIELD_LABELS: Record<ImportField, string> = {
   direction: "Bill or invoice",
   discountPct: "Early-payment discount (%)",
   discountDeadline: "Discount deadline",
+  lateFeePercent: "Late fee (% a month)",
+  lateFeeAmount: "Late fee (fixed amount)",
+  lateFeeStartsOn: "Late fee starts on",
 };
 
 /** The fields a row cannot be added without. */
@@ -74,6 +80,9 @@ const SYNONYMS: Record<ImportField, readonly string[]> = {
   direction: ["direction", "apar", "payablereceivable"],
   discountPct: ["earlypaydiscountpct", "discount", "earlypaymentdiscount", "discountpct", "discountpercent"],
   discountDeadline: ["discountdeadline", "discountuntil", "discountby", "discountdate"],
+  lateFeePercent: ["latefeepercentmonth", "latefeepercent", "latefeepct", "latefeepermonth", "monthlylatefee", "interestpermonth"],
+  lateFeeAmount: ["latefeeamount", "latefee", "latepaymentfee", "latefeefixed"],
+  lateFeeStartsOn: ["latefeestartson", "latefeestarts", "latefeefrom", "latefeedate"],
 };
 
 const KNOWN = new Set(Object.values(SYNONYMS).flat());

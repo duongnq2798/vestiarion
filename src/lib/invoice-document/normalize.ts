@@ -25,6 +25,9 @@ export const rawExtractionSchema = z.object({
   poReference: field,
   earlyPayDiscountPct: field,
   discountDeadline: field,
+  lateFeePercentPerMonth: field,
+  lateFeeAmount: field,
+  lateFeeStartsOn: field,
   payToAddress: field,
   payToChain: field,
   memo: field,
@@ -43,8 +46,31 @@ export interface InvoiceDraft {
   poReference: string | null;
   earlyPayDiscountPct: string | null;
   discountDeadline: string | null;
+  /**
+   * A late fee the document states (late fees LF2), as the invoice form's three fields: named only when one was read,
+   * so a reading stored before late fees reads the same. Its start is the day after the due date when it gives none.
+   */
+  lateFeeKind?: "percent_month" | "fixed";
+  lateFeeValue?: string;
+  lateFeeStartsOn?: string | null;
   payToAddress: string | null;
   memo: string | null;
+}
+
+/** A late fee as a reading names it: its three fields, all absent when it names none. */
+export interface LateFeeRead {
+  lateFeeKind?: string | null;
+  lateFeeValue?: string | null;
+  lateFeeStartsOn?: string | null;
+}
+
+/**
+ * A reading's late fee as the form starts from it and a stored reading keeps it (late fees LF2): its three fields when
+ * it names one, and nothing when it does not, as a reading stored before late fees does not.
+ */
+export function lateFeeFieldsOf(read: LateFeeRead | null | undefined): { lateFeeKind?: string; lateFeeValue?: string; lateFeeStartsOn?: string | null } {
+  if (!read?.lateFeeKind || !read.lateFeeValue) return {};
+  return { lateFeeKind: read.lateFeeKind, lateFeeValue: read.lateFeeValue, lateFeeStartsOn: read.lateFeeStartsOn ?? null };
 }
 
 export type NotFoundField = "amount" | "poReference" | "payToAddress";
@@ -61,6 +87,8 @@ export interface NormalizedExtraction {
 
 const AMOUNT_PATTERN = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,6})?$/;
 const DISCOUNT_PCT_PATTERN = /^(?:0|[1-9]\d?)(?:\.\d{1,2})?$/;
+/** The most a late fee may be a month (`LATE_FEE_MAX_PERCENT`, src/lib/agent/late-fee.ts). */
+const LATE_FEE_MAX_PERCENT = 10;
 const ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 /** A purchase order as people write one: letters, digits and separators, with at least one digit. */
 const PO_PATTERN = /^[A-Za-z0-9][A-Za-z0-9#/.\- ]{2,}$/;
@@ -232,6 +260,67 @@ function statesPercent(text: string, pct: string): boolean {
   return new RegExp(`(?<![\\d.])${canonical}(?:\\.0+)?\\s*(?:%|/|percent|pct)`, "i").test(text);
 }
 
+/** The day after a `YYYY-MM-DD` day. */
+function dayAfter(iso: string): string {
+  return new Date(Date.parse(`${iso}T12:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * A late fee the document states (late fees LF2), checked as the discount is: a percent a month the text writes as a
+ * percent, at most 10, or a fixed amount the text contains, in a currency Vestiarion pays in; not both. Its start is
+ * the day written when that is a real day on or after the due date, else the day after the due date, which is what the
+ * form takes a blank start as. A fee left out says why.
+ */
+function readLateFee(
+  raw: RawExtraction,
+  text: string,
+  read: { dueDate: string | null; foreign: boolean; notes: string[] }
+): Pick<InvoiceDraft, "lateFeeKind" | "lateFeeValue" | "lateFeeStartsOn"> | null {
+  const percent = raw.lateFeePercentPerMonth?.replace(/\s*%$/, "") ?? null;
+  const amount = raw.lateFeeAmount;
+  if (percent === null && amount === null) return null;
+  let kind: "percent_month" | "fixed";
+  let value: string;
+  if (percent !== null && amount !== null) {
+    read.notes.push("The late fee was left out: it was read as both a percent and a fixed amount. Enter the one the invoice charges.");
+    return null;
+  }
+  if (percent !== null) {
+    if (!(DISCOUNT_PCT_PATTERN.test(percent) && Number(percent) > 0)) {
+      read.notes.push("The late fee was left out: its percent could not be read as one.");
+      return null;
+    }
+    if (Number(percent) > LATE_FEE_MAX_PERCENT) {
+      read.notes.push(`The late fee was left out: it is more than ${LATE_FEE_MAX_PERCENT}% a month. Check it against the invoice, and enter it if it is right.`);
+      return null;
+    }
+    if (!statesPercent(text, percent)) {
+      read.notes.push("The late fee was left out: the document does not state that percent.");
+      return null;
+    }
+    kind = "percent_month";
+    value = percent;
+  } else {
+    if (read.foreign) {
+      read.notes.push("The late fee was left out: it is in a currency Vestiarion does not pay in.");
+      return null;
+    }
+    const reading = readAmount(amount, text);
+    if (reading.amount === null) {
+      read.notes.push(reading.why === "not_found" ? "The late fee was left out: the document does not state that amount." : "The late fee was left out: its amount could not be read as a number.");
+      return null;
+    }
+    kind = "fixed";
+    value = reading.amount;
+  }
+  const written = raw.lateFeeStartsOn;
+  if (isRealDate(written) && (read.dueDate === null || written >= read.dueDate)) return { lateFeeKind: kind, lateFeeValue: value, lateFeeStartsOn: written };
+  if (written !== null && read.dueDate !== null) {
+    read.notes.push("The day the late fee starts was read as before the due date or could not be read: it is set to the day after the due date. Check it against the invoice.");
+  }
+  return { lateFeeKind: kind, lateFeeValue: value, lateFeeStartsOn: read.dueDate === null ? null : dayAfter(read.dueDate) };
+}
+
 export function normalizeExtraction(raw: RawExtraction, text: string): NormalizedExtraction {
   const notFound: NotFoundField[] = [];
   const notes: string[] = [];
@@ -301,6 +390,8 @@ export function normalizeExtraction(raw: RawExtraction, text: string): Normalize
     }
   }
 
+  const lateFee = readLateFee(raw, text, { dueDate, foreign, notes });
+
   return {
     fields: {
       vendorName: cut(raw.vendorName, 160),
@@ -311,6 +402,7 @@ export function normalizeExtraction(raw: RawExtraction, text: string): Normalize
       poReference,
       earlyPayDiscountPct,
       discountDeadline,
+      ...(lateFee ?? {}),
       payToAddress,
       memo: cut(raw.memo, 120),
     },

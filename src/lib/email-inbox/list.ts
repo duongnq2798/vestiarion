@@ -27,6 +27,10 @@ export interface ShownRead {
   counterpartyId?: string | null;
   earlyPayDiscountPct?: string | null;
   discountDeadline?: string | null;
+  /** A late fee as read (late fees LF2), when it named one. */
+  lateFeeKind?: string;
+  lateFeeValue?: string;
+  lateFeeStartsOn?: string | null;
   document?: { kind: "pdf" | "email" | "text"; sha256: string };
   /** The 0x address the document asked to be paid to (invoice pay-to hold IP1); absent when it named none. */
   payTo?: string;

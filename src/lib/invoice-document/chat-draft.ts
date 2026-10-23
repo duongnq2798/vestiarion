@@ -1,6 +1,6 @@
 import { documentPayToOf } from "./provenance";
 import type { InvoiceInput } from "../invoices/create";
-import { invoiceFormRefusal, invoiceInputSchema } from "../intake-validation";
+import { invoiceFormRefusal, invoiceInputSchema, lateFeeFields } from "../intake-validation";
 import type { InvoiceDraftRead } from "./draft";
 
 /**
@@ -30,6 +30,23 @@ export interface ChatDraftFields {
   discountDeadline: string;
   /** The vendor's own number, as read (receipts v2 RV1); absent from a draft stored before it. */
   invoiceNumber?: string;
+  /** A late fee as read (late fees LF2): named only when one was, and absent from a draft stored before. */
+  lateFeeKind?: string;
+  lateFeeValue?: string;
+  lateFeeStartsOn?: string;
+}
+
+/** A late fee as a reading's or a draft's three fields name it, as the invoice schema takes it: none when they name none. */
+function lateFeeOf(fields: { lateFeeKind?: string | null; lateFeeValue?: string | null; lateFeeStartsOn?: string | null }) {
+  const named: Record<string, string | null | undefined> = fields;
+  return lateFeeFields((name) => named[name] ?? "");
+}
+
+/** A late fee read with the invoice, as a chat names it on the draft: "1.5% a month from 2026-10-11"; null with none. */
+export function lateFeeLine(draft: InvoiceDraftRead["draft"]): string | null {
+  if (!draft.lateFeeKind || !draft.lateFeeValue) return null;
+  const rate = draft.lateFeeKind === "fixed" ? `${draft.lateFeeValue} ${draft.currency ?? "USDC"}` : `${draft.lateFeeValue}% a month`;
+  return draft.lateFeeStartsOn ? `${rate} from ${draft.lateFeeStartsOn}` : rate;
 }
 
 /** A draft as a chat stores it: the fields, and where they were read from, with the address it asked payment to (IP1). */
@@ -61,8 +78,11 @@ export function chatDraftOf(read: InvoiceDraftRead): { reasons: string[]; stored
     earlyPayDiscountPct: draft.earlyPayDiscountPct ?? "",
     discountDeadline: draft.discountDeadline ?? "",
     invoiceNumber: draft.invoiceNumber ?? "",
+    ...(draft.lateFeeKind && draft.lateFeeValue
+      ? { lateFeeKind: draft.lateFeeKind, lateFeeValue: draft.lateFeeValue, ...(draft.lateFeeStartsOn ? { lateFeeStartsOn: draft.lateFeeStartsOn } : {}) }
+      : {}),
   };
-  const parsed = invoiceInputSchema.safeParse({ direction: "payable", ...fields, goodsReceived: false });
+  const parsed = invoiceInputSchema.safeParse({ direction: "payable", ...fields, goodsReceived: false, lateFee: lateFeeOf(fields) });
   if (!parsed.success) return { reasons: [invoiceFormRefusal(parsed.error).message], stored: null };
   const payTo = documentPayToOf(draft);
   return {
@@ -73,6 +93,6 @@ export function chatDraftOf(read: InvoiceDraftRead): { reasons: string[]; stored
 
 /** The payable a stored draft becomes, with the goods as the person said; null if the form's rules no longer accept it. */
 export function invoiceOfDraft(stored: StoredChatDraft, goodsReceived: boolean): InvoiceInput | null {
-  const parsed = invoiceInputSchema.safeParse({ direction: "payable", ...stored.draft, goodsReceived });
+  const parsed = invoiceInputSchema.safeParse({ direction: "payable", ...stored.draft, goodsReceived, lateFee: lateFeeOf(stored.draft) });
   return parsed.success ? parsed.data : null;
 }

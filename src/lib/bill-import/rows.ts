@@ -153,7 +153,7 @@ export interface ImportQuestions {
 
 export function questionsFor(table: Table, settings: ImportSettings, workspace: ImportWorkspace): ImportQuestions {
   const rows = billRows(table, settings.hasHeader);
-  const dates = rows.flatMap((row) => [cellOf(row, settings.mapping, "dueDate"), cellOf(row, settings.mapping, "discountDeadline")]);
+  const dates = rows.flatMap((row) => [cellOf(row, settings.mapping, "dueDate"), cellOf(row, settings.mapping, "discountDeadline"), cellOf(row, settings.mapping, "lateFeeStartsOn")]);
   const amounts = rows.map((row) => ({
     text: cellOf(row, settings.mapping, "amount"),
     currency: rowCurrency(row, settings, workspace).currency ?? settings.currency ?? "USDC",
@@ -210,6 +210,8 @@ export interface ReadRow {
   goodsReceived: boolean;
   discountPct: string | null;
   discountDeadline: string | null;
+  /** A late fee as written (late fees LF2): a percent a month or a fixed amount in `currency`, and its start; null for none. */
+  lateFee: { kind: "percent_month" | "fixed"; value: string; startsOn: string | null } | null;
 }
 
 const PAYABLE = new Set(["payable", "ap", "bill", "bills", "pay", "topay", "billtopay", "purchase", "expense", "outgoing"]);
@@ -268,7 +270,7 @@ export function readRows(table: Table, settings: ImportSettings, workspace: Impo
       else problems.push(`Amount “${amountCell}” ${read.reason}.`);
     }
 
-    const dateOf = (field: "dueDate" | "discountDeadline", label: string): string | null => {
+    const dateOf = (field: "dueDate" | "discountDeadline" | "lateFeeStartsOn", label: string): string | null => {
       const written = cell(field);
       if (written === "") {
         if (field === "dueDate") problems.push("No due date.");
@@ -281,6 +283,7 @@ export function readRows(table: Table, settings: ImportSettings, workspace: Impo
     };
     const dueDate = dateOf("dueDate", "Due date");
     const discountDeadline = dateOf("discountDeadline", "Discount deadline");
+    const lateFee = lateFeeOf(cell("lateFeePercent"), cell("lateFeeAmount"), dateOf("lateFeeStartsOn", "Late fee start"), { mark, currency, problems });
 
     let goodsReceived = settings.goodsReceived;
     if (settings.mapping.goodsReceived !== undefined) {
@@ -311,8 +314,39 @@ export function readRows(table: Table, settings: ImportSettings, workspace: Impo
       goodsReceived,
       discountPct,
       discountDeadline,
+      lateFee,
     };
   });
+}
+
+/**
+ * A row's late fee (late fees LF2): a percent a month, or a fixed amount read as the amount is, in the bill's currency,
+ * which must be USDC or EURC. Both is a problem. A start with neither goes on, so the invoice's own rule refuses it.
+ */
+function lateFeeOf(
+  percentCell: string,
+  amountCell: string,
+  startsOn: string | null,
+  row: { mark: DecimalMark | null; currency: string | null; problems: string[] }
+): ReadRow["lateFee"] {
+  const percent = percentCell.replace(/\s*%$/, "");
+  if (percent !== "" && amountCell !== "") {
+    row.problems.push("Give a late fee as a percent a month or a fixed amount, not both.");
+    return null;
+  }
+  if (percent !== "") return { kind: "percent_month", value: percent, startsOn };
+  if (amountCell !== "") {
+    if (!row.currency) return null;
+    if (!PAID_AS_IS.has(row.currency)) {
+      row.problems.push("A fixed late fee is read only on a bill in USDC or EURC: give it as a percent a month.");
+      return null;
+    }
+    const read = readAmount(splitCurrency(amountCell).number, row.mark, row.currency);
+    if (read.ok) return { kind: "fixed", value: read.value, startsOn };
+    row.problems.push(`Late fee “${amountCell}” ${read.reason}.`);
+    return null;
+  }
+  return startsOn ? { kind: "percent_month", value: "", startsOn } : null;
 }
 
 /** A bill in the business's own currency at its USDC amount, as the shadow path worked it out (B15), or why it could not be. */
@@ -466,6 +500,7 @@ export function fatesOf(rows: readonly ReadRow[], facts: ImportFacts): RowFate[]
       dueDate: row.dueDate,
       earlyPayDiscountPct: row.discountPct ?? "",
       discountDeadline: row.discountDeadline ?? "",
+      lateFee: row.lateFee ? { kind: row.lateFee.kind, value: row.lateFee.value, startsOn: row.lateFee.startsOn ?? "" } : null,
     });
     if (!parsed.success) return { ...base, status: "error", reason: invoiceFormRefusal(parsed.error).message };
 

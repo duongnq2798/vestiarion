@@ -15,6 +15,7 @@ import { useActionForm } from "@/components/ui/useActionForm";
 import { orgHref } from "@/lib/auth/org-paths";
 import { capturedTitle, startingMemo } from "@/lib/invoice-drafts/model";
 import type { CapturedDraftView } from "@/lib/invoice-drafts/store";
+import { lateFeeFieldsOf } from "@/lib/invoice-document/normalize";
 
 const INITIAL: DraftActionResult = { ok: false, message: "" };
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
@@ -208,6 +209,7 @@ function DraftCard({ orgSlug, draft, canAdd, counterparties, capturedBy }: { org
                 dueDate: fields.dueDate,
                 earlyPayDiscountPct: draft.extracted?.earlyPayDiscountPct ?? null,
                 discountDeadline: draft.extracted?.discountDeadline ?? null,
+                ...lateFeeFieldsOf(draft.extracted),
                 memo: startingMemo(fields.invoiceNumber, fields.memo),
                 poReference: fields.poReference,
                 // Its own field too, which its entry and its receipt state (receipts v2 RV1).

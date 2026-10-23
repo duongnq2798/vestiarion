@@ -129,6 +129,39 @@ describe("createInvoiceAction's counterparty lookup", () => {
     expect(insert?.body).toMatchObject({ early_pay_discount_pct: "2", discount_due_date: "2026-10-20T12:00:00.000Z" });
   });
 
+  it("inserts a late fee the form carries, and none while its fee and start are blank (late fees LF2)", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const form = invoiceForm();
+    form.set("lateFeeKind", "fixed");
+    form.set("lateFeeValue", "2.50");
+    form.set("lateFeeStartsOn", "2026-11-10");
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, form));
+    const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(insert?.body).toMatchObject({ late_fee_kind: "fixed", late_fee_value: "2.50", late_fee_starts_on: "2026-11-10" });
+
+    const blank = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const none = invoiceForm();
+    none.set("lateFeeKind", "percent_month");
+    none.set("lateFeeValue", "");
+    await runWith({ config, db: blank.client, fetch: blank.fetch }, () => createInvoiceAction({ ok: false, message: "" }, none));
+    const added = blank.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(Object.keys((added?.body ?? {}) as Record<string, unknown>).filter((key) => key.startsWith("late_fee_"))).toEqual([]);
+  });
+
+  it("refuses a late fee above 10% a month under the Late fee field, and adds nothing", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const form = invoiceForm();
+    form.set("lateFeeKind", "percent_month");
+    form.set("lateFeeValue", "12");
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, form));
+    expect(result).toEqual({
+      ok: false,
+      message: "Late fee: Enter a late fee of more than 0% and at most 10% a month, with at most 2 decimal places.",
+      fieldErrors: { lateFee: "Enter a late fee of more than 0% and at most 10% a month, with at most 2 decimal places." },
+    });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
+  });
+
   it("refuses a discount percent without its deadline with an error on the deadline field, and adds nothing", async () => {
     const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
     const form = invoiceForm();
