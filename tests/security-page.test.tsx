@@ -67,7 +67,7 @@ describe("/security", () => {
 
   it("renders its heading, the date it was last updated, the site header and the compact footer", () => {
     expect(markup).toMatch(/<h1[^>]*>Security<\/h1>/);
-    expect(body).toContain("Last updated 2026-10-22");
+    expect(body).toContain("Last updated 2026-10-23");
     expect(markup).toMatch(/<header[^>]*class="sticky top-0/);
     for (const href of ["/terms", "/privacy", "/security"]) expect(markup).toContain(`href="${href}"`);
   });
@@ -484,6 +484,20 @@ describe("claims narrowed to what the code does", () => {
     expect([undefined, 0, "off"]).toContain(level(await ruleFor("scripts/migrate.ts")));
     expect(isolation).toContain("anywhere in src outside the data access layer");
   }, 30_000);
+
+  it("vendors' documents: files in a private bucket the service role alone reaches, named beside platformDb()", () => {
+    const architecture = section("architecture");
+    expect(architecture).toContain("vendors' documents are files in a private Supabase Storage bucket");
+    expect(architecture).toContain("a vendor's browser puts the file it sends straight into that bucket, at a one-time upload address");
+    const isolation = section("isolation");
+    expect(isolation).toContain("platformStorage() , narrowed to the private bucket of vendors' documents");
+    expect(source("src/lib/dal/index.ts")).toContain("const bucket = currentContext().db.storage.from(DOCUMENTS_BUCKET);");
+    // The file is read back from where it is kept, and kept only when it is the file checked (intake.ts).
+    expect(body).toContain("read back from where it is kept and taken only when it is the file checked");
+    expect(source("src/lib/document-requests/intake.ts")).toContain("const again = await storage.download(kept);");
+    expect(body).not.toContain("which no browser reads");
+    expect(body).toContain("with no public address: only a one-time upload address and a member's one-minute download address reach it");
+  });
 
   it("foreign keys carry the workspace, but for the links named, and polymorphic ids have none", () => {
     expect(source("supabase/migrations/0048_fx_swaps.sql")).toContain("invoice_id      uuid not null references public.invoices(id) on delete cascade");

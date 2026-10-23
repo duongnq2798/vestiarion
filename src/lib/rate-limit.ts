@@ -163,6 +163,26 @@ export function takePayeeInvoiceToken(key: string, now = Date.now()): boolean {
   return take(payeeInvoiceBuckets, key, 3, 20_000, now);
 }
 
+const documentLinkBuckets = new Map<string, Bucket>();
+const documentAddressBuckets = new Map<string, Bucket>();
+
+/**
+ * What a document request's page sends, per link (document requests ER5): five uploads or answers at once, then one
+ * every 20 s, so a page cannot fill the workspace's storage or read files without end. Only a live link gets a bucket.
+ * Single-instance, like the others; the database takes one answer per request (0142) across instances.
+ */
+export function takeDocumentLinkToken(key: string, now = Date.now()): boolean {
+  return take(documentLinkBuckets, key, 5, 20_000, now);
+}
+
+/**
+ * The same page's sends per address (document requests ER5): ten at once, then one every 6 s, taken before any link is
+ * looked up, so no one tries links from one address without end. Single-instance, like the others.
+ */
+export function takeDocumentAddressToken(key: string, now = Date.now()): boolean {
+  return take(documentAddressBuckets, key, 10, 6_000, now);
+}
+
 const extensionTokenBuckets = new Map<string, Bucket>();
 
 /**

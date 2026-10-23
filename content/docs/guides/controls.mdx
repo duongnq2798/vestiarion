@@ -67,7 +67,7 @@ These checks run on every payment the agent would make, in [`src/lib/agent/guard
 | --- | --- |
 | The payee was screened high risk | Flagged. It is never paid, not even by a person's approval. |
 | It repeats a bill already paid | Flagged for a person. |
-| Its purchase order or goods receipt is missing | Sent back for what is missing. |
+| Its purchase order or goods receipt is missing | Sent back for what is missing. An owner can let Vestiarion [ask the vendor for it](/docs/guides/first-payment#ask-the-vendor-for-a-missing-document), which never pays it. |
 | It is above the payee's payment limit | Held for a person. |
 | The payee has not been screened yet, or is a client, who pays the business | Held for a person. |
 | The payee has no payment address, or its address changed and no one confirmed it | Held for a person. |

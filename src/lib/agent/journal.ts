@@ -38,6 +38,7 @@ export const CYCLE_STAGES = [
   "early_offers",
   "customer_offers",
   "term_requests",
+  "document_requests",
   "cash_alert",
   "notices",
   "telegram",
@@ -85,6 +86,9 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *               day (customer discounts C2, C8).
  *   term_requests reconcile + ap. It asks suppliers for more time on bills the AP stage held for
  *               want of cash; a request only moves a due date later, and moves no money.
+ *   document_requests ap. It asks vendors for the purchase order or goods receipt of bills the AP
+ *               stage left waiting for information; a request changes no bill and moves no money,
+ *               so it needs no balance (document requests ER2, ER7).
  *   cash_alert  reconcile. It tells the owner when the wallet will run short, from the balances
  *               reconcile read; it authorises nothing (cash short alert S1).
  *   forecast    Nothing. It reads and records; it authorises nothing. It is the
@@ -124,6 +128,8 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   customer_offers: ["reconcile", "receipts", "ap"],
   // Asks suppliers for more time on bills AP held for want of cash, from the balance reconcile read (term requests X2).
   term_requests: ["reconcile", "ap"],
+  // Asks vendors for the documents of the bills AP left waiting for information (document requests ER2).
+  document_requests: ["ap"],
   // Tells the owner when the wallet will run short: never from balances reconcile did not read (cash short alert S1).
   cash_alert: ["reconcile"],
   notices: [],

@@ -91,6 +91,14 @@ describe("the policy (CSP1, CSP2)", () => {
     expect(directives(contentSecurityPolicy({ NEXT_PUBLIC_SUPABASE_URL: "not a url; script-src *" })).get("form-action")!.join(" ")).not.toContain("*");
   });
 
+  it("lets a vendor's browser put its document at the upload address the server made, on the deployment's own Supabase (document requests ER5)", () => {
+    const own = directives(contentSecurityPolicy({ NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co/" }));
+    expect(own.get("connect-src")).toContain("https://project.supabase.co");
+    // The browser's PUT goes to the URL storage-js builds for a signed upload: the Supabase project's own origin.
+    expect(readFileSync("src/components/document-requests/DocumentUploadForm.tsx", "utf8")).toContain('fetch(started.url, { method: "PUT"');
+    expect(directives(contentSecurityPolicy({ NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: "http://insecure.example.test" })).get("connect-src")!.join(" ")).not.toContain("insecure");
+  });
+
   it("lets every connect form end at its tool's consent screen, every Zoho data center's, and Continue with Google at Google", () => {
     // Each connect route's tool, and where its consent screen is: a new connect route fails here until it is named.
     const consent: Record<string, string[]> = {

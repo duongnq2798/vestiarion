@@ -30,6 +30,7 @@ import { utcDay, utcMinute } from "@/lib/copy";
  * actions are stand-ins: the components only hand them to their forms.
  */
 
+vi.mock("@/app/actions/document-requests", () => ({ revokeDocumentRequestAction: vi.fn(), setDocumentRequestsAction: vi.fn() }));
 vi.mock("@/app/actions/approvals", () => ({
   approveInvoiceAction: vi.fn(), cosignInvoiceAction: vi.fn(),
   rejectInvoiceAction: vi.fn(),

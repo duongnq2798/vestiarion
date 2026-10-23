@@ -6,7 +6,7 @@
  *
  * `next.config.ts` imports it, so it imports only the network profiles and the site's links, which import nothing.
  * `tests/csp.test.ts` holds each origin here to the code that reaches it: the connect forms' OAuth hosts, Circle's Iris,
- * the modular wallets client and Product Hunt's badge.
+ * the modular wallets client, the Supabase origin a vendor's document is uploaded to, and Product Hunt's badge.
  */
 
 import { NETWORKS } from "../network";
@@ -125,6 +125,9 @@ export function contentSecurityPolicy(env: CspEnv = process.env, keep: (directiv
         ...CIRCLE_CONNECT,
         httpsOrigin(env.NEXT_PUBLIC_MODULAR_WALLETS_CLIENT_URL),
         httpsOrigin(env.NEXT_PUBLIC_MODULAR_WALLETS_MAINNET_CLIENT_URL),
+        // A vendor's document goes from its browser straight to the workspace's private storage, at an upload address
+        // the server made for its request (document requests ER5).
+        httpsOrigin(env.NEXT_PUBLIC_SUPABASE_URL),
         ...preview("connect"),
       ]),
     ],

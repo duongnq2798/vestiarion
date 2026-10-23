@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/bank-payouts", () => ({ startBankPayoutsAction: vi.fn(), setBankAccountAction: vi.fn(), stopBankAccountAction: vi.fn(), mintTestUsdbAction: vi.fn() }));
+vi.mock("@/app/actions/document-requests", () => ({ revokeDocumentRequestAction: vi.fn(), setDocumentRequestsAction: vi.fn() }));
 vi.mock("@/app/actions/approvals", () => ({ approveInvoiceAction: vi.fn(), cosignInvoiceAction: vi.fn(), rejectInvoiceAction: vi.fn(), returnInvoiceAction: vi.fn(), addInvoiceDetailsAction: vi.fn() }));
 vi.mock("@/app/actions/verdicts", () => ({ giveVerdictAction: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));

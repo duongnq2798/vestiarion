@@ -15,6 +15,8 @@ import { sectionTitle } from "@/components/vx/nav";
 import { listWaitingPayables } from "@/lib/agent/approvals";
 import { readCosignStates } from "@/lib/cosign-state";
 import { db } from "@/lib/dal";
+import { readDocumentRequests } from "@/lib/document-requests/read";
+import type { DocumentRequestView } from "@/lib/document-requests/rules";
 import { verdictView, type DecisionEntryFacts } from "@/lib/verdict-view";
 import { verdictFacts } from "@/lib/verdicts";
 import { isSoleApprover } from "@/lib/agent/sole-approver";
@@ -118,6 +120,12 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
     // ticks them too: once the page is in the browser (`ChecklistVisit`), never while it renders. Deciding a bill is read
     // from the signed ledger.
     const approverList = checklistRoleOf(membership.role) === "approver" ? await approverOnboarding(user.id, waiting) : null;
+    // What the agent asked each bill's vendor for, or would in shadow, and what the vendor sent (document requests ER6).
+    // Best effort: unread, the cards show none, as before migration 0142.
+    const documentRequests = await readDocumentRequests(waiting.map((payable) => payable.id)).catch((error: unknown) => {
+      console.error("approvals: document requests not read", error instanceof Error ? error.message : error);
+      return new Map<string, DocumentRequestView>();
+    });
 
     return (
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
@@ -166,6 +174,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
                 viewerEmail={user.email}
                 canCosign={canCosign}
                 cosign={cosignStates?.get(payable.id)}
+                documentRequest={documentRequests.get(payable.id)}
               />
             ))}
           </div>
