@@ -132,6 +132,8 @@ export const PLATFORM_TABLES = [
   "extension_grants", "extension_auth_codes",
   // A workspace's Discord channel webhook, its URL kept only as an envelope (migration 0140).
   "discord_webhooks",
+  // An accountant's client invite links (migration 0143): the accountant's own, before any workspace exists.
+  "accountant_client_links",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 
@@ -174,6 +176,9 @@ export const PLATFORM_RPCS = [
   // token, and a frozen payee unfrozen.
   "create_address_change_check", "mark_address_change_check_sent", "address_change_check_preview", "answer_address_change_check",
   "unfreeze_counterparty", "restore_counterparty_freeze",
+  // An accountant's client invite links (0143, accountant client links AC1-AC4): made and revoked by the accountant,
+  // previewed and claimed by the client once their workspace exists, and an accountant brought along to a live slice.
+  "create_client_link", "revoke_client_link", "client_link_preview", "claim_client_link", "add_live_slice_accountant",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 
