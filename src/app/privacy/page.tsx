@@ -517,7 +517,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             A workspace opened from an accountant&apos;s client link keeps the tags <code>accountant</code>, <code>client_link</code> and{" "}
-            <code>accountant_client</code> instead, and the cookie is not read for it.
+            <code>accountant_client</code> instead of the cookie&apos;s, unless the accountant could not be added: it then keeps the cookie&apos;s tags,
+            as any new workspace does.
           </li>
           <li>When you ask for a guided setup, those tags are kept with your request too, as described below.</li>
           <li>

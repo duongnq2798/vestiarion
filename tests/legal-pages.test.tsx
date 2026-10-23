@@ -206,6 +206,17 @@ describe("the privacy page", () => {
     expect(cookie).not.toMatch(/Domain=/);
   });
 
+  it("says a workspace from a client link keeps the accountant's tags, and the cookie's when the accountant could not be added, as the join action does (accountant client links AC5)", () => {
+    const section = text(renderToStaticMarkup(<PrivacyPage />).split('id="campaign-cookie"')[1]?.split('id="retention"')[0] ?? "");
+    expect(section).toContain(
+      "A workspace opened from an accountant's client link keeps the tags accountant , client_link and accountant_client instead of the cookie's, unless the accountant could not be added: it then keeps the cookie's tags, as any new workspace does."
+    );
+    expect(section).not.toContain("the cookie is not read for it");
+    // As the code does it: the claim writes the accountant's tags, and a claim that fails records the cookie's.
+    expect(source("supabase/migrations/0143_accountant_client_links.sql")).toContain("values (p_org_id, 'accountant', 'client_link', 'accountant_client')");
+    expect(source("src/app/join/actions.ts")).toContain("if (!accountantAdded) await recordFirstTouch(orgId);");
+  });
+
   it("describes the reasons people give as the code keeps them: what, who sees them, how long, and what deleting does", () => {
     const section = text(renderToStaticMarkup(<PrivacyPage />).split('id="decision-reasons"')[1]?.split('id="retention"')[0] ?? "");
     for (const phrase of [

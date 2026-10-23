@@ -62,6 +62,17 @@ export function clientLinksMissing(error: { code?: string | null } | null | unde
   return ["42P01", "42883", "PGRST202", "PGRST205"].includes(error?.code ?? "");
 }
 
+/**
+ * Whether migration 0143 has run here, read from its table (one id at most, never shown): its functions come with it. For
+ * a surface that would otherwise offer something that cannot work yet, as the live slice's accountants (AC4).
+ */
+export async function clientLinksAvailable(): Promise<boolean> {
+  const result = await platformDb().from("accountant_client_links").select("id").limit(1);
+  if (!result.error) return true;
+  if (clientLinksMissing(result.error)) return false;
+  throw new Error(result.error.message);
+}
+
 export type ClientLinkErrorCode =
   | "not_ready" | "not_an_accountant" | "invalid_email" | "client_link_limit_reached" | "client_link_rate_limited"
   | "client_link_not_found" | "client_link_used" | "client_link_expired" | "own_client_link" | "client_link_email_mismatch"
@@ -198,6 +209,34 @@ export async function listClientLinks(
     everUsed = (older.data ?? []).length > 0;
   }
   return { available: true, links, everUsed };
+}
+
+/** What the console's Invite a client shows (AC1): whether this person may make a link, and their links. */
+export interface ClientLinksSection {
+  canCreate: boolean;
+  available: boolean;
+  links: ClientLink[];
+  everUsed: boolean;
+}
+
+/**
+ * The console's Invite a client for `userId`, or null for someone who may not make a link and holds no open one. Only
+ * making a link needs an accountant membership: a link works until it is used, expires or is revoked, so someone who is
+ * no workspace's accountant any more still sees their links while one is open, and can revoke it. A read that fails says
+ * the links are not available, as before the migration, to someone who may make one, and shows nothing to anyone else.
+ */
+export async function readClientLinksSection(
+  userId: string,
+  memberships: readonly Pick<OrgMembership, "orgId" | "role">[],
+  now: Date = new Date()
+): Promise<ClientLinksSection | null> {
+  const canCreate = mayInviteClients(memberships);
+  const read = await listClientLinks(userId, memberships, now).catch((error: unknown) => {
+    console.error("accountant console: client links not read", error instanceof Error ? error.message : "unknown error");
+    return { available: false, links: [], everUsed: false };
+  });
+  if (!canCreate && !read.links.some((link) => link.state === "open")) return null;
+  return { canCreate, ...read };
 }
 
 /** What a link is, for the client's page (AC2): an open link names its accountant; any other names nothing. */

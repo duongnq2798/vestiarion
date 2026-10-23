@@ -13,7 +13,7 @@ import { triageFilter } from "@/lib/accountant/triage";
 import { membershipsOf } from "@/lib/auth/membership";
 import { verifySession } from "@/lib/auth/session";
 import { readAccountantOnboarding } from "@/lib/onboarding/accountant";
-import { listClientLinks, mayInviteClients } from "@/lib/platform/client-links";
+import { readClientLinksSection } from "@/lib/platform/client-links";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +32,8 @@ export const metadata: Metadata = { title: "Accountant console", robots: { index
  *
  * Someone who is an accountant in at least one workspace also gets Invite a client, their client invite links
  * (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md AC1), read by their own user id, and the
- * checklist's optional step for it (AC6). Before migration 0143 runs, it says the feature is not available yet.
+ * checklist's optional step for it (AC6). Someone who no longer is still sees their links while one is open, to revoke
+ * it, with no way to make another. Before migration 0143 runs, it says the feature is not available yet.
  */
 export default async function AccountantPage({ searchParams }: { searchParams: Promise<{ kind?: string | string[]; workspace?: string | string[]; mine?: string | string[] }> }) {
   const user = await verifySession("/accountant");
@@ -40,12 +41,7 @@ export default async function AccountantPage({ searchParams }: { searchParams: P
   const [portfolio, query, memberships] = await Promise.all([readPortfolio(user.id, now), searchParams, membershipsOf(user.id)]);
   const filter = triageFilter(query);
   // A read that fails says the links are not available, as before the migration: the console still shows.
-  const clientLinks = mayInviteClients(memberships)
-    ? await listClientLinks(user.id, memberships, now).catch((error: unknown) => {
-        console.error("accountant console: client links not read", error instanceof Error ? error.message : "unknown error");
-        return { available: false, links: [], everUsed: false };
-      })
-    : null;
+  const clientLinks = await readClientLinksSection(user.id, memberships, now);
   const onboarding = await readAccountantOnboarding(user.id, memberships, portfolio, filter.workspace, clientLinks?.available ? clientLinks.everUsed : undefined);
 
   return (
@@ -79,12 +75,12 @@ export default async function AccountantPage({ searchParams }: { searchParams: P
         <AccountantConsole portfolio={portfolio} now={now} filter={filter} />
         {clientLinks && (
           <div className="mt-10">
-            <ClientLinks available={clientLinks.available} links={clientLinks.links} />
+            <ClientLinks available={clientLinks.available} links={clientLinks.links} canCreate={clientLinks.canCreate} />
           </div>
         )}
         <p className="mt-10 text-xs text-ink-3">
           Only workspaces you are a member of are listed, read with your role in each. To be added to another, ask its owner or an admin to invite you
-          from its <span className="font-medium">Members</span> page{clientLinks ? ", or send a new client a link from Invite a client" : ""}.{" "}
+          from its <span className="font-medium">Members</span> page{clientLinks?.canCreate ? ", or send a new client a link from Invite a client" : ""}.{" "}
           <Link href="/onboarding?new" className="font-medium text-agent underline-offset-2 hover:underline">All your workspaces</Link>
         </p>
       </main>

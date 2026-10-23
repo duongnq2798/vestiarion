@@ -6,12 +6,14 @@ import {
   claimClientLink,
   ClientLinkError,
   clientLinkPreview,
+  clientLinksAvailable,
   clientLinkTokenHash,
   createClientLink,
   generateClientLinkToken,
   joinView,
   listClientLinks,
   mayInviteClients,
+  readClientLinksSection,
   revokeClientLink,
   sameTokenHash,
   type ClientLinkPreview,
@@ -198,6 +200,65 @@ describe("listClientLinks (AC1, AC6)", () => {
   it("throws on any other failure", async () => {
     const { run } = fake((request) => (request.path === "/rest/v1/accountant_client_links" ? { status: 500, body: { code: "XX000", message: "boom" } } : undefined));
     await expect(run(() => listClientLinks(ACCOUNTANT, [], NOW))).rejects.toThrow("boom");
+  });
+});
+
+describe("clientLinksAvailable", () => {
+  it("is true once migration 0143's table can be read, and reads no more than one id", async () => {
+    const { requests, run } = fake((request) => (request.path === "/rest/v1/accountant_client_links" ? { body: [] } : undefined));
+    expect(await run(() => clientLinksAvailable())).toBe(true);
+    expect(requests[0].params.get("select")).toBe("id");
+    expect(requests[0].params.get("limit")).toBe("1");
+  });
+
+  it("is false before migration 0143, and throws on any other failure", async () => {
+    for (const code of ["PGRST205", "42P01"]) {
+      const { run } = fake((request) => (request.path === "/rest/v1/accountant_client_links" ? missing(code) : undefined));
+      expect(await run(() => clientLinksAvailable()), code).toBe(false);
+    }
+    const { run } = fake((request) => (request.path === "/rest/v1/accountant_client_links" ? { status: 500, body: { code: "XX000", message: "boom" } } : undefined));
+    await expect(run(() => clientLinksAvailable())).rejects.toThrow("boom");
+  });
+});
+
+describe("readClientLinksSection (AC1)", () => {
+  const open = { id: "l1", email: null, created_at: "2026-10-23T10:00:00Z", expires_at: "2026-10-30T10:00:00Z", used_at: null, revoked_at: null, org_id: null, orgs: null };
+  const used = { ...open, id: "l2", used_at: "2026-10-23T11:00:00Z", org_id: KEPT, orgs: { name: "Kept Co" } };
+  const expired = { ...open, id: "l3", created_at: "2026-10-10T10:00:00Z", expires_at: "2026-10-17T10:00:00Z" };
+  const reading = (rows: unknown[]) => fake((request) => (request.path === "/rest/v1/accountant_client_links" ? { body: rows } : undefined));
+
+  it("lets an accountant make a link, and lists theirs", async () => {
+    const section = await reading([open, used]).run(() => readClientLinksSection(ACCOUNTANT, [{ orgId: KEPT, role: "accountant" }], NOW));
+    expect(section).toMatchObject({ canCreate: true, available: true, everUsed: true });
+    expect(section?.links.map((link) => [link.id, link.state])).toEqual([["l1", "open"], ["l2", "used"]]);
+  });
+
+  it("still lists the links of someone who is no accountant any more while one is open, to revoke it, and offers no new one", async () => {
+    // Removed from the only workspace they kept the books of: the open link still works until it is used, expires or is revoked.
+    const section = await reading([open, used]).run(() => readClientLinksSection(ACCOUNTANT, [{ orgId: ORG, role: "owner" }], NOW));
+    expect(section).toMatchObject({ canCreate: false, available: true });
+    expect(section?.links.map((link) => [link.id, link.state, link.workspace])).toEqual([["l1", "open", null], ["l2", "used", null]]);
+  });
+
+  it("shows nothing to someone who may not make a link and holds no open one", async () => {
+    expect(await reading([used, expired]).run(() => readClientLinksSection(ACCOUNTANT, [{ orgId: KEPT, role: "viewer" }], NOW))).toBeNull();
+    expect(await reading([]).run(() => readClientLinksSection(ACCOUNTANT, [], NOW))).toBeNull();
+    const before = fake((request) => (request.path === "/rest/v1/accountant_client_links" ? missing("PGRST205") : undefined));
+    expect(await before.run(() => readClientLinksSection(ACCOUNTANT, [{ orgId: KEPT, role: "owner" }], NOW))).toBeNull();
+  });
+
+  it("says the links are not available to an accountant when the read fails, and shows nothing to anyone else", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = fake((request) => (request.path === "/rest/v1/accountant_client_links" ? { status: 500, body: { code: "XX000", message: "boom" } } : undefined));
+    expect(await failing.run(() => readClientLinksSection(ACCOUNTANT, [{ orgId: KEPT, role: "accountant" }], NOW))).toEqual({
+      canCreate: true,
+      available: false,
+      links: [],
+      everUsed: false,
+    });
+    expect(await failing.run(() => readClientLinksSection(ACCOUNTANT, [{ orgId: KEPT, role: "owner" }], NOW))).toBeNull();
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
   });
 });
 

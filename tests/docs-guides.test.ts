@@ -540,6 +540,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["This link was made for a different email address. Sign in with that address to use it.", CLIENT_LINKS_LIB],
     ["This is your own client link. Send it to your client.", CLIENT_LINKS_LIB],
     ["Client invite links are not available yet.", CLIENT_LINKS_LIB],
+    ["You are no longer an accountant in any workspace, so you cannot make a new link.", CLIENT_LINKS_CARD],
     ['via: "accountant_link"', "src/lib/platform/workspace.ts", 'via?: "accountant_link"'],
     ["member_joined", CLIENT_LINKS_LIB],
     ["Your accountant was not added.", CONSOLE_PAGE],
@@ -3508,6 +3509,58 @@ describe("the accountant console's header", () => {
     const page = paragraph(ACCOUNTANT_PAGE);
     expect(page).toContain("payments waiting for a decision, bills to co-sign, addresses to confirm, payments to book");
     for (const twin of ["src/app/docs-shots/accountant/[state]/page.tsx", "src/app/docs-shots/onboarding/[state]/page.tsx"]) expect(paragraph(twin), twin).toBe(page);
+  });
+});
+
+describe("the accountant client links docs (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md)", () => {
+  const architecture = sourceFile("ARCHITECTURE.md");
+  const spec = sourceFile("docs/superpowers/specs/2026-10-23-accountant-client-links-design.md");
+  const flat = (text: string) => text.replace(/\s+/g, " ");
+
+  it("no longer calls the live slice's opener its only member, now that an accountant can come along (AC4)", () => {
+    for (const [name, text] of [
+      ["the report guide", readSource("guides/report")],
+      ["ARCHITECTURE.md", architecture],
+      ["src/lib/live-slice.ts", sourceFile("src/lib/live-slice.ts")],
+      ["the report page", sourceFile("src/app/o/[slug]/report/page.tsx")],
+    ] as const) {
+      expect(flat(text), name).not.toMatch(/at first,? (?:the|its) only member/);
+    }
+    expect(flat(readSource("guides/report"))).toContain("links it for the owner who opened it (its owner; an accountant they brought along is a member too)");
+  });
+
+  it("says the live slice needs migration 0143 to bring an accountant along, and offers none before it (AC4)", () => {
+    const slice = flat(architecture.split("- **Start the live slice**")[1]?.split("\n- **")[0] ?? "");
+    expect(slice).not.toContain("No migration.");
+    expect(slice).toContain("bringing an accountant along needs migration `0143`");
+    expect(slice).toContain("Before `0143` runs, the report offers no accountant (`sliceAccountants` reads `clientLinksAvailable` first)");
+    expect(flat(readSource("guides/report"))).toContain("Until the deployment has client links set up, no accountant is offered: invite them on the new workspace's **Members**.");
+  });
+
+  it("describes when a client keeps a workspace without their accountant as the join action does it (AC3)", () => {
+    const guide = flat(readSource("guides/accountants"));
+    const bullet = guide.split("- **If you were not added.**")[1]?.split(" - **")[0] ?? "";
+    expect(bullet).not.toContain("Should the link stop working between");
+    expect(bullet).toContain("A link that stopped working before your client chose **Open my workspace** opens nothing and says why.");
+    expect(bullet).toContain("the link was used or revoked at that very moment, or the request failed");
+    // The action reads the link again before it makes anything; only a claim that fails after that leaves a workspace.
+    const action = sourceFile("src/app/join/actions.ts");
+    expect(action.indexOf("joinView(await clientLinkPreview(token), user)")).toBeLessThan(action.indexOf("await createWorkspace("));
+  });
+
+  it("tells a former accountant they can still revoke an open link (AC1)", () => {
+    expect(flat(readSource("guides/accountants"))).toContain(
+      "If you are no longer an accountant in any workspace, you cannot make a new link, but the console still lists your links while one is open, so you can revoke it."
+    );
+  });
+
+  it("matches the code in the spec: a used link names its workspace only while the accountant is still in it, and member_joined carries by (AC1, AC3, AC4)", () => {
+    const text = flat(spec);
+    expect(text).toContain("used (with the workspace's name while the accountant is still a member of it)");
+    expect(text).toContain('`member_joined` for the accountant with `{ by, role: "accountant", clientLinkId, grantedBy }`');
+    expect(text).toContain('`member_joined { by, role: "accountant", via: "live_slice", grantedBy }`');
+    expect(sourceFile(CLIENT_LINKS_LIB)).toContain('detail: { by: row.accountant_id, role: "accountant", clientLinkId: row.link_id, grantedBy: input.userId }');
+    expect(sourceFile("src/lib/live-slice.ts")).toContain('detail: { by: accountantId, role: "accountant", via: "live_slice", grantedBy: input.userId }');
   });
 });
 

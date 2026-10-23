@@ -22,11 +22,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   mode, with the accountant already in it as accountant. A link bound to another address, the accountant's own, and an
   expired, used or revoked one offer nothing. If the accountant cannot be added once the workspace exists, the client
   keeps it and the console says so, with a link to Members. The console lists each link as open, used (with the
-  workspace's name while the accountant is still in it), expired or revoked, with **Revoke**; the accountant's checklist
-  gains an optional **Invite a client** step. Starting a live slice offers to bring each accountant along, ticked.
-  `org_created` carries `via: "accountant_link"`, and the accountant's `member_joined` carries the link's id, or
-  `via: "live_slice"`. The founder dashboard counts workspaces from accountants. Needs migration 0143; before it runs,
-  the console and the link's page say client links are not available yet.
+  workspace's name while the accountant is still in it), expired or revoked, with **Revoke**; someone who is no longer
+  an accountant anywhere still sees their links while one is open, to revoke it, but cannot make a new one. The
+  accountant's checklist gains an optional **Invite a client** step. Starting a live slice offers to bring each
+  accountant along, ticked, and names by email any who could not be added. `org_created` carries
+  `via: "accountant_link"`, and the accountant's `member_joined` carries the link's id, or `via: "live_slice"`. The
+  founder dashboard counts workspaces from accountants. Needs migration 0143; before it runs, the console and the link's
+  page say client links are not available yet, and the live slice offers no accountant.
 
 - **Bills waiting for approval in Telegram, each with a Review link.** After each cycle, the message in a member's
   Telegram chat now ends with the bills the agent held or flagged for a person, or asked details for, that still wait:

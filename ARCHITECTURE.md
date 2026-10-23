@@ -1561,14 +1561,17 @@ disagrees with every decision.
   (`not_added`), and a failure to sign at the end returns the workspace's slug (`unrecorded`) rather than inviting a
   second. The shadow workspace signs `live_slice_started { by, liveOrgId, liveSlug, vendors: [{ counterpartyId, name,
   address }], skipped: [{ counterpartyId, name, reason }] }`. `readLiveSlice` reads it back with whether the new
-  workspace is live; the report's last step names it, links it for its opener (`by`, at first its only member) and
-  ticks once it is live. No bill, history or verdict moves, and no money. No migration. Going live keeps the
-  accountant (accountant client links AC4): the report lists the workspace's accountants (`listMembers`, best effort)
-  as "Bring your accountant ... along", ticked, and `startLiveSlice` gets the ones left ticked as `accountantIds`. For
+  workspace is live; the report's last step names it, links it for its opener (`by`, its owner; accountants brought
+  along are members too) and ticks once it is live. No bill, history or verdict moves, and no money. Opening it needs
+  no migration; bringing an accountant along needs migration `0143`. Going live keeps the accountant (accountant client
+  links AC4): the report lists the workspace's accountants (`sliceAccountants`, best effort) as "Bring your accountant
+  ... along", ticked, and `startLiveSlice` gets the ones left ticked as `accountantIds`. Before `0143` runs, the report
+  offers no accountant (`sliceAccountants` reads `clientLinksAvailable` first), rather than one that always fails. For
   each, migration `0143`'s `add_live_slice_accountant(p_from_org_id, p_org_id, p_actor, p_user_id)` checks the actor owns
   both workspaces and the person is an accountant of the shadow one, and adds them as `accountant`; the new workspace
-  signs `member_joined { by, role: "accountant", via: "live_slice", grantedBy }`. One that fails (before `0143`, the
-  missing function) is named in the result, and the slice opens all the same.
+  signs `member_joined { by, role: "accountant", via: "live_slice", grantedBy }`. One that fails is named in the result
+  by the email this workspace's members give (`listMembers`, best effort; one no longer a member is counted), and the
+  slice opens all the same.
 - **What the business really paid** (`docs/superpowers/specs/2026-10-10-actual-payments-design.md`). An owner or admin
   (`records.write`, as for adding an invoice) records how the business paid a payable outside Vestiarion: the day, the
   amount and currency as paid (the bill's own by default), the method (bank transfer, card, cash, other), a reference and
@@ -4265,9 +4268,12 @@ new client in with one link, and the client opens their own workspace with the a
   p_token_hash)`, which refuses someone who is no workspace's accountant (`not_an_accountant`) and, under an advisory
   lock per accountant, more than 20 made in a day, revoked ones counted, or 10 open at once. The link
   (`siteOrigin()/join/<token>`) is returned once and never logged. `/accountant` shows **Invite a client**
-  (`src/components/accountant/ClientLinks.tsx`) to someone with an accountant membership, and lists their 25 newest links
-  (`listClientLinks`) as open, used, expired or revoked; a used one names its workspace only while they are still a
-  member of it. `revoke_client_link(p_actor, p_link_id)` revokes only the actor's own open link.
+  (`src/components/accountant/ClientLinks.tsx`, read by `readClientLinksSection`) to someone with an accountant
+  membership, and lists their 25 newest links (`listClientLinks`) as open, used, expired or revoked; a used one names its
+  workspace only while they are still a member of it. `claim_client_link` does not ask whether the link's maker is still
+  an accountant anywhere, since the client consents to that person by name, so someone with no accountant membership left
+  still gets the list while one of their links is open, without the form (`canCreate: false`), to revoke it.
+  `revoke_client_link(p_actor, p_link_id)` revokes only the actor's own open link, whatever their memberships.
 - **The client's page** (AC2; `/join/[token]`, `src/app/join/[token]/page.tsx`). `requiresSession` covers `/join/`, as
   `/invite/`, so nothing shows before sign-in and `vx_after_sign_in` brings the client back. `client_link_preview`
   returns the state for any known hash, and the accountant's id and address and the bound address for an open link only;
@@ -4285,11 +4291,12 @@ new client in with one link, and the client opens their own workspace with the a
   literal never taken from the caller, and `invited_by` the client, marks the link used and records the first touch, in
   one transaction. `claimClientLink` signs `member_joined { by, role: "accountant", clientLinkId, grantedBy }` in the new
   workspace only, best effort as an accepted invitation's is; nothing is read or written in the accountant's other
-  workspaces. A claim that fails leaves the workspace, the link open, and the console `?accountant=not-added`, which says
-  "Your accountant was not added." with a link to Members. Shadow mode then starts as at onboarding.
+  workspaces. A claim that fails (the link used or revoked since the check, or a failed request) leaves the workspace,
+  does not use the link, and sends the console `?accountant=not-added`, which says "Your accountant was not added." with
+  a link to Members. Shadow mode then starts as at onboarding.
 - **Before `0143` runs.** Production runs ahead of its migrations: a missing table or function (42P01, PGRST205, 42883,
   PGRST202) reads as `available: false` on the console and `not_ready` on the page, which say client links are not
-  available yet, and the live slice names the accountants it could not bring.
+  available yet, and the live slice offers no accountant to bring along (`clientLinksAvailable`).
 
 ## Usage metering
 

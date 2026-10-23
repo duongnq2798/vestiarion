@@ -19,7 +19,8 @@ import type { ClientLink, ClientLinkState } from "@/lib/platform/client-links";
  * "Invite a client" on the accountant console (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md AC1):
  * make a one-time link, bound to the client's address when one is given, shown once with a copy button; then the
  * accountant's links, each open, used (with the workspace's name while they are still in it), expired or revoked, with
- * Revoke on an open one. Before migration 0143 runs, it says the feature is not available yet.
+ * Revoke on an open one. Before migration 0143 runs, it says the feature is not available yet. Someone who is no
+ * workspace's accountant any more gets no form, only their links, so an open one can still be revoked (`canCreate`).
  */
 
 const INITIAL: ClientLinkActionResult = { ok: false, message: "" };
@@ -28,6 +29,8 @@ export const INVITE_CLIENT_TITLE = "Invite a client";
 export const INVITE_CLIENT_INTRO =
   "Send a client one link. They sign in, name their workspace, and it opens on Arc testnet in shadow mode, with you in it as its accountant. A link works once, for 7 days; give the client's email and it works only for that address.";
 export const ANYONE_WITH_THE_LINK = "Anyone signed in with the link";
+export const NO_NEW_CLIENT_LINKS =
+  "You are no longer an accountant in any workspace, so you cannot make a new link. A link you made still works until it is used, expires or you revoke it.";
 
 const dateFormat = new Intl.DateTimeFormat("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
 const day = (iso: string) => dateFormat.format(new Date(iso));
@@ -123,12 +126,18 @@ function LinkRow({ link }: { link: ClientLink }) {
   );
 }
 
-export function ClientLinks({ available, links }: { available: boolean; links: ClientLink[] }) {
+export function ClientLinks({ available, links, canCreate = true }: { available: boolean; links: ClientLink[]; canCreate?: boolean }) {
   return (
     <section aria-labelledby="invite-client-title" className="space-y-3">
-      <SectionHeader id="invite-client-title" title={INVITE_CLIENT_TITLE} meta={available ? "the link is shown once, right after you make it" : undefined} />
+      <SectionHeader id="invite-client-title" title={INVITE_CLIENT_TITLE} meta={available && canCreate ? "the link is shown once, right after you make it" : undefined} />
       <p className="max-w-2xl text-sm text-ink-2">{INVITE_CLIENT_INTRO}</p>
-      {available ? <CreateLinkForm /> : <p className="text-sm text-ink-3">Client invite links are not available yet.</p>}
+      {!available ? (
+        <p className="text-sm text-ink-3">Client invite links are not available yet.</p>
+      ) : canCreate ? (
+        <CreateLinkForm />
+      ) : (
+        <p className="max-w-2xl text-sm text-ink-3">{NO_NEW_CLIENT_LINKS}</p>
+      )}
       {links.length > 0 && (
         <Card className="overflow-hidden">
           <ul aria-label="Your client links" className="divide-y divide-line">

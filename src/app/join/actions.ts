@@ -35,8 +35,9 @@ export interface JoinFromClientLinkResult {
  *
  * The workspace is made by the usual `createWorkspace`, always on Arc testnet and always in shadow mode, whatever the
  * form sent: Arc mainnet's allowlist protects nothing where it lets everyone in. Only then is the link claimed, which
- * adds the accountant as accountant. A claim that fails leaves the client their workspace and the link open, and the
- * console says the accountant was not added. `redirect` stays outside every `try`, since it works by throwing.
+ * adds the accountant as accountant. A claim that fails (the link used or revoked since the check, or a failed request)
+ * leaves the client their workspace and does not use the link, and the console says the accountant was not added.
+ * `redirect` stays outside every `try`, since it works by throwing.
  */
 export async function joinFromClientLinkAction(_previous: JoinFromClientLinkResult, formData: FormData): Promise<JoinFromClientLinkResult> {
   const user = await getSessionUser();

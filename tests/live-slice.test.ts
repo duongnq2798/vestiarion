@@ -25,7 +25,7 @@ vi.mock("@/lib/platform/workspace", async (importOriginal) => ({ ...(await impor
 vi.mock("@/lib/counterparties/create", () => ({ createCounterparty: createCounterpartyMock }));
 vi.mock("@/lib/shadow-mode", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/shadow-mode")>()), readShadowMode: shadowMock }));
 
-import { readLiveSlice, sliceVendors, startLiveSlice, SLICE_MAX_VENDORS } from "@/lib/live-slice";
+import { readLiveSlice, sliceAccountants, sliceVendors, startLiveSlice, SLICE_MAX_VENDORS } from "@/lib/live-slice";
 import { WorkspaceLimitError } from "@/lib/platform/workspace";
 
 const SHADOW = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005a0";
@@ -270,6 +270,43 @@ describe("startLiveSlice brings the accountant along (accountant client links AC
   it("refuses an accountant id that is not one before anything is made", async () => {
     await expect(workspace().run(() => startLiveSlice({ userId: USER, vendorIds: [OWN], accountantIds: ["not-a-uuid"] }))).rejects.toThrow();
     expect(createWorkspaceMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("sliceAccountants (accountant client links AC4)", () => {
+  const BOOKS = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005b1";
+  const VIEWER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005b3";
+  const MEMBERS = [
+    { user_id: USER, email: "owner@pinecrest.example", role: "owner", joined_at: "2026-10-01T00:00:00Z" },
+    { user_id: BOOKS, email: "books@practice.example", role: "accountant", joined_at: "2026-10-02T00:00:00Z" },
+    { user_id: VIEWER, email: "viewer@pinecrest.example", role: "viewer", joined_at: "2026-10-03T00:00:00Z" },
+  ];
+  function members(links: FakeReply) {
+    const fake = fakeSupabase((sent: RecordedRequest): FakeReply => {
+      if (sent.path === "/rest/v1/accountant_client_links") return links;
+      if (sent.path === "/rest/v1/rpc/org_members") return { body: MEMBERS };
+      return { body: [] };
+    });
+    return { fake, run: <T,>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, fn) };
+  }
+
+  it("offers the workspace's accountants, by email, once migration 0143 has run", async () => {
+    const { fake, run } = members({ body: [] });
+    expect(await run(() => sliceAccountants(SHADOW))).toEqual([{ userId: BOOKS, email: "books@practice.example" }]);
+    expect(fake.requests.find((sent) => sent.path === "/rest/v1/rpc/org_members")?.body).toEqual({ p_org_id: SHADOW });
+  });
+
+  it("offers none before migration 0143, rather than one that always fails", async () => {
+    for (const [status, code] of [[404, "PGRST205"], [400, "42P01"]] as const) {
+      const { fake, run } = members({ status, body: { code, message: "not there", details: null, hint: null } });
+      expect(await run(() => sliceAccountants(SHADOW)), code).toEqual([]);
+      expect(fake.requests.some((sent) => sent.path === "/rest/v1/rpc/org_members"), code).toBe(false);
+    }
+  });
+
+  it("throws on any other failure, for the report to offer none", async () => {
+    const { run } = members({ status: 500, body: { code: "XX000", message: "boom" } });
+    await expect(run(() => sliceAccountants(SHADOW))).rejects.toThrow("boom");
   });
 });
 

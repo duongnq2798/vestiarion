@@ -14,8 +14,9 @@ accountant console (`/accountant`), under "Invite a client".
 - **Limits.** At most 10 open links per accountant, and at most 20 created a day.
 - **Showing it.** The link is shown once, with a copy button, and only its SHA-256 is kept. The token prefix is
   `vxj_`.
-- **The list.** The console lists the accountant's links, each open, used (with the workspace's name), expired or
-  revoked, with **Revoke** for an open one.
+- **The list.** The console lists the accountant's links, each open, used (with the workspace's name while the
+  accountant is still a member of it), expired or revoked, with **Revoke** for an open one. Someone who is no longer an
+  accountant anywhere cannot create a link, but still sees the list while one of their links is open, to revoke it.
 - **Signing.** `client_link_created` and `client_link_revoked` are signed nowhere, since no workspace exists yet. They
   live in the link table, with the actor and the times.
 
@@ -36,9 +37,11 @@ explicit list in `tests/access-gates.test.ts`:
   accountant is not the client. It then adds the accountant as a member with the role `accountant` and marks the link
   used, in one transaction;
 - signs, in the new workspace, `org_created` with `via: "accountant_link"`, and `member_joined` for the accountant with
-  `{ role: "accountant", clientLinkId, grantedBy }`. Nothing is written into the accountant's other workspaces.
+  `{ by, role: "accountant", clientLinkId, grantedBy }`, where `by` is the accountant, as on an accepted invitation's.
+  Nothing is written into the accountant's other workspaces.
 - **If the claim fails after the workspace exists**, the client keeps the workspace, and the console says "Your accountant
-  was not added. Invite them on Members." The link stays open.
+  was not added. Invite them on Members." The failed claim does not use the link. A link that stopped working before the
+  form was sent opens nothing.
 
 There is no second copy of `create_org`.
 
@@ -46,9 +49,10 @@ There is no second copy of `create_org`.
 creates the Arc mainnet workspace with only the owner. Now the go-live step offers "Bring your accountant <email>
 along", on by default, for each accountant member of the testnet workspace. When it is on:
 - the accountant becomes a member of the new workspace with the role `accountant`;
-- this is signed there as `member_joined { role: "accountant", via: "live_slice", grantedBy }`.
+- this is signed there as `member_joined { by, role: "accountant", via: "live_slice", grantedBy }`, `by` the accountant.
 
-The owner can turn it off for any of them.
+The owner can turn it off for any of them. One who could not be added is named by email in the result. Before migration
+0143 runs, no accountant is offered.
 
 **AC5. Attribution.**
 - The new workspace's `org_attribution` gets `utm_campaign: "accountant_client"`, with no view redefined.

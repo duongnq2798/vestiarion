@@ -95,6 +95,19 @@ describe("the Invite a client card (AC1)", () => {
     expect(markup).toContain('name="linkId" value="a"');
   });
 
+  it("offers no form to someone who is no accountant any more, but keeps Revoke on their open links", () => {
+    const markup = renderToStaticMarkup(<ClientLinks available canCreate={false} links={[link({ id: "a" }), link({ id: "b", state: "used", usedAt: "2026-10-22T11:00:00Z" })]} />);
+    const page = text(markup);
+    expect(page).toContain(
+      "You are no longer an accountant in any workspace, so you cannot make a new link. A link you made still works until it is used, expires or you revoke it."
+    );
+    expect(markup).not.toContain('name="email"');
+    expect(page).not.toContain("Create link");
+    expect(page).not.toContain("the link is shown once, right after you make it");
+    expect(markup.match(/>Revoke</g)).toHaveLength(1);
+    expect(markup).toContain('name="linkId" value="a"');
+  });
+
   it("says the links are not available yet before migration 0143, and offers no form", () => {
     const markup = renderToStaticMarkup(<ClientLinks available={false} links={[]} />);
     expect(text(markup)).toContain("Client invite links are not available yet.");

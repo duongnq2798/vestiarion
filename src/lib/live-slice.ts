@@ -8,6 +8,8 @@ import { counterpartyInputSchema } from "./intake-validation";
 import { appendLedgerEntry, assertLedgerCanSign } from "./ledger";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { homeChain } from "./payee-chains";
+import { clientLinksAvailable } from "./platform/client-links";
+import { listMembers } from "./platform/members";
 import { createWorkspace, WorkspaceLimitError } from "./platform/workspace";
 import { readShadowMode } from "./shadow-mode";
 import { workspaceNetwork } from "./workspace-network";
@@ -22,7 +24,8 @@ import { workspaceNetwork } from "./workspace-network";
  *
  * Going live keeps the accountant (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md AC4): each of the
  * shadow workspace's accountants the owner kept ticked joins the new workspace as accountant, through migration 0143's
- * `add_live_slice_accountant`, and is signed there as `member_joined` with `via: "live_slice"`.
+ * `add_live_slice_accountant`, and is signed there as `member_joined` with `via: "live_slice"`. Before 0143 runs, none is
+ * offered (`sliceAccountants`).
  */
 
 export const LIVE_SLICE_STARTED = "live_slice_started";
@@ -58,7 +61,7 @@ export interface LiveSlice {
   name: string;
   live: boolean;
   startedAt: string;
-  /** Who started it: at first the only member of the new workspace. */
+  /** Who started it: the new workspace's owner. An accountant they brought along is a member of it too. */
   by: string | null;
   vendors: number;
   skipped: Array<{ name: string; reason: SliceSkipReason }>;
@@ -169,6 +172,15 @@ export async function readLiveSlice(orgDb: OrgDb): Promise<LiveSlice | null> {
 const idsSchema = z.array(z.string().uuid()).max(SLICE_MAX_VENDORS * 4);
 /** The accountants a slice may bring along: a workspace's own, which no real one has more of. */
 const accountantIdsSchema = z.array(z.string().uuid()).max(20);
+
+/**
+ * The accountants of the workspace `orgId` an owner may bring along (AC4), by email. None before migration 0143, whose
+ * function adds them: offered then, each would always fail. A read that fails throws; the report then offers none.
+ */
+export async function sliceAccountants(orgId: string): Promise<Array<{ userId: string; email: string }>> {
+  if (!(await clientLinksAvailable())) return [];
+  return (await listMembers(orgId)).filter((member) => member.role === "accountant").map((member) => ({ userId: member.userId, email: member.email }));
+}
 
 /** Which of the accountants the owner kept ticked joined the new workspace, and which could not (AC4). */
 export interface SliceAccountants {
