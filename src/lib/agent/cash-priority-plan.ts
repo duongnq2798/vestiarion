@@ -85,13 +85,19 @@ function referenceReason(bill: Competing, today: string): string {
 }
 
 /** A competing bill's late fee as the model is told it (LF6): the term, and what it costs in the coming month; null for none. */
-function lateFeeFact(row: OpenRow, bill: Competing) {
-  const fee = invoiceLateFee(row);
+function lateFeeFact(bill: Competing) {
+  const fee = bill.lateFeeTerm;
   return fee ? { kind: fee.kind, value: fee.value, startsOn: fee.startsOn, costsInTheComingMonth: bill.lateFee } : null;
 }
 
-/** A signed order's late fee for a bill: its cost in the coming month, named only when there is one. */
-const lateFeeOfItem = (bill: Competing | undefined) => (bill && bill.lateFee > 0 ? { lateFee: bill.lateFee } : {});
+/**
+ * A signed order item's late fee (LF6): the bill's term, `{ kind, value, startsOn }` as a `create_invoice` entry signs it,
+ * named only when it has one. A person's order is carried by it (O4), whatever the day.
+ */
+const lateFeeOfItem = (bill: Competing | undefined) => {
+  const fee = bill?.lateFeeTerm;
+  return fee ? { lateFee: { kind: fee.kind, value: fee.value, startsOn: fee.startsOn } } : {};
+};
 
 /**
  * The bills competing for the cash now, and the cash they compete for (P1), read alike by the cycle and by a person
@@ -259,7 +265,7 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
       memo: row.memo,
       purchaseOrder: row.po_reference,
       earlyPayDiscount: pct && row.discount_due_date ? { percent: pct, until: row.discount_due_date.slice(0, 10) } : null,
-      lateFee: lateFeeFact(row, bill),
+      lateFee: lateFeeFact(bill),
       status: bill.status === "held" ? "held for want of cash" : bill.status,
       supplierRequestsForMoreTime: history.get(row.counterparty_id) ?? NO_REQUESTS,
     };

@@ -14,7 +14,7 @@ import { CycleMetricsCollector } from "@/lib/agent/cycle-metrics";
 import type { DecideParams } from "@/lib/agent/decide";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
-import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
+import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { paymentIntentsBackend } from "./support/payment-intents";
 import { ARC_TESTNET } from "@/lib/network";
 import type { NewPayeeFacts } from "@/lib/new-payee-facts";
@@ -206,6 +206,8 @@ function apFake(options: {
   decisions?: Array<{ action?: string; detail: Record<string, unknown> }>;
   /** The ledger's last `cash_priority_set` entries, newest first (cash priority P5). */
   priorityPlans?: Array<{ detail: Record<string, unknown>; ts?: string }>;
+  /** What a read of the invoices answers, in place of the book, when it answers at all: before migration 0141, say. */
+  invoicesRead?: (request: RecordedRequest) => FakeReply | null;
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
@@ -242,6 +244,10 @@ function apFake(options: {
     if (request.path === "/rest/v1/payment_term_requests") return { body: [] };
     if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: LEDGER_ROW };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: options.paused ?? false };
+    if (request.path === "/rest/v1/invoices" && request.method === "GET" && options.invoicesRead) {
+      const reply = options.invoicesRead(request);
+      if (reply) return reply;
+    }
     if (request.path === "/rest/v1/invoices" && request.method === "GET") {
       const status = request.params.get("status");
       const statuses = status?.match(/^in\.\((.*)\)$/)?.[1].split(",") ?? (status?.startsWith("eq.") ? [status.slice(3)] : undefined);
@@ -1123,6 +1129,10 @@ describe("the AP stage and a late fee (late fees LF3, LF4, LF7)", () => {
 
     const lateFee = { kind: "percent_month", value: 1.5, startsOn: "2026-11-01", aMonth: 6 };
     expect(promptOf().terms).toEqual({ earlyPayDiscount: null, lateFee });
+    // Its first day is late already (LF1): the model names a fee only for a payment before it.
+    const system = (decideMock.mock.calls[0][0] as DecideParams<unknown>).systemPrompt;
+    expect(system).toContain("When you pay or schedule the payment before startsOn, by the day before it at the latest, name the fee it avoids");
+    expect(system).not.toContain("on or before startsOn");
     const [entry] = ledger(fake.requests);
     expect(entry.p_detail).toMatchObject({ terms: { earlyPayDiscount: null, lateFee }, timing: { amountDueAtTarget: 400 } });
     expect((entry.p_detail as { decision: { reasoning: string } }).decision.reasoning).toContain(
@@ -2328,7 +2338,7 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
     expect(lines.some((line) => line.message === "Contoso: held, the cash goes to the bills chosen first (140 USDC)")).toBe(true);
   });
 
-  it("tells the model each bill's late fee and its start, and signs what a month of it costs (late fees LF6)", async () => {
+  it("tells the model each bill's late fee, its start and what it costs in the coming month, and signs its term (late fees LF6)", async () => {
     today("2026-10-17T09:00:00.000Z");
     await modelOrders(["B2", "B3", "B1"], {});
     const withFee = { ...render(), late_fee_kind: "fixed", late_fee_value: "10", late_fee_starts_on: "2026-10-25" };
@@ -2340,8 +2350,31 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
     expect(asked.bills.map((bill) => bill.lateFee)).toEqual([{ kind: "fixed", value: 10, startsOn: "2026-10-25", costsInTheComingMonth: 10 }, null, null]);
     const [plan] = entries(fake.requests, "cash_priority_set");
     const order = (plan.p_detail as { order: Array<Record<string, unknown>> }).order;
-    expect(order.find((item) => item.invoiceId === OTHER_INVOICE_ID)).toMatchObject({ lateFee: 10 });
+    // The term, as a create_invoice entry signs it: a person's order is carried by it, whatever day the fee starts.
+    expect(order.find((item) => item.invoiceId === OTHER_INVOICE_ID)).toMatchObject({ lateFee: { kind: "fixed", value: 10, startsOn: "2026-10-25" } });
     expect(order.find((item) => item.invoiceId === HOSTING)).not.toHaveProperty("lateFee");
+  });
+
+  it("reads the competing bills again without their late fees before migration 0141, and orders them as before (late fees LF6)", async () => {
+    today("2026-10-17T09:00:00.000Z");
+    await modelOrders(["B2", "B3", "B1"], {});
+    const refused = vi.fn();
+    const { fake, stage } = apFake({
+      book: book(),
+      decisions,
+      invoicesRead: (request) => {
+        if (!(request.params.get("select") ?? "").includes("late_fee_")) return null;
+        refused();
+        return { status: 400, body: { code: "42703", message: "column invoices.late_fee_kind does not exist" } };
+      },
+    });
+
+    await stage(150.03);
+
+    expect(refused).toHaveBeenCalled();
+    expect(priorityCalls()).toHaveLength(1);
+    const [plan] = entries(fake.requests, "cash_priority_set");
+    expect(plan.p_detail).toMatchObject({ referenceOrder: [OTHER_INVOICE_ID, HOSTING, STORAGE] });
   });
 
   it("names each bill by payee and amount in USDC where the model wrote its ref or a dollar sign (live test, Oct 18)", async () => {

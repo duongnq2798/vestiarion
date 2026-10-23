@@ -88,7 +88,9 @@ describe("a late fee read with the invoice (late fees LF2)", () => {
 
   it("names it on the chat's draft, and nothing for a draft without one", () => {
     expect(lateFeeLine(read(fee).draft)).toBe("1.5% a month from 2026-10-11");
-    expect(lateFeeLine(read({ lateFeeKind: "fixed", lateFeeValue: "0.10", lateFeeStartsOn: null }).draft)).toBe("0.10 USDC");
+    // A start the invoice did not give is the day after the due date.
+    expect(lateFeeLine(read({ lateFeeKind: "fixed", lateFeeValue: "0.10", lateFeeStartsOn: null }).draft)).toBe("0.10 USDC from 2026-10-11");
+    expect(lateFeeLine(read({ lateFeeKind: "fixed", lateFeeValue: "0.10", lateFeeStartsOn: null, dueDate: null }).draft)).toBe("0.10 USDC");
     expect(lateFeeLine(read().draft)).toBeNull();
   });
 });

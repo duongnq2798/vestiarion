@@ -2186,8 +2186,8 @@ each carrying the acting person's user id, never an address.
 **Each waiting payable is an exception someone owns**
 (`docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md` E1-E5). `exceptionFacts` (`src/lib/exceptions.ts`,
 pure) gives its decide-by day (the due date, or the early-payment discount's deadline while it is still ahead and
-earlier, or, for a bill past its due date whose late fee has not started, the day before the fee starts: reason
-`late_fee`, which `decideByWords` spells out), its priority (`overdue`, `today`, `week`, `later`) and who can act: the members whose role holds
+earlier, or, for a bill past its due date whose late fee starts later than the day after it, the last day before the
+fee, before the fee starts and after: reason `late_fee`, which `decideByWords` spells out), its priority (`overdue`, `today`, `week`, `later`) and who can act: the members whose role holds
 `approval.decide`, less whoever entered it unless nobody else may. The Approvals page and the Bills rows read the members
 once (`listMembers`) and show it through `ExceptionLine`; someone who cannot decide reads whom to ask.
 
@@ -2486,17 +2486,25 @@ date, and moves the start by as many days as the due date moves when the due dat
   (`lateFee: null`). Document capture asks the model for `lateFeePercentPerMonth`, `lateFeeAmount` and
   `lateFeeStartsOn`; the rule-based reader takes "x% per month" or "x% monthly" on a line about paying late, and "late
   fee of N". `normalizeExtraction` keeps a percent the text states (`statesPercent`), at most 10, or an amount it
-  contains, never both, and DOCUMENT_FIELDS counts a changed fee. `createInvoice` writes the columns and signs
-  `lateFee` on `create_invoice` when it kept them.
+  contains other than as a percent and at most the read amount, never both; "late fee of 2%" or "of $25 per day" is no
+  fixed fee. A start the document does not give is left null, so the form's blank-start rule applies to the due date
+  submitted, and DOCUMENT_FIELDS counts a changed fee, a null start read as the day after the submitted due date. The
+  invoice form refuses a fixed fee on a bill taken at its USDC amount in shadow mode, as CSV import does; a CSV header
+  that writes a percent ("Late fee (%)") maps to `lateFeePercent`, and a bare "Late fee" to nothing. `createInvoice`
+  writes the columns and signs `lateFee` on `create_invoice` when it kept them.
 - **Reading.** `invoiceLateFee` and `lateFeeOf` (`src/lib/agent/late-fee.ts`, pure): a term the database would refuse
-  is no fee; `lateFeeOf(invoice, on)` is a month's fee past its start, the percent of the amount, or a fixed fee while it
-  is still ahead (one already started is owed, so 0). `mapInvoice` reports it as `lateFee`.
+  is no fee; `lateFeeOf(invoice, on)` is what waiting costs in the coming month (`COMING_MONTH_DAYS`, 30): a month of
+  the percent of the amount, or a fixed fee while it is still ahead (one already started is owed, so 0), and 0 for a fee
+  that starts after that month. It moves with the day, so it orders bills but never tells plans apart. `mapInvoice`
+  reports the term as `lateFee`.
 - **Never paid.** No amount, payment limit, transfer or on-chain limit reads it: a bill paid late is paid at its amount.
 - **What it changes.** The approval card's cost box and the Bills list's terms line name it; Slack's Approve confirmation
   names it; `decideByOf` gives `late_fee` (above); the AP prompt's `terms.lateFee` (`lateFeeTerms`, with `aMonth`)
-  and the ledger's `ap_*` `terms` carry it, and `buildReason` names it when the bill is paid on or before its start;
-  the cash step's written order (`referenceOrder`) puts first, among the bills due or overdue, the heaviest `lateFeeOf`
-  in USDC, its facts carry each fee, and `planFingerprint` and `carriedOrder` count a fee where there is one.
+  and the ledger's `ap_*` `terms` carry it, and `buildReason` names it when the bill is paid before its start, whose
+  day is late already; the cash step's written order (`referenceOrder`) puts first, among the bills due or overdue, the
+  heaviest `lateFeeOf` in USDC, its facts carry each fee, and `planFingerprint`, the signed order items' `lateFee` and
+  `carriedOrder` count the term (`sameLateFee`: kind, value, start), so a fixed fee reaching its first day changes
+  nothing.
 - **Before 0141 runs.** `createInvoice` drops each later column the database lacks in turn (`LATER_COLUMNS`:
   `document_pay_to`, then the late fee's); every explicit read of the columns goes through `readWithLateFee`, which
   reads again without them on `42703` or `PGRST204`; the AP stage's `select("*")` and `listInvoices` need nothing;
@@ -2639,14 +2647,14 @@ is logged with the workspace id and never fails the cycle or the tick.
 **A waiting payable past its decide-by day is escalated once for that day.** After the digest,
 `escalateOverdueDecisions` (`src/lib/notifications/escalations.ts`, also from `runScheduledCycle`, in its own `try`)
 reads the waiting payables (`held`, `flagged`, `awaiting_info`) whose decide-by day (`decideByOf`) is before today,
-on or after the day escalations started in the workspace (`approval_escalation_starts`, 0108: one row per workspace,
+or is today for a `late_fee` day, so the email comes on the last day before the fee (`decideByReached`), on or after the day escalations started in the workspace (`approval_escalation_starts`, 0108: one row per workspace,
 set by its first run, insert-only for the tenant role, so a payable already past its day then is never emailed and
 turning escalations on sends no backlog), reads the recipients, the workspace and the members before anything is
 claimed, claims each in `approval_escalations` (migration 0108: unique per payable and decide-by day, an
 `ignoreDuplicates` upsert, so only the rows it inserted are news), and emails the digest's recipients, with the same
 switch and cap, deduplicated by member and address, each one message a run about the payables they may act on (`whoCanAct` over every member, as the card names them;
-`decisionEscalationEmail`, `src/lib/email/decision-escalation.ts`: names, amounts, statuses and days, escaped; no
-address). A payable someone received keeps its claim with `sent_at` and the counts, and the ledger records
+`decisionEscalationEmail`, `src/lib/email/decision-escalation.ts`: names, amounts, statuses and days, escaped, with a
+late fee that starts the next day or has started; "reached" rather than "passed" when one is on its day; no address). A payable someone received keeps its claim with `sent_at` and the counts, and the ledger records
 `decision_escalated` (`detail: { invoiceIds, decideBy, recipients, failed }`); a payable nobody received has its claim
 deleted, even when a send throws, so the next scheduled cycle tries again. Without email configured, or nobody to tell, nothing is claimed.
 Before 0108 runs nothing is escalated.
@@ -3077,7 +3085,7 @@ committed (matched payables, verified milestones not in escrow, scheduled bills 
 bills (`competingBills`: USDC, not
 bank-paid, pending, scheduled or held with `heldBecause: cash_shortfall` on its latest decision, due within 14 days or
 overdue). When they exceed what is left (`needsPlan`), it reuses the last `cash_priority_set` whose `fingerprint` (bill
-ids, amounts, due days, and a late fee's cost where there is one; not statuses, not cash) matches and whose order still splits the same way (`sameSplit`), or asks
+ids, amounts, due days, and a late fee's term where there is one; not statuses, not cash, not what a fee costs today) matches and whose order still splits the same way (`sameSplit`), or asks
 the model (`decide`, purpose `cash_priority`,
 refs B1..Bn in the written policy's order, which is the fallback; a ref or a dollar amount left in a reason or the
 reasoning becomes the bill's payee and amount in USDC before signing, `namedRefs`, since people read them and never see a

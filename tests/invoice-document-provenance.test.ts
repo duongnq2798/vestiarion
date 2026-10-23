@@ -107,6 +107,15 @@ describe("an invoice added from a document", () => {
     expect((await entryDetail(changed))?.document).toMatchObject({ changed: ["lateFeeValue", "lateFeeStartsOn"] });
     const cleared = documentForm({ documentRead: read, lateFeeKind: "percent_month" });
     expect((await entryDetail(cleared))?.document).toMatchObject({ changed: ["lateFeeKind", "lateFeeValue", "lateFeeStartsOn"] });
+    // Read without a start, the fee starts the day after the due date submitted: kept blank, or given as that day, it is
+    // no change; another day is one.
+    const blankRead = JSON.stringify({ ...READ, lateFeeKind: "percent_month", lateFeeValue: "1.5", lateFeeStartsOn: null });
+    const keptBlank = documentForm({ documentRead: blankRead, lateFeeKind: "percent_month", lateFeeValue: "1.5" });
+    expect((await entryDetail(keptBlank))?.document).toMatchObject({ changed: [] });
+    const movedDue = documentForm({ documentRead: blankRead, lateFeeKind: "percent_month", lateFeeValue: "1.5", dueDate: "2026-11-05" });
+    expect((await entryDetail(movedDue))?.document).toMatchObject({ changed: ["dueDate"] });
+    const laterStart = documentForm({ documentRead: blankRead, lateFeeKind: "percent_month", lateFeeValue: "1.5", lateFeeStartsOn: "2026-11-09" });
+    expect((await entryDetail(laterStart))?.document).toMatchObject({ changed: ["lateFeeStartsOn"] });
     const typed = documentForm({ lateFeeKind: "fixed", lateFeeValue: "2" });
     expect((await entryDetail(typed))?.document).toMatchObject({ changed: ["lateFeeKind", "lateFeeValue", "lateFeeStartsOn"] });
   });

@@ -42,11 +42,16 @@ function lateFeeOf(fields: { lateFeeKind?: string | null; lateFeeValue?: string 
   return lateFeeFields((name) => named[name] ?? "");
 }
 
-/** A late fee read with the invoice, as a chat names it on the draft: "1.5% a month from 2026-10-11"; null with none. */
+/**
+ * A late fee read with the invoice, as a chat names it on the draft: "1.5% a month from 2026-10-11", from the day the
+ * invoice gives or, with none, the day after the due date, as the invoice is added; null with none.
+ */
 export function lateFeeLine(draft: InvoiceDraftRead["draft"]): string | null {
   if (!draft.lateFeeKind || !draft.lateFeeValue) return null;
   const rate = draft.lateFeeKind === "fixed" ? `${draft.lateFeeValue} ${draft.currency ?? "USDC"}` : `${draft.lateFeeValue}% a month`;
-  return draft.lateFeeStartsOn ? `${rate} from ${draft.lateFeeStartsOn}` : rate;
+  const due = draft.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(draft.dueDate) ? draft.dueDate : null;
+  const startsOn = draft.lateFeeStartsOn ?? (due ? new Date(Date.parse(`${due}T12:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10) : null);
+  return startsOn ? `${rate} from ${startsOn}` : rate;
 }
 
 /** A draft as a chat stores it: the fields, and where they were read from, with the address it asked payment to (IP1). */

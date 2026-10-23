@@ -56,6 +56,13 @@ describe("lateFeeOf (LF4)", () => {
     expect(lateFeeOf({ amount: 100, lateFee: fixed }, "2026-10-30")).toBe(0);
   });
 
+  it("is nothing for a fee that starts after the coming month, the 30 days from the day: none of it can be charged in them (LF6)", () => {
+    expect(lateFeeOf({ amount: 100, lateFee: percent }, "2026-09-30")).toBe(0);
+    expect(lateFeeOf({ amount: 100, lateFee: percent }, "2026-10-01")).toBe(1.5);
+    expect(lateFeeOf({ amount: 100, lateFee: fixed }, "2026-09-30")).toBe(0);
+    expect(lateFeeOf({ amount: 100, lateFee: fixed }, "2026-10-01")).toBe(25);
+  });
+
   it("is 0 with no fee, and never negative", () => {
     expect(lateFeeOf({ amount: 100, lateFee: null }, "2026-10-22")).toBe(0);
     expect(lateFeeOf({ amount: -100, lateFee: percent }, "2026-10-22")).toBe(0);

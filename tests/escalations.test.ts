@@ -30,15 +30,21 @@ describe("the decide-by day and the priority", () => {
     expect(decideByWords({ day: "2026-10-15", reason: "discount" })).toBe("Decide by Oct 15, 2026 to keep the early-payment discount");
   });
 
-  it("is the day before a late fee starts, for a bill past its due date whose fee has not started (late fees LF5)", () => {
+  it("is the day before a late fee starts, for a bill past its due date with days before the fee, before and after it starts (late fees LF5)", () => {
     const lateFee = { kind: "percent_month" as const, value: 1.5, startsOn: "2026-10-20" };
     const overdue = decideByOf({ dueDate: "2026-10-10T12:00:00Z", lateFee }, TODAY);
-    expect(overdue).toEqual({ day: "2026-10-19", reason: "late_fee", lateFee: { dueOn: "2026-10-10", startsOn: "2026-10-20", rate: "1.5% a month" } });
+    expect(overdue).toEqual({ day: "2026-10-19", reason: "late_fee", lateFee: { dueOn: "2026-10-10", startsOn: "2026-10-20", rate: "1.5% a month", started: false } });
     expect(decideByWords(overdue)).toBe("Decide by Oct 19, 2026: overdue since Oct 10, 2026; a late fee of 1.5% a month starts Oct 20, 2026");
     expect(priorityOf(overdue.day, TODAY)).toBe("week");
-    // Not yet due, or once the fee has started: the due date, as before.
+    // Once the fee has started, the day stays the last one without it: the same decide-by day, so the same escalation.
+    const started = decideByOf({ dueDate: "2026-10-01T12:00:00Z", lateFee: { ...lateFee, startsOn: "2026-10-10" } }, TODAY);
+    expect(started).toEqual({ day: "2026-10-09", reason: "late_fee", lateFee: { dueOn: "2026-10-01", startsOn: "2026-10-10", rate: "1.5% a month", started: true } });
+    expect(decideByWords(started)).toBe("Decide by Oct 9, 2026: overdue since Oct 1, 2026; a late fee of 1.5% a month applies since Oct 10, 2026");
+    expect(priorityOf(started.day, TODAY)).toBe("overdue");
+    // Not yet due, or a fee from the due date or the day after it, which leaves no day between: the due date, as before.
     expect(decideByOf({ dueDate: "2026-10-15T12:00:00Z", lateFee }, TODAY)).toEqual({ day: "2026-10-15", reason: "due" });
-    expect(decideByOf({ dueDate: "2026-10-01T12:00:00Z", lateFee: { ...lateFee, startsOn: "2026-10-13" } }, TODAY)).toEqual({ day: "2026-10-01", reason: "due" });
+    expect(decideByOf({ dueDate: "2026-10-01T12:00:00Z", lateFee: { ...lateFee, startsOn: "2026-10-02" } }, TODAY)).toEqual({ day: "2026-10-01", reason: "due" });
+    expect(decideByOf({ dueDate: "2026-10-01T12:00:00Z", lateFee: { ...lateFee, startsOn: "2026-10-01" } }, TODAY)).toEqual({ day: "2026-10-01", reason: "due" });
     // A fixed fee in the bill's currency.
     expect(decideByOf({ dueDate: "2026-10-10T12:00:00Z", currency: "EURC", lateFee: { kind: "fixed", value: 25, startsOn: "2026-10-14" } }, TODAY)).toMatchObject({
       day: "2026-10-13",
@@ -108,6 +114,27 @@ describe("the escalation email", () => {
     expect(email.html).toContain("Acme &amp; Co");
     expect(email.html).toContain("Northstar &lt;Labs&gt;");
     expect(email.html).not.toContain("<Labs>");
+  });
+
+  it("says a payment reached its day when a late fee starts the next day, and names the fee (late fees LF5)", () => {
+    const item = { counterpartyName: "Acme", amount: 1200, currency: "USDC", status: "held" as const, decideBy: "2026-10-19", discount: false };
+    const ahead = decisionEscalationEmail({
+      orgName: "Northstar",
+      items: [{ ...item, lateFee: { startsOn: "2026-10-20", rate: "1.5% a month", started: false } }],
+      link: "https://tests.vestiarion.xyz/o/northstar/approvals",
+      origin: "https://tests.vestiarion.xyz",
+    });
+    expect(ahead.subject).toBe("1 payment reached its decide-by day in Northstar");
+    expect(ahead.text).toContain("1 payment in Northstar reached the day it is to be decided by.");
+    expect(ahead.text).toContain("- Acme: 1,200.00 USDC, Held, to decide by Oct 19, 2026, before a late fee of 1.5% a month starts Oct 20, 2026");
+    const started = decisionEscalationEmail({
+      orgName: "Northstar",
+      items: [{ ...item, lateFee: { startsOn: "2026-10-20", rate: "1.5% a month", started: true } }],
+      link: "https://tests.vestiarion.xyz/o/northstar/approvals",
+      origin: "https://tests.vestiarion.xyz",
+    });
+    expect(started.subject).toBe("1 payment passed its decide-by day in Northstar");
+    expect(started.text).toContain("- Acme: 1,200.00 USDC, Held, to decide by Oct 19, 2026; a late fee of 1.5% a month applies since Oct 20, 2026");
   });
 });
 
@@ -223,12 +250,21 @@ describe("escalateOverdueDecisions", () => {
     expect((await run(() => pastDecideBy(NOW))).map(({ id, item }) => [id, item.decideBy])).toEqual([[LATE, "2026-10-12"]]);
   });
 
-  it("waits for the day before a late fee starts on a bill past its due date, and reads before migration 0141 as before (late fees LF5)", async () => {
-    const grace = payable(LATE, { late_fee_kind: "fixed", late_fee_value: "25", late_fee_starts_on: "2026-10-20" });
-    const { run } = escalationFake({ invoices: [grace] });
-    expect(await run(() => pastDecideBy(NOW))).toEqual([]);
+  it("escalates a bill past its due date on the last day before its late fee, once, and reads before migration 0141 as before (late fees LF5)", async () => {
+    const grace = () => payable(LATE, { late_fee_kind: "fixed", late_fee_value: "25", late_fee_starts_on: "2026-10-20" });
+    const at = (day: string) => new Date(`${day}T08:00:00.000Z`);
+    // Within the days before the fee, its decide-by day is still ahead.
+    expect(await escalationFake({ invoices: [grace()] }).run(() => pastDecideBy(NOW))).toEqual([]);
+    // On the last day without the fee it is escalated, so the email comes before the fee starts; after it, with the same day.
+    const onTheDay = await escalationFake({ invoices: [grace()] }).run(() => pastDecideBy(at("2026-10-19")));
+    expect(onTheDay.map(({ item }) => [item.decideBy, item.lateFee])).toEqual([["2026-10-19", { startsOn: "2026-10-20", rate: "25.00 USDC", started: false }]]);
+    const after = await escalationFake({ invoices: [grace()] }).run(() => pastDecideBy(at("2026-10-25")));
+    expect(after.map(({ item }) => [item.decideBy, item.lateFee])).toEqual([["2026-10-19", { startsOn: "2026-10-20", rate: "25.00 USDC", started: true }]]);
+    // A fee from the day after the due date leaves no day between: escalated past its due date, as before.
     const started = payable(LATE, { late_fee_kind: "fixed", late_fee_value: "25", late_fee_starts_on: "2026-10-13" });
-    expect((await escalationFake({ invoices: [started] }).run(() => pastDecideBy(NOW))).map(({ item }) => item.decideBy)).toEqual(["2026-10-12"]);
+    const next = await escalationFake({ invoices: [started] }).run(() => pastDecideBy(NOW));
+    expect(next.map(({ item }) => item.decideBy)).toEqual(["2026-10-12"]);
+    expect(next[0].item).not.toHaveProperty("lateFee");
 
     const refused = vi.fn();
     const before0141 = escalationFake({
@@ -242,6 +278,16 @@ describe("escalateOverdueDecisions", () => {
     const found = await before0141.run(() => pastDecideBy(NOW));
     expect(refused).toHaveBeenCalledTimes(1);
     expect(found.map(({ id }) => id)).toEqual([LATE]);
+  });
+
+  it("emails on the last day before a late fee starts, claimed for that day (late fees LF5)", async () => {
+    const { fake, run } = escalationFake({ invoices: [payable(LATE, { late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-10-20" })] });
+    expect(await run(() => escalateOverdueDecisions(new Date("2026-10-19T08:00:00.000Z")))).toEqual({ sent: 1, failed: 0, invoices: 1 });
+    const claim = fake.requests.find((request) => request.path === "/rest/v1/approval_escalations" && request.method === "POST");
+    expect(claim?.body).toEqual([{ org_id: ORG, invoice_id: LATE, decide_by: "2026-10-19" }]);
+    const sent = sendEmailMock.mock.calls[0][0] as { subject: string; text: string };
+    expect(sent.subject).toBe("1 payment reached its decide-by day in Northstar");
+    expect(sent.text).toContain("to decide by Oct 19, 2026, before a late fee of 1.5% a month starts Oct 20, 2026");
   });
 
   it("claims each payable for its day, emails each member whose switch is on, marks the claims and signs it", async () => {

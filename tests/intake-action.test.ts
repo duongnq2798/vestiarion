@@ -205,6 +205,26 @@ describe("createInvoiceAction and a bill in the business's own currency (shadow 
     expect(rateMock).toHaveBeenCalledWith("VND");
   });
 
+  it("refuses a fixed late fee in the bill's own currency, which would be read as USDC, and takes a percent a month (late fees LF2)", async () => {
+    rateMock.mockReset().mockResolvedValue(VND);
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }], true));
+    const fixed = billForm();
+    fixed.set("lateFeeKind", "fixed");
+    fixed.set("lateFeeValue", "50.000");
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, fixed));
+    const why = "A fixed late fee is taken only on a bill in USDC or EURC: give it as a percent a month.";
+    expect(result).toEqual({ ok: false, message: `Late fee: ${why}`, fieldErrors: { lateFee: why } });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
+
+    const added = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }], true));
+    const percent = billForm();
+    percent.set("lateFeeKind", "percent_month");
+    percent.set("lateFeeValue", "1.5");
+    await runWith({ config, db: added.client, fetch: added.fetch }, () => createInvoiceAction({ ok: false, message: "" }, percent));
+    const insert = added.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(insert?.body).toMatchObject({ amount: "96.39", currency: "USDC", late_fee_kind: "percent_month", late_fee_value: "1.5" });
+  });
+
   it("refuses it outside shadow mode, and adds nothing", async () => {
     rateMock.mockReset().mockResolvedValue(VND);
     const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }], false));

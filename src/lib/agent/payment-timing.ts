@@ -18,7 +18,7 @@
  */
 
 import { utcDay } from "../copy";
-import { lateFeeClause, type LateFee } from "./late-fee";
+import { lateFeeClause, lateFeeStarted, type LateFee } from "./late-fee";
 
 export interface PaymentTimingInput {
   now: Date;
@@ -214,13 +214,14 @@ interface ReasonFacts {
 }
 
 /**
- * The reference sentence, and the late fee the payment comes before when it is paid on or before the day the fee starts
- * (late fees LF7): "…; paying now, before a 1.5% monthly late fee (1.50 USDC) starts Oct 30, 2026."
+ * The reference sentence, and the late fee the payment comes before when it is paid before the day the fee starts, the
+ * fee's first day being late already (late fees LF1, LF7): "…; paying now, before a 1.5% monthly late fee (1.50 USDC)
+ * starts Oct 30, 2026."
  */
 function buildReason(args: ReasonFacts): string {
   const reason = timingReason(args);
   const fee = args.input.lateFee;
-  if (!fee || args.targetOn > fee.startsOn) return reason;
+  if (!fee || lateFeeStarted(fee, args.targetOn)) return reason;
   return `${reason.replace(/\.$/, "")}, before ${lateFeeClause(fee, args.input.amount, args.input.currency ?? "USDC")} starts ${utcDay(`${fee.startsOn}T00:00:00.000Z`)}.`;
 }
 

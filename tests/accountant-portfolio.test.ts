@@ -329,6 +329,31 @@ describe("readPortfolio: what waits for the accountant", () => {
     ]);
   });
 
+  it("keeps the day before a late fee started as a bill's decide-by day once it has passed, and names the fee (late fees LF5)", async () => {
+    const started = payable("small", { amount: "200", due_date: "2026-10-05", late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-10-10" });
+    const { read } = world(INVITED, harbor({ payables: [started] }));
+    expect(harborItems((await read()).items)).toEqual([
+      expect.objectContaining({
+        kind: "past_decide_by",
+        since: "2026-10-09",
+        detail: "Held for a person. Its decide-by day was Oct 9, 2026, the day before its late fee of 1.5% a month started.",
+      }),
+    ]);
+  });
+
+  it("reads the bills again without their late fees before migration 0141, as before (late fees LF5)", async () => {
+    const refused = vi.fn();
+    const before0141 = (sent: RecordedRequest): FakeReply | null => {
+      if (sent.path !== "/rest/v1/invoices" || !(sent.params.get("select") ?? "").includes("late_fee_")) return null;
+      refused();
+      return { status: 400, body: { code: "42703", message: "column invoices.late_fee_kind does not exist" } };
+    };
+    const { read } = world(INVITED, (sent) => before0141(sent) ?? harbor({ payables: [payable("small", { amount: "200" })] })(sent));
+    const portfolio = await read();
+    expect(refused).toHaveBeenCalled();
+    expect(harborItems(portfolio.items)).toEqual([expect.objectContaining({ kind: "decision", detail: "Held for a person. Decide by Oct 20, 2026." })]);
+  });
+
   it("leaves a bill the server would refuse as a decision item that says why", async () => {
     const { read } = world(INVITED, harbor({ payables: [payable("risky", { counterparties: { name: "Payee risky", risk_level: "high", address: ADDRESS } })] }));
     expect(harborItems((await read()).items)).toEqual([

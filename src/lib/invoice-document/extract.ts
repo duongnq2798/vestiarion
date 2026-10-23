@@ -69,7 +69,9 @@ function currencyFigure(line: string): string | null {
 /** A line about paying late, and the percent a month or the fixed fee it charges. */
 const LATE_WORDS = /\b(?:late|overdue|past due|unpaid|interest)\b/i;
 const MONTHLY_PERCENT = /(\d+(?:\.\d+)?)\s*%\s*(?:per\s+month|a\s+month|each\s+month|monthly|\/\s*month)/i;
-const FIXED_LATE_FEE = /late\s+(?:payment\s+)?fee\s+of\s+(?:USDC|EURC|USD|EUR|US\$|[$€])?\s*(\d[\d,]*(?:\.\d+)?)/i;
+// The whole figure, then no percent and no fee for each day, week or year: "late fee of 2%" or "of $25 per day" is not one.
+const FIXED_LATE_FEE =
+  /late\s+(?:payment\s+)?fee\s+of\s+(?:USDC|EURC|USD|EUR|US\$|[$€])?\s*(\d[\d,]*(?:\.\d+)?)(?![\d,]|\.\d)(?!\s*(?:USDC|EURC|USD|EUR)?\s*(?:%|percent\b|pct\b|per\s+(?:day|week|year|annum)\b|an?\s+(?:day|week|year)\b|daily\b|weekly\b|yearly\b|annually\b))/i;
 
 /**
  * The reader used without a model: regular expressions for the parts of an

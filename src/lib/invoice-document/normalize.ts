@@ -48,7 +48,8 @@ export interface InvoiceDraft {
   discountDeadline: string | null;
   /**
    * A late fee the document states (late fees LF2), as the invoice form's three fields: named only when one was read,
-   * so a reading stored before late fees reads the same. Its start is the day after the due date when it gives none.
+   * so a reading stored before late fees reads the same. Its start is null when the document gives none: the form then
+   * starts it the day after the due date it is given.
    */
   lateFeeKind?: "percent_month" | "fixed";
   lateFeeValue?: string;
@@ -260,21 +261,22 @@ function statesPercent(text: string, pct: string): boolean {
   return new RegExp(`(?<![\\d.])${canonical}(?:\\.0+)?\\s*(?:%|/|percent|pct)`, "i").test(text);
 }
 
-/** The day after a `YYYY-MM-DD` day. */
-function dayAfter(iso: string): string {
-  return new Date(Date.parse(`${iso}T12:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
+/** The text without the figures it writes as a percent ("5%", "2 percent"), which are never an amount. */
+function withoutPercents(text: string): string {
+  return text.replace(/\d[\d.,]*\s*(?:%|percent\b|pct\b)/gi, " ");
 }
 
 /**
  * A late fee the document states (late fees LF2), checked as the discount is: a percent a month the text writes as a
- * percent, at most 10, or a fixed amount the text contains, in a currency Vestiarion pays in; not both. Its start is
- * the day written when that is a real day on or after the due date, else the day after the due date, which is what the
- * form takes a blank start as. A fee left out says why.
+ * percent, at most 10, or a fixed amount the text contains other than as a percent, at most the invoice's amount as the
+ * form's rule has it, in a currency Vestiarion pays in; not both. Its start is the day written when that is a real day on
+ * or after the due date, else left blank: the form starts a blank one the day after the due date it is given, so a due
+ * date the member corrects moves it too. A fee left out says why.
  */
 function readLateFee(
   raw: RawExtraction,
   text: string,
-  read: { dueDate: string | null; foreign: boolean; notes: string[] }
+  read: { dueDate: string | null; amount: string | null; foreign: boolean; notes: string[] }
 ): Pick<InvoiceDraft, "lateFeeKind" | "lateFeeValue" | "lateFeeStartsOn"> | null {
   const percent = raw.lateFeePercentPerMonth?.replace(/\s*%$/, "") ?? null;
   const amount = raw.lateFeeAmount;
@@ -310,15 +312,28 @@ function readLateFee(
       read.notes.push(reading.why === "not_found" ? "The late fee was left out: the document does not state that amount." : "The late fee was left out: its amount could not be read as a number.");
       return null;
     }
+    // "A late fee of 5%": the figure is there, but only as a percent of something, never a fixed amount.
+    if (readAmount(reading.amount, withoutPercents(text)).amount === null) {
+      read.notes.push("The late fee was left out: the document writes that figure as a percent, not a fixed amount.");
+      return null;
+    }
+    const fee = micros(reading.amount);
+    const invoiceAmount = read.amount === null ? null : micros(read.amount);
+    if (fee !== null && invoiceAmount !== null && fee > invoiceAmount) {
+      read.notes.push("The late fee was left out: it is more than the invoice's amount. Check it against the invoice.");
+      return null;
+    }
     kind = "fixed";
     value = reading.amount;
   }
   const written = raw.lateFeeStartsOn;
   if (isRealDate(written) && (read.dueDate === null || written >= read.dueDate)) return { lateFeeKind: kind, lateFeeValue: value, lateFeeStartsOn: written };
   if (written !== null && read.dueDate !== null) {
-    read.notes.push("The day the late fee starts was read as before the due date or could not be read: it is set to the day after the due date. Check it against the invoice.");
+    read.notes.push(
+      "The day the late fee starts was read as before the due date or could not be read: it is left blank, so it starts the day after the due date. Check it against the invoice."
+    );
   }
-  return { lateFeeKind: kind, lateFeeValue: value, lateFeeStartsOn: read.dueDate === null ? null : dayAfter(read.dueDate) };
+  return { lateFeeKind: kind, lateFeeValue: value, lateFeeStartsOn: null };
 }
 
 export function normalizeExtraction(raw: RawExtraction, text: string): NormalizedExtraction {
@@ -390,7 +405,7 @@ export function normalizeExtraction(raw: RawExtraction, text: string): Normalize
     }
   }
 
-  const lateFee = readLateFee(raw, text, { dueDate, foreign, notes });
+  const lateFee = readLateFee(raw, text, { dueDate, amount: reading.amount, foreign, notes });
 
   return {
     fields: {

@@ -10,6 +10,14 @@ import { PRIORITY_SYSTEM_PROMPT, supplierRequestsOf } from "@/lib/agent/cash-pri
 
 const TODAY = "2026-10-17";
 const row = (over: Partial<PriorityRow>): PriorityRow => ({ id: "x", status: "pending", amount: 10, currency: "USDC", dueDate: "2026-10-20T12:00:00Z", heldForCash: false, paidToBank: false, ...over });
+/** An order item as a `cash_priority_set` entry signs it: the bill's facts, and its late fee's term when it has one. */
+const signedItem = (bill: ReturnType<typeof competingBills>[number]) => ({
+  invoiceId: bill.id,
+  keep: true,
+  amount: bill.amount,
+  dueOn: bill.dueOn,
+  ...(bill.lateFeeTerm ? { lateFee: bill.lateFeeTerm } : {}),
+});
 const BOOK: PriorityRow[] = [
   row({ id: "render-140", status: "scheduled", amount: 140, dueDate: "2026-10-22T12:00:00Z" }),
   row({ id: "cluster-150", status: "held", heldForCash: true, amount: 150, dueDate: "2026-10-23T12:00:00Z" }),
@@ -70,6 +78,27 @@ describe("the order (P2, P3)", () => {
     expect(referenceOrder(competing, TODAY)).toEqual(["due-fixed-3", "overdue-1.5pct", "overdue-plain", "overdue-fixed-started", "later-plain", "later-5pct"]);
   });
 
+  it("weighs nothing for a fee that starts after the coming month: none of it can be charged in that month (late fees LF6)", () => {
+    const competing = competingBills(
+      [
+        row({ id: "overdue-plain", amount: 5, dueDate: "2026-10-15T12:00:00Z" }),
+        // Due today, its 2% fee from 60 days on: paying it first in the coming month avoids nothing.
+        row({ id: "due-2pct-in-60-days", amount: 1000, dueDate: "2026-10-17T12:00:00Z", lateFee: { kind: "percent_month", value: 2, startsOn: "2026-12-16" } }),
+        row({ id: "due-fixed-in-60-days", amount: 1000, dueDate: "2026-10-17T12:00:00Z", lateFee: { kind: "fixed", value: 50, startsOn: "2026-12-16" } }),
+        // Starting 29 days on, it falls in the coming month.
+        row({ id: "due-1pct-in-29-days", amount: 100, dueDate: "2026-10-17T12:00:00Z", lateFee: { kind: "percent_month", value: 1, startsOn: "2026-11-15" } }),
+      ],
+      TODAY
+    );
+    expect(competing.map((bill) => [bill.id, bill.lateFee])).toEqual([
+      ["overdue-plain", 0],
+      ["due-2pct-in-60-days", 0],
+      ["due-fixed-in-60-days", 0],
+      ["due-1pct-in-29-days", 1],
+    ]);
+    expect(referenceOrder(competing, TODAY)).toEqual(["due-1pct-in-29-days", "overdue-plain", "due-2pct-in-60-days", "due-fixed-in-60-days"]);
+  });
+
   it("keeps the model's order, drops what it does not know or names twice, and appends what it left out", () => {
     const reference = ["render-140", "cluster-150", "hosting-45", "storage-45"];
     expect(boundOrder(["hosting-45", "storage-45", "render-140", "cluster-150"], reference)).toEqual({ order: ["hosting-45", "storage-45", "render-140", "cluster-150"], corrected: false });
@@ -106,9 +135,24 @@ describe("the plan, signed and read back (P5)", () => {
     const plan = { ...planOf({ fingerprint: "f1", decisionMode: "person", by: "member-1", order: competing.map((bill) => ({ invoiceId: bill.id, keep: true, amount: bill.amount, dueOn: bill.dueOn })) })! };
     expect(carriedOrder(plan, competing)).toEqual(competing.map((bill) => bill.id));
     expect(carriedOrder(plan, withFee)).toBeNull();
-    const signedWithFee = planOf({ fingerprint: "f2", decisionMode: "person", by: "member-1", order: withFee.map((bill) => ({ invoiceId: bill.id, keep: true, amount: bill.amount, dueOn: bill.dueOn, ...(bill.lateFee > 0 ? { lateFee: bill.lateFee } : {}) })) })!;
-    expect(signedWithFee.bills["hosting-45"]).toEqual({ amount: 45, dueOn: "2026-10-24", lateFee: 5 });
+    const signedWithFee = planOf({ fingerprint: "f2", decisionMode: "person", by: "member-1", order: withFee.map(signedItem) })!;
+    expect(signedWithFee.bills["hosting-45"]).toEqual({ amount: 45, dueOn: "2026-10-24", lateFee: { kind: "fixed", value: 5, startsOn: "2026-10-25" } });
     expect(carriedOrder(signedWithFee, withFee)).toEqual(withFee.map((bill) => bill.id));
+    // A fee whose term changed, its start here, is a changed bill.
+    const moved = competingBills(BOOK.map((bill) => (bill.id === "hosting-45" ? { ...bill, lateFee: { kind: "fixed" as const, value: 5, startsOn: "2026-10-28" } } : bill)), TODAY);
+    expect(planFingerprint(moved)).not.toBe(planFingerprint(withFee));
+    expect(carriedOrder(signedWithFee, moved)).toBeNull();
+  });
+
+  it("keeps a plan's fingerprint and a person's order on the day a fixed fee starts, though its cost is then 0: the bill did not change (order design O4)", () => {
+    const fee = { kind: "fixed" as const, value: 25, startsOn: "2026-10-18" };
+    const book = BOOK.map((bill) => (bill.id === "hosting-45" ? { ...bill, lateFee: fee } : bill));
+    const before = competingBills(book, "2026-10-17");
+    const on = competingBills(book, "2026-10-18");
+    expect([before, on].map((bills) => bills.find((bill) => bill.id === "hosting-45")?.lateFee)).toEqual([25, 0]);
+    expect(planFingerprint(on)).toBe(planFingerprint(before));
+    const signed = planOf({ fingerprint: planFingerprint(before), decisionMode: "person", by: "member-1", order: before.map(signedItem) })!;
+    expect(carriedOrder(signed, on)).toEqual(before.map((bill) => bill.id));
   });
 
   it("stands while its order splits the bills the same way against the cash there is now (review of the plan)", () => {

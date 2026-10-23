@@ -59,19 +59,37 @@ export function lastDayWithoutFee(fee: LateFee): string {
   return new Date(Date.parse(`${fee.startsOn}T00:00:00.000Z`) - 86_400_000).toISOString().slice(0, 10);
 }
 
+/** The coming month a late fee is weighed over (LF6): the 30 days from the day, that day included. */
+export const COMING_MONTH_DAYS = 30;
+
 /**
- * The fee for one month past its start, in the invoice's currency, as it stands on `on` (LF4): the percent of the
- * amount still to pay, which a month of waiting costs whether or not it has started, or the fixed amount while it is
- * still ahead. A fixed fee that has started is owed whatever comes next, so another month costs nothing more. Never
- * negative; 0 with no fee.
+ * What waiting costs in the coming month from `on`, in the invoice's currency (LF4, LF6): a month of the percent of the
+ * amount still to pay, whether or not it has started, or the fixed amount while it is still ahead. A fixed fee that has
+ * started is owed whatever comes next, so another month costs nothing more; a fee that starts after the coming month
+ * costs nothing in it. Never negative; 0 with no fee. It moves with the day, so it orders bills and is never what a plan
+ * is told apart by: the term is.
  */
 export function lateFeeOf(invoice: { amount: number | string; lateFee: LateFee | null }, on: string): number {
   const fee = invoice.lateFee;
   if (!fee) return 0;
+  // The first day after the coming month: a fee from then on costs nothing in it.
+  const afterTheMonth = new Date(Date.parse(`${on.slice(0, 10)}T00:00:00.000Z`) + COMING_MONTH_DAYS * 86_400_000).toISOString().slice(0, 10);
+  if (fee.startsOn >= afterTheMonth) return 0;
   if (fee.kind === "fixed") return lateFeeStarted(fee, on) ? 0 : Math.max(0, round6(fee.value));
-  const amount = Number(invoice.amount);
-  if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return Math.max(0, round6((amount * fee.value) / 100));
+  return aMonthOf(fee, invoice.amount);
+}
+
+/** A month of a percent fee past its start: the percent of the amount still to pay; 0 for an amount that is not one. */
+function aMonthOf(fee: LateFee, amount: number | string): number {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return Math.max(0, round6((value * fee.value) / 100));
+}
+
+/** Whether two terms are the same: kind, value and first day (a bill's late fee unchanged, order design O4). */
+export function sameLateFee(a: LateFee | null | undefined, b: LateFee | null | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  return a.kind === b.kind && Math.abs(a.value - b.value) < 0.0000005 && a.startsOn === b.startsOn;
 }
 
 const show = (value: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(value);
@@ -98,7 +116,7 @@ export function lateFeeClause(fee: LateFee, amount: number, currency = "USDC"): 
  * its start costs (`aMonth`, the percent of the amount, or the fixed amount).
  */
 export function lateFeeTerms(fee: LateFee, amount: number): { kind: LateFeeKind; value: number; startsOn: string; aMonth: number } {
-  return { kind: fee.kind, value: fee.value, startsOn: fee.startsOn, aMonth: fee.kind === "fixed" ? fee.value : lateFeeOf({ amount, lateFee: fee }, fee.startsOn) };
+  return { kind: fee.kind, value: fee.value, startsOn: fee.startsOn, aMonth: fee.kind === "fixed" ? fee.value : aMonthOf(fee, amount) };
 }
 
 /**

@@ -763,7 +763,7 @@ describe("from draft to bill (C5-C7)", () => {
     const { data } = await (await capture(w, token, { source: "selection", text: `${INVOICE_TEXT}\nLate payments: 1.5% per month on overdue balances.` })).json();
     await send(w, token, data.id);
     const [draft] = w.db.rows("invoice_drafts");
-    expect((draft.read as { extracted: Record<string, unknown> }).extracted).toMatchObject({ lateFeeKind: "percent_month", lateFeeValue: "1.5", lateFeeStartsOn: "2026-11-01" });
+    expect((draft.read as { extracted: Record<string, unknown> }).extracted).toMatchObject({ lateFeeKind: "percent_month", lateFeeValue: "1.5", lateFeeStartsOn: null });
     const lateFee = { kind: "percent_month", value: "1.5", startsOn: "2026-11-01" };
     const outcome = await w.run(() =>
       withOrg(w.orgId, () => confirmInvoiceDraft(asOwner(w), { draftId: data.id, invoice: bill({ lateFee }), notDuplicate: false }))

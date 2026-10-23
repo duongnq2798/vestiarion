@@ -22,7 +22,17 @@ describe("detectMapping", () => {
       lateFeeAmount: 4,
       lateFeeStartsOn: 5,
     });
-    expect(detectMapping(["Vendor", "Late fee"])).toMatchObject({ lateFeeAmount: 1 });
+    expect(detectMapping(["Vendor", "Late fee amount"])).toEqual({ counterparty: 0, lateFeeAmount: 1 });
+  });
+
+  it("reads a late fee's column that writes a percent as the percent a month, and leaves a bare one for the person to choose", () => {
+    // `headerKey` strips the sign, so "Late fee (%)" is "latefee": never a fixed amount.
+    expect(detectMapping(["Vendor", "Late fee (%)"])).toEqual({ counterparty: 0, lateFeePercent: 1 });
+    expect(detectMapping(["Vendor", "Late fee %"])).toEqual({ counterparty: 0, lateFeePercent: 1 });
+    expect(detectMapping(["Vendor", "Late payment fee (%)"])).toEqual({ counterparty: 0, lateFeePercent: 1 });
+    // A bare "Late fee" may hold "25" or "1.5%": which one is the person's to say.
+    expect(detectMapping(["Vendor", "Late fee"])).toEqual({ counterparty: 0 });
+    expect(detectMapping(["Vendor", "Late payment fee"])).toEqual({ counterparty: 0 });
   });
 
   it("maps every column of the old template to its own field", () => {

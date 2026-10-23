@@ -405,6 +405,16 @@ describe("the written policy's reason names a late fee its payment comes before 
     expect(planPaymentTiming({ ...input, lateFee: null }).reason).toBe("Overdue since Oct 20, 2026; paying now.");
   });
 
+  it("says nothing of a fee whose first day is the day it is paid: the fee applies that day (LF1)", () => {
+    // The default start, the day after the due date, on an overdue bill decided that day.
+    expect(planPaymentTiming({ ...input, now: new Date("2026-10-21T09:00:00.000Z"), lateFee: { ...percent, startsOn: "2026-10-21" } }).reason).toBe(
+      "Overdue since Oct 20, 2026; paying now."
+    );
+    // A fee from the due date itself, on a bill paid on its due date.
+    const onDue = planPaymentTiming({ ...input, now: new Date("2026-10-10T09:00:00.000Z"), lateFee: { kind: "fixed", value: 25, startsOn: "2026-10-20" } });
+    expect(onDue.reason).toBe("No early-payment discount; paying on the due date, Oct 20, 2026, keeps 100 USDC available until then.");
+  });
+
   it("changes no figure: a late fee is never part of what is paid", () => {
     const without = planPaymentTiming({ ...input, now: new Date("2026-10-10T09:00:00.000Z") });
     const withFee = planPaymentTiming({ ...input, now: new Date("2026-10-10T09:00:00.000Z"), lateFee: percent });

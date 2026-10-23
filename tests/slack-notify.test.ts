@@ -44,6 +44,8 @@ const activity = (items: ActivityItem[], through: number): AgentActivity => ({ r
 let install: Record<string, unknown> | null;
 let invoices: Array<Record<string, unknown>>;
 let intents: Array<Record<string, unknown>>;
+/** The database before migration 0141: a read naming the late-fee columns is refused (late fees LF4). */
+let before0141: boolean;
 
 function installRow(fields: Record<string, unknown> = {}) {
   const keys = parseMasterKeys(process.env.VESTIARION_MASTER_KEYS);
@@ -64,6 +66,7 @@ beforeEach(() => {
   install = null;
   invoices = [];
   intents = [];
+  before0141 = false;
   readActivityMock.mockReset();
 });
 
@@ -76,6 +79,9 @@ function stage(reply: (body: string) => Response = () => new Response("ok")) {
   const fake = fakeSupabase((sent: RecordedRequest) => {
     if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG, { slug: "acme", name: "Acme" }) };
     if (sent.path === "/rest/v1/slack_installs" && sent.method === "GET") return { body: install ? [install] : [] };
+    if (sent.path === "/rest/v1/invoices" && before0141 && (sent.params.get("select") ?? "").includes("late_fee_")) {
+      return { status: 400, body: { code: "42703", message: "column invoices.late_fee_kind does not exist" } };
+    }
     if (sent.path === "/rest/v1/invoices") return { body: invoices };
     if (sent.path === "/rest/v1/payment_intents") return { body: intents };
     if (sent.path === "/rest/v1/rpc/append_ledger_entry") return { body: APPENDED_LEDGER_ROW };
@@ -174,6 +180,21 @@ describe("sendSlackDecisions", () => {
     expect(JSON.stringify(posts[0].body)).toContain(
       "Pays 0.50 USDC to Jiren on Arc testnet, to 0x1111…0000. A late fee of 1.5% a month starts Oct 10, 2026; it is never added to what is paid."
     );
+  });
+
+  it("reads the card's payable again without its late fee before migration 0141, and offers Approve as before", async () => {
+    install = installRow({ decisions_limit_usdc: "1" });
+    invoices = [heldInvoice()];
+    before0141 = true;
+    readActivityMock.mockResolvedValue(activity([HELD], 57));
+    const { fake, run, posts } = stage();
+    await run();
+    const reads = fake.requests.filter((sent) => sent.path === "/rest/v1/invoices").map((sent) => (sent.params.get("select") ?? "").includes("late_fee_"));
+    // The card's read naming the late-fee columns, refused, then the same read without them.
+    expect(reads.slice(0, 2)).toEqual([true, false]);
+    const body = JSON.stringify(posts[0].body);
+    expect(body).toContain("vx_approve");
+    expect(body).toContain("Pays 0.50 USDC to Jiren on Arc testnet, to 0x1111…0000.");
   });
 
   it("says Approve checks the earlier transfer first when one may exist, never that it pays (payment exceptions E3)", async () => {

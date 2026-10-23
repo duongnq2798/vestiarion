@@ -5,7 +5,7 @@ import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { decisionEscalationEmail, type EscalationItem } from "../email/decision-escalation";
 import { emailSettingsFromEnv, sendEmail } from "../email/send";
-import { decideByOf, whoCanAct } from "../exceptions";
+import { decideByOf, decideByReached, whoCanAct } from "../exceptions";
 import { chainModes } from "../circle";
 import { membersLeftOut } from "../new-payee";
 import { firstPaymentFrom, loadNewPayeeFacts } from "../new-payee-facts";
@@ -82,15 +82,16 @@ export async function escalationStart(today: string): Promise<string | null> {
 }
 
 /**
- * The waiting payables past their decide-by day today, each with that day; with `from`, only a day on or after it. In
- * scope.
+ * The waiting payables past their decide-by day today, or on the last day before a late fee (`decideByReached`), each with
+ * that day; with `from`, only a day on or after it. In scope.
  */
 export async function pastDecideBy(
   now: Date = new Date(),
   from?: string
 ): Promise<Array<{ id: string; createdBy: string | null; counterpartyId: string; address: string | null; item: EscalationItem }>> {
   const today = now.toISOString().slice(0, 10);
-  // With each bill's late fee, where migration 0141 has run: past its due date, a bill waits for the day before it (LF5).
+  // With each bill's late fee, where migration 0141 has run: past its due date, a bill with days before its fee is told on
+  // the last of them (LF5).
   const rows = unwrap(
     await readWithLateFee((lateFee) =>
       db()
@@ -103,7 +104,9 @@ export async function pastDecideBy(
   ) as unknown as WaitingRow[];
   return rows.flatMap((row) => {
     const decideBy = decideByOf({ dueDate: row.due_date, discount: invoiceDiscount(row), lateFee: invoiceLateFee(row), currency: row.currency }, today);
-    if (decideBy.day >= today || (from !== undefined && decideBy.day < from)) return [];
+    // The last day before a late fee is told on the day itself, while paying still avoids the fee (LF5).
+    if (!decideByReached(decideBy, today) || (from !== undefined && decideBy.day < from)) return [];
+    const fee = decideBy.reason === "late_fee" ? decideBy.lateFee : undefined;
     return [
       {
         id: row.id,
@@ -117,6 +120,7 @@ export async function pastDecideBy(
           status: row.status,
           decideBy: decideBy.day,
           discount: decideBy.reason === "discount",
+          ...(fee ? { lateFee: { startsOn: fee.startsOn, rate: fee.rate, started: fee.started } } : {}),
         },
       },
     ];
