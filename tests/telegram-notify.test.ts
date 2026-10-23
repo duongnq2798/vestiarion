@@ -6,8 +6,9 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { withOrg } from "@/lib/dal/scope";
 import type { TelegramResult } from "@/lib/telegram/client";
+import { plainText } from "@/lib/telegram/messages";
 import { sendAgentDecisions } from "@/lib/telegram/notify";
-import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
+import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { fakeTelegram, type TelegramCall } from "./support/fake-telegram";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 
@@ -17,9 +18,10 @@ import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
  * that blocked the bot is disconnected; a message Telegram refuses to parse is sent once as plain text, then passed.
  */
 
-const { readActivityMock } = vi.hoisted(() => ({ readActivityMock: vi.fn() }));
+const { readActivityMock, usdcValueMock } = vi.hoisted(() => ({ readActivityMock: vi.fn(), usdcValueMock: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/agent-activity-read", () => ({ readAgentActivity: readActivityMock }));
+vi.mock("@/lib/agent/second-approval", () => ({ usdcValueOfLatestDecision: usdcValueMock }));
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
 const SETTINGS = { token: "123456:AAH-secret-bot-token", webhookSecret: "s3cret_webhook-value-0123", username: "vestiarion_bot" };
@@ -40,10 +42,19 @@ const PAID: ActivityItem = {
 const activity = (items: ActivityItem[], through: number): AgentActivity => ({ running: null, head: through, lastCycleAt: null, items, through });
 
 let links: Array<ReturnType<typeof linkRow>> = [];
+let invoices: Array<Record<string, unknown>> = [];
+let invoicesReply: FakeReply | null = null;
+let policy: Array<Record<string, unknown>> = [];
+let policyReply: FakeReply | null = null;
 
 beforeEach(() => {
   links = [];
+  invoices = [];
+  invoicesReply = null;
+  policy = [];
+  policyReply = null;
   readActivityMock.mockReset();
+  usdcValueMock.mockReset();
 });
 
 function stage(answer?: (call: TelegramCall) => TelegramResult<unknown>) {
@@ -53,6 +64,8 @@ function stage(answer?: (call: TelegramCall) => TelegramResult<unknown>) {
     if (sent.path === "/rest/v1/telegram_links" && sent.method === "GET") return { body: links };
     if (sent.path === "/rest/v1/telegram_links" && sent.method === "DELETE") return { body: [{ id: sent.params.get("id")?.slice(3) }] };
     if (sent.path === "/rest/v1/rpc/append_ledger_entry") return { body: APPENDED_LEDGER_ROW };
+    if (sent.path === "/rest/v1/invoices") return invoicesReply ?? { body: invoices };
+    if (sent.path === "/rest/v1/approval_policies") return policyReply ?? { body: policy };
     return { body: [] };
   });
   const run = (settings: typeof SETTINGS | null = SETTINGS) =>
@@ -148,6 +161,157 @@ describe("sendAgentDecisions", () => {
 
     expect(telegram.calls.filter((call) => call.method === "sendMessage").map((call) => call.args[0])).toEqual([102]);
     expect(cursorMoves()).toEqual([["l2", 57]]);
+  });
+});
+
+const ORIGIN = "https://www.vestiarion.xyz";
+const INVOICE = (n: number) => `1b6c1c9e-4a4f-4a7e-9b1e-${String(n).padStart(12, "0")}`;
+const stopped = (seq: number, n: number): ActivityItem => ({
+  seq, text: `Held Vendor ${n} 120.00 USDC for you.`, detail: "The model's own words on it.", tone: "stopped", path: `/approvals#payable-${INVOICE(n)}`,
+  pathLabel: "Decide in Approvals", txHash: null, txUrl: null, network: "arc-testnet", invoiceId: INVOICE(n),
+});
+/** Held in shadow mode for a person's verdict: the activity gives it no `invoiceId`. */
+const VERDICT: ActivityItem = {
+  seq: 58, text: "Decided to pay Vendor 9 120.00 USDC; it waits for your verdict in shadow mode.", detail: null, tone: "stopped", path: `/approvals#payable-${INVOICE(9)}`,
+  pathLabel: "Give your verdict", txHash: null, txUrl: null, network: "arc-testnet",
+};
+const invoice = (n: number, fields: Record<string, unknown> = {}) => ({
+  id: INVOICE(n), amount: "120.00", currency: "USDC", status: "held", direction: "payable", agent_reasoning: "The invoice has no purchase order. It waits for a person.",
+  counterparties: { name: `Vendor ${n}` }, ...fields,
+});
+const review = (n: number) => `<a href="${ORIGIN}/o/acme/approvals#payable-${INVOICE(n)}">Review</a>`;
+
+describe("the bills waiting for approval (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG2)", () => {
+  it("tells the bills still held, flagged or waiting for details in one section of the decisions message, in one send", async () => {
+    links = [linkRow("l1", 101, 40)];
+    readActivityMock.mockResolvedValue(activity([PAID, stopped(53, 1), stopped(54, 2), stopped(55, 3), stopped(56, 4), VERDICT], 60));
+    invoices = [
+      invoice(1),
+      invoice(2, { status: "flagged", amount: "75.5", currency: "EURC" }),
+      invoice(3, { status: "awaiting_info" }),
+      // Decided since the agent held it: no longer waiting.
+      invoice(4, { status: "paid" }),
+    ];
+    const { telegram, run, cursorMoves } = stage();
+
+    expect(await run()).toEqual([{ domain: "system", message: "Told 1 Telegram chat what the agent decided" }]);
+    expect(telegram.calls.filter((call) => call.method === "sendMessage")).toHaveLength(1);
+    const text = telegram.texts()[0];
+    const lines = text.split("\n");
+    expect(lines[0]).toBe("<b>Acme</b> · the agent decided 6 things");
+    expect(lines.slice(-5)).toEqual([
+      "3 bills wait for approval:",
+      `⏸ <b>120.00 USDC</b> · Vendor 1 · held: The invoice has no purchase order. · ${review(1)}`,
+      `⏸ <b>75.50 EURC</b> · Vendor 2 · flagged: The invoice has no purchase order. · ${review(2)}`,
+      `⏸ <b>120.00 USDC</b> · Vendor 3 · waiting for details: The invoice has no purchase order. · ${review(3)}`,
+      "Opening a link never approves anything.",
+    ]);
+    expect(text).toContain("✅ Paid Centronex 0.35 USDC");
+    // The bill paid since is told as the decision it was; the verdict hold keeps its own block.
+    expect(text).toContain("⏸ Held Vendor 4 120.00 USDC for you.");
+    expect(text).toContain(`<a href="${ORIGIN}/o/acme/approvals#payable-${INVOICE(9)}">Give your verdict</a>`);
+    for (const n of [1, 2, 3]) expect(text).not.toContain(`Held Vendor ${n}`);
+    expect(cursorMoves()).toEqual([["l1", 60]]);
+  });
+
+  it("reads the bills once for chats at the same cursor, in one query each, and the rules once in the stage", async () => {
+    links = [linkRow("l1", 101, 40), linkRow("l2", 102, 40), linkRow("l3", 103, 30)];
+    readActivityMock.mockImplementation(async (since: number) => activity(since === 30 ? [stopped(35, 5), stopped(53, 1)] : [stopped(53, 1), stopped(54, 2)], 60));
+    invoices = [invoice(1), invoice(2), invoice(5)];
+    policy = [{ two_approvals_above: "500", accountant_cosigns: false }];
+    const { fake, telegram, run } = stage();
+
+    await run();
+
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/invoices").map((sent) => sent.params.get("id"))).toEqual([
+      `in.(${INVOICE(1)},${INVOICE(2)})`,
+      `in.(${INVOICE(5)},${INVOICE(1)})`,
+    ]);
+    // The figure, then the co-sign switch, once for the stage.
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/approval_policies")).toHaveLength(2);
+    expect(telegram.texts().map((text) => text.split("\n").filter((line) => line.startsWith("⏸ <b>")).length)).toEqual([2, 2, 2]);
+  });
+
+  it("reads neither bills nor rules when the agent stopped none", async () => {
+    links = [linkRow("l1", 101, 40)];
+    readActivityMock.mockResolvedValue(activity([PAID, VERDICT], 60));
+    const { fake, telegram, run } = stage();
+
+    await run();
+
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/invoices" || sent.path === "/rest/v1/approval_policies")).toEqual([]);
+    expect(telegram.texts()[0]).not.toContain("Opening a link never approves anything.");
+  });
+
+  it("says a bill above the figure needs two approvals, weighing a EURC bill by its USDC value, and that an accountant can co-sign", async () => {
+    links = [linkRow("l1", 101, 40)];
+    readActivityMock.mockResolvedValue(activity([stopped(53, 1), stopped(54, 2), stopped(55, 3)], 60));
+    invoices = [invoice(1, { amount: "900" }), invoice(2, { currency: "EURC", amount: "450" }), invoice(3, { amount: "20" })];
+    policy = [{ two_approvals_above: "500", accountant_cosigns: true }];
+    usdcValueMock.mockResolvedValue(520);
+    const { telegram, run } = stage();
+
+    await run();
+
+    expect(usdcValueMock).toHaveBeenCalledWith(INVOICE(2));
+    const lines = telegram.texts()[0].split("\n").filter((line) => line.startsWith("⏸ <b>"));
+    expect(lines).toEqual([
+      `⏸ <b>900.00 USDC</b> · Vendor 1 · held: The invoice has no purchase order. · needs two approvals, an accountant can co-sign · ${review(1)}`,
+      `⏸ <b>450.00 EURC</b> · Vendor 2 · held: The invoice has no purchase order. · needs two approvals, an accountant can co-sign · ${review(2)}`,
+      `⏸ <b>20.00 USDC</b> · Vendor 3 · held: The invoice has no purchase order. · ${review(3)}`,
+    ]);
+  });
+
+  it("sends the same words as plain text when Telegram refuses the HTML, each Review link with its address", async () => {
+    links = [linkRow("l1", 101, 40)];
+    readActivityMock.mockResolvedValue(activity([stopped(53, 1)], 60));
+    invoices = [invoice(1, { counterparties: { name: "Puka & Co" } })];
+    const { telegram, run, cursorMoves } = stage(() => ({ ok: false, status: 400, description: "Bad Request: can't parse entities" }));
+
+    await run();
+
+    const sends = telegram.calls.filter((call) => call.method === "sendMessage");
+    expect(sends).toHaveLength(2);
+    expect(sends[1].args[2]).toEqual({ plain: true });
+    const plain = String(sends[1].args[1]);
+    expect(plain).toBe(plainText(String(sends[0].args[1])));
+    expect(plain).toContain(`⏸ 120.00 USDC · Puka & Co · held: The invoice has no purchase order. · Review (${ORIGIN}/o/acme/approvals#payable-${INVOICE(1)})`);
+    expect(plain.endsWith("\nOpening a link never approves anything.")).toBe(true);
+    expect(plain).not.toContain("<a ");
+    expect(cursorMoves()).toEqual([["l1", 60]]);
+  });
+
+  it("still tells the decisions, each stopped bill in its own block, when the bills cannot be read", async () => {
+    links = [linkRow("l1", 101, 40)];
+    readActivityMock.mockResolvedValue(activity([stopped(53, 1)], 60));
+    invoicesReply = { status: 500, body: { code: "XX000", message: "boom" } };
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { telegram, run, cursorMoves } = stage();
+
+    expect(await run()).toHaveLength(1);
+
+    expect(telegram.texts()[0]).toContain(`⏸ Held Vendor 1 120.00 USDC for you.\n<i>The model's own words on it.</i>\n<a href="${ORIGIN}/o/acme/approvals#payable-${INVOICE(1)}">Decide in Approvals</a>`);
+    expect(telegram.texts()[0]).not.toContain("wait for approval");
+    expect(cursorMoves()).toEqual([["l1", 60]]);
+    expect(String(error.mock.calls[0])).toContain("telegram: waiting bills not read");
+    error.mockRestore();
+  });
+
+  it("still tells the bills when the rules cannot be read, without saying what a bill needs", async () => {
+    links = [linkRow("l1", 101, 40)];
+    readActivityMock.mockResolvedValue(activity([stopped(53, 1)], 60));
+    invoices = [invoice(1, { amount: "900" })];
+    policyReply = { status: 500, body: { code: "XX000", message: "boom" } };
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { telegram, run, cursorMoves } = stage();
+
+    await run();
+
+    expect(telegram.texts()[0]).toContain(`⏸ <b>900.00 USDC</b> · Vendor 1 · held: The invoice has no purchase order. · ${review(1)}`);
+    expect(telegram.texts()[0]).not.toContain("two approvals");
+    expect(cursorMoves()).toEqual([["l1", 60]]);
+    expect(String(error.mock.calls[0])).toContain("telegram: the figure for two approvals was not read");
+    error.mockRestore();
   });
 });
 

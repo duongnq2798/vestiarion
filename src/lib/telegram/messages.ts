@@ -1,9 +1,10 @@
 import type { ActivityItem } from "../agent-activity";
 import { networkProfile } from "../network";
-import { orgHref } from "../auth/org-paths";
+import { approvalAnchor, orgHref } from "../auth/org-paths";
 import { READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
+import type { WaitingNotice, WaitingNoticeEntry } from "../notifications/waiting-notice";
 import type { TodayFacts, WaitingFact } from "./today";
 
 /**
@@ -42,6 +43,32 @@ export function clip(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
+/**
+ * Invisible format characters (Unicode's Cf): bidi embeddings, overrides and isolates, the marks that set direction,
+ * zero-width spaces and joiners, the byte-order mark and the soft hyphen. An override in a payee's name would show the
+ * rest of a bill's line reversed, so its Review link could read as another bill's.
+ */
+const FORMAT = /\p{Cf}/gu;
+/** Half of a surrogate pair standing alone: in a `u` pattern a whole pair is one character, and never matches. */
+const LONE_SURROGATE = /\p{Cs}/gu;
+/** How long a payee's or a payment's name is shown. */
+const NAME_MAX = 100;
+
+/**
+ * A value as the bills waiting for approval and /waiting show it
+ * (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG4). A payee's name and the agent's reasons come
+ * from documents and emails anyone can send, so invisible format characters and half of an emoji are removed, as
+ * Discord's messages remove them, and every newline, control character and run of whitespace becomes one space, so a
+ * value stays on its line. A wallet address is shortened before the cut, so no cut leaves most of one; the value is
+ * clipped to `max` UTF-16 units, never between the two halves of one character, and escaped last, so no cut falls
+ * inside an entity.
+ */
+export function telegramText(value: string, max: number = ITEM_DETAIL_MAX): string {
+  const plain = shortenAddresses(value.replace(LONE_SURROGATE, "").replace(FORMAT, "").replace(/[\s\p{Cc}]+/gu, " ").trim());
+  if (plain.length <= max) return escapeHtml(plain);
+  return escapeHtml(`${plain.slice(0, Math.max(0, max - 1)).replace(LONE_SURROGATE, "").trimEnd()}…`);
+}
+
 const link = (href: string, label: string) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
 const bold = (text: string) => `<b>${escapeHtml(text)}</b>`;
 
@@ -77,25 +104,78 @@ function decisionBlock(item: ActivityItem, slug: string, origin: string): string
   return lines.join("\n");
 }
 
+/** Said once under the bills waiting for approval, as Discord's notice says it: a link opens a bill, and decides nothing. */
+export const NEVER_APPROVES = "Opening a link never approves anything.";
+
+/** How a waiting bill's status reads, as Discord's notice and /waiting say it. */
+const WAITING_STATUS: Record<string, string> = { held: "held", flagged: "flagged", awaiting_info: "waiting for details" };
+
+/**
+ * The bills among a chat's decisions that still wait for approval (TG2): the notice that lists them, and every bill it
+ * stands for, listed or counted, whose decisions' blocks the section replaces.
+ */
+export interface WaitingSection {
+  notice: WaitingNotice;
+  invoiceIds: ReadonlySet<string>;
+}
+
+/** One bill, on one line: how much, to whom, why, what it needs, and its card on Approvals, to review it. */
+function billLine(entry: WaitingNoticeEntry, slug: string, origin: string): string {
+  const parts = [`<b>${telegramText(entry.amountText, 60)}</b>`, telegramText(entry.payee, NAME_MAX)];
+  parts.push(entry.reason ? `${WAITING_STATUS[entry.status]}: ${telegramText(entry.reason)}` : WAITING_STATUS[entry.status]);
+  if (entry.twoApprovals) parts.push(entry.cosign ? "needs two approvals, an accountant can co-sign" : "needs two approvals");
+  parts.push(link(orgUrl(origin, slug, entry.reviewPath), "Review"));
+  return `${MARK.stopped}${parts.join(" · ")}`;
+}
+
+/**
+ * The bills waiting for approval, as a section of the decisions message: a line each, as many of the listed ones as fit
+ * in `room`, then how many more wait in Approvals, and once that opening a link approves nothing. A bill that would pass
+ * the room is counted among the more, never cut.
+ */
+function waitingSection(notice: WaitingNotice, slug: string, origin: string, room: number): string {
+  const heading = `${notice.total === 1 ? "1 bill waits" : `${notice.total} bills wait`} for approval:`;
+  const more = (n: number) => `…and ${n} more in ${link(orgUrl(origin, slug, "/approvals"), "Approvals")}.`;
+  // Room kept for the closing lines, whatever is left out.
+  const closing = `\n${more(notice.total)}\n${NEVER_APPROVES}`.length;
+  let section = heading;
+  let shown = 0;
+  for (const entry of notice.entries) {
+    const line = `\n${billLine(entry, slug, origin)}`;
+    if (section.length + line.length + closing > room) break;
+    section += line;
+    shown += 1;
+  }
+  const left = notice.total - shown;
+  return `${section}${left > 0 ? `\n${more(left)}` : ""}\n${NEVER_APPROVES}`;
+}
+
 /**
  * The agent's decisions in one workspace since the chat was last told (R8): one block each, with its reasons, its
- * transaction and the page where a person sees or handles it. Decisions that would pass the length limit are left to
- * the console, and the last line says how many.
+ * transaction and the page where a person sees or handles it. The bills among them still waiting for approval are told
+ * once, in a section at the end with a Review link each, in place of their decisions' blocks; the section has the first
+ * claim on the room, since it is what a person acts on. Decisions that would pass the length limit are left to the
+ * console, and a line says how many.
  */
-export function decisionsMessage(workspace: { name: string; slug: string }, items: ActivityItem[], origin: string): string {
+export function decisionsMessage(workspace: { name: string; slug: string }, items: ActivityItem[], origin: string, waiting: WaitingSection | null = null): string {
   const header = `${bold(workspace.name)} · the agent decided ${items.length === 1 ? "1 thing" : `${items.length} things`}`;
   const more = (n: number) => `…and ${n} more in ${link(orgUrl(origin, workspace.slug, "/console"), "the console")}.`;
   const roomForMore = more(items.length).length + 2;
+  const listed = waiting && waiting.notice.total > 0 ? waiting : null;
+  const blocks = listed ? items.filter((item) => !(item.invoiceId && listed.invoiceIds.has(item.invoiceId))) : items;
+  const section = listed
+    ? `\n\n${waitingSection(listed.notice, workspace.slug, origin, MESSAGE_MAX - header.length - 2 - (blocks.length > 0 ? roomForMore : 0))}`
+    : "";
   let message = header;
   let shown = 0;
-  for (const item of items) {
+  for (const item of blocks) {
     const block = `\n\n${decisionBlock(item, workspace.slug, origin)}`;
-    const last = shown === items.length - 1;
-    if (message.length + block.length + (last ? 0 : roomForMore) > MESSAGE_MAX) break;
+    const last = shown === blocks.length - 1;
+    if (message.length + block.length + section.length + (last ? 0 : roomForMore) > MESSAGE_MAX) break;
     message += block;
     shown += 1;
   }
-  return shown < items.length ? `${message}\n\n${more(items.length - shown)}` : message;
+  return `${shown < blocks.length ? `${message}\n\n${more(blocks.length - shown)}` : message}${section}`;
 }
 
 /** A UTC day as "Oct 5". */
@@ -132,23 +212,40 @@ export function todayMessage(workspaceName: string, facts: TodayFacts, consoleUr
   return clip(lines.join("\n"), MESSAGE_MAX);
 }
 
-const WAITING_STATUS: Record<string, string> = { held: "held", flagged: "flagged", awaiting_info: "waiting for information" };
+/** One payment a person must decide, for /waiting: what, how much, why it waits, and where to decide it. */
+function waitingBlock(fact: WaitingFact, origin: string, slug: string): string {
+  // A payable is reviewed on its card in Approvals, as the decisions message and Discord link it (TG3); one held for a
+  // person's verdict is settled by giving one, in Vestiarion (shadow mode S4).
+  const where =
+    fact.kind === "payable"
+      ? link(orgUrl(origin, slug, `/approvals#${approvalAnchor(fact.id)}`), fact.forVerdict ? "Give your verdict" : "Review")
+      : link(orgUrl(origin, slug, "/contractors"), "Contractors");
+  const why = fact.reason ? `: ${telegramText(fact.reason)}` : "";
+  const state = fact.forVerdict ? "waits for your verdict" : (WAITING_STATUS[fact.status] ?? telegramText(fact.status, 40));
+  return `⏸ ${telegramText(fact.name, NAME_MAX)} ${telegramText(amountText(fact.amount, fact.currency), 60)} · ${state}${why}\n${where}`;
+}
 
-/** /waiting (R9, R11): each payment a person must decide, why the agent stopped it, and where to decide it. */
+/**
+ * /waiting (R9, R11): each payment a person must decide, why the agent stopped it, and where to decide it, then once
+ * that opening a link approves nothing. A payment that would pass the length limit is counted, never cut, so no link is
+ * cut in two.
+ */
 export function waitingMessage(workspaceName: string, facts: WaitingFact[], origin: string, slug: string): string {
-  if (facts.length === 0) return `${bold(workspaceName)} · Nothing waits for a person.`;
-  const lines = [`${bold(workspaceName)} · ${facts.length === 1 ? "1 payment waits" : `${facts.length} payments wait`} for a person`];
+  const name = `<b>${telegramText(workspaceName, NAME_MAX)}</b>`;
+  if (facts.length === 0) return `${name} · Nothing waits for a person.`;
+  const more = (n: number) => `…and ${n} more in ${link(orgUrl(origin, slug, "/console"), "the console")}.`;
+  // Room kept for the closing lines, whatever is left out.
+  const closing = `\n\n${more(facts.length)}\n\n${NEVER_APPROVES}`.length;
+  let message = `${name} · ${facts.length === 1 ? "1 payment waits" : `${facts.length} payments wait`} for a person`;
+  let shown = 0;
   for (const fact of facts) {
-    // A payment held for a person's verdict is settled by giving one, in Vestiarion (shadow mode S4).
-    const where =
-      fact.kind === "payable"
-        ? link(orgUrl(origin, slug, `/approvals#payable-${fact.id}`), fact.forVerdict ? "Give your verdict" : "Decide in Approvals")
-        : link(orgUrl(origin, slug, "/contractors"), "Contractors");
-    const why = fact.reason ? `: ${escapeHtml(clip(fact.reason, ITEM_DETAIL_MAX))}` : "";
-    const state = fact.forVerdict ? "waits for your verdict" : (WAITING_STATUS[fact.status] ?? escapeHtml(fact.status));
-    lines.push("", `⏸ ${escapeHtml(fact.name)} ${escapeHtml(amountText(fact.amount, fact.currency))} · ${state}${why}`, where);
+    const block = `\n\n${waitingBlock(fact, origin, slug)}`;
+    if (message.length + block.length + closing > MESSAGE_MAX) break;
+    message += block;
+    shown += 1;
   }
-  return clip(lines.join("\n"), MESSAGE_MAX);
+  const left = facts.length - shown;
+  return `${message}${left > 0 ? `\n\n${more(left)}` : ""}\n\n${NEVER_APPROVES}`;
 }
 
 /** The ledger's verification, as the console's Verify hash chain says it (R9). */

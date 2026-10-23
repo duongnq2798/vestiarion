@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { todayMessage, waitingMessage } from "@/lib/telegram/messages";
-import { todayFacts, waitingFacts, type TodayFacts } from "@/lib/telegram/today";
+import { MESSAGE_MAX, todayMessage, waitingMessage } from "@/lib/telegram/messages";
+import { todayFacts, waitingFacts, type TodayFacts, type WaitingFact } from "@/lib/telegram/today";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -114,10 +114,53 @@ describe("waitingFacts and waitingMessage", () => {
     ]);
 
     const message = waitingMessage("Acme", facts, ORIGIN, "acme");
-    expect(message).toContain("Jiren 10.00 USDC");
-    expect(message).toContain('<a href="https://www.vestiarion.xyz/o/acme/approvals#payable-p2">');
-    expect(message).toContain('<a href="https://www.vestiarion.xyz/o/acme/contractors">');
+    // A payable's card on Approvals is reviewed, as Discord's notice and the decisions message link it; a milestone keeps
+    // its own page (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG3).
+    expect(message.split("\n")).toEqual([
+      "<b>Acme</b> · 2 payments wait for a person",
+      "",
+      "⏸ Jiren 10.00 USDC · held: Over the 5 USDC limit for Jiren.",
+      '<a href="https://www.vestiarion.xyz/o/acme/approvals#payable-p2">Review</a>',
+      "",
+      "⏸ Mr Pop: Landing page 2.00 USDC · held: Its evidence link is not a merged pull request.",
+      '<a href="https://www.vestiarion.xyz/o/acme/contractors">Contractors</a>',
+      "",
+      "Opening a link never approves anything.",
+    ]);
     expect(message).not.toContain("guardrail");
+  });
+
+  const fact = (id: string, fields: Partial<WaitingFact> = {}): WaitingFact => ({
+    kind: "payable", id, name: "Jiren", amount: 10, currency: "USDC", status: "held", reason: "Over the 5 USDC limit for Jiren.", ...fields,
+  });
+
+  it("says a payable asked for details waits for details, as Discord and the decisions message say it", () => {
+    const message = waitingMessage("Acme", [fact("p3", { status: "awaiting_info", reason: "It needs a purchase order." })], ORIGIN, "acme");
+    expect(message).toContain("⏸ Jiren 10.00 USDC · waiting for details: It needs a purchase order.");
+    expect(message).not.toContain("waiting for information");
+    expect(message).toContain('<a href="https://www.vestiarion.xyz/o/acme/approvals#payable-p3">Review</a>');
+  });
+
+  it("shows names and reasons as plain text: escaped, without hidden direction or zero-width characters", () => {
+    const rlo = String.fromCodePoint(0x202e);
+    const zwsp = String.fromCodePoint(0x200b);
+    const message = waitingMessage("A&B", [fact("p2", { name: `Puka ${rlo}& Co`, reason: `Over the <b>limit</b> for Ji${zwsp}ren.` })], ORIGIN, "acme");
+    expect(message).toContain("<b>A&amp;B</b> · 1 payment waits for a person");
+    expect(message).toContain("⏸ Puka &amp; Co 10.00 USDC · held: Over the &lt;b&gt;limit&lt;/b&gt; for Jiren.");
+    expect(message).not.toContain(rlo);
+    expect(message).not.toContain(zwsp);
+  });
+
+  it("stays under Telegram's limit with long reasons, cutting no link: what does not fit is counted, and the last line stays", () => {
+    const facts = Array.from({ length: 10 }, (_, index) => fact(`p${index}`, { name: `Vendor ${index} ${"y".repeat(150)}`, reason: `${"z".repeat(400)}.` }));
+    const message = waitingMessage("Acme", facts, ORIGIN, "acme");
+    expect(message.length).toBeLessThanOrEqual(MESSAGE_MAX);
+    const shown = message.split("\n").filter((line) => line.startsWith("⏸ ")).length;
+    expect(shown).toBeGreaterThan(0);
+    expect(shown).toBeLessThan(10);
+    expect(message.match(/<a href="[^"]*">Review<\/a>/g)).toHaveLength(shown);
+    expect(message).toContain(`…and ${10 - shown} more in <a href="https://www.vestiarion.xyz/o/acme/console">the console</a>.`);
+    expect(message.endsWith("\n\nOpening a link never approves anything.")).toBe(true);
   });
 
   it("says a payment held in shadow mode waits for a verdict, and links to give it (review minor 7)", async () => {
