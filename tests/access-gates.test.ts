@@ -74,13 +74,13 @@ describe("every /o/[slug] page", () => {
 });
 
 describe("every server action", () => {
-  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, a customer's statement, a supplier's answer to an early-payment offer, a customer's answer to an early-payment discount, a payee's answer about a change to its address, a vendor's document sent for a bill, the founder dashboard, the team's screening check, and a studio's guided setup request", () => {
+  it("lives in src/app/actions, except sign-in, accepting an invitation, creating a first workspace, your own account, a payee's own address, a client's payment check, a customer's statement, a supplier's answer to an early-payment offer, a customer's answer to an early-payment discount, a payee's answer about a change to its address, a vendor's document sent for a bill, the founder dashboard, the team's screening check, a studio's guided setup request, an accountant's client links, and a client opening a workspace from one", () => {
     const withDirective = walk(path.join(ROOT, "src")).filter(
       (file) => /\.(ts|tsx)$/.test(file) && /^\s*["']use server["']/.test(read(file))
     );
     const outside = withDirective.map(rel).filter((file) => !file.startsWith("src/app/actions/"));
     expect(outside.sort()).toEqual([
-      "src/app/account/actions.ts", "src/app/address-change/[token]/actions.ts", "src/app/admin/growth/actions.ts", "src/app/admin/screening/actions.ts", "src/app/discount/[token]/actions.ts", "src/app/documents/[token]/actions.ts", "src/app/invite/actions.ts", "src/app/login/actions.ts", "src/app/more-time/[token]/actions.ts",
+      "src/app/account/actions.ts", "src/app/accountant/actions.ts", "src/app/address-change/[token]/actions.ts", "src/app/admin/growth/actions.ts", "src/app/admin/screening/actions.ts", "src/app/discount/[token]/actions.ts", "src/app/documents/[token]/actions.ts", "src/app/invite/actions.ts", "src/app/join/actions.ts", "src/app/login/actions.ts", "src/app/more-time/[token]/actions.ts",
       "src/app/offer/[token]/actions.ts", "src/app/onboarding/actions.ts", "src/app/pay/[token]/actions.ts", "src/app/payee/[token]/actions.ts", "src/app/statement/[token]/actions.ts", "src/app/studios/actions.ts",
     ]);
   });
@@ -243,6 +243,36 @@ describe("every invite action", () => {
 
   it.each(actions.map((action) => [action.name, action.body]))("%s awaits getSessionUser first", (_name, body) => {
     expect(awaitedNames(body)[0]).toBe("getSessionUser");
+  });
+});
+
+describe("every client link action", () => {
+  // An accountant's client links belong to no workspace until one is used (accountant client links AC1, AC3): making
+  // and revoking one, and a client opening their workspace from one, happen before there is a membership to authorize
+  // against, so the gate is the session, as for accepting an invitation. Who may, and the link itself, are checked by
+  // migration 0143's functions, for the signed-in person only.
+  const FILES = [path.join(ROOT, "src", "app", "accountant", "actions.ts"), path.join(ROOT, "src", "app", "join", "actions.ts")];
+  const actions = FILES.flatMap((file) => (existsSync(file) ? exportedAsyncFunctions(read(file)).map((fn) => ({ label: `${rel(file)} ${fn.name}`, body: fn.body })) : []));
+
+  it("are making and revoking a link, and opening a workspace from one", () => {
+    expect(actions.map((action) => action.label)).toEqual([
+      "src/app/accountant/actions.ts createClientLinkAction",
+      "src/app/accountant/actions.ts revokeClientLinkAction",
+      "src/app/join/actions.ts joinFromClientLinkAction",
+    ]);
+  });
+
+  it.each(actions.map((action) => [action.label, action.body]))("%s awaits getSessionUser first, and reads no user id from the form", (_label, body) => {
+    expect(awaitedNames(body)[0]).toBe("getSessionUser");
+    expect(body).toMatch(/const user = await getSessionUser\(\);\s+if \(!user\) return \{ ok: false, message: "Your session has ended\. Sign in again\." \};/);
+    expect(body).not.toMatch(/formData\.get\(["'](?:userId|user_id|actorId|accountantId|orgId)["']\)/);
+  });
+
+  it("opens the client's workspace on Arc testnet in shadow mode, whatever the form sent", () => {
+    const join = actions.find((action) => action.label.endsWith("joinFromClientLinkAction"))!.body;
+    expect(join).toMatch(/createWorkspace\(\{ userId: user\.id, name, network: "arc-testnet", via: CLIENT_LINK_VIA \}\)/);
+    expect(join).not.toMatch(/formData\.get\(["'](?:network|shadow)["']\)/);
+    expect(join).toContain("await startShadowModeAtCreation(slug)");
   });
 });
 

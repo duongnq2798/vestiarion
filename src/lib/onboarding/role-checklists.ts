@@ -6,7 +6,7 @@
  *   decision, the limits, then what paying on Arc needs. An admin follows it, and sees an owner's step as an owner's.
  * - An approver's (R2): open Approvals, read why a bill is held, then decide it or send it back.
  * - An accountant's (R3): open the accountant console, one workspace's queue in it, book one payment or apply one
- *   receipt, and download the month's hand-off.
+ *   receipt, and download the month's hand-off; and, optional, invite a client (accountant client links AC6).
  * - A viewer has none: there is nothing a viewer's first task changes.
  *
  * Pure: the pages read the facts (`./read`) and pass them in. Every step names the permission it takes, and a role's
@@ -77,9 +77,10 @@ function checklist(role: ChecklistRole, title: string, guide: GettingStarted["gu
   return {
     role,
     title,
-    show: !dismissed && steps.some((step) => !step.done),
+    // An optional step neither keeps the checklist showing nor becomes the next one.
+    show: !dismissed && steps.some((step) => !step.done && !step.optional),
     steps,
-    next: steps.find((step) => !step.done)?.id ?? null,
+    next: steps.find((step) => !step.done && !step.optional)?.id ?? null,
     guide,
   };
 }
@@ -154,6 +155,11 @@ export interface AccountantChecklistInput {
   workspaceSlug: string;
   /** A booking waiting for this accountant to review, where there is one they may book: the bookings review. */
   bookHref?: string | null;
+  /**
+   * Whether one of this person's client links was used (accountant client links AC6). Absent where client links do not
+   * work yet (before migration 0143): no step.
+   */
+  clientInvited?: boolean;
   dismissed: boolean;
 }
 
@@ -204,6 +210,22 @@ export function accountantChecklist(input: AccountantChecklistInput): GettingSta
       ownerOnly: false,
       needs: null,
     },
+    // A person's own step, in no workspace: the link is theirs, so it takes no permission there.
+    ...(input.clientInvited === undefined
+      ? []
+      : [
+          {
+            id: "invite_client" as const,
+            title: "Invite a client",
+            body: "Send a client a link from Invite a client: they open their own workspace in shadow mode, with you in it as its accountant.",
+            path: "/",
+            href: "/accountant#invite-client-title",
+            done: input.clientInvited,
+            ownerOnly: false,
+            needs: null,
+            optional: true,
+          },
+        ]),
   ];
   return checklist("accountant", "Get started as an accountant", "accountants", steps, input.dismissed);
 }

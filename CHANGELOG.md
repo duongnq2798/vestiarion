@@ -14,6 +14,22 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **An accountant invites a client with one link.** On the accountant console, under **Invite a client**, someone who
+  is an accountant in at least one workspace makes a one-time link that works for 7 days, bound to the client's email
+  when one is given, and copies it from the page: it is shown once, and only its SHA-256 is kept. At most 10 open links
+  and 20 a day. The client opens it signed in, sees the accountant named by the address they sign in with and what an
+  accountant may do, names a workspace and ticks their consent: the workspace opens as theirs, on Arc testnet in shadow
+  mode, with the accountant already in it as accountant. A link bound to another address, the accountant's own, and an
+  expired, used or revoked one offer nothing. If the accountant cannot be added once the workspace exists, the client
+  keeps it and the console says so, with a link to Members. The console lists each link as open, used (with the
+  workspace's name while the accountant is still in it), expired or revoked, with **Revoke**; someone who is no longer
+  an accountant anywhere still sees their links while one is open, to revoke it, but cannot make a new one. The
+  accountant's checklist gains an optional **Invite a client** step. Starting a live slice offers to bring each
+  accountant along, ticked, and names by email any who could not be added. `org_created` carries
+  `via: "accountant_link"`, and the accountant's `member_joined` carries the link's id, or `via: "live_slice"`. The
+  founder dashboard counts workspaces from accountants. Needs migration 0143; before it runs, the console and the link's
+  page say client links are not available yet, and the live slice offers no accountant.
+
 - **Ask the vendor for a missing document.** In Settings, beside the payee lock, an owner sets **Ask vendors for missing
   documents** to off, shadow or on. On, when a bill waits for its purchase order or goods receipt and its vendor has a
   billing email, Vestiarion emails the vendor in the workspace's name a one-time link: the vendor's own invoice number,

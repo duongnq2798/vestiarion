@@ -145,6 +145,11 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
             detail={`Customer workspaces first reached from a page or email a business sent its supplier, payee or customer; ${metrics.fromLoop.activated} had a decision on a real bill.`}
           />
           <Tile
+            label="From accountants"
+            value={metrics.fromAccountants.workspaces}
+            detail={`Customer workspaces opened from an accountant's client link, with the accountant in them; ${metrics.fromAccountants.activated} had a decision on a real bill.`}
+          />
+          <Tile
             label="Nudged to finish setup"
             value={metrics.nudged.workspaces}
             detail={`Customer workspaces emailed once for their first bill or first verdict; ${metrics.nudged.cameBack} came back and did it after the email.`}

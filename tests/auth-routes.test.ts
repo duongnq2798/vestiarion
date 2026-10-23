@@ -38,6 +38,9 @@ describe("requiresSession", () => {
     ["/accountant", true],
     ["/accountants", false],
     ["/invite/x", true],
+    // An accountant's client link shows nothing before sign-in, as an invitation (accountant client links AC2).
+    ["/join/vxj_x", true],
+    ["/join", false],
     ["/", false],
     ["/login", false],
     ["/terms", false],
@@ -67,6 +70,10 @@ describe("loginRedirectFor", () => {
 
   it("sends a signed-out visitor of an invitation link to login, remembering the token", () => {
     expect(loginRedirectFor("/invite/x", "", false)).toBe("/login?next=%2Finvite%2Fx");
+  });
+
+  it("sends a signed-out visitor of an accountant's client link to login, remembering the link", () => {
+    expect(loginRedirectFor("/join/vxj_x", "", false)).toBe("/login?next=%2Fjoin%2Fvxj_x");
   });
 
   it("never redirects a public page", () => {

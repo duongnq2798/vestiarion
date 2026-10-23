@@ -182,6 +182,15 @@ describe("createWorkspace", () => {
     expect(result).toEqual({ orgId, slug: "northstar-studio" });
   });
 
+  it("says in org_created that an accountant's client link opened it, when it did (accountant client links AC3)", async () => {
+    const { fake, run } = workspaceFake();
+    await run(() => createWorkspace({ userId: USER, name: "Northstar Studio", network: "arc-testnet", via: "accountant_link" }));
+    const [created] = fake.requests.filter((request) => request.path === "/rest/v1/rpc/append_ledger_entry");
+    expect(created.body).toMatchObject({ p_action: "org_created", p_detail: { by: USER, slug: "northstar-studio", via: "accountant_link" } });
+    // Through the one create_org, as any workspace: there is no second copy of it.
+    expect(rpcBodies(fake.requests, "create_org")).toHaveLength(1);
+  });
+
   it("checks the slug before creating anything, and suffixes one already taken", async () => {
     const { fake, run } = workspaceFake({ takenSlugs: ["northstar-studio"] });
     const result = await run(() => createWorkspace({ userId: USER, name: "Northstar Studio", random: () => "beef" }));

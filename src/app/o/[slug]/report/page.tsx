@@ -31,7 +31,7 @@ import { workspaceNetwork } from "@/lib/workspace-network";
 import { buildReport } from "@/lib/workspace-report";
 import { LiveSliceStart } from "@/components/vx/LiveSliceStart";
 import { utcDay } from "@/lib/copy";
-import { readLiveSlice, sliceVendors } from "@/lib/live-slice";
+import { readLiveSlice, sliceAccountants, sliceVendors } from "@/lib/live-slice";
 import { readReportFacts } from "@/lib/workspace-report-read";
 import { shellStatus } from "@/lib/shell-status";
 
@@ -84,10 +84,19 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
           return null;
         })
       : null;
-    // Its opener is, at first, its only member: they get its link, and what went over until it is live. The same
-    // component before and after it opens, so the result replaces the form where it stood.
+    // Its opener owns it: they get its link, and what went over until it is live. The same component before and after
+    // it opens, so the result replaces the form where it stood.
     const opened = sliceRead?.[0] ?? null;
     const mine = opened?.by === access.user.id;
+    // The accountants an owner about to open it may bring along (accountant client links AC4); none before migration
+    // 0143. Best effort: a read that fails offers none, and the new workspace's Members invites them.
+    const accountants =
+      sliceRead && !opened && canAnswer
+        ? await sliceAccountants(access.membership.orgId).catch((error: unknown) => {
+            console.error("report: accountants not read", error instanceof Error ? error.message : error);
+            return [];
+          })
+        : [];
     const slice = sliceRead
       ? {
           opened: opened ? { name: opened.name, slug: opened.slug, live: opened.live, opened: utcDay(opened.startedAt), vendors: opened.vendors, canOpen: mine } : null,
@@ -97,6 +106,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
                 orgSlug={slug}
                 vendors={sliceRead[1]}
                 canStart={canAnswer}
+                accountants={accountants}
                 opened={opened ? { name: opened.name, slug: opened.slug, vendors: opened.vendors, skipped: opened.skipped } : null}
               />
             ),

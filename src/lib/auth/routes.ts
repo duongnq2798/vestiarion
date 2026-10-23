@@ -13,7 +13,8 @@ export function requiresSession(pathname: string): boolean {
     pathname === "/accountant" ||
     pathname === "/o" ||
     pathname.startsWith("/o/") ||
-    pathname.startsWith("/invite/")
+    pathname.startsWith("/invite/") ||
+    pathname.startsWith("/join/")
   );
 }
 

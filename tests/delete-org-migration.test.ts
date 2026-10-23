@@ -39,7 +39,7 @@ const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
   "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes", "github_installations", "github_bounties",
   "growth_leads", "growth_revenue", "org_attribution", "accounting_tokens", "asana_webhooks",
-  "extension_grants", "extension_auth_codes", "discord_webhooks",
+  "extension_grants", "extension_auth_codes", "discord_webhooks", "accountant_client_links",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -211,6 +211,11 @@ async function populated(slug: string): Promise<string> {
   await db.query(
     "insert into public.discord_webhooks (org_id, webhook_id, channel_id, name, webhook_url_enc, connected_by) values ($1, '1234567890123456789', '3234567890123456789', 'Finance', $2::jsonb, $3)",
     [orgId, JSON.stringify(ENVELOPE), member]
+  );
+  // The accountant's client link that opened it forgets it (0143): the link stays theirs, used.
+  await db.query(
+    "insert into public.accountant_client_links (created_by, token_hash, expires_at, used_at, org_id) values ($1, $2, now() + interval '7 days', now(), $3)",
+    [member, crypto.randomBytes(32).toString("hex"), orgId]
   );
   await closeCycles(orgId);
   return orgId;

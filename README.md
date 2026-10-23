@@ -399,7 +399,8 @@ run in production, with its ledger entries and transactions.
   an owner or admin can share a live copy by a revocable link, with suppliers as labels and amounts hidden if they
   choose.
 - **Workspaces and members** — per-network workspaces, invitations, five roles, per-member notifications; an
-  accountant console across the businesses an outside accountant looks after.
+  accountant console across the businesses an outside accountant looks after, and a one-time link an accountant sends a
+  new client, who opens their own workspace in shadow mode with the accountant already in it.
 - **When a payment does not settle** — each exceptional state says who acts, what Vestiarion already did and what to do
   next; paying again always looks for the earlier transfer first.
 - **Why it was paid** — one page per payment, link by link from the purchase order to the receipt, each fact marked

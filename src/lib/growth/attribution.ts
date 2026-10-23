@@ -7,13 +7,22 @@
  * utm_campaign, utm_content, utm_term or ref) and no first touch is kept yet, for 90 days. It holds those tags, each
  * cut to 100 characters of `[A-Za-z0-9._~-]` (a space becomes a hyphen, anything else is dropped), the path the visit
  * landed on without its query, the host of the site that linked to it, and when. Never an email, a name or free text:
- * nothing outside that alphabet survives, and a tag with an `@` in it is dropped whole.
+ * nothing outside that alphabet survives, and a tag with an `@` in it is dropped whole. A utm_campaign of
+ * `accountant_client`, in any case, is dropped too: only an accountant's client link gives a workspace that campaign.
  *
  * Its value is `key=value` pairs joined by `&`, every value already in a cookie-safe alphabet, so it needs no encoding
  * and stays under 1 KB.
  */
 
 export const FIRST_TOUCH_COOKIE = "vx_ft";
+
+/**
+ * The first touch of a workspace an accountant's client link opened (docs/superpowers/specs/2026-10-23-accountant-client-
+ * links-design.md AC5): written by migration 0143's claim_client_link, with utm_source accountant and utm_medium
+ * client_link, rather than from this cookie. Only the claim may write it, in the transaction that adds the accountant,
+ * since /admin/growth counts it under From accountants: the cookie never keeps it, in any case (`campaignTag`).
+ */
+export const ACCOUNTANT_CLIENT_CAMPAIGN = "accountant_client";
 export const FIRST_TOUCH_DAYS = 90;
 export const FIRST_TOUCH_MAX_AGE_SECONDS = FIRST_TOUCH_DAYS * 24 * 60 * 60;
 export const TAG_MAX = 100;
@@ -47,6 +56,15 @@ export function sanitizeTag(value: string | null | undefined): string | null {
   return clean === "" ? null : clean;
 }
 
+/**
+ * A tag as the cookie may hold it under its name: as `sanitizeTag`, except that utm_campaign never takes
+ * ACCOUNTANT_CLIENT_CAMPAIGN, in any case, which only migration 0143's claim_client_link writes.
+ */
+function campaignTag(name: TagName, value: string | null | undefined): string | null {
+  const clean = sanitizeTag(value);
+  return name === "utm_campaign" && clean?.toLowerCase() === ACCOUNTANT_CLIENT_CAMPAIGN ? null : clean;
+}
+
 /** A path as the cookie may hold it: the same alphabet plus `/`, at most 100, always starting with `/`. */
 export function sanitizePath(value: string | null | undefined): string | null {
   if (typeof value !== "string" || !value.startsWith("/")) return null;
@@ -71,7 +89,7 @@ export function firstTouchFrom(location: { search: string; pathname: string; hos
   const params = new URLSearchParams(location.search);
   const touch: FirstTouch = {};
   for (const name of TAG_NAMES) {
-    const value = sanitizeTag(params.get(name));
+    const value = campaignTag(name, params.get(name));
     if (value) touch[name] = value;
   }
   if (!TAG_NAMES.some((name) => touch[name])) return null;
@@ -122,7 +140,7 @@ export function parseFirstTouch(raw: string | null | undefined): FirstTouch | nu
   if (fields.get("v") !== "1") return null;
   const touch: FirstTouch = {};
   for (const name of TAG_NAMES) {
-    const tag = sanitizeTag(fields.get(TAG_KEYS[name]));
+    const tag = campaignTag(name, fields.get(TAG_KEYS[name]));
     if (tag) touch[name] = tag;
   }
   if (!TAG_NAMES.some((name) => touch[name])) return null;

@@ -171,4 +171,16 @@ describe("each role's checklist on the page (onboarding by role R1 to R4)", () =
     const first = renderToStaticMarkup(<GettingStarted slug="harbor-bakery" checklist={accountantChecklist({ ...base, consoleOpened: false, handedOff: false })} isOwner={false} />);
     expect(first).toContain('href="/accountant"');
   });
+
+  it("marks the accountant's Invite a client as optional, links it, and leaves it out of the count (accountant client links AC6)", () => {
+    const base = { consoleOpened: true, queueOpened: true, booked: false, applied: true, workspaceSlug: "harbor-bakery", dismissed: false };
+    const markup = renderToStaticMarkup(
+      <GettingStarted slug="harbor-bakery" checklist={accountantChecklist({ ...base, handedOff: false, clientInvited: false })} isOwner={false} />
+    );
+    expect(markup).toContain("3 of 4 done");
+    expect(markup).toMatch(/Invite a client<span[^>]*>Optional<\/span>/);
+    expect(markup).toContain('href="/accountant#invite-client-title"');
+    // The required step still waits as the next one.
+    expect(markup).toMatch(/aria-current="step"[^]*Download the month/);
+  });
 });
