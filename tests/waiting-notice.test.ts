@@ -3,8 +3,8 @@ import { buildWaitingNotice, NOTICE_MAX_BILLS, type WaitingBill } from "@/lib/no
 
 /**
  * The bills a chat is told wait for approval, as structured entries (docs/superpowers/specs/2026-10-22-discord-design.md
- * DC3): Discord formats them, and Telegram's Review-link message will. How much, to whom, why in one plain sentence, what
- * it needs, and the Approvals path that opens it.
+ * DC3): Discord formats them, and so does Telegram's decisions message. How much, to whom, why in one plain sentence,
+ * what it needs, and the Approvals path that opens it.
  */
 
 const ID = (n: number) => `2b6c1c9e-4a4f-4a7e-9b1e-${String(n).padStart(12, "0")}`;

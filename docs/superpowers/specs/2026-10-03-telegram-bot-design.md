@@ -76,7 +76,9 @@ The bot never moves money and never approves anything. A held payment links to A
   never sent the past. A failed send leaves the cursor where it was, and the next cycle sends again. One stage sends to
   at most 25 links and stops after 20 s. Sandboxes are included: nothing in them is real money, and they are where a
   new member learns the bot. A person's own approvals are not sent in this version, because the reader reads the
-  agent's decisions only.
+  agent's decisions only. Since 2026-10-23 the bills among them that still wait for approval end the message as one
+  section, each with a Review link to its card on Approvals
+  (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md).
 - **R9. Questions are answered by code; the model only picks the question.** `/today`, `/waiting`, `/ledger`,
   `/workspaces`, `/disconnect` and `/help` are commands. Plain text is routed by `decide()` to one of `today`,
   `waiting`, `ledger`, `help` or `invoice`, with a keyword fallback in English and Vietnamese. The answer is always
