@@ -82,13 +82,25 @@ warning.
     that day. The item's day is that last day. The dedupe key stays (org, invoice, decide_by), so this is a new key, sent
     even though the bill was escalated past its due date earlier. Its line says the fee starts tomorrow, with the day and
     the rate.
-  - The day escalations started in the workspace filters each item by its own day, as before; an eve's day is today.
+  - The eve never takes the place of the escalation past the due date. The eve's item carries the bill as past its due
+    date (`passed`), when that day counts, and the escalation claims both keys. When the due date's claim is new (the
+    eve is the first day past it, as for a fee two days after it; the bill waits only from that day; or every send failed
+    until then), the bill is sent as past its due date, as without the fee, its line naming the fee's start, tomorrow,
+    and the eve is spent with it. Otherwise the eve is sent.
+  - An eve is claimed on its own day, and a day that passed only after it. So a bill with a fee whose passed day is found
+    taken by a claim made on that very day has a spent eve's claim there: its due date moved onto a day an eve was told
+    on. That claim is released and the day claimed again (`retakeSpentEves`), so the new day is escalated as without the
+    fee. A failure leaves the claim as it is.
+  - The day escalations started in the workspace filters each item by its own day, as before; an eve's day is today. So
+    a bill already past its due date when escalations started, never emailed for that day, is still told on its eve.
   - The email words each item on its own. A batch of past items reads as before ("passed its decide-by day"); an eve
     alone says "A late fee starts tomorrow on 1 payment"; a mixed batch says how many passed their day and how many have
     a fee from tomorrow, and never rewords a past item.
 - Example, due Oct 20 with the fee from Oct 30: escalated on Oct 21 for Oct 20, as without the fee; nothing more from
-  Oct 22 to Oct 28; on Oct 29 for Oct 29, the fee's eve; and nothing more once the fee has started. A fee from the due
-  date or the day after it has no eve.
+  Oct 22 to Oct 28; on Oct 29 for Oct 29, the fee's eve; and nothing more once the fee has started. With the fee from
+  Oct 22, escalated on Oct 21 for Oct 20, naming the fee from Oct 22, and nothing more: that eve is spent with it. A fee
+  from the due date or the day after it has no eve. A bill first waiting on Oct 29 is escalated that day for Oct 20, as
+  without the fee, and not again on Oct 30.
 
 **LF6. Short cash.**
 - The written policy's `referenceOrder` (`src/lib/agent/cash-priority.ts`) puts first, among bills due or overdue, the one
@@ -125,7 +137,9 @@ warning.
 - `lateFeeOf`.
 - `decideByOf` with `late_fee`: the same day as without the fee, and a bill with none exactly as before.
 - Escalations with a late fee: past the due date as before, once more on the fee's eve, and each item worded on its own
-  in a mixed batch.
+  in a mixed batch. Day by day against claims kept across runs, a bill with a fee is sent what it is sent without one,
+  plus its eve: a fee two days after the due date, a bill first waiting on its eve, sends refused until the eve, and a
+  due date moved onto a day an eve was told on.
 - `referenceOrder` with fees.
 - The cost box, for a USDC payout and a bank payout.
 - The API payload and schema.

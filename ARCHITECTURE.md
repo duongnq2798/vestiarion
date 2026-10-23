@@ -2649,17 +2649,24 @@ is logged with the workspace id and never fails the cycle or the tick.
 `escalateOverdueDecisions` (`src/lib/notifications/escalations.ts`, also from `runScheduledCycle`, in its own `try`)
 reads the waiting payables (`held`, `flagged`, `awaiting_info`) whose decide-by day (`decideByOf`) is before today,
 or, past the due date, whose late fee starts tomorrow (the fee's eve: its last day without the fee, after the due date,
-is today; the item's day is that day, a new key, so it is told once more even when escalated past its due date; at most
-one item a payable a run), each by its own day on or after the day escalations started in the workspace (`approval_escalation_starts`, 0108: one row per workspace,
-set by its first run, insert-only for the tenant role, so a payable already past its day then is never emailed and
-turning escalations on sends no backlog), reads the recipients, the workspace and the members before anything is
+is today; the item's day is that day, a new key, so it is told once more even when escalated past its due date; the
+item carries the payable as past its due date beside it, `passed`, when that day counts, claimed with the eve and sent
+in its place when that claim is new, the first day past the due date or the first day it waits, so an eve never delays
+the escalation it gets without the fee; at most one item a payable a run), each by its own day on or after the day
+escalations started in the workspace (`approval_escalation_starts`, 0108: one row per workspace,
+set by its first run, insert-only for the tenant role, so a payable already past its day then is never emailed for that
+day and turning escalations on sends no backlog; one with a late fee is still told on its eve, whose day is today),
+reads the recipients, the workspace and the members before anything is
 claimed, claims each in `approval_escalations` (migration 0108: unique per payable and decide-by day, an
-`ignoreDuplicates` upsert, so only the rows it inserted are news), and emails the digest's recipients, with the same
+`ignoreDuplicates` upsert, so only the rows it inserted are news; an eve is claimed on its own day and a passed day only
+after it, so a passed day of a payable with a late fee found taken by a claim made on that very day is a spent eve's,
+when the due date moved onto a day an eve was told on, and `retakeSpentEves` releases it and claims the day again,
+logging and leaving it on any failure), and emails the digest's recipients, with the same
 switch and cap, deduplicated by member and address, each one message a run about the payables they may act on (`whoCanAct` over every member, as the card names them;
 `decisionEscalationEmail`, `src/lib/email/decision-escalation.ts`: names, amounts, statuses and days, escaped, each
 item worded on its own: a late fee as `lateFeeDayWords` names it, or, on its eve, that it starts tomorrow, with eves
-listed first; a batch with no eve reads as before; no address). A payable someone received keeps its claim with `sent_at` and the counts, and the ledger records
-`decision_escalated` (`detail: { invoiceIds, decideBy, recipients, failed }`); a payable nobody received has its claim
+listed first; a batch with no eve reads as before; no address). A payable someone received keeps its claims with `sent_at` and the counts, and the ledger records
+`decision_escalated` (`detail: { invoiceIds, decideBy, recipients, failed }`); a payable nobody received has its claims
 deleted, even when a send throws, so the next scheduled cycle tries again. Without email configured, or nobody to tell, nothing is claimed.
 Before 0108 runs nothing is escalated.
 
