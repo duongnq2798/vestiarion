@@ -3,6 +3,7 @@ import { bankAccountsOf } from "../bank-payouts/store";
 import { unwrap, type OrgDb } from "../dal";
 import { appendLedgerEntry } from "../ledger";
 import { heldForCash } from "../next-step";
+import { invoiceLateFee, readWithLateFee } from "./late-fee";
 import { REASONING_RULE, REASONING_SHAPE } from "../reasoning-copy";
 import { boundOrder, carriedOrder, competingBills, namedRefs, needsPlan, personOrder, planFingerprint, planFrom, planOf, referenceOrder, sameSplit, PRIORITY_HORIZON_DAYS, type Competing, type PriorityPlan, type PriorityRow } from "./cash-priority";
 import { decide } from "./decide";
@@ -25,11 +26,11 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
 
 export const PRIORITY_SYSTEM_PROMPT = `You are the cash step of a treasury agent for a small business. The cash it can pay with cannot cover every bill below, all due within ${PRIORITY_HORIZON_DAYS} days or overdue. Decide the order they are paid in: code pays them in your order while the cash lasts, and the rest wait. A bill that waits is held for a person, the agent asks its supplier for more time and customers to pay sooner, and it is decided again once cash comes in.
 
-- Put first what costs the business most to pay late: a recurring service it runs on (hosting, storage, software, rent) can be stopped; an early-payment discount is lost after its day; a supplier who itself declined more time before (supplierRequestsForMoreTime.declinedBySupplier) will not wait again; a bill already overdue hurts more each day. A request the agent withdrew, or whose fewer days the agent declined, says nothing about the supplier's patience: say only what the counts show.
+- Put first what costs the business most to pay late: a recurring service it runs on (hosting, storage, software, rent) can be stopped; an early-payment discount is lost after its day; a late fee (lateFee) is charged from its first day (startsOn), a percent a month growing each month, and costsInTheComingMonth is what paying later costs in USDC; a supplier who itself declined more time before (supplierRequestsForMoreTime.declinedBySupplier) will not wait again; a bill already overdue hurts more each day. A request the agent withdrew, or whose fewer days the agent declined, says nothing about the supplier's patience: say only what the counts show.
 - supplierRequestsForMoreTime counts the requests for more time the agent sent that supplier (requestsTheAgentSent) and what became of each. A supplier never offered more time on its own: do not say it did.
 - Put later what can wait: a one-off purchase, a supplier who agreed to more time before, a bill due later.
 - Paying two small bills can keep two suppliers whole where one large bill keeps one.
-- The written policy's order, given as a reference, pays the bill due first, the smaller first on the same day. Follow it unless the facts say otherwise, and say why when you depart from it.
+- The written policy's order, given as a reference, puts first, among the bills due or overdue, the one whose late fee costs most in the coming month, then pays the bill due first, the smaller first on the same day. Follow it unless the facts say otherwise, and say why when you depart from it.
 - When aPersonsEarlierOrder is given, a person at the business chose that order for those bills before a bill was added or changed: keep it for them unless a bill's facts changed, place the other bills among them by the rules above, and say so.
 - In the order, name every bill once, by its ref. Give each a reason of one sentence.
 - People read the reasons and the reasoning, and never see a ref: never name a bill by its ref there. Name it by its payee and what it is ("Cobalt Cloud's GPU hosting"). Write an amount in USDC ("45 USDC"), never with a currency sign.
@@ -55,6 +56,10 @@ interface OpenRow {
   recurring_id: string | null;
   early_pay_discount_pct: string | number | null;
   discount_due_date: string | null;
+  /** Its late fee (0141); absent before it. */
+  late_fee_kind?: string | null;
+  late_fee_value?: string | number | null;
+  late_fee_starts_on?: string | null;
   counterparty_id: string;
   counterparties: { name: string } | null;
   recurring_payables: { every_count: number; every_unit: string } | null;
@@ -73,10 +78,26 @@ export interface CashPriority {
 const utcDay = (at: number) => new Date(at).toISOString().slice(0, 10);
 const num = (value: unknown) => Number(value ?? 0);
 
-/** The written policy's reason for a bill's place (P2). */
+/** The written policy's reason for a bill's place (P2), and the late fee a bill due or overdue avoids (late fees LF6). */
 function referenceReason(bill: Competing, today: string): string {
-  return bill.dueOn < today ? `Overdue since ${bill.dueOn}: paid first.` : bill.dueOn === today ? "Due today." : `Due ${bill.dueOn}.`;
+  const fee = bill.dueOn <= today && bill.lateFee > 0 ? ` Paying it avoids ${AMOUNT.format(bill.lateFee)} USDC of late fees in the coming month.` : "";
+  return (bill.dueOn < today ? `Overdue since ${bill.dueOn}: paid first.` : bill.dueOn === today ? "Due today." : `Due ${bill.dueOn}.`) + fee;
 }
+
+/** A competing bill's late fee as the model is told it (LF6): the term, and what it costs in the coming month; null for none. */
+function lateFeeFact(bill: Competing) {
+  const fee = bill.lateFeeTerm;
+  return fee ? { kind: fee.kind, value: fee.value, startsOn: fee.startsOn, costsInTheComingMonth: bill.lateFee } : null;
+}
+
+/**
+ * A signed order item's late fee (LF6): the bill's term, `{ kind, value, startsOn }` as a `create_invoice` entry signs it,
+ * named only when it has one. A person's order is carried by it (O4), whatever the day.
+ */
+const lateFeeOfItem = (bill: Competing | undefined) => {
+  const fee = bill?.lateFeeTerm;
+  return fee ? { lateFee: { kind: fee.kind, value: fee.value, startsOn: fee.startsOn } } : {};
+};
 
 /**
  * The bills competing for the cash now, and the cash they compete for (P1), read alike by the cycle and by a person
@@ -100,12 +121,15 @@ export interface PriorityFacts {
 export async function readPriorityFacts(input: { db: OrgDb; now: Date; operatingBalance: number; reserveBalance: number }): Promise<PriorityFacts | null> {
   const { db, now } = input;
   const today = utcDay(now.getTime());
+  // With each bill's late fee, where migration 0141 has run (LF6).
   const rows = unwrap(
-    await db
-      .from("invoices")
-      .select("id, status, amount, currency, due_date, memo, po_reference, recurring_id, early_pay_discount_pct, discount_due_date, counterparty_id, created_by, counterparties(name), recurring_payables(every_count, every_unit)")
-      .eq("direction", "payable")
-      .in("status", ["pending", "matched", "scheduled", "held"])
+    await readWithLateFee((lateFee) =>
+      db
+        .from("invoices")
+        .select(`id, status, amount, currency, due_date, memo, po_reference, recurring_id, early_pay_discount_pct, discount_due_date, counterparty_id, created_by, counterparties(name), recurring_payables(every_count, every_unit)${lateFee}`)
+        .eq("direction", "payable")
+        .in("status", ["pending", "matched", "scheduled", "held"])
+    )
   ) as unknown as OpenRow[];
   if (rows.length === 0) return null;
 
@@ -146,6 +170,7 @@ export async function readPriorityFacts(input: { db: OrgDb; now: Date; operating
     dueDate: row.due_date,
     heldForCash: row.status === "held" && heldForCash(latest.get(row.id)),
     paidToBank: bankPaid.has(row.counterparty_id),
+    lateFee: invoiceLateFee(row),
   }));
   const competing = competingBills(priorityRows, today);
   if (competing.length < 2 || !needsPlan(competing, Math.max(0, available))) return null;
@@ -185,11 +210,11 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
       order: carried,
       keep: split.keep,
       wait: split.wait,
-      bills: Object.fromEntries(competing.map((bill) => [bill.id, { amount: bill.amount, dueOn: bill.dueOn }])),
+      bills: Object.fromEntries(competing.map((bill) => [bill.id, { amount: bill.amount, dueOn: bill.dueOn, ...lateFeeOfItem(bill) }])),
     };
     if (last.fingerprint !== fingerprint) {
       const keptSet = new Set(split.keep);
-      const reference = referenceOrder(competing);
+      const reference = referenceOrder(competing, today);
       await appendLedgerEntry({
         actor: "agent",
         domain: "ap",
@@ -200,7 +225,7 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
           cash: { operating: input.operatingBalance, reserve: input.reserveBalance, committed, available },
           order: carried.map((id) => {
             const row = byId.get(id) as OpenRow;
-            return { invoiceId: id, payee: row.counterparties?.name ?? null, amount: competingById.get(id)?.amount ?? num(row.amount), dueOn: competingById.get(id)?.dueOn ?? null, keep: keptSet.has(id), reason: last.reasons[id] ?? referenceReason(competingById.get(id) as Competing, today) };
+            return { invoiceId: id, payee: row.counterparties?.name ?? null, amount: competingById.get(id)?.amount ?? num(row.amount), dueOn: competingById.get(id)?.dueOn ?? null, ...lateFeeOfItem(competingById.get(id)), keep: keptSet.has(id), reason: last.reasons[id] ?? referenceReason(competingById.get(id) as Competing, today) };
           }),
           reasoning: "The order a person set, with the bills that left it taken out.",
           decisionMode: "person",
@@ -219,7 +244,7 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
   }
 
   // Ask the model for the order (P2), each bill by a short ref, with the written policy's order as its reference.
-  const reference = referenceOrder(competing);
+  const reference = referenceOrder(competing, today);
   const refOf = new Map<string, string>(reference.map((id, index) => [id, `B${index + 1}`]));
   const idOf = new Map<string, string>(reference.map((id, index) => [`B${index + 1}`, id]));
   const competingById = new Map(competing.map((bill) => [bill.id, bill] as const));
@@ -240,6 +265,7 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
       memo: row.memo,
       purchaseOrder: row.po_reference,
       earlyPayDiscount: pct && row.discount_due_date ? { percent: pct, until: row.discount_due_date.slice(0, 10) } : null,
+      lateFee: lateFeeFact(bill),
       status: bill.status === "held" ? "held for want of cash" : bill.status,
       supplierRequestsForMoreTime: history.get(row.counterparty_id) ?? NO_REQUESTS,
     };
@@ -247,7 +273,8 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
   const policy: OrderDecision = {
     order: reference.map((id) => refOf.get(id) as string),
     reasons: Object.fromEntries(reference.map((id) => [refOf.get(id) as string, referenceReason(competingById.get(id) as Competing, today)])),
-    reasoning: "The written policy pays the bill due first, and the smaller first on the same day, while the cash lasts.",
+    reasoning:
+      "The written policy pays first, among the bills due or overdue, the one whose late fee costs most in the coming month, then the bill due first, and the smaller first on the same day, while the cash lasts.",
   };
   const decided = await decide<OrderDecision>({
     purpose: "cash_priority",
@@ -284,7 +311,7 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
     wait,
     reasons,
     byPerson: null,
-    bills: Object.fromEntries(competing.map((bill) => [bill.id, { amount: bill.amount, dueOn: bill.dueOn }])),
+    bills: Object.fromEntries(competing.map((bill) => [bill.id, { amount: bill.amount, dueOn: bill.dueOn, ...lateFeeOfItem(bill) }])),
   };
   const sameAsPolicy = bounded.order.every((id, index) => reference[index] === id);
   const keptSet = new Set(keep);
@@ -298,7 +325,7 @@ export async function cashPriority(input: { db: OrgDb; now: Date; operatingBalan
       cash: { operating: input.operatingBalance, reserve: input.reserveBalance, committed, available },
       order: bounded.order.map((id) => {
         const row = byId.get(id) as OpenRow;
-        return { invoiceId: id, payee: row.counterparties?.name ?? null, amount: competingById.get(id)?.amount ?? num(row.amount), dueOn: competingById.get(id)?.dueOn ?? null, keep: keptSet.has(id), reason: reasons[id] };
+        return { invoiceId: id, payee: row.counterparties?.name ?? null, amount: competingById.get(id)?.amount ?? num(row.amount), dueOn: competingById.get(id)?.dueOn ?? null, ...lateFeeOfItem(competingById.get(id)), keep: keptSet.has(id), reason: reasons[id] };
       }),
       reasoning,
       decisionMode: decided.mode,
@@ -442,7 +469,7 @@ export async function setPersonOrder(input: {
   if (!latest || latest.at !== input.basedOn) throw new PriorityOrderRefusal("changed");
   const last = latest.plan;
   const sameBills = last.fingerprint === facts.fingerprint;
-  const reference = referenceOrder(competing);
+  const reference = referenceOrder(competing, facts.today);
   const { keep, wait } = planFrom(order, competing, Math.max(0, available));
   const competingById = new Map(competing.map((bill) => [bill.id, bill] as const));
   const named = (ids: string[]) => ids.map((id) => `${byId.get(id)?.counterparties?.name ?? "a supplier"} ${AMOUNT.format(competingById.get(id)?.amount ?? 0)} USDC`).join(", ");
@@ -469,7 +496,7 @@ export async function setPersonOrder(input: {
       cash: { operating: input.operatingBalance, reserve: input.reserveBalance, committed, available },
       order: order.map((id) => {
         const row = byId.get(id) as OpenRow;
-        return { invoiceId: id, payee: row.counterparties?.name ?? null, amount: competingById.get(id)?.amount ?? num(row.amount), dueOn: competingById.get(id)?.dueOn ?? null, keep: keptSet.has(id), reason: reasonOf(id) };
+        return { invoiceId: id, payee: row.counterparties?.name ?? null, amount: competingById.get(id)?.amount ?? num(row.amount), dueOn: competingById.get(id)?.dueOn ?? null, ...lateFeeOfItem(competingById.get(id)), keep: keptSet.has(id), reason: reasonOf(id) };
       }),
       reasoning: "A person set this order from the payment plan.",
       decisionMode: "person",

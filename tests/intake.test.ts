@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { counterpartyInputSchema, firstZodMessage, invoiceFormRefusal, invoiceInputSchema, usdcAmountSchema } from "@/lib/intake-validation";
+import { counterpartyInputSchema, firstZodMessage, invoiceFormRefusal, invoiceInputSchema, lateFeeFields, usdcAmountSchema } from "@/lib/intake-validation";
 
 describe("USDC intake precision", () => {
   it.each(["0.000001", "100.123456", "1", "99999999999999.999999", " 42.50 "])("accepts %s without numeric coercion", (amount) => {
@@ -188,6 +188,98 @@ describe("invoice intake", () => {
     it("rejects an unparseable deadline", () => {
       const result = invoiceInputSchema.safeParse({ ...base, earlyPayDiscountPct: "2", discountDeadline: "not-a-date" });
       expect(result.success).toBe(false);
+    });
+  });
+
+  describe("late fee (late fees LF1, LF2: checkLateFee)", () => {
+    const fee = (lateFee: unknown, extra: Record<string, unknown> = {}) => invoiceInputSchema.safeParse({ ...base, amount: "100", ...extra, lateFee });
+
+    it("leaves it out when none is given, as before", () => {
+      const result = invoiceInputSchema.safeParse(base);
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.lateFee).toBeUndefined();
+      const none = fee(null);
+      expect(none.success && none.data.lateFee).toBeFalsy();
+    });
+
+    it("takes a percent a month, starting the day after the due date when no start is given", () => {
+      const result = fee({ kind: "percent_month", value: "1.5" });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.lateFee).toEqual({ kind: "percent_month", value: "1.5", startsOn: "2026-11-01" });
+    });
+
+    it("takes a fixed amount and the day it starts, on or after the due date", () => {
+      const result = fee({ kind: "fixed", value: "25.00", startsOn: "2026-11-10" });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.data.lateFee).toEqual({ kind: "fixed", value: "25.00", startsOn: "2026-11-10" });
+      const sameDay = fee({ kind: "fixed", value: "25", startsOn: "2026-10-31" });
+      expect(sameDay.success).toBe(true);
+    });
+
+    it.each(["0", "10.01", "11", "1.555", "abc", "-1", ""])("refuses a percent a month of %s: more than 0, at most 10, 2 decimals", (value) => {
+      const result = fee({ kind: "percent_month", value, startsOn: "2026-11-05" });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.error.issues[0]?.path).toEqual(["lateFee", "value"]);
+    });
+
+    it.each(["10", "0.5", "2.25"])("takes a percent a month of %s", (value) => {
+      expect(fee({ kind: "percent_month", value }).success).toBe(true);
+    });
+
+    it.each(["0", "100.000001", "abc", "1.1234567"])("refuses a fixed amount of %s: more than 0 and at most the invoice's amount", (value) => {
+      const result = fee({ kind: "fixed", value });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(firstZodMessage(result.error)).toBe("lateFee.value: Enter a late fee of more than 0 and at most the invoice's amount, with at most 6 decimal places.");
+    });
+
+    it("takes a fixed amount equal to the invoice's", () => {
+      expect(fee({ kind: "fixed", value: "100" }).success).toBe(true);
+    });
+
+    it("refuses a kind it does not know", () => {
+      const result = fee({ kind: "percent_year", value: "12" });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(firstZodMessage(result.error)).toBe("lateFee.kind: Choose a late fee of a percent a month or a fixed amount.");
+    });
+
+    it("refuses a start before the due date, or one that is not a day", () => {
+      const before = fee({ kind: "fixed", value: "25", startsOn: "2026-10-30" });
+      expect(before.success).toBe(false);
+      if (!before.success) expect(firstZodMessage(before.error)).toBe("lateFee.startsOn: The late fee cannot start before the due date.");
+      const notADay = fee({ kind: "fixed", value: "25", startsOn: "2026-11-31" });
+      expect(notADay.success).toBe(false);
+      if (!notADay.success) expect(firstZodMessage(notADay.error)).toBe("lateFee.startsOn: The day the late fee starts is not a real calendar date.");
+    });
+
+    it("refuses a start without a fee", () => {
+      const result = fee({ kind: "percent_month", value: "", startsOn: "2026-11-05" });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(firstZodMessage(result.error)).toBe("lateFee.value: Enter the late fee, or clear the day it starts.");
+    });
+
+    it("refuses a late fee on an invoice the business is owed: the term is for payables only", () => {
+      const result = fee({ kind: "fixed", value: "25" }, { direction: "receivable" });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(firstZodMessage(result.error)).toBe("lateFee: A late fee is for a bill you pay: leave it out of an invoice you are owed.");
+    });
+
+    it("names the form's Late fee field in a refusal", () => {
+      const result = fee({ kind: "percent_month", value: "12" });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(invoiceFormRefusal(result.error)).toEqual({
+          message: "Late fee: Enter a late fee of more than 0% and at most 10% a month, with at most 2 decimal places.",
+          fieldErrors: { lateFee: "Enter a late fee of more than 0% and at most 10% a month, with at most 2 decimal places." },
+        });
+      }
+    });
+
+    it("reads a form's three fields: none when the fee and its start are blank, whatever kind is chosen", () => {
+      const form = (values: Record<string, string>) => lateFeeFields((name) => values[name] ?? "");
+      expect(form({ lateFeeKind: "percent_month" })).toBeNull();
+      expect(form({ lateFeeKind: "fixed", lateFeeValue: " 25 " })).toEqual({ kind: "fixed", value: "25", startsOn: "" });
+      expect(form({ lateFeeKind: "percent_month", lateFeeStartsOn: "2026-11-05" })).toEqual({ kind: "percent_month", value: "", startsOn: "2026-11-05" });
+      expect(form({ lateFeeValue: "1.5" })).toEqual({ kind: "percent_month", value: "1.5", startsOn: "" });
     });
   });
 });

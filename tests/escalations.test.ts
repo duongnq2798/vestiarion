@@ -30,6 +30,51 @@ describe("the decide-by day and the priority", () => {
     expect(decideByWords({ day: "2026-10-15", reason: "discount" })).toBe("Decide by Oct 15, 2026 to keep the early-payment discount");
   });
 
+  it("keeps the due date for a bill past it with a late fee, and names the fee in its words (late fees LF5)", () => {
+    const lateFee = { kind: "percent_month" as const, value: 1.5, startsOn: "2026-10-20" };
+    // Overdue since Oct 10, with days before the fee: the due date stays its day, so it is overdue, as without the fee.
+    const overdue = decideByOf({ dueDate: "2026-10-10T12:00:00Z", lateFee }, TODAY);
+    expect(overdue).toEqual({ day: "2026-10-10", reason: "late_fee", lateFee: { dueOn: "2026-10-10", startsOn: "2026-10-20", rate: "1.5% a month", started: false } });
+    expect(overdue.day).toBe(decideByOf({ dueDate: "2026-10-10T12:00:00Z" }, TODAY).day);
+    expect(priorityOf(overdue.day, TODAY)).toBe("overdue");
+    expect(decideByWords(overdue)).toBe("Decide by Oct 10, 2026; a late fee of 1.5% a month starts Oct 20, 2026");
+    expect(exceptionFacts({ dueDate: "2026-10-10T12:00:00Z", lateFee, createdBy: null }, [], TODAY).priority).toBe("overdue");
+    // Once the fee has started, still the due date; the words say since when it applies.
+    const started = decideByOf({ dueDate: "2026-10-01T12:00:00Z", lateFee: { ...lateFee, startsOn: "2026-10-10" } }, TODAY);
+    expect(started).toEqual({ day: "2026-10-01", reason: "late_fee", lateFee: { dueOn: "2026-10-01", startsOn: "2026-10-10", rate: "1.5% a month", started: true } });
+    expect(decideByWords(started)).toBe("Decide by Oct 1, 2026; a late fee of 1.5% a month applies since Oct 10, 2026");
+    // A fee from the day after the due date: the same day, and the fee named.
+    expect(decideByWords(decideByOf({ dueDate: "2026-10-12T12:00:00Z", lateFee: { ...lateFee, startsOn: "2026-10-13" } }, TODAY))).toBe(
+      "Decide by Oct 12, 2026; a late fee of 1.5% a month applies since Oct 13, 2026"
+    );
+    // Not yet past its due date: exactly as without the fee, the discount's deadline included.
+    expect(decideByOf({ dueDate: "2026-10-15T12:00:00Z", lateFee }, TODAY)).toEqual({ day: "2026-10-15", reason: "due" });
+    expect(decideByOf({ dueDate: `${TODAY}T12:00:00Z`, lateFee: { ...lateFee, startsOn: TODAY } }, TODAY)).toEqual({ day: TODAY, reason: "due" });
+    expect(decideByOf({ dueDate: "2026-10-20T00:00:00Z", discount: { pct: 2, deadline: "2026-10-15" }, lateFee }, TODAY)).toEqual({ day: "2026-10-15", reason: "discount" });
+    // A fixed fee in the bill's currency.
+    expect(decideByOf({ dueDate: "2026-10-10T12:00:00Z", currency: "EURC", lateFee: { kind: "fixed", value: 25, startsOn: "2026-10-14" } }, TODAY)).toMatchObject({
+      day: "2026-10-10",
+      reason: "late_fee",
+      lateFee: { rate: "25.00 EURC", started: false },
+    });
+  });
+
+  it("is what it was before late fees for a bill without one (late fees LF5)", () => {
+    const bills = [
+      { dueDate: "2026-10-10T12:00:00Z" },
+      { dueDate: `${TODAY}T00:00:00Z` },
+      { dueDate: "2026-10-20T00:00:00Z", discount: { pct: 2, deadline: "2026-10-15" } },
+      { dueDate: "2026-10-20T00:00:00Z", discount: { pct: 2, deadline: "2026-10-10" } },
+    ];
+    expect(bills.map((bill) => JSON.stringify(decideByOf({ ...bill, lateFee: null, currency: "USDC" }, TODAY)))).toEqual([
+      '{"day":"2026-10-10","reason":"due"}',
+      `{"day":"${TODAY}","reason":"due"}`,
+      '{"day":"2026-10-15","reason":"discount"}',
+      '{"day":"2026-10-20","reason":"due"}',
+    ]);
+    expect(decideByWords(decideByOf({ dueDate: "2026-10-10T12:00:00Z", lateFee: null }, TODAY))).toBe("Decide by Oct 10, 2026");
+  });
+
   it("is overdue, due today, due this week, or later", () => {
     expect(priorityOf("2026-10-12", TODAY)).toBe("overdue");
     expect(priorityOf(TODAY, TODAY)).toBe("today");
@@ -93,6 +138,46 @@ describe("the escalation email", () => {
     expect(email.html).toContain("Northstar &lt;Labs&gt;");
     expect(email.html).not.toContain("<Labs>");
   });
+
+  describe("with late fees (late fees LF5)", () => {
+    const link = "https://tests.vestiarion.xyz/o/northstar/approvals";
+    const origin = "https://tests.vestiarion.xyz";
+    const overdue = { counterpartyName: "Acme", amount: 1200, currency: "USDC", status: "held" as const, decideBy: "2026-10-20", discount: false };
+    const ahead = { ...overdue, lateFee: { startsOn: "2026-10-30", rate: "1.5% a month", started: false } };
+    const started = { ...overdue, lateFee: { startsOn: "2026-10-21", rate: "1.5% a month", started: true } };
+    const eve = { ...overdue, counterpartyName: "Globex", decideBy: "2026-10-29", lateFee: { startsOn: "2026-10-30", rate: "25.00 USDC", started: false }, eve: true };
+    const email = (items: Parameters<typeof decisionEscalationEmail>[0]["items"]) => decisionEscalationEmail({ orgName: "Northstar", items, link, origin });
+
+    it("says a payment past its decide-by day passed it, as before, and names its late fee", () => {
+      const before = email([ahead]);
+      expect(before.subject).toBe("1 payment passed its decide-by day in Northstar");
+      expect(before.text).toContain("1 payment in Northstar passed the day it was to be decided by.");
+      expect(before.text).toContain("- Acme: 1,200.00 USDC, Held, to decide by Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026");
+      expect(email([started]).text).toContain("- Acme: 1,200.00 USDC, Held, to decide by Oct 20, 2026; a late fee of 1.5% a month applies since Oct 21, 2026");
+    });
+
+    it("says on a late fee's eve that the fee starts tomorrow, with its day and rate", () => {
+      const sent = email([eve]);
+      expect(sent.subject).toBe("A late fee starts tomorrow on 1 payment in Northstar");
+      expect(sent.text).toContain("1 payment in Northstar has a late fee that starts tomorrow.");
+      expect(sent.text).toContain("- Globex: 1,200.00 USDC, Held, to decide by Oct 29, 2026, before a late fee of 25.00 USDC starts tomorrow, Oct 30, 2026");
+      expect(sent.html).toContain("before a late fee of 25.00 USDC starts tomorrow, Oct 30, 2026");
+      expect(`${sent.subject} ${sent.text}`).not.toMatch(/passed|reached/);
+    });
+
+    it("words each payment on its own in a batch that mixes a fee's eve with payments past their day", () => {
+      const lineOf = (text: string, name: string) => text.split("\n").find((line) => line.startsWith(`- ${name}:`));
+      const mixed = email([{ ...ahead, counterpartyName: "Initech" }, eve, started]);
+      expect(mixed.subject).toBe("3 payments wait for a decision in Northstar; a late fee starts tomorrow");
+      expect(mixed.text).toContain("3 payments in Northstar wait for a decision: 2 passed the day they were to be decided by, and 1 has a late fee that starts tomorrow.");
+      // Each past payment reads as it does alone, never as reached; the eve reads as its own, and comes first.
+      expect(lineOf(mixed.text, "Initech")).toBe(lineOf(email([{ ...ahead, counterpartyName: "Initech" }]).text, "Initech"));
+      expect(lineOf(mixed.text, "Acme")).toBe(lineOf(email([started]).text, "Acme"));
+      expect(lineOf(mixed.text, "Globex")).toBe(lineOf(email([eve]).text, "Globex"));
+      expect(mixed.text.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2, line.indexOf(":")))).toEqual(["Globex", "Initech", "Acme"]);
+      expect(`${mixed.subject} ${mixed.text} ${mixed.html}`).not.toContain("reached");
+    });
+  });
 });
 
 const ORG = "5d0f3a2e-8c1b-4f7a-9e6d-00000000e5c1";
@@ -147,6 +232,10 @@ function escalationFake(
     startsOn?: string | null;
     /** What the members' read answers, by its number in the run (1 first); the members when it answers nothing. */
     membersRead?: (call: number) => FakeReply | null;
+    /** What a request to the claims answers, in place of `claimed` and the defaults, when it answers at all. */
+    claims?: (request: RecordedRequest) => FakeReply | null;
+    /** What a read of the invoices answers, in place of `invoices`, when it answers at all. */
+    invoicesRead?: (request: RecordedRequest) => FakeReply | null;
   } = {}
 ) {
   const members = options.members ?? [
@@ -168,7 +257,15 @@ function escalationFake(
         },
       };
     }
+    if (request.path === "/rest/v1/invoices" && options.invoicesRead) {
+      const reply = options.invoicesRead(request);
+      if (reply) return reply;
+    }
     if (request.path === "/rest/v1/invoices") return { body: options.invoices ?? [payable(LATE), payable(ON_TIME, { due_date: "2026-10-20T00:00:00Z" })] };
+    if (request.path === "/rest/v1/approval_escalations" && options.claims) {
+      const reply = options.claims(request);
+      if (reply) return reply;
+    }
     if (request.path === "/rest/v1/approval_escalations" && request.method === "POST") {
       const rows = request.body as Array<{ invoice_id: string; decide_by: string }>;
       return options.claimed ? options.claimed(rows) : { body: rows.map((row, index) => ({ id: `claim-${index}`, ...row })) };
@@ -195,10 +292,234 @@ function escalationFake(
   return { fake, run: <T,>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(ORG, fn)) };
 }
 
+/**
+ * The claims as Postgres keeps them across runs (`approval_escalations`, 0108): one per payable and day, an upsert that
+ * ignores duplicates answering only the rows it inserted, each stamped `claimed_at` on the day of the run that claimed it;
+ * read, released and marked as PostgREST would.
+ */
+function claimStore() {
+  const rows: Array<{ id: string; invoice_id: string; decide_by: string; claimed_at: string }> = [];
+  let today = "";
+  let next = 0;
+  const listOf = (value: string | null) => (value ?? "").replace(/^in\.\(/, "").replace(/\)$/, "").split(",").filter(Boolean);
+  const reply = (request: RecordedRequest): FakeReply | null => {
+    if (request.method === "POST") {
+      const inserted = (request.body as Array<{ invoice_id: string; decide_by: string }>).flatMap((row) => {
+        if (rows.some((kept) => kept.invoice_id === row.invoice_id && kept.decide_by === row.decide_by)) return [];
+        const claim = { id: `claim-${++next}`, invoice_id: row.invoice_id, decide_by: row.decide_by, claimed_at: `${today}T08:00:01.000000+00:00` };
+        rows.push(claim);
+        return [claim];
+      });
+      return { body: inserted.map(({ id, invoice_id, decide_by }) => ({ id, invoice_id, decide_by })) };
+    }
+    if (request.method === "GET") {
+      const ids = listOf(request.params.get("invoice_id"));
+      const days = listOf(request.params.get("decide_by"));
+      return { body: rows.filter((row) => (ids.length === 0 || ids.includes(row.invoice_id)) && (days.length === 0 || days.includes(row.decide_by))) };
+    }
+    if (request.method === "DELETE") {
+      const ids = new Set(listOf(request.params.get("id")));
+      rows.splice(0, rows.length, ...rows.filter((row) => !ids.has(row.id)));
+    }
+    return { body: [] };
+  };
+  return { rows, on: (day: string) => (today = day), reply };
+}
+
 describe("escalateOverdueDecisions", () => {
   it("finds the waiting payables past their decide-by day", async () => {
     const { run } = escalationFake();
     expect((await run(() => pastDecideBy(NOW))).map(({ id, item }) => [id, item.decideBy])).toEqual([[LATE, "2026-10-12"]]);
+  });
+
+  describe("with a late fee (late fees LF5): overdue on Oct 20, the fee from Oct 30", () => {
+    const at = (day: string) => new Date(`${day}T08:00:00.000Z`);
+    const due = { due_date: "2026-10-20T00:00:00Z" };
+    const withFee = (over: Record<string, unknown> = {}) => payable(LATE, { ...due, late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-10-30", ...over });
+    const found = (row: unknown, day: string, from?: string) => escalationFake({ invoices: [row] }).run(() => pastDecideBy(at(day), from));
+    const keys = async (row: unknown, day: string, from?: string) => (await found(row, day, from)).map(({ id, item }) => [id, item.decideBy]);
+
+    it("finds it the day after its due date, keyed on the due date as before, with the fee's words", async () => {
+      expect(await keys(withFee(), "2026-10-20")).toEqual([]);
+      const first = await found(withFee(), "2026-10-21");
+      expect(first.map(({ id, item }) => [id, item.decideBy])).toEqual([[LATE, "2026-10-20"]]);
+      expect(first[0].item.lateFee).toEqual({ startsOn: "2026-10-30", rate: "1.5% a month", started: false });
+      expect(first[0].item).not.toHaveProperty("eve");
+    });
+
+    it("finds on Oct 22 to Oct 28 exactly what it finds without the fee", async () => {
+      for (const day of ["2026-10-22", "2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26", "2026-10-27", "2026-10-28"]) {
+        expect(await keys(withFee(), day), day).toEqual(await keys(payable(LATE, due), day));
+        expect(await keys(withFee(), day), day).toEqual([[LATE, "2026-10-20"]]);
+      }
+    });
+
+    it("finds it once on the fee's eve, Oct 29, keyed on that day, a new escalation, whatever day escalations started", async () => {
+      const eve = await found(withFee(), "2026-10-29");
+      expect(eve.map(({ id, item }) => [id, item.decideBy])).toEqual([[LATE, "2026-10-29"]]);
+      expect(eve[0].item).toMatchObject({ decideBy: "2026-10-29", eve: true, lateFee: { startsOn: "2026-10-30", rate: "1.5% a month", started: false } });
+      // With it, the payable as past its due date, as without the fee: sent in place of the eve if that was never sent.
+      expect(eve[0].passed).toEqual({ ...eve[0].item, decideBy: "2026-10-20", eve: undefined });
+      expect(eve[0].passed).not.toHaveProperty("eve");
+      // A start after the due date: the due date's key is left out, as before; the eve, today's day, is not.
+      expect(await keys(withFee(), "2026-10-28", "2026-10-25")).toEqual([]);
+      const backlog = await found(withFee(), "2026-10-29", "2026-10-25");
+      expect(backlog.map(({ id, item }) => [id, item.decideBy])).toEqual([[LATE, "2026-10-29"]]);
+      expect(backlog[0]).not.toHaveProperty("passed");
+    });
+
+    it("finds no eve once the fee has started, nor for a fee from the day after the due date", async () => {
+      for (const day of ["2026-10-30", "2026-11-05"]) {
+        const after = await found(withFee(), day);
+        expect(after.map(({ id, item }) => [id, item.decideBy]), day).toEqual([[LATE, "2026-10-20"]]);
+        expect(after[0].item).toMatchObject({ lateFee: { started: true } });
+        expect(after[0].item).not.toHaveProperty("eve");
+      }
+      const next = await found(withFee({ late_fee_starts_on: "2026-10-21" }), "2026-10-21");
+      expect(next.map(({ id, item }) => [id, item.decideBy])).toEqual([[LATE, "2026-10-20"]]);
+      expect(next[0].item).toMatchObject({ lateFee: { startsOn: "2026-10-21", started: true } });
+      expect(next[0].item).not.toHaveProperty("eve");
+    });
+
+    it("emails on the fee's eve, claimed for that day, saying the fee starts tomorrow", async () => {
+      // Escalated for its due date on Oct 21: that claim is taken, so only the eve is news.
+      const { fake, run } = escalationFake({
+        invoices: [withFee()],
+        claimed: (rows) => ({ body: rows.filter((row) => row.decide_by !== "2026-10-20").map((row, index) => ({ id: `claim-${index}`, ...row })) }),
+      });
+      expect(await run(() => escalateOverdueDecisions(at("2026-10-29")))).toEqual({ sent: 1, failed: 0, invoices: 1 });
+      const claim = fake.requests.find((request) => request.path === "/rest/v1/approval_escalations" && request.method === "POST");
+      expect(claim?.body).toEqual([
+        { org_id: ORG, invoice_id: LATE, decide_by: "2026-10-29" },
+        { org_id: ORG, invoice_id: LATE, decide_by: "2026-10-20" },
+      ]);
+      const sent = sendEmailMock.mock.calls[0][0] as { subject: string; text: string };
+      expect(sent.subject).toBe("A late fee starts tomorrow on 1 payment in Northstar");
+      expect(sent.text).toContain("to decide by Oct 29, 2026, before a late fee of 1.5% a month starts tomorrow, Oct 30, 2026");
+      const ledger = fake.requests.find((request) => request.path === "/rest/v1/rpc/append_ledger_entry")?.body as Record<string, unknown>;
+      expect(JSON.parse(JSON.stringify(ledger.p_detail))).toEqual({ invoiceIds: [LATE], decideBy: { [LATE]: "2026-10-29" }, recipients: 1, failed: 0 });
+    });
+
+    describe("day by day, against the claims as Postgres keeps them", () => {
+      const daysFrom = (first: string, count: number) =>
+        Array.from({ length: count }, (_, index) => new Date(Date.parse(`${first}T00:00:00.000Z`) + index * 86_400_000).toISOString().slice(0, 10));
+      /**
+       * Runs the escalation once on each day, against one store of claims: each day that sent, with the day it was sent
+       * for and its line. `rowOn` is the payable as it is that day; on a day `refused` says, the send fails.
+       */
+      const daily = async (rowOn: (day: string) => unknown, days: string[], options: { refused?: (day: string) => boolean } = {}) => {
+        const store = claimStore();
+        const sent: Array<{ day: string; decideBy: string; line: string }> = [];
+        const deletes: string[] = [];
+        for (const day of days) {
+          store.on(day);
+          sendEmailMock.mockClear();
+          sendEmailMock.mockResolvedValue(options.refused?.(day) ? { sent: false, reason: "resend refused" } : { sent: true, id: "email-1" });
+          const { fake, run } = escalationFake({ invoices: [rowOn(day)], claims: store.reply });
+          await run(() => escalateOverdueDecisions(at(day)));
+          deletes.push(...fake.requests.filter((request) => request.path === "/rest/v1/approval_escalations" && request.method === "DELETE").map(() => day));
+          const ledger = fake.requests.find((request) => request.path === "/rest/v1/rpc/append_ledger_entry")?.body as
+            | { p_detail: { decideBy: Record<string, string> } }
+            | undefined;
+          if (!ledger) continue;
+          const text = (sendEmailMock.mock.calls[0][0] as { text: string }).text;
+          sent.push({ day, decideBy: ledger.p_detail.decideBy[LATE], line: text.split("\n").find((line) => line.startsWith("- ")) ?? "" });
+        }
+        return { sent, store, deletes };
+      };
+      const keysOf = (sent: Array<{ day: string; decideBy: string }>) => sent.map(({ day, decideBy }) => [day, decideBy]);
+
+      it("sends what it sends without the fee, and the eve besides, and never releases a claim it sent", async () => {
+        const days = daysFrom("2026-10-20", 14);
+        const main = await daily(() => payable(LATE, due), days);
+        const fee = await daily(() => withFee(), days);
+        expect(keysOf(main.sent)).toEqual([["2026-10-21", "2026-10-20"]]);
+        expect(keysOf(fee.sent)).toEqual([...keysOf(main.sent), ["2026-10-29", "2026-10-29"]]);
+        expect(fee.store.rows.map(({ decide_by, claimed_at }) => [decide_by, claimed_at.slice(0, 10)])).toEqual([
+          ["2026-10-20", "2026-10-21"],
+          ["2026-10-29", "2026-10-29"],
+        ]);
+        expect(fee.deletes).toEqual([]);
+      });
+
+      it("never delays the escalation of a fee two days after the due date: the first day past it names the fee's start, and sends nothing more", async () => {
+        const days = daysFrom("2026-10-20", 5);
+        const main = await daily(() => payable(LATE, due), days);
+        const fee = await daily(() => withFee({ late_fee_starts_on: "2026-10-22" }), days);
+        expect(keysOf(main.sent)).toEqual([["2026-10-21", "2026-10-20"]]);
+        expect(keysOf(fee.sent)).toEqual(keysOf(main.sent));
+        expect(fee.sent[0].line).toBe("- Northwind Hosting: 1,200.00 USDC, Held, to decide by Oct 20, 2026; a late fee of 1.5% a month starts Oct 22, 2026");
+      });
+
+      it("sends a bill whose due date was never escalated by its fee's eve as without the fee, once, with its eve spent", async () => {
+        // First waiting on its eve: Oct 29.
+        const main = await daily(() => payable(LATE, due), ["2026-10-29", "2026-10-30", "2026-10-31"]);
+        const fee = await daily(() => withFee(), ["2026-10-29", "2026-10-30", "2026-10-31"]);
+        expect(keysOf(main.sent)).toEqual([["2026-10-29", "2026-10-20"]]);
+        expect(keysOf(fee.sent)).toEqual(keysOf(main.sent));
+        expect(fee.sent[0].line).toBe("- Northwind Hosting: 1,200.00 USDC, Held, to decide by Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026");
+        // Every send refused until the eve: the same.
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        const refused = (day: string) => day < "2026-10-29";
+        const days = daysFrom("2026-10-20", 12);
+        const mainRefused = await daily(() => payable(LATE, due), days, { refused });
+        const feeRefused = await daily(() => withFee(), days, { refused });
+        expect(keysOf(mainRefused.sent)).toEqual([["2026-10-29", "2026-10-20"]]);
+        expect(keysOf(feeRefused.sent)).toEqual(keysOf(mainRefused.sent));
+      });
+
+      it("escalates the new day when the due date moves to the day its eve was told, as without the fee", async () => {
+        const moved = { due_date: "2026-10-29T00:00:00Z" };
+        const days = ["2026-10-21", "2026-10-29", "2026-10-30", "2026-10-31"];
+        const main = await daily((day) => payable(LATE, day < "2026-10-30" ? due : moved), days);
+        // The fee's start moves with the due date (0141): Nov 8.
+        const fee = await daily((day) => (day < "2026-10-30" ? withFee() : withFee({ ...moved, late_fee_starts_on: "2026-11-08" })), days);
+        expect(keysOf(main.sent)).toEqual([
+          ["2026-10-21", "2026-10-20"],
+          ["2026-10-30", "2026-10-29"],
+        ]);
+        expect(keysOf(fee.sent)).toEqual([
+          ["2026-10-21", "2026-10-20"],
+          ["2026-10-29", "2026-10-29"],
+          ["2026-10-30", "2026-10-29"],
+        ]);
+        expect(fee.sent[2].line).toBe("- Northwind Hosting: 1,200.00 USDC, Held, to decide by Oct 29, 2026; a late fee of 1.5% a month starts Nov 8, 2026");
+        // The eve's claim, spent, gave way to the day that passed; that claim is kept.
+        expect(fee.store.rows.map(({ decide_by, claimed_at }) => [decide_by, claimed_at.slice(0, 10)])).toEqual([
+          ["2026-10-20", "2026-10-21"],
+          ["2026-10-29", "2026-10-30"],
+        ]);
+      });
+
+      it("leaves the claims as they are, and fails nothing, when they cannot be read for a spent eve", async () => {
+        const error = vi.spyOn(console, "error").mockImplementation(() => {});
+        const { fake, run } = escalationFake({
+          invoices: [withFee({ due_date: "2026-10-29T00:00:00Z", late_fee_starts_on: "2026-11-08" })],
+          claimed: () => ({ body: [] }),
+          claims: (request) => (request.method === "GET" ? { status: 500, body: { code: "XX000", message: "claims down" } } : null),
+        });
+        expect(await run(() => escalateOverdueDecisions(at("2026-10-30")))).toEqual({ sent: 0, failed: 0, invoices: 0 });
+        expect(error).toHaveBeenCalledWith("escalations: spent eve claims not retaken", ORG, "claims down");
+        expect(fake.requests.some((request) => request.path === "/rest/v1/approval_escalations" && request.method === "DELETE")).toBe(false);
+        expect(sendEmailMock).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  it("reads the waiting payables again without their late fees before migration 0141, as before (late fees LF5)", async () => {
+    const refused = vi.fn();
+    const before0141 = escalationFake({
+      invoices: [payable(LATE)],
+      invoicesRead: (request) => {
+        if (!(request.params.get("select") ?? "").includes("late_fee_")) return null;
+        refused();
+        return { status: 400, body: { code: "42703", message: "column invoices.late_fee_kind does not exist" } };
+      },
+    });
+    const found = await before0141.run(() => pastDecideBy(NOW));
+    expect(refused).toHaveBeenCalledTimes(1);
+    expect(found.map(({ id }) => id)).toEqual([LATE]);
   });
 
   it("claims each payable for its day, emails each member whose switch is on, marks the claims and signs it", async () => {

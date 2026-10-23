@@ -99,6 +99,27 @@ describe("an invoice added from a document", () => {
     expect((await entryDetail(form))?.document).toMatchObject({ changed: ["currency"] });
   });
 
+  it("records a late fee kept as read as no change, and one the member changed, typed or cleared (late fees LF2)", async () => {
+    const read = JSON.stringify({ ...READ, lateFeeKind: "percent_month", lateFeeValue: "1.5", lateFeeStartsOn: "2026-11-01" });
+    const kept = documentForm({ documentRead: read, lateFeeKind: "percent_month", lateFeeValue: "1.50", lateFeeStartsOn: "2026-11-01" });
+    expect((await entryDetail(kept))?.document).toMatchObject({ changed: [] });
+    const changed = documentForm({ documentRead: read, lateFeeKind: "percent_month", lateFeeValue: "2", lateFeeStartsOn: "2026-11-05" });
+    expect((await entryDetail(changed))?.document).toMatchObject({ changed: ["lateFeeValue", "lateFeeStartsOn"] });
+    const cleared = documentForm({ documentRead: read, lateFeeKind: "percent_month" });
+    expect((await entryDetail(cleared))?.document).toMatchObject({ changed: ["lateFeeKind", "lateFeeValue", "lateFeeStartsOn"] });
+    // Read without a start, the fee starts the day after the due date submitted: kept blank, or given as that day, it is
+    // no change; another day is one.
+    const blankRead = JSON.stringify({ ...READ, lateFeeKind: "percent_month", lateFeeValue: "1.5", lateFeeStartsOn: null });
+    const keptBlank = documentForm({ documentRead: blankRead, lateFeeKind: "percent_month", lateFeeValue: "1.5" });
+    expect((await entryDetail(keptBlank))?.document).toMatchObject({ changed: [] });
+    const movedDue = documentForm({ documentRead: blankRead, lateFeeKind: "percent_month", lateFeeValue: "1.5", dueDate: "2026-11-05" });
+    expect((await entryDetail(movedDue))?.document).toMatchObject({ changed: ["dueDate"] });
+    const laterStart = documentForm({ documentRead: blankRead, lateFeeKind: "percent_month", lateFeeValue: "1.5", lateFeeStartsOn: "2026-11-09" });
+    expect((await entryDetail(laterStart))?.document).toMatchObject({ changed: ["lateFeeStartsOn"] });
+    const typed = documentForm({ lateFeeKind: "fixed", lateFeeValue: "2" });
+    expect((await entryDetail(typed))?.document).toMatchObject({ changed: ["lateFeeKind", "lateFeeValue", "lateFeeStartsOn"] });
+  });
+
   it("records no document for an invoice typed in, or one whose document fields are not well formed", async () => {
     expect((await entryDetail(typedForm()))?.document).toBeUndefined();
     expect((await entryDetail(documentForm({ documentSha256: "not-a-hash" })))?.document).toBeUndefined();

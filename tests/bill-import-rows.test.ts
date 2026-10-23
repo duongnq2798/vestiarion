@@ -395,15 +395,46 @@ describe("a row's fields", () => {
   it("offers a template that is read with every column matched, and whose sample row only needs its counterparty", () => {
     const [header, sample, ...rest] = INVOICE_CSV_TEMPLATE.split("\n");
     expect(rest).toEqual([]);
-    expect(header).toBe("direction,counterparty,amount,memo,po_reference,goods_received,due_date,early_pay_discount_pct,discount_deadline,currency");
-    expect(sample).toBe("payable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,,USDC");
+    expect(header).toBe(
+      "direction,counterparty,amount,memo,po_reference,goods_received,due_date,early_pay_discount_pct,discount_deadline,currency,late_fee_percent_month,late_fee_amount,late_fee_starts_on"
+    );
+    expect(sample).toBe("payable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,,USDC,,,");
     const table = readTable(INVOICE_CSV_TEMPLATE);
-    expect(Object.keys(startingSettings(table, PLAIN).mapping)).toHaveLength(10);
+    expect(Object.keys(startingSettings(table, PLAIN).mapping)).toHaveLength(13);
     const [fate] = plainFates(INVOICE_CSV_TEMPLATE.replace("Vendor name", "Kanto Paper"), { direction: null });
     expect(fate).toMatchObject({
       status: "add",
       invoice: { direction: "payable", amount: "100", currency: "USDC", memo: "Invoice memo", poReference: "PO-100", goodsReceived: true, dueDate: "2026-10-15", earlyPayDiscountPct: null },
     });
+  });
+
+  it("reads a late fee: a percent a month or a fixed amount, and the day it starts (late fees LF2)", () => {
+    const header = "counterparty,amount,due_date,currency,late_fee_percent_month,late_fee_amount,late_fee_starts_on\n";
+    const fates = plainFates(
+      header +
+        "Kanto Paper,100,2026-10-15,USDC,1.5%,,\n" +
+        "Kanto Paper,200,2026-10-15,USDC,,25.00,2026-10-25\n" +
+        "Kanto Paper,300,2026-10-15,USDC,,,\n" +
+        "Kanto Paper,400,2026-10-15,USDC,1.5,25,\n" +
+        "Kanto Paper,500,2026-10-15,USDC,12,,\n" +
+        "Kanto Paper,600,2026-10-15,USDC,,,2026-10-20\n" +
+        "Kanto Paper,700,2026-10-15,USDC,2,,2026-10-01\n"
+    );
+    const lateFee = (fate: RowFate) => (fate.status === "add" ? (fate.invoice.lateFee ?? null) : reason(fate));
+    expect(fates.map(lateFee)).toEqual([
+      { kind: "percent_month", value: "1.5", startsOn: "2026-10-16" },
+      { kind: "fixed", value: "25", startsOn: "2026-10-25" },
+      null,
+      "Give a late fee as a percent a month or a fixed amount, not both.",
+      "Late fee: Enter a late fee of more than 0% and at most 10% a month, with at most 2 decimal places.",
+      "Late fee: Enter the late fee, or clear the day it starts.",
+      "Late fee: The late fee cannot start before the due date.",
+    ]);
+  });
+
+  it("refuses a fixed late fee on a bill in the business's own currency, whose fee is not in USDC either", () => {
+    const [fate] = plainFates("counterparty,amount,due_date,currency,late_fee_amount\nKanto Paper,100000,2026-10-15,JPY,500\n", {}, SHADOW_JPY);
+    expect(reason(fate)).toContain("A fixed late fee is read only on a bill in USDC or EURC: give it as a percent a month.");
   });
 
   it("reads a direction column's words, and refuses one it does not know", () => {

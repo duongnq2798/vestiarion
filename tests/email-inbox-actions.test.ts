@@ -102,6 +102,16 @@ describe("finishing an emailed invoice in the invoice form (reader follow-up F5)
     expect(mocks.revalidate).toHaveBeenCalled();
   });
 
+  it("finishes it with the late fee the form carries (late fees LF2)", async () => {
+    mocks.authorize.mockResolvedValue(access("admin"));
+    mocks.finishFromInbox.mockResolvedValue({ ok: true, message: "Added a payable for Northwind Hosting.", invoiceId: "inv-1" });
+    await finishInboxEmailAction(STARTED, filled({ lateFeeKind: "percent_month", lateFeeValue: "1.5" }));
+    expect(mocks.finishFromInbox).toHaveBeenCalledWith(expect.anything(), {
+      inboxEmailId: ROW,
+      invoice: expect.objectContaining({ lateFee: { kind: "percent_month", value: "1.5", startsOn: "2026-11-01" } }),
+    });
+  });
+
   it("answers a field the invoice form refuses under that field, and finishes nothing", async () => {
     mocks.authorize.mockResolvedValue(access("admin"));
     const result = await finishInboxEmailAction(STARTED, filled({ amount: "-3" }));

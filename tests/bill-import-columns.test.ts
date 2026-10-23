@@ -16,6 +16,25 @@ describe("headerKey", () => {
 });
 
 describe("detectMapping", () => {
+  it("maps the late fee's columns (late fees LF2)", () => {
+    expect(detectMapping(["Vendor", "Amount", "Due", "late_fee_percent_month", "late_fee_amount", "late_fee_starts_on"])).toMatchObject({
+      lateFeePercent: 3,
+      lateFeeAmount: 4,
+      lateFeeStartsOn: 5,
+    });
+    expect(detectMapping(["Vendor", "Late fee amount"])).toEqual({ counterparty: 0, lateFeeAmount: 1 });
+  });
+
+  it("reads a late fee's column that writes a percent as the percent a month, and leaves a bare one for the person to choose", () => {
+    // `headerKey` strips the sign, so "Late fee (%)" is "latefee": never a fixed amount.
+    expect(detectMapping(["Vendor", "Late fee (%)"])).toEqual({ counterparty: 0, lateFeePercent: 1 });
+    expect(detectMapping(["Vendor", "Late fee %"])).toEqual({ counterparty: 0, lateFeePercent: 1 });
+    expect(detectMapping(["Vendor", "Late payment fee (%)"])).toEqual({ counterparty: 0, lateFeePercent: 1 });
+    // A bare "Late fee" may hold "25" or "1.5%": which one is the person's to say.
+    expect(detectMapping(["Vendor", "Late fee"])).toEqual({ counterparty: 0 });
+    expect(detectMapping(["Vendor", "Late payment fee"])).toEqual({ counterparty: 0 });
+  });
+
   it("maps every column of the old template to its own field", () => {
     const mapping = detectMapping(OLD_TEMPLATE_HEADER.split(","));
     expect(mapping).toEqual({
@@ -80,6 +99,7 @@ describe("detectMapping", () => {
   it("has a field for each part of an invoice the import fills", () => {
     expect(IMPORT_FIELDS).toEqual([
       "counterparty", "amount", "dueDate", "invoiceNumber", "poReference", "currency", "memo", "goodsReceived", "direction", "discountPct", "discountDeadline",
+      "lateFeePercent", "lateFeeAmount", "lateFeeStartsOn",
     ]);
   });
 });

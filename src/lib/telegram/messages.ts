@@ -1,7 +1,7 @@
 import type { ActivityItem } from "../agent-activity";
 import { networkProfile } from "../network";
 import { approvalAnchor, orgHref } from "../auth/org-paths";
-import { READER_NAMES } from "../invoice-document/chat-draft";
+import { lateFeeLine, READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
 import type { WaitingNotice, WaitingNoticeEntry } from "../notifications/waiting-notice";
@@ -295,6 +295,8 @@ export function draftMessage(read: InvoiceDraftRead): string {
   if (draft.earlyPayDiscountPct && draft.discountDeadline) {
     lines.push(`Early payment: ${escapeHtml(`${draft.earlyPayDiscountPct}% if paid by ${draft.discountDeadline}`)}`);
   }
+  const lateFee = lateFeeLine(draft);
+  if (lateFee) lines.push(`Late fee: ${escapeHtml(lateFee)}`);
   if (draft.invoiceNumber) lines.push(`Invoice number: ${escapeHtml(draft.invoiceNumber)}`);
   if (draft.memo) lines.push(`Memo: ${escapeHtml(draft.memo)}`);
   for (const warning of read.warnings) lines.push(`⚠️ ${escapeHtml(clip(warning, ITEM_DETAIL_MAX))}`);

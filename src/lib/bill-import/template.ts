@@ -3,5 +3,5 @@
  * A list in this shape is read with every column matched (import design B1); any other list is read as well.
  */
 export const INVOICE_CSV_TEMPLATE =
-  "direction,counterparty,amount,memo,po_reference,goods_received,due_date,early_pay_discount_pct,discount_deadline,currency\n" +
-  "payable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,,USDC";
+  "direction,counterparty,amount,memo,po_reference,goods_received,due_date,early_pay_discount_pct,discount_deadline,currency,late_fee_percent_month,late_fee_amount,late_fee_starts_on\n" +
+  "payable,Vendor name,100.00,Invoice memo,PO-100,true,2026-10-15,,,USDC,,,";

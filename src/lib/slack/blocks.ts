@@ -1,7 +1,7 @@
 import type { ActivityItem } from "../agent-activity";
 import { orgHref } from "../auth/org-paths";
 import type { CommandOutcome } from "../commands/outcome";
-import { READER_NAMES } from "../invoice-document/chat-draft";
+import { lateFeeLine, READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
 import { txUrl } from "../payee-chains";
@@ -312,6 +312,8 @@ export function draftAnswer(read: InvoiceDraftRead, draftId: string): SlackMessa
   if (draft.earlyPayDiscountPct && draft.discountDeadline) {
     lines.push(`Early payment: ${mrkdwn(`${draft.earlyPayDiscountPct}% if paid by ${draft.discountDeadline}`)}`);
   }
+  const lateFee = lateFeeLine(draft);
+  if (lateFee) lines.push(`Late fee: ${mrkdwn(lateFee)}`);
   if (draft.invoiceNumber) lines.push(`Invoice number: ${mrkdwn(draft.invoiceNumber)}`);
   if (draft.memo) lines.push(`Memo: ${mrkdwn(clip(draft.memo, 300))}`);
   for (const warning of read.warnings) lines.push(`:warning: ${mrkdwn(clip(warning, 300))}`);

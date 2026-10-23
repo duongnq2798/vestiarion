@@ -1,3 +1,5 @@
+import { invoiceLateFee, readWithLateFee, type LateFee } from "../agent/late-fee";
+
 /**
  * The values `GET /api/v1/invoices` accepts for its `direction` and `status`
  * filters. Kept here rather than in the route so the OpenAPI document can
@@ -22,6 +24,8 @@ export interface InvoicePayload {
   scheduledFor: string | null;
   /** The early-payment discount this invoice carries, if any: the percent off and the deadline's ISO timestamp. */
   earlyPayDiscount: { percent: number; deadline: string } | null;
+  /** The late fee a payable carries, if any (late fees LF2): never part of what is paid. */
+  lateFee: LateFee | null;
   decidedAt: string | null;
   settledAt: string | null;
   escalatedAt: string | null;
@@ -35,9 +39,20 @@ export interface InvoicePayload {
   createdAt: string;
 }
 
-/** What `GET /api/v1/invoices` reads for each invoice, and what a write reads back to answer in the same shape. */
+/**
+ * What `GET /api/v1/invoices` reads for each invoice, and what a write reads back to answer in the same shape, less the
+ * late fee's columns, which `readInvoices` adds.
+ */
 export const INVOICE_SELECT =
   "id, direction, status, amount, currency, memo, po_reference, goods_received, due_date, scheduled_for, early_pay_discount_pct, discount_due_date, decided_at, settled_at, escalated_at, agent_reasoning, tx_ref, paid_amount, created_at, counterparties(id, name, risk_level)";
+
+/**
+ * A read of invoices with `INVOICE_SELECT` and the late fee's columns, built by `read` from the select it is given; read
+ * again without the late fee's before migration 0141, when each invoice then answers with none.
+ */
+export function readInvoices<T extends { error: { code?: string } | null }>(read: (select: string) => PromiseLike<T>): Promise<T> {
+  return readWithLateFee((lateFee) => read(`${INVOICE_SELECT}${lateFee}`));
+}
 
 /**
  * `early_pay_discount_pct` and `discount_due_date` (migration 0038), read the
@@ -75,6 +90,8 @@ export function mapInvoice(row: Record<string, unknown>): InvoicePayload {
     dueDate: String(row.due_date),
     scheduledFor: row.scheduled_for == null ? null : String(row.scheduled_for),
     earlyPayDiscount: invoiceDiscountOf(row.early_pay_discount_pct, row.discount_due_date),
+    // Read as the AP stage reads it (`invoiceLateFee`), so the API never reports a fee the agent would not weigh.
+    lateFee: invoiceLateFee(row as Parameters<typeof invoiceLateFee>[0]),
     decidedAt: row.decided_at == null ? null : String(row.decided_at),
     settledAt: row.settled_at == null ? null : String(row.settled_at),
     escalatedAt: row.escalated_at == null ? null : String(row.escalated_at),

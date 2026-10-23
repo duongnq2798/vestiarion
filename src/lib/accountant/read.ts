@@ -1,4 +1,5 @@
 import { readFrozenPayees } from "../address-change-check";
+import { invoiceLateFee, readWithLateFee } from "../agent/late-fee";
 import { invoiceDiscount } from "../agent/payment-timing";
 import { billApproversBesides, readAccountantCosign } from "../approval-policy";
 import { membershipsOf, type OrgMembership } from "../auth/membership";
@@ -13,7 +14,7 @@ import { addressUnconfirmed } from "../counterparty-address";
 import { readCustomerRequests } from "../customer-portal/requests";
 import { db, type OrgDb } from "../dal";
 import { withOrg } from "../dal/scope";
-import { decideByOf } from "../exceptions";
+import { decideByOf, lateFeeDayWords, type DecideBy } from "../exceptions";
 import { addressGiver } from "../new-payee";
 import { ID_CHUNK, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
 import { counterpartyPath } from "../next-step";
@@ -83,6 +84,10 @@ type PayableRow = {
   created_at: string;
   early_pay_discount_pct: string | number | null;
   discount_due_date: string | null;
+  /** Its late fee (0141); absent before it. */
+  late_fee_kind?: string | null;
+  late_fee_value?: string | number | null;
+  late_fee_starts_on?: string | null;
   counterparty_id: string;
   /** The payee's screening and address, read for whether a co-sign could be given, and never shown on an item. */
   counterparties: { name: string; risk_level?: string | null; address?: string | null } | null;
@@ -96,6 +101,12 @@ const HELD_WORDS: Record<PayableRow["status"], string> = {
 
 const dayWords = (iso: string) =>
   new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso.slice(0, 10)}T00:00:00.000Z`));
+
+/** What a decide-by day that passed says besides the day: the discount's last day, or the bill's late fee (LF5). */
+function pastWhy(decideBy: DecideBy): string {
+  if (decideBy.reason === "discount") return ", to keep the early-payment discount";
+  return decideBy.reason === "late_fee" && decideBy.lateFee ? `; ${lateFeeDayWords(decideBy.lateFee)}` : "";
+}
 
 /** What a bill's item says of its co-sign (docs/superpowers/specs/2026-10-22-accountant-queue-design.md AQ3), ahead of its decide-by day. */
 function cosignWords(state: CosignState | undefined): string | null {
@@ -145,13 +156,16 @@ async function decisionItems(
 ): Promise<TriageItem[]> {
   const today = day(now);
   const [payables, milestones] = await Promise.all([
-    orgDb
-      .from("invoices")
-      .select("id, amount, currency, due_date, status, decided_at, created_at, early_pay_discount_pct, discount_due_date, counterparty_id, counterparties(name, risk_level, address)")
-      .eq("direction", "payable")
-      .in("status", ["held", "flagged", "awaiting_info"])
-      .order("due_date", { ascending: true })
-      .limit(ROWS),
+    // With each bill's late fee, where migration 0141 has run (late fees LF5).
+    readWithLateFee((lateFee) =>
+      orgDb
+        .from("invoices")
+        .select(`id, amount, currency, due_date, status, decided_at, created_at, early_pay_discount_pct, discount_due_date, counterparty_id, counterparties(name, risk_level, address)${lateFee}`)
+        .eq("direction", "payable")
+        .in("status", ["held", "flagged", "awaiting_info"])
+        .order("due_date", { ascending: true })
+        .limit(ROWS)
+    ),
     orgDb.from("milestones").select("id, title, amount, decided_at, created_at, counterparties(name)").eq("status", "held").order("created_at", { ascending: true }).limit(ROWS),
   ]);
   if (payables.error) throw new Error(payables.error.message);
@@ -162,12 +176,12 @@ async function decisionItems(
   const states = ws.role === "accountant" && cosign.on && cosign.viewerId && rows.length > 0 ? await cosignStatesOf(cosign.viewerId, rows, cosign.unread) : null;
   const items: TriageItem[] = [];
   for (const row of rows) {
-    const decideBy = decideByOf({ dueDate: row.due_date, discount: invoiceDiscount(row) }, today);
+    const decideBy = decideByOf({ dueDate: row.due_date, discount: invoiceDiscount(row), lateFee: invoiceLateFee(row), currency: row.currency }, today);
     const past = decideBy.day < today;
     const state = states?.get(row.id);
     const kind = state?.state === "can_cosign" ? "cosign" : past ? "past_decide_by" : "decision";
     const by = past
-      ? `Its decide-by day was ${dayWords(decideBy.day)}${decideBy.reason === "discount" ? ", to keep the early-payment discount" : ""}.`
+      ? `Its decide-by day was ${dayWords(decideBy.day)}${pastWhy(decideBy)}.`
       : `Decide by ${dayWords(decideBy.day)}.`;
     const words = cosignWords(state);
     items.push({

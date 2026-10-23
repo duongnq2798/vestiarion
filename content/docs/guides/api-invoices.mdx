@@ -54,7 +54,9 @@ The answer is `201`, with the invoice in `status: "pending"`. A payable is now t
 - A payment over the counterparty's limit, or to an address no one has confirmed, is held for a person. One to a high-risk counterparty, or one that repeats an invoice already paid, is flagged.
 - The workspace's spending limits still bound every payment, and so does its contract on Arc where it has one: the limit enforced on Arc testnet, or your own wallet's contract on Arc mainnet.
 
-The ledger records the invoice as `create_invoice`, with `via: "api"` and the key's id. It is the key's issuer's invoice: if the agent holds it, the issuer cannot approve it, unless they are the workspace's only approver.
+A bill that charges for paying late takes a `lateFee`: `{"kind":"percent_month","value":"1.5"}` for 1.5% a month, or `{"kind":"fixed","value":"25.00"}` for a fixed amount in its currency, with `startsOn`, the first day it applies, on or after `dueDate`; without it, the fee starts the day after `dueDate`. The agent weighs it when a bill waits and when cash is short, and never adds it to what is paid. An invoice you are owed takes none. The invoice answers with its `lateFee`, or `null`.
+
+The ledger records the invoice as `create_invoice`, with `via: "api"` and the key's id, and its `lateFee` when it has one. It is the key's issuer's invoice: if the agent holds it, the issuer cannot approve it, unless they are the workspace's only approver.
 
 ## 5. Follow the decision
 

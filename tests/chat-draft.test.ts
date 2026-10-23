@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatDraftOf, invoiceOfDraft } from "@/lib/invoice-document/chat-draft";
+import { chatDraftOf, invoiceOfDraft, lateFeeLine } from "@/lib/invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "@/lib/invoice-document/draft";
 
 /**
@@ -68,5 +68,29 @@ describe("invoiceOfDraft", () => {
   it("is nothing for a stored draft the form no longer accepts", () => {
     const { stored } = chatDraftOf(read());
     expect(invoiceOfDraft({ ...stored!, draft: { ...stored!.draft, amount: "not a number" } }, false)).toBeNull();
+  });
+});
+
+describe("a late fee read with the invoice (late fees LF2)", () => {
+  const fee = { lateFeeKind: "percent_month" as const, lateFeeValue: "1.5", lateFeeStartsOn: "2026-10-11" };
+
+  it("keeps it in the draft, and the payable it becomes carries it", () => {
+    const { stored } = chatDraftOf(read(fee));
+    expect(stored?.draft).toMatchObject(fee);
+    expect(invoiceOfDraft(stored!, true)?.lateFee).toEqual({ kind: "percent_month", value: "1.5", startsOn: "2026-10-11" });
+  });
+
+  it("holds the fee to the invoice form's rules", () => {
+    const { reasons, stored } = chatDraftOf(read({ ...fee, lateFeeValue: "15" }));
+    expect(stored).toBeNull();
+    expect(reasons).toEqual(["Late fee: Enter a late fee of more than 0% and at most 10% a month, with at most 2 decimal places."]);
+  });
+
+  it("names it on the chat's draft, and nothing for a draft without one", () => {
+    expect(lateFeeLine(read(fee).draft)).toBe("1.5% a month from 2026-10-11");
+    // A start the invoice did not give is the day after the due date.
+    expect(lateFeeLine(read({ lateFeeKind: "fixed", lateFeeValue: "0.10", lateFeeStartsOn: null }).draft)).toBe("0.10 USDC from 2026-10-11");
+    expect(lateFeeLine(read({ lateFeeKind: "fixed", lateFeeValue: "0.10", lateFeeStartsOn: null, dueDate: null }).draft)).toBe("0.10 USDC");
+    expect(lateFeeLine(read().draft)).toBeNull();
   });
 });

@@ -451,6 +451,8 @@ export async function releaseDealLine(input: { actorId: string | null; dealId: s
     dueDate: line.dueOn,
     earlyPayDiscountPct: "",
     discountDeadline: "",
+    // A receivable carries no late fee: the term is for payables only (late fees LF1).
+    lateFee: null,
   });
 
   assertLedgerCanSign();

@@ -1,5 +1,6 @@
 import { CHECKSUM_MISMATCH, checksumMatches } from "@/lib/address-checksum";
 import { z } from "zod";
+import { LATE_FEE_KINDS } from "@/lib/agent/late-fee";
 import type { ApiErrorCode } from "@/lib/api/contract";
 import { COUNTERPARTY_RISK_LEVELS, COUNTERPARTY_ROLES } from "@/lib/api/counterparties";
 import { INVOICE_DIRECTIONS } from "@/lib/api/invoices";
@@ -140,6 +141,14 @@ export const InvoiceSchema = z
       .object({ percent: z.number(), deadline: z.string() })
       .nullable()
       .describe("The early-payment discount this invoice carries, if any: the percent off and the deadline's ISO timestamp."),
+    lateFee: z
+      .object({
+        kind: z.enum(LATE_FEE_KINDS).describe("`percent_month`, a percent a month of what is still owed, or `fixed`, an amount in `currency`."),
+        value: z.number().describe("The percent a month, or the fixed amount."),
+        startsOn: z.string().describe("The first day the fee applies, as `YYYY-MM-DD`."),
+      })
+      .nullable()
+      .describe("The late fee a payable carries, if any. The agent weighs it when a bill waits and when cash is short; it is never added to what is paid."),
     decidedAt: z.string().nullable(),
     settledAt: z.string().nullable(),
     escalatedAt: z.string().nullable(),
@@ -441,6 +450,18 @@ export const CreateInvoiceBodySchema = z
       .strict()
       .optional()
       .describe("A discount for paying by `deadline`. The agent weighs it against what the cash would earn in the reserve until `dueDate`."),
+    lateFee: z
+      .object({
+        kind: z.enum(LATE_FEE_KINDS).describe("`percent_month`, a percent a month of what is still owed, or `fixed`, an amount in `currency`."),
+        value: z
+          .union([z.string(), z.number()])
+          .describe("The percent a month, more than 0 and at most 10, with at most 2 decimal places; or the fixed amount, more than 0 and at most `amount`, with at most 6."),
+        startsOn: z.string().optional().describe("The first day the fee applies, as `YYYY-MM-DD`, on or after `dueDate`. Defaults to the day after `dueDate`."),
+      })
+      .strict()
+      .nullable()
+      .optional()
+      .describe("A late fee the invoice charges once it is paid late, for a payable only. The agent weighs it when a bill waits and when cash is short; it never adds it to what is paid."),
   })
   .strict()
   .describe("An invoice to add. The agent decides a payable as one typed in, with every guardrail, usually within a minute.");

@@ -103,3 +103,39 @@ describe("reading an invoice with the workspace's model", () => {
     );
   });
 });
+
+describe("a late fee (late fees LF2)", () => {
+  it("asks the model for the late-fee term: a percent a month or a fixed amount, and the day it starts", () => {
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain("- lateFeePercentPerMonth:");
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain("- lateFeeAmount:");
+    expect(EXTRACTION_SYSTEM_PROMPT).toContain("- lateFeeStartsOn:");
+  });
+
+  it.each([
+    ["Late payments: 1.5% per month on overdue balances.", "1.5"],
+    ["Interest of 2% monthly is charged on overdue amounts", "2"],
+    ["Overdue invoices accrue 1.25 % a month", "1.25"],
+  ])("reads %s as a percent a month", (line, percent) => {
+    expect(ruleBasedExtraction(`${TEXT}\n${line}`)).toMatchObject({ lateFeePercentPerMonth: percent, lateFeeAmount: null });
+  });
+
+  it("reads a late fee of a fixed amount", () => {
+    expect(ruleBasedExtraction(`${TEXT}\nA late fee of 25.00 USDC applies after the due date.`)).toMatchObject({ lateFeePercentPerMonth: null, lateFeeAmount: "25.00" });
+    expect(ruleBasedExtraction(`${TEXT}\nLate payment fee of $40`)).toMatchObject({ lateFeeAmount: "40" });
+  });
+
+  it.each([
+    "A late fee of 2% will be charged on overdue balances.",
+    "Late fee of 2 percent applies.",
+    "Late payment fee of $25 per day",
+    "A late fee of 10 USDC a day",
+    "Late fee of 12 per annum",
+  ])("reads no fixed fee from %s: a percent, or a fee for each day or year, is not one", (line) => {
+    expect(ruleBasedExtraction(`${TEXT}\n${line}`)).toMatchObject({ lateFeeAmount: null });
+  });
+
+  it("reads no late fee from a percent that is not about paying late, or from none at all", () => {
+    expect(ruleBasedExtraction(TEXT)).toMatchObject({ lateFeePercentPerMonth: null, lateFeeAmount: null, lateFeeStartsOn: null });
+    expect(ruleBasedExtraction(`${TEXT}\nSave 2% monthly with an annual plan`)).toMatchObject({ lateFeePercentPerMonth: null });
+  });
+});

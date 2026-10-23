@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-23: Late fees on bills
+
+- **`POST /api/v1/invoices`** accepts `lateFee`, the late fee a payable charges once it is paid late, or `null` for none: `kind` is `percent_month`, a percent a month of what is still owed, more than 0 and at most 10, or `fixed`, an amount in `currency`, more than 0 and at most `amount`; `value` is the percent or the amount; `startsOn`, the first day it applies as `YYYY-MM-DD`, is on or after `dueDate`, and defaults to the day after it. A receivable with a late fee is refused with `400`, as is a value out of range (`lateFee.value`) or a start before the due date (`lateFee.startsOn`).
+- **`GET /api/v1/invoices`**, and the invoice a write answers with, carry `lateFee`: `{ kind, value, startsOn }`, or `null`.
+- **`create_invoice`** entries carry `lateFee` (`{ kind, value, startsOn }`, `value` as entered) when the invoice was added with one.
+- The agent's **`ap_*`** decisions carry `lateFee` in their `terms` when the bill has one: `{ kind, value, startsOn, aMonth }`, where `aMonth` is what a month past its start costs, in the invoice's currency. A late fee is never added to what is paid: `amountPaid` is the invoice's amount, less an early-payment discount, as before.
+- **`cash_priority_set`** entries' `order` items carry `lateFee`, the bill's late fee as `create_invoice` signs it (`{ kind, value, startsOn }`), when it has one. Their `referenceOrder` now puts first, among the bills due or overdue, the one whose late fee costs most in USDC in the coming 30 days; a fixed fee that has started, or a fee that starts after those 30 days, counts for nothing.
+- **`decision_escalated`** entries' `decideBy` can also be the eve of a bill's late fee, the day before it starts: a bill past its due date whose fee starts later than the day after it is escalated once more on that day, besides once its due date has passed, as before. When its due date was not escalated before that day, as on the first day past it, the entry is for the due date, as before, and the eve is not escalated apart: a late fee never delays an escalation. Each is escalated once for its day, and an entry that tells such an eve says in its `summary` how many payments have a late fee from tomorrow. A late fee never moves a bill's decide-by day.
+- The TypeScript SDK 0.3.7 describes `lateFee` on `Invoice` and `CreateInvoiceInput`. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-23: An accountant's client invite links
 
 - **`org_created`** carries `via: "accountant_link"` for a workspace a client opened from their accountant's client link. Such a workspace is always on Arc testnet, `network: "arc-testnet"`.

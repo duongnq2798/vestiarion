@@ -95,6 +95,7 @@ import { BRIDGE_FEE_CAP_PERCENT, chainOn, paidAcrossChains } from "../payee-chai
 import { bankAccountsOf } from "../bank-payouts/store";
 import { latestSchedulingOf, shortAhead, type CashAhead } from "./cash-ahead";
 import { cashPriority, type CashPriority } from "./cash-priority-plan";
+import { invoiceLateFee, lateFeeTerms } from "./late-fee";
 import { PAYMENT_RESCHEDULED } from "../payment-plan-apply";
 import { bankPayoutTakesTestToken, readTestUsdb } from "../bank-payouts/test-token";
 import {
@@ -174,6 +175,7 @@ When to pay an accounts-payable invoice:
 - When \`timing.shortfall\` is true, the cash available by its date (the operating balance, plus the reserve for a later day) cannot cover this payment after the payables that fall due on or before that date. Hold it and cite the figures, rather than scheduling or paying into a failure.
 - When \`scheduledEarlier.decidedBeforeItsDay\` is true, an earlier cycle scheduled this payment, and it is decided again before that day because the cash will no longer cover it then: something that falls due first came in since. Holding it now gives the business days to bring the money in or move the date, rather than finding out on the day.
 - Cite the figures you were given: what the discount is worth, the yield from keeping the cash to the due date, the dates, and what falls due on or before its date (\`timing.earlierObligations\`: their total and how many there are).
+- \`terms.lateFee\`, when given, is the late fee the supplier charges once the invoice is paid late: a percent a month of what is still owed (percent_month) or a fixed amount (fixed), from startsOn, its first day; aMonth is what a month past its start costs. It is never added to what is paid. When you pay or schedule the payment before startsOn, by the day before it at the latest, name the fee it avoids in your reasoning; paid on startsOn or later, the fee applies.
 
 Respond with ONLY a single JSON object in the requested shape. No prose outside the JSON.`;
 
@@ -190,7 +192,7 @@ export interface ApPromptFacts {
     /** Created for one period of a recurring payment (recurring payments R7); absent for a typed invoice. */
     recurring?: { period: string; cadence: string | null };
   };
-  terms: { earlyPayDiscount: unknown };
+  terms: { earlyPayDiscount: unknown; lateFee?: unknown };
   counterparty: {
     name: string;
     riskLevel: string;
@@ -1183,6 +1185,10 @@ interface ApPayableRow {
   decided_at?: string | null;
   early_pay_discount_pct?: string | number | null;
   discount_due_date?: string | null;
+  /** Its late fee (0141); absent on rows read before it. */
+  late_fee_kind?: string | null;
+  late_fee_value?: string | number | null;
+  late_fee_starts_on?: string | null;
   scheduled_for?: string | null;
   /** USDC or EURC (0040); absent on rows read before it. */
   currency?: string | null;
@@ -1673,7 +1679,12 @@ async function decideApPayable(
   // ledger, not sent — and, for an invoice scheduled earlier, now on its day,
   // the date it was scheduled for and why.
   const discount = invoiceDiscount(invoice);
-  const terms = { earlyPayDiscount: discount ? { percent: discount.pct, deadline: discount.deadline } : null };
+  // Its late fee (late fees LF3, LF7): weighed and signed, never paid. Named only on a bill that has one.
+  const lateFee = invoiceLateFee(invoice);
+  const terms = {
+    earlyPayDiscount: discount ? { percent: discount.pct, deadline: discount.deadline } : null,
+    ...(lateFee ? { lateFee: lateFeeTerms(lateFee, amount) } : {}),
+  };
   // A live EURC payable the wallet is short of now (EURC swap spec S1): the
   // swap of USDC that would cover it, sized so its minimum does, or why there
   // is none. The model is shown it, and may choose to fund the payment with it.
@@ -1732,6 +1743,7 @@ async function decideApPayable(
       reserveApy: isEurc || viaGateway || paidInTestToken ? 0 : ctx.reserveApy,
       reserveBalance: isEurc || viaGateway || paidInTestToken ? 0 : ctx.reserveBalance,
       currency,
+      lateFee,
     },
     // A Gateway payout's money is set aside in the Gateway balance, and a bank payout in USDB is paid from the wallet's
     // USDB: what falls due in USDC from the operating wallet counts against neither.
@@ -1768,6 +1780,8 @@ async function decideApPayable(
       },
       terms: {
         earlyPayDiscount: terms.earlyPayDiscount,
+        // Left out of the question (undefined) for a bill without one, so it is asked as before.
+        lateFee: terms.lateFee,
       },
       counterparty: {
         name: counterparty.name,

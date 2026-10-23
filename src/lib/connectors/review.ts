@@ -104,6 +104,8 @@ export function reviewRow(bill: StagedBillView, index: number, supplier: Supplie
     goodsReceived,
     discountPct: null,
     discountDeadline: null,
+    // An accounting tool's bill carries no late fee Vestiarion reads (late fees LF2).
+    lateFee: null,
   };
 }
 

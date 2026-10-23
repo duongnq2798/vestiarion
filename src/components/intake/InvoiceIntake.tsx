@@ -56,6 +56,10 @@ export interface InvoiceFormInitial {
   dueDate?: string | null;
   earlyPayDiscountPct?: string | null;
   discountDeadline?: string | null;
+  /** A late fee read from the document (late fees LF2): its kind, value and the day it starts. */
+  lateFeeKind?: string | null;
+  lateFeeValue?: string | null;
+  lateFeeStartsOn?: string | null;
   memo?: string | null;
   poReference?: string | null;
   invoiceNumber?: string | null;
@@ -304,6 +308,38 @@ export default function InvoiceIntake({
             onChange={(event) => setDiscountDeadline(event.target.value)}
           />
         </Field>
+        {direction === "payable" && (
+          <>
+            <Field
+              id={id("late-fee")}
+              label="Late fee"
+              optional
+              description="As the invoice states it. Shown when you approve; never added to what is paid."
+              error={fieldError("lateFee")}
+            >
+              <Input name="lateFeeValue" inputMode="decimal" defaultValue={start(initial?.lateFeeValue)} />
+            </Field>
+            <Field id={id("late-fee-kind")} label="Late fee is">
+              <Select name="lateFeeKind" defaultValue={initial?.lateFeeKind === "fixed" ? "fixed" : "percent_month"}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="percent_month">% a month</SelectItem>
+                  <SelectItem value="fixed">A fixed amount</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field
+              id={id("late-fee-starts")}
+              label="Starting on"
+              optional
+              description="The first day the late fee applies, on or after the due date. Blank: the day after the due date."
+            >
+              <Input name="lateFeeStartsOn" type="date" min={dueDate || undefined} defaultValue={start(initial?.lateFeeStartsOn)} />
+            </Field>
+          </>
+        )}
         <Field id={id("memo")} label="Memo" optional error={fieldError("memo")}>
           <Input name="memo" maxLength={280} defaultValue={start(initial?.memo)} />
         </Field>

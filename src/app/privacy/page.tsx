@@ -234,7 +234,7 @@ export default function PrivacyPage() {
             the agent asks it about, and nothing else:
             <ul>
               <li>
-                for an invoice: its amount and currency, its value in USDC for an invoice in EURC, memo, purchase order reference, due date, early-payment discount and
+                for an invoice: its amount and currency, its value in USDC for an invoice in EURC, memo, purchase order reference, due date, early-payment discount, late fee and
                 whether the goods were received, and, for one a recurring payment created, its period and how often it repeats; the counterparty&apos;s name, risk level, payment limit, whether it needs a purchase order and performance score, and, when the agent bought it before a first payment, how many workspaces here have paid its address, how often, and when first and last; the operating balance and the reserve
                 balance, or for an invoice in EURC the wallet&apos;s EURC balance, its USDC balance and the USDC due within 7 days, and, when its EURC falls short,
                 the swap of USDC for EURC that could fund it (the USDC it takes, the EURC it gives at least and as estimated, and what it costs above the
@@ -263,7 +263,7 @@ export default function PrivacyPage() {
               </li>
               <li>
                 when the cash cannot cover every bill due within 14 days, to choose which are paid first: each such bill&apos;s payee name, amount, due date
-                and days left, whether it is a recurring payment and how often, its memo and purchase order, an early-payment discount it would lose, its
+                and days left, whether it is a recurring payment and how often, its memo and purchase order, an early-payment discount it would lose, a late fee and the day it starts, its
                 status, and how many requests for more time its supplier was sent and how each ended (agreed, declined by the supplier, fewer days the
                 agent declined, withdrawn by the agent, still open); the cash the agent can pay with, what is
                 already committed, and the written policy&apos;s order. Code pays the bills in the order chosen only while the cash lasts;

@@ -3787,3 +3787,26 @@ describe("a payable held for a person's verdict (shadow mode S4)", () => {
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "paid" });
   });
 });
+
+describe("listWaitingPayables and a late fee (late fees LF4)", () => {
+  it("lists a payable with its late fee, and reads again without it before migration 0141", async () => {
+    const fee = { late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-11-01" };
+    const withFee = approvalsFake({ invoice: (r) => (r.params.get("id") ? undefined : { body: [invoiceRow(fee)] }) });
+    const [listed] = await withFee.run(() => listWaitingPayables());
+    expect(listed.lateFee).toEqual({ kind: "percent_month", value: 1.5, startsOn: "2026-11-01" });
+
+    // Production can run this code before the migration: the read naming the columns is refused, and read again without.
+    const refused = vi.fn();
+    const before0141 = approvalsFake({
+      invoice: (r) => {
+        if (r.params.get("id") || !(r.params.get("select") ?? "").includes("late_fee_")) return undefined;
+        refused();
+        return { status: 400, body: { code: "42703", message: "column invoices.late_fee_kind does not exist" } };
+      },
+    });
+    const listedBefore = await before0141.run(() => listWaitingPayables());
+    expect(refused).toHaveBeenCalledTimes(1);
+    expect(listedBefore.map((payable) => payable.id)).toEqual([INVOICE_ID]);
+    expect(listedBefore[0]).not.toHaveProperty("lateFee");
+  });
+});

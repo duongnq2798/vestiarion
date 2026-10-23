@@ -14,6 +14,25 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Late fees on bills.** A bill can carry the late fee its supplier charges for paying late: a percent a month, such as
+  1.5%, or a fixed amount, from the first day it applies, the day after the due date unless you say otherwise. Enter it
+  in the invoice form (**Late fee**), through the API, in an imported list (`late_fee_percent_month`,
+  `late_fee_amount`, `late_fee_starts_on`), or let Vestiarion read it from a document, an email, the Chrome extension
+  or a chat, checked against the text as a discount is. A late fee is never added to what is paid: it shows what waiting
+  costs. The approval card's cost box ends with "Late after *date*" and what a month of the fee costs, for a bank payout
+  too; the bill's terms on Bills & receivables and Slack's Approve confirmation name it. A late fee never moves a bill's
+  decide-by day or its priority: past its due date, a bill with one names the fee beside that day ("Decide by Oct 20,
+  2026; a late fee of 1.5% a month starts Oct 30, 2026"), in Approvals, on Bills & receivables, in the accountant
+  console and in its escalation email, which comes as for any bill. Past the due date, one more escalation email comes
+  on the eve of the fee, while paying still avoids it: "A late fee starts tomorrow". On an eve before the usual email
+  went out, as the first day past the due date, the usual email comes that day instead, naming the day the fee starts,
+  and no second one follows. When cash is short, the written policy pays first, among the bills due or overdue, the one
+  whose fee costs most in the coming month, and the agent is told each fee and names the one a payment made before the
+  fee's first day avoids. A fixed fee in your own currency is refused in shadow mode, as in an imported list: give it as
+  a percent a month. When a supplier agrees to more time, the fee's start moves with the due date. The sample data gives
+  one supplier bill a late fee. The TypeScript SDK 0.3.7 describes `lateFee`. Needs migration 0141; until it runs, bills
+  are added and read without a late fee, as before.
+
 - **An accountant invites a client with one link.** On the accountant console, under **Invite a client**, someone who
   is an accountant in at least one workspace makes a one-time link that works for 7 days, bound to the client's email
   when one is given, and copies it from the page: it is shown once, and only its SHA-256 is kept. At most 10 open links

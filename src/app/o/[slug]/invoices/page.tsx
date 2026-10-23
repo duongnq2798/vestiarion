@@ -105,6 +105,7 @@ import { CrmDeals, type CrmListProvider } from "@/components/CrmDeals";
 import { crmPrefillFor, crmReady, crmReview, type CrmPrefillRead, type CrmReviewView } from "@/lib/connectors/crm-review";
 import { readDealCosts } from "@/lib/deals/costs-read";
 import { exceptionFacts } from "@/lib/exceptions";
+import { invoiceLateFee } from "@/lib/agent/late-fee";
 import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { readDealCollections } from "@/lib/deals/collection-read";
 import { dealLinksOf, plannedLinesOf, readDeals, type DealLink, type DealRecord } from "@/lib/deals/read";
@@ -922,7 +923,18 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     };
     const exceptionOf = (invoice: InvoiceRow) =>
       members && waiting.has(invoice.id)
-        ? exceptionFacts({ dueDate: invoice.due_date, discount: invoiceDiscount(invoice), createdBy: invoice.created_by ?? null, leftOut: leftOutOf(invoice) }, members, today)
+        ? exceptionFacts(
+            {
+              dueDate: invoice.due_date,
+              discount: invoiceDiscount(invoice),
+              lateFee: invoiceLateFee(invoice),
+              currency: invoice.currency ?? "USDC",
+              createdBy: invoice.created_by ?? null,
+              leftOut: leftOutOf(invoice),
+            },
+            members,
+            today
+          )
         : null;
     const ruleOf = (decision: Decision) => decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : decision.heldForVerdict ? SHADOW_VERDICT : null);
     const needsYouFor = (decision: Decision) => {

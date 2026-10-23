@@ -60,15 +60,22 @@ const STORED = {
   paid_amount: null, created_at: "2026-10-03T10:00:00Z", counterparties: { id: COUNTERPARTY, name: "Acme Supplies", risk_level: "clear" },
 };
 
-function workspace(options: { mode?: "sandbox" | "live"; counterparties?: Array<{ id: string; name: string }> } = {}) {
+function workspace(options: { mode?: "sandbox" | "live"; counterparties?: Array<{ id: string; name: string }>; stored?: Record<string, unknown>; before0141?: boolean } = {}) {
   const counterparties = options.counterparties ?? [{ id: COUNTERPARTY, name: "Acme Supplies" }];
   const fake = fakeSupabase((sent: RecordedRequest) => {
+    // Before migration 0141 the late fee's columns are not there: a write or a read naming one is refused.
+    if (options.before0141 && sent.path === "/rest/v1/invoices") {
+      const named = sent.method === "POST" ? Object.keys(sent.body as Record<string, unknown>).some((key) => key.startsWith("late_fee_")) : (sent.params.get("select") ?? "").includes("late_fee_");
+      if (named) return sent.method === "POST"
+        ? { status: 400, body: { code: "PGRST204", details: null, hint: null, message: "Could not find the 'late_fee_kind' column of 'invoices' in the schema cache" } }
+        : { status: 400, body: { code: "42703", details: null, hint: null, message: "column invoices.late_fee_kind does not exist" } };
+    }
     // The key's issuer, read again at every write (part 2, W5): an admin, who may add records.
     if (sent.path === "/rest/v1/memberships") return { body: [{ role: "admin" }] };
     if (sent.path === "/rest/v1/orgs") return { body: orgs.orgRow(ORG, { mode: options.mode ?? "sandbox" }) };
     if (sent.path === "/rest/v1/counterparties") return { body: counterparties.filter((row) => sent.params.get("id") === `eq.${row.id}`) };
     if (sent.path === "/rest/v1/invoices" && sent.method === "POST") return { body: { id: INVOICE } };
-    if (sent.path === "/rest/v1/invoices" && sent.method === "GET") return { body: STORED };
+    if (sent.path === "/rest/v1/invoices" && sent.method === "GET") return { body: options.stored ?? STORED };
     if (sent.path === "/rest/v1/rpc/append_ledger_entry") return { body: APPENDED_LEDGER_ROW };
     if (sent.path === "/rest/v1/api_idempotency" && sent.method === "POST") return { status: 201, body: [{ org_id: ORG }] };
     return { body: [] };
@@ -112,13 +119,14 @@ describe("POST /api/v1/invoices", () => {
       data: {
         id: INVOICE, direction: "payable", status: "pending", amount: 10.5, currency: "USDC", memo: "Landing page design", poReference: "PO-7",
         goodsReceived: true, dueDate: "2026-10-31T12:00:00+00:00", scheduledFor: null,
-        earlyPayDiscount: { percent: 2, deadline: "2026-10-20T12:00:00+00:00" }, decidedAt: null, settledAt: null, escalatedAt: null,
+        earlyPayDiscount: { percent: 2, deadline: "2026-10-20T12:00:00+00:00" }, lateFee: null, decidedAt: null, settledAt: null, escalatedAt: null,
         agentReasoning: null, txHash: null, paidAmount: null, counterparty: { id: COUNTERPARTY, name: "Acme Supplies", riskLevel: "clear" },
         createdAt: "2026-10-03T10:00:00Z",
       },
     });
     const readBack = requestsTo(fake.requests, "/rest/v1/invoices").find((sent) => sent.method === "GET");
     expect(readBack?.params.get("id")).toBe(`eq.${INVOICE}`);
+    expect(readBack?.params.get("select")).toContain("late_fee_kind,late_fee_value,late_fee_starts_on");
     expect(invoiceInsert(fake.requests)).toMatchObject({
       early_pay_discount_pct: "2",
       discount_due_date: "2026-10-20T12:00:00.000Z",
@@ -200,6 +208,12 @@ describe("POST /api/v1/invoices", () => {
     ["a discount of 100 percent", { ...valid, earlyPayDiscount: { percent: 100, deadline: "2026-10-20" } }, /^earlyPayDiscount\.percent: /],
     ["a discount deadline after the due date", { ...valid, earlyPayDiscount: { percent: 2, deadline: "2026-11-05" } }, /^earlyPayDiscount\.deadline: The discount deadline must be on or before the due date/],
     ["a discount deadline that is not a real day", { ...valid, earlyPayDiscount: { percent: 2, deadline: "2026-02-30" } }, /^earlyPayDiscount\.deadline: /],
+    ["a late fee of a kind it does not take", { ...valid, lateFee: { kind: "percent_year", value: 12 } }, /^lateFee\.kind: /],
+    ["a late fee above 10% a month", { ...valid, lateFee: { kind: "percent_month", value: 12 } }, /^lateFee\.value: Enter a late fee of more than 0% and at most 10% a month/],
+    ["a fixed late fee above the invoice's amount", { ...valid, lateFee: { kind: "fixed", value: "11" } }, /^lateFee\.value: Enter a late fee of more than 0 and at most the invoice's amount/],
+    ["a late fee that starts before the due date", { ...valid, lateFee: { kind: "fixed", value: 5, startsOn: "2026-10-30" } }, /^lateFee\.startsOn: The late fee cannot start before the due date/],
+    ["a late fee on a receivable", { ...valid, direction: "receivable", earlyPayDiscount: undefined, lateFee: { kind: "fixed", value: 5 } }, /^lateFee: A late fee is for a bill you pay/],
+    ["a late fee with a field it does not take", { ...valid, lateFee: { kind: "fixed", value: 5, grace: 10 } }, /^lateFee\.grace: /],
   ])("answers 400 to %s, naming the field, and writes and remembers nothing", async (_label, body, message) => {
     const { fake, send } = workspace();
     const response = await send(body, { "idempotency-key": "inv-1" });
@@ -211,6 +225,43 @@ describe("POST /api/v1/invoices", () => {
     expect(requestsTo(fake.requests, "/rest/v1/invoices")).toEqual([]);
     expect(requestsTo(fake.requests, "/rest/v1/api_idempotency")).toEqual([]);
     expect(cycleMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps a late fee and answers with it, never as part of what is paid (late fees LF2)", async () => {
+    const stored = { ...STORED, amount: "100", late_fee_kind: "percent_month", late_fee_value: "1.500000", late_fee_starts_on: "2026-11-01" };
+    const { fake, send } = workspace({ stored });
+    const response = await send({ ...valid, amount: "100", lateFee: { kind: "percent_month", value: 1.5 } });
+
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(operationById("create-invoice")!.response.parse(body)).toEqual(body);
+    expect(body.data).toMatchObject({ amount: 100, lateFee: { kind: "percent_month", value: 1.5, startsOn: "2026-11-01" } });
+    expect(invoiceInsert(fake.requests)).toMatchObject({ amount: "100", late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-11-01" });
+    const entry = requestsTo(fake.requests, "/rest/v1/rpc/append_ledger_entry")[0]?.body as { p_detail: Record<string, unknown> };
+    expect(entry.p_detail.lateFee).toEqual({ kind: "percent_month", value: "1.5", startsOn: "2026-11-01" });
+  });
+
+  it("takes a fixed late fee with the day it starts, and null for none", async () => {
+    const { fake, send } = workspace();
+    expect((await send({ ...valid, lateFee: { kind: "fixed", value: "2.50", startsOn: "2026-11-10" } })).status).toBe(201);
+    expect(invoiceInsert(fake.requests)).toMatchObject({ late_fee_kind: "fixed", late_fee_value: "2.50", late_fee_starts_on: "2026-11-10" });
+
+    const none = workspace();
+    expect((await none.send({ ...valid, lateFee: null })).status).toBe(201);
+    expect(Object.keys(invoiceInsert(none.fake.requests) ?? {}).filter((column) => column.startsWith("late_fee_"))).toEqual([]);
+  });
+
+  it("adds the invoice and answers before migration 0141, with no late fee, as before", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { fake, send } = workspace({ before0141: true });
+    const response = await send({ ...valid, lateFee: { kind: "fixed", value: 5 } });
+
+    expect(response.status).toBe(201);
+    expect((await response.json()).data).toMatchObject({ id: INVOICE, lateFee: null });
+    const writes = requestsTo(fake.requests, "/rest/v1/invoices").filter((sent) => sent.method === "POST");
+    expect(writes).toHaveLength(2);
+    const reads = requestsTo(fake.requests, "/rest/v1/invoices").filter((sent) => sent.method === "GET");
+    expect(reads.map((sent) => (sent.params.get("select") ?? "").includes("late_fee_"))).toEqual([true, false]);
   });
 
   it("answers 403 to a read-only key, and writes nothing", async () => {

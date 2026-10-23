@@ -371,6 +371,7 @@ describe("the privacy page", () => {
       goodsReceived: "whether the goods were received",
       dueDate: "due date",
       earlyPayDiscount: "early-payment discount",
+      lateFee: "late fee",
       timing: "the payment timing worked out from those",
       scheduledEarlier: "when the agent scheduled the invoice earlier, the date it chose and its reasoning",
       name: "name",

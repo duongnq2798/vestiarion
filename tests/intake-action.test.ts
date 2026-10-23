@@ -129,6 +129,39 @@ describe("createInvoiceAction's counterparty lookup", () => {
     expect(insert?.body).toMatchObject({ early_pay_discount_pct: "2", discount_due_date: "2026-10-20T12:00:00.000Z" });
   });
 
+  it("inserts a late fee the form carries, and none while its fee and start are blank (late fees LF2)", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const form = invoiceForm();
+    form.set("lateFeeKind", "fixed");
+    form.set("lateFeeValue", "2.50");
+    form.set("lateFeeStartsOn", "2026-11-10");
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, form));
+    const insert = fake.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(insert?.body).toMatchObject({ late_fee_kind: "fixed", late_fee_value: "2.50", late_fee_starts_on: "2026-11-10" });
+
+    const blank = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const none = invoiceForm();
+    none.set("lateFeeKind", "percent_month");
+    none.set("lateFeeValue", "");
+    await runWith({ config, db: blank.client, fetch: blank.fetch }, () => createInvoiceAction({ ok: false, message: "" }, none));
+    const added = blank.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(Object.keys((added?.body ?? {}) as Record<string, unknown>).filter((key) => key.startsWith("late_fee_"))).toEqual([]);
+  });
+
+  it("refuses a late fee above 10% a month under the Late fee field, and adds nothing", async () => {
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
+    const form = invoiceForm();
+    form.set("lateFeeKind", "percent_month");
+    form.set("lateFeeValue", "12");
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, form));
+    expect(result).toEqual({
+      ok: false,
+      message: "Late fee: Enter a late fee of more than 0% and at most 10% a month, with at most 2 decimal places.",
+      fieldErrors: { lateFee: "Enter a late fee of more than 0% and at most 10% a month, with at most 2 decimal places." },
+    });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
+  });
+
   it("refuses a discount percent without its deadline with an error on the deadline field, and adds nothing", async () => {
     const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }]));
     const form = invoiceForm();
@@ -170,6 +203,26 @@ describe("createInvoiceAction and a bill in the business's own currency (shadow 
       fx_at: "2026-10-07T00:02:32.000Z",
     });
     expect(rateMock).toHaveBeenCalledWith("VND");
+  });
+
+  it("refuses a fixed late fee in the bill's own currency, which would be read as USDC, and takes a percent a month (late fees LF2)", async () => {
+    rateMock.mockReset().mockResolvedValue(VND);
+    const fake = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }], true));
+    const fixed = billForm();
+    fixed.set("lateFeeKind", "fixed");
+    fixed.set("lateFeeValue", "50.000");
+    const result = await runWith({ config, db: fake.client, fetch: fake.fetch }, () => createInvoiceAction({ ok: false, message: "" }, fixed));
+    const why = "A fixed late fee is taken only on a bill in USDC or EURC: give it as a percent a month.";
+    expect(result).toEqual({ ok: false, message: `Late fee: ${why}`, fieldErrors: { lateFee: why } });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
+
+    const added = fakeSupabase(organizationDatabase([{ id: COUNTERPARTY, name: "Acme Supplies" }], true));
+    const percent = billForm();
+    percent.set("lateFeeKind", "percent_month");
+    percent.set("lateFeeValue", "1.5");
+    await runWith({ config, db: added.client, fetch: added.fetch }, () => createInvoiceAction({ ok: false, message: "" }, percent));
+    const insert = added.requests.find((sent) => sent.path === "/rest/v1/invoices" && sent.method === "POST");
+    expect(insert?.body).toMatchObject({ amount: "96.39", currency: "USDC", late_fee_kind: "percent_month", late_fee_value: "1.5" });
   });
 
   it("refuses it outside shadow mode, and adds nothing", async () => {

@@ -8,7 +8,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/duongnq2798/vestiarion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/duongnq2798/vestiarion/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/duongnq2798/vestiarion?include_prereleases&style=flat-square&label=release)](https://github.com/duongnq2798/vestiarion/releases)
-[![npm](https://img.shields.io/badge/%40vestiarion%2Fsdk-v0.3.6-cb3837?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@vestiarion/sdk)
+[![npm](https://img.shields.io/badge/%40vestiarion%2Fsdk-v0.3.7-cb3837?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
 <a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
@@ -346,7 +346,8 @@ run in production, with its ledger entries and transactions.
 ## Product capabilities
 
 - **AP automation** — invoices typed in, imported from a bill list in its own columns, dates and currency, read from a PDF, forwarded by email, captured
-  from the browser with the Chrome extension, or sent through the API; recurring payables; early-payment discounts taken when they pay.
+  from the browser with the Chrome extension, or sent through the API; recurring payables; early-payment discounts taken when they pay;
+  late fees weighed when a bill waits and when cash is short, never added to what is paid.
 - **Approvals inbox** — approve and pay, reject, or return to the agent; claims keep two people from deciding the
   same row.
 - **Try a limit first** — see which past bills a new payment limit, two-approvals figure or spending limit would have

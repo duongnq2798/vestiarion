@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { invoiceLateFee, lateFeeOf, sameLateFee, type LateFee } from "./late-fee";
 
 /**
  * Which bill first when the cash cannot cover them all (docs/superpowers/specs/2026-10-18-cash-priority-design.md).
@@ -25,6 +26,8 @@ export interface PriorityRow {
   heldForCash: boolean;
   /** Paid to a bank account in another token (bank payouts B13). */
   paidToBank: boolean;
+  /** Its late fee (late fees LF6); none when absent. */
+  lateFee?: LateFee | null;
 }
 
 /** A bill competing for the cash, with its due day. */
@@ -34,6 +37,10 @@ export interface Competing {
   /** `YYYY-MM-DD`. */
   dueOn: string;
   status: string;
+  /** What its late fee costs in the coming month, in USDC (`lateFeeOf`, late fees LF6); 0 for none. It moves with the day. */
+  lateFee: number;
+  /** Its late fee's term, which a plan is told apart by and a person's order carried by (LF6); null for none. */
+  lateFeeTerm: LateFee | null;
 }
 
 const dayOf = (value: string): string | null => {
@@ -55,7 +62,8 @@ export function competingBills(rows: readonly PriorityRow[], today: string): Com
     if (!open) continue;
     const dueOn = dayOf(row.dueDate) ?? today;
     if (dueOn > last) continue;
-    competing.push({ id: row.id, amount: row.amount, dueOn, status: row.status });
+    const term = row.lateFee ?? null;
+    competing.push({ id: row.id, amount: row.amount, dueOn, status: row.status, lateFee: lateFeeOf({ amount: row.amount, lateFee: term }, today), lateFeeTerm: term });
   }
   return competing;
 }
@@ -65,10 +73,26 @@ export function needsPlan(competing: readonly Competing[], cash: number): boolea
   return competing.reduce((sum, bill) => sum + bill.amount, 0) > cash + CENT_MILLIONTH;
 }
 
-/** The written policy's order (P2): overdue first, then by due day, the smaller first on the same day, then by id. */
-export function referenceOrder(competing: readonly Competing[]): string[] {
+/**
+ * The written policy's order (P2): among the bills due or overdue, the one whose late fee costs most in the coming month
+ * first (late fees LF6); then overdue first, by due day, the smaller first on the same day, then by id.
+ */
+export function referenceOrder(competing: readonly Competing[], today: string): string[] {
+  const due = (bill: Competing) => bill.dueOn <= today;
   return [...competing]
-    .sort((a, b) => (a.dueOn !== b.dueOn ? (a.dueOn < b.dueOn ? -1 : 1) : a.amount !== b.amount ? a.amount - b.amount : a.id < b.id ? -1 : 1))
+    .sort((a, b) =>
+      due(a) && due(b) && Math.abs(a.lateFee - b.lateFee) > CENT_MILLIONTH
+        ? b.lateFee - a.lateFee
+        : a.dueOn !== b.dueOn
+          ? a.dueOn < b.dueOn
+            ? -1
+            : 1
+          : a.amount !== b.amount
+            ? a.amount - b.amount
+            : a.id < b.id
+              ? -1
+              : 1
+    )
     .map((bill) => bill.id);
 }
 
@@ -111,13 +135,20 @@ export function planFrom(order: readonly string[], competing: readonly Competing
 }
 
 /**
- * What the plan was made from (P5): the competing bills, their ids, amounts and due days. Statuses are left out, so
+ * What the plan was made from (P5): the competing bills, their ids, amounts and due days, and a late fee's term where
+ * there is one, so a fee added or changed asks again (a bill without one reads as before). Statuses are left out, so
  * applying the plan, which moves bills between scheduled, held and pending, does not ask again; so is the cash, which
- * moves with every sweep and every cent of yield: the last plan is reused while its order still splits the bills the
- * same way against the cash there is now (`sameSplit`).
+ * moves with every sweep and every cent of yield: the last plan is reused while its order still splits the bills the same
+ * way against the cash there is now (`sameSplit`). So is what a fee costs in the coming month, which moves with the day:
+ * a fixed fee reaching its first day is the same bill.
  */
 export function planFingerprint(competing: readonly Competing[]): string {
-  const bills = [...competing].sort((a, b) => (a.id < b.id ? -1 : 1)).map((bill) => `${bill.id}:${bill.amount.toFixed(6)}:${bill.dueOn}`);
+  const bills = [...competing]
+    .sort((a, b) => (a.id < b.id ? -1 : 1))
+    .map((bill) => {
+      const term = bill.lateFeeTerm;
+      return `${bill.id}:${bill.amount.toFixed(6)}:${bill.dueOn}${term ? `:${term.kind}:${term.value.toFixed(6)}:${term.startsOn}` : ""}`;
+    });
   return crypto.createHash("sha256").update(bills.join("|"), "utf8").digest("hex").slice(0, 32);
 }
 
@@ -138,8 +169,22 @@ export interface PriorityPlan {
   reasons: Record<string, string>;
   /** The member who set this order from the payment plan (order design O3), or null when the agent did. */
   byPerson: string | null;
-  /** Each bill's amount and due day as the order was signed, by id: what a person's order was set for (O4). */
-  bills: Record<string, { amount: number | null; dueOn: string | null }>;
+  /**
+   * Each bill's amount and due day as the order was signed, by id, and its late fee's term when it had one: what a
+   * person's order was set for (O4).
+   */
+  bills: Record<string, { amount: number | null; dueOn: string | null; lateFee?: LateFee }>;
+}
+
+/** A signed order item's late fee, `{ kind, value, startsOn }` as a `create_invoice` entry signs it; null when it has none. */
+function signedLateFee(value: unknown): LateFee | null {
+  if (typeof value !== "object" || value === null) return null;
+  const term = value as Record<string, unknown>;
+  return invoiceLateFee({
+    late_fee_kind: typeof term.kind === "string" ? term.kind : null,
+    late_fee_value: typeof term.value === "number" ? term.value : null,
+    late_fee_starts_on: typeof term.startsOn === "string" ? term.startsOn : null,
+  });
 }
 
 /** The last signed plan, when its detail can be read. */
@@ -157,7 +202,12 @@ export function planOf(detail: Record<string, unknown> | null | undefined): Prio
     order.push(entry.invoiceId);
     (entry.keep === true ? keep : wait).push(entry.invoiceId);
     if (typeof entry.reason === "string") reasons[entry.invoiceId] = entry.reason;
-    bills[entry.invoiceId] = { amount: typeof entry.amount === "number" ? entry.amount : null, dueOn: typeof entry.dueOn === "string" ? entry.dueOn : null };
+    const lateFee = signedLateFee(entry.lateFee);
+    bills[entry.invoiceId] = {
+      amount: typeof entry.amount === "number" ? entry.amount : null,
+      dueOn: typeof entry.dueOn === "string" ? entry.dueOn : null,
+      ...(lateFee ? { lateFee } : {}),
+    };
   }
   const byPerson = detail.decisionMode === "person" && typeof detail.by === "string" ? detail.by : null;
   return { fingerprint: detail.fingerprint, order, keep, wait, reasons, byPerson, bills };
@@ -165,14 +215,16 @@ export function planOf(detail: Record<string, unknown> | null | undefined): Prio
 
 /**
  * A person's order still standing for the bills competing now (order design O4): every one of them was in it, at the same
- * amount and due day, so the order goes on with the bills that left it (paid, or past the window) taken out. Null for an
- * agent's order, or when a bill is new or changed: the agent then orders the bills again.
+ * amount, due day and late fee term (not its cost, which moves with the day), so the order goes on with the bills that
+ * left it (paid, or past the window) taken out.
+ * Null for an agent's order, or when a bill is new or changed: the agent then orders the bills again.
  */
 export function carriedOrder(plan: PriorityPlan, competing: readonly Competing[]): string[] | null {
   if (!plan.byPerson) return null;
   for (const bill of competing) {
     const was = plan.bills[bill.id];
     if (!was || was.amount === null || Math.abs(was.amount - bill.amount) > CENT_MILLIONTH || was.dueOn !== bill.dueOn) return null;
+    if (!sameLateFee(was.lateFee, bill.lateFeeTerm)) return null;
   }
   const now = new Set(competing.map((bill) => bill.id));
   return plan.order.filter((id) => now.has(id));

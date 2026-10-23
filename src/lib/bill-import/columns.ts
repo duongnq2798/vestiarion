@@ -18,6 +18,9 @@ export const IMPORT_FIELDS = [
   "direction",
   "discountPct",
   "discountDeadline",
+  "lateFeePercent",
+  "lateFeeAmount",
+  "lateFeeStartsOn",
 ] as const;
 
 export type ImportField = (typeof IMPORT_FIELDS)[number];
@@ -38,6 +41,9 @@ export const FIELD_LABELS: Record<ImportField, string> = {
   direction: "Bill or invoice",
   discountPct: "Early-payment discount (%)",
   discountDeadline: "Discount deadline",
+  lateFeePercent: "Late fee (% a month)",
+  lateFeeAmount: "Late fee (fixed amount)",
+  lateFeeStartsOn: "Late fee starts on",
 };
 
 /** The fields a row cannot be added without. */
@@ -74,18 +80,34 @@ const SYNONYMS: Record<ImportField, readonly string[]> = {
   direction: ["direction", "apar", "payablereceivable"],
   discountPct: ["earlypaydiscountpct", "discount", "earlypaymentdiscount", "discountpct", "discountpercent"],
   discountDeadline: ["discountdeadline", "discountuntil", "discountby", "discountdate"],
+  lateFeePercent: ["latefeepercentmonth", "latefeepercent", "latefeepct", "latefeepermonth", "monthlylatefee", "interestpermonth"],
+  lateFeeAmount: ["latefeeamount", "latefeefixed"],
+  lateFeeStartsOn: ["latefeestartson", "latefeestarts", "latefeefrom", "latefeedate"],
 };
 
 const KNOWN = new Set(Object.values(SYNONYMS).flat());
 
+/** A late fee's bare name ("Late fee"), which says neither a percent nor an amount: the column may hold "25" or "1.5%". */
+const BARE_LATE_FEE = new Set(["latefee", "latepaymentfee"]);
+
+/**
+ * A header as a field is matched by: its `headerKey`, save a late fee's bare name written with a percent sign ("Late fee
+ * (%)"), which `headerKey` strips: that one is the percent a month, never a fixed amount (late fees LF2). A bare name
+ * without it matches no field, and the person chooses.
+ */
+function mappingKey(header: string): string {
+  const key = headerKey(header);
+  return BARE_LATE_FEE.has(key) && header.includes("%") ? "latefeepercent" : key;
+}
+
 /** Whether a row reads as column names: at least one of its cells is a name a field is known by. */
 export function looksLikeHeader(cells: readonly string[]): boolean {
-  return cells.some((cell) => KNOWN.has(headerKey(cell)));
+  return cells.some((cell) => KNOWN.has(mappingKey(cell)));
 }
 
 /** Each field's column, from the list's column names: a column goes to one field, the first in `IMPORT_FIELDS`. */
 export function detectMapping(headers: readonly string[]): ColumnMapping {
-  const keys = headers.map(headerKey);
+  const keys = headers.map(mappingKey);
   const taken = new Set<number>();
   const mapping: ColumnMapping = {};
   for (const field of IMPORT_FIELDS) {

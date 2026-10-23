@@ -16,10 +16,12 @@ import {
   firstZodMessage,
   invoiceFormRefusal,
   invoiceInputSchema,
+  lateFeeFields,
   noticeEmailSchema,
   type InvoiceField,
   counterpartyChainProblem,
   INVOICE_CURRENCIES,
+  INVOICE_FIELD_LABELS,
 } from "@/lib/intake-validation";
 import { changeCounterpartyNoticeEmail } from "@/lib/payment-notices";
 import { unfreezeCounterparty, UnfreezeError } from "@/lib/address-change-check";
@@ -36,7 +38,7 @@ import { changeCounterpartyLimit, CounterpartyLimitError } from "@/lib/counterpa
 import { limitApplied } from "@/lib/policy-replay-apply";
 import { RuleReplayError } from "@/lib/policy-replay-read";
 import { changeCounterpartyPurchaseOrders, CounterpartyPurchaseOrdersError } from "@/lib/counterparty-purchase-orders";
-import { documentProvenance } from "@/lib/invoice-document/provenance";
+import { documentProvenance, submittedLateFee } from "@/lib/invoice-document/provenance";
 import { createCounterparty } from "@/lib/counterparties/create";
 import { createInvoice } from "@/lib/invoices/create";
 import { consoleActor } from "@/lib/commands/actor";
@@ -421,6 +423,13 @@ export async function createInvoiceAction(
         throw error;
       }
     }
+    // A late fee as typed (late fees LF2): none while its fee and start are blank. A fixed one on a bill taken at its USDC
+    // amount would be in the bill's own currency, not USDC: refused, as an imported list refuses it; a percent holds.
+    const lateFee = lateFeeFields((name) => formString(formData, name));
+    if (original && lateFee?.kind === "fixed" && lateFee.value !== "") {
+      const why = "A fixed late fee is taken only on a bill in USDC or EURC: give it as a percent a month.";
+      return { ok: false, message: `${INVOICE_FIELD_LABELS.lateFee}: ${why}`, fieldErrors: { lateFee: why } };
+    }
     const parsed = invoiceInputSchema.safeParse({
       direction: formString(formData, "direction"),
       counterpartyId: formString(formData, "counterpartyId"),
@@ -433,6 +442,7 @@ export async function createInvoiceAction(
       dueDate: formString(formData, "dueDate"),
       earlyPayDiscountPct: formString(formData, "earlyPayDiscountPct"),
       discountDeadline: formString(formData, "discountDeadline"),
+      lateFee,
     });
     if (!parsed.success) return { ok: false, ...invoiceFormRefusal(parsed.error) };
 
@@ -446,6 +456,7 @@ export async function createInvoiceAction(
         poReference: input.poReference,
         earlyPayDiscountPct: input.earlyPayDiscountPct,
         discountDeadline: input.discountDeadline,
+        ...submittedLateFee(input.lateFee),
         memo: input.memo,
         counterpartyId: input.counterpartyId,
       });

@@ -1,3 +1,4 @@
+import { lateFeeRateWords, lateFeeStarted, type LateFee } from "./agent/late-fee";
 import { utcDay } from "./copy";
 
 /**
@@ -21,17 +22,40 @@ const DECIDING_ROLES = ["owner", "admin", "approver"] as const;
 export interface DecideBy {
   /** `YYYY-MM-DD`. */
   day: string;
-  /** Its due date, or its early-payment discount's deadline while that is still ahead and earlier. */
-  reason: "due" | "discount";
+  /**
+   * Its due date, or its early-payment discount's deadline while that is still ahead and earlier. `late_fee` is its due
+   * date too, for a bill past it that has a late fee: the day is the same, and only the words name the fee (late fees LF5).
+   */
+  reason: "due" | "discount" | "late_fee";
+  /**
+   * With `late_fee`: the due date it is past, the fee's first day, its rate in words ("1.5% a month"), and whether the
+   * fee has started. For the words only.
+   */
+  lateFee?: { dueOn: string; startsOn: string; rate: string; started: boolean };
 }
 
 const dayOf = (iso: string) => iso.slice(0, 10);
 
-/** E1: the due date, or the discount's deadline while it is still to come and before the due date. */
-export function decideByOf(payable: { dueDate: string; discount?: { pct: number; deadline: string } | null }, today: string): DecideBy {
+/**
+ * E1: the due date, or the discount's deadline while it is still to come and before the due date. A late fee never moves
+ * the day (late fees LF5): a bill past its due date that has one keeps its due date, so its priority, its ageing, its
+ * order and its escalation stay what they are without the fee, and carries the fee for its words (`late_fee`).
+ */
+export function decideByOf(
+  payable: { dueDate: string; discount?: { pct: number; deadline: string } | null; lateFee?: LateFee | null; currency?: string | null },
+  today: string
+): DecideBy {
   const due = dayOf(payable.dueDate);
   const deadline = payable.discount ? dayOf(payable.discount.deadline) : null;
   if (deadline && deadline >= today && deadline < due) return { day: deadline, reason: "discount" };
+  const fee = payable.lateFee;
+  if (fee && due < today) {
+    return {
+      day: due,
+      reason: "late_fee",
+      lateFee: { dueOn: due, startsOn: fee.startsOn, rate: lateFeeRateWords(fee, payable.currency ?? "USDC"), started: lateFeeStarted(fee, today) },
+    };
+  }
   return { day: due, reason: "due" };
 }
 
@@ -71,7 +95,14 @@ export interface ExceptionFacts {
 }
 
 export function exceptionFacts(
-  payable: { dueDate: string; discount?: { pct: number; deadline: string } | null; createdBy: string | null; leftOut?: readonly string[] },
+  payable: {
+    dueDate: string;
+    discount?: { pct: number; deadline: string } | null;
+    lateFee?: LateFee | null;
+    currency?: string | null;
+    createdBy: string | null;
+    leftOut?: readonly string[];
+  },
   members: readonly ActingMember[],
   today: string
 ): ExceptionFacts {
@@ -79,9 +110,24 @@ export function exceptionFacts(
   return { decideBy, priority: priorityOf(decideBy.day, today), owners: whoCanAct(members, payable.createdBy, payable.leftOut).map((member) => member.email) };
 }
 
-/** "Decide by Oct 20, 2026", with the discount named when it sets the day. */
+const dayWords = (day: string) => utcDay(`${day}T00:00:00.000Z`);
+
+/**
+ * A late fee as the words after a decide-by day name it (late fees LF5): "a late fee of 1.5% a month starts Oct 30, 2026",
+ * or "applies since Oct 30, 2026" once it has. The Approvals card, the Bills row, the accountant console and the
+ * escalation email say it alike.
+ */
+export function lateFeeDayWords(fee: { startsOn: string; rate: string; started: boolean }): string {
+  return `a late fee of ${fee.rate} ${fee.started ? "applies since" : "starts"} ${dayWords(fee.startsOn)}`;
+}
+
+/**
+ * "Decide by Oct 20, 2026", with the discount named when it sets the day, or, past the due date, the late fee: "Decide by
+ * Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026" (LF5).
+ */
 export function decideByWords(decideBy: DecideBy): string {
-  return `Decide by ${utcDay(`${decideBy.day}T00:00:00.000Z`)}${decideBy.reason === "discount" ? " to keep the early-payment discount" : ""}`;
+  if (decideBy.reason === "late_fee" && decideBy.lateFee) return `Decide by ${dayWords(decideBy.day)}; ${lateFeeDayWords(decideBy.lateFee)}`;
+  return `Decide by ${dayWords(decideBy.day)}${decideBy.reason === "discount" ? " to keep the early-payment discount" : ""}`;
 }
 
 /** Who can act, in a line: the first `max` by email (two by default), then how many more; the viewer as "you". */

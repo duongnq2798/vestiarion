@@ -1,3 +1,4 @@
+import { lateFeeLine, type LateFee } from "./agent/late-fee";
 import { amountToPay } from "./agent/payment-timing";
 import { ARC_FEE_USD } from "./circle/types";
 import { utcDay } from "./copy";
@@ -7,7 +8,8 @@ import { chainById, networkOfChain, paidAcrossChains } from "./payee-chains";
 /**
  * What Approve and pay would cost, on the approval card before anyone approves (docs/superpowers/specs/2026-10-22-
  * approval-total-cost-design.md TC1-TC3): the invoice, an early-payment discount that still applies, the route's fee
- * for a payee on another chain, what leaves the balance that pays it, and what the payee receives. Arc's network fee
+ * for a payee on another chain, what leaves the balance that pays it, and what the payee receives, then a late fee the
+ * bill carries (docs/superpowers/specs/2026-10-23-late-fees-design.md LF4), which is never part of what leaves. Arc's network fee
  * is a note, where the workspace's wallets pay their own gas (Arc mainnet's EOAs): it is small and is never read before
  * the transfer. On Arc testnet Circle's Gas Station pays it.
  */
@@ -36,6 +38,7 @@ export function approvalCost(
     payeeChain?: string;
     bridgeFeeUsdc?: number | null;
     payoutRoute?: "cctp" | "gateway";
+    lateFee?: LateFee | null;
   },
   now: Date = new Date()
 ): ApprovalCost {
@@ -60,6 +63,8 @@ export function approvalCost(
   // CCTP mints the amount, and what Circle did not charge of the most the fee could be (CCTP payouts R3).
   const onChain = elsewhere ? ` on ${chainById(payable.payeeChain as string).label}` : "";
   lines.push({ label: `${payable.counterpartyName} receives`, value: `${elsewhere && !gateway ? "at least " : ""}${show(amountPaid)} ${currency}${onChain}` });
+  // What paying late would cost: the vendor charges it, and a late payment is still paid at its amount.
+  if (payable.lateFee) lines.push(lateFeeLine(payable.lateFee, payable.amount, currency));
 
   // A Gateway payout sends no transaction of the wallet's on Arc; a smart account's gas is paid by Circle's Gas Station.
   const ownGas = payable.payeeChain !== undefined && networkProfile(networkOfChain(payable.payeeChain)).walletAccountType === "EOA";
@@ -81,6 +86,7 @@ export function bankPayoutCost(
     counterpartyName: string;
     discount: { pct: number; deadline: string } | null;
     bank?: { quote: { feesSender: number } | null } | null;
+    lateFee?: LateFee | null;
   },
   now: Date = new Date()
 ): ApprovalCost | null {
@@ -92,6 +98,7 @@ export function bankPayoutCost(
       { label: "Invoice", value: `${show(payable.amount)} USDC` },
       { label: "BlindPay's fees, taken from it", value: `-${show(quote.feesSender)} USDC` },
       { label: "Leaves the operating wallet", value: `${show(payable.amount)} USDC`, total: true },
+      ...(payable.lateFee ? [lateFeeLine(payable.lateFee, payable.amount)] : []),
     ],
     note: `Paid in USDC to a wallet instead, ${payable.counterpartyName} would receive the full ${show(payable.amount)} USDC, with no fee taken: ask them for a wallet address with a payee link.`,
   };

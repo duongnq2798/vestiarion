@@ -13,7 +13,19 @@ import type { DecisionMode } from "@/lib/agent/decide";
  * pays the address on file, and holds a payment whose document asked for another.
  */
 
-export const DOCUMENT_FIELDS = ["amount", "currency", "dueDate", "poReference", "earlyPayDiscountPct", "discountDeadline", "memo", "counterpartyId"] as const;
+export const DOCUMENT_FIELDS = [
+  "amount",
+  "currency",
+  "dueDate",
+  "poReference",
+  "earlyPayDiscountPct",
+  "discountDeadline",
+  "lateFeeKind",
+  "lateFeeValue",
+  "lateFeeStartsOn",
+  "memo",
+  "counterpartyId",
+] as const;
 export type DocumentField = (typeof DOCUMENT_FIELDS)[number];
 
 export interface DocumentProvenance {
@@ -37,10 +49,21 @@ export function documentPayToOf(read: { payToAddress?: unknown } | null | undefi
 }
 
 const READERS: readonly DecisionMode[] = ["anthropic", "openai", "deepseek", "heuristic"];
-const NUMERIC: ReadonlySet<DocumentField> = new Set(["amount", "earlyPayDiscountPct"]);
+const NUMERIC: ReadonlySet<DocumentField> = new Set(["amount", "earlyPayDiscountPct", "lateFeeValue"]);
 
 /** The fields as a member submitted them, each a string or null. */
 export type Submitted = Record<DocumentField, string | null>;
+
+/**
+ * A late fee as a member submitted it (late fees LF2), as the three fields a reading names: all null with none. Its start
+ * is the day it takes, the day after the due date when left blank, as a reading without one is compared (`changedFields`).
+ */
+export function submittedLateFee(
+  lateFee: { kind: string; value: string; startsOn?: string | null } | null | undefined
+): Pick<Submitted, "lateFeeKind" | "lateFeeValue" | "lateFeeStartsOn"> {
+  if (!lateFee) return { lateFeeKind: null, lateFeeValue: null, lateFeeStartsOn: null };
+  return { lateFeeKind: lateFee.kind || null, lateFeeValue: lateFee.value || null, lateFeeStartsOn: lateFee.startsOn || null };
+}
 
 function blank(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
@@ -58,9 +81,21 @@ export function isReader(value: unknown): value is DecisionMode {
   return typeof value === "string" && READERS.includes(value as DecisionMode);
 }
 
-/** The fields a member changed from what was read: an empty value and a missing one are the same, as are 10.5 and 10.50. */
+/** The day after a `YYYY-MM-DD` day, or null for what is not one. */
+function dayAfter(day: string | null): string | null {
+  if (!day || !/^\d{4}-\d{2}-\d{2}/.test(day)) return null;
+  const time = Date.parse(`${day.slice(0, 10)}T12:00:00.000Z`);
+  return Number.isNaN(time) ? null : new Date(time + 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * The fields a member changed from what was read: an empty value and a missing one are the same, as are 10.5 and 10.50.
+ * A late fee read without a start starts the day after the due date submitted (late fees LF1), so one kept so, or given
+ * that day, is not a change, whatever due date the member settled on.
+ */
 export function changedFields(read: Partial<Record<DocumentField, unknown>>, submitted: Submitted): DocumentField[] {
-  return DOCUMENT_FIELDS.filter((field) => !same(field, blank(read[field]), submitted[field]));
+  const readStart = blank(read.lateFeeStartsOn) ?? (blank(read.lateFeeKind) ? dayAfter(submitted.dueDate) : null);
+  return DOCUMENT_FIELDS.filter((field) => !same(field, field === "lateFeeStartsOn" ? readStart : blank(read[field]), submitted[field]));
 }
 
 export function documentProvenance(formData: FormData, submitted: Submitted): DocumentProvenance | null {

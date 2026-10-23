@@ -157,6 +157,10 @@ export interface StoredRead {
     poReference: string | null;
     earlyPayDiscountPct: string | null;
     discountDeadline: string | null;
+    /** A late fee as read (late fees LF2), when it named one; absent from a draft read before. */
+    lateFeeKind?: string;
+    lateFeeValue?: string;
+    lateFeeStartsOn?: string | null;
     memo: string | null;
   };
 }

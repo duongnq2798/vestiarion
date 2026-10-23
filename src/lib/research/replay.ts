@@ -69,7 +69,7 @@ export function factsFromEntry(entry: ReplayEntry, rows: ReplayRows): ApPromptFa
       goodsReceived: observed.goodsReceived === true,
       dueDate,
     },
-    terms: (entry.detail.terms as { earlyPayDiscount: unknown } | undefined) ?? { earlyPayDiscount: null },
+    terms: (entry.detail.terms as { earlyPayDiscount: unknown; lateFee?: unknown } | undefined) ?? { earlyPayDiscount: null },
     counterparty: {
       name: rows.counterparty?.name ?? /from (.+?) for /.exec(entry.summary)?.[1] ?? "the counterparty",
       riskLevel: String(observed.riskLevel ?? "clear"),

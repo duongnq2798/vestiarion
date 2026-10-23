@@ -273,3 +273,76 @@ describe("checking what the model read against the document", () => {
     expect(Object.values(fields).every((value) => value === null)).toBe(true);
   });
 });
+
+describe("a late fee read from the document (late fees LF2)", () => {
+  const LATE = `${TEXT}\nLate payments: 1.5% per month on overdue balances.\nA late fee of 25.00 USDC applies after 2026-11-10.`;
+  const noFee = { lateFeePercentPerMonth: null, lateFeeAmount: null, lateFeeStartsOn: null };
+
+  it("names no late fee when none was read, as before", () => {
+    const { fields, notes } = normalize(noFee);
+    expect(fields).not.toHaveProperty("lateFeeKind");
+    expect(notes).toEqual([]);
+  });
+
+  it("keeps a percent a month the document states, its start left blank when it gives no day, for the form's own rule", () => {
+    // Blank, the fee starts the day after the due date the member submits: a due date they correct moves it too.
+    const { fields, notes } = normalize({ lateFeePercentPerMonth: "1.5%" }, LATE);
+    expect(fields).toMatchObject({ lateFeeKind: "percent_month", lateFeeValue: "1.5", lateFeeStartsOn: null });
+    expect(notes).toEqual([]);
+  });
+
+  it("keeps a fixed amount the document states, and the day it starts when that is on or after the due date", () => {
+    const { fields } = normalize({ lateFeeAmount: "25.00", lateFeeStartsOn: "2026-11-10" }, LATE);
+    expect(fields).toMatchObject({ lateFeeKind: "fixed", lateFeeValue: "25.00", lateFeeStartsOn: "2026-11-10" });
+  });
+
+  it("leaves out a fee the document does not state, and says why", () => {
+    const percent = normalize({ lateFeePercentPerMonth: "3" }, LATE);
+    expect(percent.fields).not.toHaveProperty("lateFeeKind");
+    expect(percent.notes).toContain("The late fee was left out: the document does not state that percent.");
+    const amount = normalize({ lateFeeAmount: "250" }, LATE);
+    expect(amount.fields).not.toHaveProperty("lateFeeKind");
+    expect(amount.notes).toContain("The late fee was left out: the document does not state that amount.");
+  });
+
+  it("leaves out a percent above 10 a month, and one read as both kinds", () => {
+    const high = normalize({ lateFeePercentPerMonth: "50" }, `${TEXT}\nLate fee: 50% per month`);
+    expect(high.fields).not.toHaveProperty("lateFeeKind");
+    expect(high.notes).toContain("The late fee was left out: it is more than 10% a month. Check it against the invoice, and enter it if it is right.");
+    const both = normalize({ lateFeePercentPerMonth: "1.5", lateFeeAmount: "25.00" }, LATE);
+    expect(both.fields).not.toHaveProperty("lateFeeKind");
+    expect(both.notes).toContain("The late fee was left out: it was read as both a percent and a fixed amount. Enter the one the invoice charges.");
+  });
+
+  it("leaves blank the start of a fee whose day is before the due date, or cannot be read, and says so", () => {
+    const { fields, notes } = normalize({ lateFeePercentPerMonth: "1.5", lateFeeStartsOn: "2026-10-15" }, LATE);
+    expect(fields).toMatchObject({ lateFeeKind: "percent_month", lateFeeStartsOn: null });
+    expect(notes).toContain(
+      "The day the late fee starts was read as before the due date or could not be read: it is left blank, so it starts the day after the due date. Check it against the invoice."
+    );
+  });
+
+  it("leaves out a fixed fee above the invoice's amount, which the invoice form would refuse, and says why", () => {
+    const { fields, notes } = normalize({ lateFeeAmount: "1,250.00" }, `${TEXT}\nA late fee of 1,250.00 USDC applies after the due date.`);
+    expect(fields).not.toHaveProperty("lateFeeKind");
+    expect(notes).toContain("The late fee was left out: it is more than the invoice's amount. Check it against the invoice.");
+    // At most the amount, it is kept.
+    expect(normalize({ lateFeeAmount: "1,200.00" }, `${TEXT}\nA late fee of 1,200.00 USDC applies.`).fields).toMatchObject({ lateFeeKind: "fixed", lateFeeValue: "1200.00" });
+  });
+
+  it("leaves out a fixed fee the document writes only as a percent, and says why", () => {
+    const { fields, notes } = normalize({ lateFeeAmount: "5" }, `${TEXT}\nA late fee of 5% will be charged on overdue balances.`);
+    expect(fields).not.toHaveProperty("lateFeeKind");
+    expect(notes).toContain("The late fee was left out: the document writes that figure as a percent, not a fixed amount.");
+  });
+
+  it("leaves the start blank when no due date was read either", () => {
+    const { fields } = normalize({ lateFeePercentPerMonth: "1.5", dueDate: null }, LATE);
+    expect(fields).toMatchObject({ lateFeeKind: "percent_month", lateFeeValue: "1.5", lateFeeStartsOn: null });
+  });
+
+  it("leaves out a fixed fee on an invoice in a currency Vestiarion does not pay in", () => {
+    const { fields } = normalize({ currency: "GBP", lateFeeAmount: "25.00" }, LATE);
+    expect(fields).not.toHaveProperty("lateFeeKind");
+  });
+});
