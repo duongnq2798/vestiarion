@@ -2762,8 +2762,9 @@ embeds), the username Vestiarion and at most 2,000 characters. The cycle's last
 stage, `discord` (`src/lib/discord/notify.ts`), reads the agent's activity after
 `discord_webhooks.notified_seq`, page after page up to the ledger's head while
 less than 8 of its 20 seconds have gone (`READ_BUDGET_MS`, so the post's own
-deadline still fits), keeps the stopped payables whose link is
-Approvals, reads them again in one query and keeps those still held or flagged,
+deadline still fits), keeps the stopped payables with an `invoiceId`
+(none for a shadow-mode verdict hold), reads them again in one query and keeps those still held, flagged or
+awaiting_info, as Slack's notifier does,
 and posts one message (`src/lib/discord/messages.ts`) built from
 `buildWaitingNotice` (`src/lib/notifications/waiting-notice.ts`, structured
 entries any chat can format): at most ten bills, as many as fit, each with its

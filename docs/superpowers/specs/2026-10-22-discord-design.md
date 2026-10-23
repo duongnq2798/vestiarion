@@ -63,13 +63,14 @@ requirement (`src/lib/discord/notify.ts`).
 - **Which bills.** Like Slack's notifier, it reads the workspace's activity after `notified_seq`, page after page (a read
   returns 20 entries at most) up to the ledger's head while less than 8 of the stage's 20 seconds have gone, so the
   post's 10-second deadline still fits; the cursor then moves only past what was read. It keeps the payables
-  the agent stopped for a person whose link is Approvals, re-read in one query, still held or flagged. A bill decided
-  since, a request for details (decided with Add details) and a payment held for a verdict in shadow mode (which carries
-  no `invoiceId`) are left out. Nothing waiting moves the cursor past what was read, posting nothing.
+  the agent stopped for a person, re-read in one query, still held, flagged or waiting for details (awaiting_info), as
+  Slack's notifier does. A bill decided since and a payment held for a verdict in shadow mode (which carries no
+  `invoiceId`) are left out. Nothing waiting moves the cursor past what was read, posting nothing.
 - **The message.** One message per cycle, at most 10 bills and as many as fit in 2,000 characters, then "…and N more in
   Approvals" with a link to Approvals. A bill that would pass the limit is counted among the more, never cut. Each bill
   takes one line:
-  - amount and currency, payee, held or flagged, and the agent's reason (first sentence, as the approval card says it);
+  - amount and currency, payee, held, flagged or "waiting for details", and the agent's reason (first sentence, as the
+    approval card says it);
   - for a bill above the two-approvals figure, "needs two approvals", plus "an accountant can co-sign" while accountant
     co-sign is on. A EURC bill is weighed by its last decision's USDC value, and needs two approvals when that is not
     known (two approvals T2). A rule that cannot be read is left out of the notice rather than stop it;
@@ -157,7 +158,7 @@ Send test message handles a gone webhook the same way. Logs carry the status and
 - The connection (`tests/discord-connections.test.ts`): envelope, cursor at the head, ledger entries with ids only,
   scope, before 0140, and the panel's view.
 - The notifier (`tests/discord-notify.test.ts`):
-  - only held or flagged payables are posted;
+  - only held, flagged or awaiting_info payables are posted;
   - more than 10 bills collapse to "…and N more";
   - the two-approvals and co-sign wording;
   - the cursor on success and on each failure;

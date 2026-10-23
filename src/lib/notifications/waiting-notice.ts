@@ -20,7 +20,7 @@ export interface WaitingBill {
   payee: string;
   amount: number;
   currency: "USDC" | "EURC";
-  status: "held" | "flagged";
+  status: "held" | "flagged" | "awaiting_info";
   /** The agent's reasoning, as stored on the invoice. */
   reasoning: string | null;
   /** A EURC bill's USDC value as the agent last weighed it; null when it is not known. */
