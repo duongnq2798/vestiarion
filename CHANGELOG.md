@@ -19,12 +19,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   billing email, Vestiarion emails the vendor in the workspace's name a one-time link: the vendor's own invoice number,
   its amount and due date, and what is missing. Without an account, the vendor sends one PDF, PNG or JPEG of up to
   10 MB, and may type the purchase order number and a note; the file is kept in the workspace's private storage,
-  checked by its first bytes, and the owners and admins are emailed. The bill's card, on Approvals and on Bills, says
-  when Vestiarion asked and when the link expires, or what the vendor sent, with a link any member opens and the
-  purchase order filled into Add details; an owner or admin can revoke a link. In shadow, nothing is sent and each card
-  says what Vestiarion would ask. One request per bill at a time, at most 20 a day, a 7-day wait after an answer or an
-  expiry, and three tries per email. Nothing is paid because a document arrived: a person adds the details, and the
-  agent decides the bill again. Needs migration 0142, which also makes the private `documents` storage bucket.
+  checked by its first bytes, and the owners and admins are emailed, without what the vendor typed. The bill's card, on
+  Approvals and on Bills, says when Vestiarion asked and when the link expires, or what the vendor sent, with a link any
+  member opens and the purchase order filled into Add details, kept there if the vendor is asked again; an owner or
+  admin can revoke a link. In shadow, nothing is sent and each card says what Vestiarion would ask, while the bill still
+  lacks it. A sandbox never emails its vendors: its requests go to the member who turned vendor requests on. One
+  request per bill at a time, at most 20 a day, a 7-day wait after an answer or an expiry, and three tries per email.
+  Nothing is paid because a document arrived: a person adds the details, and the agent decides the bill again. Deleting
+  the workspace, or the daily cleanup of an idle sandbox, removes the files vendors sent. Needs migration 0142, which
+  also makes the private `documents` storage bucket.
 
 - **Bills waiting for approval in Telegram, each with a Review link.** After each cycle, the message in a member's
   Telegram chat now ends with the bills the agent held or flagged for a person, or asked details for, that still wait:

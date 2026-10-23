@@ -3052,7 +3052,14 @@ migration 0142). Part 1 asks, collects and shows; it never pays, and changes no 
   order or a goods receipt, its counterparty has a notice email and is neither frozen (`frozen_at`, read without it
   before 0137) nor screened high risk, and it has no request drafted or open, none answered or expired in 7 days, and
   none revoked. It keys on the row, never on `guardrailRule`, which most match holds leave null. At most 20 requests
-  made and 20 emailed in 24 hours per workspace.
+  made and 20 emailed in 24 hours per workspace. The bills' earlier requests are read 100 bills at a time (`ID_CHUNK`),
+  so no read's address grows long enough to be refused.
+- **A sandbox** never emails its vendors (`orgs.mode`, read with the workspace's name): the request goes to the member
+  who last set vendor requests to shadow or on, named by the latest `document_requests_changed` and found among the
+  members (`listMembers`), as term requests and early offers send theirs. The email is marked `[Sandbox]` and says whose
+  place they take; the request keeps that member's email domain, and both ledger entries carry `sandbox: true`. With no
+  such entry, or once that member left, a sandbox asks no one. A workspace in shadow mode asks as a live one does: its
+  bills are the business's own, and a request asks for a document, never a payment.
 - **Shadow** drafts the request (`create_document_request`, one drafted or open per bill by a partial unique index) and
   signs `document_request_drafted { invoiceId, counterpartyId, requestId, missing, emailDomain }`, once per bill: the
   domain is the only part of the address kept. Nothing is sent; the cards say what Vestiarion would ask.
@@ -3071,23 +3078,33 @@ migration 0142). Part 1 asks, collects and shows; it never pays, and changes no 
   private `documents` bucket, and the browser puts the file there (the Supabase origin is in `connect-src`). Sending it
   (`submitDocument`) reads the file back, refuses it unless its first bytes are a PDF, PNG or JPEG of at most 10 MB
   (`sniffDocumentType`), and moves it to `<org>/document-requests/<request>/<sha256>`, out of the upload address's reach.
-  `answer_document_request` takes it once, re-checking the path, the kind, the size and the fields; a file it does not
-  take is removed. Both steps take a token from `takeDocumentAddressToken` (per IP, before the lookup) and
-  `takeDocumentLinkToken` (per live link). The ledger records `document_received` (`by: null`,
-  `via: "document_request"`, with `poReference`, `fileSha256`, `fileType`, `fileSize`), and `notifyDocumentReceived`
-  emails the owners and admins after the vendor has its page. No model reads the file.
+  The upload address stays good for two hours and may overwrite the upload, so the moved file is read back from where it
+  is kept and taken only when it hashes as the file checked; otherwise it is removed (`failed_check`). The vendor's form
+  reads the file's first 8 bytes too (`sniffDocumentType` is pure), and asks for the upload address and puts the file
+  with that type, so a PDF with no extension, which a browser gives no type, is still taken. `answer_document_request`
+  takes it once, re-checking the path, the kind, the size and the fields; a file it does not take is removed. Both
+  steps take a token from `takeDocumentAddressToken` (per IP, before the lookup) and `takeDocumentLinkToken` (per live
+  link). The purchase order number is plain text on one line of at most 100 characters, with no control or format
+  character and no link (`readDocumentFields`; the function refuses a control character or a link too). The
+  ledger records `document_received` (`by: null`, `via: "document_request"`, with `poReference`, `fileSha256`, `fileType`,
+  `fileSize`), and `notifyDocumentReceived` emails the owners and admins after the vendor has its page, saying whether a
+  purchase order number came and never what the vendor typed. No model reads the file.
 - **The cards** (`readDocumentRequests`, `src/lib/document-requests/read.ts`; `DocumentRequestLine`). Approvals
   (`ApprovalCard`) and Bills (`WaitingPayableAction`) show each waiting bill's latest request: what Vestiarion would ask
-  (drafted, while shadow), when it asked and until when (open), what the vendor sent (answered), or a link that expired
-  unanswered. An answered request links any member to `/api/document-requests/[id]/file`, which checks membership and
-  redirects to a one-minute signed download from the storage's own origin; its purchase order is filled into Add details
-  (`suggestedPo`), which still adds it as before. An owner or admin revokes an open request (`revoke_document_request`,
-  `document_request_revoked`); a revoked request is not made again for that bill.
+  (drafted, while shadow, only for a bill still `awaiting_info`, as what its current row lacks), when it asked and until
+  when (open), what the vendor sent (answered), or a link that expired unanswered. The latest answered request is kept
+  apart: under a newer request as `received`, or alone when the newer one shows nothing, so the vendor's file and
+  purchase order stay on the card. An answered request links any member to `/api/document-requests/[id]/file`, which
+  checks membership and redirects to a one-minute signed download from the storage's own origin; its purchase order is
+  filled into Add details (`suggestedPo`, from `suggestedPoOf`), which still adds it as before. An owner or admin
+  revokes an open request (`revoke_document_request`, `document_request_revoked`); a revoked request is not made again
+  for that bill.
 - **Storage and tenancy.** The tenant role only reads `document_requests` under RLS; every write is a service-role
   definer function. The bucket has no storage policy: only the service role reaches it, through `platformStorage()`
   (`src/lib/dal`), narrowed to that bucket. Deleting a workspace, or the account of its last member, names its files
-  before `delete_org` and removes them after (`documentFilesOf`, `removeDocumentFiles`). Every read of 0142's column,
-  table and functions treats their absence as none.
+  before `delete_org` and removes them after (`documentFilesOf`, `removeDocumentFiles`); so does the daily cleanup
+  around `delete_sandbox_org`, once it deleted an idle sandbox, and removing the sample data, for the requests to its
+  sample counterparties. Every read of 0142's column, table and functions treats their absence as none.
 
 ## Which bill first when the cash cannot cover them all
 
@@ -3139,7 +3156,7 @@ activity feed says a member set the order.
 ## Telling the owner before the cash runs short
 
 docs/superpowers/specs/2026-10-17-cash-short-alert-design.md, `src/lib/agent/cash-alert.ts`, stage `cash_alert` after
-`term_requests` (needs `reconcile`). The stage reads the balances, the open invoices (payables still to pay and
+`document_requests` (needs `reconcile`). The stage reads the balances, the open invoices (payables still to pay and
 receivables still owed, so a long paid history never crowds the read past PostgREST's row cap), what customers still owe
 on each (`stillOwed` over `readAllocationRows`, as the console counts it) and the open milestones, maps them with
 `outlookInputOf` (`src/lib/cash-outlook-input.ts`, shared with `todayFacts`) and runs `cashOutlook`, so its figures are

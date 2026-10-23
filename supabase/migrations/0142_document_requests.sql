@@ -307,7 +307,8 @@ begin
      or p_file_size is null or p_file_size not between 1 and 10485760 then
     raise exception 'document_request_invalid: the file';
   end if;
-  if v_po is not null and (char_length(v_po) > 100 or v_po ~ '[[:cntrl:]]') then
+  -- One line of plain text: no control character, and no link a member might open from the card.
+  if v_po is not null and (char_length(v_po) > 100 or v_po ~ '[[:cntrl:]]' or v_po ~* '://|www[.]') then
     raise exception 'document_request_invalid: the purchase order';
   end if;
   if v_note is not null and (char_length(v_note) > 500 or replace(v_note, E'\n', '') ~ '[[:cntrl:]]') then

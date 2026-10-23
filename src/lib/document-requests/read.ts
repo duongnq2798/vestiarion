@@ -1,9 +1,11 @@
+import { missingDetails } from "../added-details";
 import { can, type OrgRole } from "../auth/roles";
 import { currentOrgId } from "../context";
-import { db, platformDb, platformStorage, type OrgDb } from "../dal";
+import { db, platformDb, platformStorage, unwrap, type OrgDb } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
-import { missingOf, type DocumentRequestStatus, type DocumentRequestView } from "./rules";
+import { ID_CHUNK } from "../new-payee-facts";
+import { missingDocuments, missingOf, type DocumentReceivedView, type DocumentRequestStatus, type DocumentRequestView, type MissingDocument } from "./rules";
 import { readDocumentRequestsSetting } from "./setting";
 
 /**
@@ -33,22 +35,29 @@ interface RequestRow {
   file_size: number | null;
 }
 
-/** A request as its bill's card shows it, or null for one the card says nothing of. */
-function viewOf(row: RequestRow, shadow: boolean, now: number): DocumentRequestView | null {
+/** An answered request, as its bill's card shows what the vendor sent. */
+function receivedOf(row: RequestRow): DocumentReceivedView | null {
+  if (row.status !== "answered" || !row.answered_at) return null;
+  return {
+    state: "answered",
+    id: row.id,
+    missing: missingOf(row.missing),
+    answeredAt: row.answered_at,
+    poReference: row.po_reference,
+    note: row.note,
+    fileType: row.file_type,
+    fileSize: row.file_size === null ? null : Number(row.file_size),
+  };
+}
+
+/**
+ * A request as its bill's card shows it, or null for one the card says nothing of. A drafted one shows only in shadow,
+ * as what the bill lacks now (`wouldAsk`), and not at all once the bill no longer waits for a document.
+ */
+function viewOf(row: RequestRow, wouldAsk: MissingDocument[] | null, now: number): DocumentRequestView | null {
   const missing = missingOf(row.missing);
-  if (row.status === "drafted") return shadow ? { state: "would_ask", missing } : null;
-  if (row.status === "answered" && row.answered_at) {
-    return {
-      state: "answered",
-      id: row.id,
-      missing,
-      answeredAt: row.answered_at,
-      poReference: row.po_reference,
-      note: row.note,
-      fileType: row.file_type,
-      fileSize: row.file_size === null ? null : Number(row.file_size),
-    };
-  }
+  if (row.status === "drafted") return wouldAsk ? { state: "would_ask", missing: wouldAsk } : null;
+  if (row.status === "answered") return receivedOf(row);
   if (!row.sent_at || !row.expires_at) return null;
   if (row.status === "open" && Date.parse(row.expires_at) > now) return { state: "asked", id: row.id, missing, sentAt: row.sent_at, expiresAt: row.expires_at };
   if (row.status === "open" || row.status === "expired") return { state: "expired", missing, sentAt: row.sent_at, expiresAt: row.expires_at };
@@ -56,33 +65,74 @@ function viewOf(row: RequestRow, shadow: boolean, now: number): DocumentRequestV
 }
 
 /**
+ * What each of `invoiceIds` lacks now that a vendor can send, for the bills that still wait for information: shadow's
+ * "would ask" follows the bill as it is, not as it was when the request was drafted.
+ */
+async function stillMissing(orgDb: OrgDb, invoiceIds: string[]): Promise<Map<string, MissingDocument[]>> {
+  const missing = new Map<string, MissingDocument[]>();
+  for (let start = 0; start < invoiceIds.length; start += ID_CHUNK) {
+    const rows = unwrap(
+      await orgDb
+        .from("invoices")
+        .select("id, status, po_reference, goods_received, counterparties(purchase_order_required)")
+        .in("id", invoiceIds.slice(start, start + ID_CHUNK))
+    ) as unknown as Array<{
+      id: string;
+      status: string;
+      po_reference: string | null;
+      goods_received: boolean | null;
+      counterparties: { purchase_order_required?: boolean | null } | null;
+    }>;
+    for (const row of rows) {
+      if (row.status !== "awaiting_info") continue;
+      const lacks = missingDocuments(
+        missingDetails({ poReference: row.po_reference, goodsReceived: row.goods_received === true, purchaseOrderRequired: row.counterparties?.purchase_order_required !== false })
+      );
+      if (lacks.length > 0) missing.set(row.id, lacks);
+    }
+  }
+  return missing;
+}
+
+/**
  * Each of `invoiceIds`' latest request, as its card shows it (ER3, ER4, ER6): what Vestiarion would ask while the setting
- * is shadow, when it asked and until when, what the vendor sent, or a link that expired unanswered. Bills with nothing to
- * show are left out; before migration 0142, all of them.
+ * is shadow and the bill still waits for a document, when it asked and until when, what the vendor sent, or a link that
+ * expired unanswered. What a vendor sent with an earlier request stays beside a newer one, or shows alone when the newer
+ * one shows nothing, so its file and purchase order never drop off the card. Bills with nothing to show are left out;
+ * before migration 0142, all of them.
  */
 export async function readDocumentRequests(invoiceIds: string[], orgDb: OrgDb = db(), now: number = Date.now()): Promise<Map<string, DocumentRequestView>> {
   const views = new Map<string, DocumentRequestView>();
   if (invoiceIds.length === 0) return views;
   const { setting, ready } = await readDocumentRequestsSetting(orgDb);
   if (!ready) return views;
-  for (let start = 0; start < invoiceIds.length; start += 100) {
+  const latest = new Map<string, RequestRow>();
+  const answered = new Map<string, RequestRow>();
+  for (let start = 0; start < invoiceIds.length; start += ID_CHUNK) {
     const read = await orgDb
       .from("document_requests")
       .select("id, invoice_id, status, missing, created_at, sent_at, expires_at, answered_at, po_reference, note, file_type, file_size")
-      .in("invoice_id", invoiceIds.slice(start, start + 100))
+      .in("invoice_id", invoiceIds.slice(start, start + ID_CHUNK))
       .order("created_at", { ascending: false });
     if (read.error) {
       if (beforeMigration(read.error)) return views;
       throw new Error(read.error.message);
     }
-    const seen = new Set<string>();
+    // Newest first: the first row per bill is its latest, and the first answered one its latest answer.
     for (const row of (read.data ?? []) as unknown as RequestRow[]) {
-      // Newest first: the first row per bill is its latest.
-      if (seen.has(row.invoice_id)) continue;
-      seen.add(row.invoice_id);
-      const view = viewOf(row, setting === "shadow", now);
-      if (view) views.set(row.invoice_id, view);
+      if (!latest.has(row.invoice_id)) latest.set(row.invoice_id, row);
+      if (row.status === "answered" && !answered.has(row.invoice_id)) answered.set(row.invoice_id, row);
     }
+  }
+  const drafted = [...latest.values()].filter((row) => row.status === "drafted").map((row) => row.invoice_id);
+  const lacking = setting === "shadow" && drafted.length > 0 ? await stillMissing(orgDb, drafted) : new Map<string, MissingDocument[]>();
+  for (const [invoiceId, row] of latest) {
+    const view = viewOf(row, lacking.get(invoiceId) ?? null, now);
+    const earlier = answered.get(invoiceId);
+    const received = earlier && earlier !== row ? receivedOf(earlier) : null;
+    if (view && view.state !== "answered" && received) views.set(invoiceId, { ...view, received });
+    else if (view) views.set(invoiceId, view);
+    else if (received) views.set(invoiceId, received);
   }
   return views;
 }
@@ -120,12 +170,14 @@ export async function revokeDocumentRequest(input: { actorId: string; role: OrgR
 
 /**
  * Every file a workspace's requests hold in the private storage, under its own folder: each kept document, and any upload
- * a vendor started and never sent. Read before the workspace is deleted, whose rows go with it, so its files can follow;
- * none before migration 0142, or when they cannot be read.
+ * a vendor started and never sent. Read before the rows go, so their files can follow: when the workspace is deleted, by
+ * its owner, with its last member's account or as an idle sandbox, and, for the requests to `counterpartyIds` alone,
+ * when those counterparties are deleted with the sample data. None before migration 0142, or when they cannot be read.
  */
-export async function documentFilesOf(orgId: string): Promise<string[]> {
+export async function documentFilesOf(orgId: string, counterpartyIds?: string[]): Promise<string[]> {
   const read = async () => {
-    const rows = await db().from("document_requests").select("id, file_path").limit(10_000);
+    const query = db().from("document_requests").select("id, file_path");
+    const rows = await (counterpartyIds ? query.in("counterparty_id", counterpartyIds) : query).limit(10_000);
     if (rows.error) {
       if (!beforeMigration(rows.error)) console.error("document files not read", orgId);
       return [];
@@ -151,7 +203,7 @@ function scopedTo(orgId: string): boolean {
   }
 }
 
-/** Removes the files `documentFilesOf` named, once their workspace is deleted. Best effort: it never throws. */
+/** Removes the files `documentFilesOf` named, once their rows are deleted. Best effort: it never throws. */
 export async function removeDocumentFiles(paths: string[]): Promise<void> {
   for (let start = 0; start < paths.length; start += 100) {
     try {

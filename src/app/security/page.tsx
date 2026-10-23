@@ -34,12 +34,15 @@ export default function SecurityPage() {
             Programs use the REST API, the SDK, the CLI or the MCP server with a workspace API key. Connected tools are read with the grant a workspace
             gave them, and tell Vestiarion about changes with webhooks it verifies. Scheduled jobs call their routes with the deployment&apos;s own
             token. The Chrome extension Vestiarion Invoice Capture uses a token of its own, issued when a member allows it and good for at most 90
-            days, that can only create and read the drafts it captured. A request is checked by its session, its key, its signature, its token or
+            days, that can only create and read the drafts it captured. A vendor asked for a bill&apos;s missing document sends it through a one-time
+            link, with no account, its browser putting the file straight into storage. A request is checked by its session, its key, its signature, its token or
             the token of a shared link, and a person&apos;s role decides what they may do.
           </li>
           <li>
             <strong>Stored.</strong> A workspace&apos;s records are rows in Postgres, kept apart from other workspaces&apos; as{" "}
-            <a href="#isolation">Tenant isolation</a> describes. Secrets are encrypted before they are stored.
+            <a href="#isolation">Tenant isolation</a> describes. Secrets are encrypted before they are stored. The vendors&apos; documents are files
+            in a private Supabase Storage bucket, which only the server&apos;s service role reaches, under the workspace&apos;s own folder: a
+            vendor&apos;s browser puts the file it sends straight into that bucket, at a one-time upload address the server makes for the request.
           </li>
           <li>
             <strong>Decided.</strong> When this deployment has a model provider, the agent sends it the facts of one decision and gets back a proposal,
@@ -84,7 +87,10 @@ export default function SecurityPage() {
             insert and refuses a row that names another workspace. The service-role client, <code>platformDb()</code>, reaches only an allowlist of
             platform tables and functions, such as memberships, API keys, webhook endpoints and connector tokens, many of which hold rows for every
             workspace. Code that uses it, in about 70 files, names the workspace in its queries itself, except where it looks a row up by a token or
-            a key prefix, or runs a job across workspaces, such as webhook delivery and the daily cleanup. A lint rule forbids importing the raw
+            a key prefix, or runs a job across workspaces, such as webhook delivery and the daily cleanup. Its storage counterpart,{" "}
+            <code>platformStorage()</code>, narrowed to the private bucket of vendors&apos; documents, makes a one-time upload address, reads, moves
+            and removes a file, and makes a one-minute download address, each at a path its caller builds under the workspace&apos;s own folder;
+            nothing else of Storage is reachable from it. A lint rule forbids importing the raw
             database client anywhere in <code>src</code> outside the data access layer and the module that makes it.
           </li>
           <li>
@@ -180,13 +186,16 @@ export default function SecurityPage() {
           </li>
           <li>
             <strong>A vendor&apos;s document.</strong> Once an owner turns on vendor requests, a bill waiting for its purchase order or goods receipt
-            has its vendor&apos;s billing email sent a one-time link (<code>vxu_</code> and 32 random bytes). Only the link&apos;s SHA-256 is kept, the
-            link is checked for its shape before any lookup, and it answers for 14 days, once, while the bill still waits for information; an
-            owner or admin can revoke it. An expired, answered or revoked link names no one. The page is limited per IP address and per link. The
-            file goes straight to private storage, which no browser reads; it is taken only as a PDF, PNG or JPEG of at most 10 MB, known by its
-            first bytes rather than its name, and kept under its SHA-256, out of reach of the upload address. A member opens it as a download from
-            the storage&apos;s own address, for one minute, never on Vestiarion&apos;s pages, and no model reads it. A document changes no bill: a
-            person adds the details, and the agent decides the bill again.
+            has its vendor&apos;s billing email sent a one-time link (<code>vxu_</code> and 32 random bytes); a sandbox&apos;s goes to the member who
+            turned vendor requests on, never to the vendor. Only the link&apos;s SHA-256 is kept, the link is checked for its shape before any lookup,
+            and it answers for 14 days, once, while the bill still waits for information; an owner or admin can revoke it. An expired, answered or
+            revoked link names no one. The page is limited per IP address and per link. The file goes from the vendor&apos;s browser straight to
+            private storage, with no public address: only a one-time upload address and a member&apos;s one-minute download address reach it. It is
+            taken only as a PDF, PNG or JPEG of at most 10 MB, known by its first bytes rather than its name, and kept under its SHA-256, out of
+            reach of the upload address; since that address could write again while the file was checked, the file is read back from where it is
+            kept and taken only when it is the file checked. A member opens it as a download from the storage&apos;s own address, for one minute,
+            never on Vestiarion&apos;s pages, and no model reads it. A document changes no bill: a person adds the details, and the agent decides
+            the bill again.
           </li>
           <li>
             <strong>Two approvals.</strong> Above a figure the owner sets, a payment needs two different people, and one person cannot give both. A

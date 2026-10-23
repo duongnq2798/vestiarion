@@ -5,7 +5,7 @@ import { DocumentRequestLine } from "@/components/document-requests/DocumentRequ
 import { Button } from "@/components/ui/Button";
 import { addDetailsPrompt, addedDetailsSentence, missingDetails, type AddedDetails, type OnFile } from "@/lib/added-details";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
-import type { DocumentRequestView } from "@/lib/document-requests/rules";
+import { suggestedPoOf, type DocumentRequestView } from "@/lib/document-requests/rules";
 import { MATCH_INCOMPLETE, ruleNextStep } from "@/lib/next-step";
 
 /** What the card says when the payable lacks nothing a person can add here: it waits for a decision. */
@@ -69,7 +69,7 @@ export function WaitingPayableAction({
       : step
         ? step.sentence
         : (detailsPrompt ?? WAITING_FOR_A_DECISION);
-  const suggestedPo = documentRequest?.state === "answered" ? documentRequest.poReference : null;
+  const suggestedPo = suggestedPoOf(documentRequest);
 
   const row = (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

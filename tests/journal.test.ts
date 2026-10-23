@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CycleJournal,
@@ -134,6 +136,15 @@ describe("CycleJournal — the fail-closed boundary", () => {
     reconcileDown.failed("reconcile", new Error("chain down"), 1);
     reconcileDown.completed("ap", 1);
     expect(reconcileDown.gate("document_requests").run).toBe(true);
+  });
+
+  it("is described in ARCHITECTURE.md with each stage after the one the cycle runs just before it", () => {
+    const architecture = readFileSync(path.join(process.cwd(), "ARCHITECTURE.md"), "utf8");
+    const said = [...architecture.matchAll(/stage `([a-z_]+)`,?\s+after\s+`([a-z_]+)`/g)].map(([, stage, after]) => [stage, after]);
+    expect(said.map(([stage]) => stage)).toContain("cash_alert");
+    for (const [stage, after] of said) {
+      expect([stage, after]).toEqual([stage, CYCLE_STAGES[CYCLE_STAGES.indexOf(stage as CycleStage) - 1]]);
+    }
   });
 
   it("blames the stage that actually broke, not the nearest dependency", () => {

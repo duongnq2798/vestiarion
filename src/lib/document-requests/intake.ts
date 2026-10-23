@@ -16,9 +16,11 @@ import { documentTokenHash } from "./token";
  * The file goes from the vendor's browser straight to the workspace's private storage, at an upload address made for the
  * request, so a file of up to 10 MB never passes through a server function. Sending it then reads the file back, knows
  * it by its first bytes (a PDF, a PNG or a JPEG, never by its name), and keeps it under its SHA-256, where the upload
- * address can no longer write; one that is not one of those is removed. 0142's answer_document_request takes it once,
- * while the request is open. Signed as `document_received` (by no member) and told to the owners and admins, both best
- * effort: the answer is taken by then. It never changes the bill, and is read by no model (ER7).
+ * address can no longer write; one that is not one of those is removed. The file kept is read back and taken only when
+ * it hashes as the file checked, since the upload address could write again in between. 0142's
+ * answer_document_request takes it once, while the request is open. Signed as `document_received` (by no member) and
+ * told to the owners and admins, both best effort: the answer is taken by then. It never changes the bill, and is read
+ * by no model (ER7).
  */
 
 export interface DocumentRequestPreview {
@@ -173,6 +175,16 @@ export async function submitDocument(
     const removed = await storage.remove([kept]);
     if (removed.error) console.error("document request: unused file not removed", row.request_id);
   };
+  // The upload address lets the vendor's browser write the upload again while it was read and checked, so the file moved
+  // may not be the one checked: it is read back from where it is kept, out of that address's reach, and taken only when
+  // it is the same file.
+  const again = await storage.download(kept);
+  const keptBytes = again.error || !again.data ? null : new Uint8Array(await again.data.arrayBuffer());
+  if (!keptBytes || crypto.createHash("sha256").update(keptBytes).digest("hex") !== fileSha256) {
+    console.error("document request: kept file is not the one checked", row.request_id);
+    await dropKept();
+    return { ok: false, reason: "failed_check" };
+  }
 
   const done = await platformDb().rpc("answer_document_request", {
     p_token_hash: tokenHash,
@@ -232,7 +244,7 @@ export async function submitDocument(
         invoiceId: answered.invoice_id as string,
         vendorName,
         reference: answered.invoice_reference,
-        poReference: fields.poReference,
+        typedPo: fields.poReference !== null,
       });
     if (options.defer) {
       try {

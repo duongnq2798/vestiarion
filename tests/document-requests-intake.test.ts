@@ -196,6 +196,30 @@ describe("sending it (ER5, ER6)", () => {
     expect(sendMock).toHaveBeenCalledTimes(1);
     expect(sendMock.mock.calls[0][0]).toMatchObject({ to: "owner@pinecrest.example", subject: "Northstar Studio sent a document for invoice INV-2215" });
     expect(sendMock.mock.calls[0][0].text).toContain(`/o/pinecrest/approvals#payable-${INVOICE}`);
+    // What the vendor typed stays on the card, behind sign-in: Vestiarion's own email only says there is one.
+    expect(sendMock.mock.calls[0][0].text).toContain("with a purchase order number");
+    expect(JSON.stringify(sendMock.mock.calls[0][0])).not.toContain("PO-4410");
+  });
+
+  it("keeps the file only once it reads back, from where it is kept, as the file it checked", async () => {
+    const kept = `${ORG}/document-requests/${REQUEST}/${PDF_SHA}`;
+    const client = world();
+    await within(client, () => submitDocument(token(), { poReference: "", note: "" }, freshClient(), { now: NOW }));
+    expect(storage.download).toHaveBeenNthCalledWith(1, `${ORG}/document-requests/${REQUEST}/upload`);
+    expect(storage.download).toHaveBeenNthCalledWith(2, kept);
+
+    // The upload address put another file in place between the check and the move: nothing is taken, and it is removed.
+    storage.download.mockReset();
+    storage.download
+      .mockResolvedValueOnce({ data: new Blob([PDF]), error: null })
+      .mockResolvedValueOnce({ data: new Blob([new TextEncoder().encode("<html><script>alert(1)</script>")]), error: null });
+    storage.remove.mockClear();
+    bestEffortMock.mockClear();
+    const swapped = world();
+    expect(await within(swapped, () => submitDocument(token(), { poReference: "", note: "" }, freshClient(), { now: NOW }))).toEqual({ ok: false, reason: "failed_check" });
+    expect(storage.remove).toHaveBeenCalledWith([kept]);
+    expect(swapped.requests.some((r) => r.path === "/rest/v1/rpc/answer_document_request")).toBe(false);
+    expect(bestEffortMock).not.toHaveBeenCalled();
   });
 
   it("leaves the purchase order out of the entry when the vendor typed none", async () => {

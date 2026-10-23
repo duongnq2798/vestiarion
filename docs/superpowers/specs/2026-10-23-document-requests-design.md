@@ -26,18 +26,20 @@ hold:
 - `missingDetails` of its current row names a purchase order or a goods receipt;
 - its counterparty has a billing email;
 - its counterparty is not frozen and not screened high risk;
-- it has no open request, and no request expired or answered in the last 7 days.
+- it has no drafted or open request (at most one of those per bill), no request expired or answered in the last 7 days,
+  and no request an owner or admin revoked: a revoked bill is never asked about again.
 
 This matches how the UI already offers **Add details**. It does not key on `guardrailRule`, which most match holds leave
 null.
 
-At most 20 requests per workspace a day.
+At most 20 requests per workspace a day. The bills' earlier requests are read 100 bills at a time.
 
 **ER3. Shadow first.** With `shadow`, the stage sends nothing.
-- It signs `document_request_drafted { invoiceId, counterpartyId, missing, emailDomain }`. The domain is the only part of
-  the address signed.
+- It signs `document_request_drafted { invoiceId, counterpartyId, requestId, missing, emailDomain }`. The domain is the
+  only part of the address signed.
 - The bill's card on Approvals and in the Bills list says "Vestiarion would ask <vendor> for the purchase order. Turn on
-  vendor requests in Settings to send it."
+  vendor requests in Settings to send it." It says so only while the bill is still `awaiting_info`, and names what its
+  current row lacks, not what it lacked when the request was drafted.
 
 **ER4. Asking.** With `on`, the stage:
 - creates a request with a one-time token: `vxu_` plus 32 random bytes, of which only the SHA-256 is kept;
@@ -49,20 +51,37 @@ At most 20 requests per workspace a day.
 
 A send that fails leaves the request unsent and is tried at the next cycle, at most 3 times.
 
+A sandbox never emails its vendors, which are sample data or real ones a trial added. Its requests, in shadow and on, go
+to the member who last set vendor requests to shadow or on, as the latest `document_requests_changed` names them, and
+the email is marked `[Sandbox]`, as term requests and early offers do. The request keeps that member's email domain,
+and both entries carry `sandbox: true`. With no such entry, or once that member left, a sandbox asks no one. A
+workspace in shadow mode asks as a live one does: its bills are the business's own, and a request asks for a
+document, never a payment.
+
 **ER5. The vendor's page**, `/documents/[token]`, public and noindex, with no account. It shows:
 - the workspace's name;
 - the vendor's own invoice number, its amount and due date;
 - what is missing.
 
 The vendor:
-- uploads one file, a PDF, PNG or JPEG of at most 10 MB, checked by its first bytes, not its name;
-- may type the PO number;
+- uploads one file, a PDF, PNG or JPEG of at most 10 MB, checked by its first bytes, not its name (the page reads them
+  too, so a file with no extension, which a browser gives no type, is still taken);
+- may type the PO number: plain text on one line, of at most 100 characters, with no control or format character and
+  no link;
 - may add a note of at most 500 characters.
 
+Migration 0142 creates the private `documents` storage bucket, where no file has a public address. The vendor's browser
+puts the file there directly, at a signed upload address the server makes for the request under the workspace's own
+folder.
+
 On submit:
-- the file is stored in the workspace's private document storage, read only by members;
+- the server reads the file back, checks its first bytes and size, and moves it to a path named by its SHA-256, out of
+  the upload address's reach; since that address could write again in between, the moved file is read back and kept
+  only when it hashes as the file checked;
 - the request becomes answered, once;
-- `document_received { invoiceId, requestId, poReference?, fileSha256, fileType, fileSize }` is signed.
+- `document_received { by: null, via: "document_request", invoiceId, counterpartyId, requestId, poReference?,
+  fileSha256, fileType, fileSize }` is signed;
+- the owners and admins are emailed, which says whether the vendor typed a PO number, never what they typed.
 
 The page then says the business was told. An expired, answered or revoked link shows one sentence and names nothing.
 Submissions are rate-limited per IP and per token.
@@ -71,7 +90,8 @@ Submissions are rate-limited per IP and per token.
 - a members-only link to open it;
 - the PO number they typed, prefilled in **Add details**.
 
-The person still adds the details and the agent decides again, as today.
+The person still adds the details and the agent decides again, as today. If the vendor is asked again later, what they
+sent stays on the card under the newer request, with its link and PO.
 
 An owner or admin can **Revoke** an open request, signed as `document_request_revoked`.
 
@@ -109,6 +129,10 @@ money.
   - `document_request_preview(p_token_hash)`: what the page shows, for an open, unexpired request only;
   - `answer_document_request(p_token_hash, …)`: once, while open.
 - **Idempotent**, with no function redefined from another migration.
+
+The vendors' files are not rows: they are named before the rows go, and removed from the bucket after, when the
+workspace is deleted by its owner, with its last member's account or by the daily cleanup of an idle sandbox, and,
+for the requests to sample vendors, when the sample data is removed.
 
 ## Tests
 

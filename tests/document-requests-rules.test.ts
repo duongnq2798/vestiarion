@@ -139,6 +139,17 @@ describe("what the vendor may send (ER5)", () => {
     expect(readDocumentFields({ poReference: "", note: "Signed copy.\r\nThanks" })).toEqual({ ok: true, poReference: null, note: "Signed copy.\nThanks" });
     expect(readDocumentFields({ poReference: "P".repeat(101), note: "" })).toMatchObject({ ok: false, field: "poReference" });
     expect(readDocumentFields({ poReference: `PO${String.fromCharCode(0)}1`, note: "" })).toMatchObject({ ok: false, field: "poReference" });
+    // A purchase order has no use for a character that changes how the text around it reads: a direction override, a
+    // zero-width space or joiner. A note keeps them, as emoji need the joiner.
+    for (const code of [0x202e, 0x2066, 0x200b, 0x200d, 0xfeff]) {
+      expect(readDocumentFields({ poReference: `PO-1${String.fromCharCode(code)}2`, note: "" }), code.toString(16)).toMatchObject({ ok: false, field: "poReference" });
+    }
+    expect(readDocumentFields({ poReference: "", note: `Thanks ${String.fromCodePoint(0x1f469, 0x200d, 0x1f4bc)}` })).toMatchObject({ ok: true });
+    // Nor a link, which a member might open from the card or Add details.
+    for (const po of ["PO-1 verify at https://evil.example/login", "see www.evil.example"]) {
+      expect(readDocumentFields({ poReference: po, note: "" })).toMatchObject({ ok: false, field: "poReference" });
+    }
+    expect(readDocumentFields({ poReference: "PO-2026/0042 #3", note: "" })).toEqual({ ok: true, poReference: "PO-2026/0042 #3", note: null });
     expect(readDocumentFields({ poReference: "", note: "n".repeat(501) })).toMatchObject({ ok: false, field: "note" });
     expect(readDocumentFields({ poReference: "", note: `tab${String.fromCharCode(9)}here` })).toMatchObject({ ok: false, field: "note" });
   });

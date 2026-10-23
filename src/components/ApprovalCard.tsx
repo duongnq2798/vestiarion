@@ -7,7 +7,7 @@ import { useCallback, useState, type FormEvent } from "react";
 import { approveInvoiceAction, cosignInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { AddDetailsDialog } from "@/components/AddDetailsDialog";
 import { DocumentRequestLine } from "@/components/document-requests/DocumentRequestLine";
-import type { DocumentRequestView } from "@/lib/document-requests/rules";
+import { suggestedPoOf, type DocumentRequestView } from "@/lib/document-requests/rules";
 import { ExceptionLine } from "@/components/ExceptionLine";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import VerdictControl from "@/components/VerdictControl";
@@ -417,7 +417,7 @@ export default function ApprovalCard({
               ownEntry={ownEntry}
               ownAddress={ownAddress}
               canAddDetails={canAddDetails}
-              suggestedPo={documentRequest?.state === "answered" ? documentRequest.poReference : null}
+              suggestedPo={suggestedPoOf(documentRequest)}
             />
           </>
         ) : canCosign && (cosign ? cosign.state !== "not_needed" : two) ? (

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { IDEMPOTENCY_TTL_MS } from "@/lib/api/idempotency";
@@ -6,6 +6,19 @@ import {
   deleteAbandonedSandboxes, deleteExpiredIdempotencyOutcomes, deleteExpiredWebhookDeliveries, SANDBOX_IDLE_DAYS, WEBHOOK_DELIVERY_RETENTION_DAYS,
 } from "@/lib/platform/cleanup";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+
+// A sandbox's vendor documents are files in the private storage, not rows: what names and removes them is proven in
+// tests/document-requests-members.test.ts. Here, only when the cleanup calls them.
+const { filesMock, removeFilesMock } = vi.hoisted(() => ({
+  filesMock: vi.fn<(orgId: string) => Promise<string[]>>(),
+  removeFilesMock: vi.fn<(paths: string[]) => Promise<void>>(),
+}));
+vi.mock("@/lib/document-requests/read", () => ({ documentFilesOf: filesMock, removeDocumentFiles: removeFilesMock }));
+
+beforeEach(() => {
+  filesMock.mockReset().mockResolvedValue([]);
+  removeFilesMock.mockReset().mockResolvedValue(undefined);
+});
 
 /**
  * `deleteAbandonedSandboxes` against a real supabase-js client whose network
@@ -78,6 +91,35 @@ describe("deleteAbandonedSandboxes", () => {
     for (const call of rpcCalls) {
       expect((call.body as { p_inactive_before: string }).p_inactive_before).toBe(CUTOFF_ISO);
     }
+  });
+
+  it("names each sandbox's vendor documents before deleting it, and removes them only once it is deleted", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const order: string[] = [];
+    filesMock.mockImplementation(async (orgId: string) => {
+      order.push(`files ${orgId}`);
+      return [`${orgId}/document-requests/r-1/upload`];
+    });
+    removeFilesMock.mockImplementation(async (paths: string[]) => {
+      order.push(`remove ${paths.join(",")}`);
+    });
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/rpc/delete_sandbox_org") order.push(`delete ${(request.body as { p_org_id: string }).p_org_id}`);
+      return sandboxesDatabase(request);
+    });
+
+    await runWith({ config, db: fake.client, fetch: fake.fetch }, () => deleteAbandonedSandboxes(NOW));
+
+    expect(order).toEqual([
+      `files ${DELETED}`,
+      `delete ${DELETED}`,
+      `remove ${DELETED}/document-requests/r-1/upload`,
+      `files ${SURVIVED}`,
+      `delete ${SURVIVED}`,
+      `files ${BROKEN}`,
+      `delete ${BROKEN}`,
+    ]);
   });
 
   it("returns empty results and calls nothing when no sandbox is listed", async () => {

@@ -62,6 +62,8 @@ interface World {
   apiKeys?: Array<{ id: string; org_id: string; created_by: string; revoked_at: string | null }>;
   /** Reading `api_keys` fails, as a database error would. */
   keysFail?: boolean;
+  /** Each workspace's requests to vendors for a missing document, with the file one sent (0142). */
+  documentRequests?: Record<string, Array<{ id: string; file_path: string | null }>>;
 }
 
 let counter = 0;
@@ -123,6 +125,10 @@ function world(state: World) {
       if (state.authError) return { status: state.authError.status, body: { code: state.authError.status, msg: state.authError.message } };
       return { body: { id: request.path.split("/").pop() } };
     }
+    if (request.path === "/rest/v1/document_requests" && request.method === "GET") {
+      return { body: state.documentRequests?.[eqOf(request, "org_id") ?? ""] ?? [] };
+    }
+    if (request.path === "/storage/v1/object/documents" && request.method === "DELETE") return { body: [] };
     if (request.path === "/rest/v1/api_keys" && request.method === "GET") {
       if (state.keysFail) return { status: 500, body: { code: "XX000", message: "keys unavailable", details: null, hint: null } };
       const creator = eqOf(request, "created_by");
@@ -321,6 +327,36 @@ describe("deleteAccount (A3)", () => {
     expect(authDeletes().map((request) => request.path)).toEqual([`/auth/v1/admin/users/${ME}`]);
     // A hard delete: the row goes, so 0023's cascades run.
     expect(authDeletes()[0].body).toMatchObject({ should_soft_delete: false });
+  });
+
+  it("removes each deleted workspace's vendor documents once delete_org took it, and none of one whose delete was refused", async () => {
+    const taken = org("files-co");
+    const refused = org("refused-co");
+    const kept = (orgId: string) => `${orgId}/document-requests/r-1/${"b".repeat(64)}`;
+    const { run, requests, authDeletes } = world({
+      orgs: [taken, refused],
+      memberships: [
+        { org_id: taken.id, user_id: ME, role: "owner" },
+        { org_id: refused.id, user_id: ME, role: "owner" },
+      ],
+      refuse: { [refused.id]: "pause_first: pause the agent before deleting this workspace" },
+      documentRequests: {
+        [taken.id]: [{ id: "r-1", file_path: kept(taken.id) }],
+        [refused.id]: [{ id: "r-1", file_path: kept(refused.id) }],
+      },
+    });
+
+    await expect(run(() => deleteAccount({ userId: ME, confirmText: "delete my account" }))).rejects.toThrow();
+
+    const steps = requests
+      .filter((request) => request.path === "/rest/v1/rpc/delete_org" || request.path === "/storage/v1/object/documents")
+      .map((request) =>
+        request.path === "/rest/v1/rpc/delete_org"
+          ? `delete ${(request.body as { p_org_id: string }).p_org_id}`
+          : `remove ${(request.body as { prefixes: string[] }).prefixes.join(",")}`
+      );
+    expect(steps).toEqual([`delete ${taken.id}`, `remove ${taken.id}/document-requests/r-1/upload,${kept(taken.id)}`, `delete ${refused.id}`]);
+    expect(authDeletes()).toEqual([]);
   });
 
   it("deletes the auth user of someone with no workspace", async () => {

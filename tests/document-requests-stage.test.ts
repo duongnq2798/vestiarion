@@ -51,7 +51,15 @@ interface World {
   create?: FakeReply;
   claim?: boolean;
   release?: string;
+  /** The workspace's mode; live by default. */
+  mode?: string;
+  /** Who last set vendor requests, from its signed change; null for no such entry. */
+  changedBy?: string | null;
+  /** The workspace's members, for a sandbox's recipient. */
+  members?: Array<{ user_id: string; email: string; role: string }>;
 }
+
+const OWNER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000004d4";
 
 function world(w: World = {}) {
   return fakeSupabase((request: RecordedRequest): FakeReply => {
@@ -60,7 +68,14 @@ function world(w: World = {}) {
       return { body: [{ document_requests: w.setting ?? "on" }] };
     }
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: w.paused === true };
-    if (request.path === "/rest/v1/orgs") return { body: { name: "Pinecrest Studio" } };
+    if (request.path === "/rest/v1/orgs") return { body: { name: "Pinecrest Studio", mode: w.mode ?? "live" } };
+    if (request.path === "/rest/v1/ledger_entries") {
+      const by = w.changedBy === undefined ? OWNER : w.changedBy;
+      return { body: by === null ? [] : [{ detail: { by, from: "off", to: w.setting ?? "on" } }] };
+    }
+    if (request.path === "/rest/v1/rpc/org_members") {
+      return { body: (w.members ?? [{ user_id: OWNER, email: "owner@pinecrest.example", role: "owner" }]).map((m) => ({ ...m, joined_at: "2026-09-01T00:00:00Z" })) };
+    }
     if (request.path === "/rest/v1/rpc/close_document_requests") return { body: 0 };
     if (request.path === "/rest/v1/invoices") {
       if (w.noFreeze && request.params.get("select")?.includes("frozen_at")) return { status: 400, body: { code: "42703", message: "column counterparties_1.frozen_at does not exist" } };
@@ -163,6 +178,16 @@ describe("which bills it asks about (ER2)", () => {
     expect(sendMock).not.toHaveBeenCalled();
     expect(rpcs(noMore, "claim_document_request_send")).toHaveLength(0);
   });
+
+  it("reads the bills' earlier requests 100 bills at a time, so no read's address grows past the others'", async () => {
+    const many = Array.from({ length: 150 }, (_, i) => bill({ id: `0b6c1c9e-4a4f-4a7e-9b1e-${String(i).padStart(12, "0")}` }));
+    const made = Array.from({ length: 20 }, (_, i) => ({ id: `t${i}`, created_at: new Date(NOW - i * 3_600_000).toISOString(), sent_at: new Date(NOW - i * 3_600_000).toISOString() }));
+    const client = world({ bills: many, today: made });
+    await run(client);
+    const reads = client.requests.filter((r) => r.path === "/rest/v1/document_requests" && r.params.has("invoice_id"));
+    const named = reads.map((r) => (r.params.get("invoice_id") ?? "").replace(/^in\.\(|\)$/g, "").split(",").length);
+    expect(named).toEqual([100, 50]);
+  });
 });
 
 describe("shadow (ER3)", () => {
@@ -259,6 +284,41 @@ describe("on (ER4)", () => {
     const client = world();
     expect(await run(client, null)).toEqual([]);
     expect(rpcs(client, "create_document_request")).toHaveLength(0);
+  });
+});
+
+describe("a sandbox", () => {
+  it("never emails the vendor: the request goes to the member who set vendor requests, marked as a sandbox", async () => {
+    const client = world({ mode: "sandbox" });
+    const lines = await run(client);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const email = sendMock.mock.calls[0][0];
+    expect(email.to).toBe("owner@pinecrest.example");
+    expect(email.subject).toBe("[Sandbox] Pinecrest Studio needs the purchase order for invoice INV-2215");
+    expect(email.text).toContain("This is a sandbox, so Vestiarion never emails its vendors. You get this in place of Northstar Studio");
+    expect(JSON.stringify(client.requests)).not.toContain("Northstar.example");
+    expect((rpcs(client, "create_document_request")[0].body as { p_email_domain: string }).p_email_domain).toBe("pinecrest.example");
+    expect((rpcs(client, "claim_document_request_send")[0].body as { p_email_domain: string }).p_email_domain).toBe("pinecrest.example");
+    expect(ledgerMock.mock.calls[0][0]).toMatchObject({ action: "document_requested", detail: { emailDomain: "pinecrest.example", sandbox: true } });
+    expect(lines).toEqual([{ domain: "ap", message: "Asked Northstar Studio for the purchase order; as this is a sandbox, the email went to the member who turned vendor requests on. The link expires Nov 6" }]);
+  });
+
+  it("still asks only about a vendor with a billing email, and records a sandbox's draft as one", async () => {
+    const noEmail = world({ mode: "sandbox", bills: [bill({}, { notice_email: null })] });
+    expect(await run(noEmail)).toEqual([]);
+    expect(rpcs(noEmail, "create_document_request")).toHaveLength(0);
+    const shadow = world({ mode: "sandbox", setting: "shadow" });
+    await run(shadow);
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(ledgerMock.mock.calls[0][0]).toMatchObject({ action: "document_request_drafted", detail: { emailDomain: "pinecrest.example", sandbox: true } });
+  });
+
+  it("asks no one when the member who set vendor requests has left, or no signed change names them", async () => {
+    for (const client of [world({ mode: "sandbox", members: [] }), world({ mode: "sandbox", changedBy: null })]) {
+      expect(await run(client)).toEqual([]);
+      expect(rpcs(client, "create_document_request")).toHaveLength(0);
+      expect(sendMock).not.toHaveBeenCalled();
+    }
   });
 });
 

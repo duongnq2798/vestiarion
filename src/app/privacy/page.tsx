@@ -205,7 +205,8 @@ export default function PrivacyPage() {
             on its statement link, with at most 140 characters of what it wrote and no link it wrote, the question to a payee&apos;s billing email, when its payment address
             changes to a new one in a live workspace, whether they made the change, with a one-time link to answer, and a note to the owners and admins
             when the payee answers that they did not, the request to a vendor&apos;s billing email for a bill&apos;s missing purchase order or goods
-            receipt, once an owner turns it on, with a one-time link, and a note to the owners and admins when the vendor sends it. It receives each
+            receipt, once an owner turns it on, with a one-time link (in a sandbox, to the member who turned it on instead), and a note to the
+            owners and admins when the vendor sends it, which says whether they typed a purchase order number but not what they typed. It receives each
             recipient&apos;s email address and the message. When the
             team has turned it on, it also sends the team a short note about each new guided setup request, described below.
           </li>
@@ -608,7 +609,8 @@ export default function PrivacyPage() {
       <LegalSection id="vendor-documents" title="A vendor's page for a missing document">
         <p>
           When an owner turns on vendor requests in Settings, and a bill waits for its purchase order or goods receipt, Vestiarion emails the bill&apos;s
-          vendor at the billing email a member gave, with a one-time link where the vendor sends the document. In shadow, nothing is sent.
+          vendor at the billing email a member gave, with a one-time link where the vendor sends the document. In shadow, nothing is sent. A
+          sandbox never emails its vendors: its requests go to the member who turned vendor requests on, who answers as the vendor would.
         </p>
         <ul>
           <li>
@@ -631,7 +633,10 @@ export default function PrivacyPage() {
             The file is read by no model and shown on no Vestiarion page. Any member of the workspace opens it as a download, through an address that
             works for one minute. Nothing about it changes the bill: a person adds the details, and the agent decides the bill again.
           </li>
-          <li>Deleting the workspace deletes its requests and the files vendors sent.</li>
+          <li>
+            Deleting the workspace, by its owner, with its last member&apos;s account or as an idle sandbox, deletes its requests and the files
+            vendors sent. Removing the sample data deletes those of its sample vendors.
+          </li>
         </ul>
       </LegalSection>
 

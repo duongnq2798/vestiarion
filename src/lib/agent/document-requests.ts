@@ -21,6 +21,8 @@ import { documentRequestUrl, generateDocumentToken } from "../document-requests/
 import { documentRequestEmail } from "../email/document-request";
 import { emailSettingsFromEnv, sendEmail, type EmailMessage, type SendResult } from "../email/send";
 import { appendLedgerEntry } from "../ledger";
+import { ID_CHUNK } from "../new-payee-facts";
+import { listMembers } from "../platform/members";
 import type { CycleLogLine } from "./orchestrator";
 import { agentPaused } from "./pause";
 
@@ -35,6 +37,11 @@ import { agentPaused } from "./pause";
  * again at the next cycle, three times at most (ER4). Requests out whose bill no longer waits for information, or whose
  * date passed, are closed first; while the setting is off the stage reads nothing more, and a link out answers only
  * while its bill waits for information.
+ *
+ * A sandbox never emails its vendors, which are sample data or real ones a trial added: its requests go to the member
+ * who last set vendor requests to shadow or on, as its signed change names them, who sends the document as the vendor
+ * would (ER4). A workspace in shadow mode asks as a live one does: its bills are the business's own, and a request asks
+ * for a document, never a payment.
  *
  * It keys on the bill as it is, never on the decision's guardrail rule, which most match holds leave null. It never
  * changes a bill's status, amount or address, and moves no money (ER7). Never while the agent is paused; before
@@ -126,20 +133,33 @@ export async function requestMissingDocuments(
   if (setting === "on" && !send) return [];
   const now = options.now ?? Date.now();
 
+  const org = await platformDb().from("orgs").select("name, mode").eq("id", orgId).single<{ name: string; mode: string }>();
+  if (org.error || !org.data) return [];
+  const { name: orgName, mode } = org.data;
+  if (mode !== "live" && mode !== "sandbox") return [];
+  // A sandbox's requests go to the member who set vendor requests, in place of the vendor; none when they cannot be named.
+  const sandbox = mode === "sandbox";
+  const sandboxTo = sandbox ? await sandboxRecipient(orgDb, orgId) : null;
+  if (sandbox && !sandboxTo) return [];
+
   const bills = await waitingBills(orgDb);
   if (bills.length === 0) return [];
 
-  const requestsRead = await orgDb
-    .from("document_requests")
-    .select("id, invoice_id, status, send_attempts, created_at, sent_at, expires_at, answered_at")
-    .in("invoice_id", bills.map((bill) => bill.id))
-    .order("created_at", { ascending: false })
-    .limit(2000);
-  if (requestsRead.error) {
-    if (beforeMigration(requestsRead.error)) return [];
-    throw new Error(requestsRead.error.message);
+  // 100 bills a read, so no read's address grows long enough to be refused (ID_CHUNK).
+  const requests: RequestRow[] = [];
+  for (let start = 0; start < bills.length; start += ID_CHUNK) {
+    const requestsRead = await orgDb
+      .from("document_requests")
+      .select("id, invoice_id, status, send_attempts, created_at, sent_at, expires_at, answered_at")
+      .in("invoice_id", bills.slice(start, start + ID_CHUNK).map((bill) => bill.id))
+      .order("created_at", { ascending: false })
+      .limit(2000);
+    if (requestsRead.error) {
+      if (beforeMigration(requestsRead.error)) return [];
+      throw new Error(requestsRead.error.message);
+    }
+    requests.push(...((requestsRead.data ?? []) as unknown as RequestRow[]));
   }
-  const requests = (requestsRead.data ?? []) as unknown as RequestRow[];
 
   // The day's requests across the workspace: at most 20 made, and 20 emailed, in 24 hours (ER2).
   const since = new Date(now - DAY_MS).toISOString();
@@ -153,7 +173,6 @@ export async function requestMissingDocuments(
   let made = today.filter((row) => Date.parse(row.created_at) >= now - DAY_MS).length;
   let sent = today.filter((row) => row.sent_at && Date.parse(row.sent_at) >= now - DAY_MS).length;
 
-  let orgName: string | null = null;
   const lines: CycleLogLine[] = [];
   for (const bill of bills) {
     if (made >= DOCUMENT_REQUESTS_PER_DAY && sent >= DOCUMENT_REQUESTS_PER_DAY) break;
@@ -178,8 +197,10 @@ export async function requestMissingDocuments(
       now,
     });
     if (!allowance.allowed) continue;
-    const email = vendor.notice_email as string;
-    const emailDomain = emailDomainOf(email) as string;
+    // Where the email goes: the vendor's billing address, or, in a sandbox, the member's in its place.
+    const email = sandboxTo ?? (vendor.notice_email as string);
+    const emailDomain = emailDomainOf(email);
+    if (!emailDomain) continue;
 
     let request: { id: string; send_attempts: number };
     if (drafted) {
@@ -204,7 +225,7 @@ export async function requestMissingDocuments(
           action: "document_request_drafted",
           summary: `Would ask ${vendor.name} for ${missingWords(missing)}; vendor requests are in shadow, so nothing was sent`,
           // The email's domain is the only part of the address signed (ER3).
-          detail: { invoiceId: bill.id, counterpartyId: bill.counterparty_id, requestId: row.id, missing, emailDomain },
+          detail: { invoiceId: bill.id, counterpartyId: bill.counterparty_id, requestId: row.id, missing, emailDomain, ...(sandbox ? { sandbox: true } : {}) },
         });
         lines.push({ domain: "ap", message: `Would ask ${vendor.name} for ${missingWords(missing)} (vendor requests are in shadow)` });
         continue;
@@ -212,7 +233,6 @@ export async function requestMissingDocuments(
     }
 
     if (request.send_attempts >= DOCUMENT_REQUEST_ATTEMPTS || sent >= DOCUMENT_REQUESTS_PER_DAY) continue;
-    orgName ??= await workspaceName(orgId);
     const outcome = await emailRequest({
       orgId,
       orgName,
@@ -225,6 +245,7 @@ export async function requestMissingDocuments(
       now,
       origin: options.origin ?? siteOrigin(),
       send: send as (message: EmailMessage) => Promise<SendResult>,
+      sandbox,
     });
     if (outcome.sent) sent += 1;
     if (outcome.line) lines.push(outcome.line);
@@ -232,9 +253,22 @@ export async function requestMissingDocuments(
   return lines;
 }
 
-async function workspaceName(orgId: string): Promise<string> {
-  const org = await platformDb().from("orgs").select("name").eq("id", orgId).single<{ name: string }>();
-  return org.data?.name ?? "Your customer";
+/**
+ * Where a sandbox's requests go: the member who last set vendor requests to shadow or on, as the latest signed
+ * `document_requests_changed` names them; null when no such entry is readable, or that member has left, and then the
+ * sandbox asks no one.
+ */
+async function sandboxRecipient(orgDb: OrgDb, orgId: string): Promise<string | null> {
+  const latest = await orgDb.from("ledger_entries").select("detail").eq("action", "document_requests_changed").order("seq", { ascending: false }).limit(1);
+  if (latest.error) return null;
+  const detail = ((latest.data ?? []) as Array<{ detail: { by?: unknown; to?: unknown } | null }>)[0]?.detail;
+  const by = detail && detail.to !== "off" && typeof detail.by === "string" ? detail.by : null;
+  if (!by) return null;
+  try {
+    return (await listMembers(orgId)).find((member) => member.userId === by)?.email ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -254,8 +288,10 @@ async function emailRequest(input: {
   now: number;
   origin: string;
   send: (message: EmailMessage) => Promise<SendResult>;
+  /** A sandbox's request, emailed to the member who set vendor requests in place of the vendor. */
+  sandbox: boolean;
 }): Promise<{ sent: boolean; line: CycleLogLine | null }> {
-  const { orgId, bill, request, missing, vendorName } = input;
+  const { orgId, bill, request, missing, vendorName, sandbox } = input;
   const { token, tokenHash } = generateDocumentToken();
   const claimed = await platformDb().rpc("claim_document_request_send", {
     p_org_id: orgId,
@@ -281,6 +317,7 @@ async function emailRequest(input: {
     missing,
     url: documentRequestUrl(input.origin, token),
     origin: input.origin,
+    sandbox,
   });
   const attempt = request.send_attempts + 1;
   const idempotencyKey = crypto.createHash("sha256").update(`document_request\n${request.id}\n${attempt}`, "utf8").digest("hex");
@@ -307,13 +344,34 @@ async function emailRequest(input: {
     console.error("document request not marked sent", request.id);
     return { sent: true, line: null };
   }
+  const what = missingWords(missing);
+  const invoice = bill.memo ? `invoice ${bill.memo}` : "their invoice";
+  const instead = "as this is a sandbox, the email went to the member who turned vendor requests on";
   await appendLedgerEntry({
     actor: "agent",
     domain: "ap",
     action: "document_requested",
-    summary: `Asked ${vendorName} by email for ${missingWords(missing)}, for ${bill.memo ? `invoice ${bill.memo}` : "their invoice"}; the link expires ${utcDay(expiresAt)}`,
+    summary: sandbox
+      ? `Asked ${vendorName} for ${what}, for ${invoice}; ${instead}. The link expires ${utcDay(expiresAt)}`
+      : `Asked ${vendorName} by email for ${what}, for ${invoice}; the link expires ${utcDay(expiresAt)}`,
     // The email's domain is the only part of the address signed; never the link.
-    detail: { invoiceId: bill.id, counterpartyId: bill.counterparty_id, requestId: request.id, missing, emailDomain: input.emailDomain, expiresAt },
+    detail: {
+      invoiceId: bill.id,
+      counterpartyId: bill.counterparty_id,
+      requestId: request.id,
+      missing,
+      emailDomain: input.emailDomain,
+      expiresAt,
+      ...(sandbox ? { sandbox: true } : {}),
+    },
   });
-  return { sent: true, line: { domain: "ap", message: `Asked ${vendorName} by email for ${missingWords(missing)}; the link expires ${shortDay(expiresAt)}` } };
+  return {
+    sent: true,
+    line: {
+      domain: "ap",
+      message: sandbox
+        ? `Asked ${vendorName} for ${what}; ${instead}. The link expires ${shortDay(expiresAt)}`
+        : `Asked ${vendorName} by email for ${what}; the link expires ${shortDay(expiresAt)}`,
+    },
+  };
 }

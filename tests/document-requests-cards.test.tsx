@@ -135,6 +135,17 @@ describe("the card on Approvals (ER3, ER4, ER6)", () => {
     expect(dialog.textContent).toContain("As Northstar Studio typed it with their document.");
   });
 
+  it("keeps what the vendor sent, its file and its purchase order, beside a newer request", () => {
+    card({ ...ASKED, sentAt: "2026-10-31T09:00:00Z", expiresAt: "2026-11-14T09:00:00Z", received: ANSWERED as Extract<DocumentRequestView, { state: "answered" }> });
+    expect(container.textContent).toContain("Asked Northstar Studio for the purchase order on Oct 31; the link expires Nov 14.");
+    expect(container.textContent).toContain("Northstar Studio sent a document on Oct 24.");
+    expect(buttonNamed("Revoke", container)).toBeTruthy();
+    const open = [...container.querySelectorAll("a")].find((link) => link.textContent?.includes("Open the PDF"));
+    expect(open?.getAttribute("href")).toBe("/api/document-requests/2b6c1c9e-4a4f-4a7e-9b1e-0000000000d1/file?org=pinecrest");
+    const dialog = openAddDetails();
+    expect(dialog.querySelector<HTMLInputElement>('input[name="poReference"]')?.value).toBe("PO-4410");
+  });
+
   it("says what Vestiarion would ask, in shadow, and nothing without a request", () => {
     card({ state: "would_ask", missing: ["purchase_order"] });
     expect(container.textContent).toContain("Vestiarion would ask Northstar Studio for the purchase order. Turn on vendor requests in Settings to send it.");
@@ -164,6 +175,30 @@ describe("the card on Bills (ER3, ER6)", () => {
     expect(markup).toContain("Asked Northstar Studio for the purchase order on Oct 23; the link expires Nov 6.");
     expect(markup).toContain("Add details");
     expect(markup.indexOf("Asked Northstar Studio")).toBeLessThan(markup.indexOf("Add details"));
+  });
+
+  it("fills in the purchase order a vendor sent with an earlier request", () => {
+    const view: DocumentRequestView = { state: "would_ask", missing: ["purchase_order"], received: ANSWERED as Extract<DocumentRequestView, { state: "answered" }> };
+    act(() => {
+      root.render(
+        <TooltipProvider>
+          <WaitingPayableAction
+            orgSlug="pinecrest"
+            invoice={{ id: PAYABLE.id, counterpartyName: "Northstar Studio", counterpartyId: PAYABLE.counterpartyId, poReference: null, goodsReceived: true }}
+            added={null}
+            canAddDetails
+            canDecide
+            canFix
+            documentRequest={view}
+          />
+        </TooltipProvider>
+      );
+    });
+    expect(container.textContent).toContain("Vestiarion would ask Northstar Studio for the purchase order.");
+    expect(container.textContent).toContain("Northstar Studio sent a document on Oct 24.");
+    expect(container.textContent).toContain("Open the PDF");
+    const dialog = openAddDetails();
+    expect(dialog.querySelector<HTMLInputElement>('input[name="poReference"]')?.value).toBe("PO-4410");
   });
 
   it("shows a viewer the request too, with nothing to act on", () => {

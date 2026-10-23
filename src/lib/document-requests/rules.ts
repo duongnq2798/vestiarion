@@ -138,36 +138,60 @@ export function documentKindWord(type: string | null | undefined): string {
 export const DOCUMENT_LINK_INVALID = "This link is no longer valid. If the business still needs a document, ask them for a new link.";
 
 export const DOCUMENT_FIELD_MESSAGES = {
-  poReference: `A purchase order number has at most ${MAX_DOCUMENT_PO} characters, on one line.`,
+  poReference: `A purchase order number is plain text on one line, of at most ${MAX_DOCUMENT_PO} characters, with no link.`,
   note: `A note has at most ${MAX_DOCUMENT_NOTE} characters.`,
 } as const;
+
+/**
+ * A purchase order number's own refusals, as a payee lock's record has them: a control or format character (U+202E
+ * reverses how the text after it reads, a zero-width one hides), and a link, which a purchase order never needs and a
+ * member might open from the card or Add details.
+ */
+const PO_UNSEEN = /[\p{Cc}\p{Cf}]/u;
+const LINK = /:\/\/|www\./i;
 
 /** What the vendor typed beside the file (ER5): a purchase order number and a note, both optional, trimmed, within limits. */
 export function readDocumentFields(input: { poReference: string; note: string }):
   | { ok: true; poReference: string | null; note: string | null }
   | { ok: false; field: "poReference" | "note"; message: string } {
   const po = input.poReference.trim();
-  if (po.length > MAX_DOCUMENT_PO || /\p{Cc}/u.test(po)) return { ok: false, field: "poReference", message: DOCUMENT_FIELD_MESSAGES.poReference };
+  if (po.length > MAX_DOCUMENT_PO || PO_UNSEEN.test(po) || LINK.test(po)) return { ok: false, field: "poReference", message: DOCUMENT_FIELD_MESSAGES.poReference };
   const note = input.note.replace(/\r\n?/g, "\n").trim();
   if (note.length > MAX_DOCUMENT_NOTE || /\p{Cc}/u.test(note.replaceAll("\n", ""))) return { ok: false, field: "note", message: DOCUMENT_FIELD_MESSAGES.note };
   return { ok: true, poReference: po || null, note: note || null };
 }
 
-/** A bill's latest request, as its card on Approvals and Bills shows it (ER3, ER4, ER6). */
+/** A request the vendor answered: what they sent, as a bill's card shows it (ER6). */
+export interface DocumentReceivedView {
+  state: "answered";
+  id?: string;
+  missing: MissingDocument[];
+  answeredAt: string;
+  poReference?: string | null;
+  note?: string | null;
+  fileType?: string | null;
+  fileSize?: number | null;
+}
+
+/**
+ * A bill's latest request, as its card on Approvals and Bills shows it (ER3, ER4, ER6). A newer request than the one a
+ * vendor answered carries that answer as `received`, so its file and purchase order stay on the card.
+ */
 export type DocumentRequestView =
-  | { state: "would_ask"; missing: MissingDocument[] }
-  | { state: "asked"; id?: string; missing: MissingDocument[]; sentAt: string; expiresAt: string }
-  | {
-      state: "answered";
-      id?: string;
-      missing: MissingDocument[];
-      answeredAt: string;
-      poReference?: string | null;
-      note?: string | null;
-      fileType?: string | null;
-      fileSize?: number | null;
-    }
-  | { state: "expired"; missing: MissingDocument[]; sentAt: string; expiresAt: string };
+  | { state: "would_ask"; missing: MissingDocument[]; received?: DocumentReceivedView }
+  | { state: "asked"; id?: string; missing: MissingDocument[]; sentAt: string; expiresAt: string; received?: DocumentReceivedView }
+  | DocumentReceivedView
+  | { state: "expired"; missing: MissingDocument[]; sentAt: string; expiresAt: string; received?: DocumentReceivedView };
+
+/** What the vendor sent with the bill's latest answered request, if any: the request itself, or an earlier one. */
+export function documentReceivedOf(view: DocumentRequestView): DocumentReceivedView | null {
+  return view.state === "answered" ? view : (view.received ?? null);
+}
+
+/** The purchase order number the vendor typed with what it sent, filled into Add details (ER6); null with none. */
+export function suggestedPoOf(view: DocumentRequestView | undefined): string | null {
+  return (view ? documentReceivedOf(view)?.poReference : null) ?? null;
+}
 
 /** Where a member opens a request's document, from its bill's card (ER6): src/app/api/document-requests/[id]/file. */
 export function documentFileHref(orgSlug: string, requestId: string): string {

@@ -41,9 +41,25 @@ const request = (over: Record<string, unknown>) => ({
   ...over,
 });
 
-function world(options: { setting?: string; requests?: Array<Record<string, unknown>> | FakeReply; revoke?: FakeReply; file?: Record<string, unknown> | null } = {}) {
+/** A bill as the cards' read sees it: waiting for its purchase order unless told otherwise. */
+const bill = (id: string, over: Record<string, unknown> = {}) => ({
+  id,
+  status: "awaiting_info",
+  po_reference: null,
+  goods_received: true,
+  counterparties: { purchase_order_required: true },
+  ...over,
+});
+
+function world(
+  options: { setting?: string; requests?: Array<Record<string, unknown>> | FakeReply; revoke?: FakeReply; file?: Record<string, unknown> | null; bills?: Array<Record<string, unknown>> } = {}
+) {
   return fakeSupabase((r: RecordedRequest): FakeReply => {
     if (r.path === "/rest/v1/approval_policies") return { body: [{ document_requests: options.setting ?? "on" }] };
+    if (r.path === "/rest/v1/invoices") {
+      const ids = (r.params.get("id") ?? "").replace(/^in\.\(|\)$/g, "").split(",");
+      return { body: (options.bills ?? [1, 2, 3, 4, 5].map((n) => bill(BILL(n)))).filter((row) => ids.includes(String(row.id))) };
+    }
     if (r.path === "/rest/v1/document_requests") {
       if (r.params.get("id")) return { body: options.file === undefined ? null : options.file };
       const requests = options.requests ?? [];
@@ -98,6 +114,47 @@ describe("each bill's request, as its card shows it (ER3, ER4, ER6)", () => {
     expect(views.has(BILL(3))).toBe(false);
     expect(views.get(BILL(2))?.state).toBe("expired");
     expect(views.has(BILL(1))).toBe(false);
+  });
+
+  it("says what it would ask only while the bill still waits for information, and for what it lacks now", async () => {
+    const shadow = world({
+      setting: "shadow",
+      requests: [
+        // Drafted while both were missing; the purchase order was added since, and the bill still waits for its goods.
+        request({ id: "r-4", invoice_id: BILL(4), status: "drafted", sent_at: null, expires_at: null, missing: ["purchase_order", "goods_receipt"] }),
+        // Drafted, then the purchase order was added and the agent held the bill for approval.
+        request({ id: "r-5", invoice_id: BILL(5), status: "drafted", sent_at: null, expires_at: null }),
+        // Drafted, and the bill still waits, but lacks nothing a vendor can send.
+        request({ id: "r-3", invoice_id: BILL(3), status: "drafted", sent_at: null, expires_at: null }),
+      ],
+      bills: [bill(BILL(4), { po_reference: "PO-1", goods_received: false }), bill(BILL(5), { status: "held", po_reference: "PO-2" }), bill(BILL(3), { po_reference: "PO-3" })],
+    });
+    const views = await within(shadow, () => readDocumentRequests([BILL(3), BILL(4), BILL(5)], db(), NOW));
+    expect(views.get(BILL(4))).toEqual({ state: "would_ask", missing: ["goods_receipt"] });
+    expect(views.has(BILL(5))).toBe(false);
+    expect(views.has(BILL(3))).toBe(false);
+  });
+
+  it("keeps showing what the vendor sent beside a newer request, or alone when the newer one shows nothing", async () => {
+    const sent = { status: "answered", created_at: "2026-10-01T09:00:00Z", sent_at: "2026-10-01T09:00:00Z", answered_at: "2026-10-02T08:00:00Z", po_reference: "PO-4410", note: "Signed.", file_type: "application/pdf", file_size: 2048 };
+    const received = { state: "answered", id: "r-1", missing: ["purchase_order"], answeredAt: "2026-10-02T08:00:00Z", poReference: "PO-4410", note: "Signed.", fileType: "application/pdf", fileSize: 2048 };
+    const on = world({
+      setting: "on",
+      requests: [
+        // Asked again a week after the answer: both show.
+        request({ id: "r-9", invoice_id: BILL(1), created_at: "2026-10-23T09:00:00Z" }),
+        // Drafted again, its email not gone yet, and expired after three failed emails: the answer shows alone.
+        request({ id: "r-8", invoice_id: BILL(2), status: "drafted", created_at: "2026-10-23T09:00:00Z", sent_at: null, expires_at: null }),
+        request({ id: "r-7", invoice_id: BILL(3), status: "expired", created_at: "2026-10-23T09:00:00Z", sent_at: null, expires_at: "2026-10-23T12:00:00Z" }),
+        request({ id: "r-1", invoice_id: BILL(1), ...sent }),
+        request({ id: "r-1", invoice_id: BILL(2), ...sent }),
+        request({ id: "r-1", invoice_id: BILL(3), ...sent }),
+      ],
+    });
+    const views = await within(on, () => readDocumentRequests([BILL(1), BILL(2), BILL(3)], db(), NOW));
+    expect(views.get(BILL(1))).toEqual({ state: "asked", id: "r-9", missing: ["purchase_order"], sentAt: "2026-10-23T09:00:00Z", expiresAt: "2026-11-06T09:00:00Z", received });
+    expect(views.get(BILL(2))).toEqual(received);
+    expect(views.get(BILL(3))).toEqual(received);
   });
 
   it("reads none before migration 0142, and none for no bill", async () => {

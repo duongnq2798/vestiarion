@@ -9,7 +9,7 @@ import { Field } from "@/components/ui/Field";
 import { FileInput } from "@/components/ui/FileInput";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input, Textarea } from "@/components/ui/Input";
-import { MAX_DOCUMENT_NOTE, MAX_DOCUMENT_PO, MAX_VENDOR_DOCUMENT_BYTES, missingWords, type MissingDocument } from "@/lib/document-requests/rules";
+import { MAX_DOCUMENT_NOTE, MAX_DOCUMENT_PO, MAX_VENDOR_DOCUMENT_BYTES, missingWords, sniffDocumentType, type MissingDocument } from "@/lib/document-requests/rules";
 
 const INITIAL: DocumentSubmitResult = { ok: false, message: "" };
 
@@ -17,6 +17,20 @@ const INITIAL: DocumentSubmitResult = { ok: false, message: "" };
 export const DOCUMENT_FILE_LINE = "One PDF, PNG or JPEG, up to 10 MB. Only the business you work with can open it.";
 const TOO_LARGE = "The file is over 10 MB. Send a smaller copy.";
 const NOT_SENT = "The file could not be sent. Try again in a moment.";
+
+/**
+ * What the file is, by its first bytes (ER5): a browser types a file by its name's extension, so a PDF saved with none
+ * has no type, and one misnamed has the wrong one. Read here, it is the type the upload address is asked for and the file
+ * is put with; a file that is none of the three keeps the browser's, for the server to refuse. The server reads the bytes
+ * again when it is sent.
+ */
+async function typeOf(file: File): Promise<string> {
+  try {
+    return sniffDocumentType(new Uint8Array(await file.slice(0, 8).arrayBuffer())) ?? file.type;
+  } catch {
+    return file.type;
+  }
+}
 
 export interface DocumentRequestShown {
   orgName: string;
@@ -70,14 +84,15 @@ export function DocumentUploadForm({ token, request }: { token: string; request:
       return;
     }
     startTransition(async () => {
-      const started = await startDocumentUploadAction(token, file.size, file.type);
+      const type = await typeOf(file);
+      const started = await startDocumentUploadAction(token, file.size, type);
       if (!started.ok || !started.url) {
         setState({ ok: false, message: started.message, field: "file" });
         return;
       }
       let put: Response | null = null;
       try {
-        put = await fetch(started.url, { method: "PUT", body: file, headers: { "content-type": file.type, "x-upsert": "true" } });
+        put = await fetch(started.url, { method: "PUT", body: file, headers: { "content-type": type, "x-upsert": "true" } });
       } catch {
         put = null;
       }

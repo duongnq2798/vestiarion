@@ -204,6 +204,9 @@ describe("the vendor's page (ER5)", () => {
     await expect(answer(token, { path: pathOf(other, id, sha), sha })).rejects.toThrow(/document_request_invalid: the file/);
     await expect(answer(token, { path: pathOf(orgId, id, sha), sha: hash() })).rejects.toThrow(/document_request_invalid: the file/);
     await expect(answer(token, { path: pathOf(orgId, id, sha), sha }, "P".repeat(101))).rejects.toThrow(/document_request_invalid: the purchase order/);
+    // Nor a link, which a member might open from the card: the vendor's page refuses it first.
+    await expect(answer(token, { path: pathOf(orgId, id, sha), sha }, "PO-1 https://evil.example/login")).rejects.toThrow(/document_request_invalid: the purchase order/);
+    await expect(answer(token, { path: pathOf(orgId, id, sha), sha }, "see WWW.evil.example")).rejects.toThrow(/document_request_invalid: the purchase order/);
     await expect(answer(token, { path: pathOf(orgId, id, sha), sha }, null, "n".repeat(501))).rejects.toThrow(/document_request_invalid: the note/);
     await expect(answer(token, { path: pathOf(orgId, id, sha), sha }, null, `bell${String.fromCharCode(7)}`)).rejects.toThrow(/document_request_invalid: the note/);
     // A line break in the note is fine, and blanks are kept as none.
