@@ -27,6 +27,7 @@ export function AddDetailsDialog({
   payable,
   variant = "secondary",
   size = "sm",
+  suggestedPo = null,
 }: {
   orgSlug: string;
   payable: Pick<WaitingPayable, "id" | "counterpartyName" | "poReference" | "goodsReceived">;
@@ -34,6 +35,11 @@ export function AddDetailsDialog({
   variant?: "primary" | "secondary";
   /** `touch` where it is decided from a phone too (Approvals). */
   size?: "sm" | "touch";
+  /**
+   * The purchase order number the vendor typed when it sent its document (document requests ER6): filled in, for the
+   * person to check and add; nothing is added until they do.
+   */
+  suggestedPo?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -55,8 +61,13 @@ export function AddDetailsDialog({
           <input type="hidden" name="orgSlug" value={orgSlug} />
           <input type="hidden" name="invoiceId" value={payable.id} />
           {payable.poReference === null ? (
-            <Field id={poId} label="PO reference" optional={!payable.goodsReceived}>
-              <Input name="poReference" maxLength={100} placeholder="PO-100" />
+            <Field
+              id={poId}
+              label="PO reference"
+              optional={!payable.goodsReceived}
+              description={suggestedPo ? `As ${payable.counterpartyName} typed it with their document. Check it against the document before adding it.` : undefined}
+            >
+              <Input name="poReference" maxLength={100} placeholder="PO-100" defaultValue={suggestedPo ?? undefined} />
             </Field>
           ) : (
             <p className="text-sm text-ink-2">

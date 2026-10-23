@@ -18,11 +18,12 @@ export const LOOP_PAGES = [
   "pay_link",
   "statement",
   "shared_report",
+  "document_request",
 ] as const;
 export type LoopPage = (typeof LOOP_PAGES)[number];
 
 /** The emails a counterparty gets (C1). */
-export const LOOP_EMAILS = ["payment_notice", "payee_link", "address_request", "early_offer", "term_request", "customer_discount", "receivable_reminder"] as const;
+export const LOOP_EMAILS = ["payment_notice", "payee_link", "address_request", "early_offer", "term_request", "customer_discount", "receivable_reminder", "document_request"] as const;
 export type LoopEmail = (typeof LOOP_EMAILS)[number];
 
 /** The words on a page's foot and in an email's (C2). */

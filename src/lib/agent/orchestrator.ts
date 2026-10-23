@@ -60,6 +60,7 @@ import { makeCustomerOffers } from "./customer-offers";
 import { alertCashShort } from "./cash-alert";
 import { makeEarlyPaymentOffers } from "./early-offers";
 import { makeTermRequests } from "./term-requests";
+import { requestMissingDocuments } from "./document-requests";
 import { buyPayeeHistories, type AddressHistoryFact } from "./services";
 import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
@@ -4891,6 +4892,14 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
   // Once a person turned it on, each bill held for want of cash where code allows it: the model decides whether to ask
   // the supplier for more time, and how many days, and the link is emailed to the supplier (term requests X1-X6).
   lines.push(...(await makeTermRequests(db, { operatingBalance })));
+  });
+
+  await stage("document_requests", async () => {
+  // ------------------------------------------------- 6e2. document requests
+  // Once an owner set it to shadow or on, each bill waiting for its purchase order or goods receipt: its vendor is asked
+  // for the document through a one-time link, or, in shadow, what would be asked is recorded (document requests ER2-ER4).
+  // It changes no bill and moves no money.
+  lines.push(...(await requestMissingDocuments(db)));
   });
 
   await stage("cash_alert", async () => {

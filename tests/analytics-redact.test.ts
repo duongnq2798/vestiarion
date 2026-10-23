@@ -24,6 +24,7 @@ describe("redactPath", () => {
     ["/address-change/vxw_secret", "/address-change/:token"],
     ["/join/vxj_secret", "/join/:token"],
     ["/join/vxj_secret/", "/join/:token"],
+    ["/documents/vxu_secret", "/documents/:token"],
     ["/o/acme", "/o/:org"],
     ["/o/acme/", "/o/:org/"],
     ["/o/acme/audit", "/o/:org/audit"],

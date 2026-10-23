@@ -79,6 +79,22 @@ describe("sendEmail", () => {
     expect(busy).toEqual({ sent: false, reason: "status 409" });
   });
 
+  it("sends in a business's name, from Vestiarion's own address, with nothing in the name that could change the header", async () => {
+    const fromOf = async (fromName: string, from = "Vestiarion <no-reply@vestiarion.xyz>") => {
+      let body: { from?: string } = {};
+      await sendEmail({ ...message, fromName }, { apiKey: "re_test", from }, async (_url, init) => {
+        body = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ id: "msg_1" }), { status: 200 });
+      });
+      return body.from;
+    };
+    expect(await fromOf("Pinecrest Studio")).toBe('"Pinecrest Studio via Vestiarion" <no-reply@vestiarion.xyz>');
+    expect(await fromOf("Pinecrest Studio", "no-reply@vestiarion.xyz")).toBe('"Pinecrest Studio via Vestiarion" <no-reply@vestiarion.xyz>');
+    expect(await fromOf('Evil" <x@evil.example>\r\nBcc: y@evil.example')).toBe('"Evil x@evil.example Bcc: y@evil.example via Vestiarion" <no-reply@vestiarion.xyz>');
+    expect(await fromOf("   ")).toBe("Vestiarion <no-reply@vestiarion.xyz>");
+    expect(((await fromOf("A".repeat(200))) ?? "").length).toBeLessThan(120);
+  });
+
   it("reports a refused send without throwing", async () => {
     const result = await sendEmail(message, { apiKey: "re_test", from: "x <no-reply@vestiarion.xyz>" },
       async () => new Response(JSON.stringify({ message: "bad" }), { status: 422 }));

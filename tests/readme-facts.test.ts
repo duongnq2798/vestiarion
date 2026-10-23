@@ -11,7 +11,7 @@ describe("the README", () => {
   it("lists the agent cycle's stages, in the order the cycle runs them", () => {
     const start = README.indexOf("The agent cycle:");
     const block = README.slice(start, README.indexOf("the ledger", start)).replace(/\s+/g, " ");
-    const words: Record<string, string> = { follow_up: "follow-up", ap: "AP", early_offers: "early offers", customer_offers: "customer offers", term_requests: "term requests", cash_alert: "cash alert" };
+    const words: Record<string, string> = { follow_up: "follow-up", ap: "AP", early_offers: "early offers", customer_offers: "customer offers", term_requests: "term requests", document_requests: "document requests", cash_alert: "cash alert" };
     const named = CYCLE_STAGES.map((stage) => words[stage] ?? stage);
     expect(block).toContain(named.join(" -> "));
   });

@@ -3,6 +3,7 @@ import { NoOrgScopeError, currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { FOUNDING_ORG_ID } from "../dal/org-config";
 import { withOrg } from "../dal/scope";
+import { documentFilesOf, removeWorkspaceDocumentFiles } from "../document-requests/read";
 
 /**
  * Deleting a workspace, owner initiated
@@ -13,6 +14,8 @@ import { withOrg } from "../dal/scope";
  * anyone but an owner (re-checked there), a live workspace whose agent is not
  * paused, and one with a cycle or a payment in progress, writes the tombstone,
  * and deletes every row of the organization. No ledger entry is written: the ledger is deleted, and the tombstone is the record.
+ * The documents vendors sent through its requests (migration 0142) are files, not rows: they are removed from the private
+ * storage once the rows are gone, with everything else left under the workspace's folder there.
  */
 
 export type DeleteWorkspaceErrorCode =
@@ -75,8 +78,12 @@ export async function deleteWorkspace(input: { orgId: string; actorId: string; c
   if (!org) throw new DeleteWorkspaceError("org_not_found");
   if (input.confirmSlug !== org.slug) throw new DeleteWorkspaceError("slug_mismatch");
 
+  // The vendors' documents live in the private storage, not in a row: named before the rows go, removed after, with
+  // whatever else is left under the workspace's folder.
+  const files = await documentFilesOf(input.orgId);
   const { error } = await platformDb().rpc("delete_org", { p_org_id: input.orgId, p_by: input.actorId });
   if (error) raise(error);
+  await removeWorkspaceDocumentFiles(input.orgId, files);
 }
 
 /** What the delete dialog needs to say: counts and booleans only, no address or id. */
