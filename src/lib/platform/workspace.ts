@@ -85,6 +85,8 @@ export async function createWorkspace(input: {
   name: string;
   /** Arc testnet unless the caller, which checked the person against the allowlist, asks for Arc mainnet (M2). */
   network?: Network;
+  /** What opened it, when that was an accountant's client link: `org_created` says so (accountant client links AC3). */
+  via?: "accountant_link";
   random?: () => string;
 }): Promise<{ orgId: string; slug: string }> {
   const { userId, network = "arc-testnet", random = () => crypto.randomBytes(2).toString("hex") } = input;
@@ -176,6 +178,7 @@ export async function createWorkspace(input: {
             slug,
             mode: "sandbox",
             network: own,
+            ...(input.via ? { via: input.via } : {}),
             // Every figure a mainnet workspace starts with, on record (mainnet limits L4).
             ...(own === "arc-mainnet"
               ? {

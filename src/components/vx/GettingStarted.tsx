@@ -45,7 +45,9 @@ export function GettingStarted({
   if (!checklist.show) return null;
   const role = checklist.role ?? "owner";
   const titleId = `getting-started-title${role === "owner" ? "" : `-${role}`}`;
-  const doneCount = checklist.steps.filter((step) => step.done).length;
+  // An optional step is offered but not counted: the checklist is done without it.
+  const required = checklist.steps.filter((step) => !step.optional);
+  const doneCount = required.filter((step) => step.done).length;
   // The guide's walkthrough, when it has one, beside "Read the guide".
   const video = videoFor(`/docs/guides/${checklist.guide}`);
   // Consecutive steps under the same heading, each with its number in the whole list.
@@ -96,6 +98,7 @@ export function GettingStarted({
         <div className="min-w-0 flex-1">
           <p className={cn("text-sm font-semibold", step.done ? "text-ink-3" : "text-ink")}>
             {step.title}
+            {step.optional && !step.done && <span className="ml-2 text-xs font-normal text-ink-3">Optional</span>}
             {step.done && <span className="sr-only"> (done)</span>}
           </p>
           {!step.done && step.body && (
@@ -114,6 +117,7 @@ export function GettingStarted({
           )}
         </div>
         {next && stepLink(step, ownerStepForAdmin ? "View" : step.download ? "Download" : "Start")}
+        {step.optional && !step.done && stepLink(step, "Open")}
       </li>
     );
   };
@@ -123,7 +127,7 @@ export function GettingStarted({
       <SectionHeader
         id={titleId}
         title={checklist.title ?? "Get started"}
-        meta={`${doneCount} of ${checklist.steps.length} done`}
+        meta={`${doneCount} of ${required.length} done`}
         action={
           <div className="flex flex-wrap items-center gap-1">
             <Button asChild size="sm" variant="ghost">

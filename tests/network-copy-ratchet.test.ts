@@ -68,6 +68,10 @@ const ALLOWED: Record<string, number> = {
   // pays is said from the workspace's capability (src/lib/capability.ts), which names its network from its profile.
   "src/components/ShadowModePanel.tsx": 1,
   "src/lib/shadow-mode.ts": 1,
+  // A workspace opened from an accountant's client link is always on Arc testnet in shadow mode (accountant client links
+  // AC3): the client's form says so before it is made, and the accountant's card before the link is sent.
+  "src/components/JoinFromClientLinkForm.tsx": 1,
+  "src/components/accountant/ClientLinks.tsx": 1,
   // A supplier's payment status link, refused in shadow mode, which runs only on Arc testnet (supplier status V8).
   "src/lib/supplier-status/links.ts": 1,
   // Test USDC for shadow mode, only on Arc testnet (test USDC T2): where the console summary says to buy more, its

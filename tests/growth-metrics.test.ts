@@ -16,6 +16,7 @@ import {
   type LeadRow,
   type WorkspaceRow,
 } from "@/lib/growth/metrics";
+import { ACCOUNTANT_CLIENT_CAMPAIGN } from "@/lib/growth/attribution";
 import type { Stage } from "@/lib/growth/fields";
 
 /**
@@ -233,5 +234,32 @@ describe("growthMetrics", () => {
     expect(metrics.founderHours).toBe(3.5);
     // Leads reaching real_invoice_reviewed: only a.
     expect(metrics.costPerActivated).toEqual({ spendUsd: 0.3, activated: 1, value: 0.3 });
+  });
+});
+
+describe("workspaces from accountants (accountant client links AC5)", () => {
+  const fromLink = { utmSource: "accountant", utmMedium: "client_link", utmCampaign: ACCOUNTANT_CLIENT_CAMPAIGN, utmContent: null, utmTerm: null, ref: null, landingPath: null, referrerHost: null, firstSeenAt: null };
+
+  it("counts the customer workspaces an accountant's client link opened, and those with a decision on a real bill", () => {
+    expect(ACCOUNTANT_CLIENT_CAMPAIGN).toBe("accountant_client");
+    const metrics = growthMetrics({
+      leads: [],
+      events: [],
+      workspaces: [
+        workspace({ attribution: fromLink, firstDecisionAt: "2026-10-01T10:05:00Z" }),
+        workspace({ attribution: fromLink }),
+        workspace({ attribution: { ...fromLink, utmCampaign: "counterparty_loop" } }),
+        // Our own team's workspace never counts.
+        workspace({ attribution: fromLink, side: "ours" }),
+      ],
+      spend: [],
+      revenue: [],
+      now: NOW,
+    });
+    expect(metrics.fromAccountants).toEqual({ workspaces: 2, activated: 1 });
+  });
+
+  it("names the source of one in the workspaces table", () => {
+    expect(workspaceSource(workspace({ attribution: fromLink }))).toBe("accountant · campaign accountant_client");
   });
 });

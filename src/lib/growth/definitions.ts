@@ -61,6 +61,14 @@ export const DEFINITIONS: readonly Definition[] = [
     limits: "Only a person who followed the link and opened a workspace in the same browser within 90 days, with no earlier campaign's first touch, is counted. Its utm_source says the kind of page or email. A member who followed the link from their own workspace's page and then opened another workspace is counted too: the first touch cannot tell them apart.",
   },
   {
+    metric: "From accountants",
+    source: "growth_workspaces (migration 0099): each workspace's first touch, which migration 0143 writes when an accountant's client link is used.",
+    calculation: "Customer workspaces whose first touch carries utm_campaign accountant_client: a client opened it from an accountant's one-time link, and the accountant joined it as accountant (accountant client links AC5). Of those, the ones with the agent's decision on a real bill.",
+    window: WORKSPACES_WINDOW,
+    dedupe: `${CUSTOMERS} Each workspace once.`,
+    limits: "A workspace whose accountant was not added (the link used, expired or revoked at that moment) keeps the first touch of the client's own visit instead, and is not counted. The link's first touch replaces any campaign that brought the client before. Only the link's claim writes that campaign: one a visitor puts in an address or in the first-touch cookie is dropped.",
+  },
+  {
     metric: "Median minutes to first decision",
     source: "growth_workspaces.",
     calculation: "For each customer workspace with a decision on a real bill, the minutes from opening to the first one; the median of those.",

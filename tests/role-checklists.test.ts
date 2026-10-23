@@ -56,7 +56,11 @@ function variantsFor(role: OrgRole): GettingStarted[] {
     case "approver":
       return [approverChecklist(APPROVER), approverChecklist({ ...APPROVER, waitingCount: 2, firstWaitingId: "5f1e2d3c-0000-4000-8000-000000000001" })];
     case "accountant":
-      return [accountantChecklist(ACCOUNTANT), accountantChecklist({ ...ACCOUNTANT, bookHref: "/invoices?review=book-xero" })];
+      return [
+        accountantChecklist(ACCOUNTANT),
+        accountantChecklist({ ...ACCOUNTANT, bookHref: "/invoices?review=book-xero" }),
+        accountantChecklist({ ...ACCOUNTANT, clientInvited: false }),
+      ];
     default:
       return [];
   }
@@ -188,5 +192,18 @@ describe("the accountant's checklist (R3)", () => {
 
   it("hides for good once dismissed", () => {
     expect(accountantChecklist({ ...ACCOUNTANT, dismissed: true }).show).toBe(false);
+  });
+
+  it("offers Invite a client as an optional last step where client links work, done once one of them is used (accountant client links AC6)", () => {
+    expect(accountantChecklist(ACCOUNTANT).steps.map((step) => step.id)).not.toContain("invite_client");
+    const offered = accountantChecklist({ ...ACCOUNTANT, clientInvited: false });
+    const invite = offered.steps.at(-1);
+    expect(invite).toMatchObject({ id: "invite_client", title: "Invite a client", href: "/accountant#invite-client-title", optional: true, done: false, needs: null });
+    expect(accountantChecklist({ ...ACCOUNTANT, clientInvited: true }).steps.at(-1)?.done).toBe(true);
+    // Optional: it is never the next step, and the checklist is done without it.
+    expect(offered.next).toBe("console");
+    const rest = accountantChecklist({ ...ACCOUNTANT, consoleOpened: true, queueOpened: true, applied: true, handedOff: true, clientInvited: false });
+    expect(rest.show).toBe(false);
+    expect(rest.next).toBeNull();
   });
 });

@@ -115,3 +115,23 @@ describe("the cookie", () => {
     expect(parseFirstTouch("%E0%A4%A")).toBeNull();
   });
 });
+
+describe("the accountant client campaign", () => {
+  // Only migration 0143's claim_client_link writes it, in the transaction that adds the accountant: a visitor who puts
+  // it in an address, or in the cookie by hand, must not be counted under From accountants on /admin/growth.
+  it("is never taken from an address", () => {
+    expect(firstTouchFrom(at("?utm_campaign=accountant_client"), "", NOW)).toBeNull();
+    expect(firstTouchFrom(at("?utm_campaign=%20accountant_client%20"), "", NOW)).toBeNull();
+    expect(firstTouchFrom(at("?utm_source=x&utm_campaign=ACCOUNTANT_CLIENT", "/open"), "", NOW)).toEqual({
+      utm_source: "x",
+      landing_path: "/open",
+      first_seen_at: "2026-10-10T08:30:00.000Z",
+    });
+  });
+
+  it("is never read back from a cookie", () => {
+    expect(parseFirstTouch("v=1&c=accountant_client")).toBeNull();
+    expect(parseFirstTouch("v=1&s=accountant&m=client_link&c=Accountant_Client")).toEqual({ utm_source: "accountant", utm_medium: "client_link" });
+    expect(parseFirstTouch("v=1&c=accountant_client_2")).toEqual({ utm_campaign: "accountant_client_2" });
+  });
+});

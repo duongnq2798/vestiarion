@@ -100,6 +100,8 @@ describe("0023 is idempotent", () => {
          where c.contype = 'f' and c.confrelid = 'auth.users'::regclass
          order by 1, 2`);
       expect(keys.rows).toEqual([
+        // An accountant's client invite links (0143) are theirs alone: they go with the account.
+        { tbl: "accountant_client_links", col: "created_by", action: "c" },
         { tbl: "accounting_bills", col: "decided_by", action: "n" },
         { tbl: "accounting_connections", col: "connected_by", action: "n" },
         { tbl: "accounting_connections", col: "payment_account_by", action: "n" },

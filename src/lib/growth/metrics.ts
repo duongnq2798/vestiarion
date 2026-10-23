@@ -1,3 +1,4 @@
+import { ACCOUNTANT_CLIENT_CAMPAIGN } from "./attribution";
 import { STAGES, type OrderedStage, type RevenueKind, type Stage } from "./fields";
 import { LOOP_CAMPAIGN } from "./loop";
 
@@ -200,6 +201,8 @@ export interface GrowthMetrics {
   costPerActivated: { spendUsd: number; activated: number; value: number | null };
   /** Customer workspaces whose first touch was a page or email a business sent a counterparty (counterparty loop C4). */
   fromLoop: { workspaces: number; activated: number };
+  /** Customer workspaces an accountant's client link opened (accountant client links AC5), and those activated. */
+  fromAccountants: { workspaces: number; activated: number };
   /**
    * Customer workspaces that got a setup reminder, and how many came back: a real bill after a first-bill reminder, or a
    * verdict after a first-verdict one (docs/superpowers/specs/2026-10-19-activation-nudge-design.md A7).
@@ -243,6 +246,7 @@ export function growthMetrics({ leads, events, workspaces, spend, revenue, now, 
   const cashSpendUsd = sumMoney(spend.map((row) => row.usd));
   const activated = reachedCount("real_invoice_reviewed");
   const fromLoop = customers.filter((workspace) => workspace.attribution?.utmCampaign === LOOP_CAMPAIGN);
+  const fromAccountants = customers.filter((workspace) => workspace.attribution?.utmCampaign === ACCOUNTANT_CLIENT_CAMPAIGN);
   const nudgedWorkspaces = customers.filter((workspace) => nudges.some((nudge) => nudge.orgId === workspace.orgId));
   const cameBack = nudgedWorkspaces.filter((workspace) =>
     nudges.some(
@@ -275,6 +279,7 @@ export function growthMetrics({ leads, events, workspaces, spend, revenue, now, 
     founderHours: Math.round(spend.reduce((total, row) => total + row.founder_hours * 10, 0)) / 10,
     costPerActivated: { spendUsd: cashSpendUsd, activated, value: activated > 0 ? Math.round((cashSpendUsd / activated) * 100) / 100 : null },
     fromLoop: { workspaces: fromLoop.length, activated: fromLoop.filter((workspace) => workspace.firstDecisionAt !== null).length },
+    fromAccountants: { workspaces: fromAccountants.length, activated: fromAccountants.filter((workspace) => workspace.firstDecisionAt !== null).length },
     nudged: { workspaces: nudgedWorkspaces.length, cameBack: cameBack.length },
   };
 }

@@ -19,6 +19,9 @@ import type { SliceAddress, SliceSkipReason, SliceVendor } from "@/lib/live-slic
  * address goes over: its own, confirmed again there; any other, and it adds its own there. A vendor with no payment limit
  * cannot go. Once opened, the one who opened it sees what went over and the way to its Settings, until it is live. Nothing
  * here moves money.
+ *
+ * Each of the workspace's accountants is offered too, ticked: "Bring your accountant along"
+ * (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md AC4). The owner unticks any to leave behind.
  */
 
 const INITIAL: LiveSliceActionResult = { ok: false, message: "" };
@@ -45,16 +48,24 @@ export interface OpenedSlice {
   skipped: Array<{ name: string; reason: SliceSkipReason }>;
 }
 
+/** One of the workspace's accountants, offered to bring along (AC4). */
+export interface SliceAccountant {
+  userId: string;
+  email: string;
+}
+
 export function LiveSliceStart({
   orgSlug,
   vendors,
   canStart,
   opened = null,
+  accountants = [],
 }: {
   orgSlug: string;
   vendors: SliceVendor[];
   canStart: boolean;
   opened?: OpenedSlice | null;
+  accountants?: SliceAccountant[];
 }) {
   const [result, setResult] = useState<LiveSliceActionResult | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -151,6 +162,22 @@ export function LiveSliceStart({
               ))}
             </ul>
           </Card>
+          {accountants.length > 0 && (
+            <fieldset className="space-y-2">
+              <legend className="mb-2 text-sm font-medium text-ink">Your accountant</legend>
+              {accountants.map((accountant) => (
+                <Checkbox
+                  key={accountant.userId}
+                  id={`slice-accountant-${accountant.userId}`}
+                  name="accountantId"
+                  value={accountant.userId}
+                  defaultChecked
+                  label={`Bring your accountant ${accountant.email} along`}
+                  description="They join the new workspace as its accountant. You can remove them from its Members at any time."
+                />
+              ))}
+            </fieldset>
+          )}
           <SubmitButton icon={<Rocket />} pendingLabel="Opening the live slice…">
             Open the live slice on Arc mainnet
           </SubmitButton>

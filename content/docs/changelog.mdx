@@ -10,6 +10,13 @@ Changes to the API and webhooks that affect an integration, newest first. Change
 - **`decision_escalated`** entries' `decideBy` can also be the eve of a bill's late fee, the day before it starts: a bill past its due date whose fee starts later than the day after it is escalated once more on that day, besides once its due date has passed, as before. When its due date was not escalated before that day, as on the first day past it, the entry is for the due date, as before, and the eve is not escalated apart: a late fee never delays an escalation. Each is escalated once for its day, and an entry that tells such an eve says in its `summary` how many payments have a late fee from tomorrow. A late fee never moves a bill's decide-by day.
 - The TypeScript SDK 0.3.7 describes `lateFee` on `Invoice` and `CreateInvoiceInput`. Nothing else in `/api/v1` or the webhooks changes.
 
+## 2026-10-23: An accountant's client invite links
+
+- **`org_created`** carries `via: "accountant_link"` for a workspace a client opened from their accountant's client link. Such a workspace is always on Arc testnet, `network: "arc-testnet"`.
+- **`member_joined`** for the accountant follows in that workspace, domain `system`, actor `human`, with `role: "accountant"`, `clientLinkId` (the link's id) and `grantedBy` (the client, the workspace's owner). `by` is the accountant, as for an accepted invitation, which carries `invitationId` instead.
+- **`member_joined`** in a workspace on Arc mainnet opened as a live slice, for each accountant of the shadow workspace its owner brought along, carries `by` (the accountant), `role: "accountant"`, `via: "live_slice"` and `grantedBy` (the owner).
+- Making and revoking a client link is signed in no workspace, since none exists yet. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-23: Asking a vendor for a missing document
 
 - Five new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:

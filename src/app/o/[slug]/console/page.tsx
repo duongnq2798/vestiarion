@@ -58,6 +58,7 @@ import { scenarioBasis } from "@/lib/cash-scenario-basis";
 import { listRecurringPayables } from "@/lib/recurring-payables";
 import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
 import { readShadowMode, SHADOW_NOT_STARTED } from "@/lib/shadow-mode";
+import { ACCOUNTANT_NOT_ADDED } from "@/lib/platform/client-links";
 import { readShadowSummary, verdictFacts } from "@/lib/verdicts";
 import { readTestUsdcWeek, testUsdcAvailable } from "@/lib/test-usdc";
 import { testUsdcView } from "@/lib/test-usdc-rules";
@@ -488,6 +489,18 @@ export default async function DashboardPage({
             Your workspace is ready, but shadow mode did not turn on.{" "}
             <Link href={orgHref(slug, "/settings#shadow-mode-title")} className="font-medium text-agent underline-offset-2 hover:underline">
               Turn it on in Settings
+            </Link>
+            .
+          </Callout>
+        )}
+
+        {/* Opened from an accountant's client link, and the accountant was not added (accountant client links AC3): the
+            workspace is the client's either way, and Members invites the accountant. */}
+        {query.accountant === ACCOUNTANT_NOT_ADDED && (
+          <Callout tone="held" className="mb-8">
+            Your accountant was not added.{" "}
+            <Link href={orgHref(slug, "/members")} className="font-medium text-agent underline-offset-2 hover:underline">
+              Invite them on Members
             </Link>
             .
           </Callout>
