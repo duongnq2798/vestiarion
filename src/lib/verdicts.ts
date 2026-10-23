@@ -156,10 +156,22 @@ export async function verdictGate(
  * lists of what waits for a person, which say so and link to give it.
  */
 export async function awaitingVerdicts(invoiceIds: readonly string[]): Promise<Set<string>> {
+  return (await verdictHolds(invoiceIds)).waiting;
+}
+
+/**
+ * Of these payables, those a verdict holds now, as `verdictGate` answers an approval of each (shadow mode S4): `waiting`
+ * for one that can still be given, as `awaitingVerdicts` lists them; or given, and `disagreed`, so an approval, a co-sign
+ * included, is refused until the payable is returned or rejected. The same reads whatever the list's length. Whether its
+ * transfer was already sent, which an approval after a disagreement still records, and whether it is held at all, are
+ * the caller's to weigh.
+ */
+export async function verdictHolds(invoiceIds: readonly string[]): Promise<{ waiting: Set<string>; disagreed: Set<string> }> {
   const waiting = new Set<string>();
-  if (invoiceIds.length === 0) return waiting;
+  const disagreed = new Set<string>();
+  if (invoiceIds.length === 0) return { waiting, disagreed };
   const shadow = await readShadowMode(db());
-  if (!shadow) return waiting;
+  if (!shadow) return { waiting, disagreed };
   const rows = unwrap(
     await db()
       .from("ledger_entries")
@@ -175,14 +187,20 @@ export async function awaitingVerdicts(invoiceIds: readonly string[]): Promise<S
     if (typeof id === "string" && !newest.has(id)) newest.set(id, { seq: Number(row.seq), ts: row.ts, detail: row.detail });
   }
   const held = [...newest].filter(([, row]) => awaitsVerdict(row.detail) && Date.parse(row.ts) >= Date.parse(shadow.startedAt));
-  if (held.length === 0) return waiting;
-  const given = new Set(
-    (unwrap(await db().from("decision_verdicts").select("entry_seq").in("entry_seq", held.map(([, row]) => row.seq))) as Array<{ entry_seq: number | string }>).map(
-      (row) => Number(row.entry_seq)
-    )
+  if (held.length === 0) return { waiting, disagreed };
+  const given = new Map(
+    (
+      unwrap(await db().from("decision_verdicts").select("entry_seq, verdict").in("entry_seq", held.map(([, row]) => row.seq))) as Array<{
+        entry_seq: number | string;
+        verdict?: Verdict | null;
+      }>
+    ).map((row) => [Number(row.entry_seq), row.verdict ?? null])
   );
-  for (const [id, row] of held) if (!given.has(row.seq)) waiting.add(id);
-  return waiting;
+  for (const [id, row] of held) {
+    if (!given.has(row.seq)) waiting.add(id);
+    else if (given.get(row.seq) === "disagree") disagreed.add(id);
+  }
+  return { waiting, disagreed };
 }
 
 export async function giveVerdict(
