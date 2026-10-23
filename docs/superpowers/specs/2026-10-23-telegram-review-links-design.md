@@ -29,7 +29,8 @@ same bills the same way.
     approvals, an accountant can co-sign", then a link labelled **Review** to the bill's card on Approvals
     (`approvalAnchor`);
   - "Opening a link never approves anything." once.
-- **Sending.** One send and one cursor move, as today. The 400 plain-text retry carries the same text without HTML.
+- **Sending.** One send and one cursor move, as today. The 400 plain-text retry carries the same text without HTML,
+  with link previews off as on the HTML send.
 
 **TG3. /waiting agrees.** `waitingMessage` (`src/lib/telegram/messages.ts`):
 - labels each payable's link **Review**, built with `approvalAnchor`, not a hand-written anchor;
@@ -38,8 +39,13 @@ same bills the same way.
 
 Milestones and verdict holds keep their own labels ("Decide in Contractors", "Give your verdict").
 
-**TG4. Safe text.** A `telegramText` helper for the values in the section and in /waiting:
+**TG4. Safe text.** A `telegramText` helper for every value in the decisions message (the workspace's name, each
+decision's text and reason, and the section's values) and in /waiting:
 - removes invisible format characters (\p{Cf}), as `discordText` does;
+- breaks up what Telegram would make tappable, since it finds web addresses, @names and /commands in every message a
+  bot sends: a dot before a domain's ending, and each dot of an IP address, becomes `[.]`; every `@`, and every `/`
+  that follows no letter or digit, takes its fullwidth form (U+FF20, U+FF0F). Discord's `discordText` escapes the same
+  things;
 - escapes HTML;
 - clips without splitting a surrogate pair.
 
@@ -56,6 +62,8 @@ No API, ledger or migration change.
   co-sign), and a verdict hold that keeps its block.
 - The 400 retry.
 - /waiting's labels and wording.
-- `telegramText`: format characters removed, HTML escaped, surrogate-safe clipping.
+- `telegramText`: format characters removed, a web address, an @name and a /command broken up, HTML escaped,
+  surrogate-safe clipping; a decision's own text and reason, and a payee or reason in the section and in /waiting,
+  leave Telegram nothing to link.
 - Discord's existing tests pass unchanged.
 - The tests that pin Telegram's message text, updated.

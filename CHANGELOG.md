@@ -21,8 +21,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   Approvals. Opening a link never approves anything, and the message says so once. Those bills are no longer repeated
   among the decisions; a payment held for your verdict in shadow mode keeps **Give your verdict**. `/waiting` labels a
   payable's link **Review** too, says "waiting for details" for a bill asked for details, and counts what does not fit
-  instead of cutting the message short. Names and reasons are shown as plain text, with hidden direction and zero-width
-  characters removed. Nothing new to run.
+  instead of cutting the message short. In the message and in `/waiting`, names and reasons are shown as plain text:
+  hidden direction and zero-width characters are removed, and a web address, an @name or a /command inside one is
+  broken up (`acme[.]com`) so Telegram makes nothing in it tappable. The plain-text resend of a message Telegram
+  refused keeps link previews off. Nothing new to run.
 
 - **Bills waiting for approval in Discord.** In Settings, under Integrations, an owner or admin pastes a Discord
   channel webhook's URL and chooses **Connect**: Vestiarion posts a test message, and saves the connection only once

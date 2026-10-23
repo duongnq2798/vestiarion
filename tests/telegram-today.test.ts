@@ -13,6 +13,9 @@ import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fa
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
 const NOW = Date.parse("2026-10-03T08:00:00Z");
 const ORIGIN = "https://www.vestiarion.xyz";
+/** Fullwidth "/" and "@", built from their code points: they read as the characters, and Telegram links neither. */
+const SLASH = String.fromCodePoint(0xff0f);
+const AT = String.fromCodePoint(0xff20);
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 
 const payable = (id: string, name: string, amount: number, status: string, due: string, extra: Record<string, unknown> = {}) => ({
@@ -146,9 +149,23 @@ describe("waitingFacts and waitingMessage", () => {
     const zwsp = String.fromCodePoint(0x200b);
     const message = waitingMessage("A&B", [fact("p2", { name: `Puka ${rlo}& Co`, reason: `Over the <b>limit</b> for Ji${zwsp}ren.` })], ORIGIN, "acme");
     expect(message).toContain("<b>A&amp;B</b> · 1 payment waits for a person");
-    expect(message).toContain("⏸ Puka &amp; Co 10.00 USDC · held: Over the &lt;b&gt;limit&lt;/b&gt; for Jiren.");
+    // The closing tag's slash, which follows no letter, reads in its fullwidth form, as any such slash does.
+    expect(message).toContain(`⏸ Puka &amp; Co 10.00 USDC · held: Over the &lt;b&gt;limit&lt;${SLASH}b&gt; for Jiren.`);
     expect(message).not.toContain(rlo);
     expect(message).not.toContain(zwsp);
+  });
+
+  it("gives Telegram no link, @name or /command to make of a name or a reason", () => {
+    const message = waitingMessage(
+      "Acme",
+      [fact("p2", { name: "Acme /disconnect", reason: "Pay it at https://pay.acme-billing.com today, or ask @acme_billing." })],
+      ORIGIN,
+      "acme"
+    );
+    expect(message).toContain(`⏸ Acme ${SLASH}disconnect 10.00 USDC · held: Pay it at https:${SLASH}${SLASH}pay[.]acme-billing[.]com today, or ask ${AT}acme_billing.`);
+    expect(message).not.toContain("/disconnect");
+    expect(message).not.toContain("@acme");
+    expect(message).not.toContain("acme-billing.com");
   });
 
   it("stays under Telegram's limit with long reasons, cutting no link: what does not fit is counted, and the last line stays", () => {

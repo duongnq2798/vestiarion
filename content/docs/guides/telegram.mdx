@@ -39,13 +39,14 @@ Opening a link never approves anything.
 - A payment Circle has not confirmed yet has neither mark: it says it was submitted and waits for Circle.
 - ⏸ marks what the agent stopped. The bills that still wait for approval come last, under how many wait, one line each: the amount and its currency, the payee, whether the agent held or flagged it or it is waiting for details, the first sentence of its reason, and **Review**, the bill's own link.
 - A bill above the workspace's figure for two approvals says "needs two approvals". While an owner lets accountants co-sign, it says "needs two approvals, an accountant can co-sign".
-- Only bills that still wait are listed there: one a person approved, rejected or returned before the message went out is told among the decisions, as the agent decided it. A message lists at most ten bills, as many as fit, then "…and 3 more in Approvals", with a link to Approvals, for the rest.
+- Only bills that still wait are listed there. A message lists at most ten bills, as many as fit, then "…and 3 more in Approvals", with a link to Approvals, for the rest.
+- A stopped bill that is not listed there keeps its own place among the decisions, as the agent decided it, with **Decide in Approvals**, which opens its card, or **Add details** for one it asked details for. That is a bill a person approved, rejected or returned before the message went out, or every stopped bill when Vestiarion could not check which still wait.
 - ⚠️ marks a warning that is not yours to decide, such as the cash running short.
 - In shadow mode, a payment held for your verdict keeps its own place among the decisions and links **Give your verdict**, where you agree or disagree with it.
 - When the wallet will run short, the chat is told how much, by when and what the agent is doing about it, and told again only when that changes. See [When the cash will run short](/docs/guides/payment-plan#when-the-cash-will-run-short).
 - A chat is told only about decisions made after it was connected. A busy cycle's message says how many more decisions are in the console.
 
-Every value from a bill, such as a payee's name or the agent's reason, is shown as plain text, with hidden direction and zero-width characters removed, so no name can make a line read as another bill's. A wallet address is shortened to its first and last four characters.
+In these messages and in `/waiting`, every value that comes from a bill or from the agent, such as a payee's name or the agent's reason, is shown as plain text. Hidden direction and zero-width characters are removed, so no name can make a line read as another bill's. A web address, an @name or a /command inside one is broken up so Telegram does not turn it into something you can tap: `acme.com` reads `acme[.]com`, and the `@` or `/` is shown in its wide form. The only links are the ones Vestiarion adds. A wallet address is shortened to its first and last four characters.
 
 ### Review a bill
 

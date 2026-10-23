@@ -53,18 +53,38 @@ const FORMAT = /\p{Cf}/gu;
 const LONE_SURROGATE = /\p{Cs}/gu;
 /** How long a payee's or a payment's name is shown. */
 const NAME_MAX = 100;
+/** Fullwidth "@" and "/" (U+FF20, U+FF0F): they read as the characters, and Telegram finds no @name or /command in them. */
+const FULLWIDTH_AT = String.fromCodePoint(0xff20);
+const FULLWIDTH_SLASH = String.fromCodePoint(0xff0f);
 
 /**
- * A value as the bills waiting for approval and /waiting show it
+ * A value with nothing left in it for Telegram to make tappable. Telegram finds web addresses, @names and /commands in
+ * every message a bot sends, in HTML or plain text, and links each one: a payee named `Acme https://…` would put a link
+ * of its own beside the bill's Review link, and one named `Acme /disconnect` a command that disconnects the chat at a
+ * tap. So a dot before a domain's ending, and each dot of an IP address, reads `[.]`, and every `@`, and every `/` that
+ * does not follow a letter or a digit, takes its fullwidth form: `acme.com` reads `acme[.]com` and `https://` shows
+ * wide slashes, while `2.00 USDC`, `e.g.`, `1/3` and `N/A` read as they did. Discord's messages escape the same things
+ * (`src/lib/discord/escape.ts`).
+ */
+function unlinked(value: string): string {
+  return value
+    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, (ip) => ip.split(".").join("[.]"))
+    .replace(/\.(?=\p{L}{2})/gu, "[.]")
+    .replace(/@/g, FULLWIDTH_AT)
+    .replace(/(?<![\p{L}\p{N}])\//gu, FULLWIDTH_SLASH);
+}
+
+/**
+ * A value as the decisions message, its bills waiting for approval and /waiting show it
  * (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG4). A payee's name and the agent's reasons come
  * from documents and emails anyone can send, so invisible format characters and half of an emoji are removed, as
  * Discord's messages remove them, and every newline, control character and run of whitespace becomes one space, so a
- * value stays on its line. A wallet address is shortened before the cut, so no cut leaves most of one; the value is
- * clipped to `max` UTF-16 units, never between the two halves of one character, and escaped last, so no cut falls
- * inside an entity.
+ * value stays on its line. A wallet address is shortened before the cut, so no cut leaves most of one, and what
+ * Telegram would link is broken up (`unlinked`); the value is clipped to `max` UTF-16 units, never between the two
+ * halves of one character, and escaped last, so no cut falls inside an entity.
  */
 export function telegramText(value: string, max: number = ITEM_DETAIL_MAX): string {
-  const plain = shortenAddresses(value.replace(LONE_SURROGATE, "").replace(FORMAT, "").replace(/[\s\p{Cc}]+/gu, " ").trim());
+  const plain = unlinked(shortenAddresses(value.replace(LONE_SURROGATE, "").replace(FORMAT, "").replace(/[\s\p{Cc}]+/gu, " ").trim()));
   if (plain.length <= max) return escapeHtml(plain);
   return escapeHtml(`${plain.slice(0, Math.max(0, max - 1)).replace(LONE_SURROGATE, "").trimEnd()}…`);
 }
@@ -96,9 +116,10 @@ export function plainText(html: string): string {
 /** A decision's mark: done, or stopped for a person. A payment Circle has not confirmed yet is neither, and has none (I17). */
 const MARK: Record<ActivityItem["tone"], string> = { done: "✅ ", stopped: "⏸ ", pending: "", notice: "⚠️ " };
 
+/** One decision: what the agent did and why, each a line of plain text, as the bills' lines show theirs (TG4), then its links. */
 function decisionBlock(item: ActivityItem, slug: string, origin: string): string {
-  const lines = [`${MARK[item.tone]}${escapeHtml(clip(item.text, ITEM_TEXT_MAX))}`];
-  if (item.detail) lines.push(`<i>${escapeHtml(clip(item.detail, ITEM_DETAIL_MAX))}</i>`);
+  const lines = [`${MARK[item.tone]}${telegramText(item.text, ITEM_TEXT_MAX)}`];
+  if (item.detail) lines.push(`<i>${telegramText(item.detail, ITEM_DETAIL_MAX)}</i>`);
   const links = [...(item.txUrl ? [link(item.txUrl, `${networkProfile(item.network).label} transaction`)] : []), link(orgUrl(origin, slug, item.path), item.pathLabel)];
   lines.push(links.join(" · "));
   return lines.join("\n");
@@ -158,7 +179,7 @@ function waitingSection(notice: WaitingNotice, slug: string, origin: string, roo
  * console, and a line says how many.
  */
 export function decisionsMessage(workspace: { name: string; slug: string }, items: ActivityItem[], origin: string, waiting: WaitingSection | null = null): string {
-  const header = `${bold(workspace.name)} · the agent decided ${items.length === 1 ? "1 thing" : `${items.length} things`}`;
+  const header = `<b>${telegramText(workspace.name, NAME_MAX)}</b> · the agent decided ${items.length === 1 ? "1 thing" : `${items.length} things`}`;
   const more = (n: number) => `…and ${n} more in ${link(orgUrl(origin, workspace.slug, "/console"), "the console")}.`;
   const roomForMore = more(items.length).length + 2;
   const listed = waiting && waiting.notice.total > 0 ? waiting : null;

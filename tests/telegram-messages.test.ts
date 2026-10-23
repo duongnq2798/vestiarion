@@ -219,6 +219,19 @@ const ZWSP = String.fromCodePoint(0x200b);
 const SMILE = String.fromCodePoint(0x1f600);
 /** Half of a surrogate pair standing alone: in a `u` pattern, a whole pair is one character and never matches. */
 const LONE = /\p{Cs}/u;
+/** Fullwidth "@" and "/", built from their code points: they read as the characters, and Telegram links neither. */
+const AT = String.fromCodePoint(0xff20);
+const SLASH = String.fromCodePoint(0xff0f);
+
+/**
+ * What Telegram would make tappable in a message's text, roughly as it finds them in every message a bot sends: a web
+ * address (a dot before a domain's ending, or a scheme's `://`), an @name and a /command. The message's own links, its
+ * `<a>` tags, are left out, and so is a closing tag's slash.
+ */
+function autoLinks(message: string): string[] {
+  const text = message.replace(/<a href="[^"]*">[^<]*<\/a>/g, "");
+  return [...text.matchAll(/[\p{L}\p{N}-]\.\p{L}{2}|:\/\/|(?<![\p{L}\p{N}_])@\w|(?<![\p{L}\p{N}_/<>\\])\/\w/gu)].map((match) => match[0]);
+}
 
 describe("telegramText (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG4)", () => {
   it("removes invisible format characters, as Discord's messages do", () => {
@@ -246,6 +259,47 @@ describe("telegramText (docs/superpowers/specs/2026-10-23-telegram-review-links-
     const address = `0x${"c0ffee00".repeat(5)}`;
     expect(telegramText(`Pay ${address} now`)).toBe("Pay 0xc0ff…ee00 now");
     expect(telegramText(`Pay ${address}`, 20)).toBe("Pay 0xc0ff…ee00");
+  });
+
+  it("breaks up what Telegram would make a link of: a web address, an @name, a /command, an email", () => {
+    expect(telegramText("Acme https://vestiarion-approvals.example/o/acme/approvals")).toBe(
+      `Acme https:${SLASH}${SLASH}vestiarion-approvals[.]example/o/acme/approvals`
+    );
+    expect(telegramText("Booking.com")).toBe("Booking[.]com");
+    expect(telegramText("Acme t.me/evil_bot")).toBe("Acme t[.]me/evil_bot");
+    expect(telegramText("Acme @vestiarion_support")).toBe(`Acme ${AT}vestiarion_support`);
+    expect(telegramText("Acme /disconnect")).toBe(`Acme ${SLASH}disconnect`);
+    expect(telegramText("(/disconnect@vestiarion_bot)")).toBe(`(${SLASH}disconnect${AT}vestiarion_bot)`);
+    expect(telegramText("Write to billing@acme.co.uk")).toBe(`Write to billing${AT}acme[.]co[.]uk`);
+    expect(telegramText("tg://resolve?domain=evil_bot")).toBe(`tg:${SLASH}${SLASH}resolve?domain=evil_bot`);
+    expect(telegramText("Pay at 203.0.113.5/login")).toBe("Pay at 203[.]0[.]113[.]5/login");
+    for (const value of ["Acme https://pay.acme-billing.com", "Acme @vestiarion_support", "Acme /disconnect", "billing@acme.com"]) {
+      expect(autoLinks(telegramText(value)), value).toEqual([]);
+    }
+  });
+
+  it("leaves amounts, fractions and abbreviations as they read", () => {
+    expect(telegramText("Over the 2.00 USDC limit, e.g. 1/3 of it, N/A for U.S. vendors.")).toBe("Over the 2.00 USDC limit, e.g. 1/3 of it, N/A for U.S. vendors.");
+  });
+});
+
+describe("a decision's own words (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG4)", () => {
+  it("are plain text, as the bills' are: no hidden characters, one line each, and no link, @name or /command of their own", () => {
+    const message = decisionsMessage(
+      { name: `Acme${RLO} Ltd`, slug: "acme" },
+      [item({ text: `Paid ${RLO}Acme https://pay.acme-billing.com 0.35 USDC`, detail: `Ask @acme_billing,\nor send /disconnect.${ZWSP}` })],
+      ORIGIN
+    );
+    expect(message).not.toContain(RLO);
+    expect(message).not.toContain(ZWSP);
+    expect(autoLinks(message)).toEqual([]);
+    expect(message.split("\n")).toEqual([
+      "<b>Acme Ltd</b> · the agent decided 1 thing",
+      "",
+      `✅ Paid Acme https:${SLASH}${SLASH}pay[.]acme-billing[.]com 0.35 USDC`,
+      `<i>Ask ${AT}acme_billing, or send ${SLASH}disconnect.</i>`,
+      `<a href="https://explorer.testnet.arc.io/tx/${TX}">Arc testnet transaction</a> · <a href="${ORIGIN}/o/acme/invoices#invoice-1">See it on Bills &amp; receivables</a>`,
+    ]);
   });
 });
 
@@ -338,9 +392,30 @@ describe("the bills waiting for approval, in the decisions message (TG2)", () =>
       ORIGIN,
       waiting([bill(1, { payee: `A&B ${RLO}<Ltd>`, reasoning: `Over the <b>limit</b> for Ac${ZWSP}me.` })])
     );
-    expect(message).toContain("· A&amp;B &lt;Ltd&gt; · held: Over the &lt;b&gt;limit&lt;/b&gt; for Acme. ·");
+    // The closing tag's slash, which follows no letter, reads in its fullwidth form, as any such slash does.
+    expect(message).toContain(`· A&amp;B &lt;Ltd&gt; · held: Over the &lt;b&gt;limit&lt;${SLASH}b&gt; for Acme. ·`);
     expect(message).not.toContain(RLO);
     expect(message).not.toContain(ZWSP);
+  });
+
+  it("gives Telegram no link, @name or /command to make of a payee's name or a reason: the only links are Vestiarion's", () => {
+    const message = decisionsMessage(
+      ACME,
+      [stopped(1), stopped(2), stopped(3)],
+      ORIGIN,
+      waiting([
+        bill(1, { payee: "Acme https://vestiarion-approvals.example/o/acme/approvals" }),
+        bill(2, { payee: "Acme @vestiarion_support", reasoning: "Confirm the new bank details at pay.acme-billing.com first." }),
+        bill(3, { payee: "Acme /disconnect" }),
+      ])
+    );
+    expect(autoLinks(message)).toEqual([]);
+    expect(message).toContain(`⏸ <b>120.00 USDC</b> · Acme https:${SLASH}${SLASH}vestiarion-approvals[.]example/o/acme/approvals · held:`);
+    expect(message).toContain(`⏸ <b>120.00 USDC</b> · Acme ${AT}vestiarion_support · held: Confirm the new bank details at pay[.]acme-billing[.]com first. ·`);
+    expect(message).toContain(`⏸ <b>120.00 USDC</b> · Acme ${SLASH}disconnect · held:`);
+    // Sent again as plain text, the first address in it, which Telegram would preview, is the first bill's Review link.
+    const plain = plainText(message);
+    expect(plain.indexOf("://")).toBe(plain.indexOf(`${ORIGIN}/o/acme/approvals#payable-${BILL(1)}`) + "https".length);
   });
 
   it("says nothing of bills when none waits, and the message reads as before", () => {

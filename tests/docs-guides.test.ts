@@ -1822,6 +1822,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["I only work in a private chat", TELEGRAM_MESSAGES],
     ["Arc testnet transaction", TELEGRAM_MESSAGES, "${networkProfile(item.network).label} transaction"],
     ["How it decided", AGENT_ACTIVITY],
+    ["Decide in Approvals", AGENT_ACTIVITY],
+    ["acme[.]com", TELEGRAM_MESSAGES, '"[.]"'],
     ["2 bills wait for approval:", TELEGRAM_MESSAGES, "bills wait`} for approval:"],
     ["Review", TELEGRAM_MESSAGES, '"Review")'],
     ["needs two approvals", TELEGRAM_MESSAGES],

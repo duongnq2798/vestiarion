@@ -2686,7 +2686,7 @@ in `src/lib/agent-activity.ts`, with a supplier's answers the system records,
 `SUPPLIER_ANSWERS`, and never a person's own offer), and then moves
 the cursor past everything read: a failed send keeps it for the next cycle,
 a 403 disconnects the chat, and a message Telegram refuses to parse is sent
-once as plain text and then passed. The stopped payables among what was read
+once as plain text, link previews off as on every send, and then passed. The stopped payables among what was read
 that are still held, flagged or awaiting_info, read again in one query per
 cursor through the same `src/lib/notifications/waiting-bills.ts` as Discord's
 stage (the rules for two approvals and co-sign once per stage, and only once a
@@ -2698,11 +2698,15 @@ approvals" (and that an accountant can co-sign) and a Review link to
 `/approvals#payable-<id>` that carries no token, as many of ten as fit, the
 section taking the room first, then "Opening a link never approves anything."
 once. A shadow-mode verdict hold has no `invoiceId` and keeps its block; bills
-that cannot be read leave every block as it was. Values in the section and in
-`/waiting` go through `telegramText` (Unicode's Cf and half of an emoji
-removed, whitespace to one space, addresses shortened, clipped by UTF-16 units
-without splitting a character, then HTML-escaped), and `/waiting` counts what
-does not fit rather than cut its HTML. The transfer watch's post to the chats
+that cannot be read leave every block as it was. Every value in the message
+(the workspace's name, each decision's text and reason, and the section's) and
+in `/waiting` goes through `telegramText` (Unicode's Cf and half of an emoji
+removed, whitespace to one space, addresses shortened, then what Telegram
+would make tappable broken up: a dot before a domain's ending or in an IP
+address written `[.]`, every `@` and every `/` that follows no letter or digit
+in its fullwidth form; then clipped by UTF-16 units without splitting a
+character, and HTML-escaped), and `/waiting` counts what does not fit rather
+than cut its HTML. The transfer watch's post to the chats
 is this same send, so a chat whose cursor lags is told its waiting bills there.
 
 **A workspace can also connect Slack**
