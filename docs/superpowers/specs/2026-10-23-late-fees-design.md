@@ -66,18 +66,29 @@ amount or the fixed amount, whatever the day.
 - **The amount is never changed.** A late fee is not added to the transfer. A bill paid late is paid at its amount, and
   the person settles any fee with the vendor.
 
-**LF5. Holds and the decide-by day.** `decideByOf` (`src/lib/exceptions.ts`) gains the reason `late_fee`. For a bill past
-its due date whose fee starts later than the day after it, the decide-by day is the day before the fee starts. It stays
-that day once the fee has started, so the day, its escalation and the item that ages from it do not move back to the due
-date. A fee from the due date or the day after it leaves no day between: the due date stays the decide-by day.
-- It feeds the existing surfaces: Approvals, the Bills rows, the accountant console and the escalation emails. The
-  escalation's dedupe key stays (org, invoice, decide_by).
-- A `late_fee` day is escalated on the day itself, the last day without the fee, so the email comes while paying still
-  avoids it; any other decide-by day is escalated once it has passed, as before. The email says the payment "reached" its
-  decide-by day, and names the fee.
-- The words: "Overdue since Oct 20; a late fee of 1.5% a month starts Oct 30", or "applies since Oct 30" once it has.
-  Past it, the accountant console says "Its decide-by day was Oct 29, the day before its late fee of 1.5% a month
-  started".
+**LF5. Holds and the decide-by day.** A late fee never delays or hides what a bill without one gets: it only adds a
+warning.
+- **The day does not move.** `decideByOf` (`src/lib/exceptions.ts`) gives the same day as without the fee: the discount's
+  deadline while it is still ahead and earlier, else the due date. So the priority, the ageing, the order and the
+  escalation's key are unchanged for every bill. For a bill past its due date that has a late fee, the result carries the
+  reason `late_fee` and `lateFee { dueOn, startsOn, rate, started }`, for the words only. A bill with no fee, or not yet
+  past its due date, gets exactly what it got before.
+- **The words.** "Decide by Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026", or "applies since Oct 21,
+  2026" once it has (`decideByWords`, `lateFeeDayWords`). Approvals and the Bills rows show them. Past the day, the
+  accountant console says "Its decide-by day was Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026".
+- **Escalations** (`pastDecideBy`, `src/lib/notifications/escalations.ts`): at most one item per bill per day.
+  - Once its decide-by day has passed, as before: an item with that day, which names the fee when the bill has one.
+  - On the fee's eve, one more: the fee has not started, its last day without the fee is after the due date, and today is
+    that day. The item's day is that last day. The dedupe key stays (org, invoice, decide_by), so this is a new key, sent
+    even though the bill was escalated past its due date earlier. Its line says the fee starts tomorrow, with the day and
+    the rate.
+  - The day escalations started in the workspace filters each item by its own day, as before; an eve's day is today.
+  - The email words each item on its own. A batch of past items reads as before ("passed its decide-by day"); an eve
+    alone says "A late fee starts tomorrow on 1 payment"; a mixed batch says how many passed their day and how many have
+    a fee from tomorrow, and never rewords a past item.
+- Example, due Oct 20 with the fee from Oct 30: escalated on Oct 21 for Oct 20, as without the fee; nothing more from
+  Oct 22 to Oct 28; on Oct 29 for Oct 29, the fee's eve; and nothing more once the fee has started. A fee from the due
+  date or the day after it has no eve.
 
 **LF6. Short cash.**
 - The written policy's `referenceOrder` (`src/lib/agent/cash-priority.ts`) puts first, among bills due or overdue, the one
@@ -112,7 +123,9 @@ date. A fee from the due date or the day after it leaves no day between: the due
 - `checkLateFee` and every entry path.
 - Extraction, from text and from the model.
 - `lateFeeOf`.
-- `decideByOf` with `late_fee`.
+- `decideByOf` with `late_fee`: the same day as without the fee, and a bill with none exactly as before.
+- Escalations with a late fee: past the due date as before, once more on the fee's eve, and each item worded on its own
+  in a mixed batch.
 - `referenceOrder` with fees.
 - The cost box, for a USDC payout and a bank payout.
 - The API payload and schema.

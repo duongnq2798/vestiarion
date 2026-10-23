@@ -1,11 +1,11 @@
-import { invoiceLateFee, readWithLateFee } from "../agent/late-fee";
+import { invoiceLateFee, lastDayWithoutFee, lateFeeStarted, readWithLateFee } from "../agent/late-fee";
 import { invoiceDiscount } from "../agent/payment-timing";
 import { siteOrigin } from "../auth/env";
 import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
 import { decisionEscalationEmail, type EscalationItem } from "../email/decision-escalation";
 import { emailSettingsFromEnv, sendEmail } from "../email/send";
-import { decideByOf, decideByReached, whoCanAct } from "../exceptions";
+import { decideByOf, whoCanAct } from "../exceptions";
 import { chainModes } from "../circle";
 import { membersLeftOut } from "../new-payee";
 import { firstPaymentFrom, loadNewPayeeFacts } from "../new-payee-facts";
@@ -23,6 +23,10 @@ import { decidingRecipients, DIGEST_MAX_RECIPIENTS, DIGEST_SEND_DEADLINE_MS } fr
  * Each payable is escalated once per decide-by day: an `approval_escalations` row is claimed before the sends and kept
  * once anyone received the email, so a later cycle never sends it again; a claim nobody received is released, so the next
  * cycle tries again. A decide-by day that moves (the due date changed) is a new escalation.
+ *
+ * A late fee never delays it (late fees LF5): a payable with one is escalated once its decide-by day, its due date, has
+ * passed, as without it, and its email names the fee. Past its due date, it is told once more on the fee's eve, the last
+ * day without the fee, keyed on that day, while paying still avoids the fee.
  *
  * Only a decide-by day on or after the day escalations started in the workspace counts (`approval_escalation_starts`, set
  * by its first run): a payable already past its day then is never emailed, so turning escalations on sends no backlog.
@@ -82,16 +86,15 @@ export async function escalationStart(today: string): Promise<string | null> {
 }
 
 /**
- * The waiting payables past their decide-by day today, or on the last day before a late fee (`decideByReached`), each with
- * that day; with `from`, only a day on or after it. In scope.
+ * The waiting payables past their decide-by day today, each with that day; or, on a late fee's eve, with that day, today
+ * (late fees LF5). At most one a payable; with `from`, only a day on or after it. In scope.
  */
 export async function pastDecideBy(
   now: Date = new Date(),
   from?: string
 ): Promise<Array<{ id: string; createdBy: string | null; counterpartyId: string; address: string | null; item: EscalationItem }>> {
   const today = now.toISOString().slice(0, 10);
-  // With each bill's late fee, where migration 0141 has run: past its due date, a bill with days before its fee is told on
-  // the last of them (LF5).
+  // With each bill's late fee, where migration 0141 has run: its words, and its eve (LF5).
   const rows = unwrap(
     await readWithLateFee((lateFee) =>
       db()
@@ -103,9 +106,15 @@ export async function pastDecideBy(
     )
   ) as unknown as WaitingRow[];
   return rows.flatMap((row) => {
-    const decideBy = decideByOf({ dueDate: row.due_date, discount: invoiceDiscount(row), lateFee: invoiceLateFee(row), currency: row.currency }, today);
-    // The last day before a late fee is told on the day itself, while paying still avoids the fee (LF5).
-    if (!decideByReached(decideBy, today) || (from !== undefined && decideBy.day < from)) return [];
+    const lateFee = invoiceLateFee(row);
+    const decideBy = decideByOf({ dueDate: row.due_date, discount: invoiceDiscount(row), lateFee, currency: row.currency }, today);
+    // The fee's eve: not started, its last day without it after the due date, and today. A new day, so a new escalation,
+    // though the payable was escalated past its due date already; any other day, once its decide-by day has passed.
+    const lastFree = lateFee ? lastDayWithoutFee(lateFee) : null;
+    const eve = lateFee !== null && !lateFeeStarted(lateFee, today) && lastFree !== null && lastFree > row.due_date.slice(0, 10) && lastFree === today;
+    const day = eve ? today : decideBy.day;
+    if ((!eve && day >= today) || (from !== undefined && day < from)) return [];
+    // Past its due date with a fee, `decideByOf` carries the fee's words.
     const fee = decideBy.reason === "late_fee" ? decideBy.lateFee : undefined;
     return [
       {
@@ -118,9 +127,10 @@ export async function pastDecideBy(
           amount: Number(row.amount),
           currency: row.currency === "EURC" ? "EURC" : "USDC",
           status: row.status,
-          decideBy: decideBy.day,
+          decideBy: day,
           discount: decideBy.reason === "discount",
           ...(fee ? { lateFee: { startsOn: fee.startsOn, rate: fee.rate, started: fee.started } } : {}),
+          ...(eve ? { eve: true } : {}),
         },
       },
     ];
@@ -250,6 +260,7 @@ export async function escalateOverdueDecisions(now: Date = new Date()): Promise<
     }
     const told = fresh.filter(({ id }) => delivered.has(id));
     if (told.length === 0) return counts;
+    const eves = told.filter(({ item }) => item.eve).length;
     const marked = await db()
       .from("approval_escalations")
       .update({ sent_at: new Date().toISOString(), recipients: counts.sent, failed: counts.failed })
@@ -260,7 +271,10 @@ export async function escalateOverdueDecisions(now: Date = new Date()): Promise<
       actor: "system",
       domain: "system",
       action: ESCALATION_ACTION,
-      summary: `Told ${counts.sent} member(s) that ${told.length} payment(s) passed the day to decide them`,
+      summary:
+        eves === 0
+          ? `Told ${counts.sent} member(s) that ${told.length} payment(s) passed the day to decide them`
+          : `Told ${counts.sent} member(s) that ${told.length} payment(s) wait for a decision, ${eves} with a late fee from tomorrow`,
       detail: {
         invoiceIds: told.map(({ id }) => id),
         decideBy: Object.fromEntries(told.map(({ id, item }) => [id, item.decideBy])),

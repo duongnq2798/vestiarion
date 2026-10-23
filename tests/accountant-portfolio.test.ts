@@ -318,27 +318,34 @@ describe("readPortfolio: what waits for the accountant", () => {
     });
   });
 
-  it("gives a bill past its due date the day before its late fee starts, and says so (late fees LF5)", async () => {
+  it("keeps a bill past its due date past its decide-by day when it has a late fee, and names the fee (late fees LF5)", async () => {
     const late = payable("small", { amount: "200", due_date: "2026-10-10", late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-10-20" });
     const { read } = world(INVITED, harbor({ payables: [late] }));
     expect(harborItems((await read()).items)).toEqual([
       expect.objectContaining({
-        kind: "decision",
-        detail: "Held for a person. Decide by Oct 19, 2026: overdue since Oct 10, 2026; a late fee of 1.5% a month starts Oct 20, 2026.",
+        kind: "past_decide_by",
+        since: "2026-10-10",
+        detail: "Held for a person. Its decide-by day was Oct 10, 2026; a late fee of 1.5% a month starts Oct 20, 2026.",
       }),
     ]);
   });
 
-  it("keeps the day before a late fee started as a bill's decide-by day once it has passed, and names the fee (late fees LF5)", async () => {
+  it("ages a bill whose late fee has started from its due date, as before, and says since when the fee applies (late fees LF5)", async () => {
     const started = payable("small", { amount: "200", due_date: "2026-10-05", late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-10-10" });
     const { read } = world(INVITED, harbor({ payables: [started] }));
     expect(harborItems((await read()).items)).toEqual([
       expect.objectContaining({
         kind: "past_decide_by",
-        since: "2026-10-09",
-        detail: "Held for a person. Its decide-by day was Oct 9, 2026, the day before its late fee of 1.5% a month started.",
+        since: "2026-10-05",
+        detail: "Held for a person. Its decide-by day was Oct 5, 2026; a late fee of 1.5% a month applies since Oct 10, 2026.",
       }),
     ]);
+  });
+
+  it("leaves a bill not yet due with a late fee as it was (late fees LF5)", async () => {
+    const ahead = payable("small", { amount: "200", late_fee_kind: "percent_month", late_fee_value: "1.5", late_fee_starts_on: "2026-10-21" });
+    const { read } = world(INVITED, harbor({ payables: [ahead] }));
+    expect(harborItems((await read()).items)).toEqual([expect.objectContaining({ kind: "decision", detail: "Held for a person. Decide by Oct 20, 2026." })]);
   });
 
   it("reads the bills again without their late fees before migration 0141, as before (late fees LF5)", async () => {

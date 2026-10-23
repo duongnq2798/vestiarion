@@ -480,6 +480,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Over 30 days", TRIAGE],
     ["Past its decide-by day", TRIAGE],
     ["Payment waiting for a decision", TRIAGE],
+    // A late fee named beside the decide-by day, which it never moves (late fees LF5).
+    ["Its decide-by day was Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026", "src/lib/accountant/read.ts", "`; ${lateFeeDayWords(decideBy.lateFee)}`"],
     // Bills to co-sign and addresses to confirm (docs/superpowers/specs/2026-10-22-accountant-queue-design.md AQ8).
     ["Waiting for your co-sign", TRIAGE],
     ["Address to confirm", TRIAGE],
@@ -744,6 +746,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Due this week", "src/lib/exceptions.ts"],
     ["Who can act", "src/lib/exceptions.ts"],
     ["Decide by Oct 15, 2026 to keep the early-payment discount", "src/lib/exceptions.ts", " to keep the early-payment discount"],
+    // A late fee named beside the decide-by day, and the escalation on its eve (late fees LF5).
+    ["Decide by Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026", "src/lib/exceptions.ts", 'a late fee of ${fee.rate} ${fee.started ? "applies since" : "starts"}'],
+    ["A late fee starts tomorrow on 1 payment", "src/lib/email/decision-escalation.ts", '"a late fee starts tomorrow"'],
     ["Email me when payments need a decision", "src/components/NotificationsPanel.tsx"],
   ],
   "guides/go-live": [

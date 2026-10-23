@@ -2186,8 +2186,8 @@ each carrying the acting person's user id, never an address.
 **Each waiting payable is an exception someone owns**
 (`docs/superpowers/specs/2026-10-13-deal-cash-readiness-design.md` E1-E5). `exceptionFacts` (`src/lib/exceptions.ts`,
 pure) gives its decide-by day (the due date, or the early-payment discount's deadline while it is still ahead and
-earlier, or, for a bill past its due date whose late fee starts later than the day after it, the last day before the
-fee, before the fee starts and after: reason `late_fee`, which `decideByWords` spells out), its priority (`overdue`, `today`, `week`, `later`) and who can act: the members whose role holds
+earlier; a late fee never moves it: a bill past its due date with one keeps its due date, with reason `late_fee` and
+the fee for `decideByWords` only), its priority (`overdue`, `today`, `week`, `later`) and who can act: the members whose role holds
 `approval.decide`, less whoever entered it unless nobody else may. The Approvals page and the Bills rows read the members
 once (`listMembers`) and show it through `ExceptionLine`; someone who cannot decide reads whom to ask.
 
@@ -2499,7 +2499,8 @@ date, and moves the start by as many days as the due date moves when the due dat
   reports the term as `lateFee`.
 - **Never paid.** No amount, payment limit, transfer or on-chain limit reads it: a bill paid late is paid at its amount.
 - **What it changes.** The approval card's cost box and the Bills list's terms line name it; Slack's Approve confirmation
-  names it; `decideByOf` gives `late_fee` (above); the AP prompt's `terms.lateFee` (`lateFeeTerms`, with `aMonth`)
+  names it; `decideByOf` names it beside the unchanged decide-by day (`late_fee`, above) and the escalations tell
+  it once more on its eve (below); the AP prompt's `terms.lateFee` (`lateFeeTerms`, with `aMonth`)
   and the ledger's `ap_*` `terms` carry it, and `buildReason` names it when the bill is paid before its start, whose
   day is late already; the cash step's written order (`referenceOrder`) puts first, among the bills due or overdue, the
   heaviest `lateFeeOf` in USDC, its facts carry each fee, and `planFingerprint`, the signed order items' `lateFee` and
@@ -2647,14 +2648,17 @@ is logged with the workspace id and never fails the cycle or the tick.
 **A waiting payable past its decide-by day is escalated once for that day.** After the digest,
 `escalateOverdueDecisions` (`src/lib/notifications/escalations.ts`, also from `runScheduledCycle`, in its own `try`)
 reads the waiting payables (`held`, `flagged`, `awaiting_info`) whose decide-by day (`decideByOf`) is before today,
-or is today for a `late_fee` day, so the email comes on the last day before the fee (`decideByReached`), on or after the day escalations started in the workspace (`approval_escalation_starts`, 0108: one row per workspace,
+or, past the due date, whose late fee starts tomorrow (the fee's eve: its last day without the fee, after the due date,
+is today; the item's day is that day, a new key, so it is told once more even when escalated past its due date; at most
+one item a payable a run), each by its own day on or after the day escalations started in the workspace (`approval_escalation_starts`, 0108: one row per workspace,
 set by its first run, insert-only for the tenant role, so a payable already past its day then is never emailed and
 turning escalations on sends no backlog), reads the recipients, the workspace and the members before anything is
 claimed, claims each in `approval_escalations` (migration 0108: unique per payable and decide-by day, an
 `ignoreDuplicates` upsert, so only the rows it inserted are news), and emails the digest's recipients, with the same
 switch and cap, deduplicated by member and address, each one message a run about the payables they may act on (`whoCanAct` over every member, as the card names them;
-`decisionEscalationEmail`, `src/lib/email/decision-escalation.ts`: names, amounts, statuses and days, escaped, with a
-late fee that starts the next day or has started; "reached" rather than "passed" when one is on its day; no address). A payable someone received keeps its claim with `sent_at` and the counts, and the ledger records
+`decisionEscalationEmail`, `src/lib/email/decision-escalation.ts`: names, amounts, statuses and days, escaped, each
+item worded on its own: a late fee as `lateFeeDayWords` names it, or, on its eve, that it starts tomorrow, with eves
+listed first; a batch with no eve reads as before; no address). A payable someone received keeps its claim with `sent_at` and the counts, and the ledger records
 `decision_escalated` (`detail: { invoiceIds, decideBy, recipients, failed }`); a payable nobody received has its claim
 deleted, even when a send throws, so the next scheduled cycle tries again. Without email configured, or nobody to tell, nothing is claimed.
 Before 0108 runs nothing is escalated.

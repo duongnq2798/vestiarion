@@ -14,7 +14,7 @@ import { addressUnconfirmed } from "../counterparty-address";
 import { readCustomerRequests } from "../customer-portal/requests";
 import { db, type OrgDb } from "../dal";
 import { withOrg } from "../dal/scope";
-import { decideByOf, decideByWords, type DecideBy } from "../exceptions";
+import { decideByOf, lateFeeDayWords, type DecideBy } from "../exceptions";
 import { addressGiver } from "../new-payee";
 import { ID_CHUNK, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
 import { counterpartyPath } from "../next-step";
@@ -102,10 +102,10 @@ const HELD_WORDS: Record<PayableRow["status"], string> = {
 const dayWords = (iso: string) =>
   new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${iso.slice(0, 10)}T00:00:00.000Z`));
 
-/** Why a decide-by day that passed was that day: the discount's last day, or the last day before the late fee (LF5). */
+/** What a decide-by day that passed says besides the day: the discount's last day, or the bill's late fee (LF5). */
 function pastWhy(decideBy: DecideBy): string {
   if (decideBy.reason === "discount") return ", to keep the early-payment discount";
-  return decideBy.reason === "late_fee" && decideBy.lateFee ? `, the day before its late fee of ${decideBy.lateFee.rate} started` : "";
+  return decideBy.reason === "late_fee" && decideBy.lateFee ? `; ${lateFeeDayWords(decideBy.lateFee)}` : "";
 }
 
 /** What a bill's item says of its co-sign (docs/superpowers/specs/2026-10-22-accountant-queue-design.md AQ3), ahead of its decide-by day. */
@@ -182,9 +182,7 @@ async function decisionItems(
     const kind = state?.state === "can_cosign" ? "cosign" : past ? "past_decide_by" : "decision";
     const by = past
       ? `Its decide-by day was ${dayWords(decideBy.day)}${pastWhy(decideBy)}.`
-      : decideBy.reason === "late_fee"
-        ? `${decideByWords(decideBy)}.`
-        : `Decide by ${dayWords(decideBy.day)}.`;
+      : `Decide by ${dayWords(decideBy.day)}.`;
     const words = cosignWords(state);
     items.push({
       key: `${ws.slug}:${kind}:${row.id}`,
