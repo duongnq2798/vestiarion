@@ -45,6 +45,21 @@ describe("Contracts on Arc testnet", () => {
     expect(README).toContain(`[\`${mainnet}\`](${addressUrl("arc-mainnet", mainnet)})`);
   });
 
+  it("links every contract Vestiarion deployed to its verified source on Sourcify and its explorer's contract tab", () => {
+    const verified = [
+      [5042, "https://explorer.arc.io", "0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6"],
+      [5042, "https://explorer.arc.io", "0x00b83bA62F17cd49c9ccB8e782e166c481e5d94F"],
+      ...["0x74af203fec3f121ff1cd3a763092d1211487702b", "0xd74997e6e93e997437a543707e77f6662a1c9a9b", "0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba", "0xdeb475145cd1982391083a8e7f306dde917f276e", "0xdaf84b4aef1028bd3a4cd67d786253602437911a"].map(
+        (address) => [5042002, "https://explorer.testnet.arc.io", address] as const
+      ),
+    ] as const;
+    for (const [chainId, explorer, address] of verified) {
+      expect(PAGE).toContain(`[\`${address}\`](${explorer}/address/${address}?tab=contract)`);
+      expect(PAGE).toContain(`(https://repo.sourcify.dev/${chainId}/${address})`);
+    }
+    expect(PAGE).toContain("0.8.37+commit.f401782d");
+  });
+
   it("names the compiler the contracts are built with", () => {
     const settings = JSON.parse(readFileSync(path.join(ROOT, "contracts", "solc-settings.json"), "utf8")) as { evmVersion: string; optimizer: { enabled: boolean; runs: number } };
     for (const file of ["VestiarionEscrow.sol", "VestiarionSpendingLimit.sol", "VestiarionSpendingLimitV2.sol"]) {

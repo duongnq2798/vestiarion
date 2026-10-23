@@ -71,6 +71,22 @@ A spending limit contract runs on Arc mainnet in mainnet-wp, our own workspace t
 
 Its first payment, 0.10 USDC to a vendor on Oct 7, 2026: [`0xcecef38e…dee6`](https://explorer.arc.io/tx/0xcecef38e3f751bc118f8f00cee5bb5344679e84f89123d679b986b47d7f1dee6). USDC on Arc mainnet is [`0x3600000000000000000000000000000000000000`](https://explorer.arc.io/address/0x3600000000000000000000000000000000000000), the same address as on Arc testnet.
 
+### Verified source
+
+Every contract Vestiarion has deployed is verified, so its explorer shows the source and anyone can check that the bytecode on chain was built from this repository. Each was submitted with the exact standard JSON input the app compiles with: one source keyed by its path in this repository, `contracts/solc-settings.json`, and Solidity 0.8.37 (`0.8.37+commit.f401782d`). On [Sourcify](https://sourcify.dev) both the creation and the runtime bytecode are an exact match, metadata included, and Blockscout, the explorer of both networks, shows the same source on each contract's page.
+
+| Network | Contract | Address | Deployed for | Sourcify |
+| --- | --- | --- | --- | --- |
+| Arc mainnet | VestiarionSpendingLimit | [`0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6`](https://explorer.arc.io/address/0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6?tab=contract) | mainnet-wp, Oct 7, 2026 | [Exact match](https://repo.sourcify.dev/5042/0xd90cA89Fc318d0330Bb14eaeF78B72C3CA7E7fB6) |
+| Arc mainnet | VestiarionSpendingLimitV2 | [`0x00b83bA62F17cd49c9ccB8e782e166c481e5d94F`](https://explorer.arc.io/address/0x00b83bA62F17cd49c9ccB8e782e166c481e5d94F?tab=contract) | our own workspace's first Arc mainnet payout to Base, Oct 19, 2026 | [Exact match](https://repo.sourcify.dev/5042/0x00b83bA62F17cd49c9ccB8e782e166c481e5d94F) |
+| Arc testnet | VestiarionEscrow | [`0x74af203fec3f121ff1cd3a763092d1211487702b`](https://explorer.testnet.arc.io/address/0x74af203fec3f121ff1cd3a763092d1211487702b?tab=contract) | testnet-2, Oct 1, 2026 | [Exact match](https://repo.sourcify.dev/5042002/0x74af203fec3f121ff1cd3a763092d1211487702b) |
+| Arc testnet | VestiarionEscrow | [`0xd74997e6e93e997437a543707e77f6662a1c9a9b`](https://explorer.testnet.arc.io/address/0xd74997e6e93e997437a543707e77f6662a1c9a9b?tab=contract) | Oct 10, 2026 | [Exact match](https://repo.sourcify.dev/5042002/0xd74997e6e93e997437a543707e77f6662a1c9a9b) |
+| Arc testnet | VestiarionSpendingLimit | [`0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba`](https://explorer.testnet.arc.io/address/0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba?tab=contract) | testnet-2, Oct 3, 2026 | [Exact match](https://repo.sourcify.dev/5042002/0x9da3c47f73ea9399ac566806a189b0bf47b7d4ba) |
+| Arc testnet | VestiarionSpendingLimit | [`0xdeb475145cd1982391083a8e7f306dde917f276e`](https://explorer.testnet.arc.io/address/0xdeb475145cd1982391083a8e7f306dde917f276e?tab=contract) | Oct 10, 2026 | [Exact match](https://repo.sourcify.dev/5042002/0xdeb475145cd1982391083a8e7f306dde917f276e) |
+| Arc testnet | VestiarionSpendingLimit | [`0xdaf84b4aef1028bd3a4cd67d786253602437911a`](https://explorer.testnet.arc.io/address/0xdaf84b4aef1028bd3a4cd67d786253602437911a?tab=contract) | Oct 15, 2026 | [Exact match](https://repo.sourcify.dev/5042002/0xdaf84b4aef1028bd3a4cd67d786253602437911a) |
+
+A contract a workspace deploys later can be verified the same way: send Sourcify's `POST /v2/verify/{chainId}/{address}` the same standard JSON input, the compiler version above, the contract as `contracts/<file>.sol:<name>`, and its deploy transaction. Arc mainnet is chain 5042 and Arc testnet 5042002.
+
 ## Circle's contracts Vestiarion calls
 
 On Arc testnet:

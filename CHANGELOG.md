@@ -164,6 +164,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **Every deployed contract's source is verified.** The escrow and both versions of the spending limit contract, on Arc
+  mainnet and Arc testnet, are verified on Sourcify, with the creation and runtime bytecode an exact match, and their
+  source shows on each network's Blockscout explorer. [Contracts on Arc](https://www.vestiarion.xyz/docs/contracts#verified-source)
+  lists each one with its links, and says how to verify a contract a workspace deploys later.
 - **`npm run screening:check` never prints an address past its origin.** When the provider's error quotes the address
   it was asked for, or the key, the command now prints it with the key and everything after the address's origin
   taken out.
