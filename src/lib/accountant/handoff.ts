@@ -8,7 +8,8 @@ import { KIND_TITLES, type TriageItem } from "./triage";
 /**
  * The hand-off export (docs/superpowers/specs/2026-10-13-accountant-console-design.md A7): one workspace's month for its
  * accountant, as JSON or CSV. The decisions made in the month (the agent's on payables and a person's approvals,
- * rejections and returns, from the signed ledger as the audit export reads it), the payments sent or confirmed in it,
+ * rejections and returns, an accountant's co-signs among them, from the signed ledger as the audit export reads it), the
+ * payments sent or confirmed in it,
  * the payments booked in the accounting tool, and what is open now (the console's own items).
  *
  * Read in the workspace's scope only, through its tenant client. Each amount stays with its row and its currency: no
@@ -65,6 +66,8 @@ export interface HandoffDecision {
   summary: string;
   invoiceId: string | null;
   hash: string;
+  /** An accountant's co-sign (`approval_given` with `cosign: true`): one of a bill's two approvals, which paid nothing. */
+  cosign?: true;
 }
 
 export interface HandoffPayment {
@@ -122,6 +125,11 @@ export interface HandoffDoc {
 }
 
 const PERSON_DECISIONS = ["approval_paid", "approval_rejected", "approval_returned"] as const;
+/**
+ * An approval that paid nothing yet: listed among a person's decisions only when it is an accountant's co-sign
+ * (docs/superpowers/specs/2026-10-22-accountant-queue-design.md AQ6), whose `detail.cosign` is true.
+ */
+const APPROVAL_GIVEN = "approval_given";
 
 async function pages<T>(read: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }>): Promise<{ rows: T[]; cut: boolean }> {
   const rows: T[] = [];
@@ -143,19 +151,36 @@ const notSetUp = (error: unknown) => {
 const decimal = (value: unknown) => (value === null || value === undefined ? "" : String(value));
 
 async function decisions(orgDb: OrgDb, period: HandoffPeriod) {
-  const read = await pages<{ seq: number; ts: string; actor: "agent" | "human"; action: string; summary: string; invoice_id: string | null; hash: string }>((from, to) =>
-    orgDb
-      .from("ledger_entries")
-      .select("seq, ts, actor, action, summary, invoice_id:detail->>invoiceId, hash")
-      .in("action", [...AGENT_DECISION_ACTIONS, ...PERSON_DECISIONS])
-      .gte("ts", `${period.from}T00:00:00.000Z`)
-      .lt("ts", `${period.to}T00:00:00.000Z`)
-      .order("seq", { ascending: true })
-      .range(from, to)
+  const read = await pages<{ seq: number; ts: string; actor: "agent" | "human"; action: string; summary: string; invoice_id: string | null; cosign?: string | null; hash: string }>(
+    (from, to) =>
+      orgDb
+        .from("ledger_entries")
+        .select("seq, ts, actor, action, summary, invoice_id:detail->>invoiceId, cosign:detail->>cosign, hash")
+        .in("action", [...AGENT_DECISION_ACTIONS, ...PERSON_DECISIONS, APPROVAL_GIVEN])
+        // The first of two approvals by an owner, admin or approver is no decision yet: only an accountant's co-sign is
+        // read, so the rows the export counts against its most are decisions only.
+        .or(`action.neq.${APPROVAL_GIVEN},detail->>cosign.eq.true`)
+        .gte("ts", `${period.from}T00:00:00.000Z`)
+        .lt("ts", `${period.to}T00:00:00.000Z`)
+        .order("seq", { ascending: true })
+        .range(from, to)
   );
   return {
     cut: read.cut,
-    rows: read.rows.map((row) => ({ seq: row.seq, at: row.ts, actor: row.actor, action: row.action, summary: row.summary, invoiceId: row.invoice_id ?? null, hash: row.hash })),
+    rows: read.rows
+      // The first of two approvals by an owner, admin or approver is no decision yet: the one that pays it is. The request
+      // already leaves it out; kept here as well.
+      .filter((row) => row.action !== APPROVAL_GIVEN || row.cosign === "true")
+      .map((row) => ({
+        seq: row.seq,
+        at: row.ts,
+        actor: row.actor,
+        action: row.action,
+        summary: row.summary,
+        invoiceId: row.invoice_id ?? null,
+        hash: row.hash,
+        ...(row.action === APPROVAL_GIVEN ? { cosign: true as const } : {}),
+      })),
   };
 }
 
@@ -300,7 +325,7 @@ export function* handoffCsvChunks(doc: HandoffDoc): Generator<string> {
   yield `﻿${HANDOFF_CSV_FIELDS.join(",")}\r\n`;
   yield row(["workspace", doc.workspace.slug, doc.exportedAt, "hand-off", doc.cut ? "cut" : "complete", doc.workspace.name, "", "", doc.ledgerHead ? `ledger #${doc.ledgerHead.seq}` : "", `${doc.period.label}: ${doc.period.from} to ${doc.period.to} (exclusive)`, doc.ledgerHead?.hash ?? ""]);
   for (const decision of doc.decisions) {
-    yield row(["decision", decision.seq, decision.at, decision.action, decision.actor, decision.summary, "", "", decision.invoiceId ?? "", "", decision.hash]);
+    yield row(["decision", decision.seq, decision.at, decision.action, decision.actor, decision.summary, "", "", decision.invoiceId ?? "", decision.cosign ? "co-sign" : "", decision.hash]);
   }
   for (const payment of doc.payments) {
     yield row(["payment", payment.id, payment.confirmedAt ?? payment.sentAt ?? "", payment.source, payment.status, payment.destination, payment.amount, payment.token, payment.txHash ?? "", payment.simulated ? "simulated" : "on chain", payment.sourceId]);

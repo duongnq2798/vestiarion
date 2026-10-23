@@ -13,6 +13,7 @@ import { GettingStarted } from "@/components/vx/GettingStarted";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { listWaitingPayables } from "@/lib/agent/approvals";
+import { readCosignStates } from "@/lib/cosign-state";
 import { db } from "@/lib/dal";
 import { verdictView, type DecisionEntryFacts } from "@/lib/verdict-view";
 import { verdictFacts } from "@/lib/verdicts";
@@ -60,6 +61,27 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
       payable.verdictEntry ? [{ seq: payable.verdictEntry.seq, ts: payable.verdictEntry.ts, actor: "agent" as const, action: "ap_pay", detail: { invoiceId: payable.id } }] : []
     );
     const verdicts = verdictEntries.length > 0 ? await verdictFacts(db(), verdictEntries, canDecide) : null;
+    // For a co-signing accountant, whether each payment can be co-signed now, as the accountant console says it (accountant
+    // queue AQ5), so Co-sign shows only where the server would take it. Best effort: unread, the cards offer Co-sign on
+    // every payment above the figure, as before, and the server refuses what it must.
+    const cosignStates = canCosign
+      ? await readCosignStates(
+          user.id,
+          waiting.map((payable) => ({
+            id: payable.id,
+            amount: payable.amount,
+            currency: payable.currency,
+            status: payable.status,
+            reviewedAt: payable.reviewedAt,
+            counterpartyId: payable.counterpartyId,
+            riskLevel: payable.riskLevel,
+            address: payable.address,
+          }))
+        ).catch((error: unknown) => {
+          console.error("approvals: co-sign states not read", error instanceof Error ? error.message : error);
+          return null;
+        })
+      : null;
     // Whether Approve and pay is simulated: the workspace's capability, not its mode, since a sandbox connected to Circle
     // pays for real (capability and reasons R5).
     const capability = verdicts?.capability ?? (await readCapability());
@@ -143,6 +165,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
                 exception={exceptionOf(payable)}
                 viewerEmail={user.email}
                 canCosign={canCosign}
+                cosign={cosignStates?.get(payable.id)}
               />
             ))}
           </div>

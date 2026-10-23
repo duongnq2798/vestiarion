@@ -38,6 +38,8 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
 const KIND_TONE: Record<TriageKind, "refused" | "held" | "agent" | "neutral"> = {
   past_decide_by: "refused",
   decision: "held",
+  cosign: "agent",
+  confirm_address: "held",
   customer_says_paid: "agent",
   disputed: "held",
   to_book: "agent",

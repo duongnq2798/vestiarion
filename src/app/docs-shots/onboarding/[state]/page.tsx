@@ -89,8 +89,8 @@ function AccountantShot() {
         <div className="mb-8 max-w-2xl space-y-2">
           <h1 className="text-[1.75rem] font-semibold tracking-[-0.025em] text-ink">Accountant console</h1>
           <p className="text-[0.9375rem] leading-relaxed text-ink-2">
-            Every workspace you are a member of, and what needs attention in each: payments waiting for a decision, payments to book, receivables to follow
-            up and connectors to fix. Amounts stay with their own workspace and currency; nothing here is added up.
+            Every workspace you are a member of, and what needs attention in each: payments waiting for a decision, bills to co-sign, addresses to confirm,
+            payments to book, receivables to follow up and connectors to fix. Amounts stay with their own workspace and currency; nothing here is added up.
           </p>
         </div>
         <GettingStarted slug="harbor-bakery" checklist={checklist} isOwner={false} dismiss={dismissChecklistAction} />

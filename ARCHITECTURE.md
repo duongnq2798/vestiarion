@@ -800,6 +800,23 @@ plan, on Arc testnet).
     It counts one accountant at most, since a co-sign never pays. Milestones keep `approversBesides`, and read their
     approvals with `deciders_among` (owners, admins and approvers; `approvers_among` before 0138).
   - **Addresses:** `confirmCounterpartyAddressAction` takes whoever decides payments or a co-signing accountant.
+  - **What can be co-signed now** (`docs/superpowers/specs/2026-10-22-accountant-queue-design.md`,
+    `src/lib/cosign-state.ts`): one answer for the accountant console and the approval card, so neither offers a co-sign
+    `approveAndPay` would refuse.
+    - `cosignState`, pure (`cosign-state-rules.ts`), answers `can_cosign`, `cosigned`, `not_needed` (below the figure, a
+      transfer exists, two approvals stand, or another accountant's co-sign does) or `blocked`, with the server's first
+      refusal in words: a verdict waited for or disagreed with, a claim in progress, high risk, a payee with no address
+      where payments are real (`no_address`), a frozen payee, an address to confirm or its wait under the payee lock.
+    - `readCosignStates` reads its facts in the workspace in scope, a handful of requests however many bills: the figure
+      with the lock, a EURC bill's recorded USDC value, payment intents, `twoApprovalsFacts`, `deciders_among` for which
+      lone approval is a co-sign, `verdictHolds` for every bill still to be decided (a verdict comes first in the
+      server's order), then, for the bills nothing else blocks, frozen payees, the payees paid to a bank account (while
+      the lock is on, or where `chainModes` says payments are real and a payee has no address) and the payees' address
+      state while the lock is on. No quote, balance or Circle call.
+    - Approvals reads it for a co-signing accountant: Co-sign shows only for `can_cosign`, a `blocked` reason shows in
+      its place. Unread, the card offers Co-sign as before and the server refuses what it must. A first payment that
+      leaves the accountant out, a bill they entered and a commission's partner are left to the card's refusal when
+      Co-sign is clicked.
 
 **Trying a limit on past decisions** (`docs/superpowers/specs/2026-10-10-policy-replay-design.md`).
 - **What it replays** (`replayDecisions`, `src/lib/policy-replay.ts`, pure): the agent's `ap_*` and `milestone_*`
@@ -4110,6 +4127,8 @@ Each part of a workspace is read on its own, and one that fails is named on its 
 | Kind | Read | Age from | Opens | Who acts |
 | --- | --- | --- | --- | --- |
 | `past_decide_by`, `decision` | payables `held`, `flagged`, `awaiting_info` (split by `decideByOf`), milestones `held` | the decide-by day once past; else `decided_at` | Approvals at the bill; Contractors | `approval.decide` |
+| `cosign` | the same payables, for an accountant while `accountant_cosigns` is on: those `readCosignStates` answers `can_cosign`, in place of their decision item | as the decision item would | Approvals at the bill | `approval.cosign` |
+| `confirm_address` | `counterparties` with `address_changed_at` set (newest first, at most 200), kept where `addressUnconfirmed`; frozen ones from `readFrozenPayees` | `address_changed_at` | Counterparties at the payee | `approval.decide`; an accountant's `approval.cosign` while co-signing is on; a frozen payee `records.write`, who unfreezes it; under the payee lock, not whoever gave the address (`loadNewPayeeFacts`, `addressGiver`) while `billApproversBesides` counts someone else, as `giver_confirms` refuses |
 | `to_book` | `accounting_postings` `draft` or `failed` | `created_at` | the bookings review | `accounting.book`; an accountant only on a connection whose consent is in `ACCOUNTANT_BOOKING_CONSENTS`, as the command checks |
 | `receivable_overdue` | receivables `pending`/`matched` past `due_date` | the due date | the receivable | `receivables.reconcile` |
 | `customer_says_paid`, `disputed` | open `customer_requests` of kind `paid`, `dispute` | `created_at` | From customers | `receivables.reconcile` |
@@ -4117,14 +4136,19 @@ Each part of a workspace is read on its own, and one that fails is named on its 
 | `limit` | `readUsageLimits` without Gateway's balance, reached ones | the day | Settings, Usage this month | the limit's own |
 
 `routeTo(role, kind)` says "You can ..." or which roles of the workspace act; the queue puts what the viewer can act on
-first, then by kind, then the oldest. The KPI is how many items are open in each age bucket (under a day, 1 to 3, 4 to 7,
+first, then by kind, then the oldest. For an accountant, `readWorkspaceTriage` reads `accountant_cosigns` once
+(`readAccountantCosign`, unread counts as off and is named) and passes it to the decision part and the address part. A
+bill is one item whatever its co-sign state: `can_cosign` makes it `cosign`, saying the figure and whether one approval
+is given; `cosigned` and `blocked` keep the decision item and say so first; a co-sign read that fails leaves the
+decision items and names "bills to co-sign". No member list is read, and no address is put on an item. The KPI is how many items are open in each age bucket (under a day, 1 to 3, 4 to 7,
 8 to 30, over 30 days). The console counts items and never adds money: each amount stays on its item, in its currency.
 
 **The hand-off** (A7; `GET /api/accountant/handoff?org=&format=csv|json&month=YYYY-MM`, `src/lib/accountant/handoff.ts`).
 The audit export's gate in its order (a cross-site request refused, the session, the membership read afresh, a 404 that
 never says whether a workspace exists), then, in the workspace's scope: the month's (UTC; the last full month by default)
 decisions from the signed ledger (the agent's `AGENT_DECISION_ACTIONS` and a person's approvals, rejections and returns,
-with their numbers and hashes), the payment intents created or confirmed in it, the postings paid in it, and the
+an accountant's co-signs among them, `approval_given` with `cosign: true` marked `cosign` and `co-sign` in the CSV, read
+with an `or` so no other `approval_given` counts against the most rows, with their numbers and hashes), the payment intents created or confirmed in it, the postings paid in it, and the
 workspace's open items now, with the ledger's head so the audit export of the same chain verifies it. CSV is one table
 with a `section` column (formula-safe through `csvCell`, a BOM first); JSON is `vestiarion-handoff/1`. Each download
 appends `handoff_exported` and is braked at 10 a person in 10 minutes, counted from those entries. Nothing is stored:

@@ -46,7 +46,8 @@ second line on every read and needs no new privileged SQL.
 to book in Xero (accounting write-back W6; QuickBooks books nothing yet), receivables overdue, customers who say they paid or dispute an invoice
 (#333), connector problems, and limits reached (U3). Each names its workspace, its own amount in its own currency, how
 long it has been open, and who acts: "You can ..." when the viewer's role may, or which roles may. What the viewer can act
-on comes first, then by kind, then the oldest.
+on comes first, then by kind, then the oldest. Since Oct 22, 2026 it also holds bills waiting for an accountant's co-sign
+and addresses to confirm (`2026-10-22-accountant-queue-design.md`).
 
 **A4. Where it is.** `/accountant`, behind the session. The workspaces page links it for anyone in more than one workspace
 or an accountant in one.
