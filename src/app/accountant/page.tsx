@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { dismissChecklistAction } from "@/app/actions/onboarding";
 import { AccountantConsole } from "@/components/accountant/AccountantConsole";
+import { ClientLinks } from "@/components/accountant/ClientLinks";
 import { DocsLink } from "@/components/DocsLink";
 import { AccountMenu } from "@/components/vx/AccountMenu";
 import { ChecklistVisit } from "@/components/vx/ChecklistVisit";
@@ -12,6 +13,7 @@ import { triageFilter } from "@/lib/accountant/triage";
 import { membershipsOf } from "@/lib/auth/membership";
 import { verifySession } from "@/lib/auth/session";
 import { readAccountantOnboarding } from "@/lib/onboarding/accountant";
+import { listClientLinks, mayInviteClients } from "@/lib/platform/client-links";
 
 export const dynamic = "force-dynamic";
 
@@ -27,13 +29,24 @@ export const metadata: Metadata = { title: "Accountant console", robots: { index
  * lands them (onboarding by role R3, R6): this page open is its first step, read in each such workspace as them, and
  * recorded there once the page is in the browser (`ChecklistVisit`), never while it renders. "Don't show again" records
  * the dismissal in the workspace its steps open, and it stays dismissed here.
+ *
+ * Someone who is an accountant in at least one workspace also gets Invite a client, their client invite links
+ * (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md AC1), read by their own user id, and the
+ * checklist's optional step for it (AC6). Before migration 0143 runs, it says the feature is not available yet.
  */
 export default async function AccountantPage({ searchParams }: { searchParams: Promise<{ kind?: string | string[]; workspace?: string | string[]; mine?: string | string[] }> }) {
   const user = await verifySession("/accountant");
   const now = new Date();
   const [portfolio, query, memberships] = await Promise.all([readPortfolio(user.id, now), searchParams, membershipsOf(user.id)]);
   const filter = triageFilter(query);
-  const onboarding = await readAccountantOnboarding(user.id, memberships, portfolio, filter.workspace);
+  // A read that fails says the links are not available, as before the migration: the console still shows.
+  const clientLinks = mayInviteClients(memberships)
+    ? await listClientLinks(user.id, memberships, now).catch((error: unknown) => {
+        console.error("accountant console: client links not read", error instanceof Error ? error.message : "unknown error");
+        return { available: false, links: [], everUsed: false };
+      })
+    : null;
+  const onboarding = await readAccountantOnboarding(user.id, memberships, portfolio, filter.workspace, clientLinks?.available ? clientLinks.everUsed : undefined);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -64,9 +77,15 @@ export default async function AccountantPage({ searchParams }: { searchParams: P
         )}
         {onboarding && onboarding.unrecorded.length > 0 && <ChecklistVisit page="accountant" slugs={onboarding.unrecorded} queue={filter.workspace} />}
         <AccountantConsole portfolio={portfolio} now={now} filter={filter} />
+        {clientLinks && (
+          <div className="mt-10">
+            <ClientLinks available={clientLinks.available} links={clientLinks.links} />
+          </div>
+        )}
         <p className="mt-10 text-xs text-ink-3">
           Only workspaces you are a member of are listed, read with your role in each. To be added to another, ask its owner or an admin to invite you
-          from its <span className="font-medium">Members</span> page. <Link href="/onboarding?new" className="font-medium text-agent underline-offset-2 hover:underline">All your workspaces</Link>
+          from its <span className="font-medium">Members</span> page{clientLinks ? ", or send a new client a link from Invite a client" : ""}.{" "}
+          <Link href="/onboarding?new" className="font-medium text-agent underline-offset-2 hover:underline">All your workspaces</Link>
         </p>
       </main>
       <SiteFooter compact />

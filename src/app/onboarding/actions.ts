@@ -3,39 +3,18 @@
 import "server-only";
 
 import { redirect } from "next/navigation";
-import { authorize } from "@/lib/auth/authorize";
 import { orgHref } from "@/lib/auth/org-paths";
 import { getSessionUser } from "@/lib/auth/session";
 import { currentConfig } from "@/lib/context";
-import { inOrg } from "@/lib/dal/scope";
 import { recordFirstTouch } from "@/lib/growth/record";
 import { MAINNET_NOT_OPEN, mayUseMainnet } from "@/lib/mainnet";
 import { createWorkspace, WorkspaceLimitError } from "@/lib/platform/workspace";
-import { SHADOW_NOT_STARTED, startShadowMode } from "@/lib/shadow-mode";
+import { SHADOW_NOT_STARTED } from "@/lib/shadow-mode";
+import { startShadowModeAtCreation } from "@/lib/shadow-mode-at-creation";
 
 export interface CreateWorkspaceResult {
   ok: boolean;
   message: string;
-}
-
-/**
- * Shadow mode for the workspace just created (shadow mode S1), as Settings turns it on: an owner's (`approval.policy`),
- * through `startShadowMode`, which refuses Arc mainnet and writes the signed entry. In USDC, with the person who
- * created it as the actor. Says whether it turned on: the workspace stays created either way.
- */
-async function startShadowModeIn(slug: string): Promise<boolean> {
-  try {
-    const auth = await authorize(slug, "approval.policy");
-    if (!auth.ok) {
-      console.error("shadow mode at creation refused", auth.message);
-      return false;
-    }
-    await inOrg(auth, () => startShadowMode({ actorId: auth.user.id, currency: "USDC" }));
-    return true;
-  } catch (error) {
-    console.error("shadow mode at creation failed", error instanceof Error ? error.message : "unknown error");
-    return false;
-  }
 }
 
 /**
@@ -67,7 +46,7 @@ export async function createWorkspaceAction(_previous: CreateWorkspaceResult, fo
   // Which campaign brought this person, from the first-touch cookie, recorded once; it never fails or holds up the
   // workspace, which already exists (src/lib/growth/record.ts).
   await recordFirstTouch(orgId);
-  const shadowStarted = shadow ? await startShadowModeIn(slug) : true;
+  const shadowStarted = shadow ? await startShadowModeAtCreation(slug) : true;
   // `redirect` throws to navigate, so it stays outside the `try` above.
   redirect(orgHref(slug, shadowStarted ? "/console" : `/console?shadow=${SHADOW_NOT_STARTED}`));
 }

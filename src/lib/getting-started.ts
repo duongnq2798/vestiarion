@@ -65,7 +65,9 @@ export type GettingStartedStepId =
   | "console"
   | "queue"
   | "book"
-  | "handoff";
+  | "handoff"
+  // An accountant's optional step, where client links work (accountant client links AC6).
+  | "invite_client";
 
 /** Whose checklist it is (R1 to R3): an admin follows the owner's, and a viewer has none. */
 export type ChecklistRole = "owner" | "approver" | "accountant";
@@ -139,6 +141,8 @@ export interface GettingStartedStep {
   needs: Permission | null;
   /** The heading the step is listed under, when the checklist groups its steps: "To pay on Arc" in a sandbox with no wallet. */
   section?: string;
+  /** A step the checklist offers but does not wait for: never the next step, and the checklist is done without it. */
+  optional?: boolean;
 }
 
 export interface GettingStarted {

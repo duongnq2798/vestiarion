@@ -45,13 +45,15 @@ async function inTurn<T>(books: readonly OrgMembership[], each: (membership: Org
 
 /**
  * Null for someone who is no workspace's accountant: the console shows them no checklist. `queueSlug` is the workspace
- * the console is narrowed to, if any.
+ * the console is narrowed to, if any. `clientInvited`, given where client links work, offers the optional Invite a client
+ * step, done once one of this person's links was used (accountant client links AC6).
  */
 export async function readAccountantOnboarding(
   userId: string,
   memberships: readonly OrgMembership[],
   portfolio: Portfolio,
-  queueSlug: string | null
+  queueSlug: string | null,
+  clientInvited?: boolean
 ): Promise<AccountantOnboarding | null> {
   const books = memberships.filter(isBooks);
   if (books.length === 0) return null;
@@ -93,6 +95,7 @@ export async function readAccountantOnboarding(
       handedOff: facts.some((fact) => fact.handedOff),
       workspaceSlug,
       bookHref,
+      ...(clientInvited === undefined ? {} : { clientInvited }),
       dismissed: any("dismissed_accountant"),
     }),
   };

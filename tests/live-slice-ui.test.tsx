@@ -54,6 +54,21 @@ describe("LiveSliceStart", () => {
     expect(words).not.toContain("Open the live slice on Arc mainnet");
   });
 
+  it("offers to bring each accountant along, ticked, for the owner to turn off (accountant client links AC4)", () => {
+    const html = renderToStaticMarkup(
+      <LiveSliceStart orgSlug="acme-shadow" vendors={vendors} canStart accountants={[{ userId: "u-books", email: "books@practice.example" }]} />
+    );
+    const words = text(html);
+    expect(words).toContain("Your accountant");
+    expect(words).toContain("Bring your accountant books@practice.example along");
+    expect(words).toContain("They join the new workspace as its accountant. You can remove them from its Members at any time.");
+    const box = html.match(/<button[^>]*id="slice-accountant-u-books"[^>]*>/)?.[0] ?? "";
+    expect(box).toContain('aria-checked="true"');
+    expect(html).toContain('name="accountantId"');
+    expect(html).toContain('value="u-books"');
+    expect(text(renderToStaticMarkup(<LiveSliceStart orgSlug="acme-shadow" vendors={vendors} canStart />))).not.toContain("Bring your accountant");
+  });
+
   it("tells anyone else that an owner starts it", () => {
     const words = text(renderToStaticMarkup(<LiveSliceStart orgSlug="acme-shadow" vendors={vendors} canStart={false} />));
     expect(words).toContain("An owner can start the live slice.");

@@ -74,11 +74,12 @@ const MORE = [
   vendor(UNCONFIRMED, "Quill Studio", { address: ADDRESS, address_changed_at: "2026-10-17T10:00:00Z" }),
 ];
 
-function workspace(start: { network?: string; slice?: boolean; vendors?: unknown[]; signFails?: boolean } = {}) {
+function workspace(start: { network?: string; slice?: boolean; vendors?: unknown[]; signFails?: boolean; addAccountant?: (sent: RecordedRequest) => FakeReply } = {}) {
   const fake = fakeSupabase((sent: RecordedRequest): FakeReply => {
     if (sent.path === "/rest/v1/orgs") {
       const id = sent.params.get("id")?.replace(/^eq\./, "");
-      if (sent.params.get("select")?.includes("mode") && id === LIVE) return { body: [{ id: LIVE, slug: "pinecrest-studio-live", name: "Pinecrest Studio live slice", mode: "sandbox" }] };
+      // readLiveSlice's read of the slice's workspace; a scope entering it reads its whole row below.
+      if (sent.params.get("select") === "id,slug,name,mode" && id === LIVE) return { body: [{ id: LIVE, slug: "pinecrest-studio-live", name: "Pinecrest Studio live slice", mode: "sandbox" }] };
       if (sent.params.get("select") === "name") return { body: [{ name: "Pinecrest Studio" }] };
       return { body: orgs.orgRow(id ?? SHADOW, start.network ? { network: start.network } : {}) };
     }
@@ -100,6 +101,7 @@ function workspace(start: { network?: string; slice?: boolean; vendors?: unknown
       return { body: ids ? rows.filter((row) => ids.includes(row.id)) : rows };
     }
     if (sent.path === "/rest/v1/rpc/append_ledger_entry") return start.signFails ? { status: 500, body: { message: "down" } } : { body: APPENDED_LEDGER_ROW };
+    if (sent.path === "/rest/v1/rpc/add_live_slice_accountant") return start.addAccountant?.(sent) ?? { body: true };
     return { body: [] };
   });
   const run = <T,>(fn: () => Promise<T>) => runWith({ config, db: fake.client, fetch: fake.fetch }, () => withOrg(SHADOW, fn, { userId: USER }));
@@ -209,6 +211,65 @@ describe("startLiveSlice", () => {
     expect(createWorkspaceMock).not.toHaveBeenCalled();
     createWorkspaceMock.mockRejectedValueOnce(new WorkspaceLimitError("arc-mainnet"));
     await expect(workspace().run(() => startLiveSlice({ userId: USER, vendorIds: [OWN] }))).rejects.toMatchObject({ code: "limit" });
+  });
+});
+
+describe("startLiveSlice brings the accountant along (accountant client links AC4)", () => {
+  const BOOKS = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005b1";
+  const OTHER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000005b2";
+  const joined = (requests: RecordedRequest[]) =>
+    requests
+      .filter((sent) => sent.path === "/rest/v1/rpc/append_ledger_entry")
+      .map((sent) => sent.body as { p_org_id: string; p_action: string; p_detail: Record<string, unknown> })
+      .filter((body) => body.p_action === "member_joined");
+
+  it("adds each accountant kept on to the new workspace as accountant, signed there", async () => {
+    const { fake, run } = workspace();
+    const started = await run(() => startLiveSlice({ userId: USER, vendorIds: [OWN], accountantIds: [BOOKS, BOOKS] }));
+    expect(started.accountants).toEqual({ added: [BOOKS], notAdded: [] });
+    const calls = fake.requests.filter((sent) => sent.path === "/rest/v1/rpc/add_live_slice_accountant").map((sent) => sent.body);
+    expect(calls).toEqual([{ p_from_org_id: SHADOW, p_org_id: LIVE, p_actor: USER, p_user_id: BOOKS }]);
+    expect(joined(fake.requests)).toEqual([
+      expect.objectContaining({
+        p_org_id: LIVE,
+        p_action: "member_joined",
+        p_detail: { by: BOOKS, role: "accountant", via: "live_slice", grantedBy: USER },
+      }),
+    ]);
+  });
+
+  it("adds none the owner turned off", async () => {
+    const { fake, run } = workspace();
+    const started = await run(() => startLiveSlice({ userId: USER, vendorIds: [OWN] }));
+    expect(started.accountants).toEqual({ added: [], notAdded: [] });
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/rpc/add_live_slice_accountant")).toBe(false);
+    expect(joined(fake.requests)).toEqual([]);
+  });
+
+  it("still opens the slice when an accountant cannot be added, and names them", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { fake, run } = workspace({
+      addAccountant: (sent) =>
+        (sent.body as { p_user_id: string }).p_user_id === OTHER
+          ? { status: 400, body: { code: "P0001", message: "not_an_accountant: that person is not an accountant of the shadow workspace" } }
+          : { body: true },
+    });
+    const started = await run(() => startLiveSlice({ userId: USER, vendorIds: [OWN], accountantIds: [BOOKS, OTHER] }));
+    expect(started.accountants).toEqual({ added: [BOOKS], notAdded: [OTHER] });
+    expect(joined(fake.requests).map((body) => body.p_detail.by)).toEqual([BOOKS]);
+    expect(ledgerOf(fake.requests, "live_slice_started")).toBeDefined();
+  });
+
+  it("names them too before migration 0143, which has no such function yet", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { run } = workspace({ addAccountant: () => ({ status: 404, body: { code: "PGRST202", message: "not there" } }) });
+    const started = await run(() => startLiveSlice({ userId: USER, vendorIds: [OWN], accountantIds: [BOOKS] }));
+    expect(started.accountants).toEqual({ added: [], notAdded: [BOOKS] });
+  });
+
+  it("refuses an accountant id that is not one before anything is made", async () => {
+    await expect(workspace().run(() => startLiveSlice({ userId: USER, vendorIds: [OWN], accountantIds: ["not-a-uuid"] }))).rejects.toThrow();
+    expect(createWorkspaceMock).not.toHaveBeenCalled();
   });
 });
 

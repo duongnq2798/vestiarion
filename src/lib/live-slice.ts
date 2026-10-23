@@ -6,6 +6,7 @@ import { db, platformDb, unwrap, type OrgDb } from "./dal";
 import { withOrg } from "./dal/scope";
 import { counterpartyInputSchema } from "./intake-validation";
 import { appendLedgerEntry, assertLedgerCanSign } from "./ledger";
+import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { homeChain } from "./payee-chains";
 import { createWorkspace, WorkspaceLimitError } from "./platform/workspace";
 import { readShadowMode } from "./shadow-mode";
@@ -18,6 +19,10 @@ import { workspaceNetwork } from "./workspace-network";
  * there; a mirror address, an address on another chain and one still waiting for confirmation here never are. No bill,
  * history or verdict is carried, and the new workspace is not live: going live is the business's next step. The shadow
  * workspace signs `live_slice_started`.
+ *
+ * Going live keeps the accountant (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md AC4): each of the
+ * shadow workspace's accountants the owner kept ticked joins the new workspace as accountant, through migration 0143's
+ * `add_live_slice_accountant`, and is signed there as `member_joined` with `via: "live_slice"`.
  */
 
 export const LIVE_SLICE_STARTED = "live_slice_started";
@@ -162,6 +167,14 @@ export async function readLiveSlice(orgDb: OrgDb): Promise<LiveSlice | null> {
 }
 
 const idsSchema = z.array(z.string().uuid()).max(SLICE_MAX_VENDORS * 4);
+/** The accountants a slice may bring along: a workspace's own, which no real one has more of. */
+const accountantIdsSchema = z.array(z.string().uuid()).max(20);
+
+/** Which of the accountants the owner kept ticked joined the new workspace, and which could not (AC4). */
+export interface SliceAccountants {
+  added: string[];
+  notAdded: string[];
+}
 
 /**
  * Opens the live slice from the workspace in scope (L2-L4). Who may (an owner) and whether Arc mainnet is open to them
@@ -174,7 +187,9 @@ const idsSchema = z.array(z.string().uuid()).max(SLICE_MAX_VENDORS * 4);
 export async function startLiveSlice(input: {
   userId: string;
   vendorIds: string[];
-}): Promise<{ slug: string; carried: SliceVendor[]; skipped: SliceSkipped[] }> {
+  /** The shadow workspace's accountants to bring along (AC4); none when absent. */
+  accountantIds?: string[];
+}): Promise<{ slug: string; carried: SliceVendor[]; skipped: SliceSkipped[]; accountants: SliceAccountants }> {
   const sourceOrgId = currentOrgId();
   if (workspaceNetwork().id === "arc-mainnet") throw new SliceError("mainnet_workspace");
   if (!(await readShadowMode(db()))) throw new SliceError("not_shadow");
@@ -182,6 +197,7 @@ export async function startLiveSlice(input: {
   const ids = [...new Set(idsSchema.parse(input.vendorIds))];
   if (ids.length === 0) throw new SliceError("no_vendors");
   if (ids.length > SLICE_MAX_VENDORS) throw new SliceError("too_many");
+  const accountantIds = [...new Set(accountantIdsSchema.parse(input.accountantIds ?? []))];
   // An unreadable signing key refuses before a workspace is made, rather than leave a slice unrecorded.
   assertLedgerCanSign();
 
@@ -233,6 +249,7 @@ export async function startLiveSlice(input: {
   // Each vendor through the one way a counterparty is added, in the new workspace's scope. Its own address waits for a
   // person there (`via: "live_slice"`). One that fails is left behind and named; the rest still go.
   const carried: SliceVendor[] = [];
+  const accountants: SliceAccountants = { added: [], notAdded: [] };
   await withOrg(
     made.orgId,
     async () => {
@@ -250,6 +267,29 @@ export async function startLiveSlice(input: {
           console.error("live slice: a vendor was not added", made.orgId, row.id, error instanceof Error ? error.message : "unknown error");
           skipped.push({ counterpartyId: row.id, name: row.name, reason: "not_added" });
         }
+      }
+      // The function checks the owner owns both workspaces and that each is an accountant of the shadow one; the role is
+      // always accountant. One that cannot be added is named, and the owner can invite them on its Members.
+      for (const accountantId of accountantIds) {
+        const added = await platformDb().rpc("add_live_slice_accountant", {
+          p_from_org_id: sourceOrgId,
+          p_org_id: made.orgId,
+          p_actor: input.userId,
+          p_user_id: accountantId,
+        });
+        if (added.error) {
+          console.error("live slice: an accountant was not added", made.orgId, added.error.code ?? added.error.message);
+          accountants.notAdded.push(accountantId);
+          continue;
+        }
+        await appendLedgerEntryBestEffort(made.orgId, {
+          actor: "human",
+          domain: "system",
+          action: "member_joined",
+          summary: "A member joined with the accountant role",
+          detail: { by: accountantId, role: "accountant", via: "live_slice", grantedBy: input.userId },
+        });
+        accountants.added.push(accountantId);
       }
     },
     { userId: input.userId }
@@ -275,5 +315,5 @@ export async function startLiveSlice(input: {
     unrecorded.slug = made.slug;
     throw unrecorded;
   }
-  return { slug: made.slug, carried, skipped };
+  return { slug: made.slug, carried, skipped, accountants };
 }
