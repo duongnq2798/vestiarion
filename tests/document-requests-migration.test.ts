@@ -214,6 +214,28 @@ describe("the vendor's page (ER5)", () => {
     expect(await row(id)).toMatchObject({ po_reference: null, note: "First line.\nSecond line." });
   });
 
+  it("refuses a line or paragraph separator, or a C1 control, in the purchase order and the note, whatever the database's locale", async () => {
+    // [[:cntrl:]] follows the database's ctype: glibc counts U+2028 and U+2029 in it, PGlite does not, and plain C counts
+    // neither them nor U+0085. The vendor's page and the function must refuse the same characters everywhere.
+    const { orgId, id, token } = await openRequest("dr-separators");
+    const sha = hash();
+    const file = { path: pathOf(orgId, id, sha), sha };
+    for (const code of [0x2028, 0x2029, 0x85]) {
+      const char = String.fromCharCode(code);
+      await expect(answer(token, file, `PO-4410${char}rev B`), code.toString(16)).rejects.toThrow(/document_request_invalid: the purchase order/);
+      await expect(answer(token, file, null, `First line.${char}Second line.`), code.toString(16)).rejects.toThrow(/document_request_invalid: the note/);
+    }
+    expect((await answer(token, file, "PO-4410", "First line.\nSecond line.")).outcome).toBe("answered");
+    // The table refuses them too, should a write ever come around the function; a line break in the note stays fine.
+    for (const code of [0x2028, 0x2029, 0x85]) {
+      const char = String.fromCharCode(code);
+      await expect(db.query("update public.document_requests set po_reference = $2 where id = $1", [id, `PO${char}1`]), code.toString(16)).rejects.toThrow(/document_requests_po_reference_check/);
+      await expect(db.query("update public.document_requests set note = $2 where id = $1", [id, `a${char}b`]), code.toString(16)).rejects.toThrow(/document_requests_note_check/);
+    }
+    await db.query("update public.document_requests set note = $2 where id = $1", [id, "a\nb"]);
+    await expect(db.query("update public.document_requests set po_reference = $2 where id = $1", [id, "PO\n1"])).rejects.toThrow(/document_requests_po_reference_check/);
+  });
+
   it("answers nothing for an expired link, or once the bill no longer waits for information", async () => {
     const expired = await openRequest("dr-expired");
     await db.query("update public.document_requests set expires_at = now() - interval '1 minute' where id = $1", [expired.id]);

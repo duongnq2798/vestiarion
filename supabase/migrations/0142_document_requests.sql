@@ -63,11 +63,15 @@ create table if not exists public.document_requests (
   sent_at          timestamptz,
   expires_at       timestamptz,
   answered_at      timestamptz,
-  -- What the vendor typed: a purchase order number, and a note.
+  -- What the vendor typed: a purchase order number, and a note, which may break its lines with \n. No other control
+  -- character, named by code point (C0, DEL, C1, and the line and paragraph separators U+2028 and U+2029) rather than
+  -- [[:cntrl:]], whose members follow the database's ctype: glibc counts the separators, plain C not even C1.
   po_reference     text constraint document_requests_po_reference_check
-                        check (po_reference is null or (char_length(po_reference) between 1 and 100 and po_reference !~ '[[:cntrl:]]')),
+                        check (po_reference is null or (char_length(po_reference) between 1 and 100
+                                                        and po_reference !~ '[\u0001-\u001f\u007f-\u009f\u2028\u2029]')),
   note             text constraint document_requests_note_check
-                        check (note is null or (char_length(note) between 1 and 500 and replace(note, E'\n', '') !~ '[[:cntrl:]]')),
+                        check (note is null or (char_length(note) between 1 and 500
+                                                and note !~ '[\u0001-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]')),
   -- The vendor's file, in the private `documents` bucket, under the workspace's own folder.
   file_path        text constraint document_requests_file_path_check
                         check (file_path is null or (file_path ~ '^[0-9a-f-]{36}/document-requests/[0-9a-f-]{36}/[0-9a-f]{64}$'
@@ -307,11 +311,12 @@ begin
      or p_file_size is null or p_file_size not between 1 and 10485760 then
     raise exception 'document_request_invalid: the file';
   end if;
-  -- One line of plain text: no control character, and no link a member might open from the card.
-  if v_po is not null and (char_length(v_po) > 100 or v_po ~ '[[:cntrl:]]' or v_po ~* '://|www[.]') then
+  -- One line of plain text: no control character, and no link a member might open from the card. The note may break its
+  -- lines with \n. The control characters are the table's, named by code point, so every database refuses the same ones.
+  if v_po is not null and (char_length(v_po) > 100 or v_po ~ '[\u0001-\u001f\u007f-\u009f\u2028\u2029]' or v_po ~* '://|www[.]') then
     raise exception 'document_request_invalid: the purchase order';
   end if;
-  if v_note is not null and (char_length(v_note) > 500 or replace(v_note, E'\n', '') ~ '[[:cntrl:]]') then
+  if v_note is not null and (char_length(v_note) > 500 or v_note ~ '[\u0001-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]') then
     raise exception 'document_request_invalid: the note';
   end if;
   update public.document_requests r

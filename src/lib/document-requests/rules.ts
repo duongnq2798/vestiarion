@@ -144,19 +144,25 @@ export const DOCUMENT_FIELD_MESSAGES = {
 
 /**
  * A purchase order number's own refusals, as a payee lock's record has them: a control or format character (U+202E
- * reverses how the text after it reads, a zero-width one hides), and a link, which a purchase order never needs and a
- * member might open from the card or Add details.
+ * reverses how the text after it reads, a zero-width one hides), a line or paragraph separator (U+2028, U+2029), which
+ * breaks its one line and which 0142's answer_document_request refuses as a control character, and a link, which a
+ * purchase order never needs and a member might open from the card or Add details.
  */
-const PO_UNSEEN = /[\p{Cc}\p{Cf}]/u;
+const PO_UNSEEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 const LINK = /:\/\/|www\./i;
+/** A line break as a vendor's text may carry one: CR LF, a lone CR, or a line or paragraph separator. */
+const LINE_BREAK = /\r\n?|[\p{Zl}\p{Zp}]/gu;
 
-/** What the vendor typed beside the file (ER5): a purchase order number and a note, both optional, trimmed, within limits. */
+/**
+ * What the vendor typed beside the file (ER5): a purchase order number and a note, both optional, trimmed, within limits.
+ * A note's line breaks are read as `\n`, the only control character answer_document_request lets through.
+ */
 export function readDocumentFields(input: { poReference: string; note: string }):
   | { ok: true; poReference: string | null; note: string | null }
   | { ok: false; field: "poReference" | "note"; message: string } {
   const po = input.poReference.trim();
   if (po.length > MAX_DOCUMENT_PO || PO_UNSEEN.test(po) || LINK.test(po)) return { ok: false, field: "poReference", message: DOCUMENT_FIELD_MESSAGES.poReference };
-  const note = input.note.replace(/\r\n?/g, "\n").trim();
+  const note = input.note.replace(LINE_BREAK, "\n").trim();
   if (note.length > MAX_DOCUMENT_NOTE || /\p{Cc}/u.test(note.replaceAll("\n", ""))) return { ok: false, field: "note", message: DOCUMENT_FIELD_MESSAGES.note };
   return { ok: true, poReference: po || null, note: note || null };
 }

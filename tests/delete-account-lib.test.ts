@@ -64,6 +64,8 @@ interface World {
   keysFail?: boolean;
   /** Each workspace's requests to vendors for a missing document, with the file one sent (0142). */
   documentRequests?: Record<string, Array<{ id: string; file_path: string | null }>>;
+  /** The private documents bucket, by folder: an entry with no id is a folder, as Storage lists it. */
+  storage?: Record<string, Array<{ name: string; id: string | null }>>;
 }
 
 let counter = 0;
@@ -129,6 +131,10 @@ function world(state: World) {
       return { body: state.documentRequests?.[eqOf(request, "org_id") ?? ""] ?? [] };
     }
     if (request.path === "/storage/v1/object/documents" && request.method === "DELETE") return { body: [] };
+    if (request.path === "/storage/v1/object/list/documents") {
+      const { prefix, limit, offset } = request.body as { prefix: string; limit: number; offset: number };
+      return { body: (state.storage?.[prefix] ?? []).slice(offset, offset + limit) };
+    }
     if (request.path === "/rest/v1/api_keys" && request.method === "GET") {
       if (state.keysFail) return { status: 500, body: { code: "XX000", message: "keys unavailable", details: null, hint: null } };
       const creator = eqOf(request, "created_by");
@@ -344,6 +350,13 @@ describe("deleteAccount (A3)", () => {
         [taken.id]: [{ id: "r-1", file_path: kept(taken.id) }],
         [refused.id]: [{ id: "r-1", file_path: kept(refused.id) }],
       },
+      // What no row names: a file kept for r-2 whose answer did not go through, and could not be removed then.
+      storage: {
+        [`${taken.id}/document-requests`]: [{ name: "r-2", id: null }],
+        [`${taken.id}/document-requests/r-2`]: [{ name: "c".repeat(64), id: "o-1" }],
+        [`${refused.id}/document-requests`]: [{ name: "r-2", id: null }],
+        [`${refused.id}/document-requests/r-2`]: [{ name: "c".repeat(64), id: "o-2" }],
+      },
     });
 
     await expect(run(() => deleteAccount({ userId: ME, confirmText: "delete my account" }))).rejects.toThrow();
@@ -355,7 +368,11 @@ describe("deleteAccount (A3)", () => {
           ? `delete ${(request.body as { p_org_id: string }).p_org_id}`
           : `remove ${(request.body as { prefixes: string[] }).prefixes.join(",")}`
       );
-    expect(steps).toEqual([`delete ${taken.id}`, `remove ${taken.id}/document-requests/r-1/upload,${kept(taken.id)}`, `delete ${refused.id}`]);
+    expect(steps).toEqual([
+      `delete ${taken.id}`,
+      `remove ${taken.id}/document-requests/r-1/upload,${kept(taken.id)},${taken.id}/document-requests/r-2/${"c".repeat(64)}`,
+      `delete ${refused.id}`,
+    ]);
     expect(authDeletes()).toEqual([]);
   });
 

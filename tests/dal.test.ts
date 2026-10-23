@@ -242,4 +242,13 @@ describe("platformStorage()", () => {
     expect(signDownload.path).toBe("/storage/v1/object/sign/documents/o/r/f");
     expect(signDownload.body).toEqual({ expiresIn: 60 });
   });
+
+  it("lists one folder of the documents bucket a page at a time, by name, for a deleted workspace's files", async () => {
+    const fake = fakeSupabase(() => ({ body: [{ name: "r-1", id: null }] }));
+    const listed = await runWith(contextOf(null, fake.client), () => platformStorage().list("o/document-requests", { limit: 100, offset: 200 }));
+    expect(listed.data).toEqual([{ name: "r-1", id: null }]);
+    expect(fake.requests.map((request) => [request.method, request.path, request.body])).toEqual([
+      ["POST", "/storage/v1/object/list/documents", { prefix: "o/document-requests", limit: 100, offset: 200, sortBy: { column: "name", order: "asc" } }],
+    ]);
+  });
 });

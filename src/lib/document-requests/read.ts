@@ -168,24 +168,37 @@ export async function revokeDocumentRequest(input: { actorId: string; role: OrgR
   });
 }
 
+/** PostgREST's `max_rows` on Supabase: one request answers at most this many rows, and cuts the rest without an error. */
+const ROW_PAGE = 1000;
+/** How many entries one Storage call lists, or removes. */
+const STORAGE_PAGE = 100;
+/** How many folders are listed at once. */
+const LIST_AT_ONCE = 8;
+
 /**
  * Every file a workspace's requests hold in the private storage, under its own folder: each kept document, and any upload
  * a vendor started and never sent. Read before the rows go, so their files can follow: when the workspace is deleted, by
  * its owner, with its last member's account or as an idle sandbox, and, for the requests to `counterpartyIds` alone,
- * when those counterparties are deleted with the sample data. None before migration 0142, or when they cannot be read.
+ * when those counterparties are deleted with the sample data. Read in pages by id, since one request stops at
+ * `ROW_PAGE`. None before migration 0142; what was read when a page cannot be.
  */
 export async function documentFilesOf(orgId: string, counterpartyIds?: string[]): Promise<string[]> {
   const read = async () => {
-    const query = db().from("document_requests").select("id, file_path");
-    const rows = await (counterpartyIds ? query.in("counterparty_id", counterpartyIds) : query).limit(10_000);
-    if (rows.error) {
-      if (!beforeMigration(rows.error)) console.error("document files not read", orgId);
-      return [];
+    const files: string[] = [];
+    let after: string | null = null;
+    for (;;) {
+      const base = db().from("document_requests").select("id, file_path");
+      const scoped = counterpartyIds ? base.in("counterparty_id", counterpartyIds) : base;
+      const rows = await (after ? scoped.gt("id", after) : scoped).order("id", { ascending: true }).limit(ROW_PAGE);
+      if (rows.error) {
+        if (!beforeMigration(rows.error)) console.error("document files not read", orgId);
+        return files;
+      }
+      const page = (rows.data ?? []) as Array<{ id: string; file_path: string | null }>;
+      for (const row of page) files.push(`${orgId}/document-requests/${row.id}/upload`, ...(row.file_path ? [row.file_path] : []));
+      if (page.length < ROW_PAGE) return files;
+      after = page[page.length - 1].id;
     }
-    return ((rows.data ?? []) as Array<{ id: string; file_path: string | null }>).flatMap((row) => [
-      `${orgId}/document-requests/${row.id}/upload`,
-      ...(row.file_path ? [row.file_path] : []),
-    ]);
   };
   try {
     return scopedTo(orgId) ? await read() : await withOrg(orgId, read);
@@ -205,14 +218,54 @@ function scopedTo(orgId: string): boolean {
 
 /** Removes the files `documentFilesOf` named, once their rows are deleted. Best effort: it never throws. */
 export async function removeDocumentFiles(paths: string[]): Promise<void> {
-  for (let start = 0; start < paths.length; start += 100) {
+  for (let start = 0; start < paths.length; start += STORAGE_PAGE) {
     try {
-      const removed = await platformStorage().remove(paths.slice(start, start + 100));
+      const removed = await platformStorage().remove(paths.slice(start, start + STORAGE_PAGE));
       if (removed.error) console.error("document files not removed", removed.error.message);
     } catch {
       console.error("document files not removed");
     }
   }
+}
+
+/**
+ * Every file under `folder` in the private storage, in its folders too, a page at a time; what was listed when a page
+ * cannot be. Storage lists a folder inside it as an entry with no id.
+ */
+async function filesUnder(folder: string): Promise<string[]> {
+  const files: string[] = [];
+  const folders: string[] = [];
+  for (let offset = 0; ; offset += STORAGE_PAGE) {
+    const listed = await platformStorage()
+      .list(folder, { limit: STORAGE_PAGE, offset })
+      .catch(() => null);
+    if (!listed?.data || listed.error) {
+      console.error("document files not listed", folder, listed?.error?.message ?? "none");
+      break;
+    }
+    for (const entry of listed.data) (entry.id === null ? folders : files).push(`${folder}/${entry.name}`);
+    if (listed.data.length < STORAGE_PAGE) break;
+  }
+  for (let start = 0; start < folders.length; start += LIST_AT_ONCE) {
+    const inside = await Promise.all(folders.slice(start, start + LIST_AT_ONCE).map(filesUnder));
+    files.push(...inside.flat());
+  }
+  return files;
+}
+
+/**
+ * Once a workspace is deleted, removes the files `documentFilesOf` named and then every file left under its own
+ * `document-requests` folder: one kept for an answer that did not go through and could not be removed then, or one an
+ * answer kept after the rows were read, which no row names any more. The names read from the rows still go when the folder
+ * cannot be listed. Best effort: it never throws.
+ */
+export async function removeWorkspaceDocumentFiles(orgId: string, named: string[]): Promise<void> {
+  const root = `${orgId}/document-requests`;
+  const found = await filesUnder(root).catch(() => {
+    console.error("document files not listed", root);
+    return [];
+  });
+  await removeDocumentFiles([...new Set([...named, ...found])]);
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -3085,7 +3085,10 @@ migration 0142). Part 1 asks, collects and shows; it never pays, and changes no 
   takes it once, re-checking the path, the kind, the size and the fields; a file it does not take is removed. Both
   steps take a token from `takeDocumentAddressToken` (per IP, before the lookup) and `takeDocumentLinkToken` (per live
   link). The purchase order number is plain text on one line of at most 100 characters, with no control or format
-  character and no link (`readDocumentFields`; the function refuses a control character or a link too). The
+  character, no line or paragraph separator (U+2028, U+2029) and no link; a note's line breaks, those separators among
+  them, are read as `\n` (`readDocumentFields`). The function and the table refuse a control character too, named by
+  code point (C0, DEL, C1 and the two separators) rather than `[[:cntrl:]]`, whose members follow the database's ctype
+  (glibc counts the separators, PGlite does not), so the page never passes what Postgres refuses; and a link. The
   ledger records `document_received` (`by: null`, `via: "document_request"`, with `poReference`, `fileSha256`, `fileType`,
   `fileSize`), and `notifyDocumentReceived` emails the owners and admins after the vendor has its page, saying whether a
   purchase order number came and never what the vendor typed. No model reads the file.
@@ -3102,9 +3105,13 @@ migration 0142). Part 1 asks, collects and shows; it never pays, and changes no 
 - **Storage and tenancy.** The tenant role only reads `document_requests` under RLS; every write is a service-role
   definer function. The bucket has no storage policy: only the service role reaches it, through `platformStorage()`
   (`src/lib/dal`), narrowed to that bucket. Deleting a workspace, or the account of its last member, names its files
-  before `delete_org` and removes them after (`documentFilesOf`, `removeDocumentFiles`); so does the daily cleanup
-  around `delete_sandbox_org`, once it deleted an idle sandbox, and removing the sample data, for the requests to its
-  sample counterparties. Every read of 0142's column, table and functions treats their absence as none.
+  before `delete_org`, reading the rows by id in pages of 1000 (PostgREST's `max_rows` cuts a longer answer without an
+  error), and after it removes those and every file left under the workspace's `document-requests` folder, which it
+  lists (`documentFilesOf`, `removeWorkspaceDocumentFiles`): a file kept for an answer that did not go through and could
+  not be removed then, or kept by an answer after the rows were read, is named by no row. So does the daily cleanup
+  around `delete_sandbox_org`, once it deleted an idle sandbox. Removing the sample data removes the files named by the
+  requests to its sample counterparties (`removeDocumentFiles`). Every read of 0142's column, table and functions treats
+  their absence as none.
 
 ## Which bill first when the cash cannot cover them all
 

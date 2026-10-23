@@ -153,6 +153,24 @@ describe("what the vendor may send (ER5)", () => {
     expect(readDocumentFields({ poReference: "", note: "n".repeat(501) })).toMatchObject({ ok: false, field: "note" });
     expect(readDocumentFields({ poReference: "", note: `tab${String.fromCharCode(9)}here` })).toMatchObject({ ok: false, field: "note" });
   });
+
+  it("refuses a line or paragraph separator inside a purchase order, and reads one in a note as a line break, as answer_document_request does", () => {
+    // Postgres on glibc counts U+2028 and U+2029 as control characters, so the function would refuse what passed here,
+    // and the vendor would see only a generic failure, every time.
+    for (const code of [0x2028, 0x2029]) {
+      const char = String.fromCharCode(code);
+      expect(readDocumentFields({ poReference: `PO-4410${char}rev B`, note: "" }), code.toString(16)).toEqual({
+        ok: false,
+        field: "poReference",
+        message: expect.stringContaining("one line"),
+      });
+      expect(readDocumentFields({ poReference: "", note: `First line.${char}Second line.${char}` }), code.toString(16)).toEqual({
+        ok: true,
+        poReference: null,
+        note: "First line.\nSecond line.",
+      });
+    }
+  });
 });
 
 describe("what a bill's card says (ER3, ER4, ER6)", () => {

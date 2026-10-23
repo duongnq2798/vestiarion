@@ -316,8 +316,9 @@ export const DOCUMENTS_BUCKET = "documents";
 /**
  * The service role's storage, narrowed to the private `documents` bucket and the calls a vendor's document needs
  * (document requests ER5, ER6): a one-time upload address for the vendor's browser, reading the file back to check it,
- * moving it to where it is kept, removing a file refused, and a short-lived address for a member to open it. Every path
- * is the caller's to build under the workspace's own folder; nothing else of Storage is reachable from here.
+ * moving it to where it is kept, removing a file refused, and a short-lived address for a member to open it; and listing
+ * one folder, a page at a time by name, for what a deleted workspace left there. Every path is the caller's to build under
+ * the workspace's own folder; nothing else of Storage is reachable from here.
  */
 export function platformStorage() {
   const bucket = currentContext().db.storage.from(DOCUMENTS_BUCKET);
@@ -326,6 +327,7 @@ export function platformStorage() {
     download: (path: string) => bucket.download(path),
     move: (from: string, to: string) => bucket.move(from, to),
     remove: (paths: string[]) => bucket.remove(paths),
+    list: (folder: string, page: { limit: number; offset: number }) => bucket.list(folder, { ...page, sortBy: { column: "name", order: "asc" } }),
     openUrl: (path: string, seconds: number, fileName: string) => bucket.createSignedUrl(path, seconds, { download: fileName }),
   };
 }

@@ -66,9 +66,12 @@ document, never a payment.
 The vendor:
 - uploads one file, a PDF, PNG or JPEG of at most 10 MB, checked by its first bytes, not its name (the page reads them
   too, so a file with no extension, which a browser gives no type, is still taken);
-- may type the PO number: plain text on one line, of at most 100 characters, with no control or format character and
-  no link;
-- may add a note of at most 500 characters.
+- may type the PO number: plain text on one line, of at most 100 characters, with no control or format character, no
+  line or paragraph separator (U+2028, U+2029) and no link;
+- may add a note of at most 500 characters, whose line breaks, those separators among them, are kept as line breaks.
+
+The page and 0142 refuse the same control characters: the migration names them by code point, never `[[:cntrl:]]`,
+whose members follow the database's ctype.
 
 Migration 0142 creates the private `documents` storage bucket, where no file has a public address. The vendor's browser
 puts the file there directly, at a signed upload address the server makes for the request under the workspace's own
@@ -130,9 +133,11 @@ money.
   - `answer_document_request(p_token_hash, …)`: once, while open.
 - **Idempotent**, with no function redefined from another migration.
 
-The vendors' files are not rows: they are named before the rows go, and removed from the bucket after, when the
-workspace is deleted by its owner, with its last member's account or by the daily cleanup of an idle sandbox, and,
-for the requests to sample vendors, when the sample data is removed.
+The vendors' files are not rows: they are named before the rows go, read in pages of 1000 rows, and removed from the
+bucket after, when the workspace is deleted by its owner, with its last member's account or by the daily cleanup of an
+idle sandbox, and, for the requests to sample vendors, when the sample data is removed. A deleted workspace's whole
+`document-requests` folder is listed and emptied too, so a file no row names (kept for an answer that did not go
+through, or by an answer after the rows were read) goes with it.
 
 ## Tests
 

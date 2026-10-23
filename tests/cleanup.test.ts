@@ -8,12 +8,12 @@ import {
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 // A sandbox's vendor documents are files in the private storage, not rows: what names and removes them is proven in
-// tests/document-requests-members.test.ts. Here, only when the cleanup calls them.
+// tests/document-requests-files.test.ts. Here, only when the cleanup calls them.
 const { filesMock, removeFilesMock } = vi.hoisted(() => ({
   filesMock: vi.fn<(orgId: string) => Promise<string[]>>(),
-  removeFilesMock: vi.fn<(paths: string[]) => Promise<void>>(),
+  removeFilesMock: vi.fn<(orgId: string, paths: string[]) => Promise<void>>(),
 }));
-vi.mock("@/lib/document-requests/read", () => ({ documentFilesOf: filesMock, removeDocumentFiles: removeFilesMock }));
+vi.mock("@/lib/document-requests/read", () => ({ documentFilesOf: filesMock, removeWorkspaceDocumentFiles: removeFilesMock }));
 
 beforeEach(() => {
   filesMock.mockReset().mockResolvedValue([]);
@@ -101,8 +101,8 @@ describe("deleteAbandonedSandboxes", () => {
       order.push(`files ${orgId}`);
       return [`${orgId}/document-requests/r-1/upload`];
     });
-    removeFilesMock.mockImplementation(async (paths: string[]) => {
-      order.push(`remove ${paths.join(",")}`);
+    removeFilesMock.mockImplementation(async (orgId: string, paths: string[]) => {
+      order.push(`remove ${orgId}: ${paths.join(",")}`);
     });
     const fake = fakeSupabase((request) => {
       if (request.path === "/rest/v1/rpc/delete_sandbox_org") order.push(`delete ${(request.body as { p_org_id: string }).p_org_id}`);
@@ -114,7 +114,7 @@ describe("deleteAbandonedSandboxes", () => {
     expect(order).toEqual([
       `files ${DELETED}`,
       `delete ${DELETED}`,
-      `remove ${DELETED}/document-requests/r-1/upload`,
+      `remove ${DELETED}: ${DELETED}/document-requests/r-1/upload`,
       `files ${SURVIVED}`,
       `delete ${SURVIVED}`,
       `files ${BROKEN}`,

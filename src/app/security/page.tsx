@@ -89,7 +89,8 @@ export default function SecurityPage() {
             workspace. Code that uses it, in about 70 files, names the workspace in its queries itself, except where it looks a row up by a token or
             a key prefix, or runs a job across workspaces, such as webhook delivery and the daily cleanup. Its storage counterpart,{" "}
             <code>platformStorage()</code>, narrowed to the private bucket of vendors&apos; documents, makes a one-time upload address, reads, moves
-            and removes a file, and makes a one-minute download address, each at a path its caller builds under the workspace&apos;s own folder;
+            and removes a file, lists a folder for what a deleted workspace left there, and makes a one-minute download address, each at a path
+            its caller builds under the workspace&apos;s own folder;
             nothing else of Storage is reachable from it. A lint rule forbids importing the raw
             database client anywhere in <code>src</code> outside the data access layer and the module that makes it.
           </li>
