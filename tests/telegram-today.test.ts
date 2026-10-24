@@ -214,8 +214,10 @@ describe("waitingFacts and waitingMessage", () => {
     /** The payables' ledger entries, newest first, as `ledger_entries_for_targets` returns them. */
     const ENTRIES = [
       { seq: 72, action: "ap_hold", detail: { invoiceId: "p2", observed, guardrailBlocked: true, guardrailRule: "counterparty.cooling_off" } },
-      { seq: 71, action: "ap_hold", detail: { invoiceId: "p6", observed, guardrailBlocked: false, execution: { resultingStatus: "held", heldBecause: "cash_shortfall" } } },
-      { seq: 70, action: "ap_hold", detail: { invoiceId: "p7", observed, guardrailBlocked: false, decision: { action: "hold" }, execution: { resultingStatus: "held" } } },
+      // Code held the agent's payment for the cash the bills due before it count on (cash ahead A2).
+      { seq: 71, action: "ap_hold", detail: { invoiceId: "p6", observed, guardrailBlocked: false, decision: { action: "hold" }, timingRule: "pay.cash_ahead", execution: { resultingStatus: "held", heldBecause: "cash_shortfall" } } },
+      // The agent held it itself, while the cash was short too.
+      { seq: 70, action: "ap_hold", detail: { invoiceId: "p7", observed, guardrailBlocked: false, decision: { action: "hold" }, timingRule: null, execution: { resultingStatus: "held", heldBecause: "cash_shortfall" } } },
     ];
 
     function waitingWith(ledger: { status?: number; body: unknown }) {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { stoppedWhy } from "@/components/vx/decision-signals";
 import { invoiceDecision } from "@/components/vx/map";
 import type { LedgerEntry } from "@/lib/ledger";
 import type { InvoiceRow } from "@/lib/queries";
@@ -684,6 +685,30 @@ describe("invoiceDecision: a hold read from the agent's decision, past a newer e
       { network: "arc-testnet" }
     );
     expect(decision.heldForCash).toBe(true);
+  });
+
+  it("still says code stopped it once the follow-up has escalated it, as the chats and the approval card read it (2026-10-24)", () => {
+    const refused = entry(41, "ap_pay", {
+      invoiceId: "inv-1", decision: { action: "pay", reasoning: "The invoice is due today, so I am paying now." }, observed: { amount: 400 }, guardrailBlocked: true, guardrailRule: "invoice.pay_to_differs",
+    });
+    const held = invoice({ status: "held", agent_reasoning: "The invoice is due today, so I am paying now." });
+    const decision = invoiceDecision(held, undefined, [escalated, refused], { network: "arc-testnet" });
+    expect(decision.guardrail?.rule).toBe("invoice.pay_to_differs");
+    expect(decision.outcome).toBe("refused");
+    expect(stoppedWhy(decision)).toBe("Code stopped it: the invoice asks to be paid to a different address from the one on file.");
+    // Decided since, by the agent again or by a person, the old refusal no longer speaks for it.
+    expect(invoiceDecision(invoice({ status: "pending" }), undefined, [escalated, refused], { network: "arc-testnet" }).guardrail).toBeNull();
+  });
+
+  it("says code held it for want of cash only when code did, past the escalation (2026-10-24)", () => {
+    const short = { resultingStatus: "held", heldBecause: "cash_shortfall", cashNeededUsdc: 400, cashSeen: { operating: 10, reserve: 0 } };
+    const paid = invoiceDecision(invoice({ status: "held" }), undefined, [escalated, decidedWith(short)], { network: "arc-testnet" });
+    expect(paid.heldForCashByCode).toBe(true);
+    // The agent chose to hold it while the cash was short: held for cash, so cash coming in reopens it, but not by code.
+    const chosen = entry(41, "ap_hold", { invoiceId: "inv-1", decision: { action: "hold" }, timingRule: null, observed: { amount: 400 }, guardrailBlocked: false, execution: short });
+    const held = invoiceDecision(invoice({ status: "held" }), undefined, [escalated, chosen], { network: "arc-testnet" });
+    expect(held.heldForCash).toBe(true);
+    expect(held.heldForCashByCode).toBeUndefined();
   });
 });
 

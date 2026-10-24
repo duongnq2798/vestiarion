@@ -235,9 +235,12 @@ describe("what the agent checked on a payable", () => {
     expect(stoppedWhy({ ...held, domain: "ar" })).toBeNull();
   });
 
-  it("says code stopped a payment held for want of cash, not the model's sentence that says it pays (2026-10-24)", () => {
-    const cash = { ...DECISION, outcome: "held" as const, reasoning: "The invoice is due today, so I am paying now.", heldForCash: true };
+  it("says code stopped a payment it held for want of cash, not the model's sentence that says it pays (2026-10-24)", () => {
+    const cash = { ...DECISION, outcome: "held" as const, reasoning: "The invoice is due today, so I am paying now.", heldForCash: true, heldForCashByCode: true };
     expect(stoppedWhy(cash)).toBe("Code stopped it: the operating wallet did not hold the cash it needs.");
+    // The agent held it itself while the cash was short: its own sentence says why, and no code is credited with it.
+    const chosen = { ...cash, reasoning: "The amount is twice what this vendor usually bills. Check it first.", heldForCashByCode: undefined };
+    expect(stoppedWhy(chosen)).toBe("The amount is twice what this vendor usually bills.");
   });
 
   it("says a payment held for a verdict in shadow mode waits for one, not that code stopped it (2026-10-08)", () => {

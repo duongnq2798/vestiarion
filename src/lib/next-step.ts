@@ -29,6 +29,18 @@ export function heldForCash(detail: Record<string, unknown> | null | undefined):
 }
 
 /**
+ * Whether code made that hold for want of cash, not the agent: the agent decided to pay and the cash was not there, or a
+ * timing rule turned its payment into a hold, the cash priority plan's (P4) or the cash ahead (A2). A hold the agent
+ * chose itself while the cash was short is held for cash too, so cash coming in reopens it, but its reason is its own
+ * (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS2).
+ */
+export function codeHeldForCash(detail: Record<string, unknown> | null | undefined): boolean {
+  if (!detail || !heldForCash(detail)) return false;
+  const decision = detail.decision as Record<string, unknown> | null | undefined;
+  return decision?.action === "pay" || detail.timingRule === "cash.priority" || detail.timingRule === "pay.cash_ahead";
+}
+
+/**
  * The next step's key for a payment held in shadow mode (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S2): no
  * rule refused it, the agent decided to pay it, and it waits for a person to agree.
  */
@@ -295,10 +307,10 @@ export function codeStoppedLine(rule: string | null | undefined): string | null 
 
 /**
  * The rule code stopped a payable on, from its latest AP decision's detail (`latestDecision`), as the approval card reads
- * it (CS2): the guardrail rule that refused the payment, else the cash shortfall hold, else null.
+ * it (CS2): the guardrail rule that refused the payment, else the cash shortfall hold when code made it, else null.
  */
 export function stopRuleOf(detail: Record<string, unknown> | null | undefined): string | null {
   if (!detail) return null;
   if (detail.guardrailBlocked === true && typeof detail.guardrailRule === "string") return detail.guardrailRule;
-  return heldForCash(detail) ? CASH_SHORTFALL : null;
+  return codeHeldForCash(detail) ? CASH_SHORTFALL : null;
 }

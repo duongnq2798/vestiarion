@@ -36,8 +36,18 @@ describe("stopRuleOf", () => {
     expect(stopRuleOf({ guardrailBlocked: false, guardrailRule: "counterparty.payment_limit" })).toBeNull();
   });
 
-  it("gives the cash shortfall for a payment held for want of cash", () => {
-    expect(stopRuleOf({ guardrailBlocked: false, execution: { resultingStatus: "held", heldBecause: "cash_shortfall" } })).toBe(CASH_SHORTFALL);
+  it("gives the cash shortfall for a payment the agent decided that code held for want of cash", () => {
+    const held = { resultingStatus: "held", heldBecause: "cash_shortfall" };
+    expect(stopRuleOf({ guardrailBlocked: false, decision: { action: "pay" }, execution: held })).toBe(CASH_SHORTFALL);
+    // Code turned the agent's payment into a hold: the cash priority plan's (P4), or the cash ahead (A2).
+    expect(stopRuleOf({ guardrailBlocked: false, decision: { action: "hold" }, timingRule: "cash.priority", execution: held })).toBe(CASH_SHORTFALL);
+    expect(stopRuleOf({ guardrailBlocked: false, decision: { action: "hold" }, timingRule: "pay.cash_ahead", execution: held })).toBe(CASH_SHORTFALL);
+  });
+
+  it("gives nothing for a hold the agent chose itself while the cash was short, which its own sentence explains", () => {
+    const held = { resultingStatus: "held", heldBecause: "cash_shortfall" };
+    expect(stopRuleOf({ guardrailBlocked: false, decision: { action: "hold" }, timingRule: null, execution: held })).toBeNull();
+    expect(stopRuleOf({ guardrailBlocked: false, execution: held })).toBeNull();
   });
 
   it("gives nothing for a hold the model chose, or one shadow mode keeps for a verdict", () => {

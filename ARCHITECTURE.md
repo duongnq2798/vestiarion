@@ -2771,10 +2771,15 @@ once. Why it waits is what code stopped it on, when code did
 `waitingBills` reads the listed bills' ledger entries in one
 `listLedgerEntriesForTargets` call, and `stopRuleOf` takes the latest AP
 decision's (`latestDecision`) `guardrailRule` when `guardrailBlocked`, else
-`CASH_SHORTFALL` when `heldForCash`, as `listWaitingPayables` gives the
-approval card; `codeStoppedLine` (`src/lib/next-step.ts`) says it as "Code
-stopped it: *the rule in brief*.", the same line as the row's `stoppedWhy` on
-Bills & receivables. Otherwise, or when a rule has no words of its own, it is
+`CASH_SHORTFALL` when `codeHeldForCash` (held for cash, and code made the
+hold: the agent's `pay`, or the `cash.priority` or `pay.cash_ahead` timing
+rule; a hold the agent chose itself while cash was short is its own), as
+`listWaitingPayables` gives the approval card; `codeStoppedLine`
+(`src/lib/next-step.ts`) says it as "Code stopped it: *the rule in brief*.",
+the same line as the row's `stoppedWhy` on Bills & receivables, whose
+`invoiceDecision` reads the guardrail and `heldForCashByCode` from the same
+decision while the bill waits, past a newer escalation entry. Otherwise, or
+when a rule has no words of its own, it is
 the first sentence of the reasoning, as when the entries cannot be read (logged
 once, the notice still sent). `/waiting` (`waitingFacts`) reads its payables'
 entries the same way, best effort as it reads verdicts, and a held milestone

@@ -50,8 +50,8 @@ describe("waitingBills: why code stopped each bill", () => {
       {
         body: [
           entry(90, 1, { ...OBSERVED, guardrailBlocked: true, guardrailRule: "counterparty.cooling_off" }),
-          entry(89, 2, { ...OBSERVED, guardrailBlocked: false, execution: { resultingStatus: "held", heldBecause: "cash_shortfall" } }),
-          entry(88, 3, { ...OBSERVED, guardrailBlocked: false, decision: { action: "hold" }, execution: { resultingStatus: "held" } }),
+          entry(89, 2, { ...OBSERVED, guardrailBlocked: false, decision: { action: "pay" }, execution: { resultingStatus: "held", heldBecause: "cash_shortfall" } }),
+          entry(88, 3, { ...OBSERVED, guardrailBlocked: false, decision: { action: "hold" }, execution: { resultingStatus: "held", heldBecause: "cash_shortfall" } }),
         ],
       }
     );
@@ -59,7 +59,7 @@ describe("waitingBills: why code stopped each bill", () => {
     expect(bills.map((bill) => [bill.payee, bill.stopRule])).toEqual([
       ["Vendor 1", "counterparty.cooling_off"],
       ["Vendor 2", "treasury.cash_shortfall"],
-      // The model held it: no code stopped it.
+      // The model held it, while the cash was short too: no code stopped it.
       ["Vendor 3", null],
     ]);
     expect(bills[0].reasoning).toBe("The invoice is due today, so I am paying now.");

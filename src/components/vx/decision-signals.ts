@@ -49,8 +49,9 @@ export function stoppedWhy(decision: Decision): string | null {
   if (decision.domain !== "ap") return null;
   // Shadow mode holds a payment that passed every check: no code stopped it, a person's verdict is awaited (2026-10-08).
   if (decision.heldForVerdict && !decision.guardrail) return "Shadow mode: it waits for a person to agree.";
-  // The same line the chats say (codeStoppedLine); a rule with no words of its own gives way to the reasoning.
-  const stopped = codeStoppedLine(decision.guardrail?.rule ?? (decision.heldForCash ? CASH_SHORTFALL : null));
+  // The same line the chats say (codeStoppedLine); a rule with no words of its own gives way to the reasoning, and so
+  // does a hold for cash the agent chose itself, which its reasoning explains.
+  const stopped = codeStoppedLine(decision.guardrail?.rule ?? (decision.heldForCashByCode ? CASH_SHORTFALL : null));
   if (stopped) return stopped;
   const first = decision.reasoning.split(/(?<=[.!?])\s/)[0]?.trim();
   if (!first) return null;

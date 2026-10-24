@@ -264,9 +264,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   channel's message and in `/waiting` gave each bill the first sentence of the agent's reasoning, even when a check in
   code refused the agent's payment or held it for want of cash, so a held bill could read "held: The invoice is due
   today, so I am paying now." Such a bill's line now says what stopped it, in the words its row on Bills & receivables
-  uses, such as "Code stopped it: the payment address changed recently, and the payee lock makes it wait." A bill held
-  because the operating wallet did not hold its cash now says so on its row on Bills & receivables too, rather than the
-  agent's reasoning. When Vestiarion cannot read why, the line gives the agent's sentence, as before.
+  uses, such as "Code stopped it: the payment address changed recently, and the payee lock makes it wait." A bill code
+  held because the operating wallet did not hold the cash for the agent's payment now says so on its row on Bills &
+  receivables too, rather than the agent's reasoning; a bill the agent held itself while cash was short still gives its
+  reasoning. A bill a check in code stopped also kept saying so on its row only until the agent escalated it to a person
+  for waiting too long or past its due date; it now says so after that too. When Vestiarion cannot read why, the line
+  gives the agent's sentence, as before.
 
 - **Approvals and Contractors on a phone.** At a phone's width the approval card showed only the start of the address
   **Approve and pay** sends to; it now shows the whole address. The buttons that decide a payment (Approve and pay,
