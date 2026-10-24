@@ -1,14 +1,18 @@
+import { latestDecision } from "../added-details";
 import type { ActivityItem } from "../agent-activity";
 import { usdcValueOfLatestDecision } from "../agent/second-approval";
 import { readAccountantCosign, readTwoApprovalsAbove } from "../approval-policy";
 import { currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
+import { listLedgerEntriesForTargets, type LedgerEntry } from "../ledger";
+import { stopRuleOf } from "../next-step";
 import { NOTICE_MAX_BILLS, type NoticePolicy, type WaitingBill } from "./waiting-notice";
 
 /**
  * What a chat's notice of the bills waiting for approval is built from
  * (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG1): the payables the agent stopped among the
- * activity a stage read, re-read in one query and kept while they still wait, the workspace's rules for what each needs,
+ * activity a stage read, re-read in one query and kept while they still wait, the rule code stopped each on
+ * (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS3), the workspace's rules for what each needs,
  * and a EURC bill's USDC value where a figure makes it matter. Discord and Telegram read them here, the same bills the
  * same way, and each says them in its own markup from `buildWaitingNotice`. Runs inside the workspace's scope.
  */
@@ -31,7 +35,7 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 /**
  * The payables the agent stopped for a person among what was read, still held or flagged now, in the order it stopped
  * them: a bill a person decided since is left out, and so is a payment held for a verdict in shadow mode, which the
- * activity gives no `invoiceId`.
+ * activity gives no `invoiceId`. Each listed bill carries the rule code stopped it on (`withStopRules`).
  */
 export async function waitingBills(items: readonly ActivityItem[]): Promise<WaitingBill[]> {
   const ids = [
@@ -42,7 +46,7 @@ export async function waitingBills(items: readonly ActivityItem[]): Promise<Wait
     await db().from("invoices").select("id, amount, currency, status, direction, agent_reasoning, counterparties(name)").in("id", ids)
   ) as unknown as BillRow[];
   const byId = new Map(rows.map((row) => [row.id, row]));
-  return ids.flatMap((id): WaitingBill[] => {
+  const bills = ids.flatMap((id): WaitingBill[] => {
     const row = byId.get(id);
     if (!row || row.direction !== "payable" || !WAITING.includes(row.status)) return [];
     return [
@@ -53,9 +57,29 @@ export async function waitingBills(items: readonly ActivityItem[]): Promise<Wait
         currency: row.currency === "EURC" ? "EURC" : "USDC",
         status: row.status as WaitingBill["status"],
         reasoning: row.agent_reasoning,
+        stopRule: null,
       },
     ];
   });
+  return withStopRules(bills);
+}
+
+/**
+ * Each listed bill with the rule code stopped it on, from its latest AP decision, as its row on Bills and the approval
+ * card read it (CS2, CS3): the listed bills' ledger entries in one call. Entries that cannot be read leave every rule
+ * null, and the notice says the model's sentence, as it did before: the bills still wait, and their cards say the rest.
+ */
+async function withStopRules(bills: WaitingBill[]): Promise<WaitingBill[]> {
+  const listed = bills.slice(0, NOTICE_MAX_BILLS);
+  if (listed.length === 0) return bills;
+  let entries: LedgerEntry[];
+  try {
+    entries = await listLedgerEntriesForTargets({ invoiceIds: listed.map((bill) => bill.id) });
+  } catch (error) {
+    console.error("waiting bills: why code stopped them was not read", currentOrgId(), messageOf(error));
+    return bills;
+  }
+  return bills.map((bill, index) => (index < NOTICE_MAX_BILLS ? { ...bill, stopRule: stopRuleOf(latestDecision(entries, bill.id)?.detail) } : bill));
 }
 
 /**

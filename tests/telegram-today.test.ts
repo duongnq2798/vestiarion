@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { MESSAGE_MAX, todayMessage, waitingMessage } from "@/lib/telegram/messages";
@@ -201,6 +201,75 @@ describe("waitingFacts and waitingMessage", () => {
     const message = waitingMessage("Acme", facts, ORIGIN, "acme");
     expect(message).toContain("Jiren 10.00 USDC · waits for your verdict");
     expect(message).toContain('<a href="https://www.vestiarion.xyz/o/acme/approvals#payable-p2">Give your verdict</a>');
+  });
+
+  describe("a payable code stopped (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS4)", () => {
+    const PAYING = "The invoice is due today, so I am paying now.";
+    const invoices = [
+      payable("p2", "Jiren", 10, "held", "2026-10-20", { agent_reasoning: PAYING }),
+      payable("p6", "Northwind", 12, "held", "2026-10-21", { agent_reasoning: PAYING }),
+      payable("p7", "Orbit", 14, "held", "2026-10-22", { agent_reasoning: "No purchase order is on file. Ask for it." }),
+    ];
+    const observed = { riskLevel: "clear", poReference: null, goodsReceived: true };
+    /** The payables' ledger entries, newest first, as `ledger_entries_for_targets` returns them. */
+    const ENTRIES = [
+      { seq: 72, action: "ap_hold", detail: { invoiceId: "p2", observed, guardrailBlocked: true, guardrailRule: "counterparty.cooling_off" } },
+      { seq: 71, action: "ap_hold", detail: { invoiceId: "p6", observed, guardrailBlocked: false, execution: { resultingStatus: "held", heldBecause: "cash_shortfall" } } },
+      { seq: 70, action: "ap_hold", detail: { invoiceId: "p7", observed, guardrailBlocked: false, decision: { action: "hold" }, execution: { resultingStatus: "held" } } },
+    ];
+
+    function waitingWith(ledger: { status?: number; body: unknown }) {
+      const fake = fakeSupabase((sent: RecordedRequest) => {
+        switch (sent.path) {
+          case "/rest/v1/invoices":
+            return { body: invoices };
+          case "/rest/v1/milestones":
+            return { body: MILESTONES.filter((row) => row.status === "held") };
+          case "/rest/v1/rpc/ledger_entries_for_targets":
+            return ledger;
+          default:
+            return { body: [] };
+        }
+      });
+      const facts = () => runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => waitingFacts());
+      return { fake, facts };
+    }
+
+    it("says why code stopped it, as its row on Bills does, in place of the model's sentence; a milestone keeps its own", async () => {
+      const { fake, facts } = waitingWith({ body: ENTRIES });
+      const read = await facts();
+      expect(read.map((fact) => [fact.id, fact.reason])).toEqual([
+        ["p2", "Code stopped it: the payment address changed recently, and the payee lock makes it wait."],
+        ["p6", "Code stopped it: the operating wallet did not hold the cash it needs."],
+        // The model held it: its own sentence says why.
+        ["p7", "No purchase order is on file."],
+        ["m1", "Its evidence link is not a merged pull request."],
+      ]);
+      const targets = fake.requests.filter((sent) => sent.path === "/rest/v1/rpc/ledger_entries_for_targets");
+      expect(targets).toHaveLength(1);
+      expect(targets[0].body).toMatchObject({ p_invoice_ids: ["p2", "p6", "p7"], p_milestone_ids: [] });
+
+      const message = waitingMessage("Acme", read, ORIGIN, "acme");
+      expect(message).toContain("⏸ Jiren 10.00 USDC · held: Code stopped it: the payment address changed recently, and the payee lock makes it wait.");
+      expect(message).not.toContain("paying now");
+    });
+
+    it("still lists them with the model's sentence when the entries cannot be read", async () => {
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const { facts } = waitingWith({ status: 500, body: { message: "upstream timed out" } });
+        const read = await facts();
+        expect(read.map((fact) => [fact.id, fact.reason])).toEqual([
+          ["p2", PAYING],
+          ["p6", PAYING],
+          ["p7", "No purchase order is on file."],
+          ["m1", "Its evidence link is not a merged pull request."],
+        ]);
+        expect(logged).toHaveBeenCalledWith("waiting: why code stopped them was not read", "upstream timed out");
+      } finally {
+        logged.mockRestore();
+      }
+    });
   });
 
   it("says so when nothing waits", async () => {

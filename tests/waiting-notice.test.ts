@@ -9,7 +9,7 @@ import { buildWaitingNotice, NOTICE_MAX_BILLS, type WaitingBill } from "@/lib/no
 
 const ID = (n: number) => `2b6c1c9e-4a4f-4a7e-9b1e-${String(n).padStart(12, "0")}`;
 const bill = (n: number, fields: Partial<WaitingBill> = {}): WaitingBill => ({
-  id: ID(n), payee: `Vendor ${n}`, amount: 1250, currency: "USDC", status: "held", reasoning: null, ...fields,
+  id: ID(n), payee: `Vendor ${n}`, amount: 1250, currency: "USDC", status: "held", reasoning: null, stopRule: null, ...fields,
 });
 
 describe("buildWaitingNotice", () => {
@@ -30,6 +30,21 @@ describe("buildWaitingNotice", () => {
     expect(entry.reason).toBe("The invoice has no purchase order.");
     const [none] = buildWaitingNotice([bill(1, { reasoning: "   " })]).entries;
     expect(none.reason).toBeNull();
+  });
+
+  it("says why code stopped a bill in place of the model's sentence, as its row on Bills does (chat code stop reason CS3)", () => {
+    const reasoning = "The invoice is due today, so I am paying now.";
+    const [rule, cash, model, nameless] = buildWaitingNotice([
+      bill(1, { reasoning, stopRule: "counterparty.cooling_off" }),
+      bill(2, { reasoning, stopRule: "treasury.cash_shortfall" }),
+      bill(3, { reasoning }),
+      // A rule with no words of its own: the model's sentence says more than its name.
+      bill(4, { reasoning, stopRule: "some.new_rule" }),
+    ]).entries;
+    expect(rule.reason).toBe("Code stopped it: the payment address changed recently, and the payee lock makes it wait.");
+    expect(cash.reason).toBe("Code stopped it: the operating wallet did not hold the cash it needs.");
+    expect(model.reason).toBe(reasoning);
+    expect(nameless.reason).toBe(reasoning);
   });
 
   it("lists at most ten bills, in the order given, and counts the rest", () => {

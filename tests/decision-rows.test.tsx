@@ -235,6 +235,11 @@ describe("what the agent checked on a payable", () => {
     expect(stoppedWhy({ ...held, domain: "ar" })).toBeNull();
   });
 
+  it("says code stopped a payment held for want of cash, not the model's sentence that says it pays (2026-10-24)", () => {
+    const cash = { ...DECISION, outcome: "held" as const, reasoning: "The invoice is due today, so I am paying now.", heldForCash: true };
+    expect(stoppedWhy(cash)).toBe("Code stopped it: the operating wallet did not hold the cash it needs.");
+  });
+
   it("says a payment held for a verdict in shadow mode waits for one, not that code stopped it (2026-10-08)", () => {
     const shadowHeld = { ...DECISION, outcome: "held" as const, heldForVerdict: true };
     expect(stoppedWhy(shadowHeld)).toBe("Shadow mode: it waits for a person to agree.");

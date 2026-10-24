@@ -15,7 +15,7 @@ const ORIGIN = "https://www.vestiarion.xyz";
 const WORKSPACE = { name: "Acme Studio", slug: "acme" };
 const ID = (n: number) => `1b6c1c9e-4a4f-4a7e-9b1e-${String(n).padStart(12, "0")}`;
 const bill = (n: number, fields: Partial<WaitingBill> = {}): WaitingBill => ({
-  id: ID(n), payee: `Vendor ${n}`, amount: 100 + n, currency: "USDC", status: "held", reasoning: "The invoice is above the payee's 50 USDC limit. It needs a person.", ...fields,
+  id: ID(n), payee: `Vendor ${n}`, amount: 100 + n, currency: "USDC", status: "held", reasoning: "The invoice is above the payee's 50 USDC limit. It needs a person.", stopRule: null, ...fields,
 });
 
 /** Whether a character is escaped where it stands: an odd run of backslashes before it. */
@@ -108,6 +108,17 @@ describe("waitingMessage", () => {
     expect(message).not.toMatch(/token=|vx1\./);
     expect(lines.at(-1)).toBe(NEVER_APPROVES);
     expect(message.match(/Opening a link never approves anything\./g)).toHaveLength(1);
+  });
+
+  it("says why code stopped a bill, not the model's sentence that says the opposite (chat code stop reason CS3)", () => {
+    const paying = "The invoice is due today, so I am paying now.";
+    const message = waitingMessage(WORKSPACE, buildWaitingNotice([bill(1, { reasoning: paying, stopRule: "treasury.cash_shortfall" }), bill(2, { reasoning: paying })]), ORIGIN);
+    const lines = message.split("\n");
+    // The reason's own colon is escaped, as every value's is; Discord shows it as a colon.
+    expect(lines[2]).toBe(
+      `• **101.00 USDC** · Vendor 1 · held: Code stopped it\\: the operating wallet did not hold the cash it needs. · Review: <${ORIGIN}/o/acme/approvals#payable-${ID(1)}>`
+    );
+    expect(lines[3]).toBe(`• **102.00 USDC** · Vendor 2 · held: The invoice is due today, so I am paying now. · Review: <${ORIGIN}/o/acme/approvals#payable-${ID(2)}>`);
   });
 
   it("says a bill above the figure needs two approvals, and that an accountant can co-sign while co-signing is on", () => {

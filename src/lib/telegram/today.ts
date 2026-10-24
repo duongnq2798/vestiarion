@@ -1,7 +1,10 @@
+import { latestDecision } from "../added-details";
 import { cashOutlook } from "../cash-outlook";
 import { outlookInputOf } from "../cash-outlook-input";
 import { db, unwrap } from "../dal";
 import { firstSentence } from "../email/waiting-digest";
+import { listLedgerEntriesForTargets, type LedgerEntry } from "../ledger";
+import { codeStoppedLine, stopRuleOf } from "../next-step";
 import { listAccounts, listInvoices, listMilestones } from "../queries";
 import { awaitingVerdicts } from "../verdicts";
 
@@ -34,7 +37,11 @@ export interface WaitingFact {
   amount: number;
   currency: string;
   status: string;
-  /** The first sentence of why the agent stopped it, without a bracketed guardrail note. */
+  /**
+   * Why it waits: for a payable code stopped, "Code stopped it: …", as its row on Bills says it
+   * (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS4); else the first sentence of the agent's
+   * reasoning, without a bracketed guardrail note.
+   */
   reason: string | null;
   /** Held in shadow mode for a person's verdict, which is given in Vestiarion (shadow mode S4); absent otherwise. */
   forVerdict?: true;
@@ -125,11 +132,22 @@ export async function waitingFacts(): Promise<WaitingFact[]> {
     status: row.status,
     reason: firstSentence(row.agent_reasoning),
   }));
-  // Which payables wait for a verdict, said as such; best effort, so the list still shows if it cannot be read.
-  const verdicts = await awaitingVerdicts(payables.filter((fact) => fact.status === "held").map((fact) => fact.id)).catch((error: unknown) => {
-    console.error("waiting: verdicts not read", error instanceof Error ? error.message : error);
-    return new Set<string>();
+  // Which payables wait for a verdict, said as such, and why code stopped each, from its latest decision, in place of the
+  // model's sentence that may say it pays (CS4); best effort, so the list still shows if either cannot be read.
+  const [verdicts, entries] = await Promise.all([
+    awaitingVerdicts(payables.filter((fact) => fact.status === "held").map((fact) => fact.id)).catch((error: unknown) => {
+      console.error("waiting: verdicts not read", error instanceof Error ? error.message : error);
+      return new Set<string>();
+    }),
+    listLedgerEntriesForTargets({ invoiceIds: payables.map((fact) => fact.id) }).catch((error: unknown): LedgerEntry[] => {
+      console.error("waiting: why code stopped them was not read", error instanceof Error ? error.message : error);
+      return [];
+    }),
+  ]);
+  const marked = payables.map((fact) => {
+    const stopped = codeStoppedLine(stopRuleOf(latestDecision(entries, fact.id)?.detail));
+    const said = stopped ? { ...fact, reason: stopped } : fact;
+    return verdicts.has(fact.id) ? { ...said, forVerdict: true as const } : said;
   });
-  const marked = payables.map((fact) => (verdicts.has(fact.id) ? { ...fact, forVerdict: true as const } : fact));
   return [...marked, ...held].slice(0, WAITING_SHOWN);
 }

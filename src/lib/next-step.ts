@@ -256,6 +256,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "the spending-limit contract on Arc would refuse it";
     case "workspace.onchain_limit_route":
       return "the spending-limit contract carries only USDC on Arc";
+    case CASH_SHORTFALL:
+      return "the operating wallet did not hold the cash it needs";
     case "project.budget_exceeded":
       return "its project's budget has no room left for it";
     case "obligation.duplicate_reference":
@@ -279,4 +281,24 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
     default:
       return rule ? `rule ${rule}` : null;
   }
+}
+
+/**
+ * Why code stopped a payable, in one line, as its row on Bills and the chats say it in place of the model's sentence,
+ * which may say the opposite (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS1); null for a rule
+ * with no words of its own, which reads as its name: the agent's reasoning says it better.
+ */
+export function codeStoppedLine(rule: string | null | undefined): string | null {
+  const brief = ruleInBrief(rule);
+  return brief && !brief.startsWith("rule ") ? `Code stopped it: ${brief}.` : null;
+}
+
+/**
+ * The rule code stopped a payable on, from its latest AP decision's detail (`latestDecision`), as the approval card reads
+ * it (CS2): the guardrail rule that refused the payment, else the cash shortfall hold, else null.
+ */
+export function stopRuleOf(detail: Record<string, unknown> | null | undefined): string | null {
+  if (!detail) return null;
+  if (detail.guardrailBlocked === true && typeof detail.guardrailRule === "string") return detail.guardrailRule;
+  return heldForCash(detail) ? CASH_SHORTFALL : null;
 }

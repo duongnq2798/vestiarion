@@ -1,14 +1,15 @@
 import { approvalAnchor } from "../auth/org-paths";
 import { firstSentence } from "../email/waiting-digest";
+import { codeStoppedLine } from "../next-step";
 import { presentReasoning } from "../reasoning-copy";
 import { needsTwoApprovals } from "../two-approvals";
 
 /**
  * The bills a chat is told wait for approval (docs/superpowers/specs/2026-10-22-discord-design.md DC3), as structured
  * entries a channel formats in its own markup: Discord's notice, and the section of Telegram's decisions message.
- * Each says how much, to whom, why the agent stopped it in its first plain sentence, whether it needs two approvals and
- * an accountant may give one, and the Approvals path that opens it. The path carries no token: opening it approves
- * nothing. Pure.
+ * Each says how much, to whom, why it stopped (the rule, when code stopped it, as its row on Bills says it, else the
+ * agent's first plain sentence), whether it needs two approvals and an accountant may give one, and the Approvals path
+ * that opens it. The path carries no token: opening it approves nothing. Pure.
  */
 
 /** At most this many bills are listed one by one; the rest are counted. */
@@ -23,6 +24,11 @@ export interface WaitingBill {
   status: "held" | "flagged" | "awaiting_info";
   /** The agent's reasoning, as stored on the invoice. */
   reasoning: string | null;
+  /**
+   * The rule code stopped it on, from its latest AP decision (`stopRuleOf`): a guardrail rule or the cash shortfall hold;
+   * null when code did not stop it, or that could not be read.
+   */
+  stopRule: string | null;
   /** A EURC bill's USDC value as the agent last weighed it; null when it is not known. */
   usdcValue?: number | null;
 }
@@ -41,7 +47,10 @@ export interface WaitingNoticeEntry {
   /** "1,250.00 USDC". */
   amountText: string;
   status: WaitingBill["status"];
-  /** The first sentence of the agent's reasoning, as the approval card says it; null when it gave none. */
+  /**
+   * Why it stopped: "Code stopped it: …" when code did (chat code stop reason CS3), else the first sentence of the agent's
+   * reasoning, as the approval card says it; null when it gave none.
+   */
   reason: string | null;
   /** Above the figure for two approvals. */
   twoApprovals: boolean;
@@ -70,8 +79,9 @@ export function buildWaitingNotice(items: readonly WaitingBill[], policy: Notice
       payee: item.payee,
       amountText: `${AMOUNT.format(item.amount)} ${item.currency}`,
       status: item.status,
-      // As the approval card and the email digest say it: plain sentences, never the model's field names (plain reasoning R4).
-      reason: firstSentence(presentReasoning(item.reasoning) || null),
+      // What code stopped it on, as its row on Bills says it: the model's sentence may say it pays (CS3). Else as the
+      // approval card and the email digest say it: plain sentences, never the model's field names (plain reasoning R4).
+      reason: codeStoppedLine(item.stopRule) ?? firstSentence(presentReasoning(item.reasoning) || null),
       twoApprovals,
       cosign: twoApprovals && policy.accountantCosigns,
       reviewPath: `/approvals#${approvalAnchor(item.id)}`,
