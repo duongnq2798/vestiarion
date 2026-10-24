@@ -2762,12 +2762,30 @@ stage (the rules for two approvals and co-sign once per stage, and only once a
 bill waits), end the same message as one section built from
 `buildWaitingNotice`, in place of those bills' blocks
 (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md): a line
-each with its amount, payee, status, first sentence of reasoning, "needs two
+each with its amount, payee, status, why it waits, "needs two
 approvals" (and that an accountant can co-sign) and a Review link to
 `/approvals#payable-<id>` that carries no token, as many of ten as fit, the
 section taking the room first, then "Opening a link never approves anything."
-once. A shadow-mode verdict hold has no `invoiceId` and keeps its block; bills
-that cannot be read leave every block as it was. Every value in the message
+once. Why it waits is what code stopped it on, when code did
+(docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md):
+`waitingBills` reads the listed bills' ledger entries in one
+`listLedgerEntriesForTargets` call, and `stopRuleOf` takes the latest AP
+decision's (`latestDecision`) `guardrailRule` when `guardrailBlocked`, else
+`CASH_SHORTFALL` when `codeHeldForCash` (held for cash, and code made the
+hold: the agent's `pay`, or the `cash.priority` or `pay.cash_ahead` timing
+rule; a hold the agent chose itself while cash was short is its own), as
+`listWaitingPayables` gives the approval card; `codeStoppedLine`
+(`src/lib/next-step.ts`) says it as "Code stopped it: *the rule in brief*.",
+the same line as the row's `stoppedWhy` on Bills & receivables, whose
+`invoiceDecision` reads the guardrail and `heldForCashByCode` from the same
+decision while the bill waits, past a newer escalation entry. Otherwise, or
+when a rule has no words of its own, it is
+the first sentence of the reasoning, as when the entries cannot be read (logged
+once, the notice still sent). `/waiting` (`waitingFacts`) reads its payables'
+entries the same way, best effort as it reads verdicts, and a held milestone
+keeps its reasoning's first sentence. A shadow-mode verdict hold has no
+`invoiceId` and keeps its block; bills that cannot be read leave every block
+as it was. Every value in the message
 (the workspace's name, each decision's text and reason, and the section's) and
 in `/waiting` goes through `telegramText` (Unicode's Cf and half of an emoji
 removed, whitespace to one space, addresses shortened, then what Telegram
@@ -2859,7 +2877,9 @@ reads too),
 and posts one message (`src/lib/discord/messages.ts`) built from
 `buildWaitingNotice` (`src/lib/notifications/waiting-notice.ts`, structured
 entries each chat formats in its own markup, as Telegram's decisions message does): at most ten bills, as many as fit, each with its
-amount, payee, first sentence of reasoning, "needs two approvals" (and that an
+amount, payee, why it waits ("Code stopped it: *the rule in brief*." when
+code stopped it, else the first sentence of reasoning, read as for Telegram's
+section), "needs two approvals" (and that an
 accountant can co-sign while co-signing is on) and a Review link to
 `/approvals#payable-<id>` that carries no token. Every value goes through
 `discordText` (invisible format characters, Unicode's Cf such as bidi overrides

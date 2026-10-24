@@ -31,12 +31,13 @@ After each cycle, when the agent has held or flagged a bill for a person, or ask
 ```text
 **Acme Studio** · 2 bills wait for approval
 
-• **1,250.00 USDC** · Northwind Hosting · held: The invoice is above Northwind Hosting's 1,000.00 USDC payment limit. · needs two approvals, an accountant can co-sign · Review: <https://www.vestiarion.xyz/o/acme/approvals#payable-…>
+• **1,250.00 USDC** · Northwind Hosting · held: Code stopped it: it is above the counterparty's payment limit. · needs two approvals, an accountant can co-sign · Review: <https://www.vestiarion.xyz/o/acme/approvals#payable-…>
 • **75.50 EURC** · Jiren Studio · flagged: The bank details on the invoice differ from the ones on file. · Review: <https://www.vestiarion.xyz/o/acme/approvals#payable-…>
 Opening a link never approves anything.
 ```
 
-- Each bill takes one line: the amount and its currency, the payee, whether the agent held or flagged it or it is waiting for details, the first sentence of its reason, and **Review:** with the bill's own link. A bill waiting for details opens on Approvals too, where an owner or admin adds them with **Add details**.
+- Each bill takes one line: the amount and its currency, the payee, whether the agent held or flagged it or it is waiting for details, why, and **Review:** with the bill's own link. A bill waiting for details opens on Approvals too, where an owner or admin adds them with **Add details**.
+- When a check in code stopped a bill, such as its payment limit, the payee lock or the cash a payment needs, the line says what stopped it, as its row on **Bills & receivables** does: "Code stopped it: it is above the counterparty's payment limit." A bill the agent held itself gives the first sentence of the agent's reason, even while cash is short. When Vestiarion cannot read what stopped a bill, the line gives the agent's sentence too; the bill's card on Approvals says the rest.
 - A bill above the workspace's figure for two approvals says "needs two approvals". While an owner lets accountants co-sign, it says "needs two approvals, an accountant can co-sign".
 - Only bills that still wait are posted: one a person approved, rejected or returned between the agent's decision and the message is left out. A payment held for your verdict in shadow mode is not posted: you settle it with **Give your verdict**.
 - A message lists at most ten bills, as many as fit in Discord's 2,000 characters, then "…and 3 more in Approvals", with a link to Approvals, for the rest.

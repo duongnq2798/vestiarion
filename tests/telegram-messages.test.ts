@@ -306,7 +306,7 @@ describe("a decision's own words (docs/superpowers/specs/2026-10-23-telegram-rev
 const BILL = (n: number) => `1b6c1c9e-4a4f-4a7e-9b1e-${String(n).padStart(12, "0")}`;
 const REASONING = "The invoice has no purchase order. It waits for a person.";
 const bill = (n: number, fields: Partial<WaitingBill> = {}): WaitingBill => ({
-  id: BILL(n), payee: `Vendor ${n}`, amount: 120, currency: "USDC", status: "held", reasoning: REASONING, ...fields,
+  id: BILL(n), payee: `Vendor ${n}`, amount: 120, currency: "USDC", status: "held", reasoning: REASONING, stopRule: null, ...fields,
 });
 /** What the activity says of a payable the agent stopped: the model's own first sentence, and Decide in Approvals. */
 const stopped = (n: number, fields: Partial<ActivityItem> = {}) =>
@@ -368,6 +368,22 @@ describe("the bills waiting for approval, in the decisions message (TG2)", () =>
     const on = decisionsMessage(ACME, [stopped(1), stopped(2)], ORIGIN, waiting(bills, { twoApprovalsAbove: 500, accountantCosigns: true })).split("\n");
     expect(on).toContain(`⏸ <b>900.00 USDC</b> · Vendor 1 · held: The invoice has no purchase order. · needs two approvals, an accountant can co-sign · ${review(1)}`);
     expect(on).toContain(`⏸ <b>20.00 USDC</b> · Vendor 2 · held: The invoice has no purchase order. · ${review(2)}`);
+  });
+
+  it("says why code stopped a bill, not the model's sentence that says the opposite (chat code stop reason CS3)", () => {
+    const message = decisionsMessage(
+      ACME,
+      [stopped(1), stopped(2)],
+      ORIGIN,
+      waiting([
+        bill(1, { reasoning: "The invoice is due today, so I am paying now.", stopRule: "invoice.pay_to_differs" }),
+        bill(2, { reasoning: "The invoice is due today, so I am paying now." }),
+      ])
+    );
+    expect(message.split("\n")).toContain(
+      `⏸ <b>120.00 USDC</b> · Vendor 1 · held: Code stopped it: the invoice asks to be paid to a different address from the one on file. · ${review(1)}`
+    );
+    expect(message.split("\n")).toContain(`⏸ <b>120.00 USDC</b> · Vendor 2 · held: The invoice is due today, so I am paying now. · ${review(2)}`);
   });
 
   it("says the bill's status alone when the agent gave no reason", () => {

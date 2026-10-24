@@ -57,6 +57,11 @@ export interface Decision {
   trail?: TrailStep[];
   /** A payable held because the cash it needs was not there, no guardrail refusing it (reserve cash back R4). */
   heldForCash?: boolean;
+  /**
+   * That hold made by code over the agent's choice to pay (`codeHeldForCash`), so its row says code stopped it; absent for
+   * a hold the agent chose itself while the cash was short (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS1).
+   */
+  heldForCashByCode?: boolean;
   /** A payment held in shadow mode for a person to agree, no rule refusing it (shadow mode S2). */
   heldForVerdict?: boolean;
   /** A person's verdict on the agent's decision, given or to give (shadow mode S3). */

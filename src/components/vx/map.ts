@@ -4,7 +4,7 @@ import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
 import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
 import { recordedFacts } from "@/lib/added-details";
-import { awaitsVerdict, heldForCash } from "@/lib/next-step";
+import { awaitsVerdict, codeHeldForCash, heldForCash } from "@/lib/next-step";
 import { verdictView, type VerdictFacts } from "@/lib/verdict-view";
 import { invoiceTrail } from "@/lib/decision-trail";
 import type { LedgerEntry } from "@/lib/ledger";
@@ -375,7 +375,12 @@ function decideInvoice(
   const decided = entries.find((candidate) => candidate.detail.invoiceId === invoice.id && record(candidate.detail.observed) !== undefined);
   // Explained from the facts the decision recorded, not from details a person added since (complete held invoice R6).
   const recorded = recordedFacts(decided ?? null);
-  const guardrailBlocked = entry?.detail.guardrailBlocked === true;
+  // The guardrail that stopped it, read from the agent's decision while the bill still waits: a newer entry, such as the
+  // follow-up's escalation, says nothing of it (shadow mode review I1), and the chats and the approval card read that
+  // decision too (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS2).
+  const blockedBy =
+    entry?.detail.guardrailBlocked === true ? entry : ["held", "flagged", "awaiting_info"].includes(invoice.status) && decided?.detail.guardrailBlocked === true ? decided : undefined;
+  const guardrailBlocked = blockedBy !== undefined;
   const limit = numberValue(observed?.paymentLimit) ?? counterparty?.payment_limit ?? 0;
   const risk = stringValue(observed?.riskLevel) ?? counterparty?.risk_level ?? "unscreened";
   const outcome = statusOutcome(invoice.status, invoice.tx_ref, guardrailBlocked);
@@ -439,10 +444,11 @@ function decideInvoice(
       paidAcrossChains(counterparty?.chain) ? { label: "Payee's chain", value: `${chainById(counterparty?.chain as string).label}, through ${route}${routeFees ?? ""}`, state: "neutral" as const } : null,
       duplicateEvidence(observed),
     ].filter((item): item is Evidence => item !== null),
-    guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, entry?.detail) : null,
+    guardrail: guardrailBlocked ? invoiceGuardrail(invoice.amount, currency, usdcValue, limit, risk, rule, blockedBy.detail) : null,
     // Why the agent's own decision held it, read from that decision: a newer entry, such as the follow-up's escalation,
-    // says nothing of it (shadow mode review I1).
+    // says nothing of it (shadow mode review I1). Code made the hold for cash, or the agent chose it (CS1).
     ...(invoice.status === "held" && heldForCash(decided?.detail) ? { heldForCash: true } : {}),
+    ...(invoice.status === "held" && codeHeldForCash(decided?.detail) ? { heldForCashByCode: true } : {}),
     // Held in shadow mode for a person to agree, which no rule did (shadow mode S2).
     ...(invoice.status === "held" && awaitsVerdict(decided?.detail) ? { heldForVerdict: true } : {}),
     decisionMode: stringValue(entry?.detail.decisionMode),
