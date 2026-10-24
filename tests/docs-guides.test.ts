@@ -1884,6 +1884,10 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["needs two approvals", TELEGRAM_MESSAGES],
     ["needs two approvals, an accountant can co-sign", TELEGRAM_MESSAGES],
     ["waiting for details", TELEGRAM_MESSAGES],
+    // What a bill's line says when code stopped it (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS5).
+    ["Code stopped it:", "src/lib/next-step.ts", "`Code stopped it: ${brief}.`"],
+    ["it is above the counterparty's payment limit", "src/lib/next-step.ts"],
+    ["the operating wallet did not hold the cash it needs", "src/lib/next-step.ts"],
     ["Opening a link never approves anything.", TELEGRAM_MESSAGES],
     ["…and 3 more in Approvals", TELEGRAM_MESSAGES, '…and ${n} more in ${link(orgUrl(origin, slug, "/approvals"), "Approvals")}'],
     ["Approvals", APP_NAV],
@@ -2083,6 +2087,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Discord is not set up on this deployment yet.", DISCORD_PANEL],
     ["2 bills wait for approval", DISCORD_MESSAGES, "bills wait`} for approval"],
     ["Review:", DISCORD_MESSAGES],
+    // What a bill's line says when code stopped it (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS5).
+    ["Code stopped it:", "src/lib/next-step.ts", "`Code stopped it: ${brief}.`"],
+    ["it is above the counterparty's payment limit", "src/lib/next-step.ts"],
     ["needs two approvals", DISCORD_MESSAGES],
     ["needs two approvals, an accountant can co-sign", DISCORD_MESSAGES],
     ["Opening a link never approves anything.", DISCORD_MESSAGES],

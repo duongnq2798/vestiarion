@@ -260,6 +260,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   refused when Co-sign is clicked, with the reason then, such as the first payment to an address the accountant
   confirmed that no member answers for alone.
 
+- **Chats say why code stopped a bill.** The bills waiting for approval in a Telegram chat's message, in a Discord
+  channel's message and in `/waiting` gave each bill the first sentence of the agent's reasoning, even when a check in
+  code refused the agent's payment or held it for want of cash, so a held bill could read "held: The invoice is due
+  today, so I am paying now." Such a bill's line now says what stopped it, in the words its row on Bills & receivables
+  uses, such as "Code stopped it: the payment address changed recently, and the payee lock makes it wait." A bill held
+  because the operating wallet did not hold its cash now says so on its row on Bills & receivables too, rather than the
+  agent's reasoning. When Vestiarion cannot read why, the line gives the agent's sentence, as before.
+
 - **Approvals and Contractors on a phone.** At a phone's width the approval card showed only the start of the address
   **Approve and pay** sends to; it now shows the whole address. The buttons that decide a payment (Approve and pay,
   Reject, Return to agent, Add details, a shadow-mode verdict, and a held milestone's Pay now and Close without paying)
