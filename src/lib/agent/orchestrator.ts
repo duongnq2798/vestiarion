@@ -61,6 +61,7 @@ import { alertCashShort } from "./cash-alert";
 import { makeEarlyPaymentOffers } from "./early-offers";
 import { makeTermRequests } from "./term-requests";
 import { requestMissingDocuments } from "./document-requests";
+import { vendorDocumentsOf, type VendorDocument } from "./document-checks";
 import { buyPayeeHistories, type AddressHistoryFact } from "./services";
 import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
@@ -1565,10 +1566,17 @@ async function decideApPayable(
     obligations?: ObligationGate;
     /** The address this payable's document asked to be paid to, read once per stage (invoice pay-to hold IP2); null for none. */
     documentPayTo?: (invoiceId: string) => string | null;
+    /**
+     * The vendor's document this payable's purchase order came from, read once per stage (document checks DK8); null for
+     * none. The agent never pays or schedules such a payable: a person approves it.
+     */
+    vendorDocument?: (invoiceId: string) => VendorDocument | null;
   }
 ): Promise<{ status: string; scheduledFor: string | null; operatingBalance: number | null; line: CycleLogLine }> {
   const { db, provider, operating, operatingBalance, history, metrics } = ctx;
   const counterparty = invoice.counterparties;
+  // Its purchase order came from its vendor's document (document checks DK8): held for a person, whatever else holds.
+  const vendorDocument = ctx.vendorDocument?.(invoice.id) ?? null;
   const amount = num(invoice.amount);
   // One moment for the whole decision: the timing figures and the bounds on
   // the model's date are both measured against it.
@@ -2016,6 +2024,8 @@ async function decideApPayable(
     outflowBudget,
     onChainLimit,
     twoApprovalsAbove: ctx.twoApprovalsAbove ?? null,
+    // The last rule, around every other one (document checks DK8): a purchase order from the vendor's document.
+    vendorDocument: vendorDocument ? { source: vendorDocument.source, vendorName: counterparty.name } : null,
   });
   // After every check above (project budgets P5, P9), for a payment they let through: a bill for the same work as an
   // earlier milestone waits for a person; then the bill's money is set aside in its project, under the database's lock,
@@ -2158,6 +2168,8 @@ async function decideApPayable(
       guardrailBlocked,
       guardrailRule: guardrail.rule,
       currency,
+      // The vendor's document its purchase order came from, whichever rule held it (document checks DK8).
+      ...(vendorDocument ? { vendorDocument: { requestId: vendorDocument.requestId, source: vendorDocument.source, fileSha256: vendorDocument.fileSha256 } } : {}),
       // The spending limit a payment now was weighed against (outflow budget spec R4); absent with none set.
       ...(outflowBudget ? { outflowBudget } : {}),
       // The same limit on Arc: the contract, the payment's ref and the contract's verdict (onchain spending limit R8, R12).
@@ -2371,6 +2383,8 @@ export interface ApStageInput {
   shadow?: ShadowMode | null;
   /** The checks after the guardrails (project budgets P5, P9); read from the workspace when absent. */
   obligations?: ObligationGate;
+  /** The payables whose purchase order came from their vendor's document (document checks DK8); read from the workspace when absent. */
+  vendorDocuments?: Map<string, VendorDocument>;
 }
 
 /** At most this many EURC payables held for FX get a fresh quote in one cycle, the oldest decided first (FX re-evaluation F9). */
@@ -2566,6 +2580,10 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   // The addresses the payables' documents asked to be paid to (invoice pay-to hold IP2): read once for the stage, none
   // before migration 0136. A read that fails stops the stage, so a payment is never made past it.
   const documentPayTo = payables.length > 0 ? await readDocumentPayTo(payables.map((row) => row.id), db) : new Map<string, string>();
+  // The payables whose purchase order came from their vendor's document (document checks DK8): read once for the stage,
+  // none before migration 0144. A read that fails stops the stage, so nothing is paid past it.
+  const vendorDocuments =
+    input.vendorDocuments ?? (payables.length > 0 ? await vendorDocumentsOf(db, payables.map((row) => row.id)) : new Map<string, VendorDocument>());
 
   // The whole payable book, settled rows included, because a duplicate is only
   // detectable against what came before it — and the invoice that matters most
@@ -2723,6 +2741,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       shadow,
       obligations,
       documentPayTo: (invoiceId) => documentPayTo.get(invoiceId) ?? null,
+      vendorDocument: (invoiceId) => vendorDocuments.get(invoiceId) ?? null,
     });
     if (decided.operatingBalance !== null) operatingBalance = decided.operatingBalance;
     record(invoice.id, decided.status, decided.scheduledFor);
