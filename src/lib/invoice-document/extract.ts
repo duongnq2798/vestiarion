@@ -66,6 +66,21 @@ function currencyFigure(line: string): string | null {
   return last;
 }
 
+/** A line that states what is due: "Total due", "Total amount", "Total payable", "Amount due" or "Balance due". */
+const TOTAL_LINE = /(total\s*(due|amount|payable)|amount\s*due|balance\s*due)/i;
+
+/**
+ * The figure of every line that states what is due, each read as the rule-based reader reads the last one (document
+ * checks DK4): a document that states two different totals has no clear total, whichever one a reader took.
+ */
+export function totalLineFigures(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => TOTAL_LINE.test(line) && lastFigure(line) !== null)
+    .map((line) => currencyFigure(line) ?? (lastFigure(line) as string));
+}
+
 /** A line about paying late, and the percent a month or the fixed fee it charges. */
 const LATE_WORDS = /\b(?:late|overdue|past due|unpaid|interest)\b/i;
 const MONTHLY_PERCENT = /(\d+(?:\.\d+)?)\s*%\s*(?:per\s+month|a\s+month|each\s+month|monthly|\/\s*month)/i;
@@ -82,7 +97,7 @@ export function ruleBasedExtraction(text: string): RawExtraction {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
 
   const totalLine =
-    [...lines].reverse().find((line) => /(total\s*(due|amount|payable)|amount\s*due|balance\s*due)/i.test(line) && lastFigure(line)) ??
+    [...lines].reverse().find((line) => TOTAL_LINE.test(line) && lastFigure(line)) ??
     [...lines].reverse().find((line) => /\btotal\b/i.test(line) && !/sub\s*total/i.test(line) && lastFigure(line));
   const currency = (totalLine?.match(/\b(USDC|EURC|USD|EUR)\b|[$€]/i) ?? text.match(/\b(USDC|EURC)\b/i))?.[0]?.toUpperCase() ?? null;
 

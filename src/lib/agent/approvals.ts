@@ -494,6 +494,11 @@ export interface WaitingPayable {
   /** Whether the goods or services are marked received now. */
   goodsReceived: boolean;
   /**
+   * Whether its counterparty needs a purchase order (three-way match design M2), so a card offers to attach one only
+   * when the bill lacks it (document checks DK11). Needed when absent, as the server reads it.
+   */
+  purchaseOrderRequired?: boolean;
+  /**
    * What a person added since the agent's decision recorded its facts, which the agent's follow-up reopens the
    * payable on at its next cycle (complete held invoice R4, R6); null when nothing was.
    */
@@ -568,7 +573,7 @@ export async function listWaitingPayables(
       db()
         .from("invoices")
         .select(
-          `id, amount, currency, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, po_reference, goods_received, counterparties(name, risk_level, address, chain)${lateFee}`
+          `id, amount, currency, due_date, status, agent_reasoning, decided_at, created_by, reviewed_at, counterparty_id, early_pay_discount_pct, discount_due_date, po_reference, goods_received, counterparties(name, risk_level, address, chain, purchase_order_required)${lateFee}`
         )
         .eq("direction", "payable")
         .in("status", WAITING_STATUSES)
@@ -592,7 +597,7 @@ export async function listWaitingPayables(
     late_fee_starts_on?: string | null;
     po_reference?: string | null;
     goods_received?: boolean | null;
-    counterparties: { name: string; risk_level: string; address: string | null; chain?: string | null } | null;
+    counterparties: { name: string; risk_level: string; address: string | null; chain?: string | null; purchase_order_required?: boolean | null } | null;
   }>;
 
   // The decision each was held on, with its facts: what its reasoning is explained from (plain reasoning R3).
@@ -691,7 +696,11 @@ export async function listWaitingPayables(
       !transferUnknown(intent);
     const needs = num(row.amount) + (cctpFee !== null ? cctpFee + cctpFeeCushion(cctpFee) : 0);
     const fromReserveUsdc = balances && fromOperating ? amountFromReserve(needs, balances.operating, balances.reserve) : null;
-    const onFile = { poReference: row.po_reference ?? null, goodsReceived: row.goods_received === true };
+    const onFile = {
+      poReference: row.po_reference ?? null,
+      goodsReceived: row.goods_received === true,
+      purchaseOrderRequired: row.counterparties?.purchase_order_required !== false,
+    };
     // The decision is explained from the facts it recorded, not from details a person added since (R6).
     const recorded = recordedFacts(decision);
     return {
@@ -733,6 +742,7 @@ export async function listWaitingPayables(
       ...(payoutRoute ? { payoutRoute } : {}),
       poReference: onFile.poReference,
       goodsReceived: onFile.goodsReceived,
+      purchaseOrderRequired: onFile.purchaseOrderRequired,
       addedSinceDecision: addedSince(recorded, onFile),
       guardrailRule: decision?.detail.guardrailBlocked === true && typeof decision.detail.guardrailRule === "string" ? decision.detail.guardrailRule : null,
       ...(row.status === "held" && heldForCash(decision?.detail) ? { heldForCash: true } : {}),

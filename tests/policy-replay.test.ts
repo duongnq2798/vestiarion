@@ -427,6 +427,43 @@ describe("checks no setting here changes (P4)", () => {
   });
 });
 
+describe("a bill whose purchase order came from its vendor's document (document checks DK8)", () => {
+  // Every ap_* entry on such a bill records the document it came from, whichever rule held it.
+  const fromDocument = { vendorDocument: { requestId: "req-1", source: "vendor", fileSha256: "ab".repeat(32) } };
+  const raised = (limit: number) => withCandidate(figures({ counterpartyLimits: { [ACME]: 50, [BOLT]: 500 } }), { kind: "counterparty_limit", counterpartyId: ACME, limit });
+  const current = () => figures({ counterpartyLimits: { [ACME]: 50, [BOLT]: 500 } });
+
+  it("is still held for a person once a higher limit lets it past the limit it was held on", () => {
+    const held = bill({ amount: 60, limit: 50, rule: "counterparty.payment_limit", detail: fromDocument });
+    const result = run([held], current(), raised(100));
+    expect(result.decisions[0].before).toEqual({ kind: "stopped", rule: "counterparty.payment_limit" });
+    expect(result.decisions[0].after).toEqual({ kind: "stopped", rule: "invoice.vendor_document" });
+    expect(changes(result)).toEqual(["unchanged"]);
+  });
+
+  it("replays one held on that rule as held, not as a rule it does not know", () => {
+    const held = bill({ amount: 30, limit: 50, rule: "invoice.vendor_document", detail: fromDocument });
+    const result = run([held], current(), raised(100));
+    expect(result.decisions[0].before).toEqual({ kind: "stopped", rule: "invoice.vendor_document" });
+    expect(result.decisions[0].after).toEqual({ kind: "stopped", rule: "invoice.vendor_document" });
+    expect(changes(result)).toEqual(["unchanged"]);
+    // A lower limit stops it first, as code would.
+    expect(run([held], current(), raised(20)).decisions[0].after).toEqual({ kind: "stopped", rule: "counterparty.payment_limit" });
+  });
+
+  it("holds a schedule too, since the rule weighs a schedule as it weighs a payment", () => {
+    const scheduled = bill({ action: "schedule", amount: 60, limit: 50, rule: "counterparty.payment_limit", detail: { ...fromDocument, decision: { action: "schedule", payOn: "2026-10-05" } } });
+    expect(run([scheduled], current(), raised(100)).decisions[0].after).toEqual({ kind: "stopped", rule: "invoice.vendor_document" });
+  });
+
+  it("lets a bill with no vendor's document go ahead once the limit allows it", () => {
+    const held = bill({ amount: 60, limit: 50, rule: "counterparty.payment_limit" });
+    const result = run([held], current(), raised(100));
+    expect(result.decisions[0].after).toEqual({ kind: "goes_ahead" });
+    expect(changes(result)).toEqual(["now_paid"]);
+  });
+});
+
 describe("the spending-limit contract on Arc (P2)", () => {
   const live = { chainMode: "live" };
 

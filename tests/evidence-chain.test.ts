@@ -1048,3 +1048,38 @@ describe("the payment step of a payment whose outcome is not clean (payment exce
     expect(step(chain, "payment").facts[0].fill).toBe("Pay now on Contractors looks for it on Circle first and sends nothing twice.");
   });
 });
+
+describe("a purchase order a vendor's document supplied (document checks DK13)", () => {
+  it("says the purchase order came from the vendor's document, which the agent checked against the bill", () => {
+    const base = paidInFull();
+    const created = entry(20, "09:30:00", "human", "create_invoice", { by: ALICE, invoiceId: INVOICE, counterpartyId: CP, amount: 12.5, currency: "USDC", goodsReceived: false });
+    const sent = entry(21, "09:40:00", "human", "document_received", { by: null, via: "document_request", invoiceId: INVOICE, counterpartyId: CP, requestId: "r-1", fileSha256: "ef".repeat(32) });
+    const checked = entry(22, "09:41:00", "agent", "document_checked", {
+      invoiceId: INVOICE,
+      counterpartyId: CP,
+      requestId: "r-1",
+      source: "vendor",
+      fileSha256: "ef".repeat(32),
+      outcome: "matched",
+      poReference: "PO-2207",
+      poWritten: true,
+    });
+    const entries = [created, sent, checked, ...base.entries.filter((row) => row.action !== "create_invoice")];
+    const chain = buildEvidenceChain({ ...base, entries, checks: { entries: okChecks(entries), onChain: base.checks.onChain } });
+    expect(step(chain, "agreed").facts[0]).toMatchObject({
+      kind: "checked",
+      text: "Purchase order PO-2207 is on the bill, from the vendor's document, which the agent checked against the bill.",
+      at: at("09:41:00"),
+      seqs: [22],
+    });
+  });
+
+  it("says nothing of a check that added no purchase order, or another one", () => {
+    const base = paidInFull();
+    const shadowCheck = entry(23, "09:41:00", "agent", "document_checked", { invoiceId: INVOICE, outcome: "matched", poReference: "PO-2207", poWritten: false, shadow: true });
+    const otherPo = entry(24, "09:42:00", "agent", "document_checked", { invoiceId: INVOICE, outcome: "matched", poReference: "PO-9999", poWritten: true });
+    const entries = [...base.entries, shadowCheck, otherPo];
+    const chain = buildEvidenceChain({ ...base, entries, checks: { entries: okChecks(entries), onChain: base.checks.onChain } });
+    expect(step(chain, "agreed").facts[0]).toMatchObject({ kind: "stated", seqs: [20] });
+  });
+});

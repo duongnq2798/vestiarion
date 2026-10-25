@@ -185,6 +185,10 @@ export const PLATFORM_RPCS = [
   // workspace, previewed and answered by token.
   "create_document_request", "claim_document_request_send", "mark_document_request_sent", "release_document_request_send",
   "close_document_requests", "revoke_document_request", "document_request_preview", "answer_document_request",
+  // Checking a vendor's document against its bill (0144, document checks DK3, DK7, DK11): a member's attached PDF, the
+  // cycle's check of each answered request, which may add the bill's purchase order, and the count of its file's reads
+  // begun and not finished.
+  "attach_document", "check_document_request", "start_document_parse", "finish_document_parse",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 
@@ -322,13 +326,15 @@ export const DOCUMENTS_BUCKET = "documents";
  * The service role's storage, narrowed to the private `documents` bucket and the calls a vendor's document needs
  * (document requests ER5, ER6): a one-time upload address for the vendor's browser, reading the file back to check it,
  * moving it to where it is kept, removing a file refused, and a short-lived address for a member to open it; and listing
- * one folder, a page at a time by name, for what a deleted workspace left there. Every path is the caller's to build under
- * the workspace's own folder; nothing else of Storage is reachable from here.
+ * one folder, a page at a time by name, for what a deleted workspace left there. It also uploads a member's PDF, from the
+ * server, where it is kept, never over a file already there (document checks DK11). Every path is the caller's to build
+ * under the workspace's own folder; nothing else of Storage is reachable from here.
  */
 export function platformStorage() {
   const bucket = currentContext().db.storage.from(DOCUMENTS_BUCKET);
   return {
     uploadUrl: (path: string) => bucket.createSignedUploadUrl(path, { upsert: true }),
+    upload: (path: string, bytes: Uint8Array, contentType: string) => bucket.upload(path, bytes, { upsert: false, contentType }),
     download: (path: string) => bucket.download(path),
     move: (from: string, to: string) => bucket.move(from, to),
     remove: (paths: string[]) => bucket.remove(paths),

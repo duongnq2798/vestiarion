@@ -15,6 +15,8 @@ const INITIAL: DocumentSubmitResult = { ok: false, message: "" };
 
 /** What the vendor reads under the file (ER5). */
 export const DOCUMENT_FILE_LINE = "One PDF, PNG or JPEG, up to 10 MB. Only the business you work with can open it.";
+/** Under the file field (document checks DK3): only a PDF with its text is checked by code, an image or a scan by a person. */
+export const DOCUMENT_TEXT_TIP = "A PDF with its text, rather than a scan or a photo, can be checked against the bill straight away.";
 const TOO_LARGE = "The file is over 10 MB. Send a smaller copy.";
 const NOT_SENT = "The file could not be sent. Try again in a moment.";
 
@@ -158,6 +160,7 @@ export function DocumentUploadForm({ token, request }: { token: string; request:
               disabled={pending}
               onFile={choose}
             />
+            <p className="text-xs text-ink-3">{DOCUMENT_TEXT_TIP}</p>
             {file && (
               <div className="flex items-center gap-2 text-sm text-ink-2">
                 <FileText aria-hidden className="size-4 shrink-0" />

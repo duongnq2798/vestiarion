@@ -16,6 +16,7 @@ import { listWaitingPayables } from "@/lib/agent/approvals";
 import { readCosignStates } from "@/lib/cosign-state";
 import { db } from "@/lib/dal";
 import { readDocumentRequests } from "@/lib/document-requests/read";
+import { documentChecksMode, readDocumentChecksStatus } from "@/lib/document-requests/setting";
 import type { DocumentRequestView } from "@/lib/document-requests/rules";
 import { verdictView, type DecisionEntryFacts } from "@/lib/verdict-view";
 import { verdictFacts } from "@/lib/verdicts";
@@ -126,10 +127,22 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
     const approverList = checklistRoleOf(membership.role) === "approver" ? await approverOnboarding(user.id, waiting) : null;
     // What the agent asked each bill's vendor for, or would in shadow, and what the vendor sent (document requests ER6).
     // Best effort: unread, the cards show none, as before migration 0142.
-    const documentRequests = await readDocumentRequests(waiting.map((payable) => payable.id)).catch((error: unknown) => {
-      console.error("approvals: document requests not read", error instanceof Error ? error.message : error);
-      return new Map<string, DocumentRequestView>();
-    });
+    // Whether an owner or admin may attach the vendor's document, and how it is checked (document checks DK11). Best
+    // effort, read once: unread, no card offers it.
+    const [documentRequests, documentChecks] = await Promise.all([
+      readDocumentRequests(waiting.map((payable) => payable.id)).catch((error: unknown) => {
+        console.error("approvals: document requests not read", error instanceof Error ? error.message : error);
+        return new Map<string, DocumentRequestView>();
+      }),
+      waiting.length > 0
+        ? readDocumentChecksStatus(db())
+            .then(documentChecksMode)
+            .catch((error: unknown) => {
+              console.error("approvals: document checks not read", error instanceof Error ? error.message : error);
+              return null;
+            })
+        : Promise.resolve(null),
+    ]);
 
     return (
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
@@ -179,6 +192,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
                 canCosign={canCosign}
                 cosign={cosignStates?.get(payable.id)}
                 documentRequest={documentRequests.get(payable.id)}
+                documentChecks={documentChecks}
               />
             ))}
           </div>

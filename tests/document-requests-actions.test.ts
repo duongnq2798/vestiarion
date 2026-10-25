@@ -6,7 +6,9 @@ import { fakeSupabase } from "./support/fake-supabase";
 /**
  * The actions of document requests (docs/superpowers/specs/2026-10-23-document-requests-design.md ER1, ER5, ER6): the
  * owner's setting, authorized as `approval.policy`; an owner's or admin's Revoke, as `records.write`; and the vendor's two
- * calls, which need no session, say only fixed sentences, and pass on the vendor's address for its rate limit.
+ * calls, which need no session, say only fixed sentences, and pass on the vendor's address for its rate limit. An owner's
+ * or admin's Attach a document, as `records.write`, which reads the file only once authorized and starts a cycle to check
+ * it (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK11).
  */
 
 const { ORG, USER } = vi.hoisted(() => ({
@@ -15,7 +17,8 @@ const { ORG, USER } = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+const { revalidateMock } = vi.hoisted(() => ({ revalidateMock: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: revalidateMock }));
 const { afterMock, headersMock, raiseMock } = vi.hoisted(() => ({ afterMock: vi.fn(), headersMock: vi.fn(), raiseMock: vi.fn() }));
 vi.mock("next/server", async (importOriginal) => ({ ...(await importOriginal<typeof import("next/server")>()), after: afterMock }));
 vi.mock("next/headers", () => ({ headers: headersMock }));
@@ -26,8 +29,11 @@ const { changeMock, revokeMock, startMock, submitMock } = vi.hoisted(() => ({ ch
 vi.mock("@/lib/document-requests/setting", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/document-requests/setting")>()), changeDocumentRequests: changeMock }));
 vi.mock("@/lib/document-requests/read", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/document-requests/read")>()), revokeDocumentRequest: revokeMock }));
 vi.mock("@/lib/document-requests/intake", () => ({ startDocumentUpload: startMock, submitDocument: submitMock }));
+const { attachMock } = vi.hoisted(() => ({ attachMock: vi.fn() }));
+vi.mock("@/lib/document-requests/attach", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/document-requests/attach")>()), attachDocument: attachMock }));
 
-import { revokeDocumentRequestAction, setDocumentRequestsAction } from "@/app/actions/document-requests";
+import { attachDocumentAction, revokeDocumentRequestAction, setDocumentRequestsAction } from "@/app/actions/document-requests";
+import { AttachDocumentError } from "@/lib/document-requests/attach";
 import { startDocumentUploadAction, submitDocumentAction } from "@/app/documents/[token]/actions";
 import { RevokeDocumentRequestError } from "@/lib/document-requests/read";
 import { DocumentRequestsError } from "@/lib/document-requests/setting";
@@ -47,7 +53,7 @@ function form(fields: Record<string, string>): FormData {
   return formData;
 }
 
-function allow(role: "owner" | "admin" | "approver") {
+function allow(role: "owner" | "admin" | "approver" | "viewer") {
   authorizeMock.mockResolvedValueOnce({ ok: true, user: { id: USER, email: null }, membership: { orgId: ORG, slug: "pinecrest", name: "Pinecrest", mode: "live", role } });
 }
 
@@ -75,6 +81,19 @@ describe("the setting (ER1)", () => {
     expect(changeMock).toHaveBeenCalledWith({ actorId: USER, to: "shadow" });
     expect(raiseMock).toHaveBeenCalledWith(expect.objectContaining({ user: { id: USER, email: null } }), "document_requests_on");
     expect(result).toEqual({ ok: true, message: "Vendor requests are in shadow: each bill's card says what Vestiarion would ask, and nothing is sent." });
+  });
+
+  it("says on checks what vendors send once documents are checked, and part 1's words before migration 0144 (document checks DK1)", async () => {
+    allow("owner");
+    changeMock.mockResolvedValueOnce({ from: "shadow", to: "on", checks: true });
+    expect((await run(() => setDocumentRequestsAction(INITIAL, form({ orgSlug: "pinecrest", setting: "on" })))).message).toBe(
+      "Vendor requests are on: Vestiarion emails vendors for a bill's missing purchase order or goods receipt, and checks what they send."
+    );
+    allow("owner");
+    changeMock.mockResolvedValueOnce({ from: "shadow", to: "on", checks: false });
+    expect((await run(() => setDocumentRequestsAction(INITIAL, form({ orgSlug: "pinecrest", setting: "on" })))).message).toBe(
+      "Vendor requests are on: Vestiarion emails vendors for a bill's missing purchase order or goods receipt."
+    );
   });
 
   it("starts no cycle when turned off", async () => {
@@ -117,6 +136,65 @@ describe("Revoke (ER6)", () => {
     expect((await run(() => revokeDocumentRequestAction(INITIAL, form({ orgSlug: "pinecrest", requestId: "r-1" })))).message).toBe("This request is no longer open.");
     authorizeMock.mockResolvedValueOnce({ ok: false, message: "Only an owner or admin can do that." });
     expect(await run(() => revokeDocumentRequestAction(INITIAL, form({ orgSlug: "pinecrest", requestId: "r-1" })))).toEqual({ ok: false, message: "Only an owner or admin can do that." });
+  });
+});
+
+describe("Attach a document (document checks DK11)", () => {
+  const PDF = new TextEncoder().encode("%PDF-1.7\nNorthstar Studio\n%%EOF");
+  const withFile = (fields: Record<string, string>, file: File | null = new File([PDF], "po-2215.pdf", { type: "application/pdf" })) => {
+    const formData = form(fields);
+    if (file) formData.set("file", file);
+    return formData;
+  };
+
+  it("asks for records.write first, reads the file only then, attaches it as the signed-in member, starts a cycle and revalidates", async () => {
+    attachMock.mockResolvedValueOnce({ requestId: "r-1", mode: "on" });
+    const formData = withFile({ orgSlug: "pinecrest", invoiceId: "inv-1" });
+    const order: string[] = [];
+    const get = formData.get.bind(formData);
+    formData.get = ((key: string) => {
+      order.push(key);
+      return get(key);
+    }) as FormData["get"];
+    authorizeMock.mockImplementationOnce(async () => {
+      order.push("authorize");
+      return { ok: true, user: { id: USER, email: null }, membership: { orgId: ORG, slug: "pinecrest", name: "Pinecrest", mode: "live", role: "admin" } };
+    });
+    const result = await run(() => attachDocumentAction(INITIAL, formData));
+    expect(authorizeMock).toHaveBeenCalledWith("pinecrest", "records.write");
+    // The org's slug is read for authorize; the file only once it said yes.
+    expect(order.indexOf("authorize")).toBeLessThan(order.indexOf("file"));
+    expect(attachMock).toHaveBeenCalledWith({ actorId: USER, role: "admin", invoiceId: "inv-1", bytes: PDF });
+    expect(raiseMock).toHaveBeenCalledWith(expect.objectContaining({ user: { id: USER, email: null } }), "document_received");
+    expect(revalidateMock).toHaveBeenCalled();
+    expect(result).toEqual({ ok: true, message: "Attached. Vestiarion checks it within a minute." });
+  });
+
+  it("refuses a viewer and an approver before reading anything", async () => {
+    for (const message of ["Only an owner or admin can do that.", "Only an owner or admin can do that."]) {
+      authorizeMock.mockResolvedValueOnce({ ok: false, message });
+      expect(await run(() => attachDocumentAction(INITIAL, withFile({ orgSlug: "pinecrest", invoiceId: "inv-1" })))).toEqual({ ok: false, message });
+    }
+    expect(attachMock).not.toHaveBeenCalled();
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+
+  it("asks for a PDF of up to 4 MB when there is no file or it is too large, and says each refusal in its own sentence", async () => {
+    allow("owner");
+    expect(await run(() => attachDocumentAction(INITIAL, withFile({ orgSlug: "pinecrest", invoiceId: "inv-1" }, null)))).toEqual({ ok: false, message: "Choose a PDF of up to 4 MB." });
+    allow("owner");
+    const large = new File([new Uint8Array(4_000_001)], "big.pdf", { type: "application/pdf" });
+    expect(await run(() => attachDocumentAction(INITIAL, withFile({ orgSlug: "pinecrest", invoiceId: "inv-1" }, large)))).toEqual({ ok: false, message: "Choose a PDF of up to 4 MB." });
+    expect(attachMock).not.toHaveBeenCalled();
+    for (const code of ["same_file", "busy", "not_waiting", "off", "not_ready"] as const) {
+      allow("owner");
+      attachMock.mockRejectedValueOnce(new AttachDocumentError(code));
+      expect((await run(() => attachDocumentAction(INITIAL, withFile({ orgSlug: "pinecrest", invoiceId: "inv-1" })))).message).toBe(new AttachDocumentError(code).message);
+    }
+    allow("owner");
+    attachMock.mockRejectedValueOnce(new Error("storage down"));
+    expect(await run(() => attachDocumentAction(INITIAL, withFile({ orgSlug: "pinecrest", invoiceId: "inv-1" })))).toEqual({ ok: false, message: "That did not work. Try again in a moment." });
+    expect(raiseMock).not.toHaveBeenCalled();
   });
 });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { stoppedWhy } from "@/components/vx/decision-signals";
 import { invoiceDecision } from "@/components/vx/map";
 import type { LedgerEntry } from "@/lib/ledger";
+import { ruleNextStep } from "@/lib/next-step";
 import type { InvoiceRow } from "@/lib/queries";
 
 /**
@@ -294,6 +295,35 @@ describe("invoiceDecision: a rule that is not a limit names itself (2026-10-07)"
 
   it("still names the payment limit where that is the rule", () => {
     expect(guardrail("counterparty.payment_limit")).toMatchObject({ rule: "counterparty.payment_limit", attempted: 0.1, limit: 1 });
+  });
+});
+
+describe("invoiceDecision: a bill held for its vendor's document (document checks DK8, DK13)", () => {
+  // 8 USDC to a vendor whose limit is 50: the purchase order came from its document, so a person approves it.
+  const held = (detail: Record<string, unknown> = {}) =>
+    ({ seq: 21, id: "e21", ts: "2026-10-25T09:00:00.000Z", actor: "agent", domain: "ap", action: "ap_pay", summary: "",
+      detail: {
+        invoiceId: "inv-1",
+        currency: "USDC",
+        guardrailBlocked: true,
+        guardrailRule: "invoice.vendor_document",
+        observed: { paymentLimit: 50, riskLevel: "low" },
+        execution: { resultingStatus: "held" },
+        vendorDocument: { requestId: "req-1", source: "vendor", fileSha256: "ab".repeat(32) },
+        ...detail,
+      } }) as unknown as LedgerEntry;
+  const vendor = { id: "cp-1", name: "Northstar Studio", payment_limit: 50 } as never;
+
+  it.each([
+    ["a USDC bill", invoice({ amount: 8, status: "held" }), {}],
+    ["a EURC bill", invoice({ amount: 8, currency: "EURC", status: "held" }), { currency: "EURC", usdcValue: 9.36 }],
+  ])("names its own rule for %s, never the payment limit it is within, and offers no limit to edit", (_, bill, detail) => {
+    const decision = invoiceDecision(bill, vendor, [held(detail)], { network: "arc-testnet" });
+    expect(decision.guardrail?.rule).toBe("invoice.vendor_document");
+    expect(decision.guardrail?.limit).toBeUndefined();
+    expect(decision.guardrail?.reason).toBe("its purchase order came from the vendor's document, which code checked against the bill, and a person approves it");
+    expect(stoppedWhy(decision)).toBe("Code stopped it: its purchase order came from the vendor's document, and a person approves it.");
+    expect(ruleNextStep(decision.guardrail?.rule, { id: "cp-1", name: "Northstar Studio" })?.fix).toBeNull();
   });
 });
 

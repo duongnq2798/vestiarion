@@ -147,6 +147,8 @@ describe("0023 is idempotent", () => {
         { tbl: "decision_verdicts", col: "decided_by", action: "n" },
         // Who connected the workspace's Discord channel (0140): the connection stays, without the person.
         { tbl: "discord_webhooks", col: "connected_by", action: "n" },
+        // Who attached a vendor's document to a bill (0144): the document and its check stay, without the person.
+        { tbl: "document_requests", col: "attached_by", action: "n" },
         // Who made an early-payment offer (0125).
         { tbl: "early_payment_offers", col: "created_by", action: "n" },
         { tbl: "escrow_contracts", col: "created_by", action: "n" },
