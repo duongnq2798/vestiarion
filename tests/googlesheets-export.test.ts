@@ -141,6 +141,13 @@ function fakeGoogle(options: { fail?: (sent: Sent, google: FakeGoogle) => Respon
             if (request.addSheet) file.tabs.push({ sheetId: request.addSheet.properties.sheetId, title: request.addSheet.properties.title });
             const props = request.updateSheetProperties?.properties;
             if (props?.title) file.tabs.find((tab) => tab.sheetId === props.sheetId)!.title = props.title;
+            // A clear of the values from a row down: what is left reads as nothing, as Google drops trailing empty rows.
+            const clear = request.updateCells as { range: { sheetId: number; startRowIndex?: number; endRowIndex?: number }; fields: string } | undefined;
+            if (clear && clear.fields === "userEnteredValue" && clear.range.endRowIndex === undefined) {
+              const title = file.tabs.find((tab) => tab.sheetId === clear.range.sheetId)?.title;
+              const grid = title === undefined ? undefined : file.values.get(title);
+              if (grid) grid.length = Math.min(grid.length, clear.range.startRowIndex ?? 0);
+            }
           }
           return json({ replies: [] });
         }
@@ -297,6 +304,8 @@ describe("a first export of the month (close pack Sheets GS7-GS11)", () => {
       repeatCell: { range: { sheetId: 0, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: "userEnteredFormat.textFormat.bold" },
     });
     expect(format).toContainEqual({ repeatCell: { range: { sheetId: 0, startRowIndex: 1 }, cell: { userEnteredFormat: { wrapStrategy: "CLIP" } }, fields: "userEnteredFormat.wrapStrategy" } });
+    // Every value below the header cleared before the rows are written, so nothing left there survives the export.
+    expect(format).toContainEqual({ updateCells: { range: { sheetId: 0, startRowIndex: 1 }, fields: "userEnteredValue" } });
     const amountPaid = CLOSE_PACK_COLUMNS.indexOf("amount_paid");
     expect(format).toContainEqual({
       repeatCell: {
@@ -414,6 +423,36 @@ describe("the month's spreadsheet found again (close pack Sheets GS7)", () => {
     expect(google.files.find((file) => file.id === other)!.values.get("Payments")).toHaveLength(4);
   });
 
+  it("keeps the file it made when the list after its create does not show it yet, even beside an older one", async () => {
+    const { run } = workspace();
+    let made = "";
+    let other = "";
+    let lists = 0;
+    const google = fakeGoogle({
+      afterCreate: (fake) => {
+        // This export's file, then another export's, made a moment before it.
+        if (other) return;
+        made = fake.files[fake.files.length - 1].id;
+        other = fake.addFile({ tag: TAG, name: "theirs", createdTime: "2026-10-25T09:59:59.000Z" }).id;
+      },
+      fail: (one, fake) => {
+        if (one.method !== "GET" || one.url.pathname !== "/drive/v3/files") return null;
+        lists += 1;
+        if (lists !== 2) return null;
+        // Drive's search has not caught up with this export's own create: only the other file is listed.
+        const listed = fake.files.filter((file) => !file.trashed && file.tag === TAG && file.id !== made).sort((a, b) => a.createdTime.localeCompare(b.createdTime));
+        return new Response(JSON.stringify({ files: listed.map((file) => ({ id: file.id, createdTime: file.createdTime })) }), { status: 200, headers: { "content-type": "application/json" } });
+      },
+    });
+    const outcome = await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps));
+    expect(outcome).toMatchObject({ ok: true, spreadsheetId: made, created: true });
+    expect(google.files.find((file) => file.id === made)!.trashed).toBe(false);
+    expect(google.files.find((file) => file.id === other)!.trashed).toBe(false);
+    expect(google.sent.filter((one) => one.method === "PATCH")).toEqual([]);
+    expect(google.files.find((file) => file.id === made)!.values.get("Payments")).toHaveLength(4);
+    expect(entries()[0].detail).toMatchObject({ spreadsheetId: made, created: true });
+  });
+
   it("adds the tabs someone deleted or renamed, and leaves every other tab alone", async () => {
     const { run } = workspace();
     const google = fakeGoogle();
@@ -469,6 +508,24 @@ describe("the values (close pack Sheets GS8)", () => {
     expect((writes(google)[0].body as { data: Array<{ range: string }> }).data[1].range).toBe("Payments!A1:AY1");
     const format = (google.sent.find((one) => one.url.pathname.endsWith(":batchUpdate") && !one.url.pathname.includes("values"))!.body as { requests: SheetRequest[] }).requests;
     expect(format).toContainEqual(expect.objectContaining({ updateSheetProperties: expect.objectContaining({ properties: { sheetId: 0, gridProperties: { rowCount: 2, columnCount: 51, frozenRowCount: 1 } } }) }));
+    // Row 2, which the grid keeps and no value reaches, is cleared with every other row below the header.
+    expect(format).toContainEqual({ updateCells: { range: { sheetId: 0, startRowIndex: 1 }, fields: "userEnteredValue" } });
+  });
+
+  it("clears what was left in row 2 of a month that now has no payment, so the read back matches", async () => {
+    const { run } = workspace();
+    const pack = { ...samplePack(), rows: [] };
+    const google = fakeGoogle();
+    const header = [...CLOSE_PACK_COLUMNS];
+    google.addFile({
+      tag: TAG,
+      tabs: [{ sheetId: 0, title: "Payments" }, { sheetId: 1, title: "Summary" }],
+      // A note someone typed under the header, or a row from an earlier export of the month.
+      values: new Map([["Payments", [header, ["a note an accountant typed"]]]]),
+    });
+    expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google, pack }).deps))).toMatchObject({ ok: true, payments: 0, created: false });
+    expect(entries().map((entry) => entry.action)).toEqual(["close_pack_exported"]);
+    expect(google.files[0].values.get("Payments")).toEqual([header]);
   });
 });
 
@@ -518,6 +575,57 @@ describe("a failure after rows may have reached Google (close pack Sheets GS10, 
     });
     expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps))).toEqual({ ok: false, reason: "drive_full" });
     expect(entries()[0].detail).toMatchObject({ stage: "write", reason: "drive_full" });
+  });
+
+  const longPack = () => {
+    const base = samplePack();
+    return { ...base, rows: Array.from({ length: 600 }, (_, index) => ({ ...base.rows[0], paymentId: `pay-${index}` })) };
+  };
+  /** The values request that starts at row 502: the second of a pack of more than 500 rows. */
+  const secondChunk = (one: Sent) => one.url.pathname.endsWith("/values:batchUpdate") && JSON.stringify(one.body).includes('"Payments!A502:');
+
+  it("records a reconnect at the write when the second values request and its retry both answer 401, its first 500 rows already in", async () => {
+    const { run, fake } = workspace();
+    const google = fakeGoogle({ fail: (one) => (secondChunk(one) ? new Response(JSON.stringify({ error: { code: 401, status: "UNAUTHENTICATED" } }), { status: 401 }) : null) });
+    expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google, pack: longPack() }).deps))).toEqual({ ok: false, reason: "reconnect" });
+    expect(google.files[0].values.get("Payments")!.length).toBeGreaterThan(1);
+    expect(fake.requests.filter((request) => request.path === "/rest/v1/accounting_connections" && request.method === "PATCH")).toHaveLength(1);
+    expect(entries().map((entry) => entry.action)).toEqual(["close_pack_export_failed"]);
+    expect(entries()[0].detail).toMatchObject({ stage: "write", reason: "reconnect", spreadsheetId: google.files[0].id });
+  });
+
+  it("records a reconnect at the write when the second values request is refused for lacking the Drive permission", async () => {
+    const { run, fake } = workspace();
+    const google = fakeGoogle({
+      fail: (one) => (secondChunk(one) ? new Response(JSON.stringify({ error: { code: 403, errors: [{ reason: "insufficientPermissions" }] } }), { status: 403 }) : null),
+    });
+    expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google, pack: longPack() }).deps))).toEqual({ ok: false, reason: "reconnect" });
+    expect(fake.requests.filter((request) => request.method === "PATCH")).toHaveLength(1);
+    expect(entries().map((entry) => entry.action)).toEqual(["close_pack_export_failed"]);
+    expect(entries()[0].detail).toMatchObject({ stage: "write", reason: "reconnect" });
+  });
+
+  it("records a reconnect at the read back when it answers 401 and the refresh says invalid_grant", async () => {
+    const { run, fake } = workspace();
+    const google = fakeGoogle({
+      fail: (one) => {
+        if (one.url.hostname === "oauth2.googleapis.com") return new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 });
+        return one.url.pathname.includes("/values/Payments") ? new Response(JSON.stringify({ error: { code: 401 } }), { status: 401 }) : null;
+      },
+    });
+    expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps))).toEqual({ ok: false, reason: "reconnect" });
+    expect(fake.requests.filter((request) => request.path === "/rest/v1/accounting_connections" && request.method === "PATCH")).toHaveLength(1);
+    expect(entries().map((entry) => entry.action)).toEqual(["close_pack_export_failed"]);
+    expect(entries()[0].detail).toMatchObject({ stage: "read_back", reason: "reconnect", spreadsheetId: google.files[0].id });
+  });
+
+  it("records gone at the read back when the spreadsheet was deleted mid-export, and answers failed", async () => {
+    const { run, fake } = workspace();
+    const google = fakeGoogle({ fail: (one) => (one.url.pathname.includes("/values/Payments") ? new Response(JSON.stringify({ error: { code: 404, status: "NOT_FOUND" } }), { status: 404 }) : null) });
+    expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps))).toEqual({ ok: false, reason: "failed" });
+    expect(fake.requests.filter((request) => request.method === "PATCH")).toEqual([]);
+    expect(entries().map((entry) => entry.action)).toEqual(["close_pack_export_failed"]);
+    expect(entries()[0].detail).toMatchObject({ stage: "read_back", reason: "gone", spreadsheetId: google.files[0].id });
   });
 });
 
@@ -655,14 +763,32 @@ describe("a create that times out (close pack Sheets GS7, GS12)", () => {
     const next = await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps));
     expect(next).toMatchObject({ ok: true, created: false, spreadsheetId: google.files[0].id });
     expect(google.files).toHaveLength(1);
+    // Never formatted, so Google's own first tab becomes Payments rather than staying, empty, in front of it.
+    expect(google.files[0].tabs).toEqual([{ sheetId: 0, title: "Payments" }, { sheetId: 1, title: "Summary" }]);
   });
 
-  it("never sends a rename or a format again after a 5xx", async () => {
+  it("never sends a rename or a format again after a 5xx; the next export formats the file as one just made", async () => {
     const { run } = workspace();
-    const google = fakeGoogle({ fail: (one) => (one.url.pathname.endsWith(":batchUpdate") && !one.url.pathname.includes("values") ? new Response("{}", { status: 500 }) : null) });
+    let failing = true;
+    const google = fakeGoogle({ fail: (one) => (failing && one.url.pathname.endsWith(":batchUpdate") && !one.url.pathname.includes("values") ? new Response("{}", { status: 500 }) : null) });
     expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps))).toEqual({ ok: false, reason: "unavailable" });
     expect(google.calls().filter((call) => call.endsWith(":batchUpdate"))).toHaveLength(1);
     expect(entries()).toEqual([]);
+    expect(google.files[0].tabs).toEqual([{ sheetId: 0, title: "Sheet1" }]);
+
+    failing = false;
+    const next = await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps));
+    expect(next).toMatchObject({ ok: true, created: false, spreadsheetId: google.files[0].id });
+    expect(google.files[0].tabs).toEqual([{ sheetId: 0, title: "Payments" }, { sheetId: 1, title: "Summary" }]);
+  });
+
+  it("leaves a lone tab of a person's alone when it is not Google's first one", async () => {
+    const { run } = workspace();
+    const google = fakeGoogle();
+    // Payments and Summary deleted, a tab of a person's left: never Google's own first tab, whose id is 0.
+    google.addFile({ tag: TAG, tabs: [{ sheetId: 5, title: "My notes" }] });
+    expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps))).toMatchObject({ ok: true });
+    expect(google.files[0].tabs.map((tab) => tab.title)).toEqual(["My notes", "Payments", "Summary"]);
   });
 
   it("starts no call after 90 seconds, and answers unavailable", async () => {

@@ -141,10 +141,11 @@ function tabTitled(tabs: Array<{ sheetId: number; title: string }>, title: strin
 
 /**
  * The two tabs' properties and formats, in one `batchUpdate` before the values (GS8, GS9). Payments and Summary are
- * Vestiarion's: a spreadsheet just made (`fresh`) has its first tab renamed Payments; either tab missing is added, one
- * renamed by case is named again. Any other tab is left alone. Payments' grid is sized to the rows, which also removes
- * rows left from a longer export, its header frozen and bold, its money columns and the attempt count formatted as
- * numbers and its data rows clipped; Summary's label column is bold, both its columns wrapped. Never sent twice.
+ * Vestiarion's: a spreadsheet never formatted (`fresh`) has its first tab renamed Payments; either tab missing is added,
+ * one renamed by case is named again. Any other tab is left alone. Payments' grid is sized to the rows, which also
+ * removes rows left from a longer export, every value under its header cleared, its header frozen and bold, its money
+ * columns and the attempt count formatted as numbers and its data rows clipped; Summary's label column is bold, both
+ * its columns wrapped. Never sent twice.
  */
 export async function formatTabs(
   token: string,
@@ -177,6 +178,9 @@ export async function formatTabs(
 
   requests.push(
     grid(payments, paymentRows, PAYMENTS_WIDTH, 1),
+    // Every value below the header, cleared before the rows are written: row 2 of a month with no payment, which the
+    // grid keeps and no value reaches, and any cell a person typed there, never survive to fail the read back.
+    { updateCells: { range: { sheetId: payments, startRowIndex: 1 }, fields: "userEnteredValue" } },
     bold({ sheetId: payments, startRowIndex: 0, endRowIndex: 1 }),
     wrap({ sheetId: payments, startRowIndex: 1 }, "CLIP"),
     ...MONEY_COLUMNS.map((column) => numberFormat(payments, CLOSE_PACK_COLUMNS.indexOf(column), AMOUNT_FORMAT)),

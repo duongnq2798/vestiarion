@@ -79,8 +79,9 @@ export async function recordClosePackExport(input: {
 
 /**
  * Appends close_pack_export_failed, best effort (close pack Sheets GS11): an export to Google Sheets that failed after
- * rows may have reached Google, at the values write or at the read back. A failure before any row was sent records
- * nothing: nothing of the pack left. Ids only, never an email, a token or a link.
+ * rows may have reached Google, at the values write or at the read back, whatever the failure: `reconnect` when Google
+ * stopped taking the grant, `gone` when the spreadsheet was deleted mid-export. A failure before any row was sent
+ * records nothing: nothing of the pack left. Ids only, never an email, a token or a link.
  */
 export async function recordClosePackExportFailed(input: {
   orgId: string;
@@ -89,7 +90,7 @@ export async function recordClosePackExportFailed(input: {
   connectionId: string;
   spreadsheetId: string | null;
   stage: "write" | "read_back";
-  reason: "rate_limited" | "unavailable" | "forbidden" | "drive_full" | "bad_response" | "mismatch";
+  reason: "rate_limited" | "unavailable" | "reconnect" | "forbidden" | "drive_full" | "gone" | "bad_response" | "mismatch";
 }): Promise<void> {
   const { pack } = input;
   await appendLedgerEntryBestEffort(input.orgId, {

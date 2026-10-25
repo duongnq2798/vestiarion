@@ -13,7 +13,7 @@ import { googleSheetsReady } from "./ready";
 import { createMonthFile, findMonthFile, formatTabs, readPayments, renameFile, sheetTabs, trashFile, writeValues } from "./sheets";
 import { markSheetsReconnect } from "./store";
 import { NO_ACCOUNT_NAME } from "./views";
-import { exporterWords, monthTag, paymentsSha256, sheetValues, spreadsheetTitle, spreadsheetUrl, summaryValues } from "./table";
+import { PAYMENTS_TAB, SUMMARY_TAB, exporterWords, monthTag, paymentsSha256, sheetValues, spreadsheetTitle, spreadsheetUrl, summaryValues } from "./table";
 
 /**
  * One export of a month's close pack to Google Sheets, in the workspace's scope
@@ -46,12 +46,19 @@ export const EXPORT_DEADLINE_MS = 90_000;
 
 type FailedReason = Parameters<typeof recordClosePackExportFailed>[0]["reason"];
 
-/** The reason a failure after the values write was sent is recorded with; null for one that sent nothing of the pack. */
-const RECORDED: Partial<Record<GoogleFailure, FailedReason>> = {
+/**
+ * The reason each failure is recorded with once the values write was sent (GS11): from then on rows may be in the
+ * spreadsheet, so every failure is recorded, a grant Google no longer takes and a file gone mid-export included. A
+ * failure before that sent nothing of the pack and records nothing.
+ */
+const RECORDED: Record<GoogleFailure, FailedReason> = {
   rate_limited: "rate_limited",
-  unavailable: "unavailable",
+  unauthorized: "reconnect",
+  reconnect: "reconnect",
   forbidden: "forbidden",
   drive_full: "drive_full",
+  gone: "gone",
+  unavailable: "unavailable",
   bad_response: "bad_response",
 };
 
@@ -157,9 +164,12 @@ export async function exportClosePackToSheet(
     const file = await monthFile({ call, tag, name, http });
     spreadsheetId = file.id;
 
-    // 6. Its tabs, Vestiarion's two formatted afresh (GS8, GS9).
+    // 6. Its tabs, Vestiarion's two formatted afresh (GS8, GS9). A file whose only tab is Google's own first one (id 0),
+    // named neither Payments nor Summary, was never formatted: a format leaves both tabs in one batchUpdate, or none.
+    // Its first tab becomes Payments, as in a file this run made, so no empty tab stays in front of the data.
     const tabs = await call((accessToken) => sheetTabs(accessToken, file.id, http));
-    await call((accessToken) => formatTabs(accessToken, file.id, { tabs, fresh: file.fresh, rows: payments.length - 1, summaryRows: summary.length }, http));
+    const untouched = tabs.length === 1 && tabs[0].sheetId === 0 && ![PAYMENTS_TAB, SUMMARY_TAB].some((title) => tabs[0].title.toLowerCase() === title.toLowerCase());
+    await call((accessToken) => formatTabs(accessToken, file.id, { tabs, fresh: file.fresh || untouched, rows: payments.length - 1, summaryRows: summary.length }, http));
 
     // 7. The values: from here rows may reach Google, and a failure is recorded (GS11).
     stage = "write";
@@ -182,8 +192,7 @@ export async function exportClosePackToSheet(
       if (stage !== "before") await record.failed({ orgId: input.orgId, userId: input.user.id, pack, connectionId: live.id, spreadsheetId, stage, reason: "bad_response" });
       return { ok: false, reason: "failed" };
     }
-    const recorded = RECORDED[error.failure];
-    if (stage !== "before" && recorded) await record.failed({ orgId: input.orgId, userId: input.user.id, pack, connectionId: live.id, spreadsheetId, stage, reason: recorded });
+    if (stage !== "before") await record.failed({ orgId: input.orgId, userId: input.user.id, pack, connectionId: live.id, spreadsheetId, stage, reason: RECORDED[error.failure] });
     if (error.failure === "reconnect" || error.failure === "unauthorized") return reconnect();
     return { ok: false, reason: ANSWER[error.failure] };
   }
@@ -193,9 +202,12 @@ type Call = <T>(send: (accessToken: string) => Promise<T>) => Promise<T>;
 
 /**
  * The month's spreadsheet (GS7): the oldest file under its tag that still answers, renamed; else a new one. After a
- * create the tag is listed again: when two exports raced and both made one, each keeps the oldest and trashes its own.
- * A file that is gone (deleted, or out of this grant's reach) is passed over, never trashed. `fresh`: made in this run,
- * by this export or the one it raced, so its first tab is still Google's own.
+ * create the tag is listed again: when two exports raced and both made one, the one whose own file is listed and is not
+ * the oldest trashes its own and takes the oldest. When its own file is not listed yet (Drive's search can lag a
+ * create), it cannot tell whether it raced, so it keeps its own: at worst a duplicate stays, and the next export takes
+ * the oldest. A file that is gone (deleted, or out of this grant's reach) is passed over, never trashed. `fresh`: made
+ * in this run, by this export or the one it raced, so its first tab is still Google's own; the export also treats as
+ * fresh a found file that was never formatted (a run that made it stopped before its format).
  */
 async function monthFile(input: { call: Call; tag: string; name: string; http: GoogleHttp }): Promise<{ id: string; created: boolean; fresh: boolean }> {
   const { call, tag, name, http } = input;
@@ -205,14 +217,15 @@ async function monthFile(input: { call: Call; tag: string; name: string; http: G
     gone.add(file.id);
   }
   const made = await call((token) => createMonthFile(token, { name, tag }, http));
-  const oldest = (await call((token) => findMonthFile(token, tag, http))).find((file) => !gone.has(file.id))?.id ?? made;
-  if (oldest === made) return { id: made, created: true, fresh: true };
+  const after = (await call((token) => findMonthFile(token, tag, http))).filter((file) => !gone.has(file.id));
+  // Its own file not listed yet: whether it raced cannot be told, so it keeps its own rather than trash both racers' files.
+  if (after.length === 0 || after[0].id === made || !after.some((file) => file.id === made)) return { id: made, created: true, fresh: true };
   try {
     await call((token) => trashFile(token, made, http));
   } catch (error) {
     // The duplicate stays in the Drive under the same tag: the next export finds the oldest first again.
     console.error("google sheets: a duplicate spreadsheet was not trashed", error instanceof GoogleError ? error.failure : "unknown error");
   }
-  return { id: oldest, created: false, fresh: true };
+  return { id: after[0].id, created: false, fresh: true };
 }
 
