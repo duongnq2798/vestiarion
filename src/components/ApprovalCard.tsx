@@ -27,7 +27,7 @@ import { paymentSendingToast, paymentToastId, withPaymentReceipt } from "@/compo
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { COSIGN_BLOCKED, type CosignState } from "@/lib/cosign-state-rules";
-import { addedDetailsSentence } from "@/lib/added-details";
+import { addedDetailsSentence, missingDetails } from "@/lib/added-details";
 import { bankAccountLine, bankQuoteLine } from "@/lib/bank-payouts/words";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
 import { agentResumes, CASH_SHORTFALL, SHADOW_VERDICT, counterpartyPath, ruleNextStep, VENDOR_DOCUMENT } from "@/lib/next-step";
@@ -299,8 +299,9 @@ export default function ApprovalCard({
     !payable.paymentSent &&
     payable.lastAttempt?.state !== "in_flight" &&
     (payable.poReference === null || !payable.goodsReceived);
-  // Beside Add details, while it waits for its purchase order or goods receipt (DK11).
-  const attach = canAddDetails && payable.status === "awaiting_info" ? documentChecks : null;
+  // Beside Add details, while it waits for its purchase order or goods receipt (DK11): what `missingDetails` names, so a
+  // vendor paid without purchase orders, its goods received, is offered nothing the server would refuse.
+  const attach = canAddDetails && payable.status === "awaiting_info" && missingDetails(payable) !== null ? documentChecks : null;
 
   return (
     <Card asChild tone={payable.status === "flagged" ? "refused" : processing ? "agent" : "held"}>

@@ -385,6 +385,18 @@ describe("Attach a document (document checks DK11)", () => {
     }
   });
 
+  it("is not offered on a bill whose vendor is paid without purchase orders, with its goods received", () => {
+    // Waiting for information, say on the model's own question: a purchase order is not what it lacks.
+    approvals({ payable: { poReference: null, goodsReceived: true, purchaseOrderRequired: false } });
+    expect(buttonNamed("Attach a document", container)).toBeUndefined();
+    // The same vendor's bill still waiting for its goods receipt is offered it.
+    approvals({ payable: { poReference: null, goodsReceived: false, purchaseOrderRequired: false } });
+    expect(buttonNamed("Attach a document", container)).toBeTruthy();
+    // With no word from the server, a purchase order is needed, as the server reads it.
+    approvals({ payable: { poReference: null, goodsReceived: true } });
+    expect(buttonNamed("Attach a document", container)).toBeTruthy();
+  });
+
   it("is offered on Bills beside Add details, only on a bill that waits for information", () => {
     const bills = (status: string | undefined, documentChecks: "shadow" | "on" | null = "on", rights = true) =>
       renderToStaticMarkup(

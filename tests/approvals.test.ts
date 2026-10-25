@@ -2118,12 +2118,15 @@ describe("listWaitingPayables", () => {
         bridgeFeeUsdc: null,
         poReference: null,
         goodsReceived: false,
+        purchaseOrderRequired: true,
         addedSinceDecision: null,
         guardrailRule: null,
       },
     ]);
     const listing = fake.requests.find((r) => r.path === "/rest/v1/invoices" && r.method === "GET" && !r.params.get("id"));
     expect(listing?.params.get("select")).toContain("currency");
+    // Whether its vendor needs a purchase order, for the card's Attach a document (document checks DK11).
+    expect(listing?.params.get("select")).toContain("counterparties(name,risk_level,address,chain,purchase_order_required)");
     expect(listing?.params.get("direction")).toBe("eq.payable");
     expect(listing?.params.get("status")).toBe("in.(held,flagged,awaiting_info,processing)");
     expect(listing?.params.get("order")).toBe("due_date.asc");
