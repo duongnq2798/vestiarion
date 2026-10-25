@@ -4,6 +4,7 @@ import type { ExchangeOutcome, ExternalOrganisation, ProviderTokens, RefreshOutc
 import { maskEmail } from "../payment-notices";
 import { DRIVE_API, GOOGLE_AUTHORIZE, GOOGLE_REVOKE, GOOGLE_TOKEN, GoogleError, apiInit, googleCall, googleFetch, jsonOf, oauthForm, type GoogleHttp } from "./http";
 import { GOOGLE_SHEETS_SCOPES, type GoogleSheetsSettings } from "./settings";
+import { NO_ACCOUNT_NAME } from "./views";
 
 /**
  * Google's OAuth 2.0 authorization code flow for Google Sheets
@@ -158,6 +159,6 @@ export async function googleAccount(tokens: ProviderTokens, deps: GoogleHttp = {
   const permissionId = typeof user.permissionId === "string" ? user.permissionId : "";
   if (!PERMISSION_ID.test(permissionId)) throw new GoogleError("bad_response", "Google about.get: no permission id that reads");
   const email = typeof user.emailAddress === "string" ? user.emailAddress.trim() : "";
-  const name = EMAIL.test(email) ? maskEmail(email).slice(0, 200) : "A Google account";
+  const name = EMAIL.test(email) ? maskEmail(email).slice(0, 200) : NO_ACCOUNT_NAME;
   return [{ externalOrgId: permissionId, name, connectionId: null }];
 }
