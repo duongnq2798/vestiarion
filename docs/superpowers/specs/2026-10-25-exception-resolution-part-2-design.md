@@ -65,24 +65,62 @@ read, and a file whose hash differs or that is gone from storage. The kind and t
 (`file_type`, `file_size`) before anything is downloaded, so a 10 MB image is never fetched. If this is wrong: photos
 of documents never match, and a person adds the details, as today.
 
-The cycle never parses a PDF on its own thread. The scheduled tick runs every live workspace's cycle on one thread, and
-pdf.js sets itself no limit, so a PDF of a few kilobytes built to keep it busy (forms drawn inside forms: about 95 s at
-fan-out 10, depth 6, on unpdf 1.8.1) or to fill its memory would hold or end every workspace's cycle, payments included.
-`readPdfBounded` (`src/lib/invoice-document/read.ts`, with `src/lib/invoice-document/pdf-worker.ts`) reads it to the
-text `readDocument` gives, in a `node:worker_threads` worker:
-- with its own heap (256 MB old generation, 32 MB young) and 15 s from its start, after which it is terminated;
-- refusing a PDF of more than 50 pages before any page is read, and reading pages only until the text passes 20,000
-  characters (signed `truncated: true`). Neither stops forms nested inside one page: the time limit is the bound.
-A PDF stopped at either limit, or that the worker cannot parse, is unreadable ("This PDF could not be read."), recorded
-like any other, and leaves the queue. A worker that cannot start or load unpdf fails the stage instead: that is not the
-file's doing, and the next cycle tries again. The worker's script is given as text and loads unpdf from
-`node_modules`, which `serverExternalPackages` in `next.config.ts` keeps there.
+The cycle never parses a PDF unbounded. The scheduled tick runs every live workspace's cycle in one process, four at a
+time, and pdf.js sets itself no limit, so a PDF of a few kilobytes built to keep it busy (forms drawn inside forms: about
+95 s at fan-out 10, depth 6, on unpdf 1.8.1) or to fill memory would hold or end every workspace's cycle, payments
+included. pdf.js decodes each stream into an ArrayBuffer, outside any JavaScript heap: a one-page PDF of 0.5 MB whose
+content stream is deflated spaces took a process from 107 MB to 1.25 GB, and one of 1 MB to 2.3 GB, enough to end a
+2 GB function. `readPdfBounded` (`src/lib/invoice-document/read.ts`) reads it to the text `readDocument` gives, in
+three steps:
+1. **The pre-scan** (`src/lib/invoice-document/pdf-prescan.ts`, strict). Before pdf.js sees the file, every stream it
+   would decode to read text is decoded as pdf.js decodes it, counting the bytes, against one budget for the whole
+   file: 16 MB decoded. It ports pdf.js's lexer, parser and FlateDecode, ASCIIHexDecode and ASCII85Decode decoders,
+   since zlib refuses streams pdf.js decodes (a copy from before the stream's start, an incomplete code table), and
+   reads each stream to the end of the file, never to the length its dictionary claims. Image XObjects and embedded
+   files are left out, since pdf.js never decodes them to read text, unless a page's contents, a font or a character
+   map names them. The test fixtures decode to under 90 KB (Northwind's invoice, 88 KB). A file over the budget is
+   refused having decoded no more than it (a 600 MB bomb in 7 ms). So is a stream read for text whose filter it cannot
+   measure (LZW, run-length, Brotli, an image codec, or a filter in an object it cannot find), an encrypted file, and
+   a file of more than 10,000 streams or 64 MB of work.
+2. **The worker** (`src/lib/invoice-document/pdf-worker.ts`), a `node:worker_threads` worker with:
+   - its own heap (256 MB old generation, 32 MB young), which bounds pdf.js's JavaScript objects only;
+   - a budget for the process's memory: the parent reads its resident size every 25 ms and stops the worker once it
+     has grown 512 MB since the worker started (a 1 GB bomb read past the pre-scan stops at about 500 MB, in about a
+     second). It bounds what the pre-scan cannot see, such as one stream decoded many times over;
+   - 15 s from its start, after which it is terminated;
+   - a refusal of more than 50 pages before any page is read, and pages read only until the text passes 20,000
+     characters (signed `truncated: true`). Neither stops forms nested inside one page: the time limit is the bound.
+3. **One parse at a time per process.** The count, the parse and the clear below run in one turn of a queue
+   (`oneParseAtATime`), whichever workspace's cycle asks; the worker's clocks and memory baseline start when it does.
+   Invoices parse in well under a second, and the tick's cycles share one CPU anyway.
 
-Each parse is counted on the row before it begins (`parse_attempts`, 0144's `start_document_parse`), and the count is
-cleared once it ends, whatever it found (`finish_document_parse`). A parse that took the whole run down with it is
-never cleared: a row whose count is already 2 is recorded unreadable with no third parse. Before those functions, the
-stage parses with nothing counted. If this is wrong: a legitimate PDF of more than 50 pages, or one that takes longer
-than 15 s, is not checked, and a person adds the details.
+Who is at fault decides what follows:
+- **The file's, for good.** The pre-scan's refusals, more than 50 pages, a parse error pdf.js reports, the worker's
+  own heap filled, a worker that stopped once running, and a timeout while no other PDF was parsed on the cycle's
+  thread: unreadable ("This PDF could not be read."), recorded like any other, and the request leaves the queue.
+- **Maybe the file's.** A stop at the process's memory budget, which counts every thread's memory, and a timeout while
+  `readDocument` parsed a PDF on the cycle's thread (`countedParse`): nothing is recorded or signed, the cycle's log says
+  "Stopped reading Northwind Hosting's document before it finished; the next cycle reads it again", the stage goes on to
+  the next document, and the read stays counted (below).
+- **Not the file's.** A worker that never came online (Node reports a thread it could not make,
+  `ERR_WORKER_INIT_FAILED`, through the worker's `error` event, not by throwing) or could not load unpdf: the stage
+  fails, the journal says so, the count is cleared, and the next cycle tries again. The worker's script is given as text
+  and loads unpdf from `node_modules`, which `serverExternalPackages` in `next.config.ts` keeps there.
+
+Each parse is counted before it begins (`parse_attempts`, 0144's `start_document_parse`), which answers how many reads of
+the same file (its SHA-256), on any of the workspace's requests, began and never finished. A parse that ends, whatever
+it found, clears them all (`finish_document_parse`); a stop that may not be the file's does not, and neither does a run
+that ended mid-parse. Once a file's count reaches 2, it is recorded unreadable with no third parse, however often it is
+sent or attached again. With one parse at a time per process, a run that ends mid-parse leaves one read unfinished: the
+one that was running. Before those functions, the stage parses with nothing counted.
+
+`readDocument` (From a document, invoices by email, the Chrome extension, chats) runs the same pre-scan, lenient: it
+refuses only a file it measures past 16 MB decoded ("This PDF could not be read. Paste the invoice's text instead."),
+and leaves what it cannot measure to pdf.js, as before. Every existing PDF fixture and test still reads.
+
+If this is wrong: a legitimate PDF of more than 50 pages, one that takes longer than 15 s, one whose streams decode past
+16 MB, an encrypted one, or one whose text uses LZW is not checked, and a person adds the details. So is one stopped
+twice at the memory budget, or by two runs that ended while it was being read.
 
 **DK4. The model reads; code compares.** The model is shown the document's text alone, never the bill's vendor, amount
 or purchase order, so an instruction in the document cannot aim at the bill's figures. Each value it returns passes
@@ -247,7 +285,8 @@ one who types it, and the ledger names who attached it.
   checked outside shadow, matched or mismatched, is skipped ("it is the same file as one already checked for this
   bill"), with no model call. A check that skipped the file or found it unreadable never compared it, so the same file
   sent or attached again is read: a vendor's document that arrived while a person had the bill claimed, or that was
-  gone from storage, can still be checked.
+  gone from storage, can still be checked. Its unfinished reads come with it (DK3): a file whose reads never finished
+  twice is unreadable on every request of the workspace.
 - **The file is the one checked.** The function refuses a SHA-256 that is not the row's.
 - **Two documents for one bill.** The older is checked first. Once it adds the purchase order, the newer finds nothing
   missing, or the compare-and-set fails, and is skipped.
@@ -399,9 +438,10 @@ authenticated and `vestiarion_tenant`, and granted to `service_role`. A refusal 
   - Otherwise it sets the check columns and returns `written` or `checked`.
   - It changes no status, amount, currency, address or goods receipt, and moves no money.
 - **`start_document_parse(p_org_id, p_id)`** `returns integer`: on the org's answered request with `checked_at` null,
-  adds one to `parse_attempts` and returns the count before it; null for any other request, which it leaves alone (DK3).
-- **`finish_document_parse(p_org_id, p_id)`** `returns void`: sets `parse_attempts` back to 0 on the org's request with
-  `checked_at` null.
+  adds one to `parse_attempts`, and returns the sum of `parse_attempts` over the org's requests with the same
+  `file_sha256` (this one included), less the one just added; null for any other request, which it leaves alone (DK3).
+- **`finish_document_parse(p_org_id, p_id)`** `returns void`: sets `parse_attempts` back to 0 on every request of the
+  org with that request's `file_sha256`, checked or not.
 - `notify pgrst, 'reload schema'`, and a commented "Down" block, as in 0142.
 
 A member's files sit in the same folder, so `documentFilesOf`, `removeWorkspaceDocumentFiles` and the sample-data
@@ -598,12 +638,14 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
 - **The setting goes off with documents unchecked.** They wait, and are checked if it goes back to shadow or on, as
   long as their bill still waits.
 - **The file is gone from storage, or its hash differs.** Unreadable, with no model call.
-- **A PDF that keeps pdf.js busy or fills its memory.** The worker is stopped at 15 s or at its heap, and the file is
-  unreadable; the thread that runs the cycles never parsed it (DK3).
-- **A run that ends during a parse anyway.** The count stays on the row: after two, the file is unreadable with no
-  third parse (DK3).
-- **The PDF reader cannot start or load.** The stage fails and the journal says so; the request waits, its count
-  cleared, for the next cycle.
+- **A PDF that keeps pdf.js busy or fills its memory.** The pre-scan refuses one whose streams would decode past
+  16 MB; the worker is stopped at 15 s or at its heap, and the file is unreadable. A stop at the process's memory
+  budget is tried again next cycle, counted. The thread that runs the cycles never parsed it (DK3).
+- **A run that ends during a parse anyway.** The count stays: after two unfinished reads of that file in the workspace,
+  on any request, it is unreadable with no third parse. One parse runs at a time per process, so only the file being
+  read is counted (DK3).
+- **The PDF reader cannot start or load.** A worker that never came online included: the stage fails and the journal
+  says so; the request waits, its count cleared, for the next cycle.
 - **The ledger append fails after the function committed.** The cycle stage fails and the journal says so. The
   purchase order is on the bill without its `document_checked` entry, and the bill is still held by DK8: the marker is
   in the table, and the `ap_*` entry carries `vendorDocument`.
@@ -627,9 +669,10 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
 - **Untrusted files.**
   - Only PDFs of at most 4,000,000 bytes reach the PDF parser (`unpdf`, server-side, as for **From a document**).
     Images are never parsed.
-  - The cycle parses each in a worker thread with its own heap and a 15 s limit, at most 50 pages, never on the
-    thread every workspace's cycle runs on, and parses no file a third time after two parses that never finished
-    (DK3).
+  - The cycle refuses a file whose streams would decode past 16 MB before pdf.js sees it, then parses each in a
+    worker thread with its own heap, a 512 MB budget for the process's memory and a 15 s limit, at most 50 pages, one
+    at a time per process, never on the thread every workspace's cycle runs on, and parses no file a third time after
+    two reads of it in the workspace that never finished (DK3).
   - A file is known by its first bytes, and read only when its hash is the one recorded.
   - A path is built from the row and checked against the org's folder.
   - The member's upload never overwrites.
@@ -656,6 +699,14 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
   `BILL_STAGES` after `treasury.insufficient_eurc` and before the same work and the project's budget, settled from
   the entry's `vendorDocument`, and `policy-replay-read.ts` gives it words.
 - Parsing a document once at intake rather than in the cycle: the cycle's parse is bounded instead (DK3).
+- Bounding pdf.js's time on the paths that parse on the thread that asks (`readDocument`: From a document, invoices by
+  email, the Chrome extension, chats). They get the lenient pre-scan only: a nested-forms PDF still holds that thread,
+  and an encrypted or LZW file is not measured there, as before this change.
+- Decrypting a PDF, or measuring LZW, run-length or Brotli: the cycle refuses such files.
+- A record of unfinished reads per workspace, whatever the file: a file changed by one byte starts its count again.
+  The pre-scan, the memory budget and one parse at a time per process are what keep such a file from ending the run.
+- Parsing in a child process under an operating-system memory limit. The memory budget measures the process from the
+  parent instead, so a stop there counts every thread's memory, and is tried again rather than blamed on the file.
 
 ## Tests (write first)
 
@@ -681,6 +732,9 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
   `email_domain`.
 - `start_document_parse` answers 0, 1, 2 as reads begin, and `finish_document_parse` clears the count; null, and no
   count, for a checked request, another workspace's or an unknown one; every row starts at 0, a pre-0144 one included.
+  The count is the file's, across the workspace's requests: the same file attached again after two unfinished reads
+  answers 2, while another file starts at 0; a finished read clears every request of the workspace with that file; and
+  another workspace's copy of the file is neither counted nor cleared.
 - Grants: anon, authenticated and `vestiarion_tenant` cannot execute any of the four functions. The tenant reads the new
   columns of its own workspace only.
 
@@ -735,6 +789,9 @@ PO-1042, 200.00 and an address; no model key, so the heuristic reader):
   unreadable, with no model call; each parse is counted before it begins and cleared after, before the check is
   recorded; a row whose count is 2 is unreadable with no parse; one at 1 is read; before 0144's functions it is read
   with nothing counted; a failure to count stops the stage; a request checked elsewhere is parsed and signed nothing.
+  A stop at the memory budget is not cleared, records and signs nothing, logs that the next cycle reads it again, and
+  the next document is still checked; a reader that could not start fails the stage and clears the count; two
+  workspaces' stages run at once parse one document at a time, each start followed by its own finish.
 - **Limits.** At most 5 per cycle; an empty read token stops the loop.
 
 **`tests/invoice-document-bounded.test.ts`** (`readPdfBounded`, the real worker and unpdf):
@@ -744,6 +801,29 @@ PO-1042, 200.00 and an address; no model key, so the heuristic reader):
   24 MB heap it stops as `memory`.
 - 51 pages are refused and 50 read; text past 20,000 characters stops the pages and reads as `truncated`.
 - With no unpdf to load (another working directory), it throws a plain error, not a refusal.
+- `PDF_LIMITS` carries `maxRssGrowthMb: 512`. A 600 MB inflate bomb of under 1 MB is refused before any worker
+  starts, in under 5 s, with the process growing less than 128 MB. A 300 MB one read in the worker directly, with a
+  128 MB budget, stops as `memory` with `retry`, the process's peak under 384 MB above its start. A timeout while
+  `readDocument` parsed on the calling thread has `retry`, and `readPdfBounded` passes it on; one alone, and a full heap
+  of the worker's own, have none. A page that draws a 48 MB image reads its text.
+
+**`tests/invoice-document-prescan.test.ts`** (`prescanPdf`, pure):
+- Every PDF the tests read passes, each decoding to under 1 MB; a deflated content stream counts to the byte, and each
+  step of an ASCII85 or ASCIIHex chain counts.
+- A 600 MB bomb, once or twice deflated, is refused in strict and lenient mode, having decoded under 17 MB, in under
+  3 s. A stream zlib refuses as "too far back" and pdf.js decodes to 64 MB is refused; the port decodes every stream
+  zlib can to the same bytes.
+- A filter is found abbreviated, escaped, as `/F`, in another object or after a comment; a `stream` no object led to
+  is inflated anyway.
+- An image a page draws is left out; the same stream as the page's content, in a contents array kept in another
+  object, or named by a page inside an object stream, is counted.
+- An image's DCT passes; LZW, run-length, Brotli and the image codecs on a stream read for text, and a filter in an
+  object it cannot find, are refused in strict mode and left to pdf.js in lenient mode; so is an encrypted file, and a
+  file over the stream or work limits.
+
+**`tests/invoice-document-worker-start.test.ts`** (a stand-in for node's Worker): an `error` before `online`,
+`ERR_WORKER_INIT_FAILED` or any other, and an exit before it, are a plain Error, through `readPdfBounded` too; an error
+or exit once online is `stopped`, and `ERR_WORKER_OUT_OF_MEMORY` then is `memory`, neither with `retry`.
 
 **`tests/document-requests-stage.test.ts`** (addition): 20 documents members attached today, with no email domain, leave
 the agent's 20 a day whole: the bill that qualifies is still asked about and emailed, and the day's read filters on

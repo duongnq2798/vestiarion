@@ -20,14 +20,24 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   that matches adds the bill's purchase order, spelled as the document writes it, and nothing else; the agent then
   checks the bill again and holds it for a person to approve: it never pays or schedules such a bill on its own. A
   mismatch keeps the bill waiting, and its card on Approvals and on Bills gives the reason, such as "The document says
-  8.50 USDC; the bill says 8.00 USDC."; an image, a scan, a PDF over 4 MB or of more than 50 pages, or one that cannot
-  be read within 15 seconds is not checked, and the card says so. Each document is read on its own, with its own time
-  and memory limit, apart from the agent's work for every other workspace. In shadow, each document is read and
-  compared, and the bill never changes. The goods receipt is never marked from a document: a person ticks it. Owners and
-  admins can also **Attach a document** a vendor emailed them, a PDF of up to 4 MB, for the same check; attaching one
-  does not use up the 20 vendor requests a workspace makes a day, and a file that could not be checked may be sent or
-  attached again. Each check is recorded once as `document_checked`, with the file's SHA-256 and the values compared,
-  never the document's text. Needs migration 0144; until it runs, documents are shown, not checked, as before.
+  8.50 USDC; the bill says 8.00 USDC."; an image, a scan, a PDF over 4 MB or of more than 50 pages, one that cannot
+  be read within 15 seconds, one built to expand to more than 16 MB once decompressed, or a password-protected one is
+  not checked, and the card says so. Each document is measured before it is opened, then read on its own, one at a
+  time, within its own time and memory limits, apart from the agent's work for every other workspace; a read stopped
+  for a reason that may not be the document's is tried again at the next cycle, up to twice for the same file. In
+  shadow, each document is read and compared, and the bill never changes. The goods receipt is never marked from a
+  document: a person ticks it. Owners and admins can also **Attach a document** a vendor emailed them, a PDF of up to
+  4 MB, for the same check; attaching one does not use up the 20 vendor requests a workspace makes a day, and a file
+  that could not be checked may be sent or attached again. Each check is recorded once as `document_checked`, with the
+  file's SHA-256 and the values compared, never the document's text. Needs migration 0144; until it runs, documents are
+  shown, not checked, as before.
+
+### Fixed
+
+- **A PDF built to expand when opened is refused before it is read.** From a document, invoices by email, the Chrome
+  extension and chats now refuse a PDF whose contents would expand to more than 16 MB once decompressed, such as a file
+  of under a megabyte that expands to gigabytes: "This PDF could not be read. Paste the invoice's text instead." Before,
+  reading one could use up the server's memory. Ordinary invoices read as before.
 
 ## [0.1.0-beta.13] - 2026-10-25
 

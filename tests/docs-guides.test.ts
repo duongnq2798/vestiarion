@@ -1484,6 +1484,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Check it against the invoice.", DOCUMENT_NORMALIZE],
     ["check this amount before you add it.", INVOICE_FORM],
     ["This PDF has no text to read; it may be a scan. Paste the invoice's text instead.", DOCUMENT_READ],
+    ["This PDF could not be read. Paste the invoice's text instead.", DOCUMENT_READ],
     ["Gateway balance", GATEWAY_PANEL],
     ["Amount to move from the operating wallet (USDC)", GATEWAY_PANEL],
     ["Fund Gateway", GATEWAY_PANEL],
