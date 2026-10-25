@@ -206,6 +206,14 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     when: ONLY_IF_CONNECTED,
   },
   {
+    name: "Google Sheets",
+    privacyEntry: "Google Sheets",
+    names: ["Google Sheets", "Google Drive"],
+    purpose: "written to with the close packs an owner, admin or accountant exports, in spreadsheets Vestiarion makes in the connected account's Google Drive",
+    data: "each exported close pack's rows and summary, with members' emails, payees' names and addresses, amounts and signed entries, and the Google account's id and email when it is connected",
+    when: ONLY_IF_CONNECTED,
+  },
+  {
     name: "Google",
     privacyEntry: "Google Analytics",
     names: ["Google Analytics", "Google sign-in"],

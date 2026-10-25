@@ -107,6 +107,8 @@ export const TENANT_RPCS = [
   "zohobooks_connector_ready",
   // Whether migration 0123 has run (Zoho CRM connector C17): it reads nothing.
   "zohocrm_connector_ready",
+  // Whether migration 0145 has run (close pack Sheets GS2): it reads nothing.
+  "googlesheets_connector_ready",
   // Whether migration 0124 has run (bank payouts B11): it reads nothing.
   "bank_payouts_ready",
   // Whether migration 0125 has run (early-payment offers E7): it reads nothing.

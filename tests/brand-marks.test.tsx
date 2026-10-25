@@ -238,7 +238,9 @@ describe("a brand mark", () => {
   });
 
   it("gives each connector its own mark, and Intuit's name alone no mark: no place stands for Intuit itself", () => {
-    expect(Object.keys(PROVIDER_MARKS).sort()).toEqual([...PROVIDERS].sort());
+    // Google Sheets has no mark: Google's product icons need Google's brand permission (close pack Sheets GS18).
+    const MARKED = PROVIDERS.filter((provider) => provider !== "googlesheets");
+    expect(Object.keys(PROVIDER_MARKS).sort()).toEqual([...MARKED].sort());
     expect(PROVIDER_MARKS).toEqual({
       xero: "xero",
       quickbooks: "quickbooks",
@@ -250,7 +252,7 @@ describe("a brand mark", () => {
     });
     // A connector's mark is a symbol before its written name, but Xero's wordmark and the Asana, Zoho Books and Zoho CRM
     // logos, which spell theirs.
-    for (const provider of PROVIDERS) {
+    for (const provider of MARKED) {
       expect(isWordmark(PROVIDER_MARKS[provider]), provider).toBe(
         provider === "xero" || provider === "asana" || provider === "zohobooks" || provider === "zohocrm",
       );

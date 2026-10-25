@@ -7,6 +7,7 @@ import ApprovalCard from "@/components/ApprovalCard";
 import { CounterpartyRow as CounterpartyRowView } from "@/components/CounterpartyRow";
 import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
+import GoogleSheetsPanel from "@/components/GoogleSheetsPanel";
 import InboxEmails from "@/components/InboxEmails";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { HeldMilestoneActions } from "@/components/HeldMilestoneActions";
@@ -1811,6 +1812,15 @@ export const DOCS_SHOTS = {
   "evidence-chain": { guide: "evidence", render: () => <EvidenceShot head ids={["decision", "payment"]} /> },
   "evidence-signatures": { guide: "evidence", render: () => <EvidenceShot ids={["signatures"]} /> },
   "evidence-access": { guide: "evidence", render: () => <EvidenceAccess kind="invoice" receipt="shared" role="owner" canShare /> },
+  "accountants-google-sheets": {
+    guide: "accountants",
+    page: "settings",
+    sub: SETTINGS_SUB,
+    // The Google Sheets card (close pack Sheets GS6), connected: the account named by a masked email only.
+    render: () => (
+      <GoogleSheetsPanel orgSlug={SLUG} view={{ state: "connected", account: "ow***@pinecrest.test", connectedAt: "Oct 25" }} canManage notice={null} />
+    ),
+  },
   "accountants-close-pack": {
     guide: "accountants",
     render: function ClosePackShot() {

@@ -18,7 +18,7 @@
 
 **[Full tour (7:22)](https://youtu.be/ds6cu4__1J4)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Mainnet proof](#mainnet-proof)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** · **[Security](https://www.vestiarion.xyz/security)**
 
-<sub>Built on [Arc](https://www.arc.io) and [Circle](#circle-integrations) · Works with [Xero](https://www.vestiarion.xyz/docs/guides/xero) · [QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks) · [Zoho Books](https://www.vestiarion.xyz/docs/guides/zohobooks) · [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot) · [Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive) · [Zoho CRM](https://www.vestiarion.xyz/docs/guides/zohocrm) · [BlindPay](https://www.vestiarion.xyz/docs/guides/bank-payouts) · [Asana](https://www.vestiarion.xyz/docs/guides/asana) · [GitHub](https://www.vestiarion.xyz/docs/guides/github) · [Slack](https://www.vestiarion.xyz/docs/guides/slack) · [Telegram](https://www.vestiarion.xyz/docs/guides/telegram) · [Discord](https://www.vestiarion.xyz/docs/guides/discord) · [Chrome](https://www.vestiarion.xyz/docs/guides/invoice-capture) · [@vestiarionhq](https://x.com/vestiarionhq)</sub>
+<sub>Built on [Arc](https://www.arc.io) and [Circle](#circle-integrations) · Works with [Xero](https://www.vestiarion.xyz/docs/guides/xero) · [QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks) · [Zoho Books](https://www.vestiarion.xyz/docs/guides/zohobooks) · [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot) · [Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive) · [Zoho CRM](https://www.vestiarion.xyz/docs/guides/zohocrm) · [BlindPay](https://www.vestiarion.xyz/docs/guides/bank-payouts) · [Asana](https://www.vestiarion.xyz/docs/guides/asana) · [Google Sheets](https://www.vestiarion.xyz/docs/guides/accountants#export-the-close-pack-to-google-sheets) · [GitHub](https://www.vestiarion.xyz/docs/guides/github) · [Slack](https://www.vestiarion.xyz/docs/guides/slack) · [Telegram](https://www.vestiarion.xyz/docs/guides/telegram) · [Discord](https://www.vestiarion.xyz/docs/guides/discord) · [Chrome](https://www.vestiarion.xyz/docs/guides/invoice-capture) · [@vestiarionhq](https://x.com/vestiarionhq)</sub>
 
 </div>
 
@@ -449,6 +449,7 @@ run in production, with its ledger entries and transactions.
 | **[Xero](https://www.vestiarion.xyz/docs/guides/xero)** | Bills approved in Xero come in for review every 15 minutes, through the same check as a bill list, and become payables when a person adds them; once paid on Arc, each payment is drafted as a booking against its bill, which an owner or admin reviews field by field and approves before anything is written to Xero. A payment on Arc testnet or in shadow mode is booked only into a Xero demo company. [Watch it](https://www.vestiarion.xyz/docs/guides/xero#watch-it) (1:52) |
 | **[QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks)** | Open bills in QuickBooks come in for review every 15 minutes, and sooner when QuickBooks says one changed, through the same check; a bill partly paid there comes in at what is left; read-only, with the bank account payments will be booked to chosen ahead |
 | **[Zoho Books](https://www.vestiarion.xyz/docs/guides/zohobooks)** | Open bills in Zoho Books come in for review every 15 minutes, through the same check, from the Zoho data center the account lives in (any but China's); a bill partly paid there comes in at what is left, and one paid or voided after it was added is flagged; a person with several organizations picks one; read-only, and a bill deleted in Zoho Books is not seen |
+| **[Google Sheets](https://www.vestiarion.xyz/docs/guides/accountants#export-the-close-pack-to-google-sheets)** | A month's close pack exported to a spreadsheet in the connected Google Drive: one row per payment with its signed entry, a summary with the tab's SHA-256, updated in place on the next export. Access to the files it makes only; it never shares them |
 
 The Postman collections are also in a public workspace, [Vestiarion API](https://www.postman.com/vestiarion/vestiarion-api), and the MCP server is in the [MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.duongnq2798/vestiarion) as `io.github.duongnq2798/vestiarion`.
 
@@ -589,7 +590,8 @@ simulated.
 
 ## License
 
-[MIT](LICENSE). Zoho, Zoho Books and Zoho CRM are trademarks of Zoho Corporation Pvt. Ltd. Arc, Circle, Slack, Telegram,
+[MIT](LICENSE). Zoho, Zoho Books and Zoho CRM are trademarks of Zoho Corporation Pvt. Ltd. Google Sheets and Google Drive
+are trademarks of Google LLC. Arc, Circle, Slack, Telegram,
 Discord, Xero, QuickBooks, HubSpot, Pipedrive, Asana and npm are trademarks of their respective owners; their names show what
 Vestiarion is built on and connects to, not an endorsement.
 

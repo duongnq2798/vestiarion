@@ -35,7 +35,7 @@ const text = (markup: string) =>
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 
 const PAGES = [
-  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-16" },
+  { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-25" },
   { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-25" },
 ] as const;
 
@@ -136,7 +136,7 @@ describe("the privacy page", () => {
   const body = text(renderToStaticMarkup(<PrivacyPage />));
 
   it("names each service that receives data", () => {
-    for (const name of ["Supabase", "Vercel", "Circle", "Resend", "Google Analytics", "Anthropic", "OpenAI", "DeepSeek", "OpenSanctions", "GitHub", "Telegram", "Product Hunt", "Xero", "QuickBooks", "Intuit", "Zoho Books", "HubSpot", "Pipedrive"]) {
+    for (const name of ["Supabase", "Vercel", "Circle", "Resend", "Google Analytics", "Anthropic", "OpenAI", "DeepSeek", "OpenSanctions", "GitHub", "Telegram", "Product Hunt", "Xero", "QuickBooks", "Intuit", "Zoho Books", "HubSpot", "Pipedrive", "Google Sheets", "Google Drive"]) {
       expect(body, name).toContain(name);
     }
   });

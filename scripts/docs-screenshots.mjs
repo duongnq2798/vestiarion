@@ -227,6 +227,7 @@ const SHOTS = {
     await page.waitFor(`document.querySelector("[data-docs-shot]").textContent.includes("Checked again in your browser")`);
   },
   "evidence-access": async () => {},
+  "accountants-google-sheets": async () => {},
   "accountants-close-pack": async () => {},
   "where-a-payment-is-track": async () => {},
   "where-a-payment-is-in-flight": async () => {},

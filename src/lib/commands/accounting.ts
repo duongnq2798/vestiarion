@@ -52,9 +52,16 @@ async function openConnection(connectionId: string): Promise<{ connection: Conne
   }
 }
 
-/** The accounting tool a bill came from: never a CRM, which `openConnection` refuses. */
+/** The accounting tool a bill came from: never a CRM, a work tool or an export tool, which `openConnection` refuses. */
 function accountingProviderOf(connection: Connection): AccountingProviderId {
-  if (connection.provider === "hubspot" || connection.provider === "pipedrive" || connection.provider === "zohocrm" || connection.provider === "asana") throw new Error("Only an accounting tool brings bills in");
+  if (
+    connection.provider === "hubspot" ||
+    connection.provider === "pipedrive" ||
+    connection.provider === "zohocrm" ||
+    connection.provider === "asana" ||
+    connection.provider === "googlesheets"
+  )
+    throw new Error("Only an accounting tool brings bills in");
   return connection.provider;
 }
 

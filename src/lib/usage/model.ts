@@ -265,7 +265,7 @@ export interface LimitFacts {
   invitationsToday: number | null;
   invitationCap: number;
   /** A connector whose status needs a person (needs reconnecting, or its last sync failed). */
-  connectors: Array<{ provider: "xero" | "quickbooks" | "hubspot" | "pipedrive" | "zohobooks" | "zohocrm"; title: string }>;
+  connectors: Array<{ provider: "xero" | "quickbooks" | "hubspot" | "pipedrive" | "zohobooks" | "zohocrm" | "googlesheets"; title: string }>;
 }
 
 const NEAR = 0.8;
@@ -280,7 +280,7 @@ function usdc(value: number): string {
   return `${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USDC`;
 }
 
-const PROVIDER_NAMES = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", zohobooks: "Zoho Books", zohocrm: "Zoho CRM" } as const;
+const PROVIDER_NAMES = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", zohobooks: "Zoho Books", zohocrm: "Zoho CRM", googlesheets: "Google Sheets" } as const;
 
 /** Each limit the workspace can hit, reached ones first, then near, then the rest. */
 export function usageLimits(facts: LimitFacts): UsageLimit[] {

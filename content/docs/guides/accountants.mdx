@@ -112,7 +112,7 @@ Each item names its workspace, who or what it is about, its amount in its own cu
 | Disputed by the customer | A customer disputes an invoice. Its reminders wait while the dispute is open. | **From customers** |
 | Payment to book | A payment made on Arc waiting for review before it is booked in Xero, or one whose booking failed. | The bookings to review |
 | Receivable overdue | A receivable past its due date and not yet received. | The receivable |
-| Connector problem | Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive or Zoho CRM needs reconnecting, or its last sync failed. | **Settings**, at the connector |
+| Connector problem | Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM or Google Sheets needs reconnecting, or a connector's last sync failed. | **Settings**, at the connector |
 | Limit reached | A limit stopped something: the day's cycles in a sandbox, the agent's spending limit, the payee history checks' daily most or Gateway balance, or the day's invitations. | **Settings**, at **Usage this month** |
 
 With nothing open, the queue says "Nothing needs attention in any of your workspaces."
@@ -168,6 +168,53 @@ To check the signed JSON without trusting Vestiarion:
 5. **Tie the file to its download.** The file itself is not signed: the ledger key signs ledger entries only. Its download's `close_pack_exported` entry is signed, and holds the file's SHA-256.
 
 A bookkeeping system reads the same pack with a workspace API key from `GET /api/v1/close-packs/{month}`, with members named by user id. See [Get a monthly close pack](/docs/api/get-close-pack).
+
+### Export the close pack to Google Sheets
+
+A month's close pack can go straight into a spreadsheet in a Google Drive, instead of a CSV you import by hand. Vestiarion makes one spreadsheet for each workspace and month, writes the pack into it, and records each export in the workspace's signed ledger. It writes a copy: it reads nothing back into Vestiarion, decides nothing, and no model sees it.
+
+**Connect a Google account.** An owner or admin opens **Settings**, finds **Google Sheets** among the integrations and chooses **Connect Google Sheets**. The connect page says what Vestiarion does with the Google Drive; tick **I agree** and choose **Continue to Google**. Google's screen then names Vestiarion and asks for one permission, in Google's words: "See, edit, create, and delete only the specific Google Drive files you use with this app". This is Google's `drive.file` permission: Vestiarion reaches only the spreadsheets it makes, and cannot see, open or list any other file in that Drive. The spreadsheets go to the My Drive of the Google account you choose there, and the card reads **Connected to the Google Drive of** that account, its email masked. Leave the Google Drive box ticked on Google's screen: without it, nothing is connected.
+
+<Screenshot
+  src="/docs/guides/accountants-google-sheets.png"
+  alt="The Google Sheets card in Settings: connected to the Google Drive of ow***@pinecrest.test on Oct 25, with a link to the monthly close pack, a note that spreadsheets already exported stay in that Google Drive, and the Disconnect Google Sheets button."
+  caption="One Google account per workspace, named by a masked email. An owner, admin or accountant exports from the close pack page."
+/>
+
+A workspace connects one Google account. The same account can be connected to several workspaces, and each keeps its own spreadsheets.
+
+**Export a month.** An owner, admin or accountant opens **Monthly close pack**, picks the month and chooses **Export to Google Sheets**, under the downloads. The answer counts the payments written, for example "Exported 14 payments to Google Sheets.", names the Drive, and links **Open the spreadsheet**, which opens it in a new tab. Opened again, the page shows every member when the month was last exported, with the same link. Approvers and viewers see that line but no button; they can still download the CSV.
+
+The spreadsheet is named for the workspace, the month and the network, such as "Vestiarion close pack · Pinecrest Studio · October 2026 so far · Arc testnet". It has two tabs:
+
+- **Payments** holds the same 51 columns as the CSV, one row per payment settled in the month, under a frozen, bold header. The amounts (`bill_amount`, `amount_paid`, `discount`, `network_fee_usd` and `route_fee_usdc`) and `earlier_attempts` are numbers, so a column adds up; every other cell is text. Each cell is written as a value, never as a formula: a payee or an invoice number that starts with `=`, `+`, `-` or `@` stays that text, with nothing added in front.
+- **Summary** names the workspace, the network, the month, when the pack was read and who exported it; the payments settled and what they paid in each token; how many payments were not settled and how many escrow moves there were, which the close pack page lists; the signed entries verified, the ledger's last entry and the signing keys; the **Payments tab SHA-256**; a link to the close pack page; and how to check it all.
+
+Exporting the same month again updates that spreadsheet: **Payments** and **Summary** are written afresh, and either one renamed or deleted is added back. A tab you added yourself is left alone, but cells you changed in those two are overwritten, and anything typed under the **Payments** header is cleared. This month's spreadsheet says "so far" in its name, and the export after the month ends renames it. Renaming the spreadsheet keeps it the month's, but the next export gives it its Vestiarion name again. Moving it to another folder of the same My Drive keeps it in step. Moving it into a shared drive does not: the next export makes a new spreadsheet in My Drive, and the moved one is never updated. A copy of it is never updated either, so export again rather than edit a copy. A spreadsheet in the trash, or deleted, is replaced by a new one at the next export.
+
+**Check it.** Each row of **Payments** names the signed ledger entry that records its payment, in `entry_seq`, `entry_hash`, `signature` and `signing_key_id`: download the month's signed JSON and check those entries as above. Each export is recorded in the ledger as `close_pack_exported`, with `format` `google_sheets`, the spreadsheet's id (the long id in its address) and a `sha256` equal to the Summary's **Payments tab SHA-256**. That is the SHA-256 of the **Payments** tab as written, so anyone with the spreadsheet can compute it: open **Extensions**, then **Apps Script**, paste this function, choose **Run**, and read the hex in the **Execution log**.
+
+```js
+function paymentsSha256() {
+  const rows = SpreadsheetApp.getActive().getSheetByName("Payments").getDataRange().getValues();
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(rows), Utilities.Charset.UTF_8);
+  const hex = digest.map((b) => ((b + 256) % 256).toString(16).padStart(2, "0")).join("");
+  console.log(hex);
+  return hex;
+}
+```
+
+It logs the same hex as long as no one has changed the **Payments** tab since the export. Before recording an export as done, Vestiarion reads the tab back once and compares it. When it does not match, the export answers "The spreadsheet did not read back as written, so the export is not recorded as done. Export again." An export that failed once rows may have reached Google is recorded too, as `close_pack_export_failed`, with the stage it stopped at and why.
+
+The spreadsheet names members by email and payees by name, as the close pack does: share it with whoever should see that. Vestiarion never shares it: the Google account that holds it decides who opens it.
+
+**Limits and messages.** Exports and downloads share one limit: past ten by one person in ten minutes, an export answers "Too many close pack exports in the last 10 minutes. Try again later." Past six exports and downloads of one workspace's pack within a minute, in any tab, the next export answers "Too many close pack exports in a row. Try again in a minute." When Google asks for a pause, the export says "Google asked Vestiarion to slow down. Try again in a minute." A full Drive, or Drive turned off by a Google Workspace administrator, is said in words too.
+
+When Google stops accepting the connection, because its access was removed in the Google Account or it went unused for six months, the card says **Google Sheets needs you to reconnect** and an owner or admin chooses **Reconnect Google Sheets**. The accountant console lists it as a **Connector problem** until then.
+
+**Disconnect.** An owner or admin chooses **Disconnect Google Sheets** on the card. Vestiarion revokes its access at Google and deletes the tokens. The spreadsheets already exported stay in that Drive: Vestiarion never deletes one. When another workspace is connected with the same Google account, Vestiarion does not revoke, since that would cut the other workspace off too, and the card says so under **Disconnected from** that account; once none is left, remove Vestiarion from **Third-party apps & services** in that Google Account. When Google does not confirm a revoke, the card says that too: remove Vestiarion there to be sure. Deleting a workspace deletes its tokens without telling Google, so remove Vestiarion there as well.
+
+**Before the update.** Until the deployment's operator runs migration 0145, the card says "Google Sheets is not set up on this deployment yet." and the close pack page shows no export button. A deployment with no Google client set up shows no Google Sheets card at all.
 
 ## 6. Usage and limits
 

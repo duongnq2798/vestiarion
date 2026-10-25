@@ -54,6 +54,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   passed alone among them, throw too. A file that holds another format's fields, or cites something that is not an
   entry's `seq`, does not pass. The payee lock's evidence file now names each member's user id beside their email. The MCP server does not
   offer these reads yet. No migration.
+- **Close packs in Google Sheets.** An owner or admin connects one Google account per workspace from **Settings**, and
+  an owner, admin or accountant sends a month's close pack to a spreadsheet in that account's Drive with **Export to
+  Google Sheets** on **Monthly close pack**. The spreadsheet holds the close pack's 51 columns on a **Payments** tab,
+  one row per payment, with a frozen header and amounts as numbers, and a **Summary** tab with the month's totals, the
+  ledger head, the signing keys, the tab's SHA-256 and how to check it. Exporting the same month again updates that
+  spreadsheet. Vestiarion asks Google only for access to the files it makes, writes every cell as a value so nothing
+  runs as a formula, reads the tab back, and records the export in the ledger as `close_pack_exported` with the
+  spreadsheet's id. Disconnecting revokes the access at Google and deletes the tokens; the spreadsheets stay in Drive.
+  Needs `GOOGLE_SHEETS_CLIENT_ID`, `GOOGLE_SHEETS_CLIENT_SECRET` and migration 0145; until it runs, the Google Sheets
+  card says it is not set up yet.
 
 ### Fixed
 

@@ -476,6 +476,18 @@ export default function PrivacyPage() {
             workspace&apos;s signed ledger.
           </li>
           <li>
+            <strong>Google Sheets</strong> (Google Drive), for a workspace an owner or admin connects to a Google account after agreeing to it, is
+            written to only when an owner, admin or accountant exports a month&apos;s close pack. Vestiarion asks Google only for access to the files
+            it makes, so it cannot see or open any other file in that Drive. Each export makes or updates one spreadsheet for the month in that
+            account&apos;s Drive and writes the close pack into it: payees&apos; names and payout addresses, amounts, invoice numbers, approvals with
+            members&apos; emails, the checks, the transactions and the signed ledger entries, with a summary naming the member who exported it.
+            Vestiarion reads that spreadsheet back once to check it, and reads the Google account&apos;s id and email once when it is connected,
+            keeping the id and a masked email. Google&apos;s tokens are kept encrypted, readable only by the server and never shown in the browser, a
+            log, a model&apos;s prompt or a webhook. Nothing read from Google reaches the agent or a model, and Vestiarion never shares a
+            spreadsheet. Disconnecting revokes the access at Google, unless another workspace is connected with the same Google account, and deletes
+            the tokens; the spreadsheets already exported stay in that Drive.
+          </li>
+          <li>
             <strong>Google Analytics</strong> receives page views on every page, signed-in pages included, and which button you chose to get
             started, as described below.
           </li>
