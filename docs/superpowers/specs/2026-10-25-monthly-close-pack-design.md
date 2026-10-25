@@ -1411,3 +1411,8 @@ On pinecrest-studio, live on Arc testnet, after the merge deploys:
 10. The accountant console: pinecrest-studio's card shows "Close pack:" with Sep 2026 and **This month so far**.
 11. A viewer member opens it; an account that is no member gets "not found". An eleventh download within ten minutes
     answers "Too many close pack downloads in the last 10 minutes. Try again later."
+12. Downloads started in several tabs at once: three are served, and the rest answer "Too many close pack downloads in a
+    row. Try again in a minute."
+13. A payment the agent sent that a person's approval only recorded later, if the month has one (its **Audit log**
+    shows `ap_pay` naming the hash, then `approval_paid` naming the same hash): it reads "No person approved it: code
+    checked it and the agent paid it.", as its evidence page's settlement track names the agent.
