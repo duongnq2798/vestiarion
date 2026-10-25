@@ -119,9 +119,12 @@ tagged with `appProperties { vestiarionClosePack: "<org id>:<YYYY-MM>" }`, which
   its own file is not listed yet (Drive's search can lag a create), it cannot tell whether it raced and keeps its own: at
   worst a duplicate stays under the tag, and the next export takes the oldest. Trashing on a list that lacks its own file
   could trash both racers' files.
-- A file under the tag whose only tab is Google's first one (`sheetId` 0), named neither Payments nor Summary, was never
-  formatted (a run that created it stopped before its format; a format leaves both tabs or none): it is treated as just
-  made, so its first tab becomes Payments rather than staying, empty, in front of the data.
+- A file under the tag whose only tab is Google's first one (`sheetId` 0), named neither Payments nor Summary, with no
+  row frozen and not 51 columns, was never formatted (a run that created it stopped before its format; a format leaves
+  both tabs or none): it is treated as just made, so its first tab becomes Payments rather than staying, empty, in front
+  of the data. The tabs are read with `sheets.properties(sheetId,title,gridProperties)`: a rename leaves the grid, and
+  a formatted Payments tab has its header frozen and 51 columns, so one a person renamed after deleting Summary (its id
+  is 0 too) is not taken for Google's own and is left alone, with Payments and Summary added beside it.
 - A spreadsheet someone trashed or deleted is not found, so the next export makes a new one (`created: true`).
 - The name: "Vestiarion close pack · <workspace name> · <month label>[ so far] · <network label>", for example
   "Vestiarion close pack · Pinecrest Studio · October 2026 so far · Arc testnet", cut to 200 characters. The network
@@ -143,13 +146,15 @@ tagged with `appProperties { vestiarionClosePack: "<org id>:<YYYY-MM>" }`, which
   cell`; `earlier_attempts` when it matches `^\d{1,6}$`. Every other cell, and any of those that does not round trip,
   stays the text the table gave (`sheetValues`).
 - Formatting, in one `spreadsheets.batchUpdate` before the values: the grid sized to `max(rows + 1, 2)` rows and 51
-  columns (which also removes rows left from a longer export), every value under the header cleared (`updateCells` from
-  row 2 down, `fields: "userEnteredValue"`, so row 2 of a month with no payment, which the grid keeps and no value
-  reaches, never fails the read back), the header frozen (`frozenRowCount: 1`) and bold, the
+  columns (which also removes rows left from a longer export), the header frozen (`frozenRowCount: 1`) and bold, the
   five money columns `#,##0.00####` and `earlier_attempts` `0`, every column 160 pixels wide, and data rows clipped
-  rather than wrapped.
+  rather than wrapped. The format clears no value: a clear sent apart from the values would, when the values write then
+  fails (or the format's answer is lost), leave an empty Payments tab under the previous export's Summary.
 - Values go in `values:batchUpdate` requests of at most 500 rows each (2,000 rows of 51 columns are about 3 MB; Google
-  recommends 2 MB or less a request).
+  recommends 2 MB or less a request). Every row is 51 cells, so it overwrites whatever its row held. When the month has
+  no payment, the first request also writes row 2, which the grid keeps and no row of the month reaches, as 51 empty
+  cells (RAW `""` empties a cell): a value typed there is cleared together with the header and the Summary, never ahead
+  of them, and the read back (which drops the empty row) is the header alone.
 - If wrong: amounts as text cannot be summed, so the accountant converts them by hand; numbers written for values that
   do not round trip would change an amount. The round-trip check keeps the exact decimal whenever a number would not.
 
@@ -570,7 +575,10 @@ delete only the specific Google Drive files you use with this app".
 The page makes `src/components/close-pack/SheetsExport.tsx` (client) from the month and the workspace, never from the
 pack, and passes it to `ClosePackView` as `sheets`, which places it under **Download signed JSON**, `print:hidden`, at
 the same place in the tree whether the pack was read or not: a render whose read is refused (the page's reads spent)
-shows its refusal in the pack's place and keeps the export's answer. The page sets `export const maxDuration = 120` and
+shows its refusal in the pack's place and keeps the export's answer. The page keys it by the month
+(`key={month.key}`): the month links change only `?month=`, which Next does not remount the page for, so the control
+starts again on another month, with that month's own "Last exported" line, and stays mounted across renders of the same
+month. The page sets `export const maxDuration = 120` and
 reads the view with `closePackSheetsView({ month, role: membership.role })` (best effort: a read that fails is
 `hidden`, logged).
 
@@ -587,8 +595,8 @@ reads the view with `closePackSheetsView({ month, role: membership.role })` (bes
 
 The action's answers (`exportClosePackToSheetsAction`), kept sticky in the component so a revalidated page does not drop
 them. A done export does not revalidate: that would read the whole pack again inside the action's 120 seconds, after an
-export that may have used most of them. Its answer stands in for the page's older "Last exported" line until the page
-is read again; a `reconnect` revalidates, so the card and the page say so:
+export that may have used most of them. Its answer carries its month and stands in for the page's older "Last exported"
+line, for that month only, until the page is read again; a `reconnect` revalidates, so the card and the page say so:
 - done: "Exported 14 payments to Google Sheets." (one: "Exported 1 payment to Google Sheets."; none: "Exported this
   month to Google Sheets: no payment settled in it yet."), then "In the Google Drive of du***@gmail.com." and **Open the
   spreadsheet**;
@@ -639,7 +647,8 @@ afresh. The callback re-checks the person, membership, role and consent (the cor
   then reads "needs you to reconnect".
 - **The spreadsheet trashed or deleted**: the next export makes a new one, `created: true`.
 - **A tab renamed or deleted**: re-added; its formatting re-applied. **Another tab added**: kept.
-- **Cells edited by a person**: overwritten by the next export, anything under the Payments header cleared; the
+- **Cells edited by a person**: overwritten by the next export's values write, which writes every row of Payments in
+  full (row 2 of a month with no payment as empty cells); the grid drops rows and columns past the export's; the
   Summary's last line says so.
 - **A month with no payment**: the header alone, Summary "Payments settled" 0, and "Exported this month to Google
   Sheets: no payment settled in it yet."
@@ -747,8 +756,16 @@ Every new test that walks files, spawns a process or loads ESLint gets `}, 30_00
 - two files under the tag after a create: keeps the oldest and trashes the one it made; its own file missing from the
   second list beside an older one: keeps its own, trashes nothing;
 - a file made by a run that stopped before its format (a timed-out create, a format answered 500): the next export
-  renames its first tab Payments and adds Summary, so no empty first tab stays; a lone tab of a person's is left alone;
-- a month with no payment whose row 2 holds a note: cleared by the format, the read back matches, `close_pack_exported`;
+  renames its first tab Payments and adds Summary, so no empty first tab stays; a lone tab of a person's is left alone,
+  and so is a Payments tab a person renamed once Summary was deleted (`sheetId` 0, 51 columns or its header frozen):
+  nothing of the format names it, and Payments and Summary are added beside it;
+- the format sends no `updateCells`; the tabs are read with their `gridProperties`;
+- a month with no payment: its first values request writes `Payments!A1:AY2`, row 2 as 51 empty cells, with the Summary;
+- a month with no payment whose row 2 holds a note: cleared by the values write, the read back matches,
+  `close_pack_exported`;
+- a re-export of fewer rows: the grid drops the rows the longer one left, and the read back matches;
+- a re-export whose first values request is answered 429 with no `Retry-After`: `close_pack_export_failed`
+  `{ stage: "write", reason: "rate_limited" }`, and the earlier export's rows and Summary are still in place;
 - missing tabs re-added; a third tab untouched;
 - a pack of 2,000 rows: four values requests of 500 rows;
 - a read back that differs: `close_pack_export_failed` `{ stage: "read_back", reason: "mismatch" }` and no
@@ -796,6 +813,12 @@ Every new test that walks files, spawns a process or loads ESLint gets `}, 30_00
 - the card's five states and their buttons by role; every notice; no full email anywhere;
 - `SheetsExport`: each view's words; the button only with `canExport`; the last export line; **Open the spreadsheet**
   opening in a new tab with `rel="noreferrer"`; `print:hidden`.
+
+`tests/close-pack-sheets-export-kept.test.tsx` (happy-dom)
+- the answer and its link kept through a render without the pack; a done export in place of the older "Last exported"
+  line; that line kept when the export did not finish;
+- after a month link, keyed by the month or kept mounted: the other month's done export and its link gone, and the
+  shown month's own "Last exported" line there.
 
 Existing tests to extend:
 - `tests/csp.test.ts`: the `consent` map gets `googlesheets: [GOOGLE_AUTHORIZE]` (its origin is in `form-action`

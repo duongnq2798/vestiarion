@@ -4648,8 +4648,9 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   the close pack page's control `src/components/close-pack/SheetsExport.tsx`. The page makes that control from the month
   and the workspace and hands it to `ClosePackView` as `sheets`, which keeps it at one place in the tree whether the pack
   was read or not, so a render whose read is refused keeps the export's answer; a done export does not revalidate, since
-  that would read the whole pack again inside the action's 120 seconds, and its answer stands in for the "Last
-  exported" line until the page is read again.
+  that would read the whole pack again inside the action's 120 seconds, and its answer, which carries its month, stands
+  in for that month's "Last exported" line until the page is read again. The control is keyed by the month, since a
+  month link changes only `?month=` and Next keeps the page's client state across it: another month starts it afresh.
 - **Off, then not set up** (GS2). Without `GOOGLE_SHEETS_CLIENT_ID` and `GOOGLE_SHEETS_CLIENT_SECRET`, or with an id
   that is not a Google OAuth client id, there is no card, no export control, both routes answer 404 and the connect page
   is not found. With the client but before `0145`, `googleSheetsReady()` finds no `googlesheets_connector_ready` and
@@ -4673,11 +4674,14 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   replaced by a new one in My Drive.
 - **The tabs** (GS8, GS9). `formatTabs`, one `batchUpdate`: **Payments** and **Summary** added back if missing or renamed
   (a title differing only by case is taken back), the grid sized to the rows (which drops rows from a longer export),
-  every value under the header cleared (`updateCells`, `userEnteredValue`, so row 2 of a month with no payment or a
-  person's note there never fails the read back), the header frozen and bold, the money columns `#,##0.00####`, widths
-  set; any other tab is left alone. A file just made, or found with only Google's first tab (`sheetId` 0, named neither
-  Payments nor Summary: a run that made it stopped before its format), has that tab renamed Payments. Values go RAW,
-  never `USER_ENTERED`, in `values:batchUpdate` requests of at most 500 rows. `sheetValues` writes six columns as
+  the header frozen and bold, the money columns `#,##0.00####`, widths set; any other tab is left alone. The format
+  clears no value, so a values write that fails leaves the last export's rows under its own Summary. A file just made,
+  or found with only Google's first tab (`sheetId` 0, named neither Payments nor Summary, nothing frozen and not 51
+  columns, read from `gridProperties`: a run that made it stopped before its format), has that tab renamed Payments; a
+  Payments tab a person renamed after deleting Summary keeps its frozen header or 51 columns, so it is left alone. Values
+  go RAW, never `USER_ENTERED`, in `values:batchUpdate` requests of at most 500 rows; every row is 51 cells, and a month
+  with no payment also writes row 2 as 51 empty cells with the header and the Summary, so a note there is cleared in
+  that request and the read back is the header alone. `sheetValues` writes six columns as
   numbers (`bill_amount`, `amount_paid`, `discount`, `network_fee_usd`, `route_fee_usdc` when they have six places
   and round trip, `earlier_attempts` when it is digits) and every other cell as the table's text, so `=`, `+`, `-` and
   `@` stay text. The Summary is label and value rows from the pack, ending with how to check it.

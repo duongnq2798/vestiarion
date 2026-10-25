@@ -87,10 +87,23 @@ export async function trashFile(token: string, id: string, deps: GoogleHttp = {}
   await updateFile(token, id, { trashed: true }, "files.trash", deps);
 }
 
-/** The spreadsheet's tabs, by id and title. */
-export async function sheetTabs(token: string, id: string, deps: GoogleHttp = {}): Promise<Array<{ sheetId: number; title: string }>> {
+/**
+ * A tab of the spreadsheet: its id, its title, and its grid, which a rename leaves as it was. `frozenRowCount` is 0 when
+ * Google leaves it out (nothing frozen); `columnCount` is null for a tab with no grid, such as a chart's.
+ */
+export interface SheetTab {
+  sheetId: number;
+  title: string;
+  frozenRowCount: number;
+  columnCount: number | null;
+}
+
+const count = (value: unknown): number | null => (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null);
+
+/** The spreadsheet's tabs, by id and title, with their grids. */
+export async function sheetTabs(token: string, id: string, deps: GoogleHttp = {}): Promise<SheetTab[]> {
   const url = new URL(`${SHEETS_API}/spreadsheets/${checkedId(id, "spreadsheets.get")}`);
-  url.searchParams.set("fields", "sheets.properties(sheetId,title)");
+  url.searchParams.set("fields", "sheets.properties(sheetId,title,gridProperties)");
   const response = await googleCall({ url: url.toString(), init: apiInit(token, "GET"), label: "spreadsheets.get", repeatable: true, onFile: true }, deps);
   const body = await jsonOf(response, "spreadsheets.get");
   const sheets = isObject(body) && Array.isArray(body.sheets) ? body.sheets : null;
@@ -99,7 +112,13 @@ export async function sheetTabs(token: string, id: string, deps: GoogleHttp = {}
     const properties = isObject(sheet) && isObject(sheet.properties) ? sheet.properties : {};
     const sheetId = properties.sheetId ?? 0;
     if (typeof sheetId !== "number" || !Number.isSafeInteger(sheetId) || sheetId < 0) throw new GoogleError("bad_response", "Google spreadsheets.get: a sheet id that does not read");
-    return { sheetId, title: typeof properties.title === "string" ? properties.title : "" };
+    const gridProperties = isObject(properties.gridProperties) ? properties.gridProperties : {};
+    return {
+      sheetId,
+      title: typeof properties.title === "string" ? properties.title : "",
+      frozenRowCount: count(gridProperties.frozenRowCount) ?? 0,
+      columnCount: count(gridProperties.columnCount),
+    };
   });
 }
 
@@ -135,7 +154,7 @@ const grid = (sheetId: number, rowCount: number, columnCount: number, frozenRowC
  * The tab of this title, its case aside: Sheets refuses two tabs whose titles differ only in case, so a tab someone
  * renamed "payments" is taken back rather than a second added.
  */
-function tabTitled(tabs: Array<{ sheetId: number; title: string }>, title: string) {
+function tabTitled<Tab extends Pick<SheetTab, "sheetId" | "title">>(tabs: Tab[], title: string): Tab | undefined {
   return tabs.find((tab) => tab.title === title) ?? tabs.find((tab) => tab.title.toLowerCase() === title.toLowerCase());
 }
 
@@ -143,14 +162,15 @@ function tabTitled(tabs: Array<{ sheetId: number; title: string }>, title: strin
  * The two tabs' properties and formats, in one `batchUpdate` before the values (GS8, GS9). Payments and Summary are
  * Vestiarion's: a spreadsheet never formatted (`fresh`) has its first tab renamed Payments; either tab missing is added,
  * one renamed by case is named again. Any other tab is left alone. Payments' grid is sized to the rows, which also
- * removes rows left from a longer export, every value under its header cleared, its header frozen and bold, its money
- * columns and the attempt count formatted as numbers and its data rows clipped; Summary's label column is bold, both
- * its columns wrapped. Never sent twice.
+ * removes rows left from a longer export, its header frozen and bold, its money columns and the attempt count formatted
+ * as numbers and its data rows clipped; Summary's label column is bold, both its columns wrapped. No value is cleared
+ * here: the values write overwrites every row it keeps (`writeValues`), so a write that fails leaves the last export's
+ * rows under its own Summary. Never sent twice.
  */
 export async function formatTabs(
   token: string,
   id: string,
-  input: { tabs: Array<{ sheetId: number; title: string }>; fresh: boolean; rows: number; summaryRows: number },
+  input: { tabs: Array<Pick<SheetTab, "sheetId" | "title">>; fresh: boolean; rows: number; summaryRows: number },
   deps: GoogleHttp = {}
 ): Promise<void> {
   const requests: SheetRequest[] = [];
@@ -178,9 +198,6 @@ export async function formatTabs(
 
   requests.push(
     grid(payments, paymentRows, PAYMENTS_WIDTH, 1),
-    // Every value below the header, cleared before the rows are written: row 2 of a month with no payment, which the
-    // grid keeps and no value reaches, and any cell a person typed there, never survive to fail the read back.
-    { updateCells: { range: { sheetId: payments, startRowIndex: 1 }, fields: "userEnteredValue" } },
     bold({ sheetId: payments, startRowIndex: 0, endRowIndex: 1 }),
     wrap({ sheetId: payments, startRowIndex: 1 }, "CLIP"),
     ...MONEY_COLUMNS.map((column) => numberFormat(payments, CLOSE_PACK_COLUMNS.indexOf(column), AMOUNT_FORMAT)),
@@ -201,16 +218,20 @@ export async function formatTabs(
 
 /**
  * The values, RAW so no cell is parsed (GS8): the Summary and the header with the first 500 rows in the first request,
- * then 500 rows a request. `USER_ENTERED` is never sent. Each request is idempotent, so a 5xx sends it once more.
+ * then 500 rows a request. `USER_ENTERED` is never sent. Each request is idempotent, so a 5xx sends it once more. Every
+ * row is 51 cells, so it overwrites whatever was in its row; a month with no payment also sends row 2, which the grid
+ * keeps, as 51 empty cells (RAW "" empties a cell), so what was there goes with the header and the Summary, never ahead
+ * of them. That blank row is sent only: the rows hashed and compared are the payments as given.
  */
 export async function writeValues(token: string, id: string, input: { payments: SheetCell[][]; summary: SheetCell[][] }, deps: GoogleHttp = {}): Promise<void> {
   const spreadsheet = checkedId(id, "values.batchUpdate");
   const [header, ...rows] = input.payments;
   const last = columnLetter(PAYMENTS_WIDTH);
   const requests = Math.max(1, Math.ceil(rows.length / VALUES_ROWS_PER_REQUEST));
+  const blank: SheetCell[][] = rows.length === 0 ? [Array<SheetCell>(PAYMENTS_WIDTH).fill("")] : [];
   for (let index = 0; index < requests; index += 1) {
     const chunk = rows.slice(index * VALUES_ROWS_PER_REQUEST, (index + 1) * VALUES_ROWS_PER_REQUEST);
-    const values = index === 0 ? [header, ...chunk] : chunk;
+    const values = index === 0 ? [header, ...chunk, ...blank] : chunk;
     const start = index === 0 ? 1 : 2 + index * VALUES_ROWS_PER_REQUEST;
     const data = [
       ...(index === 0 ? [{ range: `${SUMMARY_TAB}!A1:B${input.summary.length}`, majorDimension: "ROWS", values: input.summary }] : []),

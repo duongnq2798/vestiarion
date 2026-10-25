@@ -1,4 +1,4 @@
-import { closePackTable } from "../close-pack/export";
+import { CLOSE_PACK_COLUMNS, closePackTable } from "../close-pack/export";
 import type { ClosePackMonth } from "../close-pack/month";
 import { readClosePack } from "../close-pack/read";
 import { CLOSE_PACK_EXPORT_LIMIT, recentClosePackExportsBy, recordClosePackExport, recordClosePackExportFailed } from "../close-pack/record";
@@ -165,10 +165,19 @@ export async function exportClosePackToSheet(
     spreadsheetId = file.id;
 
     // 6. Its tabs, Vestiarion's two formatted afresh (GS8, GS9). A file whose only tab is Google's own first one (id 0),
-    // named neither Payments nor Summary, was never formatted: a format leaves both tabs in one batchUpdate, or none.
-    // Its first tab becomes Payments, as in a file this run made, so no empty tab stays in front of the data.
+    // named neither Payments nor Summary, with nothing frozen and not Payments' 51 columns, was never formatted: a format
+    // leaves both tabs in one batchUpdate, or none. Its first tab becomes Payments, as in a file this run made, so no
+    // empty tab stays in front of the data. The grid, which a rename leaves, tells it from a Payments tab a person
+    // renamed once Summary was deleted (its id is 0 too): that one is a tab of theirs now, and left alone.
     const tabs = await call((accessToken) => sheetTabs(accessToken, file.id, http));
-    const untouched = tabs.length === 1 && tabs[0].sheetId === 0 && ![PAYMENTS_TAB, SUMMARY_TAB].some((title) => tabs[0].title.toLowerCase() === title.toLowerCase());
+    const lone = tabs.length === 1 ? tabs[0] : null;
+    const untouched =
+      lone !== null &&
+      lone.sheetId === 0 &&
+      ![PAYMENTS_TAB, SUMMARY_TAB].some((title) => lone.title.toLowerCase() === title.toLowerCase()) &&
+      lone.frozenRowCount === 0 &&
+      lone.columnCount !== null &&
+      lone.columnCount !== CLOSE_PACK_COLUMNS.length;
     await call((accessToken) => formatTabs(accessToken, file.id, { tabs, fresh: file.fresh || untouched, rows: payments.length - 1, summaryRows: summary.length }, http));
 
     // 7. The values: from here rows may reach Google, and a failure is recorded (GS11).

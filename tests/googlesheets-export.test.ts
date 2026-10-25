@@ -45,21 +45,43 @@ const GOOGLE_HOSTS = ["oauth2.googleapis.com", "www.googleapis.com", "sheets.goo
 // --- A fake Google: Drive's files and each spreadsheet's tabs and values.
 
 type Sent = { method: string; url: URL; body: unknown; token: string | null };
+/** A tab's grid, as Google answers it: `frozenRowCount` left out when no row is frozen. */
+type Grid = { rowCount: number; columnCount: number; frozenRowCount?: number };
 /** One request of a format `batchUpdate`, as far as the fake and the tests read it. */
 type SheetRequest = {
-  addSheet?: { properties: { sheetId: number; title: string } };
-  updateSheetProperties?: { properties: { sheetId: number; title?: string } };
+  addSheet?: { properties: { sheetId: number; title: string; gridProperties?: Grid } };
+  updateSheetProperties?: { properties: { sheetId: number; title?: string; gridProperties?: Grid } };
   [kind: string]: unknown;
 };
+interface FakeTab {
+  sheetId: number;
+  title: string;
+  gridProperties?: Grid;
+}
 interface FakeFile {
   id: string;
   name: string;
   createdTime: string;
   tag: string | null;
   trashed: boolean;
-  tabs: Array<{ sheetId: number; title: string }>;
+  tabs: FakeTab[];
   values: Map<string, unknown[][]>;
 }
+
+/** Google's own first tab of a spreadsheet just made: 1,000 rows of 26 columns, nothing frozen. */
+const GOOGLE_FIRST_TAB: FakeTab = { sheetId: 0, title: "Sheet1", gridProperties: { rowCount: 1000, columnCount: 26 } };
+/** A tab's values as Google reads them back: an empty cell is "", trailing empty cells and rows dropped. */
+function readBack(file: FakeFile, tab = "Payments"): unknown[][] {
+  const rows = (file.values.get(tab) ?? []).map((row) => {
+    const cells = Array.from(row ?? [], (cell) => cell ?? "");
+    while (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+    return cells;
+  });
+  while (rows.length > 0 && rows[rows.length - 1].length === 0) rows.pop();
+  return rows;
+}
+/** The tabs by id and title, their grids aside. */
+const tabsOf = (file: FakeFile) => file.tabs.map(({ sheetId, title }) => ({ sheetId, title }));
 
 interface FakeGoogle {
   files: FakeFile[];
@@ -88,7 +110,7 @@ function fakeGoogle(options: { fail?: (sent: Sent, google: FakeGoogle) => Respon
         createdTime: new Date(clock).toISOString(),
         tag: null,
         trashed: false,
-        tabs: [{ sheetId: 0, title: "Sheet1" }],
+        tabs: [{ ...GOOGLE_FIRST_TAB, gridProperties: { ...GOOGLE_FIRST_TAB.gridProperties! } }],
         values: new Map(),
         ...input,
       };
@@ -138,13 +160,32 @@ function fakeGoogle(options: { fail?: (sent: Sent, google: FakeGoogle) => Respon
         if (rest === "" && one.method === "GET") return json({ sheets: file.tabs.map((tab) => ({ properties: { ...tab } })) });
         if (rest === ":batchUpdate") {
           for (const request of (one.body as { requests: SheetRequest[] }).requests) {
-            if (request.addSheet) file.tabs.push({ sheetId: request.addSheet.properties.sheetId, title: request.addSheet.properties.title });
+            if (request.addSheet) {
+              const { sheetId, title, gridProperties } = request.addSheet.properties;
+              file.tabs.push({ sheetId, title, gridProperties: { rowCount: 1000, columnCount: 26, ...gridProperties } });
+            }
             const props = request.updateSheetProperties?.properties;
-            if (props?.title) file.tabs.find((tab) => tab.sheetId === props.sheetId)!.title = props.title;
-            // A clear of the values from a row down: what is left reads as nothing, as Google drops trailing empty rows.
+            const tab = props ? file.tabs.find((candidate) => candidate.sheetId === props.sheetId)! : undefined;
+            if (props?.title) {
+              // A renamed tab keeps its values.
+              const kept = file.values.get(tab!.title);
+              file.values.delete(tab!.title);
+              tab!.title = props.title;
+              if (kept) file.values.set(props.title, kept);
+            }
+            if (props?.gridProperties) {
+              // A grid made smaller drops the rows and columns past it, values and all.
+              tab!.gridProperties = { ...tab!.gridProperties!, ...props.gridProperties };
+              const values = file.values.get(tab!.title);
+              if (values) {
+                values.length = Math.min(values.length, props.gridProperties.rowCount);
+                for (const row of values) if (row) row.length = Math.min(row.length, props.gridProperties.columnCount);
+              }
+            }
+            // A clear of the values from a row down, as Google would apply it, so a test sees what a clear would leave.
             const clear = request.updateCells as { range: { sheetId: number; startRowIndex?: number; endRowIndex?: number }; fields: string } | undefined;
             if (clear && clear.fields === "userEnteredValue" && clear.range.endRowIndex === undefined) {
-              const title = file.tabs.find((tab) => tab.sheetId === clear.range.sheetId)?.title;
+              const title = file.tabs.find((candidate) => candidate.sheetId === clear.range.sheetId)?.title;
               const grid = title === undefined ? undefined : file.values.get(title);
               if (grid) grid.length = Math.min(grid.length, clear.range.startRowIndex ?? 0);
             }
@@ -152,23 +193,22 @@ function fakeGoogle(options: { fail?: (sent: Sent, google: FakeGoogle) => Respon
           return json({ replies: [] });
         }
         if (rest === "/values:batchUpdate") {
+          // Cell by cell, from column A: a RAW "" empties its cell, and a cell the request does not reach stays.
           for (const data of (one.body as { data: Array<{ range: string; values: unknown[][] }> }).data) {
             const [tab, cells] = data.range.split("!");
             const start = Number(/^A(\d+):/.exec(cells)![1]);
             const grid = file.values.get(tab) ?? [];
-            data.values.forEach((row, index) => (grid[start - 1 + index] = row));
+            data.values.forEach((row, index) => {
+              const target = [...(grid[start - 1 + index] ?? [])];
+              row.forEach((cell, column) => (target[column] = cell));
+              grid[start - 1 + index] = target;
+            });
             file.values.set(tab, grid);
           }
           return json({ totalUpdatedRows: 1 });
         }
         if (rest.startsWith("/values/Payments!A1:AY")) {
-          // As Google answers: trailing empty cells and rows dropped.
-          const rows = (file.values.get("Payments") ?? []).map((row) => {
-            const cells = [...row];
-            while (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
-            return cells;
-          });
-          return json({ range: "Payments!A1:AY4", majorDimension: "ROWS", values: rows });
+          return json({ range: "Payments!A1:AY4", majorDimension: "ROWS", values: readBack(file) });
         }
       }
       return json({ error: { code: 400 } }, 400);
@@ -304,8 +344,11 @@ describe("a first export of the month (close pack Sheets GS7-GS11)", () => {
       repeatCell: { range: { sheetId: 0, startRowIndex: 0, endRowIndex: 1 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: "userEnteredFormat.textFormat.bold" },
     });
     expect(format).toContainEqual({ repeatCell: { range: { sheetId: 0, startRowIndex: 1 }, cell: { userEnteredFormat: { wrapStrategy: "CLIP" } }, fields: "userEnteredFormat.wrapStrategy" } });
-    // Every value below the header cleared before the rows are written, so nothing left there survives the export.
-    expect(format).toContainEqual({ updateCells: { range: { sheetId: 0, startRowIndex: 1 }, fields: "userEnteredValue" } });
+    // No value is cleared by the format: the rows are written over by the values, so a write that fails leaves the
+    // earlier export's rows under its own Summary rather than an empty tab.
+    expect(format.some((request) => "updateCells" in request)).toBe(false);
+    // The tabs are read with their grids, to tell a tab never formatted from one a person renamed.
+    expect(google.sent[3].url.searchParams.get("fields")).toBe("sheets.properties(sheetId,title,gridProperties)");
     const amountPaid = CLOSE_PACK_COLUMNS.indexOf("amount_paid");
     expect(format).toContainEqual({
       repeatCell: {
@@ -499,17 +542,36 @@ describe("the values (close pack Sheets GS8)", () => {
     expect(google.files[0].values.get("Summary")!.some((row) => row[0] === "Cut")).toBe(true);
   });
 
-  it("writes the header alone for a month with no payment, in a grid of two rows", async () => {
+  it("writes the header and a blank row 2 for a month with no payment, in a grid of two rows, with the Summary", async () => {
     const { run } = workspace();
     const pack = { ...samplePack(), rows: [] };
     const google = fakeGoogle();
     expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google, pack }).deps))).toMatchObject({ ok: true, payments: 0 });
     expect(writes(google)).toHaveLength(1);
-    expect((writes(google)[0].body as { data: Array<{ range: string }> }).data[1].range).toBe("Payments!A1:AY1");
+    // Row 2, which the grid keeps and no row of the month reaches, is emptied in the same request as the header and the
+    // Summary, never ahead of them.
+    const data = (writes(google)[0].body as { data: Array<{ range: string; values: unknown[][] }> }).data;
+    expect(data.map((part) => part.range)).toEqual([expect.stringMatching(/^Summary!A1:B\d+$/), "Payments!A1:AY2"]);
+    expect(data[1].values).toEqual([[...CLOSE_PACK_COLUMNS], Array(51).fill("")]);
     const format = (google.sent.find((one) => one.url.pathname.endsWith(":batchUpdate") && !one.url.pathname.includes("values"))!.body as { requests: SheetRequest[] }).requests;
     expect(format).toContainEqual(expect.objectContaining({ updateSheetProperties: expect.objectContaining({ properties: { sheetId: 0, gridProperties: { rowCount: 2, columnCount: 51, frozenRowCount: 1 } } }) }));
-    // Row 2, which the grid keeps and no value reaches, is cleared with every other row below the header.
-    expect(format).toContainEqual({ updateCells: { range: { sheetId: 0, startRowIndex: 1 }, fields: "userEnteredValue" } });
+    expect(format.some((request) => "updateCells" in request)).toBe(false);
+    // Read back as the header alone, the hash the Summary names.
+    expect(readBack(google.files[0])).toEqual([[...CLOSE_PACK_COLUMNS]]);
+    expect(entries().map((entry) => entry.action)).toEqual(["close_pack_exported"]);
+  });
+
+  it("drops the rows a longer export of the month left, by the grid sized to the rows", async () => {
+    const { run } = workspace();
+    const google = fakeGoogle();
+    await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps));
+    expect(readBack(google.files[0])).toHaveLength(4);
+    appendEntryMock.mockClear();
+    const base = samplePack();
+    const shorter = { ...base, rows: base.rows.slice(0, 1) };
+    expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google, pack: shorter }).deps))).toMatchObject({ ok: true, payments: 1, created: false });
+    expect(readBack(google.files[0])).toHaveLength(2);
+    expect(entries().map((entry) => entry.action)).toEqual(["close_pack_exported"]);
   });
 
   it("clears what was left in row 2 of a month that now has no payment, so the read back matches", async () => {
@@ -525,7 +587,32 @@ describe("the values (close pack Sheets GS8)", () => {
     });
     expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google, pack }).deps))).toMatchObject({ ok: true, payments: 0, created: false });
     expect(entries().map((entry) => entry.action)).toEqual(["close_pack_exported"]);
-    expect(google.files[0].values.get("Payments")).toEqual([header]);
+    // Emptied by the values write's blank row 2: the tab reads back as the header alone.
+    expect(readBack(google.files[0])).toEqual([header]);
+  });
+
+  it("leaves the earlier export's rows, under its own Summary, when the first values request is answered 429", async () => {
+    const { run } = workspace();
+    let limiting = false;
+    const google = fakeGoogle({
+      // No Retry-After: Google's default wait is longer than an export waits, so the request is not sent again.
+      fail: (one) => (limiting && one.url.pathname.endsWith("/values:batchUpdate") ? new Response(JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED" } }), { status: 429 }) : null),
+    });
+    expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps))).toMatchObject({ ok: true, payments: 3 });
+    const payments = readBack(google.files[0]);
+    const summary = readBack(google.files[0], "Summary");
+    expect(payments).toHaveLength(4);
+    appendEntryMock.mockClear();
+    google.sent.length = 0;
+
+    limiting = true;
+    expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps))).toEqual({ ok: false, reason: "rate_limited" });
+    expect(writes(google)).toHaveLength(1);
+    expect(entries().map((entry) => entry.action)).toEqual(["close_pack_export_failed"]);
+    expect(entries()[0].detail).toMatchObject({ stage: "write", reason: "rate_limited", spreadsheetId: google.files[0].id });
+    // The month's spreadsheet is as the last recorded export left it: its rows, and the Summary that names their hash.
+    expect(readBack(google.files[0])).toEqual(payments);
+    expect(readBack(google.files[0], "Summary")).toEqual(summary);
   });
 });
 
@@ -764,7 +851,7 @@ describe("a create that times out (close pack Sheets GS7, GS12)", () => {
     expect(next).toMatchObject({ ok: true, created: false, spreadsheetId: google.files[0].id });
     expect(google.files).toHaveLength(1);
     // Never formatted, so Google's own first tab becomes Payments rather than staying, empty, in front of it.
-    expect(google.files[0].tabs).toEqual([{ sheetId: 0, title: "Payments" }, { sheetId: 1, title: "Summary" }]);
+    expect(tabsOf(google.files[0])).toEqual([{ sheetId: 0, title: "Payments" }, { sheetId: 1, title: "Summary" }]);
   });
 
   it("never sends a rename or a format again after a 5xx; the next export formats the file as one just made", async () => {
@@ -774,12 +861,12 @@ describe("a create that times out (close pack Sheets GS7, GS12)", () => {
     expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps))).toEqual({ ok: false, reason: "unavailable" });
     expect(google.calls().filter((call) => call.endsWith(":batchUpdate"))).toHaveLength(1);
     expect(entries()).toEqual([]);
-    expect(google.files[0].tabs).toEqual([{ sheetId: 0, title: "Sheet1" }]);
+    expect(tabsOf(google.files[0])).toEqual([{ sheetId: 0, title: "Sheet1" }]);
 
     failing = false;
     const next = await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps));
     expect(next).toMatchObject({ ok: true, created: false, spreadsheetId: google.files[0].id });
-    expect(google.files[0].tabs).toEqual([{ sheetId: 0, title: "Payments" }, { sheetId: 1, title: "Summary" }]);
+    expect(tabsOf(google.files[0])).toEqual([{ sheetId: 0, title: "Payments" }, { sheetId: 1, title: "Summary" }]);
   });
 
   it("leaves a lone tab of a person's alone when it is not Google's first one", async () => {
@@ -789,6 +876,28 @@ describe("a create that times out (close pack Sheets GS7, GS12)", () => {
     google.addFile({ tag: TAG, tabs: [{ sheetId: 5, title: "My notes" }] });
     expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps))).toMatchObject({ ok: true });
     expect(google.files[0].tabs.map((tab) => tab.title)).toEqual(["My notes", "Payments", "Summary"]);
+  });
+
+  it("leaves alone a Payments tab a person renamed once Summary is deleted: its id is 0, but it was formatted", async () => {
+    // A formatted Payments tab has 51 columns and its header frozen; a person may then add columns, or unfreeze it.
+    for (const grid of [
+      { rowCount: 4, columnCount: 51, frozenRowCount: 1 },
+      { rowCount: 4, columnCount: 54, frozenRowCount: 1 },
+      { rowCount: 4, columnCount: 51 },
+    ]) {
+      const { run } = workspace();
+      const google = fakeGoogle();
+      const notes = [[...CLOSE_PACK_COLUMNS, "Reviewed by", "Note", "Query"], ["pay-1", ...Array(50).fill("x"), "Lan", "ok", "none"], ["pay-2"], ["pay-3"]];
+      const file = google.addFile({ tag: TAG, tabs: [{ sheetId: 0, title: "Reviewed", gridProperties: grid }], values: new Map([["Reviewed", notes.map((row) => [...row])]]) });
+      expect(await run(() => exportClosePackToSheet(USER_INPUT, exporter({ google }).deps)), JSON.stringify(grid)).toMatchObject({ ok: true, created: false });
+      const format = (google.sent.find((one) => one.url.pathname.endsWith(":batchUpdate") && !one.url.pathname.includes("values"))!.body as { requests: SheetRequest[] }).requests;
+      // Nothing of the format names the person's tab: no rename, no grid, no clear.
+      expect(JSON.stringify(format), JSON.stringify(grid)).not.toMatch(/"sheetId":0\b/);
+      expect(format.filter((request) => request.addSheet).map((request) => request.addSheet!.properties.title)).toEqual(["Payments", "Summary"]);
+      expect(file.tabs.map((tab) => tab.title)).toEqual(["Reviewed", "Payments", "Summary"]);
+      expect(file.values.get("Reviewed")).toEqual(notes);
+      expect(readBack(file)).toHaveLength(4);
+    }
   });
 
   it("starts no call after 90 seconds, and answers unavailable", async () => {
