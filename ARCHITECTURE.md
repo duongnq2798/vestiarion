@@ -4511,9 +4511,10 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
   (`people: "id"` names them by id only); someone gone is a former member.
 - **The checks** (CP8). Guardrails, screening, OFAC's address list, the payee lock, the invoice's own address and a
   milestone's verification, each in the evidence chain's words (`EVIDENCE_WORDS`) or "Does not apply", with its entries
-  and a warning for bad news. The payee lock is judged by the lock in force when it was sent: the newest
+  and a warning for bad news. The payee lock is read against the lock in force when it was sent: the newest
   `payee_lock_changed` between the confirmation and the paying entry (the workspace's, read up to the month's end), else
-  the confirmation's; a payment sent under a lock an owner eased is stated, with a warning, citing the change. A pull request is named as text, never linked; the pack reads no chain.
+  the confirmation's; a payment sent under a lock an owner eased is stated, with a warning, citing the change. A pull
+  request is named as text, never linked; the pack reads no chain.
 - **The transaction** (CP9). Its route and the transaction that paid the payee, as a receipt reads it; explorer links are
   built from the chain profile's `explorerTx` for a hash that is `0x` and 64 hex digits only. A bank payout names its bank
   code and last 4 digits only.
