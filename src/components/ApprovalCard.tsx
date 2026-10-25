@@ -29,7 +29,7 @@ import { COSIGN_BLOCKED, type CosignState } from "@/lib/cosign-state-rules";
 import { addedDetailsSentence } from "@/lib/added-details";
 import { bankAccountLine, bankQuoteLine } from "@/lib/bank-payouts/words";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
-import { agentResumes, CASH_SHORTFALL, SHADOW_VERDICT, counterpartyPath, ruleNextStep } from "@/lib/next-step";
+import { agentResumes, CASH_SHORTFALL, SHADOW_VERDICT, counterpartyPath, ruleNextStep, VENDOR_DOCUMENT } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { approvalCost, bankPayoutCost, type ApprovalCost } from "@/lib/approval-cost";
 import type { ExceptionFacts } from "@/lib/exceptions";
@@ -164,6 +164,8 @@ export function unansweredLine(attempt: { sending?: true }, acrossChains: boolea
  */
 export function overridesHold(payable: Pick<WaitingPayable, "status" | "guardrailRule" | "heldForCash" | "heldForVerdict">): boolean {
   if (payable.heldForCash || payable.heldForVerdict) return false;
+  // Held for its vendor's document, the agent waits for a person: approving it is what the hold asks for (document checks DK8).
+  if (payable.guardrailRule === VENDOR_DOCUMENT) return false;
   return payable.status === "flagged" || payable.guardrailRule !== null;
 }
 

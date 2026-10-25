@@ -230,6 +230,11 @@ describe("where Approve and pay asks why", () => {
     expect(overridesHold({ ...held, guardrailRule: "counterparty_limit", heldForCash: true })).toBe(false);
     expect(overridesHold({ ...held, status: "flagged", heldForVerdict: true })).toBe(false);
   });
+
+  it("asks nothing of a person approving a bill whose purchase order came from its vendor's document: the agent waits for them (document checks DK8)", () => {
+    const held = { status: "held" as const, guardrailRule: "invoice.vendor_document", heldForCash: false, heldForVerdict: false };
+    expect(overridesHold(held)).toBe(false);
+  });
 });
 
 describe("an invoice that asks to be paid somewhere else (invoice pay-to hold IP3)", () => {

@@ -84,6 +84,12 @@ describe("billNextStep", () => {
     expect(billNextStep(decision({ outcome: "settled" }), { status: "paid", waiting: undefined, rule: null, ...people })).toBeNull();
   });
 
+  it("sends a bill held for its vendor's document to Approvals, where a person approves it (document checks DK8)", () => {
+    const facts = { status: "held", waiting: waiting({ poReference: "PO-PC-2026-1030", goodsReceived: true }), rule: "invoice.vendor_document", ...people };
+    expect(billNextStep(decision({ outcome: "refused" }), facts)).toEqual({ text: "Decide in Approvals", tone: "held", href: "/approvals#payable-inv-1" });
+    expect(billNextStep(decision({ outcome: "refused" }), { ...facts, canDecide: false, canWrite: false })).toMatchObject({ text: "Waits for an owner or approver" });
+  });
+
   it("sends a bill code refused, and no longer waiting, to Approvals", () => {
     expect(billNextStep(decision({ outcome: "refused" }), { status: "pending", waiting: undefined, rule: "counterparty.high_risk", ...people, canWrite: false })).toMatchObject({
       text: "Decide in Approvals",
