@@ -19,7 +19,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of use"
-      updated="2026-10-16"
+      updated="2026-10-25"
       intro="These terms cover your use of Vestiarion, an AI agent for bills and payments that pays invoices and contractors in USDC on Arc mainnet and Arc testnet. By using it, you accept them."
     >
       <LegalSection id="networks" title="Arc mainnet and Arc testnet">
@@ -202,6 +202,14 @@ export default function TermsPage() {
           keeping anyone else from accepting their own work stays the workspace&apos;s. Vestiarion never uses Asana data to train or improve any AI model, and never
           passes it to anyone else without the workspace&apos;s say. Disconnecting stops the reading at once; acceptances already recorded stay with
           the workspace.
+        </p>
+        <p>
+          When an owner or admin connects Google Sheets to a workspace, they agree, for the workspace, that Vestiarion makes spreadsheets in the Drive
+          of the Google account they connect and writes to them the close packs an owner, admin or accountant exports, with Google&apos;s access to the
+          files it makes only. Vestiarion never shares a spreadsheet and reads nothing from one back; who sees it is up to that Google account.
+          Vestiarion never uses Google data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say.
+          Disconnecting revokes the access at Google, unless another workspace uses the same Google account, and deletes the tokens; the spreadsheets
+          already exported stay in that Drive.
         </p>
       </LegalSection>
 

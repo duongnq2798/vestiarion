@@ -620,6 +620,18 @@ sync. The connection needs migration 0115; before it runs, the Asana card says A
 each webhook's secret are kept encrypted under `VESTIARION_MASTER_KEYS`. See [Accept contractor work from
 Asana](https://www.vestiarion.xyz/docs/guides/asana).
 
+With `GOOGLE_SHEETS_CLIENT_ID` and `GOOGLE_SHEETS_CLIENT_SECRET` set, from a Google OAuth client of type Web application,
+an owner or admin connects a workspace to one Google account from Settings, after agreeing to what Vestiarion does with
+its Drive, and an owner, admin or accountant exports a month's close pack to a spreadsheet in that Drive from **Monthly
+close pack**. In the Google Cloud project, enable the Google Sheets API and the Google Drive API, set the app's
+branding, add the one scope `https://www.googleapis.com/auth/drive.file` (non-sensitive: Vestiarion reaches only the
+files it makes), and register the redirect URI `<origin>/api/integrations/googlesheets/callback` exactly. Publish the
+app before real use: while it is in Testing, Google ends its refresh tokens after 7 days. The client id must read like
+`1234567890-abc123.apps.googleusercontent.com`, or Google Sheets stays off and `/api/integrations/googlesheets/*`
+answers 404. The connection needs migration 0145; before it runs, the Google Sheets card says Google Sheets is not set up
+yet. Its tokens are kept encrypted under `VESTIARION_MASTER_KEYS`. See [Export the close pack to Google
+Sheets](https://www.vestiarion.xyz/docs/guides/accountants#export-the-close-pack-to-google-sheets).
+
 ### Measurement provenance
 
 Every newly executed payment intent records its target, transaction reference, chain, provider

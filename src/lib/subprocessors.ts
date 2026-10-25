@@ -8,7 +8,7 @@ import { ENS_GATEWAY_HOSTS, ENS_RPC_DEFAULT } from "./ens-hosts";
 import { NETWORKS } from "./network";
 
 /** The day this list was last checked against the code. */
-export const SUBPROCESSORS_AS_OF = "2026-10-23";
+export const SUBPROCESSORS_AS_OF = "2026-10-25";
 
 const hostOf = (url: string) => new URL(url).host;
 
@@ -203,6 +203,14 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     names: ["Asana"],
     purpose: "read for the tasks linked to milestones, and written to only to make and delete their webhooks",
     data: "the requests that read linked tasks, the webhooks made on them, and the email addresses it asks about to tell whether one belongs to an Asana user",
+    when: ONLY_IF_CONNECTED,
+  },
+  {
+    name: "Google Sheets",
+    privacyEntry: "Google Sheets",
+    names: ["Google Sheets", "Google Drive"],
+    purpose: "written to with the close packs an owner, admin or accountant exports, in spreadsheets Vestiarion makes in the connected account's Google Drive",
+    data: "each exported close pack's rows and summary, with members' emails, payees' names and addresses, amounts and signed entries, and the Google account's id and email when it is connected",
     when: ONLY_IF_CONNECTED,
   },
   {

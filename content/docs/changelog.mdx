@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-25: Close packs exported to Google Sheets
+
+- **`close_pack_exported`** takes `format: "google_sheets"` when a member exports a month to Google Sheets, with `connectionId`, `spreadsheetId` (Google's id of the spreadsheet) and `created` (a new spreadsheet was made). Its `sha256` is then the SHA-256 of the Payments tab as written: `JSON.stringify` of its rows, the header first, each as wide as the header. It names no one by email and carries no URL.
+- A new entry, actor `human`, domain `system`, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`close_pack_export_failed`** `{ by, month, ended, format, connectionId, spreadsheetId, stage, reason }`, when an export failed after rows may have reached Google. `stage` is `write` or `read_back`; `reason` is `rate_limited`, `unavailable`, `forbidden`, `drive_full`, `bad_response` or `mismatch`. It counts toward the same ten in ten minutes as `close_pack_exported`.
+- `accounting_connected` and `accounting_disconnected` may carry `provider: "googlesheets"`; `externalOrgId` is then the Google account's permission id and `externalOrgName` a masked email.
+- Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-25: The monthly close pack
 
 - A new entry, actor `human`, domain `system`, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`close_pack_exported`** `{ by, month, ended, format, payments, notSettled, sha256, headSeq }`, when a member downloads a workspace's close pack for a month. `month` is YYYY-MM; `ended` is false for a month still running; `format` is `csv` or `json`; `payments` and `notSettled` count its rows; `sha256` is the SHA-256 of the file served, in hex; `headSeq` is the ledger's last entry when it was read. It names no one by email. Nothing else in `/api/v1` or the webhooks changes.
