@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ClosePackView } from "@/components/ClosePackView";
+import { SheetsExport } from "@/components/close-pack/SheetsExport";
 import { DocsLink } from "@/components/DocsLink";
 import { Callout } from "@/components/ui/Callout";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
@@ -67,7 +68,12 @@ export default async function ClosePackPage({ params, searchParams }: ClosePackP
             That month could not be read, so this shows last month. Choose a month with the Month field.
           </Callout>
         )}
-        {pack ? <ClosePackView pack={pack} sheets={sheets} /> : <Callout tone="held">The close pack was read many times in a row. Try again in a minute.</Callout>}
+        {/* Export to Google Sheets is made from the month and the workspace, not the pack, so a render with no read keeps its answer (close pack Sheets GS5). */}
+        <ClosePackView
+          pack={pack}
+          sheets={<SheetsExport orgSlug={access.membership.slug} month={month.key} view={sheets} />}
+          refused={<Callout tone="held">The close pack was read many times in a row. Try again in a minute.</Callout>}
+        />
       </ProductShell>
     );
   });

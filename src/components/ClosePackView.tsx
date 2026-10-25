@@ -1,7 +1,6 @@
 import { ArrowUpRight, FileJson, FileSpreadsheet, Minus } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { SheetsExport } from "@/components/close-pack/SheetsExport";
 import { PrintButton } from "@/components/PrintButton";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -14,7 +13,6 @@ import { Input } from "@/components/ui/Input";
 import { EvidenceLabel } from "@/components/vx/EvidenceChain";
 import { closePackMonth, monthsBeside, type ClosePackMonth } from "@/lib/close-pack/month";
 import type { ClosePack, ClosePackCheck, ClosePackChecks, ClosePackRow, ClosePackTotal } from "@/lib/close-pack/types";
-import type { ClosePackSheetsView } from "@/lib/googlesheets/views";
 import {
   addressLines,
   amountWords,
@@ -125,21 +123,15 @@ function CheckKind({ check }: { check: ClosePackCheck }) {
   return <EvidenceLabel kind={check.kind} />;
 }
 
-/** Nothing of Google Sheets: a deployment without it, or the guide's screenshot. */
-const SHEETS_HIDDEN: ClosePackSheetsView = { state: "hidden" };
-
-/**
- * The month field, the months around it, the downloads and print, and Export to Google Sheets where it is on (close
- * pack Sheets GS5), none of them printed (CP11, CP12).
- */
-export function ClosePackControls({ pack, sheets = SHEETS_HIDDEN }: { pack: ClosePack; sheets?: ClosePackSheetsView }) {
+/** The month field, the months around it, the downloads and print (CP11, CP12). */
+function MonthAndDownloads({ pack }: { pack: ClosePack }) {
   const now = new Date(pack.readAt);
   const last = closePackMonth(null, now) as ClosePackMonth;
   const current = closePackMonth(now.toISOString().slice(0, 7), now) as ClosePackMonth;
   const { previous, next } = monthsBeside(pack.month, now);
   const download = (format: "csv" | "json") => `/api/evidence/close-pack?${new URLSearchParams({ org: pack.workspace.slug, month: pack.month.key, format }).toString()}`;
   return (
-    <div className="flex flex-col gap-4 print:hidden">
+    <>
       <form method="get" className="flex flex-wrap items-end gap-3">
         <Field id="close-pack-month" label="Month">
           <Input type="month" name="month" size="sm" defaultValue={pack.month.key} min="2020-01" max={current.key} placeholder="YYYY-MM" />
@@ -181,10 +173,25 @@ export function ClosePackControls({ pack, sheets = SHEETS_HIDDEN }: { pack: Clos
           </a>
         </Button>
       </div>
-      <SheetsExport orgSlug={pack.workspace.slug} month={pack.month.key} view={sheets} />
-      <p className="text-xs text-ink-3">
-        Vestiarion records each download in the workspace&apos;s ledger with the file&apos;s SHA-256, so a copy can be matched to it later.
-      </p>
+    </>
+  );
+}
+
+/**
+ * The controls, none of them printed (CP11, CP12): the month, the downloads and print once the pack is read, and
+ * between the downloads and their note, Export to Google Sheets where it is on (close pack Sheets GS5). `sheets` stays
+ * at the same place in the tree whether the pack was read or not (see `ClosePackView`).
+ */
+export function ClosePackControls({ pack, sheets }: { pack: ClosePack | null; sheets?: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-4 print:hidden">
+      {pack && <MonthAndDownloads pack={pack} />}
+      {sheets}
+      {pack && (
+        <p className="text-xs text-ink-3">
+          Vestiarion records each download in the workspace&apos;s ledger with the file&apos;s SHA-256, so a copy can be matched to it later.
+        </p>
+      )}
     </div>
   );
 }
@@ -472,14 +479,10 @@ export function ClosePackEscrow({ pack }: { pack: ClosePack }) {
   );
 }
 
-export function ClosePackView({ pack, sheets = SHEETS_HIDDEN }: { pack: ClosePack; sheets?: ClosePackSheetsView }) {
+function ClosePackReport({ pack }: { pack: ClosePack }) {
   const { entries } = pack.totals;
   return (
-    <div className="space-y-8">
-      <p className="hidden text-sm text-ink-2 print:block">
-        {`Vestiarion monthly close pack · ${pack.workspace.name} (${pack.network.label}) · ${monthWords(pack)} · read ${utcWords(pack.readAt)}`}
-      </p>
-      <ClosePackControls pack={pack} sheets={sheets} />
+    <>
       <ClosePackSummary pack={pack} />
       <ClosePackPayments pack={pack} />
       <ClosePackNotSettled pack={pack} />
@@ -487,6 +490,28 @@ export function ClosePackView({ pack, sheets = SHEETS_HIDDEN }: { pack: ClosePac
       <p className="border-t border-line pt-4 text-sm text-ink-2">
         {`${entries.verified} of ${entries.cited} signed ledger entries this pack cites verified against the workspace's keys. The signed JSON carries each of them with the public keys, so anyone can check them offline.`}
       </p>
+    </>
+  );
+}
+
+/**
+ * The close pack page's body (CP11). `sheets` is Export to Google Sheets (close pack Sheets GS5), which the page makes
+ * from the month and the workspace, never from the pack: it sits at the same place in the tree whether the pack was read
+ * or not, so a render whose read was refused (an export's revalidation once the page's reads are spent) keeps the
+ * export's answer and its link (the revalidate unmount pattern). With no pack, `refused` stands in its place.
+ */
+export function ClosePackView({ pack, sheets, refused }: { pack: ClosePack | null; sheets?: ReactNode; refused?: ReactNode }) {
+  return (
+    <div className="space-y-8">
+      {pack ? (
+        <p className="hidden text-sm text-ink-2 print:block">
+          {`Vestiarion monthly close pack · ${pack.workspace.name} (${pack.network.label}) · ${monthWords(pack)} · read ${utcWords(pack.readAt)}`}
+        </p>
+      ) : (
+        refused
+      )}
+      <ClosePackControls pack={pack} sheets={sheets} />
+      {pack && <ClosePackReport pack={pack} />}
     </div>
   );
 }

@@ -91,8 +91,19 @@ describe("exportClosePackToSheetsAction (close pack Sheets GS5, GS11)", () => {
     expect(input).toMatchObject({ orgId: ORG, user: { id: USER, email: "accountant@ledgerworks.test" }, workspace: { slug: "acme", name: "Acme Studio" }, month: { key: "2026-10" } });
     expect(deps.provider).toMatchObject({ id: "googlesheets" });
     expect(mocks.token).toHaveBeenCalledWith(`${USER}:${ORG}`);
-    expect(mocks.revalidate).toHaveBeenCalled();
+    // No revalidation: it would read the whole pack again inside the action's time; the answer holds what changed.
+    expect(mocks.revalidate).not.toHaveBeenCalled();
     expect(JSON.stringify(result)).not.toMatch(/ya29\.|1\/\/|GOCSPX/);
+  });
+
+  it("revalidates when the export asks for a reconnect, so the card and the page say so", async () => {
+    mocks.exportSheet.mockResolvedValue({ ok: false, reason: "reconnect" });
+    await exportClosePackToSheetsAction(EMPTY, form({ month: "2026-10" }));
+    expect(mocks.revalidate).toHaveBeenCalledTimes(1);
+    mocks.revalidate.mockClear();
+    mocks.exportSheet.mockResolvedValue({ ok: false, reason: "unavailable" });
+    await exportClosePackToSheetsAction(EMPTY, form({ month: "2026-10" }));
+    expect(mocks.revalidate).not.toHaveBeenCalled();
   });
 
   it("says one payment, and a month with none", async () => {

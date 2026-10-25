@@ -89,10 +89,9 @@ export async function exportClosePackToSheetsAction(_previous: SheetsExportResul
         },
         { provider: settings ? googleSheetsProvider(settings) : null }
       );
-      if (outcome.ok) {
-        revalidateOrgPages();
-        return { ok: true, message: exportedWords(outcome.payments), sheet: { url: outcome.url, account: outcome.account } };
-      }
+      // Done: no revalidation. It would read the whole pack again inside this action's time, after an export that may
+      // have used most of it; the answer holds the count, the account and the link (GS5, GS12).
+      if (outcome.ok) return { ok: true, message: exportedWords(outcome.payments), sheet: { url: outcome.url, account: outcome.account } };
       // The card and the close pack page say the connection needs reconnecting.
       if (outcome.reason === "reconnect") revalidateOrgPages();
       return { ok: false, message: EXPORT_WORDS[outcome.reason] };

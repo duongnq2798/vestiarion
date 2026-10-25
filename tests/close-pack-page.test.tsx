@@ -3,6 +3,7 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ClosePackView } from "@/components/ClosePackView";
+import { SheetsExport } from "@/components/close-pack/SheetsExport";
 import type { ClosePack, ClosePackOpenPayment, ClosePackOpenState } from "@/lib/close-pack/types";
 import type { ClosePackSheetsView } from "@/lib/googlesheets/views";
 import { takeClosePackPageToken } from "@/lib/rate-limit";
@@ -249,20 +250,34 @@ describe("the controls, downloads and print (close pack CP11, CP12)", () => {
 });
 
 describe("Export to Google Sheets beside the downloads (close pack Sheets GS5)", () => {
-  const sheets = (view: ClosePackSheetsView) => textOf(renderToStaticMarkup(<ClosePackView pack={PACK} sheets={view} />));
+  const READY: ClosePackSheetsView = { state: "ready", account: "du***@gmail.com", canExport: true, last: null };
+  const control = (view: ClosePackSheetsView) => <SheetsExport orgSlug={PACK.workspace.slug} month={PACK.month.key} view={view} />;
+  const sheets = (view: ClosePackSheetsView) => textOf(renderToStaticMarkup(<ClosePackView pack={PACK} sheets={control(view)} />));
 
-  it("shows nothing of Google Sheets when hidden, or when the page passes no view", () => {
+  it("shows nothing of Google Sheets when hidden, or when the page passes no control", () => {
     for (const text of [TEXT, sheets({ state: "hidden" })]) expect(text).not.toContain("Google Sheets");
   });
 
-  it("renders each view in the controls, with the pack's month and workspace", () => {
+  it("renders each view under the downloads, with the month and the workspace", () => {
     expect(sheets({ state: "connect", canConnect: true })).toContain("Connect Google Sheets in Settings to export this month to a spreadsheet.");
     expect(sheets({ state: "connect", canConnect: false })).toContain("An owner or admin can connect Google Sheets in Settings");
     expect(sheets({ state: "reconnect", canConnect: true })).toContain("Google Sheets needs reconnecting before this month can be exported.");
-    const ready = renderToStaticMarkup(<ClosePackView pack={PACK} sheets={{ state: "ready", account: "du***@gmail.com", canExport: true, last: null }} />);
+    const ready = renderToStaticMarkup(<ClosePackView pack={PACK} sheets={control(READY)} />);
     expect(textOf(ready)).toContain("Export to Google Sheets");
     expect(ready).toContain(`name="month" value="${PACK.month.key}"`);
     expect(ready).toContain(`name="orgSlug" value="${PACK.workspace.slug}"`);
+    const text = textOf(ready);
+    expect(text.indexOf("Download signed JSON")).toBeLessThan(text.indexOf("Export to Google Sheets"));
+    expect(text.indexOf("Export to Google Sheets")).toBeLessThan(text.indexOf("Vestiarion records each download"));
+  });
+
+  it("keeps the control when the pack was not read, with the page's refusal in the pack's place", () => {
+    const markup = renderToStaticMarkup(<ClosePackView pack={null} sheets={control(READY)} refused={<p>The close pack was read many times in a row. Try again in a minute.</p>} />);
+    const text = textOf(markup);
+    expect(text).toContain("The close pack was read many times in a row. Try again in a minute.");
+    expect(text).toContain("Export to Google Sheets");
+    expect(markup).toContain(`name="month" value="${PACK.month.key}"`);
+    for (const absent of ["Download CSV", "Payments settled", "Vestiarion records each download"]) expect(text).not.toContain(absent);
   });
 });
 
@@ -272,7 +287,12 @@ describe("the page (close pack CP11, CP14)", () => {
   it("gives its Server Actions 120 seconds, and reads the Google Sheets view for the person's role (close pack Sheets GS5, GS12)", () => {
     expect(page).toContain("export const maxDuration = 120;");
     expect(page).toContain("closePackSheetsView({ month, role: access.membership.role })");
-    expect(page).toContain("<ClosePackView pack={pack} sheets={sheets} />");
+  });
+
+  it("makes Export to Google Sheets from the month and the workspace, and renders the view whether the pack was read or not (close pack Sheets GS5)", () => {
+    expect(page).toContain("sheets={<SheetsExport orgSlug={access.membership.slug} month={month.key} view={sheets} />}");
+    expect(page).toMatch(/<ClosePackView\s+pack=\{pack\}/);
+    expect(page).not.toMatch(/pack \? <ClosePackView/);
   });
 
   it("is the Monthly close pack, gated as every workspace page is", () => {

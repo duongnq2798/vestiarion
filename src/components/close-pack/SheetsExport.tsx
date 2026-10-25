@@ -41,12 +41,14 @@ const paymentsWords = (n: number) => `${n} ${n === 1 ? "payment" : "payments"}`;
  * Export to Google Sheets on the close pack page (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md
  * GS5, GS9, "The close pack page"): connect or reconnect in Settings, or the button for an owner, admin or accountant,
  * with the Drive it writes to; and for every member the month's last export with its link. The action's answer lives in
- * this component, which stays mounted whatever the revalidated page's view is, so the answer is not dropped with it.
- * Nothing of it is printed.
+ * this component, which stays mounted whatever the revalidated page's view is, and which the page places outside what
+ * the pack's read renders, so the answer is not dropped with either. A done export does not revalidate the page: its
+ * answer is the month's last export, so it stands in for the page's older "Last exported" line. Nothing of it is printed.
  */
 export function SheetsExport({ orgSlug, month, view }: { orgSlug: string; month: string; view: ClosePackSheetsView }) {
   const { state, formProps } = useActionForm(exportClosePackToSheetsAction, INITIAL);
   if (view.state === "hidden") return null;
+  const done = state.ok && state.sheet !== undefined;
   const answer = state.message ? (
     state.ok ? (
       <div className="space-y-1 text-sm">
@@ -93,7 +95,7 @@ export function SheetsExport({ orgSlug, month, view }: { orgSlug: string; month:
               </p>
             </form>
           )}
-          {view.last && (
+          {view.last && !done && (
             <p className="flex flex-wrap items-center gap-x-2 text-sm text-ink-2">
               <span>
                 Last exported to Google Sheets on {view.last.at}: {paymentsWords(view.last.payments)}.
