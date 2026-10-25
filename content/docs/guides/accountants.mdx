@@ -163,9 +163,11 @@ To check the signed JSON without trusting Vestiarion:
 
 1. **Read what it holds.** `format` and `exportedAt`, when the pack was read; `workspace`, `network` and `month`, with `ended`; `ledgerHead`, the ledger's last entry then; `totals`; `rows`, one per settled payment with its `bill`, `approval`, `checks`, `transaction`, `record` and `books`, each fact naming its entries by `seq`; `notSettled` and `escrow`; `labels`, what each check's label means; `checkAnEntry`; `keys`, the workspace's public keys; and `entries`, every entry the rows cite, once each, oldest first.
 2. **Compare the keys** with the ones the **Audit log** shows beside **Ledger signing public key**, as [Verify an audit export](/docs/guides/audit-export#4-compare-the-key-id-and-the-head) explains.
-3. **Check each entry alone,** as for the [payee lock's evidence pack](/docs/guides/evidence-and-receipts#6-check-the-signed-json-offline): its `body_hash`, its `signature` by the key `signing_key_id` names, and its `hash`. A developer can run each entry through the [SDK's](/docs/get-started/sdk#webhooks) `verifyLedgerEntry`, with `body_hash`, `prev_hash` and `signing_key_id` named `bodyHash`, `prevHash` and `signingKeyId`, and the keys as a map of id to PEM.
+3. **Check each entry alone,** as for the [payee lock's evidence pack](/docs/guides/evidence-and-receipts#6-check-the-signed-json-offline): its `body_hash`, its `signature` by the key `signing_key_id` names, and its `hash`. A developer can run each entry through the [SDK's](/docs/get-started/sdk#webhooks) `verifyLedgerEntry`, with `body_hash`, `prev_hash` and `signing_key_id` named `bodyHash`, `prevHash` and `signingKeyId`, and the keys as a map of id to PEM. Or the [SDK's](/docs/get-started/sdk#evidence-receipts-and-close-packs) `verifyEvidence` takes the file as it is.
 4. **Place the entries in the whole ledger.** Download the [audit export](/docs/guides/audit-export) and check it; each entry in the pack must have the same `seq` and `hash` there.
 5. **Tie the file to its download.** The file itself is not signed: the ledger key signs ledger entries only. Its download's `close_pack_exported` entry is signed, and holds the file's SHA-256.
+
+A bookkeeping system reads the same pack with a workspace API key from `GET /api/v1/close-packs/{month}`, with members named by user id. See [Get a monthly close pack](/docs/api/get-close-pack).
 
 ## 6. Usage and limits
 

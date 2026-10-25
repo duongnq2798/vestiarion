@@ -89,7 +89,7 @@ If Vestiarion cannot look the key up at all, because of a database error, it ans
 
 ## Keeping a key safe
 
-A key reads the whole workspace: its invoices, counterparties, treasury and ledger. A read-and-write key can also add counterparties, invoices, milestones and payee links, so give write access only to a system that adds records.
+A key reads the whole workspace: its invoices, counterparties, treasury and ledger, and each payment's evidence and receipt and the monthly close pack. A read-and-write key can also add counterparties, invoices, milestones and payee links, so give write access only to a system that adds records.
 
 - **Never put a key in a URL.** URLs end up in server logs, browser history and proxies. The API does not read a key from a query string anyway.
 - **Never put a key in client-side code**, such as a web page, a browser extension or a mobile app. Anyone who has the code can read the key. Call the API from your server, and pass on only what the client needs.

@@ -24,6 +24,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   keep each token apart. **Print or save as PDF**, **Download CSV** and
   **Download signed JSON**; each download is recorded in the ledger as `close_pack_exported` with the file's SHA-256.
   Open it from the **Audit log** or the accountant console. No migration.
+- **Evidence, receipts and the close pack through the API.** A bookkeeping system, an auditor's tooling or the
+  business's own code reads with a workspace API key what the workspace's pages download: one payment's evidence
+  (`GET /api/v1/invoices/{id}/evidence`, `GET /api/v1/milestones/{id}/evidence`), a paid bill's receipt with its two
+  checks (`GET /api/v1/invoices/{id}/receipt`), the payee lock's evidence for a period (`GET
+  /api/v1/payee-lock/evidence`) and a month's close pack (`GET /api/v1/close-packs/{month}`), each the same signed file,
+  with members named by user id rather than email. A key makes up to 10 of these reads at once, then one every 6
+  seconds, and reading records nothing in the ledger. The TypeScript SDK 0.4.0 has a method for each, and
+  `verifyEvidence`, which checks any of these files offline, a download from the workspace included, with Web Crypto
+  alone. The payee lock's evidence file now names each member's user id beside their email. The MCP server does not
+  offer these reads yet. No migration.
 
 ## [0.1.0-beta.13] - 2026-10-25
 

@@ -1,6 +1,6 @@
 Vestiarion runs a remote [MCP](https://modelcontextprotocol.io) server. Connect an AI agent to it with a workspace API key, and the agent can answer questions from your workspace's own records: which payments are held and why, whether the ledger is intact, what is due to contractors.
 
-Each tool is one of the API's operations. A tool call runs that operation with your key and returns its JSON exactly as the API does. With a read-only key, an agent connected here can read and explain, and nothing more. With a [read-and-write key](/docs/get-started/authentication#scopes), it can also add counterparties, invoices and milestones, which the agent in Vestiarion then decides as it decides any other, and make payee links. No tool verifies work, approves or pays.
+Each tool is one of the API's operations, except the evidence reads (a payment's evidence and receipt, the payee lock's evidence and the monthly close pack), which have no tool yet. A tool call runs that operation with your key and returns its JSON exactly as the API does. With a read-only key, an agent connected here can read and explain, and nothing more. With a [read-and-write key](/docs/get-started/authentication#scopes), it can also add counterparties, invoices and milestones, which the agent in Vestiarion then decides as it decides any other, and make payee links. No tool verifies work, approves or pays.
 
 ## The server
 

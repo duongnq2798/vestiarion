@@ -6,7 +6,7 @@ A collection returns 1 to 200 items per page. `limit` defaults to 50, and a larg
 
 ## Rate limits
 
-Reads have no rate limit. Writes from one key come in bursts of up to 30, then one every 2 seconds, counted on each server instance, so a key can make up to about 60 writes in its first minute and a little more now and then. Over the limit, a write answers `429 rate_limited` with `Retry-After: 60`. No endpoint returns `503` today, but `unavailable` is a defined [error code](/docs/get-started/errors): write your client to back off on both, and it keeps working if a limit is added to reads.
+Reads have no rate limit, except the evidence reads: a payment's evidence or receipt, the payee lock's evidence and a monthly close pack. Each reads and checks many signed entries, so one key makes up to 10 of them at once, then one every 6 seconds, counted on each server instance; over that they answer `429 rate_limited` with `Retry-After: 60`. Writes from one key come in bursts of up to 30, then one every 2 seconds, counted on each server instance, so a key can make up to about 60 writes in its first minute and a little more now and then. Over the limit, a write answers `429 rate_limited` with `Retry-After: 60`. No endpoint returns `503` today, but `unavailable` is a defined [error code](/docs/get-started/errors): write your client to back off on both, and it keeps working if a limit is added to other reads.
 
 - On a `429`, wait at least as long as the `Retry-After` header says, in seconds, before you try again.
 - On a `503`, retry with exponential backoff.
@@ -16,6 +16,10 @@ Poll no more often than you need to. To react to each new ledger entry, [webhook
 ## Request bodies
 
 A write's body is one JSON object of at most 64 KB. A body that is larger, is not JSON, or has a field the operation does not take answers `400 invalid_request`, and nothing is written. To make a retry safe, send an `Idempotency-Key`: [Retrying safely](/docs/guides/api-invoices#retrying-safely) explains it. A payee link takes none: a repeat makes a new link, which replaces the first.
+
+## Response size
+
+A close pack, or the payee lock's evidence for a long period, whose answer would be over 4 MB answers `400 invalid_request`. Download such a close pack from the workspace's Monthly close pack page, or ask for the payee lock's evidence a shorter period at a time.
 
 ## Keys and endpoints per workspace
 
