@@ -9,7 +9,7 @@ vi.mock("@/lib/ledger", async (importOriginal) => ({
   appendLedgerEntry: appendEntryMock,
 }));
 
-import { CLOSE_PACK_EXPORT_LIMIT, recentClosePackExportsBy, recordClosePackExport } from "@/lib/close-pack/record";
+import { CLOSE_PACK_EXPORT_LIMIT, recentClosePackExportsBy, recordClosePackExport, recordClosePackExportFailed } from "@/lib/close-pack/record";
 import { closePackMonth } from "@/lib/close-pack/month";
 import { takeClosePackDownloadToken, takeClosePackPageToken } from "@/lib/rate-limit";
 import { samplePack } from "./support/close-pack-fixtures";
@@ -73,13 +73,61 @@ describe("recordClosePackExport (close pack CP13)", () => {
   });
 });
 
+describe("a close pack exported to Google Sheets (close pack Sheets GS11)", () => {
+  const SHEET = { connectionId: "0b6c1c9e-4a4f-4a7e-9b1e-0000000a6c09", spreadsheetId: "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms", created: true };
+
+  it("records close_pack_exported with format google_sheets, the connection, the spreadsheet's id and whether it was made", async () => {
+    const { run } = scope(0);
+    await run(() => recordClosePackExport({ orgId: ORG, userId: USER, pack: samplePack(), format: "google_sheets", sha256: SHA, sheet: SHEET }));
+    expect(appendEntryMock.mock.calls[0][0]).toEqual({
+      actor: "human",
+      domain: "system",
+      action: "close_pack_exported",
+      summary: "Close pack for October 2026 exported to Google Sheets: 3 payments settled, 1 not settled",
+      detail: { by: USER, month: "2026-10", ended: true, format: "google_sheets", payments: 3, notSettled: 1, sha256: SHA, headSeq: 99, ...SHEET },
+    });
+    const text = JSON.stringify(appendEntryMock.mock.calls[0][0]);
+    expect(text).not.toContain("@");
+    expect(text).not.toContain("https://");
+  });
+
+  it("records close_pack_export_failed with the stage and the reason, and no email or address", async () => {
+    const { run } = scope(0);
+    const now = new Date("2026-10-25T00:00:00Z");
+    const soFar = samplePack({ now, month: closePackMonth("2026-10", now)! });
+    await run(() => recordClosePackExportFailed({ orgId: ORG, userId: USER, pack: soFar, connectionId: SHEET.connectionId, spreadsheetId: SHEET.spreadsheetId, stage: "read_back", reason: "mismatch" }));
+    expect(appendEntryMock.mock.calls[0][0]).toEqual({
+      actor: "human",
+      domain: "system",
+      action: "close_pack_export_failed",
+      summary: "Close pack for October 2026 so far not fully exported to Google Sheets",
+      detail: { by: USER, month: "2026-10", ended: false, format: "google_sheets", connectionId: SHEET.connectionId, spreadsheetId: SHEET.spreadsheetId, stage: "read_back", reason: "mismatch" },
+    });
+    await run(() => recordClosePackExportFailed({ orgId: ORG, userId: USER, pack: samplePack(), connectionId: SHEET.connectionId, spreadsheetId: null, stage: "write", reason: "unavailable" }));
+    expect(appendEntryMock.mock.calls[1][0]).toMatchObject({ summary: "Close pack for October 2026 not fully exported to Google Sheets", detail: { spreadsheetId: null, stage: "write", reason: "unavailable" } });
+    const text = JSON.stringify(appendEntryMock.mock.calls);
+    expect(text).not.toContain("@");
+    expect(text).not.toContain("https://");
+  });
+
+  it("is best effort too", async () => {
+    const { run } = scope(0);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    appendEntryMock.mockRejectedValueOnce(new Error("no signing key"));
+    await expect(
+      run(() => recordClosePackExportFailed({ orgId: ORG, userId: USER, pack: samplePack(), connectionId: SHEET.connectionId, spreadsheetId: null, stage: "write", reason: "drive_full" }))
+    ).resolves.toBeUndefined();
+    expect(logged).toHaveBeenCalledWith("ledger entry not recorded", "close_pack_export_failed", ORG);
+  });
+});
+
 describe("recentClosePackExportsBy (close pack CP15)", () => {
-  it("counts this person's close_pack_exported entries in the last ten minutes, from the ledger, capped at the limit", async () => {
+  it("counts this person's close_pack_exported and close_pack_export_failed entries in the last ten minutes, capped at the limit (close pack Sheets GS11)", async () => {
     const { fake, run } = scope(4);
     const now = new Date("2026-10-25T10:00:00.000Z");
     expect(await run(() => recentClosePackExportsBy(USER, now))).toBe(4);
     const [read] = fake.requests.filter((request: RecordedRequest) => request.path === "/rest/v1/ledger_entries");
-    expect(read.params.get("action")).toBe("eq.close_pack_exported");
+    expect(read.params.get("action")).toBe("in.(close_pack_exported,close_pack_export_failed)");
     expect(read.params.get("ts")).toBe("gt.2026-10-25T09:50:00.000Z");
     expect(read.params.get("detail->>by")).toBe(`eq.${USER}`);
     expect(read.params.get("limit")).toBe("10");
