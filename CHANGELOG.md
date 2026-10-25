@@ -49,7 +49,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   with members named by user id rather than email. A key makes up to 10 of these reads at once, then one every 6
   seconds, and reading records nothing in the ledger. The TypeScript SDK 0.4.0 has a method for each, and
   `verifyEvidence`, which checks any of these files offline, a download from the workspace included, with Web Crypto
-  alone. Naming `keys` with no value throws, so an unset variable never falls back to the file's keys. The payee lock's evidence file now names each member's user id beside their email. The MCP server does not
+  alone. Naming `keys` with no value throws, so an unset variable never falls back to the file's keys. Passing `format`
+  names the kind of file expected, and a file of another format throws; options other than `{ keys, format }`, a key
+  passed alone among them, throw too. A file that holds another format's fields, or cites something that is not an
+  entry's `seq`, does not pass. The payee lock's evidence file now names each member's user id beside their email. The MCP server does not
   offer these reads yet. No migration.
 
 ### Fixed

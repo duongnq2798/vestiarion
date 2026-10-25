@@ -131,7 +131,7 @@ workspace's Audit page.
 ```ts
 import { verifyEvidence } from "@vestiarion/sdk";
 
-const result = await verifyEvidence(pack, { keys: process.env.VESTIARION_LEDGER_PUBLIC_KEY! });
+const result = await verifyEvidence(pack, { keys: process.env.VESTIARION_LEDGER_PUBLIC_KEY!, format: "vestiarion-close-pack/1" });
 if (result.ok !== true) console.error(result.problems);
 ```
 
@@ -141,7 +141,14 @@ in the ledger link, and that a row's copy of its entry matches it. `ok` is `true
 something does not (`problems` says what), and `null` when nothing failed but some entry was signed by a key you did
 not pass. Without `keys` it uses the keys the file carries, and says so: that proves the entries were not changed after
 they were signed, not that the keys are the workspace's. Naming `keys` with no value throws, so an unset variable never
-falls back to the file's keys; so does a key that cannot be read as a PEM public key.
+falls back to the file's keys; so does a key that cannot be read as a PEM public key, or an empty one.
+
+`format` is the kind of file you expect (`vestiarion-evidence/1`, `vestiarion-payee-lock-evidence/1`,
+`vestiarion-receipt/1` or `vestiarion-close-pack/1`): a file of another format throws, so a close pack relabelled as
+another kind of file is never read as checked. Options other than `{ keys, format }` throw too, a PEM passed alone in
+place of `{ keys }` among them, rather than leaving your key unread. Whatever the format, a file that holds another
+format's citing fields, cites something that is not an entry's `seq`, or holds its facts or rows in another shape than
+its format's is `ok: false`.
 
 The full guide: https://www.vestiarion.xyz/docs/get-started/sdk
 

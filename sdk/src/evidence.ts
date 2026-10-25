@@ -32,9 +32,26 @@ const NOT_A_DOCUMENT =
 const WHOLE_ANSWER = "Pass the document itself, the answer's data, not the whole answer.";
 const NO_ENTRIES = "The document carries no list of entries to check.";
 const BAD_KEYS = "keys must be the PEM public key from the workspace's Audit log page, or a map of key id to PEM.";
+const BAD_OPTIONS =
+  "verifyEvidence takes its options as { keys, format }: keys, the PEM public key from the workspace's Audit log page or a map of key id to PEM; format, the format the file must have.";
+const BAD_FORMAT = "format must be vestiarion-evidence/1, vestiarion-payee-lock-evidence/1, vestiarion-receipt/1 or vestiarion-close-pack/1.";
 const DOCUMENT_KEYS = "Checked with the keys the document carries. Compare their ids with the workspace's Audit log to tie them to the workspace.";
 const KEYS_UNREADABLE = "A key could not be read as a PEM public key.";
 const NOT_AN_ENTRY = "The document's list of entries holds something that is not a ledger entry.";
+const NOT_A_CITATION = "The document cites something that is not an entry's seq.";
+const NOT_ITS_SHAPE = "Part of the document is not in its format's shape, so what it cites there cannot be read.";
+
+/** The top-level fields only one format cites from: a file of another format that holds one is not what it says it is. */
+const CITING_FIELDS: ReadonlyArray<readonly [string, EvidenceFormat]> = [
+  ["steps", "vestiarion-evidence/1"],
+  ["changes", "vestiarion-payee-lock-evidence/1"],
+  ["lock", "vestiarion-payee-lock-evidence/1"],
+  ["records", "vestiarion-receipt/1"],
+  ["invoiceEntry", "vestiarion-receipt/1"],
+  ["shared", "vestiarion-receipt/1"],
+  ["rows", "vestiarion-close-pack/1"],
+  ["escrow", "vestiarion-close-pack/1"],
+];
 
 type Fields = Record<string, unknown>;
 
@@ -42,11 +59,19 @@ function isFields(value: unknown): value is Fields {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** An object written as `{ ... }`, from this realm or another: not a list, a Map or a class's instance. */
+function isPlain(value: unknown): value is Fields {
+  if (!isFields(value)) return false;
+  const prototype = Object.getPrototypeOf(value) as object | null;
+  return prototype === null || Object.getPrototypeOf(prototype) === null;
+}
+
 function isFormat(value: unknown): value is EvidenceFormat {
   return typeof value === "string" && (EVIDENCE_FORMATS as readonly string[]).includes(value);
 }
 
 const isSeq = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value);
+const isNothing = (value: unknown): value is null | undefined => value === undefined || value === null;
 const fieldsOf = (value: unknown): Fields[] => (Array.isArray(value) ? value.filter(isFields) : []);
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
 
@@ -72,52 +97,82 @@ function ledgerEntry(entry: Fields & { seq: number }): WebhookLedgerEntry {
   };
 }
 
-/** Every entry a fact of the document cites, by seq: what the document must carry. */
-function citedBy(format: EvidenceFormat, document: Fields): Set<number> {
+/**
+ * Every entry a fact of the document cites, by seq: what the document must carry. Nothing is skipped without a word: a
+ * citation that is not a seq counts in `notSeqs`, and a list or object of citing fields that is neither in `misshapen`.
+ */
+function citedBy(format: EvidenceFormat, document: Fields): { cited: Set<number>; notSeqs: number; misshapen: number } {
   const cited = new Set<number>();
-  const cite = (...values: unknown[]) => {
-    for (const value of values) {
-      if (Array.isArray(value)) value.forEach((item) => cite(item));
-      else if (isSeq(value)) cited.add(value);
-    }
+  let notSeqs = 0;
+  let misshapen = 0;
+  // A field that cites one entry: its seq, or nothing (left out or null).
+  const one = (value: unknown) => {
+    if (isSeq(value)) cited.add(value);
+    else if (!isNothing(value)) notSeqs += 1;
   };
-  if (format === "vestiarion-evidence/1") {
-    for (const step of fieldsOf(document.steps)) for (const fact of fieldsOf(step.facts)) cite(fact.entries);
-  } else if (format === "vestiarion-payee-lock-evidence/1") {
-    for (const change of fieldsOf(document.changes)) {
-      for (const part of [change.change, change.confirmation, change.firstPayment]) if (isFields(part)) cite(part.entry);
-      for (const hold of fieldsOf(change.holds)) cite(hold.entry);
+  // A field that cites a list of entries: a list of seqs, or nothing. A list inside it is not a seq.
+  const seqs = (value: unknown) => {
+    if (Array.isArray(value)) value.forEach(one);
+    else if (!isNothing(value)) notSeqs += 1;
+  };
+  // An object that holds citing fields, or nothing.
+  const part = (value: unknown): Fields | null => {
+    if (isFields(value)) return value;
+    if (!isNothing(value)) misshapen += 1;
+    return null;
+  };
+  // A list of such objects, or nothing.
+  const parts = (value: unknown): Fields[] => {
+    if (isNothing(value)) return [];
+    if (!Array.isArray(value)) {
+      misshapen += 1;
+      return [];
     }
-    if (isFields(document.lock)) for (const change of fieldsOf(document.lock.changes)) cite(change.entry);
+    const kept = value.filter(isFields);
+    misshapen += value.length - kept.length;
+    return kept;
+  };
+
+  if (format === "vestiarion-evidence/1") {
+    for (const step of parts(document.steps)) for (const fact of parts(step.facts)) seqs(fact.entries);
+  } else if (format === "vestiarion-payee-lock-evidence/1") {
+    for (const change of parts(document.changes)) {
+      for (const field of [change.change, change.confirmation, change.firstPayment]) one(part(field)?.entry);
+      for (const hold of parts(change.holds)) one(hold.entry);
+    }
+    for (const change of parts(part(document.lock)?.changes)) one(change.entry);
   } else if (format === "vestiarion-receipt/1") {
-    if (isFields(document.records)) cite(document.records.seq);
-    cite(document.invoiceEntry);
-    if (isFields(document.shared)) {
-      cite(document.shared.entry);
-      for (const change of fieldsOf(document.shared.changes)) cite(change.entry);
+    one(part(document.records)?.seq);
+    one(document.invoiceEntry);
+    const shared = part(document.shared);
+    if (shared) {
+      one(shared.entry);
+      for (const change of parts(shared.changes)) one(change.entry);
     }
   } else {
-    for (const row of fieldsOf(document.rows)) {
+    for (const row of parts(document.rows)) {
       // The row's own list is the union of the fields below; each is read too, so a file cannot keep only the list tidy.
-      cite(row.entries);
-      if (isFields(row.record)) cite(row.record.seq);
-      if (isFields(row.bill)) {
-        cite(row.bill.entry);
-        for (const attached of fieldsOf(row.bill.vendorDocuments)) cite(attached.entry);
+      seqs(row.entries);
+      one(part(row.record)?.seq);
+      const bill = part(row.bill);
+      if (bill) {
+        one(bill.entry);
+        for (const attached of parts(bill.vendorDocuments)) one(attached.entry);
       }
-      if (isFields(row.approval)) {
-        const approval = row.approval;
-        if (isFields(approval.agent)) cite(approval.agent.entry);
-        for (const one of fieldsOf(approval.approvals)) cite(one.entry);
-        if (isFields(approval.verdict)) cite(approval.verdict.entry);
-        if (isFields(approval.address)) cite(approval.address.entries);
+      const approval = part(row.approval);
+      if (approval) {
+        one(part(approval.agent)?.entry);
+        for (const given of parts(approval.approvals)) one(given.entry);
+        one(part(approval.verdict)?.entry);
+        seqs(part(approval.address)?.entries);
       }
-      if (isFields(row.checks)) for (const check of Object.values(row.checks)) if (isFields(check)) cite(check.entries);
-      if (isFields(row.books) && isFields(row.books.booked)) cite(row.books.booked.entry);
+      const checks = part(row.checks);
+      if (checks) for (const check of Object.values(checks)) seqs(part(check)?.entries);
+      one(part(part(row.books)?.booked)?.entry);
     }
-    for (const move of fieldsOf(document.escrow)) cite(move.entry);
+    for (const move of parts(document.escrow)) one(move.entry);
   }
-  return cited;
+  return { cited, notSeqs, misshapen };
 }
 
 /** A copy of an entry's signed link that the document states beside it must be the entry's own. */
@@ -126,7 +181,11 @@ function copyProblems(format: EvidenceFormat, document: Fields, bySeq: ReadonlyM
   if (format === "vestiarion-close-pack/1") {
     for (const row of fieldsOf(document.rows)) {
       const record = row.record;
-      if (!isFields(record) || !isSeq(record.seq)) continue;
+      if (!isFields(record)) continue; // A record that is not an object is named once already, by citedBy.
+      if (!isSeq(record.seq)) {
+        problems.push(`The row for payment ${text(row.paymentId)} names its record by something that is not an entry's seq.`);
+        continue;
+      }
       const entry = bySeq.get(record.seq);
       if (!entry) continue; // Named once already: cited but not in the document.
       if (record.hash !== entry.hash || record.signature !== entry.signature || keyIdOf(record) !== keyIdOf(entry)) {
@@ -134,9 +193,13 @@ function copyProblems(format: EvidenceFormat, document: Fields, bySeq: ReadonlyM
       }
     }
   }
-  if (format === "vestiarion-receipt/1" && isFields(document.records) && isSeq(document.records.seq)) {
-    const entry = bySeq.get(document.records.seq);
-    if (entry && document.records.hash !== entry.hash) problems.push(`The receipt names entry #${document.records.seq} with another hash than the entry carries.`);
+  if (format === "vestiarion-receipt/1" && isFields(document.records)) {
+    const records = document.records;
+    if (!isSeq(records.seq)) problems.push("The receipt names its recording entry by something that is not an entry's seq.");
+    else {
+      const entry = bySeq.get(records.seq);
+      if (entry && records.hash !== entry.hash) problems.push(`The receipt names entry #${records.seq} with another hash than the entry carries.`);
+    }
   }
   return problems;
 }
@@ -146,8 +209,11 @@ function copyProblems(format: EvidenceFormat, document: Fields, bySeq: ReadonlyM
  * entry's, so one that does not would leave every entry unchecked.
  */
 function readable(pem: string): boolean {
+  // An empty key, as an empty variable gives, decodes to nothing: it is no key.
+  const body = pem.replace(/-----(BEGIN|END) PUBLIC KEY-----/g, "").replace(/\s+/g, "");
+  if (body.length === 0) return false;
   try {
-    atob(pem.replace(/-----(BEGIN|END) PUBLIC KEY-----/g, "").replace(/\s+/g, ""));
+    atob(body);
     return true;
   } catch {
     return false;
@@ -165,7 +231,7 @@ function keysFor(document: Fields, given: { named: boolean; value: unknown }): {
     const valid =
       typeof given.value === "string"
         ? readable(given.value)
-        : isFields(given.value) && Object.values(given.value).every((pem) => typeof pem === "string" && readable(pem));
+        : isPlain(given.value) && Object.values(given.value).every((pem) => typeof pem === "string" && readable(pem));
     if (!valid) throw new TypeError(BAD_KEYS);
     return { keys: given.value as string | Record<string, string>, whose: "given", dropped: [] };
   }
@@ -190,20 +256,38 @@ function keysFor(document: Fields, given: { named: boolean; value: unknown }): {
  * `keys` is the PEM from the workspace's Audit log page, or a map of key id to PEM after a rotation. Without it, the
  * document's own keys are used and the answer says so: that proves the entries were not changed after those keys signed
  * them, not that the keys are the workspace's. Naming `keys` with no value throws, so an unset variable never falls back
- * to the file's keys; so does a key given that cannot be read as a PEM.
+ * to the file's keys; so does a key given that cannot be read as a PEM, an empty one included.
+ *
+ * `format` is the kind of file the caller expects: a document of another format throws, so a file relabelled to a format
+ * whose fields it does not hold cannot pass for one that was checked. Options other than `{ keys, format }`, a PEM passed
+ * in their place among them, throw too, rather than leaving the keys unread. Whatever the format, a document that holds
+ * another format's citing fields, cites something that is not a seq, or holds its citing fields in another shape than
+ * its format's is `ok: false`.
  *
  * It cannot say that the facts' words follow from the entries, that the document carries every entry of its period, or
  * anything on chain.
  */
-export async function verifyEvidence(document: unknown, options?: { keys?: string | Record<string, string> }): Promise<EvidenceVerification> {
+export async function verifyEvidence(
+  document: unknown,
+  options?: { keys?: string | Record<string, string>; format?: EvidenceFormat },
+): Promise<EvidenceVerification> {
+  // A PEM passed alone, null, or a misspelt `keys` would otherwise read as no keys, and the file's own would check it.
+  if (options !== undefined && (!isPlain(options) || Object.keys(options).some((name) => name !== "keys" && name !== "format"))) {
+    throw new TypeError(BAD_OPTIONS);
+  }
   if (!isFields(document)) throw new TypeError(NOT_A_DOCUMENT);
   const format = document.format;
   if (!isFormat(format)) {
     if (document.format === undefined && isFields(document.data) && isFormat(document.data.format)) throw new TypeError(WHOLE_ANSWER);
     throw new TypeError(NOT_A_DOCUMENT);
   }
+  if (options !== undefined && "format" in options) {
+    // Named with no value is an unset variable, never a request to take whatever format the file states.
+    if (!isFormat(options.format)) throw new TypeError(BAD_FORMAT);
+    if (options.format !== format) throw new TypeError(`The document's format is ${format}, not ${options.format}.`);
+  }
   if (!Array.isArray(document.entries)) throw new TypeError(NO_ENTRIES);
-  const named = isFields(options) && "keys" in options;
+  const named = options !== undefined && "keys" in options;
   const { keys, whose, dropped } = keysFor(document, { named, value: options?.keys });
 
   // `open` holds what leaves the answer open rather than false: whose keys, keys left out, and entries no key could check.
@@ -240,8 +324,14 @@ export async function verifyEvidence(document: unknown, options?: { keys?: strin
   if (notEntries > 0) problems.push(NOT_AN_ENTRY);
   for (const seq of twice) problems.push(`Entry #${seq} is in the document twice.`);
 
-  const cited = citedBy(format, document);
+  // Only this format's fields are read for citations, so a field another format cites from must not be there.
+  for (const [field, owner] of CITING_FIELDS) {
+    if (owner !== format && document[field] !== undefined) problems.push(`The document holds ${field}, which a ${format} file does not carry.`);
+  }
+  const { cited, notSeqs, misshapen } = citedBy(format, document);
   counts.cited = cited.size;
+  if (notSeqs > 0) problems.push(NOT_A_CITATION);
+  if (misshapen > 0) problems.push(NOT_ITS_SHAPE);
   for (const seq of [...cited].sort((a, b) => a - b)) if (!bySeq.has(seq)) problems.push(`Entry #${seq} is cited but not in the document.`);
 
   // The chain is read by seq, so nothing of the workspace can sit between two entries whose seq follow each other.

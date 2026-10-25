@@ -234,7 +234,7 @@ workspace (`ReceiptDocument`, `src/lib/receipts/document.ts`):
   and the operation ids.
 
 **EA13. `verifyEvidence` checks a document offline.** `sdk/src/evidence.ts`, exported from `@vestiarion/sdk` (the root,
-not a new subpath): `verifyEvidence(document, { keys? })`.
+not a new subpath): `verifyEvidence(document, { keys?, format? })`.
 - It takes any of `vestiarion-evidence/1`, `vestiarion-payee-lock-evidence/1`, `vestiarion-receipt/1` and
   `vestiarion-close-pack/1`, from the API or downloaded from the workspace, as it is: snake_case entries are mapped to
   `verifyLedgerEntry`'s fields (`body_hash` to `bodyHash`, `prev_hash` to `prevHash`, `signing_key_id` to
@@ -253,6 +253,25 @@ not a new subpath): `verifyEvidence(document, { keys? })`.
     nothing of the same workspace can sit between them, as `verifyChain` reads the chain by `seq`;
   - a copy matches what it copies: a close pack row's `record` (`hash`, `signature`, `signingKeyId`) equals its entry's,
     and a receipt's `records.hash` equals its entry's `hash`.
+  - Ruled in the second review: it reads citations only from the fields of the format the file states, so it fails
+    closed on whatever it cannot read, rather than skipping it. A file that holds a top-level field only another format
+    cites from (`rows` or `escrow` outside a close pack, `steps` outside evidence, `records`, `invoiceEntry` or `shared`
+    outside a receipt, `changes` or `lock` outside the payee lock's evidence) has the problem "The document holds
+    <field>, which a <format> file does not carry.", so a close pack relabelled as another format, its entries taken
+    out, is never `true`. A citing field that holds something other than a seq, a list of seqs, `null` or nothing (a
+    seq written as text, a fraction, an object, a list inside the list) has "The document cites something that is not
+    an entry's seq."; a list of citing objects that is not a list, an item of it that is not an object, or a citing
+    object that is not one, has "Part of the document is not in its format's shape, so what it cites there cannot be
+    read.". A close pack row's `record`, or a receipt's `records`, whose `seq` is not a seq is named too, as that row's
+    or the receipt's own problem. Each is `ok: false`.
+- `format`: the format the caller expects. A document of another format throws "The document's format is <format>, not
+  <expected>."; `format` named with a value that is not one of the four, or with no value, throws its own `TypeError`,
+  so an unset variable never drops the check. The docs' example passes it, since `ok` alone does not say which kind of
+  file was checked.
+- Options other than a plain object holding only `keys` and `format` throw a `TypeError` before anything is read: a PEM
+  passed alone, as `verifyLedgerEntry(entry, pem)` takes it, `null`, a list, a `Map`, or a misspelt `{ key }`. Each
+  would otherwise read as no keys, and the document's own keys would check a file the caller meant to check with the
+  workspace's.
 - `keys`: the public key from the workspace's **Audit log** page, or a map of key id to PEM after a rotation, exactly
   as `verifyLedgerEntry` takes them. Without `keys`, it uses the document's own `keys` and says so (`keys:
   "document"`): that proves the entries were not changed after those keys signed them, not that the keys are the
@@ -261,7 +280,8 @@ not a new subpath): `verifyEvidence(document, { keys? })`.
     unset) throws the `keys` `TypeError`, as `verifyLedgerEntry` fails closed on it, so an unset variable never falls
     back to the document's keys. Leaving `keys` out, or passing no options, still uses the document's keys, and `ok` is
     still `true` when everything holds: `keys: "document"` and its note say whose keys checked it.
-  - A key given that cannot be decoded as a PEM throws the same `TypeError` before any entry is checked, since
+  - A key given that cannot be decoded as a PEM, or is empty once its armour and spaces are taken off (`{ keys: "" }`,
+    as an empty variable gives), throws the same `TypeError` before any entry is checked, since
     `verifyLedgerEntry` decodes every key it is given and one bad key would leave every entry `ok: null`. A key the
     document carries that cannot be decoded is left out, with the note "The key filed under <id> could not be read as a
     PEM public key."; the entries the other keys signed keep a real `true` or `false`.
@@ -519,7 +539,7 @@ export interface EvidenceVerification {
   /** One plain sentence for each thing that is not as it should be. */
   problems: string[];
 }
-export async function verifyEvidence(document: unknown, options?: { keys?: string | Record<string, string> }): Promise<EvidenceVerification>;
+export async function verifyEvidence(document: unknown, options?: { keys?: string | Record<string, string>; format?: EvidenceFormat }): Promise<EvidenceVerification>;
 
 // sdk/src/client.ts (EA12)
 invoices.evidence(id: string): Promise<PaymentEvidence>;
@@ -676,7 +696,18 @@ A good answer is `200`, `content-type: application/json`, `cache-control: no-sto
   vestiarion-evidence/1, vestiarion-payee-lock-evidence/1, vestiarion-receipt/1 or vestiarion-close-pack/1."
 - `TypeError`, given a whole API answer: "Pass the document itself, the answer's data, not the whole answer."
 - `TypeError`, no list of entries: "The document carries no list of entries to check."
+- `TypeError`, options other than `{ keys, format }`: "verifyEvidence takes its options as { keys, format }: keys, the
+  PEM public key from the workspace's Audit log page or a map of key id to PEM; format, the format the file must have."
+- `TypeError`, `format` not one of the four: "format must be vestiarion-evidence/1, vestiarion-payee-lock-evidence/1,
+  vestiarion-receipt/1 or vestiarion-close-pack/1."
+- `TypeError`, a document of another format than `format`: "The document's format is vestiarion-evidence/1, not
+  vestiarion-close-pack/1."
 - `problems`, one sentence each:
+  - "The document holds rows, which a vestiarion-evidence/1 file does not carry.";
+  - "The document cites something that is not an entry's seq.";
+  - "Part of the document is not in its format's shape, so what it cites there cannot be read.";
+  - "The row for payment <paymentId> names its record by something that is not an entry's seq.";
+  - "The receipt names its recording entry by something that is not an entry's seq.";
   - "Entry #5619 does not verify: <reason>" (the reason `verifyLedgerEntry` gives);
   - "Entry #5619 could not be checked: <reason>";
   - "Entry #5601 is cited but not in the document.";
@@ -711,7 +742,7 @@ const receipt = await vestiarion.invoices.receipt("7d1e4c2a-5b3f-4e8a-9c61-2f0a8
 const lock = await vestiarion.payeeLock.evidence({ from: "2026-10-01", to: "2026-10-31" });
 const pack = await vestiarion.closePacks.get("2026-10");
 
-const result = await verifyEvidence(pack, { keys: process.env.VESTIARION_LEDGER_PUBLIC_KEY! });
+const result = await verifyEvidence(pack, { keys: process.env.VESTIARION_LEDGER_PUBLIC_KEY!, format: "vestiarion-close-pack/1" });
 if (result.ok !== true) console.error(result.problems);
 ```
 
@@ -724,6 +755,9 @@ Then, in prose:
   and that a row's copy of its entry matches it. Pass the public key from the workspace's **Audit log** page, or a map
   of key id to key after a rotation. Without keys it uses the ones the file carries, and says so: that proves the
   entries were not changed after they were signed, not that the keys are the workspace's."
+- "Pass `format` as well, the kind of file you expect: ... A file of another format throws, so a close pack relabelled as
+  another kind of file is never read as checked. Options other than `{ keys, format }` throw too, a PEM passed alone in
+  place of `{ keys }` among them, rather than leaving your key unread." (second review)
 - An answer table like `verifyLedgerEntry`'s: `ok: true` "Every entry it cites is there and verifies."; `ok: false`
   "Something does not hold: `problems` says what."; `ok: null` "Nothing failed, but some entry was signed by a key you
   did not pass."

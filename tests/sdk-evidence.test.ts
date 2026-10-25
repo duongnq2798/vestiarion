@@ -31,6 +31,11 @@ const example = (id: string): Doc => (JSON.parse(readFileSync(`content/docs/exam
 const keysOf = (doc: Doc) => Object.fromEntries(doc.keys.map((key) => [key.id, key.publicKeyPem]));
 const NOTE = "Checked with the keys the document carries. Compare their ids with the workspace's Audit log to tie them to the workspace.";
 const BAD_KEYS = "keys must be the PEM public key from the workspace's Audit log page, or a map of key id to PEM.";
+const BAD_OPTIONS =
+  "verifyEvidence takes its options as { keys, format }: keys, the PEM public key from the workspace's Audit log page or a map of key id to PEM; format, the format the file must have.";
+const BAD_FORMAT = "format must be vestiarion-evidence/1, vestiarion-payee-lock-evidence/1, vestiarion-receipt/1 or vestiarion-close-pack/1.";
+const NOT_A_CITATION = "The document cites something that is not an entry's seq.";
+const NOT_ITS_SHAPE = "Part of the document is not in its format's shape, so what it cites there cannot be read.";
 /** A key pasted with a stray character: not base64, so it cannot be decoded. */
 const UNREADABLE_PEM = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA!stray\n-----END PUBLIC KEY-----\n";
 
@@ -374,5 +379,173 @@ describe("verifyEvidence on what is not a document", () => {
     expect(result.ok).toBe(false);
     expect(problemsOf(result)).toEqual(["The document's list of entries holds something that is not a ledger entry."]);
     expect(result.counts).toMatchObject({ carried: doc.entries.length, verified: doc.entries.length - 1, failed: 1 });
+  });
+});
+
+/** The document with every seq its facts and rows cite written as text (`entries` lists, `entry` and `seq` fields); its own entries and keys are left as they are. */
+function citationsAsText(doc: Doc): Doc {
+  const asText = (value: unknown, field?: string): unknown => {
+    if (Array.isArray(value)) return value.map((item) => (field === "entries" && typeof item === "number" ? String(item) : asText(item)));
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, asText(item, key)]));
+    return typeof value === "number" && (field === "entry" || field === "seq") ? String(value) : value;
+  };
+  const { entries, keys, ...around } = doc;
+  return { ...(asText(around) as Omit<Doc, "entries" | "keys">), keys, entries } as Doc;
+}
+
+describe("verifyEvidence reads only the format it is told, and fails closed on what it cannot read (evidence API EA13)", () => {
+  const OTHERS = EVIDENCE_FORMATS.filter((format) => format !== "vestiarion-close-pack/1");
+
+  it.each(OTHERS)("a close pack with its entries taken out and its format changed to %s is not ok", async (format) => {
+    const doc = { ...structuredClone(example("get-close-pack")), format, entries: [] };
+    const result = await verifyEvidence(doc, { keys: keysOf(doc) });
+    expect(result.ok).toBe(false);
+    expect(result.problems).toContain(`The document holds rows, which a ${format} file does not carry.`);
+  });
+
+  it.each([
+    ["steps", "vestiarion-evidence/1", "get-close-pack"],
+    ["records", "vestiarion-receipt/1", "get-invoice-evidence"],
+    ["changes", "vestiarion-payee-lock-evidence/1", "get-invoice-receipt"],
+    ["escrow", "vestiarion-close-pack/1", "get-payee-lock-evidence"],
+  ])("names %s, a %s field, in another kind of file", async (field, _owner, id) => {
+    const doc = { ...structuredClone(example(id)), [field]: [] };
+    const result = await verifyEvidence(doc);
+    expect(result.ok).toBe(false);
+    expect(problemsOf(result)).toEqual([`The document holds ${field}, which a ${doc.format} file does not carry.`]);
+  });
+
+  it("a close pack whose citations are text, with its entries taken out, is not ok", async () => {
+    const doc = { ...citationsAsText(example("get-close-pack")), entries: [] };
+    const result = await verifyEvidence(doc, { keys: keysOf(doc) });
+    expect(result).toMatchObject({ ok: false, format: "vestiarion-close-pack/1", counts: { cited: 0, carried: 0 } });
+    expect(result.problems).toContain(NOT_A_CITATION);
+  });
+
+  it("evidence whose facts cite by text, with its first entry taken out, is not ok", async () => {
+    const doc = citationsAsText(example("get-invoice-evidence"));
+    doc.entries.splice(0, 1);
+    const result = await verifyEvidence(doc, { keys: keysOf(doc) });
+    expect(result.ok).toBe(false);
+    expect(result.problems).toContain(NOT_A_CITATION);
+  });
+
+  it.each([
+    ["text", "999999"],
+    ["an object", { seq: 5605 }],
+    ["a fraction", 5605.5],
+    ["a list", [5605]],
+    ["true", true],
+  ])("a fact citing %s is not ok", async (_label, citation) => {
+    const doc = structuredClone(example("get-invoice-evidence"));
+    ((doc.steps as Array<{ facts: Array<{ entries: unknown[] }> }>)[0].facts[0].entries).push(citation);
+    const result = await verifyEvidence(doc, { keys: keysOf(doc) });
+    expect(result.ok).toBe(false);
+    expect(problemsOf(result)).toEqual([NOT_A_CITATION]);
+  });
+
+  it("a fact whose entries are not a list is not ok", async () => {
+    const doc = structuredClone(example("get-invoice-evidence"));
+    (doc.steps as Array<{ facts: Array<{ entries: unknown }> }>)[0].facts[0].entries = 5607;
+    expect(problemsOf(await verifyEvidence(doc))).toEqual([NOT_A_CITATION]);
+  });
+
+  it.each([
+    ["steps that are not a list", "get-invoice-evidence", (doc: Doc) => (doc.steps = { 0: (doc.steps as unknown[])[0] })],
+    ["a step that is not an object", "get-invoice-evidence", (doc: Doc) => (doc.steps as unknown[]).push("decided")],
+    ["rows that are not a list", "get-close-pack", (doc: Doc) => (doc.rows = { 0: (doc.rows as unknown[])[0] })],
+    ["a row's record that is not an object", "get-close-pack", (doc: Doc) => ((doc.rows as Array<{ record: unknown }>)[0].record = 5610)],
+    ["a receipt's records that are not an object", "get-invoice-receipt", (doc: Doc) => (doc.records = 5610)],
+    ["the payee lock's changes that are not a list", "get-payee-lock-evidence", (doc: Doc) => (doc.changes = "all")],
+  ])("%s is not ok", async (_label, id, change) => {
+    const doc = structuredClone(example(id));
+    change(doc);
+    const result = await verifyEvidence(doc);
+    expect(result.ok).toBe(false);
+    expect(result.problems).toContain(NOT_ITS_SHAPE);
+  });
+
+  it("a receipt that names its recording entry by text, that entry taken out, is not ok", async () => {
+    const doc = structuredClone(example("get-invoice-receipt"));
+    const records = doc.records as { seq: unknown };
+    const seq = records.seq as number;
+    records.seq = String(seq);
+    doc.entries = doc.entries.filter((entry) => entry.seq !== seq);
+    const result = await verifyEvidence(doc, { keys: keysOf(doc) });
+    expect(result.ok).toBe(false);
+    expect(problemsOf(result)).toContain("The receipt names its recording entry by something that is not an entry's seq.");
+    expect(problemsOf(result)).toContain(NOT_A_CITATION);
+  });
+
+  it("a close pack row that names its record by text is not ok", async () => {
+    const doc = structuredClone(example("get-close-pack"));
+    const row = (doc.rows as Array<{ paymentId: string; record: { seq: unknown } }>)[0];
+    row.record.seq = String(row.record.seq);
+    const result = await verifyEvidence(doc);
+    expect(result.ok).toBe(false);
+    expect(problemsOf(result)).toContain(`The row for payment ${row.paymentId} names its record by something that is not an entry's seq.`);
+  });
+
+  it("a receipt with no invoice entry, and none shared, is still ok", async () => {
+    const doc = { ...structuredClone(example("get-invoice-receipt")), invoiceEntry: null, shared: null };
+    expect(await verifyEvidence(doc, { keys: keysOf(doc) })).toMatchObject({ ok: true, problems: [] });
+  });
+
+  it.each(EXAMPLES)("checks %s as the format it is told", async (id) => {
+    const doc = example(id);
+    expect(await verifyEvidence(doc, { keys: keysOf(doc), format: doc.format as (typeof EVIDENCE_FORMATS)[number] })).toMatchObject({ ok: true, format: doc.format, problems: [] });
+  });
+
+  it("throws when the file is not the format it is told", async () => {
+    const doc = example("get-invoice-evidence");
+    await expect(verifyEvidence(doc, { keys: keysOf(doc), format: "vestiarion-close-pack/1" })).rejects.toThrow(
+      new TypeError("The document's format is vestiarion-evidence/1, not vestiarion-close-pack/1."),
+    );
+    // So does a close pack relabelled as evidence, whatever it holds.
+    const relabelled = { ...example("get-close-pack"), format: "vestiarion-evidence/1", entries: [] };
+    await expect(verifyEvidence(relabelled, { format: "vestiarion-close-pack/1" })).rejects.toThrow(TypeError);
+  });
+
+  it.each([
+    ["an unknown format", "close-pack"],
+    ["no value", undefined],
+  ])("throws when format is %s, so an unset variable never drops the check", async (_label, format) => {
+    await expect(verifyEvidence(example("get-close-pack"), { format: format as "vestiarion-close-pack/1" })).rejects.toThrow(new TypeError(BAD_FORMAT));
+  });
+
+  it.each([
+    ["a PEM passed alone", (pem: string) => pem],
+    ["null", () => null],
+    ["a list", (pem: string) => [pem]],
+    ["a misspelt keys", (pem: string) => ({ key: pem })],
+    ["keys beside a field it does not take", (pem: string) => ({ keys: pem, expect: "vestiarion-evidence/1" })],
+    ["a Map", (pem: string) => new Map([["keys", pem]])],
+  ])("throws for options given as %s, never checking with the file's own keys", async (_label, optionsOf) => {
+    // A file signed by another key, which carries that key: with the file's keys it would verify.
+    const workspace = signer();
+    const forger = signer();
+    const doc = evidenceOf([forger.sign(7, "0".repeat(64))], forger);
+    expect((await verifyEvidence(doc, { keys: workspace.pem })).ok).toBeNull();
+    await expect(verifyEvidence(doc, optionsOf(workspace.pem) as unknown as Parameters<typeof verifyEvidence>[1])).rejects.toThrow(new TypeError(BAD_OPTIONS));
+  });
+
+  it("throws when keys is empty, as an empty variable gives", async () => {
+    await expect(verifyEvidence(example("get-invoice-evidence"), { keys: "" })).rejects.toThrow(new TypeError(BAD_KEYS));
+    await expect(verifyEvidence(example("get-invoice-evidence"), { keys: "-----BEGIN PUBLIC KEY-----\n-----END PUBLIC KEY-----\n" })).rejects.toThrow(new TypeError(BAD_KEYS));
+  });
+
+  it("leaves out an empty key the document carries, and says so", async () => {
+    const doc = structuredClone(example("get-invoice-evidence"));
+    doc.keys.push({ id: "0".repeat(16), status: "retired", publicKeyPem: "" });
+    const result = await verifyEvidence(doc);
+    expect(result).toMatchObject({ ok: true, keys: "document" });
+    expect(result.problems).toEqual([NOTE, `The key filed under ${"0".repeat(16)} could not be read as a PEM public key.`]);
+  });
+
+  it("still checks with the document's keys when no options, or empty ones, are given", async () => {
+    const doc = example("get-invoice-evidence");
+    expect(await verifyEvidence(doc)).toMatchObject({ ok: true, keys: "document" });
+    expect(await verifyEvidence(doc, {})).toMatchObject({ ok: true, keys: "document" });
+    expect(await verifyEvidence(doc, { format: "vestiarion-evidence/1" })).toMatchObject({ ok: true, keys: "document" });
   });
 });
