@@ -57,7 +57,9 @@ describe("readPdfBounded", () => {
   }, 20_000);
 
   it("stops a worker that fills its heap, as unreadable, and says which limit stopped it", async () => {
-    const small = { ...PDF_LIMITS, maxOldGenerationSizeMb: 24, maxYoungGenerationSizeMb: 4, maxChars: MAX_DOCUMENT_CHARS };
+    // A slow runner can take longer than the default 15 s to fill even a small heap, so the memory case gets a long
+    // timeout: the heap limit, not the clock, must be what stops it.
+    const small = { ...PDF_LIMITS, timeoutMs: 90_000, maxOldGenerationSizeMb: 24, maxYoungGenerationSizeMb: 4, maxChars: MAX_DOCUMENT_CHARS };
     const full = await pdfPagesInWorker(nestedFormsPdf({ fanOut: 10, depth: 6 }), small).catch((error: unknown) => error);
     expect(full).toBeInstanceOf(PdfWorkerRefusal);
     expect((full as PdfWorkerRefusal).why).toBe("memory");
@@ -65,7 +67,7 @@ describe("readPdfBounded", () => {
     expect((slow as PdfWorkerRefusal).why).toBe("timeout");
     const refused = await readPdfBounded(nestedFormsPdf({ fanOut: 10, depth: 6 }), { maxOldGenerationSizeMb: 24, maxYoungGenerationSizeMb: 4 }).catch((error: unknown) => error);
     expect(refused).toBeInstanceOf(DocumentReadError);
-  }, 60_000);
+  }, 180_000);
 
   it("refuses a PDF of more pages than its limit, 50 by default, and reads one at it", async () => {
     expect(PDF_LIMITS).toEqual({ timeoutMs: 15_000, maxPages: 50, maxOldGenerationSizeMb: 256, maxYoungGenerationSizeMb: 32 });
