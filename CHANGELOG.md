@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.13] - 2026-10-25
+
 ### Added
 
 - **Late fees on bills.** A bill can carry the late fee its supplier charges for paying late: a percent a month, such as
@@ -178,7 +180,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 - **Choose the screening service by its settings.** A deployment names the service that screens counterparties with
   `SCREENING_PROVIDER`: OpenSanctions' hosted API, or a self-hosted yente server, each with its address and key.
-  Both are judged by the same rules, and each verdict, the console and the evidence chain say which one screened.
+  Both are held to the same rules, and each verdict, the console and the evidence chain say which one screened.
   A service named without its key or address stops the app at start. `npm run screening:check` screens one name
   with a new key before it is set, and never prints the key. A deployment that sets nothing new screens as before.
 
@@ -1384,7 +1386,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.12...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.13...HEAD
+[0.1.0-beta.13]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.13
 [0.1.0-beta.12]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.12
 [0.1.0-beta.11]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.11
 [0.1.0-beta.10]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.10
