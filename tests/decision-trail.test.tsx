@@ -391,3 +391,63 @@ describe("a receivable's trail of what its customer said (customer portal P10)",
     ]);
   });
 });
+
+describe("a vendor's document, checked against the bill (document checks DK13)", () => {
+  const checked = (detail: Record<string, unknown>) => trailStep(step(990, "03:00:00", "agent", "document_checked", { invoiceId: INVOICE, ...detail }))!;
+
+  it("says who sent the document: the vendor through its link, or a person who attached it", () => {
+    expect(trailStep(step(989, "02:59:00", "human", "document_received", { by: null, via: "document_request", invoiceId: INVOICE }))).toMatchObject({
+      who: "system",
+      tone: "neutral",
+      text: "The vendor sent a document through its link.",
+    });
+    expect(trailStep(step(989, "02:59:00", "human", "document_received", { by: "user-1", via: "attached", invoiceId: INVOICE }))).toMatchObject({
+      who: "person",
+      tone: "neutral",
+      text: "A person attached the vendor's document.",
+    });
+  });
+
+  it("says a match added the purchase order, or changed nothing in shadow", () => {
+    expect(checked({ outcome: "matched", poWritten: true, poReference: "PO-2215" })).toMatchObject({
+      who: "agent",
+      tone: "done",
+      text: "The agent checked the vendor's document against the bill and added purchase order PO-2215.",
+      notes: ["· The vendor, the amount and the purchase order match"],
+    });
+    expect(checked({ outcome: "matched", poWritten: false, poReference: "PO-2215", shadow: true })).toMatchObject({
+      who: "agent",
+      tone: "neutral",
+      text: "The agent checked the vendor's document: it matches. Vendor requests were in shadow, so nothing changed.",
+    });
+    expect(checked({ outcome: "matched", poWritten: false })).toMatchObject({ tone: "neutral", text: "The agent checked the vendor's document: it matches." });
+  });
+
+  it("gives the reason of a mismatch, an unreadable file and a skip", () => {
+    expect(checked({ outcome: "mismatched", reason: "The document says 8.50 USDC; the bill says 8.00 USDC." })).toMatchObject({
+      tone: "stopped",
+      text: "The agent checked the vendor's document. The document says 8.50 USDC; the bill says 8.00 USDC.",
+    });
+    expect(checked({ outcome: "unreadable", reason: "It is an image. Only a PDF with its text is checked." })).toMatchObject({
+      tone: "stopped",
+      text: "The agent could not check the vendor's document. It is an image. Only a PDF with its text is checked.",
+    });
+    expect(checked({ outcome: "skipped", reason: "It was not checked: the bill no longer waited for a document." })).toMatchObject({
+      tone: "neutral",
+      text: "The agent did not check the vendor's document.",
+      notes: ["· It was not checked: the bill no longer waited for a document."],
+    });
+  });
+
+  it("joins the invoice's trail, in order", () => {
+    const trail = invoiceTrail(
+      [
+        step(991, "03:00:05", "agent", "invoice_reopened", { invoiceId: INVOICE, followUp: { changes: ["purchase order PO-2215 has since been supplied"] } }),
+        step(990, "03:00:00", "agent", "document_checked", { invoiceId: INVOICE, outcome: "matched", poWritten: true, poReference: "PO-2215" }),
+        step(989, "02:59:00", "human", "document_received", { by: null, via: "document_request", invoiceId: INVOICE }),
+      ],
+      INVOICE
+    );
+    expect(trail.map((s) => s.seq)).toEqual([989, 990, 991]);
+  });
+});

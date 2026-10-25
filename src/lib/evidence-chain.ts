@@ -474,7 +474,17 @@ function agreedInvoice(ctx: Context, invoice: EvidenceInvoice): EvidenceStep {
   const title = "What was agreed";
   const po = invoice.po_reference;
   if (po) {
-    const source = newest(ctx.own, (entry) => (entry.action === "invoice_details_added" && record(entry.detail.added)?.poReference === po) || (CREATION.has(entry.action) && entry.detail.poReference === po));
+    // A vendor's document the agent checked against the bill, which added this purchase order (document checks DK13).
+    const fromDocument = (entry: EvidenceEntry) => entry.action === "document_checked" && entry.detail.poWritten === true && entry.detail.poReference === po;
+    const source = newest(
+      ctx.own,
+      (entry) => (entry.action === "invoice_details_added" && record(entry.detail.added)?.poReference === po) || (CREATION.has(entry.action) && entry.detail.poReference === po) || fromDocument(entry)
+    );
+    if (source && fromDocument(source)) {
+      return step("agreed", title, [
+        { kind: "checked", text: `Purchase order ${po} is on the bill, from the vendor's document, which the agent checked against the bill.`, at: source.ts, seqs: [source.seq] },
+      ]);
+    }
     if (!source && ctx.input.counterparty?.sample) return step("agreed", title, [{ kind: "inferred", text: `Purchase order ${po} is on the bill, loaded with the sample data.`, seqs: [] }]);
     return step("agreed", title, [stated(ctx, `Purchase order ${po} is on the bill${source ? via(source.detail) : ""}.`, source)]);
   }
