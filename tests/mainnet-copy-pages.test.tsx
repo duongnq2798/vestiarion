@@ -16,7 +16,7 @@ import { statusChips, statusRows, type PageStatus, type PlatformStatus } from "@
 
 vi.mock("server-only", () => ({}));
 
-const PAGES = ["approvals", "audit", "compliance", "console", "contractors", "counterparties", "evidence/[kind]/[id]", "insights", "invoices", "members", "report", "settings"] as const;
+const PAGES = ["approvals", "audit", "compliance", "console", "contractors", "counterparties", "evidence/[kind]/[id]", "evidence/close-pack", "insights", "invoices", "members", "report", "settings"] as const;
 const source = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
 const page = (name: string) => source(`src/app/o/[slug]/${name}/page.tsx`);
 const squash = (text: string) => text.replace(/\s+/g, " ");

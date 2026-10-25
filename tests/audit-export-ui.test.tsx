@@ -33,6 +33,14 @@ describe("AuditExportMenu", () => {
 describe("the Audit page", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "audit", "page.tsx"), "utf8");
 
+  it("links the monthly close pack beside the docs and the export, for every member (close pack CP16)", () => {
+    const link = page.indexOf('href={orgHref(slug, "/evidence/close-pack")}');
+    expect(link).toBeGreaterThan(page.indexOf('<DocsLink href="/docs/guides/audit-export"'));
+    expect(link).toBeLessThan(page.indexOf("<AuditExportMenu orgSlug={slug} />"));
+    expect(page.slice(link, page.indexOf("</Link>", link))).toContain("Monthly close pack");
+    expect(page).not.toMatch(/can\([^)]*\)\s*&&\s*<Link[^>]*close-pack/);
+  });
+
   it("renders the control for every member, with no role check", () => {
     expect(page).toContain("<AuditExportMenu orgSlug={slug} />");
     expect(page).not.toMatch(/can\([^)]*\)\s*&&\s*<AuditExportMenu/);

@@ -135,6 +135,8 @@ describe("subpageLabel — the page inside a section, named after it", () => {
     [`/o/acme/projects/${ID}`, "projects", "Project"],
     [`/o/acme/evidence/invoice/${ID}`, "invoices", "Payment evidence"],
     [`/o/acme/evidence/milestone/${ID}`, "contractors", "Payment evidence"],
+    // The monthly close pack sits inside the Audit log, which links it (close pack CP11, CP16).
+    ["/o/acme/evidence/close-pack", "audit", "Monthly close pack"],
   ])("%s is inside %s, as %s", (pathname, key, label) => {
     expect(navItemForPathname(pathname)?.key).toBe(key);
     expect(insideSection(pathname)).toBe(true);
