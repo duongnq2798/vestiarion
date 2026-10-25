@@ -49,7 +49,7 @@ export async function readUsageMonth(orgDb: OrgDb = db(), now: Date = new Date()
 }
 
 export interface ConnectorProblem {
-  provider: "xero" | "quickbooks" | "hubspot" | "pipedrive" | "zohobooks" | "zohocrm";
+  provider: "xero" | "quickbooks" | "hubspot" | "pipedrive" | "zohobooks" | "zohocrm" | "googlesheets";
   title: string;
   detail: string;
   /** Since when, as well as the row says: the failure's time. */
@@ -65,7 +65,7 @@ export async function readConnectorProblems(orgDb: OrgDb = db(), now: Date = new
   if (result.error && notSetUp(result.error)) return [];
   if (result.error) throw new Error(result.error.message);
   const rows = (result.data ?? []) as Array<{
-    provider: "xero" | "quickbooks" | "hubspot" | "pipedrive" | "zohobooks" | "zohocrm";
+    provider: "xero" | "quickbooks" | "hubspot" | "pipedrive" | "zohobooks" | "zohocrm" | "googlesheets";
     status: "connected" | "needs_reconnect" | "revoked";
     external_org_name: string | null;
     last_synced_at: string | null;

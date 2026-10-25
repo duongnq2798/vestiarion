@@ -165,6 +165,12 @@ const DAY_MS = 86_400_000;
 /** How far back a first connection brings bills in (X9). */
 export const WINDOW_DAYS = 90;
 
+/**
+ * The next sync of a provider that brings nothing in (an export tool, close pack Sheets GS15): never due, so the
+ * sweeper's `accounting_connections_due` (0101), which takes every connected row past its next sync, never picks it.
+ */
+export const EXPORT_NEVER_DUE = "9999-12-31T00:00:00.000Z";
+
 export type SaveConnection =
   | { ok: true; connection: Connection; reconnected: boolean }
   | { ok: false; reason: "other_organisation"; name: string | null }
@@ -192,6 +198,7 @@ export async function saveConnection(input: {
   const active = rows.find((row) => row.status !== "revoked");
   if (active && active.external_org_id !== input.organisation.externalOrgId) return { ok: false, reason: "other_organisation", name: active.external_org_name };
   const existing = rows.find((row) => row.external_org_id === input.organisation.externalOrgId);
+  const kind = providerKind(input.provider);
   const values = {
     external_org_name: input.organisation.name,
     status: "connected",
@@ -205,7 +212,7 @@ export async function saveConnection(input: {
     last_error: null,
     last_error_at: null,
     failures: 0,
-    next_sync_after: null,
+    next_sync_after: kind === "export" ? EXPORT_NEVER_DUE : null,
     sync_lease_until: null,
   };
   const saved = existing
@@ -226,10 +233,12 @@ export async function saveConnection(input: {
   const connection = toConnection(((saved.data ?? []) as unknown as ConnectionRow[])[0]);
   const label = PROVIDER_LABELS[input.provider];
   // A CRM's won deals come in to be planned; an accounting tool's bills to be added (HubSpot connector H19); a work tool's
-  // tasks are linked to milestones one at a time (Asana acceptance A2).
-  const kind = providerKind(input.provider);
+  // tasks are linked to milestones one at a time (Asana acceptance A2); nothing comes in from an export tool, which close
+  // packs are written to (close pack Sheets GS1).
   const comesIn =
-    kind === "work"
+    kind === "export"
+      ? "Close packs can be exported to its Google Drive from Monthly close pack"
+      : kind === "work"
       ? "Its tasks can be linked to milestones on Contractors"
       : kind === "crm"
         ? "Its won deals come in to plan collections on Bills & receivables"

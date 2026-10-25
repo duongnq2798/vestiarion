@@ -240,6 +240,8 @@ const anyConnectPage = async (provider: ProviderId, query: Record<string, string
   if (provider === "pipedrive") return renderToStaticMarkup(await PipedriveConnectPage({ searchParams }));
   if (provider === "asana") return renderToStaticMarkup(await AsanaConnectPage({ searchParams }));
   if (provider === "zohocrm") return renderToStaticMarkup(await ZohoCrmConnectPage({ searchParams }));
+  // Google Sheets' connect page (close pack Sheets GS1) joins this list with its route and page.
+  if (provider === "googlesheets") throw new Error("Google Sheets has no connect page here yet");
   return connectPage(provider, query);
 };
 

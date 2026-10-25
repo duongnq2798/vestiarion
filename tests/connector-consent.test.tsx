@@ -38,7 +38,7 @@ const JOINED: Record<string, readonly string[]> = {
 /** consent.ts's other exports, none of them a gate. */
 const NOT_GATES = ["CONSENT_VERSIONS", "CONSENT_HISTORY", "HOSTED_MODEL_PROVIDER", "namesModelProvider", "CONSENT_CHANGED", "consentStatement", "CONSENT_LABEL"];
 
-const VERSION = /\b(?:xero|quickbooks|hubspot|pipedrive|asana)-\d{4}-\d{2}-\d{2}(?:\.\d+)?\b/;
+const VERSION = /\b(?:xero|quickbooks|hubspot|pipedrive|asana|googlesheets)-\d{4}-\d{2}-\d{2}(?:\.\d+)?\b/;
 
 function files(dir: string, extension: RegExp): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -163,8 +163,9 @@ describe("the model provider a statement names", () => {
   it.each(PROVIDERS)("%s's statement names the hosted provider and its own terms where the agent decides on its facts", (provider) => {
     const naming = consentStatement(provider).filter(namesModelProvider);
     const named = `The agent's model provider (${HOSTED_MODEL_PROVIDER.name}, on the hosted service)`;
-    if (provider === "asana") {
-      // A task's facts reach no model: a person accepts the work, and the agent decides the milestone's payment.
+    if (provider === "asana" || provider === "googlesheets") {
+      // A task's facts reach no model: a person accepts the work, and the agent decides the milestone's payment. Nothing
+      // from Google Sheets reaches the agent at all (close pack Sheets GS17).
       expect(naming).toEqual([]);
       return;
     }
@@ -198,5 +199,23 @@ describe("the terms page on connected tools", () => {
     const text = markup.replace(/<[^>]+>/g, "").replace(/&#x27;/g, "'").replace(/\s+/g, " ");
     expect(text.split(`under ${HOSTED_MODEL_PROVIDER.name}'s API terms and privacy policy.`)).toHaveLength(7);
     expect(text.split(`(${HOSTED_MODEL_PROVIDER.name}, on the hosted service) may see a deal's facts`)).toHaveLength(4);
+  });
+});
+
+describe("Google Sheets' statement (close pack Sheets GS3, GS6, GS14, GS17)", () => {
+  it("is version googlesheets-2026-10-25, the first", () => {
+    expect(CONSENT_VERSIONS.googlesheets).toBe("googlesheets-2026-10-25");
+    expect(CONSENT_HISTORY.googlesheets).toEqual(["googlesheets-2026-10-25"]);
+  });
+
+  it("names the one Drive permission, the masked email, that nothing is shared or read back, and the shared grant", () => {
+    const lines = consentStatement("googlesheets");
+    expect(lines).toHaveLength(6);
+    expect(lines[0]).toBe(
+      "Vestiarion asks Google only for access to the files it makes (Google's drive.file permission). It cannot see, open or list any other file in your Google Drive."
+    );
+    expect(lines[2]).toContain("It keeps the id and a masked email, never the full address.");
+    expect(lines[3]).toContain("Nothing in a spreadsheet comes back into Vestiarion, and nothing from Google reaches the agent or its model.");
+    expect(lines[5]).toContain("unless another workspace is connected with the same Google account");
   });
 });

@@ -147,3 +147,40 @@ describe("a CRM's status words (HubSpot connector H16)", () => {
     ]);
   });
 });
+
+describe("an export tool's status words (close pack Sheets GS13, GS14)", () => {
+  const sheets: ConnectionFacts = { ...connected, providerLabel: "Google Sheets", externalOrgName: "du***@gmail.com", lastSyncedAt: null };
+  const RECONNECT =
+    "Google no longer accepts this connection: its access was removed in the Google Account, or it went unused for six months. Reconnect Google Sheets to export close packs again.";
+
+  it("says what stays in Drive once disconnected, and that nothing more is written", () => {
+    expect(connectionStatus({ ...sheets, status: "revoked" }, NOW)).toEqual({
+      tone: "off",
+      title: "Disconnected from du***@gmail.com",
+      detail: ["Spreadsheets already exported stay in that Google Drive. Nothing more is written to Google Sheets."],
+      reconnect: false,
+    });
+  });
+
+  it("asks for a reconnect in Google's words, from the row or without one", () => {
+    expect(syncErrorWords("reconnect", "Google Sheets", null)).toBe(RECONNECT);
+    expect(connectionStatus({ ...sheets, status: "needs_reconnect", lastError: RECONNECT }, NOW)).toEqual({
+      tone: "error",
+      title: "Google Sheets needs you to reconnect",
+      detail: [RECONNECT],
+      reconnect: true,
+    });
+    expect(connectionStatus({ ...sheets, status: "needs_reconnect", lastError: null }, NOW).detail).toEqual([RECONNECT]);
+  });
+
+  it("never speaks of a sync: nothing is read from it", () => {
+    const view = connectionStatus(sheets, NOW);
+    expect(view).toEqual({
+      tone: "ok",
+      title: "Connected to du***@gmail.com",
+      detail: ["An owner, admin or accountant exports a month from Monthly close pack in the Audit log."],
+      reconnect: false,
+    });
+    expect(JSON.stringify(view)).not.toMatch(/sync/i);
+  });
+});
