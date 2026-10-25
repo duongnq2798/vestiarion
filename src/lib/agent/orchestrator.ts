@@ -61,7 +61,7 @@ import { alertCashShort } from "./cash-alert";
 import { makeEarlyPaymentOffers } from "./early-offers";
 import { makeTermRequests } from "./term-requests";
 import { requestMissingDocuments } from "./document-requests";
-import { vendorDocumentsOf, type VendorDocument } from "./document-checks";
+import { checkReceivedDocuments, vendorDocumentsOf, type VendorDocument } from "./document-checks";
 import { buyPayeeHistories, type AddressHistoryFact } from "./services";
 import { cadenceLabel, type RecurringUnit } from "../recurring";
 import {
@@ -3900,6 +3900,14 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     });
   }
 
+  });
+
+  await stage("document_checks", async () => {
+  // ------------------------------------------------- 1a. document checks
+  // Each document a vendor sent for a bill's missing purchase order or goods receipt, read and compared with the bill in
+  // code, once (document checks DK2-DK7). With vendor requests on, a match adds the bill's purchase order: the follow-up
+  // below reopens the bill and the AP stage decides it in this cycle, where its last rule holds it for a person (DK8).
+  lines.push(...(await checkReceivedDocuments(db)));
   });
 
   // The agent's spending limit (outflow budget spec R5): read once, on first

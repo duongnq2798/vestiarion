@@ -17,6 +17,17 @@ const decisionFactsAt = source.indexOf("export function payableDecisionFacts(");
 const decisionFacts = source.slice(decisionFactsAt, source.indexOf("\n}\n", decisionFactsAt));
 
 describe("the cycle and a vendor's document", () => {
+  it("checks documents after screening and before the follow-up, which reopens a bill whose purchase order a document added (DK2, DK7)", () => {
+    const run = source.indexOf("async function executeCycle(");
+    const compliance = source.indexOf('stage("compliance"', run);
+    const checks = source.indexOf('stage("document_checks"', run);
+    const followUp = source.indexOf('stage("follow_up"', run);
+    expect(compliance).toBeGreaterThan(run);
+    expect(checks).toBeGreaterThan(compliance);
+    expect(followUp).toBeGreaterThan(checks);
+    expect(source.slice(checks, followUp)).toContain("lines.push(...(await checkReceivedDocuments(db)));");
+  });
+
   it("reads which bills a vendor's document completed once per AP stage, before the payables are decided", () => {
     expect(apStage.match(/vendorDocumentsOf\(/g)).toHaveLength(1);
     expect(apStage.indexOf("vendorDocumentsOf(")).toBeLessThan(apStage.indexOf("for (const invoice of payables)"));
