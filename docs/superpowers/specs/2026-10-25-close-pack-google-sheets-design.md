@@ -114,8 +114,14 @@ tagged with `appProperties { vestiarionClosePack: "<org id>:<YYYY-MM>" }`, which
   the account's My Drive.
 - Found: the oldest is the month's spreadsheet. Its name is set again (`files.update`), so "so far" drops once the month
   has ended.
-- After a create, the list runs again. If two exports raced and both created, each keeps the oldest and trashes the one
-  it made itself (`files.update { trashed: true }`, allowed on its own file).
+- After a create, the list runs again. If two exports raced and both created, the one whose own file is listed and is
+  not the oldest trashes its own (`files.update { trashed: true }`, allowed on its own file) and takes the oldest. When
+  its own file is not listed yet (Drive's search can lag a create), it cannot tell whether it raced and keeps its own: at
+  worst a duplicate stays under the tag, and the next export takes the oldest. Trashing on a list that lacks its own file
+  could trash both racers' files.
+- A file under the tag whose only tab is Google's first one (`sheetId` 0), named neither Payments nor Summary, was never
+  formatted (a run that created it stopped before its format; a format leaves both tabs or none): it is treated as just
+  made, so its first tab becomes Payments rather than staying, empty, in front of the data.
 - A spreadsheet someone trashed or deleted is not found, so the next export makes a new one (`created: true`).
 - The name: "Vestiarion close pack · <workspace name> · <month label>[ so far] · <network label>", for example
   "Vestiarion close pack · Pinecrest Studio · October 2026 so far · Arc testnet", cut to 200 characters. The network
@@ -124,8 +130,9 @@ tagged with `appProperties { vestiarionClosePack: "<org id>:<YYYY-MM>" }`, which
   deleted or renamed it. Any other tab is left alone.
 - Why not a table of exports: Drive already holds the one fact needed (which file is the month's), a trashed file
   heals itself, and there is no row to drift from Drive. The race costs one trashed duplicate at worst.
-- If wrong: a person who renames the file keeps it (the tag stays); one who copies it gets an untagged copy that is
-  never updated. The guide says to export again rather than edit the copy.
+- If wrong: a person who renames the file keeps it (the tag stays), and the next export names it again; one who copies
+  it gets an untagged copy that is never updated; one who moves it into a shared drive loses it, since the list does
+  not search shared drives (out of scope), and the next export makes a new one. The guide says each.
 
 **GS8. The Payments tab.** Row 1 is `CLOSE_PACK_COLUMNS`; then one row per `ClosePackRow`, in the pack's order, from
 `closePackTable(pack, { origin: publicOrigin() })`.
@@ -136,7 +143,9 @@ tagged with `appProperties { vestiarionClosePack: "<org id>:<YYYY-MM>" }`, which
   cell`; `earlier_attempts` when it matches `^\d{1,6}$`. Every other cell, and any of those that does not round trip,
   stays the text the table gave (`sheetValues`).
 - Formatting, in one `spreadsheets.batchUpdate` before the values: the grid sized to `max(rows + 1, 2)` rows and 51
-  columns (which also removes rows left from a longer export), the header frozen (`frozenRowCount: 1`) and bold, the
+  columns (which also removes rows left from a longer export), every value under the header cleared (`updateCells` from
+  row 2 down, `fields: "userEnteredValue"`, so row 2 of a month with no payment, which the grid keeps and no value
+  reaches, never fails the read back), the header frozen (`frozenRowCount: 1`) and bold, the
   five money columns `#,##0.00####` and `earlier_attempts` `0`, every column 160 pixels wide, and data rows clipped
   rather than wrapped.
 - Values go in `values:batchUpdate` requests of at most 500 rows each (2,000 rows of 51 columns are about 3 MB; Google
@@ -198,7 +207,9 @@ tagged with `appProperties { vestiarionClosePack: "<org id>:<YYYY-MM>" }`, which
 - Failed after rows may have reached Google (the values write was sent, or the read back did not match): a new kind,
   `close_pack_export_failed` (actor `human`, domain `system`) `{ by, month, ended, format: "google_sheets",
   connectionId, spreadsheetId, stage, reason }`, where `stage` is `write` or `read_back` and `reason` is one of
-  `rate_limited`, `unavailable`, `forbidden`, `drive_full`, `bad_response` or `mismatch`. Summary: "Close pack for
+  `rate_limited`, `unavailable`, `reconnect` (a second 401, a refresh refused, or a grant without the Drive
+  permission), `forbidden`, `drive_full`, `gone` (the file deleted mid-export), `bad_response` or `mismatch`: every
+  failure from the values write on is recorded, since an earlier request of 500 rows may have landed. Summary: "Close pack for
   October 2026 not fully exported to Google Sheets". A failure before any row was sent (no token, the list or the create
   failed) records nothing: nothing of the pack left.
 - Both are appended best effort (`appendLedgerEntryBestEffort`) through `src/lib/close-pack/record.ts`:
@@ -268,7 +279,9 @@ tagged with `appProperties { vestiarionClosePack: "<org id>:<YYYY-MM>" }`, which
 - Deleting the workspace deletes its tokens with it (the foreign key cascades) without calling Google, as for every
   connector. The guide says where a person removes the access themselves.
 - If wrong: one workspace's disconnect breaks another's exports, or a revoke is claimed that never happened. The
-  message says which of the three outcomes it was (Screens).
+  message says which of the three outcomes it was (Screens). It stays on the card once the card reads Disconnected: the
+  action revalidates the page, which drops the Disconnect button in the same render, so the card holds the form's
+  state, not the button.
 
 **GS15. The sweeper never picks it.** `accounting_connections_due` (0101) returns every `connected` row whose
 `next_sync_after` is null or past, longest unsynced first, 50 at a time; a Sheets connection never syncs, so it would sit
@@ -400,7 +413,7 @@ export async function recordClosePackExport(input: {
 }): Promise<void>;
 export async function recordClosePackExportFailed(input: {
   orgId: string; userId: string; pack: ClosePack; connectionId: string; spreadsheetId: string | null;
-  stage: "write" | "read_back"; reason: "rate_limited" | "unavailable" | "forbidden" | "drive_full" | "bad_response" | "mismatch";
+  stage: "write" | "read_back"; reason: "rate_limited" | "unavailable" | "reconnect" | "forbidden" | "drive_full" | "gone" | "bad_response" | "mismatch";
 }): Promise<void>;
 // recentClosePackExportsBy counts close_pack_exported and close_pack_export_failed.
 
@@ -417,9 +430,9 @@ The export run, in order:
 4. The token: `freshAccessToken({ store: connectionTokenStore(orgId, connection.id), refresh: provider.refresh })`.
    `reconnect` or `missing`: mark the connection (GS13) and answer `reconnect`. `busy` or `unavailable`: `unavailable`.
 5. Find or create the month's file, de-duplicate after a create, rename an existing one (GS7). `gone` on rename: create.
-6. `sheetTabs`, then `formatTabs` (GS8, GS9).
-7. `writeValues` (Payments in chunks of 500, Summary in the first request). From here a failure records
-   `close_pack_export_failed` with `stage: "write"`.
+6. `sheetTabs`, then `formatTabs` (GS8, GS9), `fresh` also for a found file never formatted (GS7).
+7. `writeValues` (Payments in chunks of 500, Summary in the first request). From here every failure records
+   `close_pack_export_failed` with `stage: "write"` (`"read_back"` from step 8), a reconnect and a file gone included.
 8. `readPayments`, padded and hashed; unequal: `close_pack_export_failed` with `stage: "read_back"`, reason `mismatch`.
 9. `close_pack_exported` (GS11), and the outcome with `spreadsheetUrl(id)`.
 
@@ -554,9 +567,12 @@ delete only the specific Google Drive files you use with this app".
 
 ### The close pack page: `/o/<slug>/evidence/close-pack`
 
-`ClosePackView` takes a `sheets: ClosePackSheetsView` prop; `src/components/close-pack/SheetsExport.tsx` (client) renders
-it beside **Download signed JSON**, `print:hidden`. The page sets `export const maxDuration = 120` and reads the view
-with `closePackSheetsView({ month, role: membership.role })` (best effort: a read that fails is `hidden`, logged).
+The page makes `src/components/close-pack/SheetsExport.tsx` (client) from the month and the workspace, never from the
+pack, and passes it to `ClosePackView` as `sheets`, which places it under **Download signed JSON**, `print:hidden`, at
+the same place in the tree whether the pack was read or not: a render whose read is refused (the page's reads spent)
+shows its refusal in the pack's place and keeps the export's answer. The page sets `export const maxDuration = 120` and
+reads the view with `closePackSheetsView({ month, role: membership.role })` (best effort: a read that fails is
+`hidden`, logged).
 
 | View | Shows |
 |---|---|
@@ -570,7 +586,9 @@ with `closePackSheetsView({ month, role: membership.role })` (best effort: a rea
 `approver` and `viewer` get `hidden` for `connect` and `reconnect`, and `ready` without the button.
 
 The action's answers (`exportClosePackToSheetsAction`), kept sticky in the component so a revalidated page does not drop
-them:
+them. A done export does not revalidate: that would read the whole pack again inside the action's 120 seconds, after an
+export that may have used most of them. Its answer stands in for the page's older "Last exported" line until the page
+is read again; a `reconnect` revalidates, so the card and the page say so:
 - done: "Exported 14 payments to Google Sheets." (one: "Exported 1 payment to Google Sheets."; none: "Exported this
   month to Google Sheets: no payment settled in it yet."), then "In the Google Drive of du***@gmail.com." and **Open the
   spreadsheet**;
@@ -621,14 +639,16 @@ afresh. The callback re-checks the person, membership, role and consent (the cor
   then reads "needs you to reconnect".
 - **The spreadsheet trashed or deleted**: the next export makes a new one, `created: true`.
 - **A tab renamed or deleted**: re-added; its formatting re-applied. **Another tab added**: kept.
-- **Cells edited by a person**: overwritten by the next export; the Summary's last line says so.
+- **Cells edited by a person**: overwritten by the next export, anything under the Payments header cleared; the
+  Summary's last line says so.
 - **A month with no payment**: the header alone, Summary "Payments settled" 0, and "Exported this month to Google
   Sheets: no payment settled in it yet."
 - **This month so far**: the title says "so far"; exported again after the month ends, the same file is renamed.
 - **More than 2,000 payments**: the pack is cut (CP15); the Summary's "Cut" row says so.
 - **Members or screening not read**: the Summary's rows say so; the cells read as the close pack's do.
 - **Two exports of the same month at once**: GS7's de-duplication; if their writes interleave, the read back of one
-  fails `mismatch` and the ledger says so; the other is recorded.
+  fails `mismatch` and the ledger says so; the other is recorded. When Drive's search lags, both may keep their own
+  file: the next export takes the oldest, and the other stays as an untrashed duplicate.
 - **A disconnect during an export**: the token is gone or revoked; the export fails `reconnect` or `unavailable`.
 - **The person who connected leaves**: the connection keeps working; the card still names the masked account.
 - **The client removed from the deployment while connected**: the card is gone, as for every connector; the tokens stay
@@ -724,12 +744,20 @@ Every new test that walks files, spawns a process or loads ESLint gets `}, 30_00
 - a second export of the month: finds the file, renames it ("so far" dropped once ended), creates nothing, `created:
   false`;
 - a file gone (404, or 403 `insufficientFilePermissions`, on rename): a new one is made;
-- two files under the tag after a create: keeps the oldest and trashes the one it made;
+- two files under the tag after a create: keeps the oldest and trashes the one it made; its own file missing from the
+  second list beside an older one: keeps its own, trashes nothing;
+- a file made by a run that stopped before its format (a timed-out create, a format answered 500): the next export
+  renames its first tab Payments and adds Summary, so no empty first tab stays; a lone tab of a person's is left alone;
+- a month with no payment whose row 2 holds a note: cleared by the format, the read back matches, `close_pack_exported`;
 - missing tabs re-added; a third tab untouched;
 - a pack of 2,000 rows: four values requests of 500 rows;
 - a read back that differs: `close_pack_export_failed` `{ stage: "read_back", reason: "mismatch" }` and no
   `close_pack_exported`;
 - a values write answered 503 twice: `close_pack_export_failed` `{ stage: "write", reason: "unavailable" }`;
+- 600 rows whose second values request answers 401 twice, or 403 `insufficientPermissions`: `reconnect`, the
+  connection marked, `{ stage: "write", reason: "reconnect" }`; a read back answering 401 with the refresh refused:
+  `{ stage: "read_back", reason: "reconnect" }`; a read back answering 404: `failed`, `{ stage: "read_back", reason:
+  "gone" }`;
 - a 429 asking 2 seconds: waits once and goes on; asking 30 seconds before anything was written: `rate_limited`, no
   entry; a Drive 403 `userRateLimitExceeded`: `rate_limited`; 403 `storageQuotaExceeded`: `drive_full`;
 - a 401: one refresh with the refused token, then the call again; a second 401: `reconnect`, the connection marked
@@ -807,7 +835,8 @@ Existing tests to extend:
     as wide as the header. It names no one by email and carries no URL."
   - "A new entry, actor `human`, domain `system`: **`close_pack_export_failed`** `{ by, month, ended, format,
     connectionId, spreadsheetId, stage, reason }`, when an export failed after rows may have reached Google. `stage` is
-    `write` or `read_back`; `reason` is `rate_limited`, `unavailable`, `forbidden`, `drive_full`, `bad_response` or
+    `write` or `read_back`; `reason` is `rate_limited`, `unavailable`, `reconnect` (Google stopped accepting the
+    connection), `forbidden`, `drive_full`, `gone` (the spreadsheet was deleted during the export), `bad_response` or
     `mismatch`."
   - "`accounting_connected` and `accounting_disconnected` may carry `provider: "googlesheets"`; `externalOrgId` is then
     the Google account's permission id and `externalOrgName` a masked email."
@@ -823,12 +852,14 @@ Existing tests to extend:
   - who exports, the button, the two tabs, the title, "so far", updating in place, a trashed file, other tabs, edits
     overwritten;
   - checking it: each row's entry with `verifyLedgerEntry`, the Summary's SHA-256 against `close_pack_exported`, and
-    the Apps Script lines:
+    the Apps Script lines, which log the hex: the editor's Run shows the Execution log, never a return value:
     ```js
     function paymentsSha256() {
       const rows = SpreadsheetApp.getActive().getSheetByName("Payments").getDataRange().getValues();
       const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(rows), Utilities.Charset.UTF_8);
-      return digest.map((b) => ((b + 256) % 256).toString(16).padStart(2, "0")).join("");
+      const hex = digest.map((b) => ((b + 256) % 256).toString(16).padStart(2, "0")).join("");
+      console.log(hex);
+      return hex;
     }
     ```
   - "The spreadsheet names members by email and payees by name, as the close pack does: share it with whoever should
@@ -970,7 +1001,7 @@ On pinecrest-studio, live on Arc testnet, after the merge deploys:
    explorer.testnet.arc.io at the same hash.
 6. The Audit log has `close_pack_exported` with `format: "google_sheets"`, the `spreadsheetId` in the sheet's address,
    `payments` n, and `sha256` equal to the Summary's "Payments tab SHA-256". The guide's Apps Script lines, run in
-   that spreadsheet, return the same hex. `/api/ledger/verify` passes.
+   that spreadsheet, log the same hex in the Execution log. `/api/ledger/verify` passes.
 7. Export again: the same address, no second file in Drive (search "Vestiarion close pack"), the entry `created:
    false`. Move the file to the trash, export again: a new file, `created: true`.
 8. As an accountant member of pinecrest-studio: the export works. As a viewer: no button, and the "Last exported" line

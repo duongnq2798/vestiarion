@@ -4568,7 +4568,11 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   `settings`, `http`, `oauth`, `provider`, `connect-deps`, `ready`, `table` (pure), `sheets`, `store`, `export`, `views`
   (pure, browser-safe) and `panel`; the routes are `src/app/api/integrations/googlesheets/{connect,callback}`, the page
   `/integrations/googlesheets/connect`, the actions `src/app/actions/googlesheets.ts`, the card `GoogleSheetsPanel` and
-  the close pack page's control `src/components/close-pack/SheetsExport.tsx`.
+  the close pack page's control `src/components/close-pack/SheetsExport.tsx`. The page makes that control from the month
+  and the workspace and hands it to `ClosePackView` as `sheets`, which keeps it at one place in the tree whether the pack
+  was read or not, so a render whose read is refused keeps the export's answer; a done export does not revalidate, since
+  that would read the whole pack again inside the action's 120 seconds, and its answer stands in for the "Last
+  exported" line until the page is read again.
 - **Off, then not set up** (GS2). Without `GOOGLE_SHEETS_CLIENT_ID` and `GOOGLE_SHEETS_CLIENT_SECRET`, or with an id
   that is not a Google OAuth client id, there is no card, no export control, both routes answer 404 and the connect page
   is not found. With the client but before `0145`, `googleSheetsReady()` finds no `googlesheets_connector_ready` and
@@ -4583,13 +4587,19 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   checked; `external_org_name` is `maskEmail(emailAddress)`, or "A Google account": the full address is stored nowhere.
 - **The month's file** (GS7). Each export lists the Drive files tagged
   `appProperties.vestiarionClosePack = "<org id>:<YYYY-MM>"` (the id a UUID, the month passed `closePackMonth`), oldest
-  first. None: `files.create` makes a spreadsheet with the name and the tag, and the tag is listed again, so of two
-  exports that raced each keeps the oldest and trashes its own. Found: the oldest is renamed (so "so far" drops once the
-  month ends); one that answers `gone` is passed over, never trashed. The name is "Vestiarion close pack", the
-  workspace, the month (with "so far") and the network's label, joined by middle dots and cut to 200 characters.
+  first. None: `files.create` makes a spreadsheet with the name and the tag, and the tag is listed again: an export
+  whose own file is listed and is not the oldest trashes its own and takes the oldest; one whose own file is not listed
+  yet (Drive's search can lag a create) keeps it, so two racers never trash both files, and the next export takes the
+  oldest. Found: the oldest is renamed (so "so far" drops once the month ends); one that answers `gone` is passed over,
+  never trashed. The name is "Vestiarion close pack", the workspace, the month (with "so far") and the network's label,
+  joined by middle dots and cut to 200 characters. The list does not search shared drives: a file moved into one is
+  replaced by a new one in My Drive.
 - **The tabs** (GS8, GS9). `formatTabs`, one `batchUpdate`: **Payments** and **Summary** added back if missing or renamed
-  (a title differing only by case is taken back), the grid sized to the rows (which drops rows from a longer export), the
-  header frozen and bold, the money columns `#,##0.00####`, widths set; any other tab is left alone. Values go RAW,
+  (a title differing only by case is taken back), the grid sized to the rows (which drops rows from a longer export),
+  every value under the header cleared (`updateCells`, `userEnteredValue`, so row 2 of a month with no payment or a
+  person's note there never fails the read back), the header frozen and bold, the money columns `#,##0.00####`, widths
+  set; any other tab is left alone. A file just made, or found with only Google's first tab (`sheetId` 0, named neither
+  Payments nor Summary: a run that made it stopped before its format), has that tab renamed Payments. Values go RAW,
   never `USER_ENTERED`, in `values:batchUpdate` requests of at most 500 rows. `sheetValues` writes six columns as
   numbers (`bill_amount`, `amount_paid`, `discount`, `network_fee_usd`, `route_fee_usdc` when they have six places
   and round trip, `earlier_attempts` when it is digits) and every other cell as the table's text, so `=`, `+`, `-` and
@@ -4600,8 +4610,9 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   `mismatch`.
 - **The ledger and the brake** (GS11). Done: `close_pack_exported` with `format: "google_sheets"` and `connectionId`,
   `spreadsheetId`, `created`. Failed once the values write was sent, or on a mismatch: `close_pack_export_failed`
-  `{ by, month, ended, format, connectionId, spreadsheetId, stage, reason }`, `stage` `write` or `read_back`. A failure
-  before any row was sent records nothing. `recentClosePackExportsBy` counts both kinds, so downloads and exports share
+  `{ by, month, ended, format, connectionId, spreadsheetId, stage, reason }`, `stage` `write` or `read_back`; every
+  failure from the values write on is recorded (`RECORDED` maps each `GoogleFailure`, `reconnect` and `gone` included),
+  since an earlier request of 500 rows may have landed. A failure before any row was sent records nothing. `recentClosePackExportsBy` counts both kinds, so downloads and exports share
   the ten in ten minutes, checked before the pack is read or Google is called. The export action also takes the
   downloads' burst token first (`takeClosePackDownloadToken`, keyed `<userId>:<orgId>`).
 - **Calls to Google** (GS12; `http.ts`). Five fixed addresses (`accounts.google.com/o/oauth2/v2/auth`,
@@ -4619,7 +4630,9 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   console's connector problems show.
 - **Disconnecting** (GS14). Google's revoke ends the account's whole grant, so it is sent only when
   `connectedElsewhere("googlesheets", permissionId, orgId)` is false; otherwise the revoke passed does nothing. Either way
-  the tokens are deleted, the connection is revoked and `accounting_disconnected` is signed. Spreadsheets stay.
+  the tokens are deleted, the connection is revoked and `accounting_disconnected` is signed. Spreadsheets stay. The
+  answer (revoked, not confirmed by Google, or kept for another workspace) is held by the card, not the Disconnect
+  button, which the revalidated page drops in the same render, so it stays beside Connect Google Sheets.
 - **Never due** (GS15). `saveConnection` writes `next_sync_after` `EXPORT_NEVER_DUE` (`9999-12-31T00:00:00.000Z`) for a
   provider of kind `export`, so `accounting_connections_due` never hands the sweeper a Sheets connection; `0145` does not
   redefine that function.

@@ -598,6 +598,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Reconnect Google Sheets", SHEETS_PANEL],
     ["Disconnect Google Sheets", SHEETS_PANEL],
     ["Connected to the Google Drive of", SHEETS_PANEL],
+    ["Disconnected from", SHEETS_PANEL],
     ["Google Sheets needs you to reconnect", SHEETS_PANEL],
     ["Google Sheets is not set up on this deployment yet.", SHEETS_PANEL],
     ["Continue to Google", "src/app/integrations/googlesheets/connect/page.tsx"],
