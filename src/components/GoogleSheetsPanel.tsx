@@ -26,15 +26,20 @@ export const GOOGLE_SHEETS_NOTICES: Record<string, { tone: "success" | "error"; 
   failed: { tone: "error", text: "Google Sheets did not finish connecting. Try again in a moment." },
 };
 
-function Disconnect({ orgSlug }: { orgSlug: string }) {
-  const { state, formProps } = useActionForm(disconnectGoogleSheetsAction, INITIAL, { toastOnSuccess: true });
+type DisconnectForm = ReturnType<typeof useActionForm<GoogleSheetsActionResult>>;
+
+/**
+ * The Disconnect button. Its form's state lives in `GoogleSheetsPanel`: the action revalidates the page, whose card turns
+ * Disconnected and drops this button in the same render as the answer, so the answer is shown by the panel, which stays
+ * mounted (the revalidate unmount pattern).
+ */
+function Disconnect({ orgSlug, form }: { orgSlug: string; form: DisconnectForm }) {
   return (
-    <form {...formProps} className="flex flex-wrap items-center gap-3">
+    <form {...form.formProps}>
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <SubmitButton variant="secondary" size="sm" pendingLabel="Disconnecting…" icon={<Unplug aria-hidden />}>
         Disconnect Google Sheets
       </SubmitButton>
-      <FormMessage tone={state.message && !state.ok ? "error" : "neutral"}>{state.ok ? null : state.message}</FormMessage>
     </form>
   );
 }
@@ -57,7 +62,8 @@ const LINK = "font-medium text-agent underline-offset-4 hover:underline";
  * GS6, GS14, GS18, "Settings > Integrations: the Google Sheets card"): which Google Drive the close packs go to, named
  * by a masked email, and where to export them; Connect, Reconnect and Disconnect Google Sheets for an owner or admin.
  * Every member sees the status. Headed by Google Sheets' name in words beside a neutral icon: no Google mark without
- * Google's permission.
+ * Google's permission. What Disconnect answered stays on the card once it reads Disconnected, beside Connect Google
+ * Sheets: whether Google confirmed the revoke, or another workspace keeps the same Google account's access.
  */
 export default function GoogleSheetsPanel({
   orgSlug,
@@ -71,6 +77,8 @@ export default function GoogleSheetsPanel({
   notice: string | null;
 }) {
   const told = notice ? GOOGLE_SHEETS_NOTICES[notice] : undefined;
+  const disconnect = useActionForm(disconnectGoogleSheetsAction, INITIAL);
+  const answered = disconnect.state;
   return (
     <section aria-labelledby="googlesheets-title" id="googlesheets">
       <SectionHeader
@@ -129,7 +137,10 @@ export default function GoogleSheetsPanel({
               <div className="flex flex-wrap items-start gap-3 border-t border-line pt-4">
                 {view.state === "needs_reconnect" && <ConnectButton orgSlug={orgSlug} label="Reconnect Google Sheets" />}
                 {view.state === "revoked" && <ConnectButton orgSlug={orgSlug} label="Connect Google Sheets" />}
-                {view.state !== "revoked" && <Disconnect orgSlug={orgSlug} />}
+                {view.state !== "revoked" && <Disconnect orgSlug={orgSlug} form={disconnect} />}
+                <FormMessage tone={answered.message && !answered.ok ? "error" : "neutral"} className="self-center">
+                  {answered.message || null}
+                </FormMessage>
               </div>
             ) : (
               <p className="text-sm text-ink-3">An owner or admin manages Google Sheets.</p>
