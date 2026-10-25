@@ -71,7 +71,7 @@ export default async function ClosePackPage({ params, searchParams }: ClosePackP
         {/* Export to Google Sheets is made from the month and the workspace, not the pack, so a render with no read keeps its answer (close pack Sheets GS5). */}
         <ClosePackView
           pack={pack}
-          sheets={<SheetsExport orgSlug={access.membership.slug} month={month.key} view={sheets} />}
+          sheets={<SheetsExport key={month.key} orgSlug={access.membership.slug} month={month.key} view={sheets} />}
           refused={<Callout tone="held">The close pack was read many times in a row. Try again in a minute.</Callout>}
         />
       </ProductShell>

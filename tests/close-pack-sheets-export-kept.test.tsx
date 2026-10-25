@@ -38,7 +38,7 @@ const show = (pack: ClosePack | null, view: ClosePackSheetsView = READY) =>
   );
 
 beforeEach(() => {
-  actions.exportClosePackToSheetsAction.mockResolvedValue({ ok: true, message: "Exported 3 payments to Google Sheets.", sheet: { url: SHEET_URL, account: "du***@gmail.com" } });
+  actions.exportClosePackToSheetsAction.mockResolvedValue({ ok: true, message: "Exported 3 payments to Google Sheets.", month: PACK.month.key, sheet: { url: SHEET_URL, account: "du***@gmail.com" } });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -89,5 +89,44 @@ describe("Export to Google Sheets, once it answers (close pack Sheets GS5, GS9)"
     await press("Export to Google Sheets");
     expect(container.textContent).toContain("Google did not answer. Try again in a moment.");
     expect(container.textContent).toContain("Last exported to Google Sheets on 2026-10-20 09:00 UTC: 2 payments.");
+  });
+});
+
+describe("Export to Google Sheets after a month link (close pack Sheets GS5, GS9)", () => {
+  const SEPTEMBER_URL = "https://docs.google.com/spreadsheets/d/1Vx00000000000000000000000000000000000sept/edit";
+  const SEPTEMBER: ClosePackSheetsView = { ...READY, last: { at: "2026-10-01 08:00 UTC", payments: 5, url: SEPTEMBER_URL } };
+  /** The control as the page makes it: keyed by the month, so a month link (only ?month= changes) starts it again. */
+  const showMonth = (month: string, view: ClosePackSheetsView, keyed = true) =>
+    act(() =>
+      root.render(
+        <ClosePackView
+          pack={PACK}
+          sheets={keyed ? <SheetsExport key={month} orgSlug={PACK.workspace.slug} month={month} view={view} /> : <SheetsExport orgSlug={PACK.workspace.slug} month={month} view={view} />}
+        />
+      )
+    );
+
+  it("drops a month's done export and shows the next month's own Last exported line", async () => {
+    showMonth(PACK.month.key, READY);
+    await press("Export to Google Sheets");
+    expect(links()).toContain(SHEET_URL);
+
+    showMonth("2026-09", SEPTEMBER);
+    expect(container.textContent).not.toContain("Exported 3 payments to Google Sheets.");
+    expect(links()).not.toContain(SHEET_URL);
+    expect(container.textContent).toContain("Last exported to Google Sheets on 2026-10-01 08:00 UTC: 5 payments.");
+    expect(links()).toContain(SEPTEMBER_URL);
+  });
+
+  it("never shows another month's done export as this month's, even kept mounted across the link", async () => {
+    showMonth(PACK.month.key, READY, false);
+    await press("Export to Google Sheets");
+    expect(links()).toContain(SHEET_URL);
+
+    showMonth("2026-09", SEPTEMBER, false);
+    expect(container.textContent).not.toContain("Exported 3 payments to Google Sheets.");
+    expect(links()).not.toContain(SHEET_URL);
+    expect(container.textContent).toContain("Last exported to Google Sheets on 2026-10-01 08:00 UTC: 5 payments.");
+    expect(links()).toContain(SEPTEMBER_URL);
   });
 });

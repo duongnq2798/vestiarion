@@ -290,7 +290,9 @@ describe("the page (close pack CP11, CP14)", () => {
   });
 
   it("makes Export to Google Sheets from the month and the workspace, and renders the view whether the pack was read or not (close pack Sheets GS5)", () => {
-    expect(page).toContain("sheets={<SheetsExport orgSlug={access.membership.slug} month={month.key} view={sheets} />}");
+    // Keyed by the month: a month link changes only ?month=, which Next does not remount the page for, so the control
+    // starts again with that month's own Last exported line rather than another month's answer.
+    expect(page).toContain("sheets={<SheetsExport key={month.key} orgSlug={access.membership.slug} month={month.key} view={sheets} />}");
     expect(page).toMatch(/<ClosePackView\s+pack=\{pack\}/);
     expect(page).not.toMatch(/pack \? <ClosePackView/);
   });

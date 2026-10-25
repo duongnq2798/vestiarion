@@ -43,13 +43,15 @@ const paymentsWords = (n: number) => `${n} ${n === 1 ? "payment" : "payments"}`;
  * with the Drive it writes to; and for every member the month's last export with its link. The action's answer lives in
  * this component, which stays mounted whatever the revalidated page's view is, and which the page places outside what
  * the pack's read renders, so the answer is not dropped with either. A done export does not revalidate the page: its
- * answer is the month's last export, so it stands in for the page's older "Last exported" line. Nothing of it is printed.
+ * answer is the month's last export, so it stands in for the page's older "Last exported" line. The page keys it by the
+ * month, since a month link changes only `?month=` and keeps it mounted; and a done export's answer names its month, so
+ * it is shown for that month only, never as another month's. Nothing of it is printed.
  */
 export function SheetsExport({ orgSlug, month, view }: { orgSlug: string; month: string; view: ClosePackSheetsView }) {
   const { state, formProps } = useActionForm(exportClosePackToSheetsAction, INITIAL);
   if (view.state === "hidden") return null;
-  const done = state.ok && state.sheet !== undefined;
-  const answer = state.message ? (
+  const done = state.ok && state.sheet !== undefined && state.month === month;
+  const answer = state.message && (!state.ok || done) ? (
     state.ok ? (
       <div className="space-y-1 text-sm">
         <FormMessage tone="success">{state.message}</FormMessage>

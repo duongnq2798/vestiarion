@@ -86,7 +86,7 @@ describe("exportClosePackToSheetsAction (close pack Sheets GS5, GS11)", () => {
   it("exports the month as the person, with their email for the Summary, and answers the count, the account and the link", async () => {
     mocks.exportSheet.mockResolvedValue({ ok: true, spreadsheetId: ID, url: SHEET_URL, payments: 14, created: true, account: "du***@gmail.com" } satisfies SheetExportOutcome);
     const result = await exportClosePackToSheetsAction(EMPTY, form({ month: "2026-10" }));
-    expect(result).toEqual({ ok: true, message: "Exported 14 payments to Google Sheets.", sheet: { url: SHEET_URL, account: "du***@gmail.com" } });
+    expect(result).toEqual({ ok: true, message: "Exported 14 payments to Google Sheets.", month: "2026-10", sheet: { url: SHEET_URL, account: "du***@gmail.com" } });
     const [input, deps] = mocks.exportSheet.mock.calls[0];
     expect(input).toMatchObject({ orgId: ORG, user: { id: USER, email: "accountant@ledgerworks.test" }, workspace: { slug: "acme", name: "Acme Studio" }, month: { key: "2026-10" } });
     expect(deps.provider).toMatchObject({ id: "googlesheets" });
