@@ -84,13 +84,15 @@ export function takeClosePackPageToken(userId: string, now = Date.now()): boolea
 const closePackDownloadBuckets = new Map<string, Bucket>();
 
 /**
- * Close pack downloads started at once (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md CP15): three, then
- * one a minute, per member. The limit that holds across instances is ten in ten minutes, counted from the ledger's own
+ * Close pack downloads (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md CP15): six within a minute, in
+ * any tab and whether started together or one after another, then one a minute, per person per workspace (the route's
+ * key is `<userId>:<orgId>`). The limit that holds across instances is ten in ten minutes, counted from the ledger's own
  * `close_pack_exported` entries; but each download appends its entry only once its heavy read is done, so downloads sent
- * together would all count the same earlier ones. Single-instance, like the cycle guard: a soft brake on a burst.
+ * together would all count the same earlier ones. Single-instance, like the cycle guard: a soft brake on a burst, room
+ * enough for CSV and JSON of a few months.
  */
-export function takeClosePackDownloadToken(userId: string, now = Date.now()): boolean {
-  return take(closePackDownloadBuckets, userId, 3, 60_000, now);
+export function takeClosePackDownloadToken(key: string, now = Date.now()): boolean {
+  return take(closePackDownloadBuckets, key, 6, 60_000, now);
 }
 
 const dueWatchBuckets = new Map<string, Bucket>();

@@ -608,10 +608,10 @@ function lockOf(value: unknown): { on: boolean; coolingHours: number } | null {
 /**
  * The payee lock as it applied to the payment (CP8). The confirmation records the lock it was confirmed under; the
  * guardrail reads the lock in force when it pays (payee lock PL5), which an owner may have eased since, and a lock eased
- * frees a held payment at once (due-work watch DW8). So the lock in force is the newest `payee_lock_changed` between the
- * confirmation and the paying entry (`cutoff`), else the confirmation's. Sent before the wait in force ended does not
- * match; sent after it but before the wait it was confirmed under is stated, naming who eased it and when, and citing
- * the change.
+ * frees a held payment at once (due-work watch DW8). So the lock in force is the newest `payee_lock_changed` after the
+ * confirmation and before the paying entry (`cutoff`), or with none, at or before it was sent (`sentAt`), else the
+ * confirmation's. Sent before the wait in force ended does not match; sent after it but before the wait it was
+ * confirmed under is stated, naming who eased it and when, and citing the change.
  */
 function payeeLockCheck(ctx: Context, route: ClosePackTransaction["route"], facts: AddressFacts, sentAt: string, cutoff: number): ClosePackCheck {
   if (route === "bank" || !facts.address) return check("not_applicable", "The payee lock covers addresses on chain only.");
@@ -624,12 +624,22 @@ function payeeLockCheck(ctx: Context, route: ClosePackTransaction["route"], fact
   if (!lock) return check("inferred", "The payee lock was off when the address was confirmed.", { at: confirmed.ts, entries });
   const wait = typeof lock.coolingHours === "number" && lock.coolingHours > 0 ? lock.coolingHours : 0;
   const base = { at: confirmed.ts, entries };
-  const change = newest(ctx.input.entries, (entry) => entry.action === "payee_lock_changed" && entry.seq > confirmed.seq && entry.seq < cutoff && lockOf(entry.detail.to) !== null);
+  const sent = at(sentAt);
+  // Bounded by the send time as well as by seq: with no paying entry the cutoff is a later recording entry, or none at
+  // all, and a change after the money left was not the lock in force when it went (ledger ts follows seq otherwise).
+  const change = newest(
+    ctx.input.entries,
+    (entry) =>
+      entry.action === "payee_lock_changed" &&
+      entry.seq > confirmed.seq &&
+      entry.seq < cutoff &&
+      (Number.isNaN(sent) || at(entry.ts) <= sent) &&
+      lockOf(entry.detail.to) !== null
+  );
   const inForce = change ? (lockOf(change.detail.to) as { on: boolean; coolingHours: number }) : { on: true, coolingHours: wait };
   const inForceWait = inForce.on ? inForce.coolingHours : 0;
   const cited = change ? [...entries, change.seq] : entries;
   const given = set ? at(set.ts) : Number.NaN;
-  const sent = at(sentAt);
   const timed = !Number.isNaN(given) && !Number.isNaN(sent);
   const after = Math.floor((sent - given) / HOUR_MS);
   const afterWords = after < 1 ? "less than an hour" : hoursWords(after);

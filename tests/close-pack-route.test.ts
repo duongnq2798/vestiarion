@@ -28,7 +28,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/session", () => ({ getSessionUser: sessionMock }));
 vi.mock("@/lib/auth/membership", () => ({ membershipFor: membershipMock, membershipsOf: vi.fn() }));
 vi.mock("@/lib/close-pack/read", () => ({ readClosePack: readMock }));
-// The per-instance brake lets every download through, but in the test of a burst, which runs the real bucket.
+// The per-instance brake lets every download through, but in the tests of a burst, which run the real bucket.
 vi.mock("@/lib/rate-limit", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/rate-limit")>()), takeClosePackDownloadToken: downloadTokenMock }));
 vi.mock("@/lib/ledger", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/ledger")>()), appendLedgerEntry: appendEntryMock }));
 
@@ -190,29 +190,45 @@ describe("GET /api/evidence/close-pack (close pack CP12, CP14)", () => {
     expect((await call("?org=pinecrest-studio&month=2026-10", { recent: 9 }).response).status).toBe(200);
   });
 
-  it("answers a burst of downloads sent at once 429 past three, before the membership or the month is read (CP15)", async () => {
+  it("answers a burst of downloads sent at once 429 past six, before the ledger is counted or the month is read (CP15)", async () => {
     const actual = await vi.importActual<typeof import("@/lib/rate-limit")>("@/lib/rate-limit");
     downloadTokenMock.mockImplementation(actual.takeClosePackDownloadToken);
     sessionMock.mockResolvedValue({ id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d1", email: null });
     // Every one of them counts the same nine earlier downloads in the ledger before any of them appends its own.
-    const answers = await Promise.all(Array.from({ length: 6 }, () => call("?org=pinecrest-studio&month=2026-10", { recent: 9 }).response));
-    expect(answers.map((answer) => answer.status)).toEqual([200, 200, 200, 429, 429, 429]);
-    const limited = answers[5];
+    const calls = Array.from({ length: 9 }, () => call("?org=pinecrest-studio&month=2026-10", { recent: 9 }));
+    const answers = await Promise.all(calls.map((one) => one.response));
+    expect(answers.map((answer) => answer.status)).toEqual([200, 200, 200, 200, 200, 200, 429, 429, 429]);
+    const limited = answers[8];
     expect(limited.headers.get("retry-after")).toBe("60");
     expect(await limited.json()).toEqual({ error: "Too many close pack downloads in a row. Try again in a minute." });
-    expect(membershipMock).toHaveBeenCalledTimes(3);
-    expect(readMock).toHaveBeenCalledTimes(3);
-    expect(appendEntryMock).toHaveBeenCalledTimes(3);
+    expect(readMock).toHaveBeenCalledTimes(6);
+    expect(appendEntryMock).toHaveBeenCalledTimes(6);
+    const counted = (one: (typeof calls)[number]) => one.fake.requests.some((request) => request.path === "/rest/v1/ledger_entries" && request.params.get("action") === "eq.close_pack_exported");
+    expect(calls.map(counted)).toEqual([true, true, true, true, true, true, false, false, false]);
   });
 
-  it("takes the brake's token only once the session, format and month are good", async () => {
+  it("holds each workspace's downloads apart, as the ledger's count does (CP15)", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/rate-limit")>("@/lib/rate-limit");
+    downloadTokenMock.mockImplementation(actual.takeClosePackDownloadToken);
+    sessionMock.mockResolvedValue({ id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000000d2", email: null });
+    const OTHER = { ...MEMBERSHIP, orgId: "0b6c1c9e-4a4f-4a7e-9b1e-000000000c9b", slug: "harbor-print", name: "Harbor Print" };
+    membershipMock.mockImplementation(async (_user: string, slug: string) => (slug === "harbor-print" ? OTHER : MEMBERSHIP));
+    // An accountant downloads one client's month six times, then another client's.
+    const first = await Promise.all(Array.from({ length: 7 }, () => call("?org=pinecrest-studio&month=2026-10&format=csv").response));
+    expect(first.map((answer) => answer.status)).toEqual([200, 200, 200, 200, 200, 200, 429]);
+    expect((await call("?org=harbor-print&month=2026-10&format=csv").response).status).toBe(200);
+  });
+
+  it("takes the brake's token only for a member, once the session, format and month are good, by person and workspace", async () => {
     sessionMock.mockResolvedValueOnce(null);
     expect((await call("?org=pinecrest-studio&month=2026-10").response).status).toBe(401);
     expect((await call("?org=pinecrest-studio&month=2026-10&format=pdf").response).status).toBe(400);
     expect((await call("?org=pinecrest-studio&month=2026-13").response).status).toBe(400);
+    membershipMock.mockResolvedValueOnce(null);
+    expect((await call("?org=no-such-workspace&month=2026-10").response).status).toBe(404);
     expect(downloadTokenMock).not.toHaveBeenCalled();
     expect((await call("?org=pinecrest-studio&month=2026-10").response).status).toBe(200);
-    expect(downloadTokenMock).toHaveBeenCalledWith(USER);
+    expect(downloadTokenMock).toHaveBeenCalledWith(`${USER}:${ORG}`);
   });
 
   it("answers a failed read 500, records nothing and names nothing of why", async () => {
