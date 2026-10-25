@@ -1,10 +1,12 @@
 import crypto from "node:crypto";
-import { platformDb, platformStorage } from "../dal";
+import { runCycleSoon } from "../agent/cycle-soon";
+import { db, platformDb, platformStorage } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { notifyDocumentReceived } from "../notifications/document-received";
 import { takeDocumentAddressToken, takeDocumentLinkToken } from "../rate-limit";
 import { MAX_VENDOR_DOCUMENT_BYTES, missingOf, readDocumentFields, sniffDocumentType, type MissingDocument } from "./rules";
+import { documentChecksMode, readDocumentChecksStatus } from "./setting";
 import { documentTokenHash } from "./token";
 
 /**
@@ -19,8 +21,13 @@ import { documentTokenHash } from "./token";
  * address can no longer write; one that is not one of those is removed. The file kept is read back and taken only when
  * it hashes as the file checked, since the upload address could write again in between. 0142's
  * answer_document_request takes it once, while the request is open. Signed as `document_received` (by no member) and
- * told to the owners and admins, both best effort: the answer is taken by then. It never changes the bill, and is read
- * by no model (ER7).
+ * told to the owners and admins, both best effort: the answer is taken by then. Sending it never changes the bill.
+ *
+ * While vendor requests are in shadow or on, and migration 0144 has run, the cycle checks the document against its bill
+ * (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK2): a PDF's text is read by the workspace's
+ * model, code compares its vendor, amount and purchase order, and only a match with vendor requests on adds the
+ * purchase order, for a person to approve. Sending it starts that cycle at once, raised by no member, as an accepted
+ * early-payment offer raises its own, and the owners' and admins' email says what the check does.
  */
 
 export interface DocumentRequestPreview {
@@ -51,6 +58,26 @@ interface PreviewRow {
 /** Postgres's or PostgREST's "no such table, column or function": migration 0142 has not run here yet. */
 function beforeMigration(error: { code?: string | null } | null | undefined): boolean {
   return ["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(error?.code ?? "");
+}
+
+/**
+ * How the cycle checks a document the vendor just sent (DK1, DK15), and whether the workspace is a sandbox, whose
+ * event-raised cycles count against its day: read in the workspace's scope, best effort. Unread, nothing is raised, and
+ * the email says what it said before the check: the six-hourly cycle still checks the document.
+ */
+async function checksFor(orgId: string): Promise<{ mode: "shadow" | "on" | null; sandbox: boolean }> {
+  try {
+    return await withOrg(orgId, async () => {
+      const mode = documentChecksMode(await readDocumentChecksStatus(db()));
+      if (!mode) return { mode, sandbox: false };
+      const org = await platformDb().from("orgs").select("mode").eq("id", orgId).maybeSingle<{ mode: unknown }>();
+      if (org.error) throw new Error(org.error.message);
+      return { mode, sandbox: org.data?.mode === "sandbox" };
+    });
+  } catch (error) {
+    console.error("document request: checks not read", orgId, error instanceof Error ? error.message : "unknown error");
+    return { mode: null, sandbox: false };
+  }
 }
 
 /** The open request a token stands for, or null for any other link; reading changes nothing. */
@@ -235,6 +262,9 @@ export async function submitDocument(
   } catch {
     console.error("ledger entry not recorded", "document_received", orgId);
   }
+  // The cycle checks it within seconds, while vendor requests are in shadow or on (DK2); a sandbox's counts against its day.
+  const checks = await checksFor(orgId);
+  if (checks.mode) runCycleSoon({ orgId, sandbox: checks.sandbox, kind: "document_received" });
   if (answered.org_slug) {
     const work = () =>
       notifyDocumentReceived({
@@ -245,6 +275,7 @@ export async function submitDocument(
         vendorName,
         reference: answered.invoice_reference,
         typedPo: fields.poReference !== null,
+        checks: checks.mode,
       });
     if (options.defer) {
       try {
