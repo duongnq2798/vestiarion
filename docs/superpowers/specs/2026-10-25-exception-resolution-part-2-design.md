@@ -71,13 +71,19 @@ or purchase order, so an instruction in the document cannot aim at the bill's fi
 (`src/lib/document-requests/check.ts`, pure) runs these checks, in this order:
 
 1. **Vendor.** The text names the bill's counterparty: its `nameKey` appears as whole words in the text's `nameKey`
-   (a key of at least 3 characters), or, failing that, its billing email's domain appears as a whole word. The model's
-   `vendorName` is never used: on a purchase order, the issuer is the buyer.
+   (a key of at least 3 characters), or, failing that, its billing email's domain, or a subdomain of it, appears as a
+   whole word. A free email provider's domain (gmail.com, outlook.com and the like) names no one and never counts. The
+   model's `vendorName` is never used: on a purchase order, the issuer is the buyer.
 2. **Currency.** The currency read with the total is the bill's currency after `normalizeExtraction`'s mapping (USD, $
-   and US$ are USDC; EUR and € are EURC). A total with no currency, or in another currency, does not match.
+   and US$ are USDC; EUR and € are EURC). A total with no currency, or in another currency, does not match. The model's
+   currency counts, or the rule-based reader's when the model read none; when both read one and they differ, it does
+   not match.
 3. **Amount.** The total read is the bill's amount exactly, to its last decimal: millionths, compared as integers. The
    total is the model's verified reading. When the rule-based reader read a different total, the total is unclear and
-   does not match. When the model read none, the rule-based reading counts alone.
+   does not match. When the model read none, the rule-based reading counts alone. Every line that states what is due
+   ("Total due", "Total amount", "Total payable", "Amount due", "Balance due") is read as the rule-based reader reads
+   one: a document whose lines state two different totals is unclear too, so a total slipped in after the real one
+   cannot pass for it, whichever line a reader took.
 4. **Purchase order** (DK5).
 5. **Pay-to.** Every `0x` address the text writes is the counterparty's address on file, ignoring case. A document
    asking to be paid anywhere else does not match, and neither does any address when none is on file.
@@ -89,7 +95,8 @@ The bill's invoice number (`memo`), standing alone in the text, is recorded as `
 evidence and never blocks.
 
 The outcome is `matched` when every check passes, else `mismatched`. `reason` is the sentence of the first check that
-failed (Screens). Every check is signed (Data). If this is wrong: a document crafted to name the vendor, the amount and
+failed (Screens). Every check is signed (Data). A vendor name of more than 100 characters is "the vendor" in a reason,
+and a control or format character in it is left out, so no reason passes the 300 characters 0144 takes. If this is wrong: a document crafted to name the vendor, the amount and
 a purchase order matches. That is bounded by DK8: the purchase order is added, and a person approves the payment with
 the document one click away on the card. Today, a person types the same purchase order and the agent pays alone.
 
@@ -100,8 +107,8 @@ the document one click away on the card. Today, a person types the same purchase
   from it, the document names two, and does not match. If no one typed one, the model's verified purchase order is
   used, or the rule-based reader's. When both read one and they differ (ignoring case), the document names two. With
   none read, it does not match.
-- **The bill has one on file.** A different purchase order in the document does not match. None is fine: a delivery
-  note may not name it.
+- **The bill has one on file.** A different purchase order in the document, read by either reader, does not match.
+  None is fine: a delivery note may not name it.
 - **The counterparty needs none.** What the document names is recorded, and nothing is compared.
 
 The purchase order added is spelled as the document writes it: the slice of the text, not the typed or modelled
@@ -142,7 +149,8 @@ Once per AP stage, `vendorDocumentsOf(db, payableIds)` (`src/lib/agent/document-
 `po_written`. A read that fails stops the stage, so nothing is paid past it. Before 0144, it reads none, which is safe:
 nothing can have been written.
 
-`enforceApGuardrails` gains `vendorDocument: { source } | null`, and a last rule:
+`enforceApGuardrails` gains `vendorDocument: { source, vendorName } | null` (the counterparty's name, for the reason),
+and a last rule:
 - It applies to a `pay` or `schedule` that every other rule let through, including the early return for a funded EURC
   swap: wrap the body, do not insert it among the rules.
 - It returns `blocked: true`, `status: "held"`, `rule: "invoice.vendor_document"`.
@@ -216,6 +224,13 @@ one who types it, and the ledger names who attached it.
 - **The file is the one checked.** The function refuses a SHA-256 that is not the row's.
 - **Two documents for one bill.** The older is checked first. Once it adds the purchase order, the newer finds nothing
   missing, or the compare-and-set fails, and is skipped.
+- **An answer from before 0144.** 0144 adds `checked_at` null, `source = 'vendor'` and `po_written = false` to every
+  row, so a request a vendor answered before it ran waits unchecked like a new one. The first cycle after 0144 checks
+  it, once; nothing is sent again and nothing has to be attached. Until 0144 runs, the deployed code reads "not there
+  yet" and checks nothing (DK15).
+- **A file Storage cannot give.** A file Storage says is not there is unreadable ("The file is no longer in storage.").
+  Any other Storage failure fails the stage, and the next cycle reads the request again, so a passing outage never marks
+  a document unreadable.
 - **Answers and attachments outside the cycle.** They only insert or answer rows. A cycle running then checks them, or
   the next one does.
 - **A person deciding.** A person claiming the bill (`processing`) or adding details at the same moment wins the
