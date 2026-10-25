@@ -5,7 +5,8 @@ A typed client for the [Vestiarion](https://www.vestiarion.xyz) API and its sign
 - every `/api/v1` endpoint, with its types;
 - pagination that reads every page;
 - retries that never add a record twice;
-- checks for webhook signatures and ledger entries.
+- checks for webhook signatures and ledger entries;
+- offline checks of evidence, receipts and close packs.
 
 It has no dependencies, and runs on Node 20 or later, Deno, Bun and edge runtimes such as Cloudflare Workers.
 
@@ -16,7 +17,7 @@ npm install @vestiarion/sdk
 ```
 
 pnpm, Yarn and Bun install it the same way. The package is ESM only. Each version is also served as a tarball, such as
-`https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.3.7.tgz`, which `npm install` takes as it is.
+`https://www.vestiarion.xyz/sdk/vestiarion-sdk-0.4.0.tgz`, which `npm install` takes as it is.
 
 ## Read
 
@@ -36,6 +37,21 @@ for await (const invoice of vestiarion.invoices.listAll({ direction: "payable" }
 
 An owner or admin creates a workspace API key on the workspace's Settings page. Keep it on a server: it reads the whole
 workspace.
+
+The workspace's signed files read the same way: one payment's evidence, a paid bill's receipt, the payee lock's
+evidence for a period and a month's close pack. Each is the file the workspace's page downloads, with members named by
+user id rather than email.
+
+```ts
+const evidence = await vestiarion.invoices.evidence("7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51");
+const released = await vestiarion.milestones.evidence("7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61");
+const receipt = await vestiarion.invoices.receipt("7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51");
+const lock = await vestiarion.payeeLock.evidence({ from: "2026-10-01", to: "2026-10-31" });
+const pack = await vestiarion.closePacks.get("2026-10");
+```
+
+A receipt that is not ready yet has `ready: false`, and `notReady.code` says why. These five reads share a limit per
+key: 10 at once, then one every 6 seconds.
 
 ## Add records
 
@@ -109,6 +125,22 @@ export async function POST(request: Request) {
 `verifyWebhook` throws a `WebhookVerificationError` unless the signature matches the raw body, signed less than 5
 minutes ago. `verifyLedgerEntry` checks the entry's own Ed25519 signature and chain hash, with the public key from the
 workspace's Audit page.
+
+## Check evidence offline
+
+```ts
+import { verifyEvidence } from "@vestiarion/sdk";
+
+const result = await verifyEvidence(pack, { keys: process.env.VESTIARION_LEDGER_PUBLIC_KEY! });
+if (result.ok !== true) console.error(result.problems);
+```
+
+`verifyEvidence` takes any of these files, an API answer's `data` or a download from the workspace, and checks it with
+Web Crypto alone: every entry's signature, that every entry a fact cites is in the file, that entries next to each other
+in the ledger link, and that a row's copy of its entry matches it. `ok` is `true` when all of that holds, `false` when
+something does not (`problems` says what), and `null` when nothing failed but some entry was signed by a key you did
+not pass. Without `keys` it uses the keys the file carries, and says so: that proves the entries were not changed after
+they were signed, not that the keys are the workspace's.
 
 The full guide: https://www.vestiarion.xyz/docs/get-started/sdk
 
