@@ -274,7 +274,7 @@ function TransactionFact({ row }: { row: ClosePackRow }) {
       <span className="block">{transactionWords(row)}</span>
       {/* The hash itself, so a printed copy keeps it. */}
       {transaction.txHash && <span className="block break-all font-mono text-[0.8125rem]">{transaction.txHash}</span>}
-      {burn && <span className="block break-all text-ink-2">{burn}</span>}
+      {burn && <span className="block wrap-anywhere text-ink-2">{burn}</span>}
       {transaction.note && <span className="block text-held">{transaction.note}</span>}
       {transaction.explorerUrl && (
         <span className="block">
@@ -318,7 +318,8 @@ export function ClosePackPayment({ row }: { row: ClosePackRow }) {
           {bill.kind === "invoice" && bill.poReference && <Fact label="Purchase order">{bill.poReference}</Fact>}
           {bill.kind === "invoice" && (
             <Fact label="Document">
-              <span className="break-all">
+              {/* A hash breaks where it must; the words around it do not. */}
+              <span className="wrap-anywhere">
                 <Lines lines={documentLines(row)} />
               </span>
             </Fact>
@@ -366,7 +367,7 @@ export function ClosePackPayment({ row }: { row: ClosePackRow }) {
           <TransactionFact row={row} />
           <Fact label="Books">{booksWords(row)}</Fact>
           <Fact label="Signed entry">
-            <span className="break-all">{recordWords(row.record)}</span>
+            <span className="wrap-anywhere">{recordWords(row.record)}</span>
           </Fact>
           <Fact label="Every entry it rests on">
             <span className="font-mono text-[0.8125rem] text-ink-2">{row.entries.map((seq) => `#${seq}`).join(" ")}</span>
