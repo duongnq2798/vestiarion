@@ -1,5 +1,9 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-25: The monthly close pack
+
+- A new entry, actor `human`, domain `system`, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`close_pack_exported`** `{ by, month, ended, format, payments, notSettled, sha256, headSeq }`, when a member downloads a workspace's close pack for a month. `month` is YYYY-MM; `ended` is false for a month still running; `format` is `csv` or `json`; `payments` and `notSettled` count its rows; `sha256` is the SHA-256 of the file served, in hex; `headSeq` is the ledger's last entry when it was read. It names no one by email. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-23: Late fees on bills
 
 - **`POST /api/v1/invoices`** accepts `lateFee`, the late fee a payable charges once it is paid late, or `null` for none: `kind` is `percent_month`, a percent a month of what is still owed, more than 0 and at most 10, or `fixed`, an amount in `currency`, more than 0 and at most `amount`; `value` is the percent or the amount; `startsOn`, the first day it applies as `YYYY-MM-DD`, is on or after `dueDate`, and defaults to the day after it. A receivable with a late fee is refused with `400`, as is a value out of range (`lateFee.value`) or a start before the due date (`lateFee.startsOn`).
