@@ -4505,11 +4505,15 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
 - **The approval chain** (CP7). The paying entry, the agent's decision before it, `authorizedBy` (`code`, `person`,
   `two_people`), the approvals from `approval_paid.detail.approvals`, an accountant's co-sign joined by bill and person
   to the newest `approval_given` with `cosign: true` before the paying entry, the flags it recorded, a shadow-mode
-  verdict, and the address paid with its giver and its confirmation. People are named by email with their role now
+  verdict, and the address paid with its giver and its confirmation. The paying entry is what let the current attempt
+  go, as the settlement track reads it (`stages.authorized.seq`); a person's approval that only reconciled a transfer an
+  earlier entry had sent, with no `retriedAfter`, gives way to that entry, by the ledger alone too. People are named by email with their role now
   (`people: "id"` names them by id only); someone gone is a former member.
 - **The checks** (CP8). Guardrails, screening, OFAC's address list, the payee lock, the invoice's own address and a
   milestone's verification, each in the evidence chain's words (`EVIDENCE_WORDS`) or "Does not apply", with its entries
-  and a warning for bad news. A pull request is named as text, never linked; the pack reads no chain.
+  and a warning for bad news. The payee lock is judged by the lock in force when it was sent: the newest
+  `payee_lock_changed` between the confirmation and the paying entry (the workspace's, read up to the month's end), else
+  the confirmation's; a payment sent under a lock an owner eased is stated, with a warning, citing the change. A pull request is named as text, never linked; the pack reads no chain.
 - **The transaction** (CP9). Its route and the transaction that paid the payee, as a receipt reads it; explorer links are
   built from the chain profile's `explorerTx` for a hash that is `0x` and 64 hex digits only. A bank payout names its bank
   code and last 4 digits only.
@@ -4530,7 +4534,10 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
   `{ by, month, ended, format, payments, notSettled, sha256, headSeq }`, appended best effort after the file is built
   and before it is sent, with the SHA-256 of the exact bytes served, the CSV's byte-order mark included. It names no one
   by email. It is the brake's count: ten per person per workspace in ten minutes (`CLOSE_PACK_EXPORT_LIMIT`,
-  `recentClosePackExportsBy`); the eleventh answers 429 with `retry-after: 600`. A failed read answers 500 and records
+  `recentClosePackExportsBy`); the eleventh answers 429 with `retry-after: 600`. Since a download appends its entry only
+  once its read is done, downloads sent at once would all count the same earlier ones: before the membership or the
+  month is read, the route takes a token from a per-member bucket (`takeClosePackDownloadToken`, three at once, then one
+  a minute, per instance), and answers 429 with `retry-after: 60` past it. A failed read answers 500 and records
   nothing.
 - **Who sees it** (CP14). Every member (`workspace.read`), as every evidence page and the hand-off.
 - **Limits** (CP15). At most 2,000 payments a month, rows and not settled together; past it the pack is `cut`.

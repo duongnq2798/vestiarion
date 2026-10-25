@@ -97,7 +97,16 @@ that paid the contractor is a payment, and a row (`payout_route` `escrow`).
 
 **CP7. The approval chain.** For each row, from its signed entries:
 - **The paying entry**: the entry that sent the transfer (`ap_pay`, `approval_paid`, `milestone_release`,
-  `milestone_approval_paid`). When the transaction was recorded by a reconcile, the newest of those before it.
+  `milestone_approval_paid`): what let the current attempt go, as the settlement track reads it (`settlementOf`'s
+  `stages.authorized.seq`), so the pack and the evidence page name the same entry. Without that stage, the recording
+  entry when it is one of those, or, when the transaction was recorded by a reconcile, the newest of those before it.
+  A person's approval that only recorded a transfer an earlier entry had sent is never the paying entry: approving a
+  transfer that exists reconciles it and sends nothing (`transferExists` in `src/lib/agent/approvals.ts`), yet still
+  writes `approval_paid` naming the hash with `status: "paid"`. So, by the ledger alone as well (an intent with no
+  `submitted_at`), an `approval_paid` or `milestone_approval_paid` with no `retriedAfter`, after an earlier paying
+  entry that names the same transaction and went out (or was held with no `heldBecause`), gives way to that earlier
+  entry. One a person sent again after Circle failed the transfer names `retriedAfter`, and is theirs. Who approved,
+  `authorizedBy`, the flags and the guardrails, payee lock and pay-to checks all read the paying entry.
 - **The agent's decision**: the newest agent decision about the record at or before the paying entry (`ap_pay`,
   `ap_schedule`, `ap_hold`, `ap_flag_fraud`, `ap_request_info`, `milestone_release`, `milestone_hold`), with who decided
   (`deciderName`: "Claude", "DeepSeek", "The written policy", "The model"), the rule that held it (`guardrailRule`), and
@@ -134,7 +143,7 @@ that paid the contractor is a payment, and a row (`payout_route` `escrow`).
 | `guardrails` | The agent's decision's checks, as `decisionChecks` words them (purchase order and goods, new payee, screening it saw, limit, duplicates, the spending-limit contract), marked ✓ ✗ ·. `checked`. With a person paying after a hold, the sentence names the rule (`ruleWords`). No decision: `missing`. |
 | `screening` | The payee's newest complete `compliance_checks` row at or before the decision (else the paying entry, else when it was sent), as `readEvidence` reads it: a live provider is `verified` ("by OpenSanctions"); OFAC's list of addresses (`ofac-sdn`) is `contradicted`; the bundled list is `checked`. None, with a risk the decision recorded: `inferred`. None: `missing`. A read that failed: `unreachable`. Anything but clear warns. |
 | `wallet_list` | Whether the address paid was on OFAC's SDN list. `contradicted` when the screening check came from that list. `checked` when the decision came on or after the workspace's first `compliance_sweep` that records `sanctionedWallets`: since then every screening and every payment checks it (sanctioned wallets SW4-SW6). `missing` before then. A bank payout or a simulated one: does not apply. |
-| `payee_lock` | From the address's confirmation (CP7): with `payeeLock` recorded, the lock was on, `checked`, with its wait and how long after the address was given the payment was sent; a payment sent before the wait ended is `contradicted`. Without it, the lock was off: `inferred`. No confirmation: `missing`. The newest address the ledger recorded is not the one paid: `contradicted`. A bank, simulated or mirror address: does not apply. |
+| `payee_lock` | From the address's confirmation (CP7): with `payeeLock` recorded, the lock was on, `checked`, with its wait and how long after the address was given the payment was sent. The guardrail reads the lock in force when it pays, which an owner may have eased since (Settings; a lock eased frees a held payment at once, due-work watch DW8), so the lock in force is the newest `payee_lock_changed` (`detail.to`, `{ on, coolingHours }`) after the confirmation and before the paying entry, else the confirmation's. Sent before the wait in force ended, while that lock was on: `contradicted`. Sent after it, but before the wait the address was confirmed under: `stated` with a warning, naming who eased the lock and when, and citing the change. Without `payeeLock`, the lock was off: `inferred`. No confirmation: `missing`. The newest address the ledger recorded is not the one paid: `contradicted`. A bank, simulated or mirror address: does not apply. |
 | `pay_to` | `invoices.document_pay_to` (0136): the same as the address paid, `checked`; another, which only a person can pay past (`invoice.pay_to_differs`), `stated` with a warning. None, a bank payout, or a milestone: does not apply. |
 | `milestone` | A milestone's verification, as the evidence chain's "What was delivered" reads it: GitHub merged or Asana completed and accepted, `verified`; by hand, `stated`; sample data, `inferred`; not verified, `missing` with a warning. A bill: does not apply. |
 
@@ -214,8 +223,13 @@ viewers (`workspace.read`).
 - If wrong: a viewer sees approvers' emails. They already see them on every evidence page and the audit log.
 
 **CP15. Limits.** Downloads: ten per person per workspace in ten minutes, counted from `close_pack_exported` entries
-(`CLOSE_PACK_EXPORT_LIMIT`), as the hand-off counts its own; the eleventh answers 429 with `retry-after: 600`. Page
-reads: CP11. A month holds at most 2,000 payments (`CLOSE_PACK_MAX_PAYMENTS`, rows and not settled together). Past it the
+(`CLOSE_PACK_EXPORT_LIMIT`), as the hand-off counts its own; the eleventh answers 429 with `retry-after: 600`. That
+count holds across instances, but a download appends its entry only once its read is done, so downloads sent at once
+would all count the same earlier ones and each run the whole read. So the route also takes a token from a per-member
+bucket (`takeClosePackDownloadToken`: three at once, then one a minute) right after the session, format and month
+checks, before the membership or the month is read; past it, 429 with `retry-after: 60`. The bucket is per instance,
+a soft brake on a burst, as CP11's is. A reservation entry appended before the read would not do: the entry carries the
+served file's SHA-256 (CP13), known only once it is built. Page reads: CP11. A month holds at most 2,000 payments (`CLOSE_PACK_MAX_PAYMENTS`, rows and not settled together). Past it the
 pack is `cut` and says so.
 - If wrong: a business with more than 2,000 payments a month sees a cut pack. That is far above any workspace today,
   and the audit export holds everything.
@@ -781,6 +795,8 @@ export async function recordClosePackExport(input: {
 
 // src/lib/rate-limit.ts adds (CP11)
 export function takeClosePackPageToken(userId: string, now?: number): boolean; // 10 at once, then one every 6 s
+// and (CP15)
+export function takeClosePackDownloadToken(userId: string, now?: number): boolean; // 3 at once, then one a minute
 
 // src/lib/payee-lock-evidence.ts: export the existing secondPersonOf (no change to what it does)
 // src/lib/evidence-chain.ts: export the existing pullRequestName (no change to what it does)
@@ -834,6 +850,7 @@ filter; ledger reads go a page of 1000 at a time by `seq`, as `readPayeeLockEvid
 | `ledger_entries` `*` | | `action = decision_verdict`, `detail->>subjectId` in the invoice ids |
 | `ledger_entries` `*` | | `detail->>counterpartyId` in the payee ids and `action` in `create_counterparty`, `counterparty_address_changed`, `counterparty_address_confirmed`, `payee_link_created` |
 | `ledger_entries` `*` | | `action` in `escrow_funded`, `escrow_refunded`, `ts` in the month |
+| `ledger_entries` `*` | | `action = payee_lock_changed`, `ts` before the month's end: an owner's change names no payee, so the workspace's are read |
 | `ledger_entries` `ts` | | `action = compliance_sweep`, `detail->sanctionedWallets` not null, oldest one |
 | `ledger_entries` `seq, hash` | | the newest one: the head |
 | `org_members` (RPC) | through `listMembers(currentOrgId())` | null on failure, and `unread` says `members` |
@@ -861,6 +878,9 @@ Ledger kinds read, and the fields used:
   `byGiver`, `giverUnknown`), `payee_link_created` (`linkId`, `by`).
 - `escrow_funded` (`milestoneId`, `amountUsdc`, `fundTxHash`), `escrow_refunded` (`milestoneId`, `amountUsdc`,
   `refundTxHash`).
+- `payee_lock_changed`: `by`, `to.{on, coolingHours}`.
+- `approval_paid`, `milestone_approval_paid`, `ap_pay`, `milestone_release`: also `retriedAfter` and
+  `execution.heldBecause`, to tell the entry that sent a transfer from one that only recorded it (CP7).
 - `compliance_sweep`: `ts` only.
 
 Writes: one ledger entry per download, `close_pack_exported` (CP13). Nothing else: no row, no file, no cache.
@@ -974,9 +994,11 @@ Each row is a card (`break-inside-avoid`). Its heading is the payee's name, with
     against OFAC's SDN list." / "A bank payout pays no address on chain." / "A simulated payment pays no address."
   - payee lock: "The payee lock was on when the address was confirmed, with a 24-hour wait. It was sent 30 hours after
     the address was given." / "The payee lock was on when the address was confirmed, with no wait." / "It was sent
-    before the payee lock's 24-hour wait had ended." / "The payee lock was off when the address was confirmed." / "No
-    confirmation of this address is recorded before it was paid." / "The address paid is not the one the ledger last
-    recorded for this payee." / "The payee lock covers addresses on chain only."
+    before the payee lock's 24-hour wait had ended." (the wait in force when it was sent) / "The payee lock was on when
+    the address was confirmed, with a 48-hour wait; <who> turned it off on <time>. It was sent 3 hours after the address
+    was given." (or "removed its wait", or "cut its wait to <N> hours") / "The payee lock was off when the address was
+    confirmed." / "No confirmation of this address is recorded before it was paid." / "The address paid is not the one
+    the ledger last recorded for this payee." / "The payee lock covers addresses on chain only."
   - invoice's own address: "The address its document asked to be paid to is the one paid." / "Its document asked to be
     paid to <address>; a person chose to pay the address on file." / "The bill's document named no address of its
     own." / "A milestone has no invoice document."
@@ -1033,6 +1055,7 @@ JSON carries each of them with the public keys, so anyone can check them offline
 | `format` not `csv` or `json` | 400 | "format must be csv or json" |
 | Bad or future `month` | 400 | "month must be YYYY-MM, and not a month still to come" |
 | Not a member, or no such workspace | 404 | "Not found" |
+| Downloads sent at once past the burst bucket (`takeClosePackDownloadToken`) | 429, `retry-after: 60` | "Too many close pack downloads in a row. Try again in a minute." |
 | Ten downloads in ten minutes | 429, `retry-after: 600` | "Too many close pack downloads in the last 10 minutes. Try again later." |
 | A read failed | 500 | "The close pack could not be read." (logged without detail) |
 
@@ -1150,6 +1173,11 @@ Nothing to apply (CP19). The next free number stays 0144 (Exception resolution p
   - a shadow-mode verdict on the decision;
   - a milestone released by the agent, and one paid now by a person;
   - a member by email, a former member by id, and with `people: "id"` no email anywhere in the pack;
+  - an approval that only recorded a transfer the agent's `ap_pay` sent ("matched", or "held" with no `heldBecause`):
+    `authorizedBy` code, no approvals, "Code checked it before it was sent.", "No person approved it: code checked it
+    and the agent paid it.", the record still the `approval_paid`; the same for a CCTP payout whose late mint an
+    `ap_reconcile` held and an approval recorded, and by the ledger alone for an intent with no `submitted_at`; an
+    approval that sent it again with `retriedAfter`, at or after the intent's `submitted_at`, is the person's;
 - CP7, the address: given by one member and confirmed by another with Confirm address is a second person; the same
   member is not; a payee link with the lock off is not known; a mirror address; a bank payout has none;
 - CP8:
@@ -1162,6 +1190,9 @@ Nothing to apply (CP19). The next free number stays 0144 (Exception resolution p
     simulated payment does not apply;
   - payee lock: on with a wait and sent after it `checked`, with the hours; sent before it `contradicted`; off
     `inferred`; no confirmation `missing`; another address last recorded `contradicted`; a bank payout does not apply;
+    the lock turned off, or its wait removed, between the confirmation and a payment sent 3 hours after the address was
+    given, `stated` with a warning, citing the change, which the pack carries; the wait cut from 48 to 24 hours and paid
+    3 hours after, still `contradicted`; a change after the paying entry or before the confirmation is not read;
   - pay-to: the same address `checked`; another `stated` with a warning; none, a bank payout or a milestone does not
     apply;
   - milestone: GitHub merged `verified`, naming the pull request as text and never as a link; by hand `stated`; sample
@@ -1229,6 +1260,9 @@ Nothing to apply (CP19). The next free number stays 0144 (Exception resolution p
 - records one `close_pack_exported` whose `sha256` is the SHA-256 of the bytes it served, with `month`, `ended`,
   `format`, the counts and `headSeq`, and no email;
 - the eleventh download in ten minutes answers 429 with `retry-after: 600`, counted from the ledger;
+- six downloads sent at once, each counting the same nine earlier ones, answer three files and three 429s with
+  `retry-after: 60`, the read run three times; the bucket's token is taken only after the session, format and month
+  checks;
 - a failed read answers 500, records nothing and names nothing of why;
 - a refused append still serves the file.
 
@@ -1249,7 +1283,10 @@ Existing tests to extend:
 - `tests/docs-links.test.tsx`: `SECTIONS` gets the page and `/docs/guides/accountants#the-monthly-close-pack`.
 - `tests/mainnet-copy-pages.test.tsx`: `PAGES` gets `evidence/close-pack`.
 - `takeClosePackPageToken` is tested in `tests/close-pack-page.test.tsx`: ten page reads at once, then one every 6
-  seconds, per member.
+  seconds, per member. `takeClosePackDownloadToken` is tested in `tests/close-pack-record.test.ts`: three downloads at
+  once, then one a minute, per member, apart from the page's reads.
+- `tests/close-pack-read.test.ts`: the workspace's `payee_lock_changed` entries are read up to the month's end, a page
+  at a time by `seq`, and one that eased the lock before a payment is cited and checked.
 - `tests/audit-export-ui.test.tsx`: the Audit log page links `orgHref(slug, "/evidence/close-pack")`.
 - `tests/accountant-console-close-pack.test.tsx` (new): each card's "Close pack:" line links last month and this month
   so far for its own slug.

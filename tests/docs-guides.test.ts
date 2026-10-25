@@ -584,6 +584,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["That month could not be read, so this shows last month. Choose a month with the Month field.", CLOSE_PACK_PAGE],
     ["The close pack was read many times in a row. Try again in a minute.", CLOSE_PACK_PAGE],
     ["Too many close pack downloads in the last 10 minutes. Try again later.", CLOSE_PACK_ROUTE],
+    ["Too many close pack downloads in a row. Try again in a minute.", CLOSE_PACK_ROUTE],
     ["Sign in to download this close pack.", CLOSE_PACK_ROUTE],
     ["close_pack_exported", "src/lib/close-pack/record.ts"],
     ["vestiarion-close-pack/1", "src/lib/close-pack/types.ts"],
