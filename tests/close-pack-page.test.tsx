@@ -4,10 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ClosePackView } from "@/components/ClosePackView";
 import type { ClosePack, ClosePackOpenPayment, ClosePackOpenState } from "@/lib/close-pack/types";
+import type { ClosePackSheetsView } from "@/lib/googlesheets/views";
 import { takeClosePackPageToken } from "@/lib/rate-limit";
 import { ADDR_H, ADDR_N, DOC_SHA, samplePack, tx } from "./support/close-pack-fixtures";
 
 vi.mock("server-only", () => ({}));
+vi.mock("@/app/actions/googlesheets", () => ({ exportClosePackToSheetsAction: vi.fn(), disconnectGoogleSheetsAction: vi.fn() }));
 
 /**
  * The monthly close pack's page (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md CP11, CP12, CP16,
@@ -246,8 +248,32 @@ describe("the controls, downloads and print (close pack CP11, CP12)", () => {
   });
 });
 
+describe("Export to Google Sheets beside the downloads (close pack Sheets GS5)", () => {
+  const sheets = (view: ClosePackSheetsView) => textOf(renderToStaticMarkup(<ClosePackView pack={PACK} sheets={view} />));
+
+  it("shows nothing of Google Sheets when hidden, or when the page passes no view", () => {
+    for (const text of [TEXT, sheets({ state: "hidden" })]) expect(text).not.toContain("Google Sheets");
+  });
+
+  it("renders each view in the controls, with the pack's month and workspace", () => {
+    expect(sheets({ state: "connect", canConnect: true })).toContain("Connect Google Sheets in Settings to export this month to a spreadsheet.");
+    expect(sheets({ state: "connect", canConnect: false })).toContain("An owner or admin can connect Google Sheets in Settings");
+    expect(sheets({ state: "reconnect", canConnect: true })).toContain("Google Sheets needs reconnecting before this month can be exported.");
+    const ready = renderToStaticMarkup(<ClosePackView pack={PACK} sheets={{ state: "ready", account: "du***@gmail.com", canExport: true, last: null }} />);
+    expect(textOf(ready)).toContain("Export to Google Sheets");
+    expect(ready).toContain(`name="month" value="${PACK.month.key}"`);
+    expect(ready).toContain(`name="orgSlug" value="${PACK.workspace.slug}"`);
+  });
+});
+
 describe("the page (close pack CP11, CP14)", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "evidence", "close-pack", "page.tsx"), "utf8");
+
+  it("gives its Server Actions 120 seconds, and reads the Google Sheets view for the person's role (close pack Sheets GS5, GS12)", () => {
+    expect(page).toContain("export const maxDuration = 120;");
+    expect(page).toContain("closePackSheetsView({ month, role: access.membership.role })");
+    expect(page).toContain("<ClosePackView pack={pack} sheets={sheets} />");
+  });
 
   it("is the Monthly close pack, gated as every workspace page is", () => {
     expect(page).toContain('export const metadata: Metadata = { title: "Monthly close pack" };');

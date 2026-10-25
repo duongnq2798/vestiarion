@@ -8,11 +8,14 @@ import { shellModes } from "@/lib/circle";
 import { closePackMonthFrom } from "@/lib/close-pack/month";
 import { readClosePack } from "@/lib/close-pack/read";
 import { inOrg } from "@/lib/dal/scope";
+import { closePackSheetsView } from "@/lib/googlesheets/panel";
 import { stats } from "@/lib/queries";
 import { takeClosePackPageToken } from "@/lib/rate-limit";
 import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
+/** Export to Google Sheets, a Server Action of this page, starts no call to Google after 90 seconds (close pack Sheets GS12). */
+export const maxDuration = 120;
 
 export const metadata: Metadata = { title: "Monthly close pack" };
 
@@ -34,9 +37,11 @@ export default async function ClosePackPage({ params, searchParams }: ClosePackP
     const now = new Date();
     const { month, unreadable } = closePackMonthFrom(await searchParams, now);
     const allowed = takeClosePackPageToken(access.user.id);
-    const [pack, dashboardStats] = await Promise.all([
+    const [pack, dashboardStats, sheets] = await Promise.all([
       allowed ? readClosePack({ month, workspace: { slug: access.membership.slug, name: access.membership.name }, now }) : null,
       stats(),
+      // Best effort: a read that fails is hidden and logged, so the month still shows (close pack Sheets GS5).
+      closePackSheetsView({ month, role: access.membership.role }),
     ]);
 
     return (
@@ -62,7 +67,7 @@ export default async function ClosePackPage({ params, searchParams }: ClosePackP
             That month could not be read, so this shows last month. Choose a month with the Month field.
           </Callout>
         )}
-        {pack ? <ClosePackView pack={pack} /> : <Callout tone="held">The close pack was read many times in a row. Try again in a minute.</Callout>}
+        {pack ? <ClosePackView pack={pack} sheets={sheets} /> : <Callout tone="held">The close pack was read many times in a row. Try again in a minute.</Callout>}
       </ProductShell>
     );
   });

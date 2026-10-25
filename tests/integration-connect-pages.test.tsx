@@ -29,6 +29,7 @@ vi.mock("@/lib/hubspot/settings", () => ({ hubspotSettingsFromEnv: () => ({}) })
 vi.mock("@/lib/pipedrive/settings", async (original) => ({ ...(await original<typeof import("@/lib/pipedrive/settings")>()), pipedriveSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/asana/settings", async (original) => ({ ...(await original<typeof import("@/lib/asana/settings")>()), asanaSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/zohocrm/settings", async (original) => ({ ...(await original<typeof import("@/lib/zohocrm/settings")>()), zohoCrmSettingsFromEnv: () => ({}) }));
+vi.mock("@/lib/googlesheets/settings", async (original) => ({ ...(await original<typeof import("@/lib/googlesheets/settings")>()), googleSheetsSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/connectors/token-store", () => ({ pendingChoice: vi.fn(async () => pending.value) }));
 vi.mock("@/lib/dal/scope", () => ({ withOrg: (_org: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/components/vx/SiteChrome", () => ({ SiteHeader: () => null, SiteFooter: () => null }));
@@ -47,6 +48,7 @@ import HubSpotConnectPage from "@/app/integrations/hubspot/connect/page";
 import PipedriveConnectPage from "@/app/integrations/pipedrive/connect/page";
 import AsanaConnectPage from "@/app/integrations/asana/connect/page";
 import ZohoCrmConnectPage from "@/app/integrations/zohocrm/connect/page";
+import GoogleSheetsConnectPage from "@/app/integrations/googlesheets/connect/page";
 import { CONSENT_CHANGED, CONSENT_VERSIONS, consentStatement, HOSTED_MODEL_PROVIDER, namesModelProvider } from "@/lib/connectors/consent";
 import type { ProviderId } from "@/lib/connectors/provider";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
@@ -240,14 +242,13 @@ const anyConnectPage = async (provider: ProviderId, query: Record<string, string
   if (provider === "pipedrive") return renderToStaticMarkup(await PipedriveConnectPage({ searchParams }));
   if (provider === "asana") return renderToStaticMarkup(await AsanaConnectPage({ searchParams }));
   if (provider === "zohocrm") return renderToStaticMarkup(await ZohoCrmConnectPage({ searchParams }));
-  // Google Sheets' connect page (close pack Sheets GS1) joins this list with its route and page.
-  if (provider === "googlesheets") throw new Error("Google Sheets has no connect page here yet");
+  if (provider === "googlesheets") return renderToStaticMarkup(await GoogleSheetsConnectPage({ searchParams }));
   return connectPage(provider, query);
 };
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm"] as const)("the %s connect page's statement", (provider) => {
+describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets"] as const)("the %s connect page's statement", (provider) => {
   it("posts the version it shows, inside the form", async () => {
     memberships.value = [workspace("acme")];
     const form = (await anyConnectPage(provider)).match(/<form[^>]*>[^]*?<\/form>/)?.[0] ?? "";
@@ -263,8 +264,8 @@ describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks
     const terms = `<a href="${escape(HOSTED_MODEL_PROVIDER.terms)}" target="_blank" rel="noopener noreferrer"[^>]*>API terms</a>`;
     const privacy = `<a href="${escape(HOSTED_MODEL_PROVIDER.privacy)}" target="_blank" rel="noopener noreferrer"[^>]*>privacy policy</a>`;
     const naming = consentStatement(provider).filter(namesModelProvider);
-    // Every tool whose facts the agent decides on names it; Asana's statement does not.
-    expect(naming).toHaveLength(provider === "asana" ? 0 : 1);
+    // Every tool whose facts the agent decides on names it; Asana's and Google Sheets' statements do not.
+    expect(naming).toHaveLength(provider === "asana" || provider === "googlesheets" ? 0 : 1);
     expect(markup.match(new RegExp(terms, "g")) ?? []).toHaveLength(naming.length);
     expect(markup.match(new RegExp(privacy, "g")) ?? []).toHaveLength(naming.length);
     for (const line of naming) {
@@ -280,5 +281,44 @@ describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks
     const alert = new RegExp(`<p role="alert"[^>]*>${escape(CONSENT_CHANGED)}</p>`);
     expect(await anyConnectPage(provider, { org: "acme", consent: "changed" })).toMatch(alert);
     expect(await anyConnectPage(provider, { org: "acme" })).not.toMatch(alert);
+  });
+});
+
+describe("the Google Sheets connect page (close pack Sheets GS2, GS3, GS18)", () => {
+  const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ");
+
+  it("names Google Sheets in words beside a neutral icon, says what it asks Google for, and goes to Google", async () => {
+    memberships.value = [workspace("acme")];
+    const markup = await anyConnectPage("googlesheets");
+    const words = text(markup);
+    expect(markup).toMatch(/<h1[^>]*>[^]*?<svg[^>]*lucide-file-spreadsheet[^]*?Connect Google Sheets[^]*?<\/h1>/);
+    // No Google mark without Google's permission (GS18).
+    expect(markup).not.toContain("/brands/");
+    expect(words).toContain(
+      "Send a month's close pack to a spreadsheet in your Google Drive: one row per payment, each with the signed ledger entry that records it. Vestiarion asks Google for one permission: to make spreadsheets and change only the ones it made."
+    );
+    expect(words).toContain("What Vestiarion does with your Google Drive");
+    expect(words).toContain(
+      "Google asks you to allow access as yourself: the spreadsheets go to the Drive of the Google account you choose there, and only that account can open them until it shares them."
+    );
+    expect(words).toContain("Connecting records your agreement, with its date, on the connection and in the workspace's signed ledger.");
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>[^]*?Continue to Google<\/button>/);
+    expect(words).toContain("Signed in as dana@example.com.");
+    expect(markup).toContain('action="/api/integrations/googlesheets/connect"');
+  });
+
+  it("says why the connect route sent the person back", async () => {
+    memberships.value = [workspace("acme")];
+    expect(text(await anyConnectPage("googlesheets", { error: "forbidden" }))).toContain("Only an owner or admin of a workspace connects Google Sheets to it.");
+    expect(text(await anyConnectPage("googlesheets", { error: "not_set_up" }))).toContain("Google Sheets is not set up on this deployment yet.");
+    expect(text(await anyConnectPage("googlesheets", { consent: "missing" }))).toContain("Tick I agree to connect Google Sheets.");
+  });
+
+  it("tells a person who manages no workspace's integrations who can connect it", async () => {
+    memberships.value = [workspace("acme", "accountant")];
+    const words = text(await anyConnectPage("googlesheets"));
+    expect(words).toContain("Only an owner or admin connects Google Sheets");
+    expect(words).toContain("Ask an owner or admin of your workspace to connect Google Sheets, or sign in with the account that is one.");
+    expect(words).not.toContain("Continue to Google");
   });
 });

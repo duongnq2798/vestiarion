@@ -6,6 +6,7 @@ import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
 import GitHubPanel from "@/components/GitHubPanel";
 import AsanaPanel from "@/components/AsanaPanel";
+import GoogleSheetsPanel from "@/components/GoogleSheetsPanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
 import PipedrivePanel from "@/components/PipedrivePanel";
 import ZohoCrmPanel from "@/components/ZohoCrmPanel";
@@ -62,6 +63,7 @@ import { accountingProvider, accountingProviderOn } from "@/lib/accounting-provi
 import { crmPanelView, type CrmPanelView } from "@/lib/connectors/crm-review";
 import { NotSetUpError } from "@/lib/connectors/connections";
 import { asanaPanelFor } from "@/lib/asana/panel";
+import { googleSheetsPanelFor } from "@/lib/googlesheets/panel";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { pipedriveSettingsFromEnv } from "@/lib/pipedrive/settings";
 import { pipedriveReady } from "@/lib/pipedrive/store";
@@ -291,6 +293,14 @@ export default async function SettingsPage({
       return null;
     });
     const asanaOutcome = ((await searchParams) as { asana?: string | string[] }).asana;
+    // Google Sheets (close pack Sheets GS2): only on a deployment with its Google client; best effort, like Asana's.
+    // Before migration 0145 the card says Google Sheets is not set up yet. How connecting it went comes back in
+    // `?googlesheets=`.
+    const googleSheets = await googleSheetsPanelFor().catch((error: unknown) => {
+      console.error("settings: Google Sheets status not loaded", error instanceof Error ? error.message : error);
+      return null;
+    });
+    const googleSheetsOutcome = ((await searchParams) as { googlesheets?: string | string[] }).googlesheets;
     // Discord (Discord design DC6): on every deployment, since a channel webhook needs no app; best effort, like Slack's.
     // Before migration 0140 the section says Discord is not set up yet. Never the webhook's URL.
     const discord = await discordPanelView(membership.orgId, access.user.id).catch((error: unknown) => {
@@ -518,6 +528,18 @@ export default async function SettingsPage({
             title: "Asana",
             content: asana ? (
               <AsanaPanel orgSlug={slug} view={asana} canManage={canManageIntegrations} notice={typeof asanaOutcome === "string" ? asanaOutcome : null} />
+            ) : null,
+          },
+          {
+            id: "googlesheets-title",
+            title: "Google Sheets",
+            content: googleSheets ? (
+              <GoogleSheetsPanel
+                orgSlug={slug}
+                view={googleSheets}
+                canManage={canManageIntegrations}
+                notice={typeof googleSheetsOutcome === "string" ? googleSheetsOutcome : null}
+              />
             ) : null,
           },
           {

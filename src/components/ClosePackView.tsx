@@ -1,6 +1,7 @@
 import { ArrowUpRight, FileJson, FileSpreadsheet, Minus } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { SheetsExport } from "@/components/close-pack/SheetsExport";
 import { PrintButton } from "@/components/PrintButton";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -13,6 +14,7 @@ import { Input } from "@/components/ui/Input";
 import { EvidenceLabel } from "@/components/vx/EvidenceChain";
 import { closePackMonth, monthsBeside, type ClosePackMonth } from "@/lib/close-pack/month";
 import type { ClosePack, ClosePackCheck, ClosePackChecks, ClosePackRow, ClosePackTotal } from "@/lib/close-pack/types";
+import type { ClosePackSheetsView } from "@/lib/googlesheets/views";
 import {
   addressLines,
   amountWords,
@@ -123,8 +125,14 @@ function CheckKind({ check }: { check: ClosePackCheck }) {
   return <EvidenceLabel kind={check.kind} />;
 }
 
-/** The month field, the months around it, the downloads and print, none of them printed (CP11, CP12). */
-export function ClosePackControls({ pack }: { pack: ClosePack }) {
+/** Nothing of Google Sheets: a deployment without it, or the guide's screenshot. */
+const SHEETS_HIDDEN: ClosePackSheetsView = { state: "hidden" };
+
+/**
+ * The month field, the months around it, the downloads and print, and Export to Google Sheets where it is on (close
+ * pack Sheets GS5), none of them printed (CP11, CP12).
+ */
+export function ClosePackControls({ pack, sheets = SHEETS_HIDDEN }: { pack: ClosePack; sheets?: ClosePackSheetsView }) {
   const now = new Date(pack.readAt);
   const last = closePackMonth(null, now) as ClosePackMonth;
   const current = closePackMonth(now.toISOString().slice(0, 7), now) as ClosePackMonth;
@@ -173,6 +181,7 @@ export function ClosePackControls({ pack }: { pack: ClosePack }) {
           </a>
         </Button>
       </div>
+      <SheetsExport orgSlug={pack.workspace.slug} month={pack.month.key} view={sheets} />
       <p className="text-xs text-ink-3">
         Vestiarion records each download in the workspace&apos;s ledger with the file&apos;s SHA-256, so a copy can be matched to it later.
       </p>
@@ -463,14 +472,14 @@ export function ClosePackEscrow({ pack }: { pack: ClosePack }) {
   );
 }
 
-export function ClosePackView({ pack }: { pack: ClosePack }) {
+export function ClosePackView({ pack, sheets = SHEETS_HIDDEN }: { pack: ClosePack; sheets?: ClosePackSheetsView }) {
   const { entries } = pack.totals;
   return (
     <div className="space-y-8">
       <p className="hidden text-sm text-ink-2 print:block">
         {`Vestiarion monthly close pack · ${pack.workspace.name} (${pack.network.label}) · ${monthWords(pack)} · read ${utcWords(pack.readAt)}`}
       </p>
-      <ClosePackControls pack={pack} />
+      <ClosePackControls pack={pack} sheets={sheets} />
       <ClosePackSummary pack={pack} />
       <ClosePackPayments pack={pack} />
       <ClosePackNotSettled pack={pack} />
