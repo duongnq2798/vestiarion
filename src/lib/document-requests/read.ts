@@ -5,14 +5,25 @@ import { db, platformDb, platformStorage, unwrap, type OrgDb } from "../dal";
 import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { ID_CHUNK } from "../new-payee-facts";
-import { missingDocuments, missingOf, type DocumentReceivedView, type DocumentRequestStatus, type DocumentRequestView, type MissingDocument } from "./rules";
+import {
+  missingDocuments,
+  missingOf,
+  type DocumentCheckView,
+  type DocumentReceivedView,
+  type DocumentRequestStatus,
+  type DocumentRequestsSetting,
+  type DocumentRequestView,
+  type MissingDocument,
+} from "./rules";
 import { readDocumentRequestsSetting } from "./setting";
 
 /**
  * What members see and do of the requests the agent sends vendors for a bill's missing document
  * (docs/superpowers/specs/2026-10-23-document-requests-design.md ER3, ER4, ER6): each bill's latest request as its card on
  * Approvals and Bills shows it, an owner's or admin's Revoke, and opening the vendor's file. Every export runs inside the
- * workspace's scope; before migration 0142, there is nothing to show.
+ * workspace's scope; before migration 0142, there is nothing to show. From migration 0144 the card also says who sent a
+ * document, the vendor or a member who attached it, and what the cycle's check found in it
+ * (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK13); before it, part 1's card as it was.
  */
 
 /** Postgres's or PostgREST's "no such table, column or function": migration 0142 has not run here yet. */
@@ -33,11 +44,61 @@ interface RequestRow {
   note: string | null;
   file_type: string | null;
   file_size: number | null;
+  /** From migration 0144 (document checks DK11, DK12). */
+  source?: string | null;
+  checked_at?: string | null;
+  check_outcome?: string | null;
+  check_reason?: string | null;
+  check_shadow?: boolean | null;
+  document_po?: string | null;
+  po_written?: boolean | null;
 }
 
-/** An answered request, as its bill's card shows what the vendor sent. */
-function receivedOf(row: RequestRow): DocumentReceivedView | null {
+const COLUMNS = "id, invoice_id, status, missing, created_at, sent_at, expires_at, answered_at, po_reference, note, file_type, file_size";
+/** Part 1's columns and 0144's: who sent the document, and what its check found. */
+const CHECK_COLUMNS = `${COLUMNS}, source, checked_at, check_outcome, check_reason, check_shadow, document_po, po_written`;
+
+/** What the cards need of a bill: whether it still waits, and for what (shadow's "would ask", a match's lines). */
+interface BillFacts {
+  status: string;
+  poReference: string | null;
+  goodsReceived: boolean;
+  purchaseOrderRequired: boolean;
+}
+
+/** How the card reads a request's check: the setting now, and the bills it was checked against, as they are now. */
+interface CheckContext {
+  /** Whether migration 0144's columns were read. */
+  checks: boolean;
+  setting: DocumentRequestsSetting;
+  bills: Map<string, BillFacts>;
+}
+
+/**
+ * What the check found in an answered request's document (DK13): waiting for the next cycle, while vendor requests are
+ * shadow or on; a match, naming the purchase order only where one was compared, as the bill is now; or the sentence of
+ * a mismatch, a file it could not read, or a skip. Nothing before migration 0144, nor for a document waiting while
+ * vendor requests are off (DK1).
+ */
+function checkOf(row: RequestRow, context: CheckContext): DocumentCheckView | null {
+  if (!context.checks) return null;
+  if (!row.checked_at) return context.setting === "off" ? null : { outcome: "pending" };
+  const outcome = row.check_outcome;
+  if (outcome === "matched") {
+    const bill = context.bills.get(row.invoice_id);
+    const added = row.po_written === true;
+    // The purchase order the document names was compared only where the bill needs one (DK5).
+    const po = row.document_po && (added || bill?.purchaseOrderRequired !== false) ? row.document_po : null;
+    return { outcome: "matched", po, added, shadowLeftPo: !added && row.check_shadow === true && po !== null && bill?.poReference === null };
+  }
+  if (outcome === "mismatched" || outcome === "unreadable" || outcome === "skipped") return { outcome, reason: row.check_reason ?? "" };
+  return null;
+}
+
+/** An answered request, as its bill's card shows what the vendor sent, or a member attached, and what its check found. */
+function receivedOf(row: RequestRow, context: CheckContext): DocumentReceivedView | null {
   if (row.status !== "answered" || !row.answered_at) return null;
+  const check = checkOf(row, context);
   return {
     state: "answered",
     id: row.id,
@@ -47,6 +108,8 @@ function receivedOf(row: RequestRow): DocumentReceivedView | null {
     note: row.note,
     fileType: row.file_type,
     fileSize: row.file_size === null ? null : Number(row.file_size),
+    ...(context.checks ? { source: row.source === "member" ? ("member" as const) : ("vendor" as const) } : {}),
+    ...(check ? { check } : {}),
   };
 }
 
@@ -54,22 +117,19 @@ function receivedOf(row: RequestRow): DocumentReceivedView | null {
  * A request as its bill's card shows it, or null for one the card says nothing of. A drafted one shows only in shadow,
  * as what the bill lacks now (`wouldAsk`), and not at all once the bill no longer waits for a document.
  */
-function viewOf(row: RequestRow, wouldAsk: MissingDocument[] | null, now: number): DocumentRequestView | null {
+function viewOf(row: RequestRow, wouldAsk: MissingDocument[] | null, now: number, context: CheckContext): DocumentRequestView | null {
   const missing = missingOf(row.missing);
   if (row.status === "drafted") return wouldAsk ? { state: "would_ask", missing: wouldAsk } : null;
-  if (row.status === "answered") return receivedOf(row);
+  if (row.status === "answered") return receivedOf(row, context);
   if (!row.sent_at || !row.expires_at) return null;
   if (row.status === "open" && Date.parse(row.expires_at) > now) return { state: "asked", id: row.id, missing, sentAt: row.sent_at, expiresAt: row.expires_at };
   if (row.status === "open" || row.status === "expired") return { state: "expired", missing, sentAt: row.sent_at, expiresAt: row.expires_at };
   return null;
 }
 
-/**
- * What each of `invoiceIds` lacks now that a vendor can send, for the bills that still wait for information: shadow's
- * "would ask" follows the bill as it is, not as it was when the request was drafted.
- */
-async function stillMissing(orgDb: OrgDb, invoiceIds: string[]): Promise<Map<string, MissingDocument[]>> {
-  const missing = new Map<string, MissingDocument[]>();
+/** What the cards need of each of `invoiceIds` now: see `BillFacts`. */
+async function billFactsOf(orgDb: OrgDb, invoiceIds: string[]): Promise<Map<string, BillFacts>> {
+  const facts = new Map<string, BillFacts>();
   for (let start = 0; start < invoiceIds.length; start += ID_CHUNK) {
     const rows = unwrap(
       await orgDb
@@ -84,22 +144,34 @@ async function stillMissing(orgDb: OrgDb, invoiceIds: string[]): Promise<Map<str
       counterparties: { purchase_order_required?: boolean | null } | null;
     }>;
     for (const row of rows) {
-      if (row.status !== "awaiting_info") continue;
-      const lacks = missingDocuments(
-        missingDetails({ poReference: row.po_reference, goodsReceived: row.goods_received === true, purchaseOrderRequired: row.counterparties?.purchase_order_required !== false })
-      );
-      if (lacks.length > 0) missing.set(row.id, lacks);
+      facts.set(row.id, {
+        status: row.status,
+        poReference: row.po_reference,
+        goodsReceived: row.goods_received === true,
+        purchaseOrderRequired: row.counterparties?.purchase_order_required !== false,
+      });
     }
   }
-  return missing;
+  return facts;
+}
+
+/**
+ * What a bill lacks now that a vendor can send, while it still waits for information: shadow's "would ask" follows the
+ * bill as it is, not as it was when the request was drafted. Null for one that lacks nothing, or no longer waits.
+ */
+function stillMissing(bill: BillFacts | undefined): MissingDocument[] | null {
+  if (!bill || bill.status !== "awaiting_info") return null;
+  const lacks = missingDocuments(missingDetails(bill));
+  return lacks.length > 0 ? lacks : null;
 }
 
 /**
  * Each of `invoiceIds`' latest request, as its card shows it (ER3, ER4, ER6): what Vestiarion would ask while the setting
  * is shadow and the bill still waits for a document, when it asked and until when, what the vendor sent, or a link that
  * expired unanswered. What a vendor sent with an earlier request stays beside a newer one, or shows alone when the newer
- * one shows nothing, so its file and purchase order never drop off the card. Bills with nothing to show are left out;
- * before migration 0142, all of them.
+ * one shows nothing, so its file and purchase order never drop off the card. Each document says who sent it and what
+ * its check found (DK13). Bills with nothing to show are left out; before migration 0142, all of them. Before migration
+ * 0144, the requests are read again without its columns, and the cards show what they showed before it.
  */
 export async function readDocumentRequests(invoiceIds: string[], orgDb: OrgDb = db(), now: number = Date.now()): Promise<Map<string, DocumentRequestView>> {
   const views = new Map<string, DocumentRequestView>();
@@ -108,12 +180,16 @@ export async function readDocumentRequests(invoiceIds: string[], orgDb: OrgDb = 
   if (!ready) return views;
   const latest = new Map<string, RequestRow>();
   const answered = new Map<string, RequestRow>();
+  let checks = true;
   for (let start = 0; start < invoiceIds.length; start += ID_CHUNK) {
-    const read = await orgDb
-      .from("document_requests")
-      .select("id, invoice_id, status, missing, created_at, sent_at, expires_at, answered_at, po_reference, note, file_type, file_size")
-      .in("invoice_id", invoiceIds.slice(start, start + ID_CHUNK))
-      .order("created_at", { ascending: false });
+    const ids = invoiceIds.slice(start, start + ID_CHUNK);
+    const select = (columns: string) => orgDb.from("document_requests").select(columns).in("invoice_id", ids).order("created_at", { ascending: false });
+    let read = await select(checks ? CHECK_COLUMNS : COLUMNS);
+    // Before migration 0144, its columns are not there: part 1's card, from part 1's columns (DK15).
+    if (read.error && checks && beforeMigration(read.error)) {
+      checks = false;
+      read = await select(COLUMNS);
+    }
     if (read.error) {
       if (beforeMigration(read.error)) return views;
       throw new Error(read.error.message);
@@ -124,12 +200,16 @@ export async function readDocumentRequests(invoiceIds: string[], orgDb: OrgDb = 
       if (row.status === "answered" && !answered.has(row.invoice_id)) answered.set(row.invoice_id, row);
     }
   }
-  const drafted = [...latest.values()].filter((row) => row.status === "drafted").map((row) => row.invoice_id);
-  const lacking = setting === "shadow" && drafted.length > 0 ? await stillMissing(orgDb, drafted) : new Map<string, MissingDocument[]>();
+  // The bills read again: a drafted request's in shadow, and a matched document's, whose lines follow the bill as it is.
+  const drafted = setting === "shadow" ? [...latest.values()].filter((row) => row.status === "drafted").map((row) => row.invoice_id) : [];
+  const matched = [...answered.values()].filter((row) => row.check_outcome === "matched" && row.document_po && row.po_written !== true).map((row) => row.invoice_id);
+  const wanted = [...new Set([...drafted, ...matched])];
+  const bills = wanted.length > 0 ? await billFactsOf(orgDb, wanted) : new Map<string, BillFacts>();
+  const context: CheckContext = { checks, setting, bills };
   for (const [invoiceId, row] of latest) {
-    const view = viewOf(row, lacking.get(invoiceId) ?? null, now);
+    const view = viewOf(row, setting === "shadow" ? stillMissing(bills.get(invoiceId)) : null, now, context);
     const earlier = answered.get(invoiceId);
-    const received = earlier && earlier !== row ? receivedOf(earlier) : null;
+    const received = earlier && earlier !== row ? receivedOf(earlier, context) : null;
     if (view && view.state !== "answered" && received) views.set(invoiceId, { ...view, received });
     else if (view) views.set(invoiceId, view);
     else if (received) views.set(invoiceId, received);

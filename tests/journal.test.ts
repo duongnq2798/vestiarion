@@ -35,6 +35,7 @@ describe("CycleJournal — recording", () => {
       "reconcile",
       "receipts",
       "compliance",
+      "document_checks",
       "follow_up",
       "recurring",
       "services",
@@ -124,6 +125,23 @@ describe("CycleJournal — the fail-closed boundary", () => {
     expect(j.gate("contractors").run).toBe(true);
     expect(j.gate("treasury").run).toBe(true);
     expect(j.gate("forecast").run).toBe(true);
+  });
+
+  it("checks vendors' documents right after screening, needing nothing, so the follow-up and AP decide their bills in the same cycle (document checks DK2)", () => {
+    expect(CYCLE_STAGES.indexOf("document_checks")).toBe(CYCLE_STAGES.indexOf("compliance") + 1);
+    expect(CYCLE_STAGES.indexOf("document_checks")).toBeLessThan(CYCLE_STAGES.indexOf("follow_up"));
+    expect(STAGE_REQUIRES.document_checks).toEqual([]);
+    const down = new CycleJournal();
+    down.failed("reconcile", new Error("chain down"), 1);
+    down.failed("compliance", new Error("screening down"), 1);
+    expect(down.gate("document_checks").run).toBe(true);
+    // A failed check stops nothing: the hold is read from the database, and no stage waits on this one.
+    const failed = upTo("document_checks");
+    failed.failed("document_checks", new Error("storage down"), 1);
+    expect(failed.gate("follow_up").run).toBe(true);
+    expect(failed.gate("ap").run).toBe(true);
+    expect(STAGE_REQUIRES.follow_up).toEqual(["compliance"]);
+    expect(Object.values(STAGE_REQUIRES).some((required) => required.includes("document_checks"))).toBe(false);
   });
 
   it("asks vendors for missing documents only after AP decided, after term requests, and needs no balance (document requests ER2)", () => {

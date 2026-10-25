@@ -8,12 +8,15 @@ import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fa
  * The vendor's page behind a document request's link (docs/superpowers/specs/2026-10-23-document-requests-design.md ER5,
  * ER7): what it shows, for an open request only; an upload address for one PDF, PNG or JPEG of at most 10 MB; the file
  * checked by its first bytes and kept under its SHA-256 in the workspace's private storage; one answer; rate limits per
- * address and per link; the signed entry and the owners' email; and nothing written to the bill.
+ * address and per link; the signed entry and the owners' email; and nothing written to the bill. While vendor requests
+ * are in shadow or on and migration 0144 has run, a cycle starts at once to check it, and the email says so
+ * (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK2, DK15).
  */
 
-const { bestEffortMock, sendMock, storage } = vi.hoisted(() => ({
+const { bestEffortMock, sendMock, soonMock, storage } = vi.hoisted(() => ({
   bestEffortMock: vi.fn(),
   sendMock: vi.fn(),
+  soonMock: vi.fn(),
   storage: {
     uploadUrl: vi.fn(),
     download: vi.fn(),
@@ -23,7 +26,12 @@ const { bestEffortMock, sendMock, storage } = vi.hoisted(() => ({
   },
 }));
 vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: bestEffortMock }));
-vi.mock("@/lib/dal/scope", () => ({ withOrg: async (_orgId: string, fn: () => Promise<unknown>) => fn() }));
+vi.mock("@/lib/agent/cycle-soon", () => ({ runCycleSoon: soonMock }));
+// The workspace's scope, as withOrg enters it: its tenant client is the fake, under the request's org.
+vi.mock("@/lib/dal/scope", async () => {
+  const { currentContext, runWith } = await import("@/lib/context");
+  return { withOrg: async (orgId: string, fn: () => Promise<unknown>) => runWith({ ...currentContext(), orgId, tenantDb: currentContext().db }, fn) };
+});
 vi.mock("@/lib/usage/record", () => ({ recordUsageFor: vi.fn(async () => undefined), recordUsage: vi.fn(async () => undefined) }));
 vi.mock("@/lib/email/send", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/email/send")>()), sendEmail: sendMock }));
 vi.mock("@/lib/dal", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/dal")>()), platformStorage: () => storage }));
@@ -57,10 +65,20 @@ const previewRow = {
 interface World {
   preview?: FakeReply;
   answer?: FakeReply;
+  /** Vendor requests: off unless set. */
+  setting?: "off" | "shadow" | "on";
+  /** Whether migration 0144 ran: it did unless set. */
+  checks?: boolean;
+  mode?: "live" | "sandbox";
 }
 
 function world(w: World = {}) {
   return fakeSupabase((request: RecordedRequest): FakeReply => {
+    if (request.path === "/rest/v1/approval_policies") return { body: w.setting ? [{ document_requests: w.setting }] : [] };
+    if (request.path === "/rest/v1/document_requests") {
+      return w.checks === false ? { status: 400, body: { code: "42703", message: "column document_requests.checked_at does not exist" } } : { body: [] };
+    }
+    if (request.path === "/rest/v1/orgs") return { body: [{ mode: w.mode ?? "live" }] };
     if (request.path === "/rest/v1/rpc/document_request_preview") return w.preview ?? { body: [previewRow] };
     if (request.path === "/rest/v1/rpc/answer_document_request") {
       return (
@@ -89,6 +107,7 @@ const token = () => generateDocumentToken().token;
 
 beforeEach(() => {
   bestEffortMock.mockReset().mockResolvedValue(undefined);
+  soonMock.mockReset();
   sendMock.mockReset().mockResolvedValue({ sent: true, id: "email-1" });
   storage.uploadUrl.mockReset().mockResolvedValue({ data: { signedUrl: "https://tests.supabase.invalid/storage/v1/object/upload/sign/documents/x?token=t", token: "t", path: "x" }, error: null });
   storage.download.mockReset().mockResolvedValue({ data: new Blob([PDF]), error: null });
@@ -275,12 +294,77 @@ describe("sending it (ER5, ER6)", () => {
     expect(tries.at(-1)).toEqual({ ok: false, reason: "busy" });
   });
 
-  it("never writes to a bill, a counterparty or a payment (ER7)", async () => {
-    const client = world();
+  it("never writes to a bill, a counterparty or a payment: only the cycle's check adds a purchase order (document checks DK7)", async () => {
+    const client = world({ setting: "on" });
     await within(client, () => submitDocument(token(), { poReference: "PO-1", note: "" }, freshClient(), { now: NOW }));
-    expect(client.requests.filter((r) => !r.path.startsWith("/rest/v1/rpc/"))).toEqual([]);
-    const called = client.requests.map((r) => r.path.slice("/rest/v1/rpc/".length));
+    // It reads whether documents are checked, and the workspace's mode: nothing else, and it writes no table.
+    const tables = client.requests.filter((r) => !r.path.startsWith("/rest/v1/rpc/"));
+    expect(tables.every((r) => r.method === "GET")).toBe(true);
+    expect([...new Set(tables.map((r) => r.path))].sort()).toEqual(["/rest/v1/approval_policies", "/rest/v1/document_requests", "/rest/v1/orgs"]);
+    const called = client.requests.filter((r) => r.path.startsWith("/rest/v1/rpc/")).map((r) => r.path.slice("/rest/v1/rpc/".length));
     // The lookup, the answer, and the members to tell: nothing else.
     expect(called).toEqual(["document_request_preview", "answer_document_request", "org_members"]);
+  });
+});
+
+describe("a cycle to check it (document checks DK2, DK15)", () => {
+  const send = async (w: World) => {
+    const client = world(w);
+    const deferred: Array<() => Promise<unknown>> = [];
+    const result = await within(client, () => submitDocument(token(), { poReference: "PO-4410", note: "" }, freshClient(), { now: NOW, defer: (work) => deferred.push(work) }));
+    for (const work of deferred) await within(client, work);
+    return { client, result };
+  };
+
+  it("starts a cycle at once in shadow and on, raised by no member, and none while off", async () => {
+    for (const setting of ["shadow", "on"] as const) {
+      soonMock.mockReset();
+      expect((await send({ setting })).result).toEqual({ ok: true, orgName: "Pinecrest Studio" });
+      expect(soonMock).toHaveBeenCalledTimes(1);
+      expect(soonMock).toHaveBeenCalledWith({ orgId: ORG, sandbox: false, kind: "document_received" });
+    }
+    soonMock.mockReset();
+    await send({ setting: "off" });
+    expect(soonMock).not.toHaveBeenCalled();
+  });
+
+  it("counts a sandbox's cycle against its own day, and raises none before migration 0144", async () => {
+    await send({ setting: "on", mode: "sandbox" });
+    expect(soonMock).toHaveBeenCalledWith({ orgId: ORG, sandbox: true, kind: "document_received" });
+    soonMock.mockReset();
+    await send({ setting: "on", checks: false });
+    expect(soonMock).not.toHaveBeenCalled();
+  });
+
+  it("tells the owners and admins what the check does, as the setting is", async () => {
+    await send({ setting: "on" });
+    expect(sendMock.mock.calls[0][0].text).toContain(
+      "Open it on the bill's card in Approvals. Vestiarion checks it against the bill within a minute: when the vendor, amount and purchase order match, it adds the purchase order, and a person approves the payment."
+    );
+    sendMock.mockClear();
+    await send({ setting: "shadow" });
+    expect(sendMock.mock.calls[0][0].text).toContain(
+      "Open it on the bill's card in Approvals. Vestiarion checks it against the bill within a minute and says what it found; in shadow, the bill does not change."
+    );
+    for (const w of [{ setting: "off" }, { setting: "on", checks: false }] as World[]) {
+      sendMock.mockClear();
+      await send(w);
+      expect(sendMock.mock.calls[0][0].text).toContain("Open it on the bill's card in Approvals. Nothing changed on the bill: add the details it shows, and the agent decides it again.");
+    }
+  });
+
+  it("takes the answer all the same when the setting cannot be read, and starts no cycle", async () => {
+    const broken = fakeSupabase((request: RecordedRequest): FakeReply => {
+      if (request.path === "/rest/v1/approval_policies") return { status: 500, body: { code: "XX000", message: "down" } };
+      if (request.path === "/rest/v1/rpc/document_request_preview") return { body: [previewRow] };
+      if (request.path === "/rest/v1/rpc/answer_document_request") {
+        return {
+          body: [{ outcome: "answered", request_id: REQUEST, org_id: ORG, org_name: "Pinecrest Studio", org_slug: "pinecrest", invoice_id: INVOICE, counterparty_id: VENDOR, counterparty_name: "Northstar Studio", invoice_reference: "INV-2215" }],
+        };
+      }
+      return { body: [] };
+    });
+    expect(await within(broken, () => submitDocument(token(), { poReference: "", note: "" }, freshClient(), { now: NOW }))).toEqual({ ok: true, orgName: "Pinecrest Studio" });
+    expect(soonMock).not.toHaveBeenCalled();
   });
 });

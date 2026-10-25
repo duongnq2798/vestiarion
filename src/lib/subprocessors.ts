@@ -66,7 +66,7 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     privacyEntry: "Supabase",
     names: ["Supabase"],
     purpose: "holds the Postgres database, runs sign-in, and keeps the documents vendors send for a bill in private storage",
-    data: "everything a workspace stores, the documents vendors send through a request's link, and each person's sign-in account",
+    data: "everything a workspace stores, the documents vendors send through a request's link or members attach to a bill, and each person's sign-in account",
     when: "",
   },
   {
@@ -90,7 +90,7 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     privacyEntry: "A model provider",
     names: ["Anthropic", "OpenAI", "DeepSeek"],
     purpose: "proposes the agent's decisions and reads invoices",
-    data: "the facts of each decision the agent asks it about; for each email to a workspace's invoice address, its first PDF, .eml or .txt attachment, or else its text; each document a member has it read; and each plain-text message a linked member sends the Telegram bot",
+    data: "the facts of each decision the agent asks it about; for each email to a workspace's invoice address, its first PDF, .eml or .txt attachment, or else its text; each document a member has it read; the text of each PDF a vendor sends for a bill's missing document, or a member attaches to a bill; and each plain-text message a linked member sends the Telegram bot",
     when: ONLY_IF_CONFIGURED,
   },
   {

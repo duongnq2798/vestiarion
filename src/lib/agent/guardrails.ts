@@ -106,6 +106,13 @@ export interface ApGuardrailInput {
    * when none is set. `amount` is weighed against it, a EURC payment's USDC value included.
    */
   twoApprovalsAbove?: number | null;
+  /**
+   * The bill's purchase order came from its vendor's document, which code checked against the bill
+   * (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK8): who sent it, the vendor or a member who
+   * attached it, and the vendor's name, for the reason. The agent never pays or schedules such a bill, whatever every
+   * other rule says: a person approves it. Absent or null, nothing is held for it.
+   */
+  vendorDocument?: { source: "vendor" | "member"; vendorName: string } | null;
 }
 
 /** What the spending limit contract says about one payment the agent would make now. */
@@ -143,7 +150,9 @@ export type ApGuardrailRule =
   // After every check above, for a payment they let through (./obligation-checks.ts): the same work billed as a bill
   // and a milestone, and a project whose budget cannot hold it.
   | "obligation.duplicate_reference"
-  | "project.budget_exceeded";
+  | "project.budget_exceeded"
+  // The last of enforceApGuardrails' own rules, around all of the others (document checks DK8).
+  | "invoice.vendor_document";
 
 export { BRIDGE_FEE_CAP_PERCENT };
 
@@ -208,8 +217,27 @@ export function onChainLimitHold(check: OnChainLimitCheck | null | undefined, re
   return null;
 }
 
-/** The final code boundary between a model's recommendation and execution. */
+/**
+ * The final code boundary between a model's recommendation and execution.
+ *
+ * Its last rule wraps every other one (document checks DK8): a payment or a schedule they all let through, the EURC
+ * swap's own early return included, is held for a person when the bill's purchase order came from its vendor's
+ * document. A rule that stopped it first keeps its own reason, status and rule.
+ */
 export function enforceApGuardrails(input: ApGuardrailInput): ApGuardrailResult {
+  const checked = everyRuleBeforeTheDocument(input);
+  if (checked.blocked || !input.vendorDocument || (input.action !== "pay" && input.action !== "schedule")) return checked;
+  const verb = input.action === "schedule" ? "scheduling" : "payment";
+  return {
+    blocked: true,
+    status: "held",
+    rule: "invoice.vendor_document",
+    reasoning: `${checked.reasoning} [guardrail override: its purchase order came from ${input.vendorDocument.vendorName}'s document, which code checked against the bill — ${verb} refused before execution; held for a person to approve]`,
+  };
+}
+
+/** Every rule of `enforceApGuardrails` but its last, in the order they speak. */
+function everyRuleBeforeTheDocument(input: ApGuardrailInput): ApGuardrailResult {
   if (input.action !== "pay" && input.action !== "schedule") {
     return { blocked: false, status: null, rule: null, reasoning: input.reasoning };
   }

@@ -25,6 +25,7 @@ export const CYCLE_STAGES = [
   "reconcile",
   "receipts",
   "compliance",
+  "document_checks",
   "follow_up",
   "recurring",
   "services",
@@ -57,6 +58,11 @@ export type CycleStage = (typeof CYCLE_STAGES)[number];
  *               receivables it pays; it authorises nothing leaving, so it
  *               stays open, and nothing waits on it (receivables on Arc).
  *   compliance  Nothing. It is the source of risk truth, not a consumer of it.
+ *   document_checks Nothing. It reads the documents vendors sent for bills waiting for a purchase order or
+ *               goods receipt and compares them with the bill in code; a match may add the bill's purchase
+ *               order, which the follow-up and AP stages after it decide again in this cycle, where a person
+ *               approves it. It pays nothing, and its hold is read from the database, not from this stage,
+ *               so a failed check stops nothing else (document checks DK2, DK8).
  *   follow_up   compliance — it reopens invoices by comparing today's risk tier
  *               and limit against the ones a past decision rested on.
  *   recurring   Nothing. It creates the invoice of each recurring payment's period as it comes
@@ -110,6 +116,8 @@ export const STAGE_REQUIRES: Record<CycleStage, readonly CycleStage[]> = {
   reconcile: [],
   receipts: [],
   compliance: [],
+  // Compares vendors' documents with their bills; it pays nothing, and the AP stage reads its hold from the database (document checks DK2).
+  document_checks: [],
   follow_up: ["compliance"],
   recurring: [],
   services: [],

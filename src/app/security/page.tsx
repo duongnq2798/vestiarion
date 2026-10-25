@@ -88,7 +88,8 @@ export default function SecurityPage() {
             platform tables and functions, such as memberships, API keys, webhook endpoints and connector tokens, many of which hold rows for every
             workspace. Code that uses it, in about 70 files, names the workspace in its queries itself, except where it looks a row up by a token or
             a key prefix, or runs a job across workspaces, such as webhook delivery and the daily cleanup. Its storage counterpart,{" "}
-            <code>platformStorage()</code>, narrowed to the private bucket of vendors&apos; documents, makes a one-time upload address, reads, moves
+            <code>platformStorage()</code>, narrowed to the private bucket of vendors&apos; documents, makes a one-time upload address, uploads a
+            member&apos;s PDF without overwriting, reads, moves
             and removes a file, lists a folder for what a deleted workspace left there, and makes a one-minute download address, each at a path
             its caller builds under the workspace&apos;s own folder;
             nothing else of Storage is reachable from it. A lint rule forbids importing the raw
@@ -191,12 +192,17 @@ export default function SecurityPage() {
             turned vendor requests on, never to the vendor. Only the link&apos;s SHA-256 is kept, the link is checked for its shape before any lookup,
             and it answers for 14 days, once, while the bill still waits for information; an owner or admin can revoke it. An expired, answered or
             revoked link names no one. The page is limited per IP address and per link. The file goes from the vendor&apos;s browser straight to
-            private storage, with no public address: only a one-time upload address and a member&apos;s one-minute download address reach it. It is
+            private storage, with no public address: only a one-time upload address, the server&apos;s upload of a member&apos;s PDF, and a
+            member&apos;s one-minute download address reach it. It is
             taken only as a PDF, PNG or JPEG of at most 10 MB, known by its first bytes rather than its name, and kept under its SHA-256, out of
             reach of the upload address; since that address could write again while the file was checked, the file is read back from where it is
             kept and taken only when it is the file checked. A member opens it as a download from the storage&apos;s own address, for one minute,
-            never on Vestiarion&apos;s pages, and no model reads it. A document changes no bill: a person adds the details, and the agent decides
-            the bill again.
+            never on Vestiarion&apos;s pages. While vendor requests are in shadow or on, the cycle reads a PDF&apos;s text once, as data: the model
+            is shown the document alone, never the bill, and each value it returns is checked against the text. Code compares the vendor, the
+            currency, the amount, the purchase order and every address the document asks to be paid to with the bill; an image or a scan is read by
+            no model. A match with vendor requests on adds only the bill&apos;s purchase order, and a person approves the payment: the agent never
+            pays such a bill on its own. An owner or admin can attach a PDF of at most 4 MB, known by its first bytes, which the server uploads
+            under the workspace&apos;s own folder without overwriting.
           </li>
           <li>
             <strong>Two approvals.</strong> Above a figure the owner sets, a payment needs two different people, and one person cannot give both. A
@@ -207,7 +213,8 @@ export default function SecurityPage() {
             <strong>Rules in code the model cannot override.</strong> After the model has answered, every bill the agent would pay passes the checks
             in <code>src/lib/agent/guardrails.ts</code>. They hold or refuse a payment to a counterparty screened high risk, one not screened yet, one
             without a payment address or with an address no one confirmed, a duplicate of a bill already paid, a bill missing its purchase order or
-            goods receipt, a payment above the counterparty&apos;s limit, above the two-approvals figure or past the agent&apos;s spending limit. A
+            goods receipt, a payment above the counterparty&apos;s limit, above the two-approvals figure or past the agent&apos;s spending limit, and
+            hold for a person a bill whose purchase order came from a vendor&apos;s document. A
             contractor&apos;s milestone passes checks of its own, written into the cycle in <code>src/lib/agent/orchestrator.ts</code>: risk,
             screening, the contractor&apos;s limit, a first payment to a new address, two approvals and the spending limit. Nothing the model writes
             changes these checks. The decision prompt tells the model that an invoice&apos;s memo and purchase
@@ -496,8 +503,10 @@ export default function SecurityPage() {
             The agent&apos;s model provider is Anthropic, OpenAI or DeepSeek, whichever this deployment configures. It receives what{" "}
             <LegalLink href="/privacy#services">Privacy</LegalLink> lists: the facts of each decision it is asked about; for each email that reaches a
             workspace&apos;s invoice address, its first PDF, .eml or .txt attachment, or else its text, and nothing for one that is too large, holds
-            only images or comes over the workspace&apos;s rate; each document a member has it read; and each plain-text message a linked member
-            sends the Telegram bot. Without a provider, a written rule-based policy decides, and nothing is sent.
+            only images or comes over the workspace&apos;s rate; each document a member has it read; the text of each PDF a vendor sends for a
+            bill&apos;s missing purchase order or goods receipt, or a member attaches to a bill, while vendor requests are in shadow or on, and
+            nothing for an image or a scan; and each plain-text message a linked member sends the Telegram bot. Without a provider, a written
+            rule-based policy decides, and nothing is sent.
           </li>
           <li>
             Each provider handles these requests under its own API terms:{" "}

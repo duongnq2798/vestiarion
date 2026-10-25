@@ -496,7 +496,10 @@ describe("claims narrowed to what the code does", () => {
     expect(body).toContain("read back from where it is kept and taken only when it is the file checked");
     expect(source("src/lib/document-requests/intake.ts")).toContain("const again = await storage.download(kept);");
     expect(body).not.toContain("which no browser reads");
-    expect(body).toContain("with no public address: only a one-time upload address and a member's one-minute download address reach it");
+    expect(body).toContain("with no public address: only a one-time upload address, the server's upload of a member's PDF, and a member's one-minute download address reach it");
+    // A member's PDF, uploaded by the server, never over another file (document checks DK11).
+    expect(body).toContain("uploads a member's PDF without overwriting");
+    expect(source("src/lib/dal/index.ts")).toContain("bucket.upload(path, bytes, { upsert: false, contentType })");
   });
 
   it("foreign keys carry the workspace, but for the links named, and polymorphic ids have none", () => {
@@ -809,6 +812,15 @@ describe("claims narrowed to what the code does", () => {
     const ai = section("ai");
     expect(ai).toContain("its first PDF, .eml or .txt attachment, or else its text, and nothing for one that is too large, holds only images or comes over the workspace's rate");
     expect(ai).toContain("each plain-text message a linked member sends the Telegram bot");
+    // The text of each PDF a vendor sends, or a member attaches, for a bill's missing document: the cycle's check reads it
+    // with the model (document checks DK3, DK4), only while vendor requests are in shadow or on, and never an image or a scan.
+    expect(ai).toContain(
+      "the text of each PDF a vendor sends for a bill's missing purchase order or goods receipt, or a member attaches to a bill, while vendor requests are in shadow or on, and nothing for an image or a scan"
+    );
+    const checks = source("src/lib/agent/document-checks.ts");
+    expect(checks).toContain("if (!ready || setting === \"off\") return [];");
+    expect(checks).toContain("if (row.file_type !== \"application/pdf\") return unreadable(UNREADABLE_REASONS.image);");
+    expect(checks).toContain("extracted: await extractInvoice(document.text, input.today)");
     expect(ai).not.toContain("every email that reaches");
     expect(privacy).toContain("its first PDF, .eml or .txt attachment, or else its text");
   });

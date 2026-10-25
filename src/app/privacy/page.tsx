@@ -258,6 +258,11 @@ export default function PrivacyPage() {
                 only images, or comes while the workspace is over its rate of documents read. The document itself is not kept;
               </li>
               <li>
+                for each PDF a vendor sends for a bill&apos;s missing purchase order or goods receipt, or a member attaches to a bill, while vendor
+                requests are in shadow or on: its text, up to 20,000 characters, once, to read its vendor, total, currency and purchase order, which
+                code then compares with the bill. The bill itself is not sent with it, and an image or a scan is not sent at all;
+              </li>
+              <li>
                 for a message a member sends the Telegram bot in plain words: the message, up to 4,000 characters, to tell which of the bot&apos;s questions it
                 asks. The answer is read from the workspace and written by the app, not by the model;
               </li>
@@ -666,8 +671,17 @@ export default function PrivacyPage() {
             The vendor&apos;s IP address limits how often the page can be sent. It is held in the server&apos;s memory for minutes, and never kept.
           </li>
           <li>
-            The file is read by no model and shown on no Vestiarion page. Any member of the workspace opens it as a download, through an address that
-            works for one minute. Nothing about it changes the bill: a person adds the details, and the agent decides the bill again.
+            While vendor requests are in shadow or on, a PDF of up to 4 MB is read once: its text, up to 20,000 characters, goes to the
+            workspace&apos;s model provider to read its vendor, total, currency and purchase order, which code compares with the bill. An image is
+            read by no model. With vendor requests on, a document that matches adds the bill&apos;s purchase order, and a person approves the
+            payment; nothing else on the bill changes. The vendor is told nothing of the check.
+          </li>
+          <li>
+            An owner or admin can also attach a PDF of up to 4 MB that the vendor emailed them, to a bill waiting for its purchase order or goods
+            receipt. It is kept in the same private storage and checked the same way, and the ledger names the member who attached it.
+          </li>
+          <li>
+            No file is shown on a Vestiarion page. Any member of the workspace opens it as a download, through an address that works for one minute.
           </li>
           <li>
             Deleting the workspace, by its owner, with its last member&apos;s account or as an idle sandbox, deletes its requests and the files

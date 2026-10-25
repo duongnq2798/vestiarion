@@ -13,7 +13,8 @@ import {
   type ActivityRefs,
 } from "@/lib/agent-activity";
 import { readAgentActivity } from "@/lib/agent-activity-read";
-import { agentResumes, CASH_SHORTFALL, counterpartyPath, heldForCash, ruleInBrief, ruleNextStep } from "@/lib/next-step";
+import { agentResumes, CASH_SHORTFALL, codeStoppedLine, counterpartyPath, heldForCash, ruleInBrief, ruleNextStep, VENDOR_DOCUMENT } from "@/lib/next-step";
+import { ruleLabel } from "@/lib/rule-words";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -289,7 +290,7 @@ describe("a code stop, in a few words", () => {
       "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.no_address", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled", "invoice.match_incomplete", "counterparty.new_payee",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget", "workspace.two_approvals",
-      "project.budget_exceeded", "obligation.duplicate_reference",
+      "project.budget_exceeded", "obligation.duplicate_reference", "invoice.vendor_document",
     ];
     for (const rule of rules) {
       expect(ruleInBrief(rule), rule).not.toBeNull();
@@ -322,6 +323,19 @@ describe("what to do about a payable code stopped", () => {
     });
     expect(ruleInBrief("counterparty.no_address")).toBe("the counterparty has no payment address yet");
     expect(agentResumes("counterparty.no_address")).toBe("The agent decides it again on its own once the counterparty has an address and a person has confirmed it.");
+  });
+
+  it("says a bill whose purchase order came from its vendor's document waits for a person, who checks it and approves (document checks DK8)", () => {
+    expect(VENDOR_DOCUMENT).toBe("invoice.vendor_document");
+    expect(ruleNextStep(VENDOR_DOCUMENT, { id: "cp-2", name: "Cobalt Cloud" })).toEqual({
+      sentence: "Its purchase order came from Cobalt Cloud's document, which matched the bill. Check the document, then approve the payment in Approvals: the agent does not pay it on its own.",
+      fix: null,
+    });
+    expect(ruleInBrief(VENDOR_DOCUMENT)).toBe("its purchase order came from the vendor's document, and a person approves it");
+    expect(codeStoppedLine(VENDOR_DOCUMENT)).toBe("Code stopped it: its purchase order came from the vendor's document, and a person approves it.");
+    expect(ruleLabel(VENDOR_DOCUMENT)).toBe("Its purchase order came from a vendor's document, which a person approves");
+    // Only a person ends it: the agent never decides it again on its own to pay it.
+    expect(agentResumes(VENDOR_DOCUMENT)).toBeNull();
   });
 
   it("says a payment held because its project could not be read, or is archived, waits for a person, not for room", () => {
@@ -408,7 +422,7 @@ describe("what to do about a payable code stopped", () => {
       "counterparty.address_unconfirmed", "counterparty.client_payable", "counterparty.high_risk", "counterparty.no_address", "counterparty.payment_limit", "counterparty.unscreened",
       "fx.rate_unavailable", "fx.swap_cost_above_cap", "fx.swap_usdc_short", "invoice.duplicate_of_settled",
       "treasury.insufficient_eurc", "workspace.onchain_limit", "workspace.onchain_limit_route", "workspace.outflow_budget", "workspace.two_approvals",
-      "project.budget_exceeded", "obligation.duplicate_reference",
+      "project.budget_exceeded", "obligation.duplicate_reference", "invoice.vendor_document",
     ];
     for (const rule of rules) expect(ruleNextStep(rule, counterparty), rule).not.toBeNull();
     expect(ruleNextStep(null, counterparty)).toBeNull();

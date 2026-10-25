@@ -65,6 +65,7 @@ import { orgHref } from "@/lib/auth/org-paths";
 import { chainModes, shellModes } from "@/lib/circle";
 import { db } from "@/lib/dal";
 import { readDocumentRequests } from "@/lib/document-requests/read";
+import { documentChecksMode, readDocumentChecksStatus } from "@/lib/document-requests/setting";
 import type { DocumentRequestView } from "@/lib/document-requests/rules";
 import { membersLeftOut } from "@/lib/new-payee";
 import { firstPaymentFrom, loadNewPayeeFacts } from "@/lib/new-payee-facts";
@@ -440,6 +441,17 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       console.error("invoices: document requests not read", error instanceof Error ? error.message : error);
       return new Map<string, DocumentRequestView>();
     });
+    // Whether an owner or admin may attach the vendor's document, and how it is checked (document checks DK11). Best
+    // effort, read once: unread, no card offers it.
+    const documentChecksRead =
+      waiting.size > 0
+        ? readDocumentChecksStatus(db())
+            .then(documentChecksMode)
+            .catch((error: unknown) => {
+              console.error("invoices: document checks not read", error instanceof Error ? error.message : error);
+              return null;
+            })
+        : Promise.resolve(null);
     const sortAsked = query.sort;
     const slugHref = (path: string) => orgHref(slug, path);
     const here = viewHref(slugHref, view, sortAsked);
@@ -825,7 +837,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         };
       }
     })();
-    const [{ shownDecisions, shareable, shared }, linkStates, collections, members, firstPayments, capturers, tabParts, documentRequests] = await Promise.all([
+    const [{ shownDecisions, shareable, shared }, linkStates, collections, members, firstPayments, capturers, tabParts, documentRequests, documentChecks] = await Promise.all([
       cardsRead,
       linkStatesRead,
       collectionsRead,
@@ -834,6 +846,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       capturersRead,
       tabRead,
       documentRequestsRead,
+      documentChecksRead,
     ]);
     const receiptFor = (decision: Decision) => (shareable.has(decision.id) ? <ReceiptControl orgSlug={slug} invoiceId={decision.id} shared={shared.has(decision.id)} /> : undefined);
     const dealContext = (decision: Decision) => {
@@ -944,7 +957,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
       return (
         <WaitingPayableAction
           orgSlug={slug}
-          invoice={{ id: invoice.id, counterpartyName: invoice.counterparty_name, counterpartyId: invoice.counterparty_id, ...facts.onFile }}
+          invoice={{ id: invoice.id, counterpartyName: invoice.counterparty_name, counterpartyId: invoice.counterparty_id, status: invoice.status, ...facts.onFile }}
           added={facts.added}
           // A transfer recorded against it is approved in Approvals, never completed here (R3).
           canAddDetails={canWrite && invoice.tx_ref === null}
@@ -952,6 +965,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
           rule={ruleOf(decision)}
           canFix={canWrite}
           documentRequest={documentRequests.get(invoice.id)}
+          documentChecks={documentChecks}
         />
       );
     };

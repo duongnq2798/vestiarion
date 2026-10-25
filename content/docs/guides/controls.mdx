@@ -67,13 +67,14 @@ These checks run on every payment the agent would make, in [`src/lib/agent/guard
 | --- | --- |
 | The payee was screened high risk | Flagged. It is never paid, not even by a person's approval. |
 | It repeats a bill already paid | Flagged for a person. |
-| Its purchase order or goods receipt is missing | Sent back for what is missing. An owner can let Vestiarion [ask the vendor for it](/docs/guides/first-payment#ask-the-vendor-for-a-missing-document), which never pays it. |
+| Its purchase order or goods receipt is missing | Sent back for what is missing. An owner can let Vestiarion [ask the vendor for it](/docs/guides/first-payment#ask-the-vendor-for-a-missing-document). A document that matches the bill adds the purchase order, and a person approves the payment. |
 | It is above the payee's payment limit | Held for a person. |
 | The payee has not been screened yet, or is a client, who pays the business | Held for a person. |
 | The payee has no payment address, or its address changed and no one confirmed it | Held for a person. |
 | Where payments are real, it is the first payment to a new address and only one person stands behind that address | Held for a second person. |
 | It would pass the agent's spending limit | Held until the limit has room again. |
 | It is above the figure where two people approve | Held for two approvals. |
+| Its purchase order came from a vendor's document | Held for a person, who approves it. The agent never pays such a bill on its own. |
 | It names the same purchase order, or the same delivered work, as an earlier milestone or bill | Held for a person, who pays it if both are owed. |
 | Its project's budget, less the project's buffer, has no room left for it | Held for a person, and decided again once the project has room. |
 

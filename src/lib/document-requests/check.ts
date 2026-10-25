@@ -1,0 +1,369 @@
+import { totalLineFigures } from "../invoice-document/extract";
+import { nameKey } from "../invoice-document/match";
+import { normalizeExtraction, rawExtractionSchema, type RawExtraction } from "../invoice-document/normalize";
+import { emailDomainOf } from "./rules";
+
+/**
+ * Comparing a vendor's document with its bill (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK4,
+ * DK5): the model reads the document, never seeing the bill; code compares. Pure: the cycle's document checks stage
+ * (src/lib/agent/document-checks.ts) hands it the document's text and both readings, and signs what it returns.
+ *
+ * Every value a reader gives is checked against the text first (`normalizeExtraction`, as for an invoice read from a
+ * document). The vendor is found by code in the text, never taken from the model, since on a purchase order the issuer
+ * is the buyer. The total and the purchase order must be the same for both readers, and a document that states two
+ * different totals has none. Then, in order: the vendor, the currency, the amount to its last decimal, the purchase
+ * order, the address it asks to be paid to, and the model's flag. The first that fails gives the reason, in Vestiarion's
+ * own words: only the counterparty's name, a purchase order as the document or the vendor wrote it, decimal figures and
+ * 0x hex go into a sentence, never other text from the document.
+ */
+
+/** The bill as the check compares it, read when it is checked. */
+export interface CheckBill {
+  /** The counterparty's name now: a renamed one is compared by its current name. */
+  vendorName: string;
+  /** Its billing email, whose domain names it when its name does not. */
+  billingEmail: string | null;
+  /** The bill's amount, as the database gives it. */
+  amount: string | number;
+  currency: "USDC" | "EURC";
+  /** Its invoice number: evidence, never a reason to refuse. */
+  memo: string | null;
+  /** The purchase order on file, null when it has none. */
+  poReference: string | null;
+  /** Whether its counterparty needs a purchase order (three-way match M2). */
+  purchaseOrderRequired: boolean;
+  /** The counterparty's payment address on file. */
+  addressOnFile: string | null;
+}
+
+/** What was read of the document. */
+export interface DocumentReading {
+  /** The document's text, as `readDocument` read it. */
+  text: string;
+  /** The model's reading, or the rule-based reader's with no model. */
+  raw: RawExtraction;
+  /** The rule-based reader's reading of the same text, which `decide()` always computes. */
+  reference: RawExtraction;
+  /** The purchase order the vendor typed beside the file: null for none, and for a member's attachment. */
+  typedPo: string | null;
+}
+
+export type DocumentCheckName = "vendor" | "currency" | "amount" | "purchase_order" | "pay_to" | "invoice_number";
+
+/** One check, as `document_checked` signs it: never the document's text, only the values compared. */
+export interface DocumentCheck {
+  check: DocumentCheckName;
+  result: "match" | "mismatch" | "absent";
+  /** What the document says: "name" or the domain found for the vendor; a plain decimal; a purchase order as written; an address. */
+  document: string | null;
+  /** What the bill says. */
+  bill: string | null;
+  /** The other reading, when a second one differs: the rule-based reader's, or another total or purchase order the text states. */
+  alsoRead?: string;
+}
+
+export interface DocumentComparison {
+  outcome: "matched" | "mismatched";
+  /** The first failing check's sentence; null when it matched. */
+  reason: string | null;
+  checks: DocumentCheck[];
+  /** The purchase order the document names, as it writes it; null when it names none. */
+  poReference: string | null;
+  /** Whether a purchase order was compared: the bill lacked one, or has one. Not for a counterparty that needs none. */
+  poCompared: boolean;
+  /** The model set its note: something needs a person. The note itself is never kept. */
+  readerFlagged: boolean;
+}
+
+/** Why a document could not be read, as the card and the ledger say it (DK3). */
+export const UNREADABLE_REASONS = {
+  image: "It is an image. Only a PDF with its text is checked.",
+  scan: "It is a PDF with no text to read, such as a scan.",
+  too_large: "It is larger than 4 MB, the most Vestiarion reads.",
+  unreadable: "This PDF could not be read.",
+  changed: "The file kept is not the one received.",
+  gone: "The file is no longer in storage.",
+} as const;
+
+/** Why a document was not checked at all (DK7, DK12). */
+export const SKIPPED_REASONS = {
+  not_waiting: "It was not checked: the bill no longer waited for a document.",
+  same_file: "It was not checked: it is the same file as one already checked for this bill.",
+  bill_moved: "It was not checked: the bill changed before the purchase order could be added.",
+} as const;
+
+/** The longest reason 0144's check_document_request takes. */
+export const MAX_CHECK_REASON = 300;
+
+const EMPTY: RawExtraction = rawExtractionSchema.parse({});
+const MILLION = BigInt(1_000_000);
+/** Part 1's purchase order rules (readDocumentFields): no control or format character, no line break, no link. */
+const UNSEEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+const UNSEEN_ALL = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+const LINK = /:\/\/|www\./i;
+const MAX_PO = 100;
+/** A vendor's own name in a sentence; a longer one is called "the vendor", so no sentence passes 300 characters. */
+const MAX_NAME_IN_REASON = 100;
+/** Every 0x address the text writes: 40 hex digits, standing alone, so a transaction hash is not one. */
+const ADDRESS = /(?<![0-9A-Za-z])0[xX][0-9a-fA-F]{40}(?![0-9A-Za-z])/g;
+
+/**
+ * Email providers anyone can have an address at: their domain names no vendor, so only a vendor's own domain counts.
+ * Its name, matched first, is unaffected.
+ */
+const FREE_MAIL = new Set([
+  "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "msn.com", "yahoo.com", "ymail.com", "icloud.com",
+  "me.com", "mac.com", "aol.com", "proton.me", "protonmail.com", "pm.me", "gmx.com", "gmx.net", "mail.com", "yandex.com",
+  "zoho.com", "fastmail.com", "hey.com", "qq.com", "163.com", "naver.com",
+]);
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** A plain decimal of at most 6 places, or the database's number, as millionths; null for anything else. */
+function microsOf(value: string | number | null | undefined): bigint | null {
+  if (value === null || value === undefined) return null;
+  const written = typeof value === "number" ? (Number.isFinite(value) && value >= 0 ? value.toFixed(6) : "") : value.trim();
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(written);
+  if (!match) return null;
+  const fraction = match[2] ?? "";
+  if (/[1-9]/.test(fraction.slice(6))) return null;
+  return BigInt(match[1]) * MILLION + BigInt(fraction.slice(0, 6).padEnd(6, "0"));
+}
+
+/** Millionths as a plain decimal with 2 to 6 places, as `document_checked` records them: "5.00", "5.000001", "1250.50". */
+function plainDecimal(micros: bigint): string {
+  const fraction = (micros % MILLION).toString().padStart(6, "0").replace(/0+$/, "");
+  return `${(micros / MILLION).toString()}.${fraction.padEnd(2, "0")}`;
+}
+
+/** Millionths as the app writes an amount, grouped, with 2 to 6 places: "1,250.50". */
+function appAmount(micros: bigint): string {
+  const [whole, fraction] = plainDecimal(micros).split(".");
+  return `${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${fraction}`;
+}
+
+type Currency = "USDC" | "EURC";
+
+/** A reader's currency as Vestiarion pays in it, by `normalizeExtraction`'s mapping: "foreign" for another, null for none. */
+function currencyOf(value: string | null, text: string): Currency | "foreign" | null {
+  if (value === null) return null;
+  return normalizeExtraction({ ...EMPTY, currency: value }, text).fields.currency ?? "foreign";
+}
+
+/** A currency as `document_checked` records it: its code, or, for one Vestiarion does not pay in, a code of 3 or 4 letters only. */
+function currencyRecord(read: Currency | "foreign" | null, written: string | null): string | null {
+  if (read !== "foreign") return read;
+  return written && /^[A-Za-z]{3,4}$/.test(written) ? written.toUpperCase() : null;
+}
+
+/** Where the text writes `value` standing alone, ignoring case: as the text spells it, or null. */
+function standingAlone(text: string, value: string): string | null {
+  const found = new RegExp(`(?<![A-Za-z0-9])${escapeRegExp(value)}(?![A-Za-z0-9])`, "i").exec(text);
+  return found ? found[0] : null;
+}
+
+/**
+ * A purchase order a reader gave or the vendor typed, as the document writes it: one that reads as a purchase order and
+ * stands alone in the text (`normalizeExtraction`'s check, so "PO-104" is not in "PO-1042"), of at most 100 characters,
+ * within part 1's rules. Null for anything else.
+ */
+function poInText(value: string | null, text: string): string | null {
+  if (value === null || value.length > MAX_PO) return null;
+  if (normalizeExtraction({ ...EMPTY, poReference: value }, text).fields.poReference === null) return null;
+  const written = standingAlone(text, value);
+  return written && !UNSEEN.test(written) && !LINK.test(written) ? written : null;
+}
+
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** How the text names the vendor: "name", its billing domain, or null when it does not. */
+function vendorNamed(bill: CheckBill, text: string): string | null {
+  const key = nameKey(bill.vendorName);
+  if (key.length >= 3 && ` ${nameKey(text)} `.includes(` ${key} `)) return "name";
+  const domain = bill.billingEmail ? emailDomainOf(bill.billingEmail) : null;
+  if (!domain || FREE_MAIL.has(domain)) return null;
+  // The domain or one under it, as a whole word: not evil-cobaltcloud.example, nor cobaltcloud.example.evil.test.
+  return new RegExp(`(?<![a-z0-9-])${escapeRegExp(domain)}(?![a-z0-9-]|\\.[a-z0-9])`).test(text.toLowerCase()) ? domain : null;
+}
+
+/** The vendor as a sentence names it: its own name, without a control or format character, or "the vendor" when very long. */
+function vendorWords(name: string): string {
+  const clean = name.replace(UNSEEN_ALL, "").replace(/\s+/g, " ").trim();
+  return clean && Array.from(clean).length <= MAX_NAME_IN_REASON ? clean : "the vendor";
+}
+
+/** A reason as 0144 takes it: no control or format character, at most 300 characters. */
+export function checkReasonOf(reason: string): string {
+  return Array.from(reason.replace(UNSEEN_ALL, " ").replace(/\s+/g, " ").trim()).slice(0, MAX_CHECK_REASON).join("");
+}
+
+interface Step {
+  record: DocumentCheck;
+  /** The sentence when this check fails; null when it passes. */
+  failure: string | null;
+}
+
+function vendorCheck(bill: CheckBill, text: string, vendor: string): Step {
+  const named = vendorNamed(bill, text);
+  return {
+    record: { check: "vendor", result: named ? "match" : "absent", document: named, bill: bill.vendorName },
+    failure: named ? null : `The document does not name ${vendor}.`,
+  };
+}
+
+function currencyCheck(bill: CheckBill, reading: DocumentReading): Step & { read: Currency | null } {
+  const { text, raw, reference } = reading;
+  const model = currencyOf(raw.currency, text);
+  const rule = currencyOf(reference.currency, text);
+  const read = model ?? rule;
+  const written = model !== null ? raw.currency : reference.currency;
+  // A second reader that names another currency: the document does not say one clearly.
+  const other = model !== null && rule !== null && rule !== model ? rule : null;
+  const record: DocumentCheck = {
+    check: "currency",
+    result: read === null ? "absent" : read === bill.currency && other === null ? "match" : "mismatch",
+    document: currencyRecord(read, written),
+    bill: bill.currency,
+    ...(other !== null ? { alsoRead: currencyRecord(other, reference.currency) ?? "other" } : {}),
+  };
+  const sentence = (currency: Currency | "foreign") =>
+    currency === "foreign" ? "The document's total is not in USDC or EURC." : `The document's total is in ${currency}; the bill is in ${bill.currency}.`;
+  const failure =
+    read === null
+      ? "The document does not say which currency its total is in."
+      : read !== bill.currency
+        ? sentence(read)
+        : other !== null
+          ? sentence(other)
+          : null;
+  return { record, failure, read: read === "USDC" || read === "EURC" ? read : null };
+}
+
+function amountCheck(bill: CheckBill, reading: DocumentReading, currency: Currency | null): Step {
+  const { text, raw, reference } = reading;
+  const model = microsOf(normalizeExtraction(raw, text).fields.amount);
+  const rule = microsOf(normalizeExtraction(reference, text).fields.amount);
+  // Each line that states what is due, read the way the rule-based reader reads one: two different ones leave no clear
+  // total, whichever a reader took, so a total slipped in after the real one cannot pass for it.
+  const stated = totalLineFigures(text)
+    .map((figure) => microsOf(normalizeExtraction({ ...EMPTY, amount: figure }, text).fields.amount))
+    .filter((figure): figure is bigint => figure !== null);
+  const total = model ?? rule;
+  const billAmount = microsOf(bill.amount);
+  const other = total === null ? null : ([rule, ...stated].find((figure) => figure !== null && figure !== total) ?? null);
+  const record: DocumentCheck = {
+    check: "amount",
+    result: total === null ? "absent" : other === null && billAmount !== null && total === billAmount ? "match" : "mismatch",
+    document: total === null ? null : plainDecimal(total),
+    bill: billAmount === null ? null : plainDecimal(billAmount),
+    ...(other !== null ? { alsoRead: plainDecimal(other) } : {}),
+  };
+  if (total === null) return { record, failure: "The document does not state a total." };
+  if (other !== null) return { record, failure: `The document's total is unclear: it reads both ${appAmount(total)} and ${appAmount(other)}.` };
+  if (billAmount === null || total !== billAmount) {
+    const billWords = billAmount === null ? "another amount" : appAmount(billAmount);
+    return { record, failure: `The document says ${appAmount(total)} ${currency ?? bill.currency}; the bill says ${billWords} ${bill.currency}.` };
+  }
+  return { record, failure: null };
+}
+
+function purchaseOrderCheck(bill: CheckBill, reading: DocumentReading, vendor: string): { step: Step | null; poReference: string | null } {
+  const { text, raw, reference, typedPo } = reading;
+  const model = poInText(raw.poReference, text);
+  const rule = poInText(reference.poReference, text);
+  const read = model ?? rule;
+  const onFile = bill.poReference?.trim() || null;
+
+  // The bill has one on file: the document may name none, as a delivery note may, but never another.
+  if (onFile !== null) {
+    const differs = [model, rule].find((po): po is string => po !== null && !same(po, onFile)) ?? null;
+    return {
+      poReference: differs ?? read,
+      step: {
+        record: { check: "purchase_order", result: differs ? "mismatch" : read ? "match" : "absent", document: differs ?? read, bill: onFile },
+        failure: differs ? `The document names purchase order ${differs}; the bill's is ${onFile}.` : null,
+      },
+    };
+  }
+  // A counterparty that needs none: what the document names is recorded, and nothing is compared.
+  if (!bill.purchaseOrderRequired) return { poReference: read, step: null };
+
+  // The bill lacks one. The vendor's own, when it typed one, must be in the document, and be the one the model read.
+  const typed = typedPo?.trim() || null;
+  if (typed !== null) {
+    const written = poInText(typed, text);
+    if (!written) {
+      return {
+        poReference: read,
+        step: { record: { check: "purchase_order", result: "mismatch", document: read, bill: null }, failure: `The purchase order ${vendor} typed, ${typed}, is not in the document.` },
+      };
+    }
+    if (model !== null && !same(model, written)) {
+      return {
+        poReference: written,
+        step: {
+          record: { check: "purchase_order", result: "mismatch", document: written, bill: null, alsoRead: model },
+          failure: `The document names more than one purchase order: ${written} and ${model}.`,
+        },
+      };
+    }
+    return { poReference: written, step: { record: { check: "purchase_order", result: "match", document: written, bill: null }, failure: null } };
+  }
+  if (model !== null && rule !== null && !same(model, rule)) {
+    return {
+      poReference: model,
+      step: {
+        record: { check: "purchase_order", result: "mismatch", document: model, bill: null, alsoRead: rule },
+        failure: `The document names more than one purchase order: ${model} and ${rule}.`,
+      },
+    };
+  }
+  if (read === null) {
+    return { poReference: null, step: { record: { check: "purchase_order", result: "absent", document: null, bill: null }, failure: "The document does not name a purchase order." } };
+  }
+  return { poReference: read, step: { record: { check: "purchase_order", result: "match", document: read, bill: null }, failure: null } };
+}
+
+function payToCheck(bill: CheckBill, text: string): Step {
+  const onFile = bill.addressOnFile;
+  const written = [...text.matchAll(ADDRESS)].map(([address]) => address);
+  const elsewhere = written.find((address) => onFile === null || address.toLowerCase() !== onFile.toLowerCase()) ?? null;
+  return {
+    record: { check: "pay_to", result: written.length === 0 ? "absent" : elsewhere ? "mismatch" : "match", document: elsewhere ?? written[0] ?? null, bill: onFile },
+    failure: elsewhere
+      ? onFile
+        ? `The document asks to be paid to ${elsewhere}, not the address on file.`
+        : `The document asks to be paid to ${elsewhere}, and there is no address on file.`
+      : null,
+  };
+}
+
+function invoiceNumberCheck(bill: CheckBill, text: string): DocumentCheck {
+  const memo = bill.memo?.trim() || null;
+  const written = memo ? standingAlone(text, memo) : null;
+  return { check: "invoice_number", result: written ? "match" : "absent", document: written, bill: memo };
+}
+
+/** The comparison (DK4, DK5): see the module comment. */
+export function compareDocument(bill: CheckBill, reading: DocumentReading): DocumentComparison {
+  const vendor = vendorWords(bill.vendorName);
+  const vendorStep = vendorCheck(bill, reading.text, vendor);
+  const currencyStep = currencyCheck(bill, reading);
+  const amountStep = amountCheck(bill, reading, currencyStep.read);
+  const po = purchaseOrderCheck(bill, reading, vendor);
+  const payToStep = payToCheck(bill, reading.text);
+  // Set only when something needs a person: figures that do not add up, a changed address, or instructions to the reader.
+  const readerFlagged = reading.raw.notes !== null;
+  const steps = [vendorStep, currencyStep, amountStep, ...(po.step ? [po.step] : []), payToStep];
+  const failure = steps.find((step) => step.failure !== null)?.failure ?? (readerFlagged ? "The reader flagged something in it for a person to check." : null);
+  return {
+    outcome: failure === null ? "matched" : "mismatched",
+    reason: failure === null ? null : checkReasonOf(failure),
+    checks: [...steps.map((step) => step.record), invoiceNumberCheck(bill, reading.text)],
+    poReference: po.poReference,
+    poCompared: po.step !== null,
+    readerFlagged,
+  };
+}

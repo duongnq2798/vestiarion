@@ -17,6 +17,7 @@ export const RULE_WORDS: Record<string, string> = {
   "counterparty.new_payee": "a first payment to a new address needs two people",
   "invoice.duplicate_of_settled": "it repeats a bill already paid",
   "invoice.match_incomplete": "its purchase order or goods receipt was missing",
+  "invoice.vendor_document": "its purchase order came from a vendor's document, which a person approves",
   "workspace.two_approvals": "it is above the figure where two people approve",
   "workspace.outflow_budget": "it would pass the workspace's spending limit",
   "workspace.onchain_limit": "it would pass the spending limit set on Arc",

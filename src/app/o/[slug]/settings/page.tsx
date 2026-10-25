@@ -25,7 +25,7 @@ import DiscordPanel from "@/components/DiscordPanel";
 import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
 import PayeeLockPanel from "@/components/PayeeLockPanel";
 import DocumentRequestsPanel from "@/components/DocumentRequestsPanel";
-import { readDocumentRequestsSetting } from "@/lib/document-requests/setting";
+import { readDocumentChecksStatus } from "@/lib/document-requests/setting";
 import { readPayeeLockStatus } from "@/lib/payee-lock";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import UsagePanel from "@/components/UsagePanel";
@@ -213,7 +213,7 @@ export default async function SettingsPage({
         console.error("settings: payee lock not loaded", error instanceof Error ? error.message : error);
         return null;
       }),
-      readDocumentRequestsSetting(db()).catch((error: unknown) => {
+      readDocumentChecksStatus(db()).catch((error: unknown) => {
         console.error("settings: document requests not loaded", error instanceof Error ? error.message : error);
         return null;
       }),

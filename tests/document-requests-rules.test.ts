@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  documentCheckLine,
   documentRequestAllowed,
   documentRequestLine,
   documentRequestsSettingOf,
   emailDomainOf,
+  MAX_ATTACHED_DOCUMENT_BYTES,
   missingDocuments,
   missingWords,
   readDocumentFields,
   sniffDocumentType,
+  type DocumentCheckView,
   type RequestHistory,
 } from "@/lib/document-requests/rules";
+import { MAX_DOCUMENT_BYTES } from "@/lib/invoice-document/read";
 import { documentRequestUrl, documentTokenHash, generateDocumentToken } from "@/lib/document-requests/token";
 
 /**
@@ -193,6 +197,75 @@ describe("what a bill's card says (ER3, ER4, ER6)", () => {
   it("says a link expired without an answer", () => {
     expect(documentRequestLine({ state: "expired", missing: ["goods_receipt"], sentAt: "2026-10-01T09:00:00Z", expiresAt: "2026-10-15T09:00:00Z" }, "Northstar Studio")).toBe(
       "Asked Northstar Studio for the goods receipt on Oct 1; the link expired Oct 15 with no answer."
+    );
+  });
+});
+
+describe("what a bill's card says of the check (document checks DK13)", () => {
+  const VENDOR = "Northstar Studio";
+  const matched = (over: Partial<Extract<DocumentCheckView, { outcome: "matched" }>> = {}): DocumentCheckView => ({
+    outcome: "matched",
+    po: "PO-2215",
+    added: false,
+    shadowLeftPo: false,
+    ...over,
+  });
+
+  it("takes a member's PDF of at most what the cycle reads", () => {
+    expect(MAX_ATTACHED_DOCUMENT_BYTES).toBe(MAX_DOCUMENT_BYTES);
+  });
+
+  it("names who sent the document: the vendor through its link, or a member who attached it", () => {
+    expect(documentRequestLine({ state: "answered", missing: ["purchase_order"], answeredAt: "2026-10-24T15:30:00Z", source: "vendor" }, VENDOR)).toBe(
+      "Northstar Studio sent a document on Oct 24."
+    );
+    expect(documentRequestLine({ state: "answered", missing: ["purchase_order"], answeredAt: "2026-10-25T08:00:00Z", source: "member" }, VENDOR)).toBe(
+      "A member attached Northstar Studio's document on Oct 25."
+    );
+  });
+
+  it("says a document waits for the next cycle", () => {
+    expect(documentCheckLine({ outcome: "pending" }, VENDOR, true)).toBe("Vestiarion checks it against the bill at its next cycle, usually within a minute.");
+  });
+
+  it("says what a match added, and who approves the payment, as the bill's goods stand now", () => {
+    expect(documentCheckLine(matched({ added: true }), VENDOR, true)).toBe(
+      "Vendor, amount and purchase order PO-2215 match the bill. Vestiarion added the purchase order and checked the bill again. A person approves the payment: the agent does not pay it on its own."
+    );
+    expect(documentCheckLine(matched({ added: true }), VENDOR, false)).toBe(
+      "Vendor, amount and purchase order PO-2215 match the bill. Vestiarion added the purchase order. Only your team can mark the goods received: do it in Add details once you have them, and a person then approves the payment."
+    );
+  });
+
+  it("says a match in shadow left the bill as it is", () => {
+    expect(documentCheckLine(matched({ shadowLeftPo: true }), VENDOR, true)).toBe(
+      "Vendor, amount and purchase order PO-2215 match the bill. Vendor requests are in shadow, so the bill was left as it is: add the purchase order yourself."
+    );
+    expect(documentCheckLine(matched({ shadowLeftPo: true }), VENDOR, false)).toBe(
+      "Vendor, amount and purchase order PO-2215 match the bill. Vendor requests are in shadow, so the bill was left as it is: add the purchase order yourself."
+    );
+  });
+
+  it("says a match that added nothing, with the goods still to mark received", () => {
+    expect(documentCheckLine(matched(), VENDOR, true)).toBe("Vendor, amount and purchase order PO-2215 match the bill.");
+    expect(documentCheckLine(matched({ po: null }), VENDOR, true)).toBe("Vendor and amount match the bill.");
+    expect(documentCheckLine(matched(), VENDOR, false)).toBe(
+      "Vendor, amount and purchase order PO-2215 match the bill. Only your team can mark the goods received: do it in Add details once you have them."
+    );
+    expect(documentCheckLine(matched({ po: null }), VENDOR, false)).toBe(
+      "Vendor and amount match the bill. Only your team can mark the goods received: do it in Add details once you have them."
+    );
+  });
+
+  it("gives the reason of a mismatch, an unreadable file and a skip", () => {
+    expect(documentCheckLine({ outcome: "mismatched", reason: "The document says 8.50 USDC; the bill says 8.00 USDC." }, VENDOR, true)).toBe(
+      "The document says 8.50 USDC; the bill says 8.00 USDC. The bill still waits: check it with Northstar Studio, or add the details yourself."
+    );
+    expect(documentCheckLine({ outcome: "unreadable", reason: "It is an image. Only a PDF with its text is checked." }, VENDOR, true)).toBe(
+      "Vestiarion could not check it. It is an image. Only a PDF with its text is checked. Open it, and add the details yourself."
+    );
+    expect(documentCheckLine({ outcome: "skipped", reason: "It was not checked: the bill no longer waited for a document." }, VENDOR, true)).toBe(
+      "It was not checked: the bill no longer waited for a document."
     );
   });
 });
