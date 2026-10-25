@@ -5,6 +5,7 @@ import {
   documentRequestLine,
   documentRequestsSettingOf,
   emailDomainOf,
+  MAX_ATTACHED_DOCUMENT_BYTES,
   missingDocuments,
   missingWords,
   readDocumentFields,
@@ -12,6 +13,7 @@ import {
   type DocumentCheckView,
   type RequestHistory,
 } from "@/lib/document-requests/rules";
+import { MAX_DOCUMENT_BYTES } from "@/lib/invoice-document/read";
 import { documentRequestUrl, documentTokenHash, generateDocumentToken } from "@/lib/document-requests/token";
 
 /**
@@ -207,6 +209,10 @@ describe("what a bill's card says of the check (document checks DK13)", () => {
     added: false,
     shadowLeftPo: false,
     ...over,
+  });
+
+  it("takes a member's PDF of at most what the cycle reads", () => {
+    expect(MAX_ATTACHED_DOCUMENT_BYTES).toBe(MAX_DOCUMENT_BYTES);
   });
 
   it("names who sent the document: the vendor through its link, or a member who attached it", () => {

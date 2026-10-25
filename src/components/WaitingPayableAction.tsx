@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { AddDetailsDialog } from "@/components/AddDetailsDialog";
+import { AttachDocumentDialog } from "@/components/document-requests/AttachDocumentDialog";
 import { DocumentRequestLine } from "@/components/document-requests/DocumentRequestLine";
 import { Button } from "@/components/ui/Button";
 import { addDetailsPrompt, addedDetailsSentence, missingDetails, type AddedDetails, type OnFile } from "@/lib/added-details";
@@ -20,7 +21,10 @@ export const WAITING_FOR_A_DECISION = "Waiting for a person's decision.";
  * who can do none of it, sees nothing unless details were added, or the agent asked the vendor for the missing document.
  *
  * Where it did (`documentRequest`), the card says what Vestiarion would ask, when it asked, or what the vendor sent, with
- * the vendor's purchase order number filled into Add details (document requests ER3, ER4, ER6).
+ * the vendor's purchase order number filled into Add details (document requests ER3, ER4, ER6), and what the cycle's
+ * check found in it (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK13). While vendor requests
+ * are in shadow or on (`documentChecks`), an owner or admin may attach a document the vendor emailed them, beside Add
+ * details, on a bill that waits for information (DK11).
  */
 export function WaitingPayableAction({
   orgSlug,
@@ -31,9 +35,11 @@ export function WaitingPayableAction({
   rule = null,
   canFix = false,
   documentRequest,
+  documentChecks = null,
 }: {
   orgSlug: string;
-  invoice: { id: string; counterpartyName: string; counterpartyId?: string } & OnFile;
+  /** `status`, where the page has it: Attach a document is offered only on a bill that waits for information. */
+  invoice: { id: string; counterpartyName: string; counterpartyId?: string; status?: string } & OnFile;
   /** What a person added since the agent's decision; null when nothing was. */
   added: AddedDetails | null;
   /** An owner or admin, on a payable with no transfer recorded against it. */
@@ -46,6 +52,8 @@ export function WaitingPayableAction({
   canFix?: boolean;
   /** The agent's latest request to the vendor for the missing document, as the card shows it. */
   documentRequest?: DocumentRequestView;
+  /** How a document attached now is checked: in shadow or on; null (no Attach a document) while off, before 0144 or unread (DK11). */
+  documentChecks?: "shadow" | "on" | null;
 }) {
   const step = ruleNextStep(rule, { id: invoice.counterpartyId ?? "", name: invoice.counterpartyName });
   const missing = missingDetails(invoice);
@@ -56,6 +64,7 @@ export function WaitingPayableAction({
   const fix = fixable && (!matchIncomplete || missing?.poReference) ? step.fix : null;
   // What code stopped it on comes first: details would not change that decision, unless they are what it lacked.
   const offerDetails = canAddDetails && missing !== null && (step === null || matchIncomplete);
+  const attach = offerDetails && invoice.status === "awaiting_info" ? documentChecks : null;
   // An owner or admin revokes a request out (ER6); the line itself is for anyone who sees the card.
   const request = documentRequest ? (
     <DocumentRequestLine orgSlug={orgSlug} vendorName={invoice.counterpartyName} view={documentRequest} goodsReceived={invoice.goodsReceived} canRevoke={canFix} />
@@ -79,6 +88,7 @@ export function WaitingPayableAction({
       {(offerDetails || fix || canDecide) && (
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {offerDetails && <AddDetailsDialog orgSlug={orgSlug} payable={invoice} variant="primary" suggestedPo={suggestedPo} />}
+          {attach && <AttachDocumentDialog orgSlug={orgSlug} invoiceId={invoice.id} vendorName={invoice.counterpartyName} mode={attach} />}
           {fix && (
             <Button asChild size="sm">
               <Link href={orgHref(orgSlug, fix.path)}>{fix.label}</Link>

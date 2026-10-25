@@ -21,7 +21,7 @@ const { actions } = vi.hoisted(() => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock("@/app/actions/verdicts", () => ({ giveVerdictAction: vi.fn() }));
-vi.mock("@/app/actions/document-requests", () => ({ revokeDocumentRequestAction: vi.fn(), setDocumentRequestsAction: vi.fn() }));
+vi.mock("@/app/actions/document-requests", () => ({ revokeDocumentRequestAction: vi.fn(), setDocumentRequestsAction: vi.fn(), attachDocumentAction: vi.fn() }));
 vi.mock("@/app/actions/approvals", () => ({
   approveInvoiceAction: actions.approve,
   cosignInvoiceAction: vi.fn(),

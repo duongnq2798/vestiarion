@@ -24,12 +24,14 @@ vi.mock("@/app/actions/approvals", () => ({
   returnInvoiceAction: vi.fn(),
   addInvoiceDetailsAction: vi.fn(),
 }));
-vi.mock("@/app/actions/document-requests", () => ({ revokeDocumentRequestAction: vi.fn(), setDocumentRequestsAction: vi.fn() }));
+vi.mock("@/app/actions/document-requests", () => ({ revokeDocumentRequestAction: vi.fn(), setDocumentRequestsAction: vi.fn(), attachDocumentAction: vi.fn() }));
 
 import ApprovalCard from "@/components/ApprovalCard";
 import DocumentRequestsPanel, { documentRequestsSentence } from "@/components/DocumentRequestsPanel";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { WaitingPayableAction } from "@/components/WaitingPayableAction";
+import { ruleNextStep, VENDOR_DOCUMENT } from "@/lib/next-step";
+import { ruleLabel } from "@/lib/rule-words";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -312,6 +314,113 @@ describe("what the check found, on Approvals and on Bills (document checks DK13)
   it("says the check found by an earlier answer, beside a newer request", () => {
     card({ ...ASKED, sentAt: "2026-10-31T09:00:00Z", expiresAt: "2026-11-14T09:00:00Z", received: checked(ADDED) as Extract<DocumentRequestView, { state: "answered" }> });
     expect(container.querySelector('[data-document-received] [data-document-check="matched"]')?.textContent).toContain("Vestiarion added the purchase order");
+  });
+});
+
+describe("Attach a document (document checks DK11)", () => {
+  const approvals = (over: { canEdit?: boolean; documentChecks?: "shadow" | "on" | null; payable?: Partial<typeof PAYABLE> } = {}) => {
+    act(() => {
+      root.render(
+        <TooltipProvider>
+          <ApprovalCard
+            orgSlug="pinecrest"
+            payable={{ ...PAYABLE, ...over.payable }}
+            canDecide
+            viewerId={VIEWER}
+            sandbox={false}
+            canEdit={over.canEdit ?? true}
+            documentChecks={over.documentChecks === undefined ? "on" : over.documentChecks}
+          />
+        </TooltipProvider>
+      );
+    });
+  };
+
+  function openAttach(): HTMLElement {
+    const button = buttonNamed("Attach a document", container);
+    if (!button) throw new Error("no Attach a document button");
+    act(() => {
+      button.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+      button.click();
+    });
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    if (!dialog) throw new Error("Attach a document opened no dialog");
+    return dialog;
+  }
+
+  it("offers an owner or admin the vendor's PDF on a bill waiting for its purchase order, and says what the check does when on", () => {
+    approvals();
+    expect(buttonNamed("Add details", container)).toBeTruthy();
+    const dialog = openAttach();
+    expect(dialog.textContent).toContain("Attach Northstar Studio's document");
+    expect(dialog.textContent).toContain(
+      "Choose the PDF Northstar Studio sent you, such as their purchase order, of up to 4 MB. Vestiarion checks its vendor, amount and purchase order against the bill. When they match, it adds the purchase order, and a person approves the payment."
+    );
+    const input = dialog.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input?.getAttribute("name")).toBe("file");
+    expect(input?.getAttribute("accept")).toBe("application/pdf");
+    expect(dialog.textContent).toContain("PDF");
+    expect(buttonNamed("Cancel", dialog)).toBeTruthy();
+    expect(buttonNamed("Attach and check", dialog)?.disabled).toBe(true);
+    expect(dialog.querySelector<HTMLInputElement>('input[name="invoiceId"]')?.value).toBe(PAYABLE.id);
+  });
+
+  it("says the bill does not change in shadow", () => {
+    approvals({ documentChecks: "shadow" });
+    expect(openAttach().textContent).toContain(
+      "Choose the PDF Northstar Studio sent you, such as their purchase order, of up to 4 MB. Vestiarion checks its vendor, amount and purchase order against the bill and says what it found. Vendor requests are in shadow, so the bill does not change."
+    );
+  });
+
+  it("is not offered to a viewer or approver, while off or before 0144, on a bill held for another reason, or one lacking nothing", () => {
+    for (const over of [
+      { canEdit: false },
+      { documentChecks: null },
+      { payable: { status: "held" as const } },
+      { payable: { poReference: "PO-2215", goodsReceived: true } },
+      { payable: { paymentSent: true } },
+    ]) {
+      approvals(over);
+      expect(buttonNamed("Attach a document", container), JSON.stringify(over)).toBeUndefined();
+    }
+  });
+
+  it("is offered on Bills beside Add details, only on a bill that waits for information", () => {
+    const bills = (status: string | undefined, documentChecks: "shadow" | "on" | null = "on", rights = true) =>
+      renderToStaticMarkup(
+        <WaitingPayableAction
+          orgSlug="pinecrest"
+          invoice={{ id: PAYABLE.id, counterpartyName: "Northstar Studio", counterpartyId: PAYABLE.counterpartyId, status, poReference: null, goodsReceived: true }}
+          added={null}
+          canAddDetails={rights}
+          canDecide={rights}
+          canFix={rights}
+          documentChecks={documentChecks}
+        />
+      );
+    const markup = bills("awaiting_info");
+    expect(markup).toContain("Attach a document");
+    expect(markup.indexOf("Add details")).toBeLessThan(markup.indexOf("Attach a document"));
+    expect(bills("held")).not.toContain("Attach a document");
+    expect(bills(undefined)).not.toContain("Attach a document");
+    expect(bills("awaiting_info", null)).not.toContain("Attach a document");
+    expect(bills("awaiting_info", "shadow", false)).not.toContain("Attach a document");
+  });
+
+  it("is read once on Approvals and Bills, beside the cards", () => {
+    const read = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8");
+    for (const file of ["src/app/o/[slug]/approvals/page.tsx", "src/app/o/[slug]/invoices/page.tsx"]) {
+      const page = read(file);
+      expect(page.match(/readDocumentChecksStatus\(db\(\)\)/g), file).toHaveLength(1);
+      expect(page).toContain("documentChecks={documentChecks}");
+    }
+  });
+
+  it("names the rule that holds a bill the check completed, and what a person does next", () => {
+    expect(ruleLabel(VENDOR_DOCUMENT)).toBe("Its purchase order came from a vendor's document, which a person approves");
+    expect(ruleNextStep(VENDOR_DOCUMENT, { id: PAYABLE.counterpartyId, name: "Northstar Studio" })?.sentence).toBe(
+      "Its purchase order came from Northstar Studio's document, which matched the bill. Check the document, then approve the payment in Approvals: the agent does not pay it on its own."
+    );
   });
 });
 

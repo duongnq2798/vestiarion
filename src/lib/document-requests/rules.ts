@@ -18,6 +18,11 @@ export const DOCUMENT_REQUEST_COOLDOWN_DAYS = 7;
 export const DOCUMENT_REQUEST_ATTEMPTS = 3;
 /** The largest file a vendor may send (ER5). */
 export const MAX_VENDOR_DOCUMENT_BYTES = 10 * 1024 * 1024;
+/**
+ * The largest PDF a member attaches, as the cycle reads one (document checks DK3, DK11): invoice-document/read's
+ * MAX_DOCUMENT_BYTES, said here so the client's dialog refuses a larger one before it is sent.
+ */
+export const MAX_ATTACHED_DOCUMENT_BYTES = 4_000_000;
 export const MAX_DOCUMENT_PO = 100;
 export const MAX_DOCUMENT_NOTE = 500;
 
