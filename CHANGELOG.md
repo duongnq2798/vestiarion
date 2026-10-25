@@ -12,6 +12,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Monthly close pack.** One page per workspace and calendar month (UTC) lists every payment Circle confirmed in it,
+  one row each: the bill with its invoice number and document, who decided and approved it (an accountant's co-sign
+  and the address's second person included), what was checked (guardrails, screening, OFAC's list of addresses, the
+  payee lock, the invoice's own address, a milestone's verification), the transaction with its explorer link, and the
+  signed ledger entry that records it, verified against the workspace's keys. Payments not settled in the month and
+  escrow moves are listed apart, and totals keep each token apart. **Print or save as PDF**, **Download CSV** and
+  **Download signed JSON**; each download is recorded in the ledger as `close_pack_exported` with the file's SHA-256.
+  Open it from the **Audit log** or the accountant console. No migration.
+
 ## [0.1.0-beta.13] - 2026-10-25
 
 ### Added
@@ -225,15 +236,6 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 - **`main` is a protected branch.** Every change reaches it through a pull request that has passed CI,
   administrators included, and it cannot be force-pushed or deleted. The security page says so.
-
-- **Monthly close pack.** One page per workspace and calendar month (UTC) lists every payment Circle confirmed in it,
-  one row each: the bill with its invoice number and document, who decided and approved it (an accountant's co-sign
-  and the address's second person included), what was checked (guardrails, screening, OFAC's list of addresses, the
-  payee lock, the invoice's own address, a milestone's verification), the transaction with its explorer link, and the
-  signed ledger entry that records it, verified against the workspace's keys. Payments not settled in the month and
-  escrow moves are listed apart, and totals keep each token apart. **Print or save as PDF**, **Download CSV** and
-  **Download signed JSON**; each download is recorded in the ledger as `close_pack_exported` with the file's SHA-256.
-  Open it from the **Audit log** or the accountant console. No migration.
 
 ### Changed
 
