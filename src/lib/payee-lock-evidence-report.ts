@@ -7,9 +7,12 @@ import { parsePeriod, type PayeeLockEvidence, type Period, type Who } from "./pa
  * details, and one CSV row per address change. Pure: the page and the route render what it returns.
  */
 
-/** Who did a step, in words: a member's email, "a former member (1a2b3c4d)", "the payee, through a payee link". */
+/**
+ * Who did a step, in words: a member's email, or their user id when the pack names no one by email (evidence API EA3),
+ * "a former member (1a2b3c4d)", "the payee, through a payee link".
+ */
 export function whoWords(who: Who): string {
-  if (who.kind === "member") return who.email;
+  if (who.kind === "member") return who.email ?? who.userId;
   if (who.kind === "former_member") return `a former member (${who.id})`;
   if (who.kind === "payee_link") return "the payee, through a payee link";
   if (who.kind === "github") return who.login ? `GitHub (${who.login})` : "GitHub";

@@ -1,5 +1,6 @@
-import { EVIDENCE_MEANINGS, EVIDENCE_WORDS, SIGNED_ENTRY_PROVES, type EvidenceChain, type EvidenceKind } from "./evidence-chain";
-import { networkProfile } from "./network";
+import { EVIDENCE_MEANINGS, EVIDENCE_WORDS, SIGNED_ENTRY_PROVES, type EvidenceChain, type EvidenceKind, type EvidenceLink, type EvidenceStepId } from "./evidence-chain";
+import { networkProfile, type Network } from "./network";
+import type { EntryCheck } from "./receipts/verify";
 
 /**
  * One payment's evidence as a file (docs/superpowers/specs/2026-10-10-evidence-chain-design.md E7): the chain as the
@@ -22,12 +23,75 @@ export const CHECK_AN_ENTRY = [
   "hash = sha256(prev_hash || body_hash || signature), the hex strings joined",
 ] as const;
 
+/**
+ * A cited entry in full, snake_case, with the server's check: every evidence file carries these (the evidence chain's,
+ * the payee lock's, a receipt's and the close pack's), so one verifier reads them all (evidence API EA10, EA13).
+ */
+export interface SignedEntry {
+  seq: number;
+  id: string | null;
+  ts: string;
+  actor: string;
+  domain: string;
+  action: string;
+  summary: string;
+  detail: Record<string, unknown>;
+  body_hash: string;
+  signature: string;
+  prev_hash: string;
+  hash: string;
+  signing_key_id: string | null;
+  check: EntryCheck | null;
+}
+
+export interface EvidenceDocumentFact {
+  /** The label in words. */
+  label: string;
+  kind: EvidenceKind;
+  text: string;
+  /** Who stated it: a member's email in a download, their user id through the API (evidence API EA3); null when the ledger names no one. */
+  who: string | null;
+  at: string | null;
+  fill?: string;
+  notes?: string[];
+  link?: EvidenceLink;
+  warn?: true;
+  /** The signed entries it rests on, by seq. */
+  entries: number[];
+}
+
+export interface EvidenceDocumentStep {
+  id: EvidenceStepId;
+  title: string;
+  /** The label in words. */
+  label: string;
+  kind: EvidenceKind;
+  caveat?: string;
+  facts: EvidenceDocumentFact[];
+}
+
+/** The file Download evidence gives, and `GET /api/v1/invoices/{id}/evidence` answers (evidence API EA2, EA10). */
+export interface EvidenceDocument {
+  format: typeof EVIDENCE_FORMAT;
+  exportedAt: string;
+  workspace: { slug: string; name: string };
+  network: { id: Network; label: string };
+  subject: EvidenceChain["subject"];
+  /** The seven words, what each means, and how many facts each holds. */
+  labels: Record<string, { words: string; meaning: string; facts: number }>;
+  steps: EvidenceDocumentStep[];
+  signedEntryProves: string;
+  checkAnEntry: string[];
+  keys: EvidenceKey[];
+  entries: SignedEntry[];
+}
+
 export function evidenceDocument(input: {
   chain: EvidenceChain;
   workspace: { slug: string; name: string };
   keys: EvidenceKey[];
   now: Date;
-}) {
+}): EvidenceDocument {
   const { chain } = input;
   const label = (kind: EvidenceKind) => EVIDENCE_WORDS[kind];
   return {
@@ -55,12 +119,12 @@ export function evidenceDocument(input: {
         ...(fact.fill ? { fill: fact.fill } : {}),
         ...(fact.notes && fact.notes.length > 0 ? { notes: fact.notes } : {}),
         ...(fact.link ? { link: fact.link } : {}),
-        ...(fact.warn ? { warn: true } : {}),
+        ...(fact.warn ? { warn: true as const } : {}),
         entries: fact.seqs,
       })),
     })),
     signedEntryProves: SIGNED_ENTRY_PROVES,
-    checkAnEntry: CHECK_AN_ENTRY,
+    checkAnEntry: [...CHECK_AN_ENTRY],
     keys: input.keys,
     entries: chain.entries.map((entry) => ({
       seq: entry.seq,
@@ -80,8 +144,6 @@ export function evidenceDocument(input: {
     })),
   };
 }
-
-export type EvidenceDocument = ReturnType<typeof evidenceDocument>;
 
 /** `vestiarion-evidence-northstar-invoice-5f1e2d3c.json`: the workspace, the kind, and the record's id's first part. */
 export function evidenceFileName(slug: string, kind: string, id: string): string {

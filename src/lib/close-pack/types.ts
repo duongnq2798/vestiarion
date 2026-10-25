@@ -8,7 +8,7 @@
  */
 import type { OrgRole } from "../auth/roles";
 import type { EvidenceKind, EvidenceScreening } from "../evidence-chain";
-import type { EvidenceKey } from "../evidence-export";
+import type { EvidenceKey, SignedEntry } from "../evidence-export";
 import type { LedgerRow } from "../ledger";
 import type { Network } from "../network";
 import type { EntryCheck } from "../receipts/verify";
@@ -265,23 +265,8 @@ export interface ClosePackTotals {
   entries: { cited: number; verified: number; failed: number; unchecked: number };
 }
 
-/** A cited entry in full, as the evidence export carries it (snake_case), with the server's check. */
-export interface ClosePackEntry {
-  seq: number;
-  id: string | null;
-  ts: string;
-  actor: string;
-  domain: string;
-  action: string;
-  summary: string;
-  detail: Record<string, unknown>;
-  body_hash: string;
-  signature: string;
-  prev_hash: string;
-  hash: string;
-  signing_key_id: string | null;
-  check: EntryCheck | null;
-}
+/** A cited entry in full, as the evidence export carries it (snake_case), with the server's check (evidence API EA10). */
+export type ClosePackEntry = SignedEntry;
 
 export interface ClosePack {
   workspace: { slug: string; name: string };

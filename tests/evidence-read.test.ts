@@ -254,6 +254,26 @@ describe("reading a paid payable's evidence", () => {
     const read = await database({ members: "fail" }).run(() => readEvidence("invoice", INVOICE, { fetch: arcFetch as unknown as typeof fetch }));
     expect(read!.chain.steps.find((s) => s.id === "agreed")?.facts[0].who).toBe("a member");
   });
+
+  it("names every member by user id with people: id, and never by email (evidence API EA3)", async () => {
+    const read = await database().run(() => readEvidence("invoice", INVOICE, { fetch: arcFetch as unknown as typeof fetch, people: "id" }));
+    const facts = read!.chain.steps.flatMap((step) => step.facts);
+    expect(read!.chain.steps.find((s) => s.id === "agreed")?.facts[0].who).toBe(USER);
+    expect(facts.filter((fact) => fact.who).every((fact) => fact.who === USER)).toBe(true);
+    expect(JSON.stringify(read!.chain)).not.toContain("alice@northstar.test");
+  });
+
+  it("names someone no longer a member a former member with people: id, and a member when members cannot be read", async () => {
+    const gone = await database({ members: [] }).run(() => readEvidence("invoice", INVOICE, { fetch: arcFetch as unknown as typeof fetch, people: "id" }));
+    expect(gone!.chain.steps.find((s) => s.id === "agreed")?.facts[0].who).toBe("a former member");
+    const unread = await database({ members: "fail" }).run(() => readEvidence("invoice", INVOICE, { fetch: arcFetch as unknown as typeof fetch, people: "id" }));
+    expect(unread!.chain.steps.find((s) => s.id === "agreed")?.facts[0].who).toBe("a member");
+  });
+
+  it("names a member by email without people, as before", async () => {
+    const read = await database().run(() => readEvidence("invoice", INVOICE, { fetch: arcFetch as unknown as typeof fetch }));
+    expect(read!.chain.steps.find((s) => s.id === "agreed")?.facts[0].who).toBe("alice@northstar.test");
+  });
 });
 
 describe("what has no evidence page", () => {

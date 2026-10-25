@@ -130,8 +130,8 @@ describe("GET /api/evidence/payee-lock", () => {
     expect(doc.changes).toHaveLength(1);
     expect(doc.changes[0]).toMatchObject({
       counterparty: { id: NORTHWIND, name: "Northwind Referrals" },
-      change: { enteredBy: { kind: "member", email: "owner@pinecrest.test" }, entry: 4839 },
-      confirmation: { by: { kind: "member", email: "approver@pinecrest.test" }, secondPerson: true, waitHours: 4, entry: 4863 },
+      change: { enteredBy: { kind: "member", userId: OWNER, email: "owner@pinecrest.test" }, entry: 4839 },
+      confirmation: { by: { kind: "member", userId: APPROVER, email: "approver@pinecrest.test" }, secondPerson: true, waitHours: 4, entry: 4863 },
     });
     expect(doc.entries.map((entry: { seq: number }) => entry.seq)).toEqual([4832, 4839, 4863]);
     // Each entry is checked with the workspace's keys: these fixtures are not really signed, so none checks out.

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parsePeriod, payeeLockEvidence, payeeLockEvidenceFileName, type CheckedEntry } from "@/lib/payee-lock-evidence";
+import { CHECK_AN_ENTRY } from "@/lib/evidence-export";
 
 /**
  * The payee lock's evidence pack (docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md EP2 to EP5): one row
@@ -72,10 +73,10 @@ describe("payeeLockEvidence", () => {
     expect(doc.changes).toHaveLength(1);
     const [row] = doc.changes;
     expect(row.counterparty).toEqual({ id: NORTHWIND, name: "Northwind Referrals" });
-    expect(row.change).toEqual({ at: "2026-10-20T11:14:02Z", from: OLD, to: NEW, chain: "ARC-TESTNET", enteredBy: { kind: "member", email: "owner@pinecrest.test" }, entry: 4839 });
+    expect(row.change).toEqual({ at: "2026-10-20T11:14:02Z", from: OLD, to: NEW, chain: "ARC-TESTNET", enteredBy: { kind: "member", userId: OWNER, email: "owner@pinecrest.test" }, entry: 4839 });
     expect(row.confirmation).toMatchObject({
       at: "2026-10-20T12:10:52Z",
-      by: { kind: "member", email: "approver@pinecrest.test" },
+      by: { kind: "member", userId: APPROVER, email: "approver@pinecrest.test" },
       record: { method: "call", methodLabel: "Called them on a number we had before", contact: "Northwind accounts line from our vendor file", contactOnFileBefore: true, note: "Second member confirms." },
       secondPerson: true,
       soloConfirmation: false,
@@ -100,7 +101,7 @@ describe("payeeLockEvidence", () => {
     expect(row.checks).toEqual({ recordKept: true, contactOnFileBefore: true, secondPerson: true, paidAfterConfirmation: true, paidAfterWait: true });
     expect(doc.lock).toEqual({
       now: { on: true, coolingHours: 4 },
-      changes: [{ at: "2026-10-20T11:12:40Z", by: { kind: "member", email: "owner@pinecrest.test" }, from: { on: false, coolingHours: 0 }, to: { on: true, coolingHours: 4 }, entry: 4832 }],
+      changes: [{ at: "2026-10-20T11:12:40Z", by: { kind: "member", userId: OWNER, email: "owner@pinecrest.test" }, from: { on: false, coolingHours: 0 }, to: { on: true, coolingHours: 4 }, entry: 4832 }],
     });
     expect(doc.summary).toEqual({
       changes: 1,
@@ -115,12 +116,31 @@ describe("payeeLockEvidence", () => {
     });
   });
 
+  it("names members by user id and no email for the API, and a former member by 8 characters (evidence API EA3)", () => {
+    const doc = payeeLockEvidence({ ...base, entries: pinecrest, people: "id" });
+    expect(doc.changes[0].change.enteredBy).toEqual({ kind: "member", userId: OWNER, email: null });
+    expect(doc.changes[0].confirmation?.by).toEqual({ kind: "member", userId: APPROVER, email: null });
+    expect(doc.lock.changes[0].by).toEqual({ kind: "member", userId: OWNER, email: null });
+    expect(JSON.stringify(doc)).not.toContain("@pinecrest.test");
+    const gone = payeeLockEvidence({ ...base, entries: pinecrest, people: "id", members: new Map([[APPROVER, "approver@pinecrest.test"]]) });
+    expect(gone.changes[0].change.enteredBy).toEqual({ kind: "former_member", id: OWNER.slice(0, 8) });
+  });
+
+  it("reads a lock change's from and to as a lock, or null for anything else (evidence API EA2)", () => {
+    const odd = entry(4832, "2026-10-20T11:12:40Z", "payee_lock_changed", { by: OWNER, from: "off", to: { on: true, coolingHours: "4" } }, "human");
+    const doc = payeeLockEvidence({ ...base, entries: [odd, ...pinecrest.filter((row) => row.seq !== 4832)] });
+    expect(doc.lock.changes[0]).toMatchObject({ from: null, to: null, entry: 4832 });
+  });
+
   it("carries every cited entry in full, each once, and none it does not cite", () => {
     const doc = payeeLockEvidence({ ...base, entries: pinecrest });
     expect(doc.entries.map((cited) => cited.seq)).toEqual([4832, 4839, 4843, 4863, 4866, 4919]);
     expect(doc.entries[1]).toEqual(expect.objectContaining({ body_hash: "b4839", signature: "s4839", prev_hash: "p4839", hash: "h4839", signing_key_id: "k1", check: { ok: true } }));
     expect(doc.keys).toEqual(base.keys);
     expect(doc.checkAnEntry.length).toBe(3);
+    // A plain array, as every evidence file carries it (evidence API EA10).
+    expect(Array.isArray(doc.checkAnEntry)).toBe(true);
+    expect(doc.checkAnEntry).toEqual([...CHECK_AN_ENTRY]);
   });
 
   it("shows a solo confirmation, the new-payee hold, and a person's approval as the payment", () => {

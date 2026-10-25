@@ -39,7 +39,10 @@ describe("the signed JSON document (close pack CP12)", () => {
     expect(doc.labels.not_applicable).toEqual({ words: "Does not apply", meaning: CHECK_KIND_MEANINGS.not_applicable });
     expect(doc.labels.verified).toEqual({ words: CHECK_KIND_WORDS.verified, meaning: CHECK_KIND_MEANINGS.verified });
     expect(doc.signedEntryProves).toBe(SIGNED_ENTRY_PROVES);
-    expect(doc.checkAnEntry).toEqual(CHECK_AN_ENTRY);
+    // A plain array, not the readonly tuple: its JSON is the same (evidence API EA10).
+    expect(Array.isArray(doc.checkAnEntry)).toBe(true);
+    expect(doc.checkAnEntry).toEqual([...CHECK_AN_ENTRY]);
+    expect(doc.checkAnEntry).not.toBe(CHECK_AN_ENTRY);
     expect(doc.keys).toEqual(KEYS);
   });
 

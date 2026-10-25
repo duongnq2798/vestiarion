@@ -164,10 +164,13 @@ async function ledgerRows(query: PromiseLike<{ data: unknown; error: { message: 
   return (unwrap(await query) as Row[]).map(entryOf);
 }
 
-/** Members' emails by user id, for the workspace in scope; null when they cannot be read (E5). */
-async function memberEmails(): Promise<Map<string, string> | null> {
+/**
+ * How the chain names each member, by user id, for the workspace in scope: their email, or with `people: "id"` their
+ * user id, as the API names people (evidence API EA3); null when the members cannot be read (E5).
+ */
+async function memberNames(people: "email" | "id"): Promise<Map<string, string> | null> {
   try {
-    return new Map((await listMembers(currentOrgId())).map((member) => [member.userId, member.email]));
+    return new Map((await listMembers(currentOrgId())).map((member) => [member.userId, people === "id" ? member.userId : member.email]));
   } catch (error) {
     console.error("evidence: members not read", error instanceof Error ? error.message : error);
     return null;
@@ -182,11 +185,14 @@ async function memberEmails(): Promise<Map<string, string> | null> {
  * The links a person, a payee or GitHub gave (a pull request, a comment, the evidence a milestone was verified by hand
  * with) are checked before the page says what they are (evidence access E1): on the allow-list only, never by their own
  * address, kept briefly (`./evidence-links/check`).
+ *
+ * `people` is "email" for a member's page and download, and "id" for the API, which names members by user id and never
+ * by email (evidence API EA3). Default "email".
  */
 export async function readEvidence(
   kind: unknown,
   id: unknown,
-  options: { fetch?: typeof fetch; rpcUrl?: (chain: string) => string; links?: LinkCheckOptions } = {}
+  options: { fetch?: typeof fetch; rpcUrl?: (chain: string) => string; links?: LinkCheckOptions; people?: "email" | "id" } = {}
 ): Promise<EvidenceRead | null> {
   const request = evidenceRequest(kind, id);
   if (!request) return null;
@@ -227,7 +233,7 @@ export async function readEvidence(
     ),
     maybeOne(db().from("payment_intents").select(INTENT_COLUMNS).eq("source_type", request.kind).eq("source_id", request.id).limit(1)),
     invoiceId ? maybeOne(db().from("payment_receipts").select("id, entry_seq, created_at, revoked_at, created_by").eq("invoice_id", invoiceId).limit(1)) : Promise.resolve(null),
-    memberEmails(),
+    memberNames(options.people ?? "email"),
   ]);
 
   const receipt: EvidenceReceipt | null = receiptRow

@@ -76,7 +76,9 @@ const pack = payeeLockEvidence({
 
 describe("who did a step, in words", () => {
   it("names a member, a former member, the payee, GitHub or nobody known", () => {
-    expect(whoWords({ kind: "member", email: "a@b.test" })).toBe("a@b.test");
+    expect(whoWords({ kind: "member", userId: "u-1", email: "a@b.test" })).toBe("a@b.test");
+    // Through the API a member has no email: the user id names them (evidence API EA3).
+    expect(whoWords({ kind: "member", userId: "63a43a55-78f9-4b85-907a-eea1483a06af", email: null })).toBe("63a43a55-78f9-4b85-907a-eea1483a06af");
     expect(whoWords({ kind: "former_member", id: "1a2b3c4d" })).toBe("a former member (1a2b3c4d)");
     expect(whoWords({ kind: "payee_link", linkId: "l1" })).toBe("the payee, through a payee link");
     expect(whoWords({ kind: "github", login: "octo" })).toBe("GitHub (octo)");
