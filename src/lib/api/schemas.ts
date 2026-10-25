@@ -633,7 +633,7 @@ export const PaymentEvidenceSchema = z
             who: z
               .string()
               .nullable()
-              .describe('Who stated it: a member by user id, "a former member", "the payee"; null when the ledger names no one.'),
+              .describe('Who stated it: a member by user id, "a former member", "a member" when the members could not be read, "the payee", "@<login> on GitHub" for a GitHub bounty; null when the ledger names no one.'),
             at: z.string().nullable(),
             fill: z.string().optional().describe("For a missing fact: what would fill it."),
             notes: z.array(z.string()).optional(),

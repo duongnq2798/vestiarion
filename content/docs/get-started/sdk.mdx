@@ -152,13 +152,13 @@ if (result.ok !== true) console.error(result.problems);
 
 Each is the file the workspace's page downloads, with members named by user id rather than email. A receipt that is not ready yet answers with `ready: false`, and `notReady.code` says why: `simulated` never changes, `not_paid` and `not_minted` pass.
 
-`verifyEvidence` checks any of these files offline, an API answer or a download from the workspace, with Web Crypto alone: every entry's signature, that every entry a fact cites is in the file, that entries next to each other link, and that a row's copy of its entry matches it. Pass the public key from the workspace's **Audit log** page, or a map of key id to key after a rotation. Without keys it uses the ones the file carries, and says so: that proves the entries were not changed after they were signed, not that the keys are the workspace's.
+`verifyEvidence` checks any of these files offline, an API answer or a download from the workspace, with Web Crypto alone: every entry's signature, that every entry a fact cites is in the file, that entries next to each other link, and that a row's copy of its entry matches it. Pass the public key from the workspace's **Audit log** page, or a map of key id to key after a rotation. Without keys it uses the ones the file carries, and says so: that proves the entries were not changed after they were signed, not that the keys are the workspace's. Naming `keys` with no value throws, so an unset variable never falls back to the file's keys; so does a key that cannot be read as a PEM public key.
 
 | Answer | Meaning |
 | --- | --- |
 | `ok: true` | Every entry it cites is there and verifies. |
 | `ok: false` | Something does not hold: `problems` says what. |
-| `ok: null` | Nothing failed, but some entry was signed by a key you did not pass. |
+| `ok: null` | Nothing failed, but some entry was signed by a key you did not pass, or by one the file carries that could not be read. |
 
 It cannot tell you that a fact's words follow from its entries, which is the server's reading; that the file carries every entry of its period, which you check by comparing `seq` and `hash` with [List ledger entries](/docs/api/list-ledger-entries) or an audit export; or anything on chain, which the explorer link shows.
 

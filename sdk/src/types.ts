@@ -371,7 +371,7 @@ export interface PaymentEvidence {
       label: string;
       kind: "checked" | "verified" | "stated" | "inferred" | "missing" | "unreachable" | "contradicted";
       text: string;
-      /** Who stated it: a member by user id, "a former member", "the payee"; null when the ledger names no one. */
+      /** Who stated it: a member by user id, "a former member", "a member" when the members could not be read, "the payee", "@<login> on GitHub" for a GitHub bounty; null when the ledger names no one. */
       who: string | null;
       at: string | null;
       /** For a missing fact: what would fill it. */

@@ -98,8 +98,22 @@ function citedBy(format: EvidenceFormat, document: Fields): Set<number> {
     }
   } else {
     for (const row of fieldsOf(document.rows)) {
+      // The row's own list is the union of the fields below; each is read too, so a file cannot keep only the list tidy.
       cite(row.entries);
       if (isFields(row.record)) cite(row.record.seq);
+      if (isFields(row.bill)) {
+        cite(row.bill.entry);
+        for (const attached of fieldsOf(row.bill.vendorDocuments)) cite(attached.entry);
+      }
+      if (isFields(row.approval)) {
+        const approval = row.approval;
+        if (isFields(approval.agent)) cite(approval.agent.entry);
+        for (const one of fieldsOf(approval.approvals)) cite(one.entry);
+        if (isFields(approval.verdict)) cite(approval.verdict.entry);
+        if (isFields(approval.address)) cite(approval.address.entries);
+      }
+      if (isFields(row.checks)) for (const check of Object.values(row.checks)) if (isFields(check)) cite(check.entries);
+      if (isFields(row.books) && isFields(row.books.booked)) cite(row.books.booked.entry);
     }
     for (const move of fieldsOf(document.escrow)) cite(move.entry);
   }
@@ -127,16 +141,42 @@ function copyProblems(format: EvidenceFormat, document: Fields, bySeq: ReadonlyM
   return problems;
 }
 
-/** The keys to check with: the ones given, or the document's own list of `{ id, publicKeyPem }`, each filed under the id it states. */
-function keysFor(document: Fields, given: unknown): { keys: string | Record<string, string>; whose: "given" | "document" } {
-  if (given !== undefined) {
-    const valid = typeof given === "string" || (isFields(given) && Object.values(given).every((pem) => typeof pem === "string"));
+/**
+ * Whether a PEM decodes, as `pemToDer` reads one. `verifyLedgerEntry` decodes every key it is given before it picks the
+ * entry's, so one that does not would leave every entry unchecked.
+ */
+function readable(pem: string): boolean {
+  try {
+    atob(pem.replace(/-----(BEGIN|END) PUBLIC KEY-----/g, "").replace(/\s+/g, ""));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The keys to check with: the ones given, or the document's own list of `{ id, publicKeyPem }`, each filed under the id
+ * it states. A key given that cannot be read throws, as `verifyLedgerEntry` does; one the document carries is left out,
+ * and `dropped` names it.
+ */
+function keysFor(document: Fields, given: { named: boolean; value: unknown }): { keys: string | Record<string, string>; whose: "given" | "document"; dropped: string[] } {
+  if (given.named) {
+    // Named with no value is an unset variable, never a request for the document's own keys.
+    const valid =
+      typeof given.value === "string"
+        ? readable(given.value)
+        : isFields(given.value) && Object.values(given.value).every((pem) => typeof pem === "string" && readable(pem));
     if (!valid) throw new TypeError(BAD_KEYS);
-    return { keys: given as string | Record<string, string>, whose: "given" };
+    return { keys: given.value as string | Record<string, string>, whose: "given", dropped: [] };
   }
   const keys: Record<string, string> = {};
-  for (const key of fieldsOf(document.keys)) if (typeof key.id === "string" && typeof key.publicKeyPem === "string") keys[key.id] = key.publicKeyPem;
-  return { keys, whose: "document" };
+  const dropped: string[] = [];
+  for (const key of fieldsOf(document.keys)) {
+    if (typeof key.id !== "string" || typeof key.publicKeyPem !== "string") continue;
+    if (readable(key.publicKeyPem)) keys[key.id] = key.publicKeyPem;
+    else dropped.push(key.id);
+  }
+  return { keys, whose: "document", dropped };
 }
 
 /**
@@ -149,7 +189,8 @@ function keysFor(document: Fields, given: unknown): { keys: string | Record<stri
  *
  * `keys` is the PEM from the workspace's Audit log page, or a map of key id to PEM after a rotation. Without it, the
  * document's own keys are used and the answer says so: that proves the entries were not changed after those keys signed
- * them, not that the keys are the workspace's.
+ * them, not that the keys are the workspace's. Naming `keys` with no value throws, so an unset variable never falls back
+ * to the file's keys; so does a key given that cannot be read as a PEM.
  *
  * It cannot say that the facts' words follow from the entries, that the document carries every entry of its period, or
  * anything on chain.
@@ -162,10 +203,12 @@ export async function verifyEvidence(document: unknown, options?: { keys?: strin
     throw new TypeError(NOT_A_DOCUMENT);
   }
   if (!Array.isArray(document.entries)) throw new TypeError(NO_ENTRIES);
-  const { keys, whose } = keysFor(document, options?.keys);
+  const named = isFields(options) && "keys" in options;
+  const { keys, whose, dropped } = keysFor(document, { named, value: options?.keys });
 
-  // `open` holds what leaves the answer open rather than false: whose keys, and entries no key given could check.
+  // `open` holds what leaves the answer open rather than false: whose keys, keys left out, and entries no key could check.
   const open: string[] = whose === "document" ? [DOCUMENT_KEYS] : [];
+  for (const id of dropped) open.push(`The key filed under ${id} could not be read as a PEM public key.`);
   const problems: string[] = [];
   const entries: EvidenceVerification["entries"] = [];
   const counts = { cited: 0, carried: document.entries.length, verified: 0, failed: 0, unchecked: 0 };
@@ -181,6 +224,7 @@ export async function verifyEvidence(document: unknown, options?: { keys?: strin
     const entry = item as Fields & { seq: number };
     if (bySeq.has(entry.seq)) twice.add(entry.seq);
     else bySeq.set(entry.seq, entry);
+    // Every key was read above; this is only a last resort.
     const check = await verifyLedgerEntry(ledgerEntry(entry), keys).catch((): EntryCheck => ({ ok: null, reason: KEYS_UNREADABLE }));
     entries.push({ seq: entry.seq, check });
     if (check.ok === true) counts.verified += 1;

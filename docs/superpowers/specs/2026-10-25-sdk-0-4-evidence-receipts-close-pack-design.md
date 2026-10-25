@@ -244,8 +244,11 @@ not a new subpath): `verifyEvidence(document, { keys? })`.
     chain hash); the document's own `check` fields are never read;
   - every entry a fact cites is carried: evidence `steps[].facts[].entries`; payee lock `changes[].change.entry`,
     `confirmation.entry`, `holds[].entry`, `firstPayment.entry` and `lock.changes[].entry`; receipt `records.seq`,
-    `invoiceEntry`, `shared.entry` and `shared.changes[].entry`; close pack `rows[].entries`, `rows[].record.seq` and
-    `escrow[].entry`;
+    `invoiceEntry`, `shared.entry` and `shared.changes[].entry`; close pack `rows[].entries`, `rows[].record.seq`,
+    `rows[].bill.entry`, `rows[].bill.vendorDocuments[].entry`, `rows[].approval.agent.entry`,
+    `rows[].approval.approvals[].entry`, `rows[].approval.verdict.entry`, `rows[].approval.address.entries`,
+    `rows[].checks.<check>.entries`, `rows[].books.booked.entry` and `escrow[].entry`. A row's `entries` is the union of
+    the fields after it (`buildRow`), and each is read too, so a file that keeps only that list tidy still fails;
   - where it carries two entries whose `seq` follow each other, the later one's `prev_hash` is the earlier one's `hash`:
     nothing of the same workspace can sit between them, as `verifyChain` reads the chain by `seq`;
   - a copy matches what it copies: a close pack row's `record` (`hash`, `signature`, `signingKeyId`) equals its entry's,
@@ -254,6 +257,14 @@ not a new subpath): `verifyEvidence(document, { keys? })`.
   as `verifyLedgerEntry` takes them. Without `keys`, it uses the document's own `keys` and says so (`keys:
   "document"`): that proves the entries were not changed after those keys signed them, not that the keys are the
   workspace's.
+  - Ruled in review: `keys` named with no value (`{ keys: undefined }`, as `process.env.X!` gives when the variable is
+    unset) throws the `keys` `TypeError`, as `verifyLedgerEntry` fails closed on it, so an unset variable never falls
+    back to the document's keys. Leaving `keys` out, or passing no options, still uses the document's keys, and `ok` is
+    still `true` when everything holds: `keys: "document"` and its note say whose keys checked it.
+  - A key given that cannot be decoded as a PEM throws the same `TypeError` before any entry is checked, since
+    `verifyLedgerEntry` decodes every key it is given and one bad key would leave every entry `ok: null`. A key the
+    document carries that cannot be decoded is left out, with the note "The key filed under <id> could not be read as a
+    PEM public key."; the entries the other keys signed keep a real `true` or `false`.
 - It answers `{ ok, format, keys, entries: [{ seq, check }], counts: { cited, carried, verified, failed, unchecked },
   problems }`. `ok` is `false` when any entry fails or any problem other than an unknown key is found; `null` when
   nothing failed but some entry's key was not among those given; `true` otherwise. An empty month is `true`.
@@ -603,7 +614,8 @@ names a network; the docs say "Arc testnet" and "Arc mainnet" plainly.
   never in the answer: Vestiarion keeps only its hash.\n\nA payable with no receipt yet answers `200` with `ready:
   false` and a `notReady` code: `not_paid`; `simulated`, a sandbox's payment, which moves nothing on chain; `not_minted`,
   a payout to another chain whose mint is not recorded yet; `no_transaction`; or `not_recorded`. A receivable, or an id
-  this workspace does not hold, answers `404`."
+  this workspace does not hold, answers `404`. Text that came from outside, such as a vendor's name or an invoice
+  number, is carried as data."
 - Param `id` (path, required): "The payable's id, as `GET /api/v1/invoices` lists it."
 - Errors: `unauthorized`, `forbidden`, `not_found`, `rate_limited`, `internal`.
 
@@ -807,8 +819,10 @@ creator's role changes keeps reading, as every read does.
   and timeouts.
 - **Logs.** A failure is logged by its label (`GET /api/v1/close-packs/{month}`), never the key or the body.
 - **Privacy, security and terms pages.** No new data is collected, no new processor, no new storage, no public route: a
-  key already "reaches its data" (privacy page). They do not change, and their pinned dates stay (privacy and security
-  2026-10-23, terms 2026-10-16, `SUBPROCESSORS_AS_OF` 2026-10-23).
+  key already "reaches its data" (privacy page). The privacy and terms pages do not change, and their pinned dates stay
+  (privacy 2026-10-23, terms 2026-10-16, `SUBPROCESSORS_AS_OF` 2026-10-23). The security page changes after all (found
+  in review): its limits list said API reads are not limited, so it now names the evidence reads' limit, in the limits
+  list and the API section, and its date moves to 2026-10-25.
 
 ## No migration
 
@@ -1020,11 +1034,11 @@ Existing tests to extend:
   `public/sdk/vestiarion-sdk-0.4.0.tgz` (`npm run sdk:pack`), `content/docs/examples/{get-invoice-evidence,
   get-milestone-evidence,get-invoice-receipt,get-payee-lock-evidence,get-close-pack}.json` (`npx tsx
   scripts/evidence-examples.ts`).
-- Grep for stale text: "every API read", "every `/api/v1` operation", "Reads have no rate limit", "tools are the",
-  "0.3.7" (only the changelogs and the version history keep it).
+- Grep for stale text: "every API read", "every `/api/v1` operation", "Reads have no rate limit", "are not limited",
+  "tools are the", "One tool per", "0.3.7" (only the changelogs and the version history keep it).
 - MDX trap: no quote and then `#5619` on the same line (`tests/ui-consistency.test.ts` reads it as a colour); write
   "entry 5619" in prose.
-- No change to the privacy, security or terms pages or their dates, `SUBPROCESSORS`, the CSP, `.env.example`,
+- No change to the privacy or terms pages or their dates, `SUBPROCESSORS`, the CSP, `.env.example`,
   `server.json`, `MCP_SERVER_VERSION`, `cli/`, the root `package.json` or `package-lock.json`. No screenshot.
 
 ## Implementation order (one PR, TDD)

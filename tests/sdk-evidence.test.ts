@@ -30,6 +30,9 @@ const EXAMPLES = ["get-invoice-evidence", "get-milestone-evidence", "get-invoice
 const example = (id: string): Doc => (JSON.parse(readFileSync(`content/docs/examples/${id}.json`, "utf8")) as { data: Doc }).data;
 const keysOf = (doc: Doc) => Object.fromEntries(doc.keys.map((key) => [key.id, key.publicKeyPem]));
 const NOTE = "Checked with the keys the document carries. Compare their ids with the workspace's Audit log to tie them to the workspace.";
+const BAD_KEYS = "keys must be the PEM public key from the workspace's Audit log page, or a map of key id to PEM.";
+/** A key pasted with a stray character: not base64, so it cannot be decoded. */
+const UNREADABLE_PEM = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA!stray\n-----END PUBLIC KEY-----\n";
 
 /** A key of its own, and entries signed with it exactly as src/lib/ledger.ts signs them, snake_case as a document carries them. */
 function signer() {
@@ -221,14 +224,39 @@ describe("verifyEvidence finds what was changed (evidence API EA13)", () => {
     expect(problemsOf(await verifyEvidence(doc))).toContain("Entry #9999 is cited but not in the document.");
   });
 
+  // The fields that cite, not only the row's own list of them: a file that keeps `entries` tidy still fails.
+  type Row = {
+    entries: number[];
+    record: { seq: number };
+    bill: { entry: number | null; vendorDocuments: Array<{ sha256: string; type: string | null; at: string; entry: number }> };
+    approval: {
+      agent: { entry: number };
+      approvals: Array<{ entry: number | null }>;
+      verdict: { verdict: string; who: unknown; at: string; entry: number } | null;
+      address: { entries: number[] };
+    };
+    checks: Record<string, { entries: number[] }>;
+    books: { booked: { tool: string; state: string; paymentId: string | null; at: string; entry: number } | null };
+  };
+  const firstRow = (doc: Doc) => (doc.rows as Row[])[0];
   it.each([
-    ["a row's entries", (doc: Doc) => (doc.rows as Array<{ entries: number[] }>)[0].entries.push(9999)],
-    ["a row's record", (doc: Doc) => ((doc.rows as Array<{ record: { seq: number } }>)[0].record.seq = 9999)],
+    ["a row's entries", (doc: Doc) => firstRow(doc).entries.push(9999)],
+    ["a row's record", (doc: Doc) => (firstRow(doc).record.seq = 9999)],
     ["an escrow move", (doc: Doc) => (doc.escrow as Array<{ entry: number }>).push({ entry: 9999 })],
+    ["its bill's entry", (doc: Doc) => (firstRow(doc).bill.entry = 9999)],
+    ["a vendor's document on its bill", (doc: Doc) => firstRow(doc).bill.vendorDocuments.push({ sha256: "a".repeat(64), type: "invoice", at: "2026-10-02T08:00:00.000Z", entry: 9999 })],
+    ["the agent's decision", (doc: Doc) => (firstRow(doc).approval.agent.entry = 9999)],
+    ["an approval", (doc: Doc) => (firstRow(doc).approval.approvals[0].entry = 9999)],
+    ["a verdict on the agent", (doc: Doc) => (firstRow(doc).approval.verdict = { verdict: "agree", who: null, at: "2026-10-03T16:00:00.000Z", entry: 9999 })],
+    ["the address it paid", (doc: Doc) => (firstRow(doc).approval.address.entries = [9999])],
+    ["a check", (doc: Doc) => (firstRow(doc).checks.screening.entries = [9999])],
+    ["its booking", (doc: Doc) => (firstRow(doc).books.booked = { tool: "quickbooks", state: "booked", paymentId: null, at: "2026-10-04T09:00:00.000Z", entry: 9999 })],
   ])("a close pack citing %s, not carried", async (_label, cite) => {
     const doc = structuredClone(example("get-close-pack"));
     cite(doc);
-    expect(problemsOf(await verifyEvidence(doc))).toContain("Entry #9999 is cited but not in the document.");
+    const result = await verifyEvidence(doc);
+    expect(result.ok).toBe(false);
+    expect(problemsOf(result)).toContain("Entry #9999 is cited but not in the document.");
   });
 });
 
@@ -295,6 +323,40 @@ describe("verifyEvidence on what is not a document", () => {
 
   it("throws when keys are neither a PEM nor a map of key id to PEM", async () => {
     await expect(verifyEvidence(example("get-invoice-receipt"), { keys: 42 as unknown as string })).rejects.toThrow(TypeError);
+  });
+
+  it("throws when keys is named with no value, so an unset variable never falls back to the file's keys", async () => {
+    await expect(verifyEvidence(example("get-invoice-receipt"), { keys: undefined })).rejects.toThrow(new TypeError(BAD_KEYS));
+    // Not naming keys at all still checks with the document's own, and says so.
+    expect(await verifyEvidence(example("get-invoice-receipt"), {})).toMatchObject({ ok: true, keys: "document" });
+  });
+
+  it("throws when a key given cannot be read as a PEM, rather than leaving every entry unchecked", async () => {
+    const doc = structuredClone(example("get-invoice-evidence"));
+    const forged = doc.entries[2];
+    forged.signature = "0".repeat(128);
+    // The good key alone finds the forged signature.
+    const good = await verifyEvidence(doc, { keys: keysOf(doc) });
+    expect(good.ok).toBe(false);
+    expect(problemsOf(good)).toEqual([`Entry #${forged.seq} does not verify: The signature does not verify with the workspace's key.`]);
+    // With a retired key pasted with a stray character beside it, the answer is not null.
+    await expect(verifyEvidence(doc, { keys: { ...keysOf(doc), ["0".repeat(16)]: UNREADABLE_PEM } })).rejects.toThrow(new TypeError(BAD_KEYS));
+    await expect(verifyEvidence(doc, { keys: UNREADABLE_PEM })).rejects.toThrow(new TypeError(BAD_KEYS));
+  });
+
+  it("leaves out a key the document carries that cannot be read, says so, and checks the rest", async () => {
+    const doc = structuredClone(example("get-invoice-evidence"));
+    doc.keys.push({ id: "0".repeat(16), status: "retired", publicKeyPem: UNREADABLE_PEM });
+    const result = await verifyEvidence(doc);
+    expect(result).toMatchObject({ ok: true, keys: "document" });
+    expect(result.counts).toMatchObject({ verified: doc.entries.length, failed: 0, unchecked: 0 });
+    expect(result.problems).toEqual([NOTE, `The key filed under ${"0".repeat(16)} could not be read as a PEM public key.`]);
+
+    const forged = doc.entries[2];
+    forged.signature = "0".repeat(128);
+    const tampered = await verifyEvidence(doc);
+    expect(tampered.ok).toBe(false);
+    expect(tampered.counts).toMatchObject({ verified: doc.entries.length - 1, failed: 1, unchecked: 0 });
   });
 
   it("names an entry that is not a ledger entry as failing, without throwing", async () => {

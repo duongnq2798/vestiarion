@@ -140,7 +140,8 @@ Web Crypto alone: every entry's signature, that every entry a fact cites is in t
 in the ledger link, and that a row's copy of its entry matches it. `ok` is `true` when all of that holds, `false` when
 something does not (`problems` says what), and `null` when nothing failed but some entry was signed by a key you did
 not pass. Without `keys` it uses the keys the file carries, and says so: that proves the entries were not changed after
-they were signed, not that the keys are the workspace's.
+they were signed, not that the keys are the workspace's. Naming `keys` with no value throws, so an unset variable never
+falls back to the file's keys; so does a key that cannot be read as a PEM public key.
 
 The full guide: https://www.vestiarion.xyz/docs/get-started/sdk
 
