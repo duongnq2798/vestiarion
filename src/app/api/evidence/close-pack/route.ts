@@ -9,6 +9,7 @@ import { readClosePack } from "@/lib/close-pack/read";
 import { CLOSE_PACK_EXPORT_LIMIT, recentClosePackExportsBy, recordClosePackExport } from "@/lib/close-pack/record";
 import { inOrg } from "@/lib/dal/scope";
 import { publicOrigin } from "@/lib/public-origin";
+import { takeClosePackDownloadToken } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,9 @@ export const dynamic = "force-dynamic";
  *
  * With no format it answers the signed JSON; with no month, last month. The file is built for this request in the
  * workspace's scope, and its exact bytes are hashed into the download's own `close_pack_exported` entry, appended best
- * effort before it is sent (CP13). Ten downloads per person in ten minutes, counted from those entries (CP15).
+ * effort before it is sent (CP13). Ten downloads per person in ten minutes, counted from those entries (CP15); and, since
+ * downloads sent together would all count the same earlier entries, three at once, then one a minute, per instance
+ * (`takeClosePackDownloadToken`), taken before the membership or the month is read.
  */
 export async function GET(request: Request) {
   if (request.headers.get("sec-fetch-site") === "cross-site") {
@@ -36,6 +39,9 @@ export async function GET(request: Request) {
   const now = new Date();
   const month = closePackMonth(params.get("month"), now);
   if (!month) return NextResponse.json({ error: "month must be YYYY-MM, and not a month still to come" }, { status: 400 });
+  if (!takeClosePackDownloadToken(user.id)) {
+    return NextResponse.json({ error: "Too many close pack downloads in a row. Try again in a minute." }, { status: 429, headers: { "retry-after": "60" } });
+  }
 
   try {
     const membership = await membershipFor(user.id, slug);

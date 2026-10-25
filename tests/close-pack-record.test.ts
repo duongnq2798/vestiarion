@@ -11,7 +11,7 @@ vi.mock("@/lib/ledger", async (importOriginal) => ({
 
 import { CLOSE_PACK_EXPORT_LIMIT, recentClosePackExportsBy, recordClosePackExport } from "@/lib/close-pack/record";
 import { closePackMonth } from "@/lib/close-pack/month";
-import { takeClosePackPageToken } from "@/lib/rate-limit";
+import { takeClosePackDownloadToken, takeClosePackPageToken } from "@/lib/rate-limit";
 import { samplePack } from "./support/close-pack-fixtures";
 
 /**
@@ -104,5 +104,25 @@ describe("takeClosePackPageToken (close pack CP11)", () => {
     for (let read = 0; read < 10; read += 1) takeClosePackPageToken("member-a", start);
     expect(takeClosePackPageToken("member-a", start)).toBe(false);
     expect(takeClosePackPageToken("member-b", start)).toBe(true);
+  });
+});
+
+describe("takeClosePackDownloadToken (close pack CP15)", () => {
+  it("lets a member start three downloads at once, then one a minute", () => {
+    const member = `downloader-${Date.now()}`;
+    const start = 3_000_000;
+    for (let download = 0; download < 3; download += 1) expect(takeClosePackDownloadToken(member, start)).toBe(true);
+    expect(takeClosePackDownloadToken(member, start)).toBe(false);
+    expect(takeClosePackDownloadToken(member, start + 59_999)).toBe(false);
+    expect(takeClosePackDownloadToken(member, start + 60_000)).toBe(true);
+    expect(takeClosePackDownloadToken(member, start + 60_000)).toBe(false);
+  });
+
+  it("keeps each member's downloads apart, and apart from the page's reads", () => {
+    const start = 4_000_000;
+    for (let download = 0; download < 3; download += 1) takeClosePackDownloadToken("downloader-a", start);
+    expect(takeClosePackDownloadToken("downloader-a", start)).toBe(false);
+    expect(takeClosePackDownloadToken("downloader-b", start)).toBe(true);
+    expect(takeClosePackPageToken("downloader-a", start)).toBe(true);
   });
 });
