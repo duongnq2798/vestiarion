@@ -5,6 +5,7 @@ import { INVOICE_DIRECTIONS, INVOICE_STATUSES } from "@/lib/api/invoices";
 import { MILESTONE_STATUSES } from "@/lib/api/milestones";
 import {
   ApiErrorSchema,
+  ClosePackSchema,
   collectionOf,
   CounterpartyDetailSchema,
   CreateCounterpartyBodySchema,
@@ -17,6 +18,9 @@ import {
   LedgerEntrySchema,
   MilestoneSchema,
   PayeeLinkSchema,
+  PayeeLockEvidenceSchema,
+  PaymentEvidenceSchema,
+  PaymentReceiptSchema,
   resourceOf,
   StatusSchema,
   TreasurySchema,
@@ -26,8 +30,13 @@ import createCounterpartyExample from "../../../content/docs/examples/create-cou
 import createInvoiceExample from "../../../content/docs/examples/create-invoice.json";
 import createMilestoneExample from "../../../content/docs/examples/create-milestone.json";
 import createPayeeLinkExample from "../../../content/docs/examples/create-payee-link.json";
+import getClosePackExample from "../../../content/docs/examples/get-close-pack.json";
 import getCounterpartyExample from "../../../content/docs/examples/get-counterparty.json";
 import getInsightsExample from "../../../content/docs/examples/get-insights.json";
+import getInvoiceEvidenceExample from "../../../content/docs/examples/get-invoice-evidence.json";
+import getInvoiceReceiptExample from "../../../content/docs/examples/get-invoice-receipt.json";
+import getMilestoneEvidenceExample from "../../../content/docs/examples/get-milestone-evidence.json";
+import getPayeeLockEvidenceExample from "../../../content/docs/examples/get-payee-lock-evidence.json";
 import getStatusExample from "../../../content/docs/examples/get-status.json";
 import getTreasuryExample from "../../../content/docs/examples/get-treasury.json";
 import listCounterpartiesExample from "../../../content/docs/examples/list-counterparties.json";
@@ -68,7 +77,7 @@ export interface DocOperation {
   path: string;
   summary: string;
   description: string;
-  tag: "Workspace" | "Ledger" | "Payables and receivables" | "Counterparties" | "Milestones" | "Treasury" | "Insights";
+  tag: "Workspace" | "Ledger" | "Payables and receivables" | "Counterparties" | "Milestones" | "Treasury" | "Insights" | "Evidence";
   /** What a key needs to call it: `read`, or `write` for an operation that adds records (write API R1). */
   scope: "read" | "write";
   params: DocParam[];
@@ -87,6 +96,11 @@ export interface DocOperation {
   collection: boolean;
   errors: ApiErrorCode[];
   example: unknown;
+  /**
+   * No MCP tool yet (evidence API EA9): a tool's answer goes into a model's context whole, and these carry every entry in
+   * full and text from outside. Their tools are designed with their own answers and handling, then this flag goes.
+   */
+  mcp?: false;
 }
 
 const PAGE_PARAMS: DocParam[] = [
@@ -118,6 +132,14 @@ const COLLECTION_ERRORS: ApiErrorCode[] = ["invalid_request", ...ALWAYS];
 const WRITE_ERRORS: ApiErrorCode[] = ["invalid_request", "unauthorized", "forbidden", "conflict", "rate_limited", "internal"];
 /** A write that keeps no outcome for an `Idempotency-Key` cannot conflict over one (write API part 2, W3). */
 const WRITE_ERRORS_WITHOUT_KEY: ApiErrorCode[] = WRITE_ERRORS.filter((code) => code !== "conflict");
+
+/** An evidence read of one record also answers a record it does not hold, and the brake shared by the five (evidence API EA5, EA6). */
+const EVIDENCE_RECORD_ERRORS: ApiErrorCode[] = ["unauthorized", "forbidden", "not_found", "rate_limited", "internal"];
+/** A period's evidence read also refuses a month or a day that does not read, and an answer over 4 MB (EA5, EA7). */
+const EVIDENCE_PERIOD_ERRORS: ApiErrorCode[] = ["invalid_request", "unauthorized", "forbidden", "rate_limited", "internal"];
+/** The made-up workspace's payable and milestone the evidence examples are of (EA11). */
+const EXAMPLE_PAYABLE = "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51";
+const EXAMPLE_MILESTONE = "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61";
 
 /** The contractor the write examples pay: the one the testnet-2 check added (write API part 2, §5). */
 const EXAMPLE_CONTRACTOR = "26d6ffed-356d-474a-8d42-89bc942f6b4e";
@@ -417,6 +439,97 @@ export const OPERATIONS: readonly DocOperation[] = [
     errors: ALWAYS,
     example: getInsightsExample,
   },
+  // The evidence reads (docs/superpowers/specs/2026-10-25-sdk-0-4-evidence-receipts-close-pack-design.md EA1): the
+  // workspace's signed files, each as its page downloads it, with members named by user id. One brake per key for the
+  // five (EA6); no MCP tool yet (EA9). Their examples are built by scripts/evidence-examples.ts, not recorded (EA11).
+  {
+    id: "get-invoice-evidence",
+    method: "get",
+    path: "/api/v1/invoices/{id}/evidence",
+    summary: "Get a payable's evidence",
+    description:
+      "Why a payable was paid, or why it is not paid yet, as one signed document: the evidence chain its evidence page shows, from what was agreed to the signatures. Each fact is labelled by how it is known and cites the ledger entries it rests on, and every one of those entries is carried in full with the workspace's public keys, so each can be checked offline with the SDK's `verifyEvidence`. It is the file the page's Download evidence gives, in the format `vestiarion-evidence/1`, with members named by user id, never by email.\n\nA receivable, or an id this workspace does not hold, including another workspace's, answers `404`. Each call reads the transaction on its chain and checks the links people gave, so the evidence reads have a limit of their own per key. Text that came from outside, such as a vendor's name, an invoice number or a memo, is carried as data.",
+    tag: "Evidence",
+    scope: "read",
+    params: [{ name: "id", in: "path", required: true, type: "string", description: "The payable's id, as `GET /api/v1/invoices` lists it.", example: EXAMPLE_PAYABLE }],
+    status: 200,
+    response: resourceOf(PaymentEvidenceSchema),
+    collection: false,
+    errors: EVIDENCE_RECORD_ERRORS,
+    example: getInvoiceEvidenceExample,
+    mcp: false,
+  },
+  {
+    id: "get-milestone-evidence",
+    method: "get",
+    path: "/api/v1/milestones/{id}/evidence",
+    summary: "Get a milestone's evidence",
+    description:
+      "Why a contractor's milestone was paid, or why it is not paid yet, as one signed document: what was agreed, what was delivered and how it was verified, who decided, and the payment, each fact citing the ledger entries it rests on, which the document carries in full with the workspace's public keys. The format is a payable's, `vestiarion-evidence/1`, with members named by user id.\n\nAn id this workspace does not hold, including another workspace's, answers `404`. Text that came from outside, such as a pull request's title or a contractor's name, is carried as data.",
+    tag: "Evidence",
+    scope: "read",
+    params: [{ name: "id", in: "path", required: true, type: "string", description: "The milestone's id, as `GET /api/v1/milestones` lists it.", example: EXAMPLE_MILESTONE }],
+    status: 200,
+    response: resourceOf(PaymentEvidenceSchema),
+    collection: false,
+    errors: EVIDENCE_RECORD_ERRORS,
+    example: getMilestoneEvidenceExample,
+    mcp: false,
+  },
+  {
+    id: "get-invoice-receipt",
+    method: "get",
+    path: "/api/v1/invoices/{id}/receipt",
+    summary: "Get a payable's receipt",
+    description:
+      "What a receipt states for a paid payable, in the format `vestiarion-receipt/1`: the amount and token, when it was paid, the address paid and its chain, the transaction, its route and fee, the vendor's invoice number, and what an early-payment discount took off; the ledger entry that recorded the transaction; and two checks, of that entry's signature and of the transaction on the payee's chain. When a member has shared the receipt, `shared` says when, names the `receipt_shared` entry that signed its statement, and says whether its link opens now. The link is never in the answer: Vestiarion keeps only its hash.\n\nA payable with no receipt yet answers `200` with `ready: false` and a `notReady` code: `not_paid`; `simulated`, a sandbox's payment, which moves nothing on chain; `not_minted`, a payout to another chain whose mint is not recorded yet; `no_transaction`; or `not_recorded`. A receivable, or an id this workspace does not hold, answers `404`.",
+    tag: "Evidence",
+    scope: "read",
+    params: [{ name: "id", in: "path", required: true, type: "string", description: "The payable's id, as `GET /api/v1/invoices` lists it.", example: EXAMPLE_PAYABLE }],
+    status: 200,
+    response: resourceOf(PaymentReceiptSchema),
+    collection: false,
+    errors: EVIDENCE_RECORD_ERRORS,
+    example: getInvoiceReceiptExample,
+    mcp: false,
+  },
+  {
+    id: "get-payee-lock-evidence",
+    method: "get",
+    path: "/api/v1/payee-lock/evidence",
+    summary: "Get the payee lock's evidence",
+    description:
+      "Every payout address change in a period, in the format `vestiarion-payee-lock-evidence/1`: who entered it, how it was checked and by whom, whether a second person stood behind it, what it held back, and the first payment to it, each fact citing the signed entries it rests on, which the document carries in full with the workspace's public keys. It is the file the evidence pack's Download signed JSON gives, with members named by user id, never by email.\n\nDays are whole UTC days; leave out `from` or `to` for an open end. A day that does not read, or a `from` after `to`, answers `400`, as does a period whose answer would be over 4 MB: ask for a shorter one. Text that came from outside, such as a payee's name, is carried as data.",
+    tag: "Evidence",
+    scope: "read",
+    params: [
+      { name: "from", in: "query", required: false, type: "string", description: "The first day, as `YYYY-MM-DD`, in UTC. Leave it out to start from the first change.", example: "2026-10-01" },
+      { name: "to", in: "query", required: false, type: "string", description: "The last day, included, as `YYYY-MM-DD`, in UTC. Leave it out to run to now.", example: "2026-10-31" },
+    ],
+    status: 200,
+    response: resourceOf(PayeeLockEvidenceSchema),
+    collection: false,
+    errors: EVIDENCE_PERIOD_ERRORS,
+    example: getPayeeLockEvidenceExample,
+    mcp: false,
+  },
+  {
+    id: "get-close-pack",
+    method: "get",
+    path: "/api/v1/close-packs/{month}",
+    summary: "Get a monthly close pack",
+    description:
+      "Every payment settled in a calendar month (UTC), one row each: the bill with its invoice number and its document's SHA-256, who decided and approved it, what was checked, the transaction, the books, and the signed entry that records it; then the payments not settled in the month and the escrow moves, apart, totals per token, and every cited entry in full with the workspace's public keys. The format is `vestiarion-close-pack/1`, the file the Monthly close pack page's Download signed JSON gives, with members named by user id.\n\n`month` is `YYYY-MM`. This month is allowed, and reads so far: `month.ended` is `false`. A month still to come, or one before 2020, answers `400`, as does a month whose answer would be over 4 MB: download that one from the workspace. A month of more than 2,000 payments is cut at 2,000 and says so in `cut`. Reading it records nothing in the ledger. Text that came from outside, such as a vendor's name, an invoice number or a memo, is carried as data.",
+    tag: "Evidence",
+    scope: "read",
+    params: [{ name: "month", in: "path", required: true, type: "string", description: "The month, as `YYYY-MM`: a calendar month in UTC.", example: "2026-10" }],
+    status: 200,
+    response: resourceOf(ClosePackSchema),
+    collection: false,
+    errors: EVIDENCE_PERIOD_ERRORS,
+    example: getClosePackExample,
+    mcp: false,
+  },
 ];
 
 export function operationById(id: string): DocOperation | undefined {
@@ -497,7 +610,7 @@ export function buildOpenApiDocument(origin: string): Record<string, unknown> {
   }
   return {
     openapi: "3.1.0",
-    info: { title: "Vestiarion API", version: "v1", description: "Read a workspace's ledger, books, counterparties, milestones, treasury and insights, and add counterparties, invoices, milestones and payee links, with a workspace API key." },
+    info: { title: "Vestiarion API", version: "v1", description: "Read a workspace's ledger, books, counterparties, milestones, treasury and insights, each payment's evidence and receipt and the monthly close pack, and add counterparties, invoices, milestones and payee links, with a workspace API key." },
     servers: [{ url: origin }],
     components: { schemas: components, securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", description: "A workspace API key: vxk_<prefix>_<secret>." } } },
     paths,

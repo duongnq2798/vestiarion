@@ -40,6 +40,11 @@ const CALLS: Record<string, (sdk: Vestiarion) => Promise<unknown>> = {
   "create-milestone": (sdk) => sdk.milestones.create(MILESTONE),
   "get-treasury": (sdk) => sdk.treasury.get(),
   "get-insights": (sdk) => sdk.insights.get(),
+  "get-invoice-evidence": (sdk) => sdk.invoices.evidence("cp_1"),
+  "get-milestone-evidence": (sdk) => sdk.milestones.evidence("cp_1"),
+  "get-invoice-receipt": (sdk) => sdk.invoices.receipt("cp_1"),
+  "get-payee-lock-evidence": (sdk) => sdk.payeeLock.evidence(),
+  "get-close-pack": (sdk) => sdk.closePacks.get("cp_1"),
 };
 
 afterEach(() => vi.unstubAllGlobals());
@@ -88,8 +93,24 @@ describe("the client's methods", () => {
       await CALLS[op.id](sdk);
       expect(calls, op.id).toHaveLength(1);
       expect(calls[0].method, op.id).toBe(op.method.toUpperCase());
-      expect(calls[0].url.pathname, op.id).toBe(op.path.replace("{id}", "cp_1"));
+      expect(calls[0].url.pathname, op.id).toBe(op.path.replace(/\{[^}]+\}/g, "cp_1"));
     }
+  });
+
+  it("send the evidence reads' period as a query, a month and an id in the path, encoded (evidence API EA12)", async () => {
+    const { calls, sdk } = client(() => ({ status: 200, body: { data: { format: "vestiarion-close-pack/1" } } }));
+    expect(await sdk.closePacks.get("2026-10")).toEqual({ format: "vestiarion-close-pack/1" });
+    await sdk.payeeLock.evidence({ from: "2026-10-01", to: "2026-10-31" });
+    await sdk.invoices.evidence("a/b");
+    await sdk.invoices.receipt("a/b");
+    await sdk.milestones.evidence("a b");
+    expect(calls.map((call) => `${call.url.pathname}${call.url.search}`)).toEqual([
+      "/api/v1/close-packs/2026-10",
+      "/api/v1/payee-lock/evidence?from=2026-10-01&to=2026-10-31",
+      "/api/v1/invoices/a%2Fb/evidence",
+      "/api/v1/invoices/a%2Fb/receipt",
+      "/api/v1/milestones/a%20b/evidence",
+    ]);
   });
 
   it("return a resource's data, and a list's data and page", async () => {

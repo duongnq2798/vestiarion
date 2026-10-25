@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { OPERATIONS } from "@/lib/api/openapi";
 
 /**
  * The access gates Plan 1 put in place, pinned as source structure.
@@ -444,6 +445,22 @@ describe("every component", () => {
 const PUBLIC_V1_ROUTES = ["src/app/api/v1/openapi.json/route.ts"];
 
 /**
+ * The keyed v1 routes with no MCP tool yet (docs/superpowers/specs/2026-10-25-sdk-0-4-evidence-receipts-close-pack-design.md
+ * EA9): the evidence reads, whose answers carry every entry in full and text from outside. The MCP route reaches every
+ * other keyed route. When one gets its tool, its operation loses `mcp: false` and its row goes from here.
+ */
+const NO_MCP_TOOL_YET = [
+  "src/app/api/v1/close-packs/[month]/route.ts",
+  "src/app/api/v1/invoices/[id]/evidence/route.ts",
+  "src/app/api/v1/invoices/[id]/receipt/route.ts",
+  "src/app/api/v1/milestones/[id]/evidence/route.ts",
+  "src/app/api/v1/payee-lock/evidence/route.ts",
+];
+
+/** The route file that serves an operation's path: `/api/v1/invoices/{id}/evidence` is `src/app/api/v1/invoices/[id]/evidence/route.ts`. */
+const routeFileOf = (operationPath: string) => `src/app${operationPath.replace(/\{([^}]+)\}/g, "[$1]")}/route.ts`;
+
+/**
  * Every src module a file loads at run time, followed through its imports.
  * A module `stop` names is listed but not followed.
  */
@@ -487,6 +504,19 @@ describe("every /api/v1 route", () => {
     }
   });
 
+  it.each(OPERATIONS.filter((op) => op.tag === "Evidence").map((op) => routeFileOf(op.path)))(
+    "%s takes an evidence read from the key's own brake after the guard and before any work (evidence API EA6)",
+    (file) => {
+      const source = read(path.join(ROOT, file));
+      const guard = source.indexOf('if ("denied" in guard) return guard.denied;');
+      const brake = source.indexOf("if (!takeApiEvidenceToken(guard.key.keyId)) return evidenceReadsLimited();");
+      expect(guard).toBeGreaterThan(-1);
+      expect(brake).toBeGreaterThan(guard);
+      expect(source.indexOf("handleApiRequest(")).toBeGreaterThan(brake);
+      expect(source.match(/takeApiEvidenceToken\(/g)).toHaveLength(1);
+    }
+  );
+
   it("checks a write's key and scope before it reads the key's issuer (write API part 2, W5)", () => {
     const source = read(path.join(ROOT, "src/lib/api/guard.ts"));
     const write = source.slice(source.indexOf("export async function guardApiWrite("));
@@ -525,8 +555,16 @@ describe("the MCP route", () => {
     }
   });
 
+  it("leaves out exactly the routes of the operations that have no tool yet (evidence API EA9)", () => {
+    const untooled = OPERATIONS.filter((op) => op.mcp === false).map((op) => routeFileOf(op.path));
+    expect([...untooled].sort()).toEqual([...NO_MCP_TOOL_YET].sort());
+    for (const file of NO_MCP_TOOL_YET) expect(V1_ROUTES.map(rel)).toContain(file);
+  });
+
   it("reaches tenant data only through the keyed /api/v1 route handlers", () => {
-    const keyed = V1_ROUTES.map(rel).filter((file) => !PUBLIC_V1_ROUTES.includes(file)).map((file) => file.replace(/\.ts$/, ""));
+    const keyed = V1_ROUTES.map(rel)
+      .filter((file) => !PUBLIC_V1_ROUTES.includes(file) && !NO_MCP_TOOL_YET.includes(file))
+      .map((file) => file.replace(/\.ts$/, ""));
     // The v1 routes and their guard are pinned above; the walk stops at them.
     const boundary = (name: string) => name === "src/lib/api/guard" || name.startsWith("src/app/api/v1/");
     const modules = [...reachableModules(path.join(ROOT, MCP_ROUTE), new Set(), boundary)];

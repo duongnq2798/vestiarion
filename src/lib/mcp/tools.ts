@@ -85,4 +85,5 @@ function toTool(op: DocOperation): McpTool {
   };
 }
 
-export const MCP_TOOLS: readonly McpTool[] = OPERATIONS.map(toTool);
+/** One tool per operation that has one: the evidence reads have none yet (evidence API EA9). */
+export const MCP_TOOLS: readonly McpTool[] = OPERATIONS.filter((op) => op.mcp !== false).map(toTool);

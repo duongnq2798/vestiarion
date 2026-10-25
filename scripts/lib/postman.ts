@@ -64,6 +64,9 @@ const IDS = {
 function errorMessage(code: string, op: Operation): string {
   switch (code) {
     case "invalid_request":
+      // A read's is the cursor's, but for the evidence reads' month and period (evidence API EA15).
+      if (op.id === "get-close-pack") return "month must be YYYY-MM, and not a month still to come";
+      if (op.id === "get-payee-lock-evidence") return "from and to must be days as YYYY-MM-DD, from no later than to";
       return op.write ? "The body must be JSON." : "cursor is not a cursor this API issued.";
     case "unauthorized":
       return "A valid API key is required.";
@@ -73,12 +76,15 @@ function errorMessage(code: string, op: Operation): string {
     case "not_found": {
       const id = op.params.find((p) => p.in === "path");
       if (op.id === "get-counterparty" && id) return `Counterparty "${id.example}" was not found.`;
+      if ((op.id === "get-invoice-evidence" || op.id === "get-invoice-receipt") && id) return `Payable invoice "${id.example}" was not found.`;
+      if (op.id === "get-milestone-evidence" && id) return `Milestone "${id.example}" was not found.`;
       break;
     }
     case "conflict":
       return "This Idempotency-Key was already used for a different request. Use a new key for a new request.";
     case "rate_limited":
-      return "Too many writes from this key. Try again in a minute.";
+      // A write's, or the evidence reads' own brake (evidence API EA6): no other read is limited.
+      return op.write ? "Too many writes from this key. Try again in a minute." : "Too many evidence reads from this key. Try again in a minute.";
     case "internal":
       return "The request could not be completed.";
   }

@@ -9,6 +9,11 @@ import { authenticateApiKey, generateApiKey, parseApiKey, touchApiKeyUsed, type 
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { GET as getCounterparties } from "@/app/api/v1/counterparties/route";
 import { GET as getCounterparty } from "@/app/api/v1/counterparties/[id]/route";
+import { GET as getClosePack } from "@/app/api/v1/close-packs/[month]/route";
+import { GET as getInvoiceEvidence } from "@/app/api/v1/invoices/[id]/evidence/route";
+import { GET as getInvoiceReceipt } from "@/app/api/v1/invoices/[id]/receipt/route";
+import { GET as getMilestoneEvidence } from "@/app/api/v1/milestones/[id]/evidence/route";
+import { GET as getPayeeLockEvidence } from "@/app/api/v1/payee-lock/evidence/route";
 import { GET as getInsights } from "@/app/api/v1/insights/route";
 import { GET as getInvoices } from "@/app/api/v1/invoices/route";
 import { GET as getLedger } from "@/app/api/v1/ledger/route";
@@ -50,6 +55,9 @@ vi.mock("next/server", async (importOriginal) => {
   };
 });
 
+// The evidence reads' brake has its own tests (tests/api-evidence-routes.test.ts): here every read of a key goes through.
+vi.mock("@/lib/rate-limit", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/rate-limit")>()), takeApiEvidenceToken: () => true }));
+
 vi.mock("@/lib/platform/api-keys", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/platform/api-keys")>();
   return {
@@ -85,7 +93,8 @@ function database(tables: Record<string, unknown[]> = {}, orgs: Record<string, R
   };
 }
 
-const PLATFORM_PATHS = new Set(["/rest/v1/orgs", "/rest/v1/api_keys"]);
+/** The platform's tables and the members function, which names its organization as an argument (`p_org_id`). */
+const PLATFORM_PATHS = new Set(["/rest/v1/orgs", "/rest/v1/api_keys", "/rest/v1/rpc/org_members"]);
 
 function tenantRequests(fake: ReturnType<typeof fakeSupabase>): RecordedRequest[] {
   return fake.requests.filter((request) => !PLATFORM_PATHS.has(request.path));
@@ -109,7 +118,15 @@ async function runDeferred(fake: ReturnType<typeof fakeSupabase>) {
 
 type Route = { url: string; handler: (request: Request) => Promise<Response>; ok: number };
 
+/** An evidence read's own id: a UUID, so the read reaches the workspace, which does not hold it. */
+const RECORD_ID = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001ee";
+
 const ROUTES: Record<string, Route> = {
+  "close-packs/[month]/route.ts": {
+    url: "/api/v1/close-packs/2026-01",
+    handler: (request) => getClosePack(request, { params: Promise.resolve({ month: "2026-01" }) }),
+    ok: 200,
+  },
   "counterparties/route.ts": { url: "/api/v1/counterparties", handler: getCounterparties, ok: 200 },
   "counterparties/[id]/route.ts": {
     url: `/api/v1/counterparties/${COUNTERPARTY_ID}`,
@@ -119,9 +136,26 @@ const ROUTES: Record<string, Route> = {
   },
   "insights/route.ts": { url: "/api/v1/insights", handler: getInsights, ok: 200 },
   "invoices/route.ts": { url: "/api/v1/invoices", handler: getInvoices, ok: 200 },
+  // No such payable or milestone in either organization (evidence API EA5).
+  "invoices/[id]/evidence/route.ts": {
+    url: `/api/v1/invoices/${RECORD_ID}/evidence`,
+    handler: (request) => getInvoiceEvidence(request, { params: Promise.resolve({ id: RECORD_ID }) }),
+    ok: 404,
+  },
+  "invoices/[id]/receipt/route.ts": {
+    url: `/api/v1/invoices/${RECORD_ID}/receipt`,
+    handler: (request) => getInvoiceReceipt(request, { params: Promise.resolve({ id: RECORD_ID }) }),
+    ok: 404,
+  },
   "ledger/route.ts": { url: "/api/v1/ledger", handler: getLedger, ok: 200 },
   "ledger/verify/route.ts": { url: "/api/v1/ledger/verify", handler: getLedgerVerify, ok: 200 },
   "milestones/route.ts": { url: "/api/v1/milestones", handler: getMilestones, ok: 200 },
+  "milestones/[id]/evidence/route.ts": {
+    url: `/api/v1/milestones/${RECORD_ID}/evidence`,
+    handler: (request) => getMilestoneEvidence(request, { params: Promise.resolve({ id: RECORD_ID }) }),
+    ok: 404,
+  },
+  "payee-lock/evidence/route.ts": { url: "/api/v1/payee-lock/evidence", handler: getPayeeLockEvidence, ok: 200 },
   "status/route.ts": { url: "/api/v1/status", handler: getStatus, ok: 200 },
   "treasury/route.ts": { url: "/api/v1/treasury", handler: getTreasury, ok: 200 },
 };
@@ -236,9 +270,14 @@ describe.each(ROUTE_CASES)("GET %s", (url, _file, route) => {
       expect(carriesOrg(request, other)).toBe(false);
       expect(tokenOrg(request)).toBe(key.orgId);
     }
-    // The organization entered is the key's, read by its id.
+    // The organization entered is the key's, read by its id; an evidence read reads its slug and name the same way.
     const orgLookups = fake.requests.filter((request) => request.path === "/rest/v1/orgs");
-    expect(orgLookups.map((request) => request.params.get("id"))).toEqual([`eq.${key.orgId}`]);
+    expect(orgLookups.length).toBeGreaterThan(0);
+    for (const lookup of orgLookups) expect(lookup.params.get("id")).toBe(`eq.${key.orgId}`);
+    // The members function names the key's organization, and only that one.
+    for (const members of fake.requests.filter((request) => request.path === "/rest/v1/rpc/org_members")) {
+      expect((members.body as { p_org_id?: string }).p_org_id).toBe(key.orgId);
+    }
   });
 
   it("records the key's use after the response, without awaiting it first", async () => {

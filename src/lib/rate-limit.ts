@@ -134,6 +134,18 @@ export function takeApiWriteToken(keyId: string, now = Date.now()): boolean {
   return take(apiWriteBuckets, keyId, 30, 2_000, now);
 }
 
+const apiEvidenceBuckets = new Map<string, Bucket>();
+
+/**
+ * Ten evidence reads at once per API key, then one every 6 seconds; one bucket for the five
+ * (docs/superpowers/specs/2026-10-25-sdk-0-4-evidence-receipts-close-pack-design.md EA6): each checks every cited entry's
+ * signature, and a payment's evidence also asks the chain for its transaction and checks the links people gave. Keyed by
+ * the key's id, never by IP. Every other read stays unlimited. Single-instance, like the others.
+ */
+export function takeApiEvidenceToken(keyId: string, now = Date.now()): boolean {
+  return take(apiEvidenceBuckets, keyId, 10, 6_000, now);
+}
+
 const telegramChatBuckets = new Map<string, Bucket>();
 
 /**

@@ -1,12 +1,14 @@
 import { VestiarionError } from "./errors.js";
 import { createTransport, type FetchLike, type Transport } from "./http.js";
 import type {
+  ClosePack,
   Counterparty,
   CounterpartyDetail,
   CreateCounterpartyInput,
   CreateInvoiceInput,
   CreateMilestoneInput,
   CreatePayeeLinkInput,
+  GetPayeeLockEvidenceParams,
   Insights,
   Invoice,
   LedgerEntry,
@@ -18,6 +20,9 @@ import type {
   Milestone,
   Page,
   PayeeLink,
+  PayeeLockEvidence,
+  PaymentEvidence,
+  PaymentReceipt,
   Status,
   Treasury,
 } from "./types.js";
@@ -99,12 +104,22 @@ function collection<T, P extends { cursor?: string }>(transport: Transport, path
 export class Vestiarion {
   readonly status: { get(): Promise<Status> };
   readonly ledger: Collection<LedgerEntry, ListLedgerEntriesParams> & { verify(): Promise<LedgerVerification> };
-  readonly invoices: Collection<Invoice, ListInvoicesParams> & { create(input: CreateInvoiceInput, options?: WriteOptions): Promise<Invoice> };
+  readonly invoices: Collection<Invoice, ListInvoicesParams> & {
+    create(input: CreateInvoiceInput, options?: WriteOptions): Promise<Invoice>;
+    /** A payable's evidence, as its evidence page's Download evidence gives it, members named by user id. */
+    evidence(id: string): Promise<PaymentEvidence>;
+    /** A paid payable's receipt: what it states, the entry that recorded it and its checks. Not ready yet: `ready` is false, and `notReady` says why. */
+    receipt(id: string): Promise<PaymentReceipt>;
+  };
   readonly counterparties: Collection<Counterparty, ListCounterpartiesParams> & {
     get(id: string): Promise<CounterpartyDetail>;
     create(input: CreateCounterpartyInput, options?: WriteOptions): Promise<Counterparty>;
   };
-  readonly milestones: Collection<Milestone, ListMilestonesParams> & { create(input: CreateMilestoneInput, options?: WriteOptions): Promise<Milestone> };
+  readonly milestones: Collection<Milestone, ListMilestonesParams> & {
+    create(input: CreateMilestoneInput, options?: WriteOptions): Promise<Milestone>;
+    /** A milestone's evidence, members named by user id. */
+    evidence(id: string): Promise<PaymentEvidence>;
+  };
   /**
    * One-time links where a payee enters the address they are paid at. A link's `url` is in the answer only: send it to
    * the payee. Making one revokes the payee's unused link, so a retry gives a working link too.
@@ -112,6 +127,14 @@ export class Vestiarion {
   readonly payeeLinks: { create(input: CreatePayeeLinkInput): Promise<PayeeLink> };
   readonly treasury: { get(): Promise<Treasury> };
   readonly insights: { get(): Promise<Insights> };
+  readonly payeeLock: {
+    /** Every payout address change in the period, with its checks and its signed entries. */
+    evidence(params?: GetPayeeLockEvidenceParams): Promise<PayeeLockEvidence>;
+  };
+  readonly closePacks: {
+    /** The close pack of a calendar month in UTC, `YYYY-MM`: every payment settled in it, one row each, with its signed entry. */
+    get(month: string): Promise<ClosePack>;
+  };
 
   constructor(options: VestiarionOptions) {
     if (typeof options?.apiKey !== "string" || !KEY_FORMAT.test(options.apiKey)) {
@@ -127,7 +150,7 @@ export class Vestiarion {
     const fetchImpl = options.fetch ?? (typeof globalThis.fetch === "function" ? (globalThis.fetch.bind(globalThis) as FetchLike) : undefined);
     if (!fetchImpl) throw new TypeError("This runtime has no fetch: pass one as options.fetch.");
     const transport = createTransport({ apiKey: options.apiKey, baseUrl, fetch: fetchImpl, maxRetries, timeoutMs });
-    const one = <T>(path: string) => transport.request<{ data: T }>({ method: "GET", path }).then((answer) => answer.data);
+    const one = <T>(path: string, query?: object) => transport.request<{ data: T }>({ method: "GET", path, query }).then((answer) => answer.data);
     const add = <T>(path: string, body: unknown, write?: WriteOptions) =>
       transport.request<{ data: T }>({ method: "POST", path, body, idempotencyKey: write?.idempotencyKey }).then((answer) => answer.data);
 
@@ -139,6 +162,9 @@ export class Vestiarion {
     this.invoices = {
       ...collection<Invoice, ListInvoicesParams>(transport, "/api/v1/invoices"),
       create: (input, write) => add<Invoice>("/api/v1/invoices", input, write),
+      // The API checks the id: one that is not a payable of the workspace answers 404, which is thrown at once.
+      evidence: (id) => one<PaymentEvidence>(`/api/v1/invoices/${encodeURIComponent(id)}/evidence`),
+      receipt: (id) => one<PaymentReceipt>(`/api/v1/invoices/${encodeURIComponent(id)}/receipt`),
     };
     this.counterparties = {
       ...collection<Counterparty, ListCounterpartiesParams>(transport, "/api/v1/counterparties"),
@@ -148,6 +174,7 @@ export class Vestiarion {
     this.milestones = {
       ...collection<Milestone, ListMilestonesParams>(transport, "/api/v1/milestones"),
       create: (input, write) => add<Milestone>("/api/v1/milestones", input, write),
+      evidence: (id) => one<PaymentEvidence>(`/api/v1/milestones/${encodeURIComponent(id)}/evidence`),
     };
     // The API keeps no outcome for a payee link's key, so none is sent (write API part 2, W3).
     this.payeeLinks = {
@@ -156,5 +183,8 @@ export class Vestiarion {
     };
     this.treasury = { get: () => one<Treasury>("/api/v1/treasury") };
     this.insights = { get: () => one<Insights>("/api/v1/insights") };
+    // The evidence reads share a limit per key; a 429 is waited out as any other is (evidence API EA6, EA12).
+    this.payeeLock = { evidence: (params) => one<PayeeLockEvidence>("/api/v1/payee-lock/evidence", params) };
+    this.closePacks = { get: (month) => one<ClosePack>(`/api/v1/close-packs/${encodeURIComponent(month)}`) };
   }
 }

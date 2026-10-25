@@ -9,6 +9,9 @@ import { argumentName, MCP_TOOLS, toolName, type McpTool } from "@/lib/mcp/tools
  * (docs/superpowers/specs/2026-09-30-mcp-server-design.md, M3 and §4).
  */
 
+/** The operations that have a tool: all but the evidence reads, whose tools come later (evidence API EA9). */
+const TOOLED = OPERATIONS.filter((op) => op.mcp !== false);
+
 function tool(name: string) {
   const found = MCP_TOOLS.find((candidate) => candidate.name === name);
   if (!found) throw new Error(`no tool ${name}`);
@@ -16,8 +19,14 @@ function tool(name: string) {
 }
 
 describe("MCP_TOOLS", () => {
-  it("has one tool per operation, in the same order, and nothing else", () => {
-    expect(MCP_TOOLS.map((t) => t.operationId)).toEqual(OPERATIONS.map((op) => op.id));
+  it("has one tool per operation that has one, in the same order, and nothing else", () => {
+    expect(MCP_TOOLS.map((t) => t.operationId)).toEqual(TOOLED.map((op) => op.id));
+  });
+
+  it("has no tool for the evidence reads yet (evidence API EA9)", () => {
+    const untooled = OPERATIONS.filter((op) => op.mcp === false).map((op) => op.id);
+    expect(untooled).toEqual(["get-invoice-evidence", "get-milestone-evidence", "get-invoice-receipt", "get-payee-lock-evidence", "get-close-pack"]);
+    for (const id of untooled) expect(MCP_TOOLS.some((t) => t.operationId === id), id).toBe(false);
   });
 
   it("names each tool after its operation id in snake_case", () => {
@@ -31,7 +40,7 @@ describe("MCP_TOOLS", () => {
   });
 
   it("marks a read's tool read-only and idempotent, and a write's as adding records, not idempotent (write API R9)", () => {
-    for (const op of OPERATIONS) {
+    for (const op of TOOLED) {
       expect(tool(toolName(op.id)).annotations, op.id).toEqual(
         op.scope === "write"
           ? { readOnlyHint: false, destructiveHint: op.destructive === true, idempotentHint: false, openWorldHint: false }
@@ -63,7 +72,7 @@ describe("MCP_TOOLS", () => {
   });
 
   it("titles and describes each tool from its operation, and tells a collection how to page", () => {
-    for (const op of OPERATIONS) {
+    for (const op of TOOLED) {
       const t = tool(toolName(op.id));
       expect(t.title).toBe(op.summary);
       expect(t.description.startsWith(`${op.summary}. ${op.description}`)).toBe(true);
@@ -78,7 +87,7 @@ describe("MCP_TOOLS", () => {
   });
 
   it("takes exactly the operation's body fields and parameters, requiring only the required ones", () => {
-    for (const op of OPERATIONS) {
+    for (const op of TOOLED) {
       const shape = tool(toolName(op.id)).inputSchema.shape;
       const fields = op.requestBody ? Object.keys(op.requestBody.shape) : [];
       expect(Object.keys(shape), op.id).toEqual([...fields, ...op.params.map(argumentName)]);
@@ -91,7 +100,7 @@ describe("MCP_TOOLS", () => {
   });
 
   it("accepts each operation's example parameters, and a write's example body", () => {
-    for (const op of OPERATIONS) {
+    for (const op of TOOLED) {
       const example = {
         ...(op.requestExample ?? {}),
         ...Object.fromEntries(op.params.filter((p) => p.example !== undefined).map((p) => [argumentName(p), p.example])),
