@@ -73,6 +73,13 @@ export function awaitsVerdict(detail: Record<string, unknown> | null | undefined
  */
 export const MATCH_INCOMPLETE = "invoice.match_incomplete";
 
+/**
+ * The guardrail rule for a bill whose purchase order came from its vendor's document, which code checked against the
+ * bill (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK8): the agent never pays or schedules
+ * it, and nothing but a person's Approve and pay ends it.
+ */
+export const VENDOR_DOCUMENT = "invoice.vendor_document";
+
 /** A counterparty's row on Counterparties, which a link opens at (`ScrollToHash` opens a closed row). */
 export function counterpartyPath(counterpartyId: string): string {
   return `/counterparties#counterparty-${counterpartyId}`;
@@ -130,6 +137,12 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
       // Two people before the first payment to an address (new payee check N3, N4): the second one decides in Approvals.
       return {
         sentence: `It is the first payment to ${counterparty.name} at this address, and two different people do not stand behind it yet. Someone other than whoever gave the address, or asked for it with a payee link, approves it in Approvals; for an address sent on GitHub, or one no one can be named as having given, one member confirms it on Counterparties and a different one approves it. If you are the only person here who can approve payments, approve it yourself. After that, the agent pays ${counterparty.name} at this address on its own.`,
+        fix: null,
+      };
+    case VENDOR_DOCUMENT:
+      // A person checks the document and approves the payment (DK8): no setting removes the hold.
+      return {
+        sentence: `Its purchase order came from ${counterparty.name}'s document, which matched the bill. Check the document, then approve the payment in Approvals: the agent does not pay it on its own.`,
         fix: null,
       };
     case MATCH_INCOMPLETE:
@@ -256,6 +269,8 @@ export function ruleInBrief(rule: string | null | undefined): string | null {
       return "it repeats an invoice already paid";
     case MATCH_INCOMPLETE:
       return "its three-way match is incomplete";
+    case VENDOR_DOCUMENT:
+      return "its purchase order came from the vendor's document, and a person approves it";
     case "counterparty.new_payee":
       return "it would be the first payment to an address two different people do not stand behind yet";
     case "workspace.two_approvals":

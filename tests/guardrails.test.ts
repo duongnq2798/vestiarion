@@ -499,3 +499,62 @@ describe("AP guardrails — two approvals above the workspace's figure (two appr
     expect(enforceApGuardrails({ ...base, action: "hold", twoApprovalsAbove: 1 }).blocked).toBe(false);
   });
 });
+
+describe("AP guardrails — a purchase order from a vendor's document (document checks DK8)", () => {
+  const vendorDocument = { source: "vendor" as const, vendorName: "Cobalt Cloud" };
+  const base = {
+    action: "pay" as const,
+    reasoning: "The purchase order is on file, the goods are received and Cobalt Cloud is clear: paying now.",
+    amount: 5,
+    riskLevel: "clear",
+    paymentLimit: 50,
+    match: { poReference: "PO-PC-2026-1030", goodsReceived: true, purchaseOrderRequired: true },
+    vendorDocument,
+  };
+  const suffix = (verb: string) =>
+    ` [guardrail override: its purchase order came from Cobalt Cloud's document, which code checked against the bill — ${verb} refused before execution; held for a person to approve]`;
+
+  it("holds a payment and a schedule every other rule let through, for a person to approve", () => {
+    expect(enforceApGuardrails(base)).toEqual({ blocked: true, status: "held", rule: "invoice.vendor_document", reasoning: `${base.reasoning}${suffix("payment")}` });
+    expect(enforceApGuardrails({ ...base, action: "schedule", reasoning: "Pay on the due date." })).toEqual({
+      blocked: true,
+      status: "held",
+      rule: "invoice.vendor_document",
+      reasoning: `Pay on the due date.${suffix("scheduling")}`,
+    });
+    // A member's attachment of the vendor's document is held the same.
+    expect(enforceApGuardrails({ ...base, vendorDocument: { source: "member", vendorName: "Cobalt Cloud" } }).rule).toBe("invoice.vendor_document");
+  });
+
+  it("lets a duplicate, high risk, an incomplete match or the payment limit speak first", () => {
+    const twin: DuplicateMatch = {
+      otherId: "inv-old", otherStatus: "paid", otherDueDate: "2026-10-01T00:00:00.000Z", otherAmount: 5, confidence: 0.95,
+      signals: ["same_purchase_order", "same_amount"], explanation: "Bills the same purchase order for the same 5 USDC (already paid).", againstSettled: true,
+    };
+    expect(enforceApGuardrails({ ...base, duplicates: [twin] }).rule).toBe("invoice.duplicate_of_settled");
+    expect(enforceApGuardrails({ ...base, riskLevel: "high" })).toMatchObject({ rule: "counterparty.high_risk", status: "flagged" });
+    expect(enforceApGuardrails({ ...base, match: { ...base.match, goodsReceived: false } })).toMatchObject({ rule: "invoice.match_incomplete", status: "awaiting_info" });
+    expect(enforceApGuardrails({ ...base, paymentLimit: 2 }).rule).toBe("counterparty.payment_limit");
+    expect(enforceApGuardrails({ ...base, twoApprovalsAbove: 1 }).rule).toBe("workspace.two_approvals");
+  });
+
+  it("still holds a EURC payment funded by a swap that passes its caps, which every other rule lets through", () => {
+    const swap = { requested: true, offer: { usdcIn: 5.6, costPercent: 0.1 }, usdcBalance: 100, usdcDueWithin7Days: 0 };
+    const eurc = { ...base, currency: "EURC" as const, fxAvailable: true, eurcShort: { balance: 0, needed: 5, faucet: true, swap } };
+    expect(enforceApGuardrails({ ...eurc, vendorDocument: null }).blocked).toBe(false);
+    expect(enforceApGuardrails(eurc)).toMatchObject({ blocked: true, status: "held", rule: "invoice.vendor_document" });
+  });
+
+  it("leaves a hold, a flag and a request for information as the model gave them", () => {
+    for (const action of ["hold", "flag_fraud", "request_info"] as const) {
+      expect(enforceApGuardrails({ ...base, action, reasoning: "Ask for the goods receipt." }), action).toEqual({ blocked: false, status: null, rule: null, reasoning: "Ask for the goods receipt." });
+    }
+  });
+
+  it("changes nothing for a bill whose purchase order came from anywhere else", () => {
+    expect(enforceApGuardrails({ ...base, vendorDocument: null })).toEqual({ blocked: false, status: null, rule: null, reasoning: base.reasoning });
+    const { vendorDocument: _none, ...without } = base;
+    void _none;
+    expect(enforceApGuardrails(without)).toEqual({ blocked: false, status: null, rule: null, reasoning: base.reasoning });
+  });
+});

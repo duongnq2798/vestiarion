@@ -21,7 +21,7 @@ const { actions } = vi.hoisted(() => {
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }) }));
 vi.mock("@/app/actions/verdicts", () => ({ giveVerdictAction: vi.fn() }));
-vi.mock("@/app/actions/document-requests", () => ({ revokeDocumentRequestAction: vi.fn(), setDocumentRequestsAction: vi.fn() }));
+vi.mock("@/app/actions/document-requests", () => ({ revokeDocumentRequestAction: vi.fn(), setDocumentRequestsAction: vi.fn(), attachDocumentAction: vi.fn() }));
 vi.mock("@/app/actions/approvals", () => ({
   approveInvoiceAction: actions.approve,
   cosignInvoiceAction: vi.fn(),
@@ -229,6 +229,11 @@ describe("where Approve and pay asks why", () => {
     expect(overridesHold(held)).toBe(false);
     expect(overridesHold({ ...held, guardrailRule: "counterparty_limit", heldForCash: true })).toBe(false);
     expect(overridesHold({ ...held, status: "flagged", heldForVerdict: true })).toBe(false);
+  });
+
+  it("asks nothing of a person approving a bill whose purchase order came from its vendor's document: the agent waits for them (document checks DK8)", () => {
+    const held = { status: "held" as const, guardrailRule: "invoice.vendor_document", heldForCash: false, heldForVerdict: false };
+    expect(overridesHold(held)).toBe(false);
   });
 });
 

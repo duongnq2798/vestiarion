@@ -19,6 +19,11 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     "/*": ["public/docs/videos/**"],
   },
+  // unpdf is loaded from node_modules rather than bundled, so each function
+  // that reads a PDF carries the package itself: the cycle parses a vendor's
+  // document in a worker thread whose script imports it by name
+  // (src/lib/invoice-document/pdf-worker.ts, document checks DK3).
+  serverExternalPackages: ["unpdf"],
   async redirects() {
     return legacyRedirects();
   },

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DocumentReadError, MAX_DOCUMENT_BYTES, MAX_DOCUMENT_CHARS, readDocument } from "@/lib/invoice-document/read";
+import { inflateBombPdf } from "./support/pdf-files";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(path.join(__dirname, "fixtures", "invoice-document", name)));
 const utf8 = (text: string) => new TextEncoder().encode(text);
@@ -66,5 +67,34 @@ describe("reading an invoice document", () => {
   it("refuses an empty document", async () => {
     expect((await failure(readDocument({ text: "   " }))).code).toBe("empty");
     expect((await failure(readDocument({ bytes: new Uint8Array(0), name: "empty.txt", type: "text/plain" }))).code).toBe("empty");
+  });
+
+  it("refuses a PDF of under a megabyte that would decode to 600 MB before pdf.js reads it, and reads an email's text beside one", async () => {
+    // Without the pre-scan, pdf.js would parse it on this thread, decoding every megabyte.
+    const bomb = inflateBombPdf(600);
+    const started = Date.now();
+    const error = await failure(readDocument({ bytes: bomb, name: "invoice.pdf", type: "application/pdf" }));
+    expect(error.code).toBe("unsupported");
+    expect(error.message).toBe("This PDF could not be read. Paste the invoice's text instead.");
+    expect(Date.now() - started).toBeLessThan(5_000);
+    const email = [
+      "Subject: Invoice INV-2207",
+      'Content-Type: multipart/mixed; boundary="b"',
+      "",
+      "--b",
+      "Content-Type: text/plain",
+      "",
+      "Total due 200.00 USDC",
+      "--b",
+      'Content-Type: application/pdf; name="INV-2207.pdf"',
+      "Content-Transfer-Encoding: base64",
+      'Content-Disposition: attachment; filename="INV-2207.pdf"',
+      "",
+      Buffer.from(bomb).toString("base64"),
+      "--b--",
+      "",
+    ].join("\r\n");
+    const read = await readDocument({ bytes: utf8(email), name: "invoice.eml", type: "message/rfc822" });
+    expect(read.text).toContain("Total due 200.00 USDC");
   });
 });

@@ -24,6 +24,8 @@ export async function notifyDocumentReceived(input: {
   reference: string | null;
   /** Whether the vendor typed a purchase order number; the email says so, never what they typed. */
   typedPo: boolean;
+  /** How the cycle checks the document (document checks DK1): in shadow or on; null while off, or before migration 0144. */
+  checks?: "shadow" | "on" | null;
 }): Promise<number> {
   try {
     const recipients = (await listMembers(input.orgId)).filter((member) => can(member.role, "records.write")).slice(0, MAX_RECIPIENTS);
@@ -33,6 +35,7 @@ export async function notifyDocumentReceived(input: {
       vendorName: input.vendorName,
       reference: input.reference,
       typedPo: input.typedPo,
+      checks: input.checks ?? null,
       link: `${origin}${orgHref(input.slug, `/approvals#${approvalAnchor(input.invoiceId)}`)}`,
       origin,
     });

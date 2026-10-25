@@ -82,7 +82,9 @@ export type CycleEventKind =
   /** An owner turned the payee lock off or shortened its wait: a payment it held may be paid now (due-work watch DW8). */
   | "payee_lock_eased"
   /** An owner set vendor requests to shadow or on: the bills already waiting for a document are weighed now (document requests ER1). */
-  | "document_requests_on";
+  | "document_requests_on"
+  /** A vendor sent, or a member attached, a document for a bill: the cycle checks it against the bill now (document checks DK2). */
+  | "document_received";
 
 export interface CycleEvent {
   orgId: string;

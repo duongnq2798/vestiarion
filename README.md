@@ -145,9 +145,10 @@ reads the whole book each time it runs:
 | **Treasury** | On Arc testnet, sweeps idle cash above a 7-day buffer into Circle's USYC only when the yield beats the round-trip fee, and redeems ahead of what falls due |
 | **Audit** | Appends every decision, human action and system event to an Ed25519-signed, hash-chained ledger, exportable and verifiable in one click, and a monthly close pack: one row per payment with its bill, approvals, checks, transaction and signed entry, as a page, a CSV or signed JSON |
 
-The agent cycle: reconcile -> receipts -> compliance -> follow-up -> recurring -> services -> liquidity -> AP ->
-contractors -> treasury -> forecast -> proposals -> collections -> early offers -> customer offers -> term requests ->
-document requests -> cash alert -> notices -> telegram -> slack -> discord, each stage's outcome appended to the ledger.
+The agent cycle: reconcile -> receipts -> compliance -> document checks -> follow-up -> recurring -> services ->
+liquidity -> AP -> contractors -> treasury -> forecast -> proposals -> collections -> early offers -> customer offers ->
+term requests -> document requests -> cash alert -> notices -> telegram -> slack -> discord, each stage's outcome appended
+to the ledger.
 
 ## Why it is different
 

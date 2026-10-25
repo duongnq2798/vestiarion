@@ -524,6 +524,8 @@ const RULE_REASONS: Readonly<Record<string, string>> = {
   "invoice.duplicate_of_settled": "it repeats an invoice already paid, being paid or scheduled",
   "counterparty.client_payable": "the counterparty is a client: it pays this business",
   "obligation.duplicate_reference": "a bill and a milestone name the same purchase order or delivered work, and this one came second",
+  // Within its limit, and held all the same: a person approves a bill whose purchase order a document gave (DK8, DK13).
+  "invoice.vendor_document": "its purchase order came from the vendor's document, which code checked against the bill, and a person approves it",
 };
 
 /**

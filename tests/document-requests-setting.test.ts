@@ -46,9 +46,13 @@ const orgRow = () => ({
   circle_entity_secret_enc: null,
 });
 
-function settingFake(options: { setting?: string | "missing" | null; cycleRunning?: boolean; upsert?: FakeReply } = {}) {
+function settingFake(options: { setting?: string | "missing" | null; cycleRunning?: boolean; upsert?: FakeReply; checks?: boolean } = {}) {
   const fake = fakeSupabase((request: RecordedRequest) => {
     if (request.path === "/rest/v1/orgs") return { body: orgRow() };
+    // Migration 0144's columns, which say documents are checked here (document checks DK15).
+    if (request.path === "/rest/v1/document_requests") {
+      return options.checks === false ? { status: 400, body: { code: "42703", message: "column document_requests.checked_at does not exist" } } : { body: [] };
+    }
     if (request.path === "/rest/v1/approval_policies" && request.method === "GET") {
       if (options.setting === "missing") return { status: 400, body: { code: "42703", message: "column approval_policies.document_requests does not exist" } };
       return { body: options.setting ? [{ document_requests: options.setting }] : [] };
@@ -88,7 +92,7 @@ describe("reading the setting (ER1)", () => {
 describe("changing it (ER1)", () => {
   it("upserts the workspace's row and signs who changed it, from what, to what", async () => {
     const { fake, run } = settingFake({ setting: "off" });
-    expect(await run(() => changeDocumentRequests({ actorId: ACTOR, to: "shadow" }))).toEqual({ from: "off", to: "shadow" });
+    expect(await run(() => changeDocumentRequests({ actorId: ACTOR, to: "shadow" }))).toEqual({ from: "off", to: "shadow", checks: true });
     const upsert = fake.requests.find((r) => r.path === "/rest/v1/approval_policies" && r.method === "POST");
     expect(upsert?.params.get("on_conflict")).toBe("org_id");
     expect(upsert?.body).toMatchObject({ org_id: ORG, document_requests: "shadow", updated_by: ACTOR });
@@ -97,13 +101,14 @@ describe("changing it (ER1)", () => {
     expect(entry.p_summary).toBe("Vestiarion now records which vendors it would ask for a missing document, and sends nothing");
   });
 
-  it("says each change in words", async () => {
-    for (const [from, to, summary] of [
-      ["shadow", "on", "Vestiarion now asks vendors for a bill's missing purchase order or goods receipt"],
-      ["on", "off", "Vestiarion no longer asks vendors for missing documents"],
+  it("says each change in words, and that documents are checked once migration 0144 ran (document checks DK1)", async () => {
+    for (const [from, to, checks, summary] of [
+      ["shadow", "on", true, "Vestiarion now asks vendors for a bill's missing purchase order or goods receipt, and checks what they send against the bill"],
+      ["shadow", "on", false, "Vestiarion now asks vendors for a bill's missing purchase order or goods receipt"],
+      ["on", "off", true, "Vestiarion no longer asks vendors for missing documents"],
     ] as const) {
-      const { fake, run } = settingFake({ setting: from });
-      await run(() => changeDocumentRequests({ actorId: ACTOR, to }));
+      const { fake, run } = settingFake({ setting: from, checks });
+      expect(await run(() => changeDocumentRequests({ actorId: ACTOR, to }))).toEqual({ from, to, checks });
       expect(ledgerBodies(fake.requests)[0].p_summary).toBe(summary);
     }
   });

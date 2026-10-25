@@ -11,6 +11,10 @@ normal approval path.
 
 Part 1 asks, collects and shows; it never pays and changes no bill on its own.
 
+Part 2 is docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md (migration 0144). For a document it
+checks, it replaces ER6 and ER7: with vendor requests on, a document that matches adds the bill's purchase order, and
+a person approves the payment. The rest of part 1 stands.
+
 ## Rules
 
 **ER1. The setting.** A column `approval_policies.document_requests text not null default 'off'`, with values `off`,

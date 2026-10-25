@@ -1,6 +1,6 @@
 import { agentOutflowUsdc, budgetRoom, exceedsBudget, type OutflowBudget } from "./agent/outflow-budget";
 import { paymentLimitForRisk } from "./compliance";
-import { heldForCash, heldForVerdict } from "./next-step";
+import { heldForCash, heldForVerdict, VENDOR_DOCUMENT } from "./next-step";
 import { TWO_APPROVALS_RULE } from "./two-approvals";
 
 /**
@@ -150,6 +150,9 @@ export const BILL_STAGES: readonly string[] = [
   "fx.swap_cost_above_cap",
   "fx.swap_usdc_short",
   "treasury.insufficient_eurc",
+  // The last of enforceApGuardrails' own rules, around every one above (document checks DK8): a pay or schedule they let
+  // through, on a bill whose purchase order came from its vendor's document, is held for a person.
+  VENDOR_DOCUMENT,
   SAME_WORK,
   PROJECT,
 ];
@@ -234,6 +237,8 @@ interface Facts {
   sameWork: boolean;
   /** The bill or milestone was in a project (`observed.projectId`, project budgets P5). */
   inProject: boolean;
+  /** The bill's purchase order came from its vendor's document (`vendorDocument`, document checks DK8). */
+  vendorDocument: boolean;
   /** The entry has what any replay needs: an amount and a decision. */
   complete: boolean;
 }
@@ -312,6 +317,7 @@ function factsOf(entry: ReplayEntry, history: ShadowHistory): Facts | null {
     newPayee: newPayee ? { twoParties: newPayee.twoParties === true } : null,
     sameWork: Array.isArray(observed?.sameWork) && observed.sameWork.length > 0,
     inProject: typeof observed?.projectId === "string",
+    vendorDocument: record(detail.vendorDocument) !== null,
     complete: observed !== null && amount !== null && action !== null,
   };
 }
@@ -412,6 +418,9 @@ function settleFromFacts(stage: string, facts: Facts, figures: RuleFigures): Sta
   if (stage === SAME_WORK) return facts.sameWork ? "fires" : "passes";
   // A project's budget is read at the moment of the decision, so a bill in a project cannot be told; one in none passes.
   if (stage === PROJECT) return facts.inProject ? { cantTell: "stage_unsettled" } : "passes";
+  // Every ap_* entry on a bill whose purchase order came from its vendor's document says so; one written before it did
+  // not, and was not held for it.
+  if (stage === VENDOR_DOCUMENT) return facts.vendorDocument ? "fires" : "passes";
   return { cantTell: "stage_unsettled" };
 }
 

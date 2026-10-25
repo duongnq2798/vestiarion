@@ -82,7 +82,11 @@ function world(w: World = {}) {
       return { body: w.bills ?? [bill()] };
     }
     if (request.path === "/rest/v1/document_requests") {
-      if (request.params.has("or")) return { body: w.today ?? [] };
+      if (request.params.has("or")) {
+        // A member's attachment has no email domain (0144): the read that leaves those out gets the vendors' alone.
+        const vendorsOnly = request.params.get("email_domain") === "not.is.null";
+        return { body: (w.today ?? []).filter((row) => !vendorsOnly || row.email_domain !== null) };
+      }
       return { body: w.requests ?? [] };
     }
     if (request.path === "/rest/v1/rpc/create_document_request") {
@@ -177,6 +181,18 @@ describe("which bills it asks about (ER2)", () => {
     await run(noMore);
     expect(sendMock).not.toHaveBeenCalled();
     expect(rpcs(noMore, "claim_document_request_send")).toHaveLength(0);
+  });
+
+  it("counts only its own requests toward the 20 a day: documents members attached today use none of them", async () => {
+    // 0144: a member's attachment is an answered row with no email domain, made now, never emailed.
+    const attached = Array.from({ length: 20 }, (_, i) => ({ id: `m${i}`, created_at: new Date(NOW - i * 3_600_000).toISOString(), sent_at: null, email_domain: null, source: "member" }));
+    const client = world({ today: attached });
+    await run(client);
+    expect(rpcs(client, "create_document_request")).toHaveLength(1);
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const read = client.requests.find((r) => r.path === "/rest/v1/document_requests" && r.params.has("or"))!;
+    // Before 0144 every row has an email domain (0142's not null), so the same filter reads the same rows there.
+    expect(read.params.get("email_domain")).toBe("not.is.null");
   });
 
   it("reads the bills' earlier requests 100 bills at a time, so no read's address grows past the others'", async () => {

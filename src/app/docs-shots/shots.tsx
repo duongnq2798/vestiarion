@@ -72,6 +72,8 @@ import { compareActuals, type ActualRecord, type ActualsFacts } from "@/lib/actu
 import { readStatement, type StatementChoices } from "@/lib/bank-statement/lines";
 import { matchStatement, type StatementBill } from "@/lib/bank-statement/match";
 import type { WaitingPayable } from "@/lib/agent/approvals";
+import type { DocumentRequestView } from "@/lib/document-requests/rules";
+import { VENDOR_DOCUMENT } from "@/lib/next-step";
 import { heldReason } from "@/lib/agent/milestone-decisions";
 import type { LedgerEntry } from "@/lib/ledger";
 import { reduceSettlement, type SettlementBooks, type SettlementFact } from "@/lib/settlement";
@@ -583,6 +585,39 @@ const AWAITING: WaitingPayable = {
   reasoning: "Asked for more information before paying 8.00 USDC to Bluebird Logistics: no purchase order is on file and no receipt is recorded, so the three-way match is incomplete.",
   explanation: "Asked for more information before paying 8.00 USDC to Bluebird Logistics: no purchase order is on file and no receipt is recorded, so the three-way match is incomplete.",
   poReference: null,
+};
+
+/**
+ * A bill its vendor's document completed (document checks DK8, DK13): the check matched the document's vendor, amount
+ * and purchase order PO-2215 against the bill and added the purchase order, and the agent held it for a person.
+ */
+const DOCUMENT_CHECKED: WaitingPayable = {
+  ...HELD,
+  id: "00000000-0000-4000-8000-0000000000e4",
+  counterpartyId: "00000000-0000-4000-8000-0000000000d4",
+  counterpartyName: "Northstar Studio",
+  status: "held",
+  reasoning: "Pay 8.00 USDC to Northstar Studio: purchase order PO-2215 is on file, the goods were received, and the amount is within its 50 USDC limit. [guardrail override: its purchase order came from Northstar Studio's document, which code checked against the bill — payment refused before execution; held for a person to approve]",
+  explanation:
+    "Pay 8.00 USDC to Northstar Studio: purchase order PO-2215 is on file, the goods were received, and the amount is within its 50.00 USDC limit. Not paid: its purchase order came from Northstar Studio's document, which code checked against the bill. Held for a person to approve.",
+  createdBy: null,
+  poReference: "PO-2215",
+  goodsReceived: true,
+  guardrailRule: VENDOR_DOCUMENT,
+};
+
+/** What the vendor sent for it, and what the check found: a match that added the purchase order. */
+const CHECKED_DOCUMENT: DocumentRequestView = {
+  state: "answered",
+  id: "00000000-0000-4000-8000-0000000000f4",
+  missing: ["purchase_order"],
+  answeredAt: "2026-10-24T15:00:00Z",
+  poReference: "PO-2215",
+  note: null,
+  fileType: "application/pdf",
+  fileSize: 48_213,
+  source: "vendor",
+  check: { outcome: "matched", po: "PO-2215", added: true, shadowLeftPo: false },
 };
 
 function HashChain({ entries }: { entries: LedgerEntry[] }) {
@@ -1425,6 +1460,15 @@ export const DOCS_SHOTS = {
     render: function AddDetailsShot() {
       // An owner adding what the agent asked for (complete held invoice R1, R2): the script opens the dialog and fills it.
       return <ApprovalCard orgSlug={SLUG} payable={AWAITING} canDecide canEdit viewerId="docs-sample-owner" sandbox={false} />;
+    },
+  },
+  "first-payment-document-checked": {
+    guide: "first-payment",
+    page: "approvals",
+    sub: "Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle.",
+    render: function DocumentCheckedShot() {
+      // Held for a person once the vendor's document added its purchase order (document checks DK8, DK13).
+      return <ApprovalCard orgSlug={SLUG} payable={DOCUMENT_CHECKED} canDecide canEdit viewerId="docs-sample-owner" sandbox={false} documentRequest={CHECKED_DOCUMENT} />;
     },
   },
   "first-payment-onchain-limit": {

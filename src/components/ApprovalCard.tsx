@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCallback, useState, type FormEvent } from "react";
 import { approveInvoiceAction, cosignInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { AddDetailsDialog } from "@/components/AddDetailsDialog";
+import { AttachDocumentDialog } from "@/components/document-requests/AttachDocumentDialog";
 import { DocumentRequestLine } from "@/components/document-requests/DocumentRequestLine";
 import { suggestedPoOf, type DocumentRequestView } from "@/lib/document-requests/rules";
 import { ExceptionLine } from "@/components/ExceptionLine";
@@ -26,10 +27,10 @@ import { paymentSendingToast, paymentToastId, withPaymentReceipt } from "@/compo
 import { withSuccessToast } from "@/components/withSuccessToast";
 import type { WaitingPayable } from "@/lib/agent/approvals";
 import { COSIGN_BLOCKED, type CosignState } from "@/lib/cosign-state-rules";
-import { addedDetailsSentence } from "@/lib/added-details";
+import { addedDetailsSentence, missingDetails } from "@/lib/added-details";
 import { bankAccountLine, bankQuoteLine } from "@/lib/bank-payouts/words";
 import { approvalAnchor, orgHref } from "@/lib/auth/org-paths";
-import { agentResumes, CASH_SHORTFALL, SHADOW_VERDICT, counterpartyPath, ruleNextStep } from "@/lib/next-step";
+import { agentResumes, CASH_SHORTFALL, SHADOW_VERDICT, counterpartyPath, ruleNextStep, VENDOR_DOCUMENT } from "@/lib/next-step";
 import { amountToPay } from "@/lib/agent/payment-timing";
 import { approvalCost, bankPayoutCost, type ApprovalCost } from "@/lib/approval-cost";
 import type { ExceptionFacts } from "@/lib/exceptions";
@@ -164,6 +165,8 @@ export function unansweredLine(attempt: { sending?: true }, acrossChains: boolea
  */
 export function overridesHold(payable: Pick<WaitingPayable, "status" | "guardrailRule" | "heldForCash" | "heldForVerdict">): boolean {
   if (payable.heldForCash || payable.heldForVerdict) return false;
+  // Held for its vendor's document, the agent waits for a person: approving it is what the hold asks for (document checks DK8).
+  if (payable.guardrailRule === VENDOR_DOCUMENT) return false;
   return payable.status === "flagged" || payable.guardrailRule !== null;
 }
 
@@ -224,7 +227,11 @@ const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfini
  * payment was sent for it; the agent then decides it again, and until it does
  * the card says what was added (complete held invoice R1, R3, R6). Where the agent asked the vendor for the missing
  * document (`documentRequest`), the card says so, opens what the vendor sent, and fills its purchase order number into
- * Add details (document requests ER6).
+ * Add details (document requests ER6). It says what the cycle's check found in the document: a match, with vendor
+ * requests on, adds the purchase order, and the agent then holds the bill for a person to approve
+ * (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK8, DK13). While vendor requests are in
+ * shadow or on (`documentChecks`), an owner or admin may also attach a document the vendor emailed them, for the cycle to
+ * check (DK11).
  */
 export default function ApprovalCard({
   orgSlug,
@@ -241,12 +248,15 @@ export default function ApprovalCard({
   canCosign = false,
   cosign,
   documentRequest,
+  documentChecks = null,
 }: {
   orgSlug: string;
   payable: WaitingPayable;
   canDecide: boolean;
   /** The agent's latest request to the vendor for the bill's missing document, as its card shows it (document requests ER6). */
   documentRequest?: DocumentRequestView;
+  /** How a document attached now is checked: in shadow or on; null (no Attach a document) while off, before 0144 or unread (DK11). */
+  documentChecks?: "shadow" | "on" | null;
   /** The viewer is an accountant and the workspace's accountants co-sign (accountant co-sign CS2). */
   canCosign?: boolean;
   /**
@@ -289,6 +299,9 @@ export default function ApprovalCard({
     !payable.paymentSent &&
     payable.lastAttempt?.state !== "in_flight" &&
     (payable.poReference === null || !payable.goodsReceived);
+  // Beside Add details, while it waits for its purchase order or goods receipt (DK11): what `missingDetails` names, so a
+  // vendor paid without purchase orders, its goods received, is offered nothing the server would refuse.
+  const attach = canAddDetails && payable.status === "awaiting_info" && missingDetails(payable) !== null ? documentChecks : null;
 
   return (
     <Card asChild tone={payable.status === "flagged" ? "refused" : processing ? "agent" : "held"}>
@@ -353,7 +366,14 @@ export default function ApprovalCard({
             </Callout>
           )}
           {documentRequest && (
-            <DocumentRequestLine orgSlug={orgSlug} vendorName={payable.counterpartyName} view={documentRequest} canRevoke={canEdit} className="mt-2" />
+            <DocumentRequestLine
+              orgSlug={orgSlug}
+              vendorName={payable.counterpartyName}
+              view={documentRequest}
+              goodsReceived={payable.goodsReceived}
+              canRevoke={canEdit}
+              className="mt-2"
+            />
           )}
           {unfinished && (
             <p className="mt-2 text-sm text-ink-2">
@@ -418,6 +438,7 @@ export default function ApprovalCard({
               ownAddress={ownAddress}
               canAddDetails={canAddDetails}
               suggestedPo={suggestedPoOf(documentRequest)}
+              attach={attach}
             />
           </>
         ) : canCosign && (cosign ? cosign.state !== "not_needed" : two) ? (
@@ -569,6 +590,7 @@ function Decisions({
   ownAddress,
   canAddDetails,
   suggestedPo = null,
+  attach = null,
 }: {
   orgSlug: string;
   payable: WaitingPayable;
@@ -582,6 +604,8 @@ function Decisions({
   canAddDetails: boolean;
   /** The purchase order number the vendor typed with its document, filled in under Add details (document requests ER6). */
   suggestedPo?: string | null;
+  /** Attach a document, in the mode vendor requests are in; null where it is not offered (document checks DK11). */
+  attach?: "shadow" | "on" | null;
 }) {
   const approveForm = useActionForm(approve, INITIAL);
   const returnForm = useActionForm(giveBack, INITIAL);
@@ -673,6 +697,7 @@ function Decisions({
           }
         />
         {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} size="touch" suggestedPo={suggestedPo} />}
+        {attach && <AttachDocumentDialog orgSlug={orgSlug} invoiceId={payable.id} vendorName={payable.counterpartyName} mode={attach} size="touch" />}
         {(!payable.paymentSent || payable.lastAttempt?.state === "unanswered") && payable.lastAttempt?.state !== "in_flight" && (
           <>
             <RejectDialog orgSlug={orgSlug} payable={payable} />

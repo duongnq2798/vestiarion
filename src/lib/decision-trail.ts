@@ -225,6 +225,42 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
         .join(" and ");
       return { ...base, who: "person", tone: "neutral", text: `A person added ${what || "details"}.` };
     }
+    // A vendor's document, and the cycle's check of it against the bill
+    // (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK13): only its reason, Vestiarion's own
+    // sentence, ever reaches a step; never the document's text.
+    case "document_received":
+      return detail.via === "attached"
+        ? { ...base, who: "person", tone: "neutral", text: "A person attached the vendor's document." }
+        : { ...base, who: "system", tone: "neutral", text: "The vendor sent a document through its link." };
+    case "document_checked": {
+      const reason = text(detail.reason) ?? "";
+      switch (detail.outcome) {
+        case "matched": {
+          const po = text(detail.poReference);
+          if (detail.poWritten === true && po) {
+            return {
+              ...base,
+              who: "agent",
+              tone: "done",
+              text: `The agent checked the vendor's document against the bill and added purchase order ${po}.`,
+              notes: ["· The vendor, the amount and the purchase order match"],
+            };
+          }
+          return {
+            ...base,
+            who: "agent",
+            tone: "neutral",
+            text: detail.shadow === true ? "The agent checked the vendor's document: it matches. Vendor requests were in shadow, so nothing changed." : "The agent checked the vendor's document: it matches.",
+          };
+        }
+        case "mismatched":
+          return { ...base, who: "agent", tone: "stopped", text: `The agent checked the vendor's document. ${reason}`.trim() };
+        case "unreadable":
+          return { ...base, who: "agent", tone: "stopped", text: `The agent could not check the vendor's document. ${reason}`.trim() };
+        default:
+          return { ...base, who: "agent", tone: "neutral", text: "The agent did not check the vendor's document.", notes: reason ? [`· ${reason}`] : [] };
+      }
+    }
     case "invoice_reopened": {
       const changes = (record(detail.followUp)?.changes as unknown[] | undefined)?.filter((change): change is string => typeof change === "string") ?? [];
       return {

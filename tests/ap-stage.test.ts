@@ -20,6 +20,7 @@ import { ARC_TESTNET } from "@/lib/network";
 import type { NewPayeeFacts } from "@/lib/new-payee-facts";
 import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
 import { NO_EARLIER_SEND, paymentIdempotencyKey } from "@/lib/payments";
+import { awaitsVerdict } from "@/lib/next-step";
 
 /**
  * The AP stage (`runApStage`, src/lib/agent/orchestrator.ts) deciding *when*
@@ -208,6 +209,10 @@ function apFake(options: {
   priorityPlans?: Array<{ detail: Record<string, unknown>; ts?: string }>;
   /** What a read of the invoices answers, in place of the book, when it answers at all: before migration 0141, say. */
   invoicesRead?: (request: RecordedRequest) => FakeReply | null;
+  /** What the read of the bills whose purchase order came from a vendor's document answers (document checks DK8); none when absent. */
+  documentRequests?: (request: RecordedRequest) => FakeReply;
+  /** Those bills, handed to the stage instead of read (`ApStageInput.vendorDocuments`). */
+  vendorDocuments?: Parameters<typeof runApStage>[0]["vendorDocuments"];
 }) {
   const intents = paymentIntentsBackend(ORG);
   const fake = fakeSupabase((request) => {
@@ -242,6 +247,7 @@ function apFake(options: {
     }
     if (request.path === "/rest/v1/ledger_entries" && request.method === "GET" && request.params.get("action") === "eq.cash_priority_set") return { body: options.priorityPlans ?? [] };
     if (request.path === "/rest/v1/payment_term_requests") return { body: [] };
+    if (request.path === "/rest/v1/document_requests" && options.documentRequests) return options.documentRequests(request);
     if (request.path === "/rest/v1/rpc/append_ledger_entry") return { body: LEDGER_ROW };
     if (request.path === "/rest/v1/rpc/agent_paused") return { body: options.paused ?? false };
     if (request.path === "/rest/v1/invoices" && request.method === "GET" && options.invoicesRead) {
@@ -290,6 +296,7 @@ function apFake(options: {
           ...(options.bridgeFee ? { bridgeFee: options.bridgeFee, gatewayQuote: async () => null } : {}),
           reevaluations: options.reevaluations,
           ...(options.newPayee ? { newPayee: { load: async () => options.newPayee! } } : {}),
+          ...(options.vendorDocuments ? { vendorDocuments: options.vendorDocuments } : {}),
         })
       )
     );
@@ -2692,5 +2699,224 @@ describe("which bill first when the cash cannot cover them all (cash priority)",
       const hostingHold = ledger(fake.requests).find((entry) => (entry.p_detail as Record<string, unknown>).invoiceId === HOSTING && entry.p_action === "ap_hold");
       expect(hostingHold?.p_detail).toMatchObject({ cashPriority: { waits: true, byPerson: true } });
     });
+  });
+});
+
+/**
+ * A bill whose purchase order came from its vendor's document, which code checked against the bill
+ * (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK8): whatever decides it, the model or the
+ * written policy, now or on its day, in shadow mode or after a send Circle never took, the agent never pays or schedules
+ * it. A person approves it.
+ */
+describe("the AP stage and a purchase order from the vendor's document (document checks DK8)", () => {
+  const REQUEST_ID = "018f8ce0-1557-7b54-a931-4d777f6ba0d1";
+  const FILE_SHA = "ab".repeat(32);
+  const plain = { early_pay_discount_pct: null, discount_due_date: null, due_date: "2026-10-01T12:00:00+00:00" };
+  const cobalt = (over: Record<string, unknown> = {}) =>
+    payable({ amount: "5", memo: "CC-2026-1030", po_reference: "PO-PC-2026-1030", ...plain, counterparties: counterparty({ name: "Cobalt Cloud" }), ...over });
+  /** The marker 0144's check_document_request wrote for `invoiceId`: what the stage's read finds. */
+  const marked =
+    (invoiceId = INVOICE_ID, source = "vendor") =>
+    (request: RecordedRequest): FakeReply =>
+      request.params.get("po_written") === "eq.true" && (request.params.get("invoice_id") ?? "").includes(invoiceId)
+        ? { body: [{ id: REQUEST_ID, invoice_id: invoiceId, source, file_sha256: FILE_SHA }] }
+        : { body: [] };
+  const payNow = () => model(() => ({ action: "pay", reasoning: "The purchase order is on file and the goods are received; paying now.", confidence: 0.9 }));
+  const HELD =
+    "[guardrail override: its purchase order came from Cobalt Cloud's document, which code checked against the bill — payment refused before execution; held for a person to approve]";
+
+  it("holds a bill the model pays before anything is sent, and names the document on its entry", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, metrics, stage } = apFake({ book: [cobalt()], documentRequests: marked() });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(fake.requests.some((r) => r.path.includes("payment_intents"))).toBe(false);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held", tx_ref: null, paid_amount: null, settled_at: null, scheduled_for: null });
+    expect((patch.body as Record<string, string>).agent_reasoning).toBe(`The purchase order is on file and the goods are received; paying now. ${HELD}`);
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_pay");
+    expect(entry.p_detail).toMatchObject({
+      guardrailBlocked: true,
+      guardrailRule: "invoice.vendor_document",
+      vendorDocument: { requestId: REQUEST_ID, source: "vendor", fileSha256: FILE_SHA },
+      observed: { poReference: "PO-PC-2026-1030", goodsReceived: true },
+      execution: { txRef: null, resultingStatus: "held" },
+    });
+    expect((entry.p_detail as { execution: Record<string, unknown> }).execution).not.toHaveProperty("heldBecause");
+    expect(metrics.snapshot()).toMatchObject({ paidCount: 0, guardrailOverrideCount: 1 });
+    // Read once for the stage, before anything is decided.
+    const reads = fake.requests.filter((r) => r.path === "/rest/v1/document_requests");
+    expect(reads).toHaveLength(1);
+    expect(reads[0].params.get("po_written")).toBe("eq.true");
+    expect(reads[0].params.get("invoice_id")).toBe(`in.(${INVOICE_ID})`);
+  });
+
+  it("holds a schedule too, so no day comes on which the agent would pay it", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    model(() => ({ action: "schedule", payOn: "2026-10-20", reasoning: "Pay on the 20th.", confidence: 0.8 }));
+    const { fake, chain, stage } = apFake({ book: [cobalt({ due_date: "2026-10-31T12:00:00+00:00" })], documentRequests: marked() });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [patch] = invoicePatches(fake.requests);
+    expect(patch.body).toMatchObject({ status: "held", scheduled_for: null });
+    expect((patch.body as Record<string, string>).agent_reasoning).toContain("— scheduling refused before execution; held for a person to approve]");
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_action).toBe("ap_schedule");
+    expect(entry.p_detail).toMatchObject({ guardrailBlocked: true, guardrailRule: "invoice.vendor_document", execution: { resultingStatus: "held" } });
+  });
+
+  it("holds what the written policy pays with no model at all, and a member's attachment the same", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    const { fake, chain, stage } = apFake({ book: [cobalt()], documentRequests: marked(INVOICE_ID, "member") });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      decisionMode: "heuristic",
+      guardrailRule: "invoice.vendor_document",
+      vendorDocument: { source: "member" },
+      execution: { resultingStatus: "held" },
+    });
+  });
+
+  it("holds a bill an earlier cycle scheduled, decided again on its day", async () => {
+    today("2026-10-11T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({
+      book: [scheduledPayable({ amount: "5", counterparties: counterparty({ name: "Cobalt Cloud" }) })],
+      documentRequests: marked(),
+    });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "held", scheduled_for: null });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "invoice.vendor_document" });
+  });
+
+  it("in shadow mode, holds it as code's own hold, which a person settles through a verdict", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [cobalt()], shadow: "VND", documentRequests: marked() });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({ shadow: true, guardrailBlocked: true, guardrailRule: "invoice.vendor_document", execution: { resultingStatus: "held" } });
+    expect((entry.p_detail as { execution: Record<string, unknown> }).execution).not.toHaveProperty("heldBecause");
+    expect(awaitsVerdict(entry.p_detail as Record<string, unknown>)).toBe(true);
+  });
+
+  it("lets a rule ahead of it stop the bill first, sending it back for its goods receipt, and still names the document", async () => {
+    // The check added the purchase order, and the goods are not received yet (DK6, DK7): the match waits for them.
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [cobalt({ goods_received: false })], documentRequests: marked() });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(invoicePatches(fake.requests)[0].body).toMatchObject({ status: "awaiting_info" });
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({
+      guardrailRule: "invoice.match_incomplete",
+      vendorDocument: { requestId: REQUEST_ID, source: "vendor", fileSha256: FILE_SHA },
+      execution: { resultingStatus: "awaiting_info" },
+    });
+  });
+
+  it("decides a person's payment Circle never took again, and holds it for a person again", async () => {
+    today("2026-10-15T10:00:00.000Z");
+    payNow();
+    /** Circle, which never took the earlier send. */
+    class NeverTook extends Chain {
+      async findTransferByRef(): Promise<TransferResult | null> {
+        return null;
+      }
+    }
+    const chain = new NeverTook();
+    const world = apFake({ book: [cobalt({ status: "matched", decided_at: "2026-10-15T09:29:00+00:00" })], chain, documentRequests: marked() });
+    const row = world.intents.insert({
+      source_type: "invoice", source_id: INVOICE_ID, idempotency_key: paymentIdempotencyKey("invoice", INVOICE_ID),
+      provider: "circle", provider_mode: "live", amount: 5, destination: "0xnorth",
+    });
+    Object.assign(row, { status: "failed", attempt_count: 1, last_error: `Circle did not answer within 20000 ms; the transfer ${MAY_HAVE_BEEN_ACCEPTED}`, updated_at: "2026-10-15T09:30:00.000Z" });
+
+    await world.stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(decideMock).toHaveBeenCalledTimes(1);
+    expect(invoicePatches(world.fake.requests)[0].body).toMatchObject({ status: "held" });
+    expect(ledger(world.fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "invoice.vendor_document" });
+  });
+
+  it("holds only the bill whose purchase order came from a document", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const other = payable({
+      id: OTHER_INVOICE_ID, amount: "3", memo: "Hosting", po_reference: "PO-2001", counterparty_id: CONTOSO, ...plain,
+      counterparties: counterparty({ id: CONTOSO, name: "Contoso", address: "0xcontoso" }),
+    });
+    const { fake, chain, stage } = apFake({ book: [cobalt(), other], documentRequests: marked() });
+
+    await stage();
+
+    expect(chain.transfers.map((t) => t.amount)).toEqual([3]);
+    expect(fake.requests.filter((r) => r.path === "/rest/v1/document_requests")).toHaveLength(1);
+    const entries = ledger(fake.requests).filter((entry) => entry.p_action === "ap_pay");
+    const decided = entries.map((entry) => entry.p_detail as { invoiceId: string; guardrailRule: string | null });
+    expect(decided.map((detail) => [detail.invoiceId, detail.guardrailRule])).toEqual([
+      [INVOICE_ID, "invoice.vendor_document"],
+      [OTHER_INVOICE_ID, null],
+    ]);
+    expect(entries[1].p_detail).not.toHaveProperty("vendorDocument");
+  });
+
+  it("takes the bills handed to it instead of reading them", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const vendorDocuments = new Map([[INVOICE_ID, { requestId: REQUEST_ID, source: "vendor" as const, fileSha256: FILE_SHA }]]);
+    const { fake, chain, stage } = apFake({ book: [cobalt()], vendorDocuments });
+
+    await stage();
+
+    expect(chain.transfers).toEqual([]);
+    expect(fake.requests.some((r) => r.path === "/rest/v1/document_requests")).toBe(false);
+    expect(ledger(fake.requests)[0].p_detail).toMatchObject({ guardrailRule: "invoice.vendor_document" });
+  });
+
+  it("stops the stage before any payment when the marker cannot be read", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({ book: [cobalt()], documentRequests: () => ({ status: 500, body: { code: "XX000", message: "connection reset" } }) });
+
+    await expect(stage()).rejects.toThrow(/vendor documents could not be read/);
+
+    expect(chain.transfers).toEqual([]);
+    expect(invoicePatches(fake.requests)).toEqual([]);
+    expect(ledger(fake.requests)).toEqual([]);
+  });
+
+  it("holds nothing for it before migration 0144, and pays a bill every check lets through", async () => {
+    today("2026-10-02T09:00:00.000Z");
+    payNow();
+    const { fake, chain, stage } = apFake({
+      book: [cobalt()],
+      documentRequests: () => ({ status: 400, body: { code: "42703", message: "column document_requests.po_written does not exist" } }),
+    });
+
+    await stage();
+
+    expect(chain.transfers.map((t) => t.amount)).toEqual([5]);
+    const [entry] = ledger(fake.requests);
+    expect(entry.p_detail).toMatchObject({ guardrailBlocked: false, guardrailRule: null });
+    expect(entry.p_detail).not.toHaveProperty("vendorDocument");
   });
 });
