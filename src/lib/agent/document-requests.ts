@@ -163,12 +163,16 @@ export async function requestMissingDocuments(
     requests.push(...((requestsRead.data ?? []) as unknown as RequestRow[]));
   }
 
-  // The day's requests across the workspace: at most 20 made, and 20 emailed, in 24 hours (ER2).
+  // The day's requests across the workspace: at most 20 made, and 20 emailed, in 24 hours (ER2). Only the agent's own
+  // count: a document a member attached (0144) has no email domain, and is left out here, though it still counts toward
+  // its bill's 7-day cooldown above (document checks DK11). 0142 made every row's email domain not null, and 0144 keeps
+  // it set on exactly the vendors' rows, so this reads the same rows before 0144 and after it.
   const since = new Date(now - DAY_MS).toISOString();
   const today = unwrap(
     await orgDb
       .from("document_requests")
       .select("id, created_at, sent_at")
+      .not("email_domain", "is", null)
       .or(`created_at.gte.${since},sent_at.gte.${since}`)
       .limit(DOCUMENT_REQUESTS_PER_DAY * 4)
   ) as Array<{ id: string; created_at: string; sent_at: string | null }>;
