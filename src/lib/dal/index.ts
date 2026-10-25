@@ -185,9 +185,10 @@ export const PLATFORM_RPCS = [
   // workspace, previewed and answered by token.
   "create_document_request", "claim_document_request_send", "mark_document_request_sent", "release_document_request_send",
   "close_document_requests", "revoke_document_request", "document_request_preview", "answer_document_request",
-  // Checking a vendor's document against its bill (0144, document checks DK7, DK11): a member's attached PDF, and the
-  // cycle's check of each answered request, which may add the bill's purchase order.
-  "attach_document", "check_document_request",
+  // Checking a vendor's document against its bill (0144, document checks DK3, DK7, DK11): a member's attached PDF, the
+  // cycle's check of each answered request, which may add the bill's purchase order, and the count of its file's reads
+  // begun and not finished.
+  "attach_document", "check_document_request", "start_document_parse", "finish_document_parse",
 ] as const;
 export type PlatformRpc = (typeof PLATFORM_RPCS)[number];
 

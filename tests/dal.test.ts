@@ -222,8 +222,8 @@ describe("the table boundary", () => {
     expect(fake.requests.map((request) => [request.path, request.body])).toEqual([["/rest/v1/rpc/create_org", { p_slug: "northstar" }]]);
   });
 
-  it("lets platformDb() attach a member's document and record a document's check (document checks DK7, DK11)", () => {
-    expect(PLATFORM_RPCS).toEqual(expect.arrayContaining(["attach_document", "check_document_request"]));
+  it("lets platformDb() attach a member's document, record a document's check and count its reads (document checks DK3, DK7, DK11)", () => {
+    expect(PLATFORM_RPCS).toEqual(expect.arrayContaining(["attach_document", "check_document_request", "start_document_parse", "finish_document_parse"]));
   });
 });
 

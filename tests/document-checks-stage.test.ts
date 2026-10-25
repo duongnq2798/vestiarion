@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+import { nestedFormsPdf } from "./support/pdf-files";
 
 /**
  * The cycle's document checks stage (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK2-DK4,
@@ -14,16 +15,22 @@ import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } fr
  * each request checked once, an answer from before 0144 included.
  */
 
-const { ledgerMock, storage, extractSpy } = vi.hoisted(() => ({
+const { ledgerMock, storage, extractSpy, readSpy } = vi.hoisted(() => ({
   ledgerMock: vi.fn(),
   storage: { download: vi.fn() },
   extractSpy: vi.fn(),
+  readSpy: vi.fn(),
 }));
 vi.mock("@/lib/ledger", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/ledger")>()), appendLedgerEntry: ledgerMock }));
 vi.mock("@/lib/dal", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/dal")>()), platformStorage: () => storage }));
 vi.mock("@/lib/invoice-document/extract", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/invoice-document/extract")>();
   return { ...actual, extractInvoice: (...args: Parameters<typeof actual.extractInvoice>) => (extractSpy(...args), actual.extractInvoice(...args)) };
+});
+// The real bounded reader, watched: which files reach pdf.js at all.
+vi.mock("@/lib/invoice-document/read", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/invoice-document/read")>();
+  return { ...actual, readPdfBounded: (...args: Parameters<typeof actual.readPdfBounded>) => (readSpy(...args), actual.readPdfBounded(...args)) };
 });
 
 import { db } from "@/lib/dal";
@@ -90,12 +97,16 @@ interface World {
   checked?: Array<Record<string, unknown>>;
   /** check_document_request's answer to each call, in turn; by default it checks, or writes. */
   answers?: string[];
+  /** start_document_parse's answer: the reads of the file begun before and never finished; none by default. */
+  parse?: FakeReply;
 }
 
 function world(w: World = {}) {
   const waiting = [...(w.waiting ?? [answered()])];
   const answers = [...(w.answers ?? [])];
   return fakeSupabase((request: RecordedRequest): FakeReply => {
+    if (request.path === "/rest/v1/rpc/start_document_parse") return w.parse ?? { body: 0 };
+    if (request.path === "/rest/v1/rpc/finish_document_parse") return { body: null };
     if (request.path === "/rest/v1/approval_policies") {
       if (w.setting === "missing") return { status: 400, body: { code: "42703", message: "column approval_policies.document_requests does not exist" } };
       return { body: [{ document_requests: w.setting ?? "on" }] };
@@ -118,8 +129,9 @@ function world(w: World = {}) {
   });
 }
 
-const run = (client: ReturnType<typeof fakeSupabase>, options: { allowRead?: () => boolean } = {}) =>
+const run = (client: ReturnType<typeof fakeSupabase>, options: Parameters<typeof checkReceivedDocuments>[1] = {}) =>
   runWith(orgTestContext({ config, client: client.client, orgId: ORG }), () => checkReceivedDocuments(db(), { now: NOW, allowRead: () => true, ...options }));
+const rpcCalls = (client: ReturnType<typeof fakeSupabase>, name: string) => client.requests.filter((r) => r.path === `/rest/v1/rpc/${name}`);
 
 const checks = (client: ReturnType<typeof fakeSupabase>) =>
   client.requests.filter((r) => r.path === "/rest/v1/rpc/check_document_request").map((r) => r.body as Record<string, unknown>);
@@ -128,6 +140,7 @@ const signed = () => ledgerMock.mock.calls.map(([entry]) => entry as { action: s
 beforeEach(() => {
   ledgerMock.mockReset().mockResolvedValue(undefined);
   extractSpy.mockReset();
+  readSpy.mockReset();
   storage.download.mockReset().mockImplementation(async () => ({ data: new Blob([PDF]), error: null }));
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -352,19 +365,47 @@ describe("a file it does not read (DK3)", () => {
 });
 
 describe("a document it skips (DK12)", () => {
-  it("skips the same file as an earlier check outside shadow, with no read", async () => {
-    const client = world({ checked: [{ id: LATER, invoice_id: INVOICE, file_sha256: PDF_SHA, check_shadow: false }] });
-    const lines = await run(client);
-    expect(checks(client)[0]).toMatchObject({ p_outcome: "skipped", p_reason: "It was not checked: it is the same file as one already checked for this bill.", p_write_po: false });
-    expect(lines).toEqual([{ domain: "ap", message: "Did not check Northwind Hosting's document: it is the same file as one already checked for this bill" }]);
-    expect(storage.download).not.toHaveBeenCalled();
-    expect(signed()[0].detail).toMatchObject({ outcome: "skipped", reader: null, checks: [] });
+  it("skips the same file as an earlier check outside shadow that compared it, with no read", async () => {
+    for (const outcome of ["matched", "mismatched"]) {
+      const client = world({ checked: [{ id: LATER, invoice_id: INVOICE, file_sha256: PDF_SHA, check_shadow: false, check_outcome: outcome }] });
+      const lines = await run(client);
+      const read = client.requests.find((r) => r.path === "/rest/v1/document_requests" && r.params.get("checked_at") === "not.is.null")!;
+      expect(read.params.get("select"), outcome).toContain("check_outcome");
+      expect(checks(client)[0], outcome).toMatchObject({ p_outcome: "skipped", p_reason: "It was not checked: it is the same file as one already checked for this bill.", p_write_po: false });
+      expect(lines, outcome).toEqual([{ domain: "ap", message: "Did not check Northwind Hosting's document: it is the same file as one already checked for this bill" }]);
+      expect(storage.download, outcome).not.toHaveBeenCalled();
+      expect(signed()[0].detail, outcome).toMatchObject({ outcome: "skipped", reader: null, checks: [] });
+      ledgerMock.mockClear();
+    }
   });
 
   it("checks the same file again when its earlier check was in shadow (DK10)", async () => {
-    const client = world({ checked: [{ id: LATER, invoice_id: INVOICE, file_sha256: PDF_SHA, check_shadow: true }] });
+    const client = world({ checked: [{ id: LATER, invoice_id: INVOICE, file_sha256: PDF_SHA, check_shadow: true, check_outcome: "matched" }] });
     await run(client);
     expect(checks(client)[0]).toMatchObject({ p_outcome: "matched", p_write_po: true });
+  });
+
+  it("reads the same file again when its earlier check outside shadow never read it: skipped or unreadable (DK12)", async () => {
+    for (const outcome of ["skipped", "unreadable"]) {
+      const client = world({ checked: [{ id: LATER, invoice_id: INVOICE, file_sha256: PDF_SHA, check_shadow: false, check_outcome: outcome }] });
+      await run(client);
+      expect(checks(client)[0], outcome).toMatchObject({ p_outcome: "matched", p_write_po: true });
+      expect(storage.download, outcome).toHaveBeenCalledTimes(1);
+      storage.download.mockClear();
+    }
+  });
+
+  it("reads a later copy of a file the same cycle found gone from storage", async () => {
+    // The vendor's first upload is gone; a member attached the same bytes again, which are kept.
+    const client = world({ waiting: [answered(), answered({ id: LATER, file_path: keptAt(LATER, PDF_SHA), answered_at: "2026-10-24T10:00:00Z", source: "member" })] });
+    storage.download.mockImplementation(async (at: string) =>
+      at.includes(LATER) ? { data: new Blob([PDF]), error: null } : { data: null, error: { message: "Object not found", statusCode: "404" } }
+    );
+    await run(client);
+    expect(checks(client).map((body) => [body.p_id, body.p_outcome])).toEqual([
+      [REQUEST, "unreadable"],
+      [LATER, "matched"],
+    ]);
   });
 
   it("skips a bill that no longer waits for a document, or that no longer lacks one, with no read", async () => {
@@ -377,6 +418,83 @@ describe("a document it skips (DK12)", () => {
     await run(gone);
     expect(checks(gone)[0]).toMatchObject({ p_outcome: "skipped" });
     expect(storage.download).not.toHaveBeenCalled();
+  });
+});
+
+describe("a PDF that will not finish reading (DK3)", () => {
+  // Nested forms: about 95 s for pdf.js unbounded, on the thread every live workspace's cycle runs on.
+  const BOMB = nestedFormsPdf({ fanOut: 10, depth: 6 });
+  const bombRow = () => answered({ file_sha256: sha(BOMB), file_path: keptAt(REQUEST, sha(BOMB)), file_size: BOMB.byteLength });
+  const parseOrder = (client: ReturnType<typeof fakeSupabase>) =>
+    client.requests
+      .map((r) => r.path.replace("/rest/v1/rpc/", ""))
+      .filter((name) => ["start_document_parse", "finish_document_parse", "check_document_request"].includes(name));
+
+  it("reads it in a worker, stops it at its time limit as unreadable, and asks no model", async () => {
+    storage.download.mockImplementation(async () => ({ data: new Blob([BOMB]), error: null }));
+    const client = world({ waiting: [bombRow()] });
+    const started = Date.now();
+    const lines = await run(client, { pdfLimits: { timeoutMs: 500 } });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(checks(client)[0]).toMatchObject({ p_outcome: "unreadable", p_reason: "This PDF could not be read.", p_write_po: false });
+    expect(lines).toEqual([{ domain: "ap", message: "Could not check Northwind Hosting's document: This PDF could not be read." }]);
+    expect(extractSpy).not.toHaveBeenCalled();
+    // The read was counted before pdf.js began, and the count cleared once it ended, before the check was recorded.
+    expect(parseOrder(client)).toEqual(["start_document_parse", "finish_document_parse", "check_document_request"]);
+    expect(rpcCalls(client, "start_document_parse")[0].body).toEqual({ p_org_id: ORG, p_id: REQUEST });
+    expect(rpcCalls(client, "finish_document_parse")[0].body).toEqual({ p_org_id: ORG, p_id: REQUEST });
+  }, 20_000);
+
+  it("counts every parse before it begins and clears it once it ends", async () => {
+    const client = world();
+    await run(client);
+    expect(parseOrder(client)).toEqual(["start_document_parse", "finish_document_parse", "check_document_request"]);
+    expect(checks(client)[0]).toMatchObject({ p_outcome: "matched" });
+  });
+
+  it("parses no file that is not a PDF, too large, or not the one received", async () => {
+    const client = world({ waiting: [answered({ file_type: "image/png" })] });
+    await run(client);
+    expect(rpcCalls(client, "start_document_parse")).toEqual([]);
+    expect(readSpy).not.toHaveBeenCalled();
+  });
+
+  it("records a file whose read began twice and never finished as unreadable, and never parses it a third time", async () => {
+    const client = world({ parse: { body: 2 } });
+    const lines = await run(client);
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(extractSpy).not.toHaveBeenCalled();
+    expect(checks(client)[0]).toMatchObject({ p_outcome: "unreadable", p_reason: "This PDF could not be read." });
+    expect(rpcCalls(client, "finish_document_parse")).toEqual([]);
+    expect(lines).toEqual([{ domain: "ap", message: "Could not check Northwind Hosting's document: This PDF could not be read." }]);
+  });
+
+  it("reads it again after one read that never finished", async () => {
+    const client = world({ parse: { body: 1 } });
+    await run(client);
+    expect(readSpy).toHaveBeenCalledTimes(1);
+    expect(checks(client)[0]).toMatchObject({ p_outcome: "matched", p_write_po: true });
+  });
+
+  it("reads it with nothing counted before 0144's functions are there", async () => {
+    const client = world({ parse: { status: 404, body: { code: "PGRST202", message: "Could not find the function public.start_document_parse" } } });
+    await run(client);
+    expect(checks(client)[0]).toMatchObject({ p_outcome: "matched" });
+    expect(rpcCalls(client, "finish_document_parse")).toEqual([]);
+  });
+
+  it("stops the stage when the read cannot be counted, so the next cycle tries again", async () => {
+    const client = world({ parse: { status: 500, body: { code: "XX000", message: "connection reset" } } });
+    await expect(run(client)).rejects.toThrow(/connection reset/);
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(checks(client)).toEqual([]);
+  });
+
+  it("parses nothing for a request checked elsewhere since the cycle read it, and signs nothing", async () => {
+    const client = world({ parse: { body: null }, answers: ["already_checked"] });
+    expect(await run(client)).toEqual([]);
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(signed()).toEqual([]);
   });
 });
 

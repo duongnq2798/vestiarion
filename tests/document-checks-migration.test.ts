@@ -204,6 +204,25 @@ describe("attach_document (DK11)", () => {
     // Checked outside shadow, it is still the same file.
     expect(await check({ orgId: bill.orgId, id: vendor.id, sha: vendor.sha, outcome: "mismatched", reason: "The document does not state a total." })).toBe("checked");
     expect((await attach({ orgId: bill.orgId, invoiceId: bill.invoiceId, by: member, sha: vendor.sha })).outcome).toBe("same_file");
+    // And a match: its check compared the document.
+    const matchedBill = await waitingBill("dk-same-matched");
+    const matched = await answeredByVendor(matchedBill);
+    expect(await check({ orgId: matchedBill.orgId, id: matched.id, sha: matched.sha, outcome: "matched", po: "PO-PC-2026-1030" })).toBe("checked");
+    expect((await attach({ orgId: matchedBill.orgId, invoiceId: matchedBill.invoiceId, by: member, sha: matched.sha })).outcome).toBe("same_file");
+  });
+
+  it("takes the same file again when its earlier check never read it: skipped or unreadable (DK12)", async () => {
+    const member = await createUser(db, "admin@dk-never-read.example");
+    for (const [tag, outcome, reason] of [
+      ["dk-again-skipped", "skipped", "It was not checked: the bill changed before the purchase order could be added."],
+      ["dk-again-not-waiting", "skipped", "It was not checked: the bill no longer waited for a document."],
+      ["dk-again-unreadable", "unreadable", "The file is no longer in storage."],
+    ] as const) {
+      const bill = await waitingBill(tag);
+      const vendor = await answeredByVendor(bill);
+      expect(await check({ orgId: bill.orgId, id: vendor.id, sha: vendor.sha, outcome, reason }), tag).toBe("checked");
+      expect((await attach({ orgId: bill.orgId, invoiceId: bill.invoiceId, by: member, sha: vendor.sha })).outcome, tag).toBe("attached");
+    }
   });
 
   it("takes the same file again when its earlier check was in shadow (DK10)", async () => {
@@ -338,6 +357,46 @@ describe("check_document_request (DK7, DK9, DK12)", () => {
   });
 });
 
+describe("start_document_parse and finish_document_parse (DK3)", () => {
+  const start = (orgId: string, id: string) =>
+    asServiceRole(db, async (tx) => (await tx.query<{ before: number | null }>("select public.start_document_parse($1, $2) as before", [orgId, id])).rows[0].before);
+  const finish = (orgId: string, id: string) => asServiceRole(db, (tx) => tx.query("select public.finish_document_parse($1, $2)", [orgId, id]));
+  const attempts = async (id: string) =>
+    (await db.query<{ parse_attempts: number }>("select parse_attempts from public.document_requests where id = $1", [id])).rows[0].parse_attempts;
+
+  it("counts each read begun and answers how many began before it and never finished; a finished read clears the count", async () => {
+    const bill = await waitingBill("dk-parse");
+    const vendor = await answeredByVendor(bill);
+    expect(await attempts(vendor.id)).toBe(0);
+    expect(await start(bill.orgId, vendor.id)).toBe(0);
+    expect(await start(bill.orgId, vendor.id)).toBe(1);
+    expect(await start(bill.orgId, vendor.id)).toBe(2);
+    expect(await attempts(vendor.id)).toBe(3);
+    await finish(bill.orgId, vendor.id);
+    expect(await attempts(vendor.id)).toBe(0);
+    expect(await start(bill.orgId, vendor.id)).toBe(0);
+  });
+
+  it("answers null, and counts nothing, for a request checked already, another workspace's or an unknown one", async () => {
+    const bill = await waitingBill("dk-parse-done");
+    const vendor = await answeredByVendor(bill);
+    expect(await check({ orgId: bill.orgId, id: vendor.id, sha: vendor.sha, outcome: "unreadable", reason: "This PDF could not be read." })).toBe("checked");
+    expect(await start(bill.orgId, vendor.id)).toBeNull();
+    expect(await attempts(vendor.id)).toBe(0);
+    const other = await createOrg(db, "dk-parse-other");
+    const theirs = await waitingBill("dk-parse-theirs");
+    const theirRequest = await answeredByVendor(theirs);
+    expect(await start(other, theirRequest.id)).toBeNull();
+    expect(await start(bill.orgId, crypto.randomUUID())).toBeNull();
+    await finish(other, theirRequest.id);
+    expect(await attempts(theirRequest.id)).toBe(0);
+  });
+
+  it("starts every request at 0, the ones a vendor answered before 0144 included", async () => {
+    expect(await attempts(before.id)).toBe(0);
+  });
+});
+
 describe("the table's own checks", () => {
   it("lets only an answered PDF be a member's, and needs a vendor's request to have its email domain", async () => {
     const bill = await waitingBill("dk-table");
@@ -421,6 +480,8 @@ describe("who reads and calls it", () => {
     const calls = [
       ["select public.attach_document($1, $2, $3, $4, $5::jsonb, 'x', 'y', 1)", [mine.orgId, crypto.randomUUID(), mine.invoiceId, member, BOTH]],
       ["select public.check_document_request($1, $2, $3, 'matched', null, false, 'PO-1', true)", [mine.orgId, mineRequest.id, mineRequest.sha]],
+      ["select public.start_document_parse($1, $2)", [mine.orgId, mineRequest.id]],
+      ["select public.finish_document_parse($1, $2)", [mine.orgId, mineRequest.id]],
     ] as const;
     for (const [sql, params] of calls) {
       await expect(asTenant(db, mine.orgId, (tx) => tx.query(sql, [...params]))).rejects.toThrow(/permission denied/);

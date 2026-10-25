@@ -13,7 +13,8 @@ import {
 import { missingDocuments, sniffDocumentType, type MissingDocument } from "../document-requests/rules";
 import { readDocumentRequestsSetting } from "../document-requests/setting";
 import { extractInvoice } from "../invoice-document/extract";
-import { DocumentReadError, MAX_DOCUMENT_BYTES, readDocument } from "../invoice-document/read";
+import type { PdfLimits } from "../invoice-document/pdf-worker";
+import { DocumentReadError, MAX_DOCUMENT_BYTES, readPdfBounded, type ReadDocument } from "../invoice-document/read";
 import { appendLedgerEntry } from "../ledger";
 import { ID_CHUNK } from "../new-payee-facts";
 import { takeDocumentReadToken } from "../rate-limit";
@@ -28,10 +29,11 @@ import { agentPaused } from "./pause";
  *
  * The stage takes the answered requests not checked yet, oldest answer first, at most 5 a cycle, while vendor requests
  * are in shadow or on and the agent is not paused (DK1, DK2). For each: a bill that no longer waits for a document, or a
- * file already checked for it outside shadow, is skipped with no read; an image, a file over 4 MB as its row records it,
+ * file already compared for it outside shadow, is skipped with no read; an image, a file over 4 MB as its row records it,
  * one not kept where its row says, gone from storage, whose hash is not the one received, a scan or a PDF that cannot be
- * read, is unreadable, and no model reads it (DK3). The rest is read through `readDocument`, one read token each, and
- * `extractInvoice`, which shows the model the document alone; code compares (`compareDocument`, DK4, DK5).
+ * read, is unreadable, and no model reads it (DK3). So is a PDF the worker that parses it stops, at its time or memory
+ * limit, and one whose parse began twice and never finished. The rest is read through `readPdfBounded` and, one read
+ * token each, `extractInvoice`, which shows the model the document alone; code compares (`compareDocument`, DK4, DK5).
  *
  * 0144's check_document_request records each check once (DK12). With vendor requests on, a match for a bill that lacks
  * its purchase order adds it, compare-and-set on the bill still waiting with none and no payment, and the follow-up and
@@ -131,14 +133,22 @@ function fileGone(error: { message?: string; statusCode?: string | number; statu
   return /not.?found/i.test(error.message ?? "") || String(error.statusCode ?? "") === "404" || error.status === 404;
 }
 
+/** Reads of a file begun that never finished, after which it is unreadable and not parsed again (DK3). */
+export const UNFINISHED_PARSES = 2;
+
 /**
  * The document's text and both readings (DK3, DK4), or why there are none: the file is read from where its row says it is
  * kept, under the request's own folder, and only when it is the file received. Null when no read token is left, so the
  * request waits for the next cycle. A Storage failure other than a missing file throws, so the next cycle tries again.
+ *
+ * pdf.js parses it in a worker, under a time and a memory limit (`readPdfBounded`), never on the thread every live
+ * workspace's cycle runs on. Each parse is counted on the row before it begins (0144's start_document_parse) and the
+ * count cleared once it ends: a parse that took the whole run down with it is never cleared, and after two such the file
+ * is unreadable, with no third parse. Before 0144's functions, it parses with nothing counted.
  */
 async function readKept(
   row: WaitingRow,
-  input: { orgId: string; today: string; allowRead: () => boolean }
+  input: { orgId: string; today: string; allowRead: () => boolean; pdfLimits?: Partial<PdfLimits> }
 ): Promise<Finding | { text: string; truncated: boolean; extracted: Awaited<ReturnType<typeof extractInvoice>> } | null> {
   // The kind and the size the row records, before anything is downloaded: an image of 10 MB is never fetched.
   if (row.file_type !== "application/pdf") return unreadable(UNREADABLE_REASONS.image);
@@ -158,12 +168,26 @@ async function readKept(
   const kind = sniffDocumentType(bytes);
   if (kind === "image/png" || kind === "image/jpeg") return unreadable(UNREADABLE_REASONS.image);
   if (kind !== "application/pdf") return unreadable(UNREADABLE_REASONS.unreadable);
-  let document: Awaited<ReturnType<typeof readDocument>>;
+
+  const parse = { p_org_id: input.orgId, p_id: row.id };
+  const started = await platformDb().rpc("start_document_parse", parse);
+  if (started.error && !beforeMigration(started.error)) throw new Error(`a document's read could not be counted: ${started.error.message}`);
+  const counted = !started.error;
+  // Checked elsewhere since this cycle read it: its record answers so, and nothing is signed.
+  if (counted && started.data === null) return skipped(SKIPPED_REASONS.not_waiting);
+  if (counted && Number(started.data) >= UNFINISHED_PARSES) return unreadable(UNREADABLE_REASONS.unreadable);
+  let document: ReadDocument;
   try {
-    document = await readDocument({ bytes, name: "document.pdf", type: "application/pdf" });
+    document = await readPdfBounded(bytes, input.pdfLimits);
   } catch (error) {
     if (!(error instanceof DocumentReadError)) throw error;
     return unreadable(error.code === "scan" ? UNREADABLE_REASONS.scan : error.code === "too_large" ? UNREADABLE_REASONS.too_large : UNREADABLE_REASONS.unreadable);
+  } finally {
+    // The parse ended, whatever it found. Best effort: a count left behind costs the file one of its two tries.
+    if (counted) {
+      const finished = await platformDb().rpc("finish_document_parse", parse);
+      if (finished.error) console.error(`[document_checks] a document's read could not be marked finished: ${finished.error.message}`);
+    }
   }
   // One read token per model read (DK2): with none left, the rest wait for the next cycle.
   if (!input.allowRead()) return null;
@@ -215,9 +239,13 @@ function wordsFor(finding: Finding, written: boolean, shadow: boolean, vendor: s
 }
 
 /**
- * The stage: see the module comment. `allowRead` stands in for the workspace's read tokens in tests; `now` for the clock.
+ * The stage: see the module comment. `allowRead` stands in for the workspace's read tokens in tests, `pdfLimits` for the
+ * PDF reader's limits, and `now` for the clock.
  */
-export async function checkReceivedDocuments(orgDb: OrgDb, options: { now?: number; allowRead?: () => boolean } = {}): Promise<CycleLogLine[]> {
+export async function checkReceivedDocuments(
+  orgDb: OrgDb,
+  options: { now?: number; allowRead?: () => boolean; pdfLimits?: Partial<PdfLimits> } = {}
+): Promise<CycleLogLine[]> {
   const { setting, ready } = await readDocumentRequestsSetting(orgDb);
   // Off, documents wait unchecked; they are checked once it is shadow or on again, while their bill still waits (DK1).
   if (!ready || setting === "off") return [];
@@ -254,8 +282,13 @@ export async function checkReceivedDocuments(orgDb: OrgDb, options: { now?: numb
       ) as unknown as BillRow[]
     ).map((row) => [row.id, row])
   );
-  // The files each bill had checked outside shadow (DK10, DK12): the same file is not read again.
-  const checkedRead = await orgDb.from("document_requests").select("id, invoice_id, file_sha256, check_shadow").in("invoice_id", invoiceIds).not("checked_at", "is", null);
+  // The files each bill had compared outside shadow, matched or mismatched (DK10, DK12): the same file is not read
+  // again. One skipped or unreadable was never compared, so the same bytes sent or attached again are read.
+  const checkedRead = await orgDb
+    .from("document_requests")
+    .select("id, invoice_id, file_sha256, check_shadow, check_outcome")
+    .in("invoice_id", invoiceIds)
+    .not("checked_at", "is", null);
   if (checkedRead.error) {
     if (beforeMigration(checkedRead.error)) return [];
     throw new Error(`the documents already checked could not be read: ${checkedRead.error.message}`);
@@ -267,8 +300,9 @@ export async function checkReceivedDocuments(orgDb: OrgDb, options: { now?: numb
     files.add(fileSha);
     checkedFiles.set(invoiceId, files);
   };
-  for (const row of (checkedRead.data ?? []) as unknown as Array<{ invoice_id: string; file_sha256: string | null; check_shadow: boolean | null }>) {
-    if (row.check_shadow !== true) markChecked(row.invoice_id, row.file_sha256);
+  const compared = (outcome: string | null | undefined) => outcome === "matched" || outcome === "mismatched";
+  for (const row of (checkedRead.data ?? []) as unknown as Array<{ invoice_id: string; file_sha256: string | null; check_shadow: boolean | null; check_outcome: string | null }>) {
+    if (row.check_shadow !== true && compared(row.check_outcome)) markChecked(row.invoice_id, row.file_sha256);
   }
 
   const lines: CycleLogLine[] = [];
@@ -290,7 +324,7 @@ export async function checkReceivedDocuments(orgDb: OrgDb, options: { now?: numb
     if (!bill || lacks.length === 0) finding = skipped(SKIPPED_REASONS.not_waiting);
     else if (row.file_sha256 && checkedFiles.get(row.invoice_id)?.has(row.file_sha256)) finding = skipped(SKIPPED_REASONS.same_file);
     else {
-      const read = await readKept(row, { orgId, today, allowRead });
+      const read = await readKept(row, { orgId, today, allowRead, pdfLimits: options.pdfLimits });
       if (read === null) break;
       if ("outcome" in read) finding = read;
       else {
@@ -346,7 +380,7 @@ export async function checkReceivedDocuments(orgDb: OrgDb, options: { now?: numb
     // Another cycle or instance checked it first: it signs nothing.
     if (done.data !== "written" && done.data !== "checked") continue;
     const written = done.data === "written";
-    if (!shadow) markChecked(row.invoice_id, row.file_sha256);
+    if (!shadow && compared(finding.outcome)) markChecked(row.invoice_id, row.file_sha256);
     if (written && bill) bill.po_reference = documentPo;
 
     const words = wordsFor(finding, written, shadow, vendor, bill);

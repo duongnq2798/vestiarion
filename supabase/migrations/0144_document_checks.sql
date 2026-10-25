@@ -15,13 +15,23 @@
 --      document_po   the purchase order the document names, as it writes it.
 --      po_written    true only when the check added the bill's purchase order: the marker that holds the bill for a
 --                    person (DK8). Only check_document_request below sets it, and no tenant write reaches the table.
+--      parse_attempts
+--                    the reads of the file begun and not finished (DK3): the cycle counts one before pdf.js parses the
+--                    file, in a worker with a time and a memory limit, and clears it once the parse ends, whatever it
+--                    found. A parse that took the whole run down with it is never cleared: after two, the file is
+--                    recorded unreadable and not parsed again.
 --    email_domain may now be null: a member's row was never emailed.
--- 2. Two functions, each `security definer`, run by the service role alone:
+-- 2. Four functions, each `security definer`, run by the service role alone:
 --      attach_document(...): a member's answered row, for a payable still waiting for information; one waiting to be
---        checked per bill; the same file is refused unless its earlier check was in shadow.
+--        checked per bill; the same file is refused while it waits, or once a check outside shadow compared it
+--        ("checked outside shadow" means matched or mismatched). A file skipped or unreadable was never compared, and
+--        may be attached again.
 --      check_document_request(...): the check, once per request, under a row lock; with p_write_po, the bill's
 --        purchase order, compare-and-set on the bill still waiting for information, with no purchase order and no
 --        payment. It changes no status, amount, currency, address or goods receipt, and moves no money.
+--      start_document_parse(p_org_id, p_id) and finish_document_parse(p_org_id, p_id): parse_attempts, on a request
+--        still waiting to be checked. start answers how many reads began before this one and never finished, or null
+--        for a request that no longer waits.
 --
 -- Additive and idempotent throughout: scripts/migrate.ts re-runs every migration each time. No function or view of
 -- another migration is redefined.
@@ -45,6 +55,8 @@ alter table public.document_requests add column if not exists document_po text
                                  and document_po !~ '[\u0001-\u001f\u007f-\u009f\u2028\u2029]'
                                  and document_po !~* '://|www[.]'));
 alter table public.document_requests add column if not exists po_written boolean not null default false;
+alter table public.document_requests add column if not exists parse_attempts integer not null default 0
+  constraint document_requests_parse_attempts_check check (parse_attempts >= 0);
 
 -- A member's row has no email: it was never sent.
 alter table public.document_requests alter column email_domain drop not null;
@@ -113,11 +125,12 @@ begin
      or p_file_size is null or p_file_size not between 1 and 4000000 then
     raise exception 'document_check_invalid: the file';
   end if;
-  -- The same file again: refused while it waits, or once checked outside shadow (DK10, DK12).
+  -- The same file again: refused while it waits, or once a check outside shadow compared it (DK10, DK12). One skipped
+  -- or unreadable was never compared, so it may come again.
   if exists (
     select 1 from public.document_requests r
      where r.org_id = p_org_id and r.invoice_id = p_invoice_id and r.file_sha256 = p_file_sha256
-       and (r.checked_at is null or not r.check_shadow)
+       and (r.checked_at is null or (not r.check_shadow and r.check_outcome in ('matched', 'mismatched')))
   ) then
     return 'same_file';
   end if;
@@ -200,14 +213,49 @@ begin
 end;
 $$;
 
+-- A read of the request's file begins (DK3): counted before pdf.js parses it. The answer is how many reads began before
+-- this one and never finished, which the cycle refuses a third; null for a request no longer waiting to be checked.
+create or replace function public.start_document_parse(p_org_id uuid, p_id uuid) returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_before integer;
+begin
+  update public.document_requests r set parse_attempts = r.parse_attempts + 1
+   where r.org_id = p_org_id and r.id = p_id and r.status = 'answered' and r.checked_at is null
+  returning r.parse_attempts - 1 into v_before;
+  return v_before;
+end;
+$$;
+
+-- The read ended, whatever it found: nothing is left unfinished.
+create or replace function public.finish_document_parse(p_org_id uuid, p_id uuid) returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.document_requests r set parse_attempts = 0
+   where r.org_id = p_org_id and r.id = p_id and r.checked_at is null and r.parse_attempts <> 0;
+end;
+$$;
+
 revoke execute on function public.attach_document(uuid, uuid, uuid, uuid, jsonb, text, text, integer) from public, anon, authenticated, vestiarion_tenant;
 grant execute on function public.attach_document(uuid, uuid, uuid, uuid, jsonb, text, text, integer) to service_role;
 revoke execute on function public.check_document_request(uuid, uuid, text, text, text, boolean, text, boolean) from public, anon, authenticated, vestiarion_tenant;
 grant execute on function public.check_document_request(uuid, uuid, text, text, text, boolean, text, boolean) to service_role;
+revoke execute on function public.start_document_parse(uuid, uuid) from public, anon, authenticated, vestiarion_tenant;
+grant execute on function public.start_document_parse(uuid, uuid) to service_role;
+revoke execute on function public.finish_document_parse(uuid, uuid) from public, anon, authenticated, vestiarion_tenant;
+grant execute on function public.finish_document_parse(uuid, uuid) to service_role;
 
 notify pgrst, 'reload schema';
 
 -- Down (by hand, never by migrate.ts):
+-- drop function if exists public.finish_document_parse(uuid, uuid);
+-- drop function if exists public.start_document_parse(uuid, uuid);
 -- drop function if exists public.check_document_request(uuid, uuid, text, text, text, boolean, text, boolean);
 -- drop function if exists public.attach_document(uuid, uuid, uuid, uuid, jsonb, text, text, integer);
 -- drop index if exists public.document_requests_one_attachment_waiting;
@@ -217,7 +265,7 @@ notify pgrst, 'reload schema';
 -- alter table public.document_requests drop constraint if exists document_requests_checked_check;
 -- delete from public.document_requests where source = 'member';
 -- alter table public.document_requests alter column email_domain set not null;
--- alter table public.document_requests drop column if exists po_written, drop column if exists document_po,
+-- alter table public.document_requests drop column if exists parse_attempts, drop column if exists po_written, drop column if exists document_po,
 --   drop column if exists check_shadow, drop column if exists check_reason, drop column if exists check_outcome,
 --   drop column if exists checked_at, drop column if exists attached_by, drop column if exists source;
 -- A member's files are in the `documents` bucket, under the workspace's own folder, removed with it.

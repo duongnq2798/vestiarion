@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { extractText, getDocumentProxy } from "unpdf";
 import { emailParts } from "./email";
+import { PDF_LIMITS, pdfPagesInWorker, PdfWorkerRefusal, type PdfLimits } from "./pdf-worker";
 
 /**
  * An invoice document to plain text, for the model to read (invoice from a
@@ -119,4 +120,31 @@ export async function readDocument(input: DocumentInput): Promise<ReadDocument> 
   // A binary file named .txt is not text: a NUL byte gives it away.
   if (isText(name, type) && !bytes.includes(0)) return finish("text", new TextDecoder("utf-8").decode(bytes), sha256(bytes));
   throw new DocumentReadError("unsupported");
+}
+
+/** The pages' text joined as unpdf's `mergePages` joins it: a line break between pages, spaces collapsed, at most one blank line. */
+function mergedPages(pages: readonly string[]): string {
+  return pages.join("\n").replace(/[^\S\n]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n");
+}
+
+/**
+ * A PDF read as `readDocument` reads one, to the same text, but in a worker thread under `PDF_LIMITS` (./pdf-worker.ts,
+ * document checks DK3): for a file someone outside the workspace sent, which the cycle reads beside every other
+ * workspace's cycle. A PDF that runs out its time or its heap, has more than 50 pages or cannot be parsed is refused as
+ * one that "could not be read"; one whose text passed 20,000 characters before its last page is cut there, and says so.
+ * A reader that could not start throws a plain `Error`: the file is not at fault, and the caller tries it again later.
+ */
+export async function readPdfBounded(bytes: Uint8Array, limits: Partial<PdfLimits> = {}): Promise<ReadDocument> {
+  if (bytes.length > MAX_DOCUMENT_BYTES) throw new DocumentReadError("too_large");
+  if (bytes.length === 0) throw new DocumentReadError("empty");
+  if (!isPdf(bytes)) throw new DocumentReadError("unsupported");
+  let read: { pages: string[]; cut: boolean };
+  try {
+    read = await pdfPagesInWorker(bytes, { ...PDF_LIMITS, ...limits, maxChars: MAX_DOCUMENT_CHARS });
+  } catch (error) {
+    if (error instanceof PdfWorkerRefusal) throw new DocumentReadError("unsupported", "This PDF could not be read. Paste the invoice's text instead.");
+    throw error;
+  }
+  const document = finish("pdf", mergedPages(read.pages), sha256(bytes));
+  return read.cut && !document.truncated ? { ...document, truncated: true } : document;
 }
