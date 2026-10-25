@@ -192,6 +192,7 @@ function database(world: World = {}) {
         if (p.get("action") === "eq.compliance_sweep") return { body: [{ ts: "2025-12-01T00:00:00Z" }] };
         if (p.get("action") === "in.(escrow_funded,escrow_refunded)") return { body: page(rows.filter((row) => row.action.startsWith("escrow")), request) };
         if (p.get("action") === "eq.decision_verdict") return { body: [] };
+        if (p.get("action") === "eq.payee_lock_changed") return { body: page(rows.filter((row) => row.action === "payee_lock_changed"), request) };
         const invoiceIds = inList(p.get("detail->>invoiceId"));
         if (invoiceIds.length > 0) return { body: page(rows.filter((row) => invoiceIds.includes(String(row.detail.invoiceId))), request) };
         const milestoneIds = inList(p.get("detail->>milestoneId"));
@@ -323,6 +324,37 @@ describe("reading the month (close pack CP2, CP14)", () => {
     const pack = await db.run(() => readClosePack({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
     expect(pack.rows[0].record?.check).toEqual({ ok: false, reason: "The entry's content does not match its body hash." });
     expect(pack.totals.entries.failed).toBe(1);
+  });
+});
+
+describe("reading the payee lock's changes (close pack CP8)", () => {
+  it("reads the workspace's payee lock changes up to the month's end, a page of 1000 at a time by seq, and cites one that eased the lock before a payment", async () => {
+    const inputs: LedgerEntryInput[] = [
+      { actor: "human", domain: "compliance", action: "create_counterparty", summary: "Added Northwind", detail: { by: USER, counterpartyId: CP1, address: PAYEE2 } },
+      { actor: "human", domain: "compliance", action: "counterparty_address_changed", summary: "Changed Northwind's address", detail: { by: USER, counterpartyId: CP1, from: PAYEE2, to: PAYEE1 } },
+      {
+        actor: "human",
+        domain: "compliance",
+        action: "counterparty_address_confirmed",
+        summary: "Confirmed Northwind's address",
+        detail: { by: USER, counterpartyId: CP1, address: PAYEE1, via: "confirm", payeeLock: { coolingHours: 48 } },
+      },
+      { actor: "human", domain: "system", action: "payee_lock_changed", summary: "Turned off the payee lock", detail: { by: USER, from: { on: true, coolingHours: 48 }, to: { on: false, coolingHours: 48 } } },
+      OLD[1],
+      OLD[2],
+    ];
+    const rows = buildChain(inputs, active.privateKey, ledgerKeyId(active.publicKey)).map((row) => ({ ...row, org_id: ORG }));
+    const db = database({ rows, intents: [INTENTS[0]], invoices: [INVOICES[0]] });
+    const pack = await db.run(() => readClosePack({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
+    const read = ledgerReads(db.fake.requests).find((request) => request.params.get("action") === "eq.payee_lock_changed")!;
+    expect(read.params.get("ts")).toBe("lt.2026-02-01T00:00:00.000Z");
+    expect(read.params.get("order")).toBe("seq.asc");
+    expect(read.params.get("offset")).toBe("0");
+    expect(read.params.get("limit")).toBe("1000");
+    expect(carriesOrg(read, ORG)).toBe(true);
+    expect(pack.rows[0].checks.payeeLock).toMatchObject({ kind: "stated", entries: [2, 3, 4], warn: true });
+    expect(pack.entries.map((one) => one.seq)).toEqual([2, 3, 4, 5, 6]);
+    expect(pack.entries.find((one) => one.seq === 4)?.check).toEqual({ ok: true });
   });
 });
 

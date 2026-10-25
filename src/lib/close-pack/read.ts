@@ -15,9 +15,9 @@ import { CLOSE_PACK_MAX_PAYMENTS, type ClosePack, type ClosePackIntentRow, type 
  * Reads one month's close pack for the workspace in scope (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md,
  * "Data it reads and writes"): the month's payments, their bills, payees and every entry about them, a hundred ids per
  * filter and a page of 1000 rows at a time; each settled payment's screening at the time of its decision, ten reads at
- * once; the month's escrow moves, the first sweep that checked payout addresses, the ledger's head and the members. Then
- * it builds twice, as `readEvidence` does: once to find the entries the pack cites, then with each of those checked
- * against the workspace's keys, retired ones included.
+ * once; the month's escrow moves, the payee lock's changes up to the month's end, the first sweep that checked payout
+ * addresses, the ledger's head and the members. Then it builds twice, as `readEvidence` does: once to find the entries the
+ * pack cites, then with each of those checked against the workspace's keys, retired ones included.
  *
  * Inside the workspace's scope only (`withOrg` or `inOrg`), through `db()`. It reads no chain, calls no model, and writes
  * nothing: no row, no file, no cache.
@@ -136,7 +136,7 @@ export async function readClosePack(input: {
   const inMonth = (column: string) => `and(${column}.gte.${from},${column}.lt.${to})`;
 
   // The month's payments: confirmed, created or sent in it (CP2, CP3), one more than a pack holds, to tell a cut (CP15).
-  const [intentsRead, escrow, sweep, head, members, workspace] = await Promise.all([
+  const [intentsRead, escrow, lockChanges, sweep, head, members, workspace] = await Promise.all([
     allRows<ClosePackIntentRow>(
       (start, end) =>
         orgDb
@@ -149,6 +149,9 @@ export async function readClosePack(input: {
       CLOSE_PACK_MAX_PAYMENTS + 1
     ),
     ledgerRows(orgDb, (query) => query.in("action", ESCROW_ACTIONS).gte("ts", from).lt("ts", to)),
+    // The lock in force when a payment was sent (CP8): an owner's changes name no payee, so the workspace's are read, from
+    // its first up to the month's end.
+    ledgerRows(orgDb, (query) => query.eq("action", "payee_lock_changed").lt("ts", to)),
     orgDb.from("ledger_entries").select("ts").eq("action", "compliance_sweep").not("detail->sanctionedWallets", "is", null).order("seq", { ascending: true }).limit(1),
     orgDb.from("ledger_entries").select("seq, hash").order("seq", { ascending: false }).limit(1),
     membersOf(),
@@ -183,7 +186,7 @@ export async function readClosePack(input: {
   ]);
 
   const bySeq = new Map<number, ClosePackLedgerRow>();
-  for (const entry of [...ownInvoices, ...ownMilestones, ...verdicts, ...payees, ...escrow]) bySeq.set(entry.seq, entry);
+  for (const entry of [...ownInvoices, ...ownMilestones, ...verdicts, ...payees, ...escrow, ...lockChanges]) bySeq.set(entry.seq, entry);
   const keyring = ledgerVerificationKeyring();
   const base: Omit<ClosePackInput, "screening" | "checks"> = {
     workspace,

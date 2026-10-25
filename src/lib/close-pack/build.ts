@@ -39,7 +39,7 @@ import type {
   ClosePackWho,
   Decimal,
 } from "./types";
-import { whoWords } from "./words";
+import { utcWords, whoWords } from "./words";
 
 /**
  * The monthly close pack, built from the rows its reader gathered (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md
@@ -64,7 +64,7 @@ export interface ClosePackInput {
   /**
    * Every entry about the bills and milestones, the verdicts on them, their payees' address entries
    * (`create_counterparty`, `counterparty_address_changed`, `counterparty_address_confirmed`, `payee_link_created`),
-   * and the month's `escrow_funded` / `escrow_refunded`.
+   * the month's `escrow_funded` / `escrow_refunded`, and the workspace's `payee_lock_changed` up to the month's end.
    */
   entries: readonly ClosePackLedgerRow[];
   /** By payment id: the payee's newest complete check at or before `screeningAnchors`' time, null for none, or unread. */
@@ -232,6 +232,19 @@ function wentOut(entry: ClosePackLedgerRow): boolean {
   return status !== null && WENT_OUT.has(status);
 }
 
+/**
+ * Whether a paying entry sent its transfer, as the settlement track reads an authorization (L2): it went out, or it was
+ * held only because the transfer's read failed, with no other reason recorded.
+ */
+function sentIt(entry: ClosePackLedgerRow): boolean {
+  if (wentOut(entry)) return true;
+  const execution = record(entry.detail.execution);
+  return (text(execution?.resultingStatus) ?? text(entry.detail.status)) === "held" && text(execution?.heldBecause) === null;
+}
+
+/** Whether an entry's detail names a hash, whatever its case, as `recordingEntry` reads it. */
+const names = (entry: ClosePackLedgerRow, hash: string) => JSON.stringify(entry.detail).toLowerCase().includes(hash.toLowerCase());
+
 interface Anchors {
   recording: ClosePackLedgerRow | null;
   paying: ClosePackLedgerRow | null;
@@ -321,26 +334,48 @@ function transactionOf(intent: ClosePackIntentRow, network: Network, milestone: 
 }
 
 /**
- * The entry that records the transaction, the one that sent it, and the agent's decision before it (CP7, CP10): the
- * newest recording entry naming the payee's transaction (or the bill's `tx_ref` for a simulated or bank payment); the
- * paying entry is that one, or for a reconcile the newest that sent before it; the decision is the agent's newest at or
- * before the paying entry.
+ * The entry that records the transaction, the one that sent it, and the agent's decision before it (CP7, CP10). The
+ * record is the newest recording entry naming the payee's transaction (or the bill's `tx_ref` for a simulated or bank
+ * payment). The paying entry is what let the current attempt go, as the settlement track reads it (`authorizedSeq`,
+ * its `authorized` stage); without one, the record when it pays, or for a reconcile the newest that sent before it. A
+ * person's approval that only recorded a transfer an earlier entry had already sent is never the paying entry, even by
+ * the ledger alone (an intent with no `submitted_at`): approving a transfer that exists reconciles it and sends
+ * nothing, so the entry that first named it and sent it is. One sent again after Circle failed it names `retriedAfter`.
+ * The decision is the agent's newest at or before the paying entry.
  */
-function anchorsOf(bill: Bill, own: readonly ClosePackLedgerRow[], refs: readonly string[]): Anchors {
+function anchorsOf(bill: Bill, own: readonly ClosePackLedgerRow[], refs: readonly string[], authorizedSeq: number | null): Anchors {
   const ref = bill.source.kind === "invoice" ? { invoiceId: bill.source.id } : { milestoneId: bill.source.id };
   const candidates = [...refs, ...(bill.txRef ? [bill.txRef] : [])];
   let recording: ClosePackLedgerRow | null = null;
   if (candidates.length > 0) recording = recordingEntry(ref, own, candidates[0], candidates[1] ?? null);
   for (const candidate of candidates.slice(2)) recording ??= recordingEntry(ref, own, candidate, null);
+  const authorizing = authorizedSeq === null ? null : (own.find((entry) => entry.seq === authorizedSeq && PAYING.has(entry.action)) ?? null);
   let paying: ClosePackLedgerRow | null;
-  if (recording && PAYING.has(recording.action)) paying = recording;
+  if (authorizing) paying = authorizing;
+  else if (recording && PAYING.has(recording.action)) paying = recording;
   else if (recording) {
     const cutoff = recording.seq;
     paying = newest(own, (entry) => PAYING.has(entry.action) && entry.seq < cutoff && wentOut(entry)) ?? newest(own, (entry) => PAYING.has(entry.action) && entry.seq < cutoff);
   } else paying = newest(own, (entry) => PAYING.has(entry.action) && wentOut(entry));
+  if (paying && PERSON_PAYING.has(paying.action) && record(paying.detail.retriedAfter) === null) {
+    const before = paying.seq;
+    const sender = oldest(own, (entry) => PAYING.has(entry.action) && entry.seq < before && sentIt(entry) && candidates.some((hash) => names(entry, hash)));
+    if (sender) paying = sender;
+  }
   const cutoff = paying?.seq ?? recording?.seq ?? Number.POSITIVE_INFINITY;
   const decision = newest(own, (entry) => AGENT_DECISIONS.has(entry.action) && entry.seq <= cutoff);
   return { recording, paying, decision };
+}
+
+/** A payment's lifecycle from its intent, its record's entries and its bill, as its evidence page reads it (L1-L6). */
+function settlementOfRow(now: Date, intent: ClosePackIntentRow, bill: Bill, own: readonly ClosePackLedgerRow[]) {
+  return settlementOf({
+    intent,
+    entries: own,
+    source: { type: bill.source.kind, id: bill.source.id },
+    books: booksOf({ id: bill.source.id, status: bill.status, tx_ref: bill.txRef, settled_at: bill.settledAt }, bill.source.kind),
+    now: now.getTime(),
+  });
 }
 
 /** Rows and not-settled payments, sorted out of the intents read (CP2, CP3). */
@@ -387,8 +422,9 @@ export function screeningAnchors(input: Omit<ClosePackInput, "screening" | "chec
   const found = new Map<string, { counterpartyId: string; at: string }>();
   for (const { intent, bill } of sortIntents(input).rows) {
     const own = ownEntries(input.entries, bill.source);
-    const { refs } = transactionOf(intent, input.network, bill.milestone, 0);
-    const anchors = anchorsOf(bill, own, refs);
+    const settlement = settlementOfRow(input.now, intent, bill, own);
+    const { refs } = transactionOf(intent, input.network, bill.milestone, settlement.earlier.length);
+    const anchors = anchorsOf(bill, own, refs, settlement.stages.authorized?.seq ?? null);
     found.set(intent.id, { counterpartyId: bill.counterpartyId, at: anchors.decision?.ts ?? anchors.paying?.ts ?? intent.submitted_at ?? intent.created_at });
   }
   return found;
@@ -560,8 +596,24 @@ function walletListCheck(route: ClosePackTransaction["route"], screening: Eviden
 }
 
 const hoursWords = (hours: number) => (hours === 1 ? "1 hour" : `${hours} hours`);
+const HOUR_MS = 3_600_000;
 
-function payeeLockCheck(route: ClosePackTransaction["route"], facts: AddressFacts, sentAt: string): ClosePackCheck {
+/** A lock as a `payee_lock_changed` entry records it (`{ on, coolingHours }`), or null for one that does not read. */
+function lockOf(value: unknown): { on: boolean; coolingHours: number } | null {
+  const lock = record(value);
+  if (!lock || typeof lock.on !== "boolean") return null;
+  return { on: lock.on, coolingHours: typeof lock.coolingHours === "number" && Number.isFinite(lock.coolingHours) && lock.coolingHours > 0 ? lock.coolingHours : 0 };
+}
+
+/**
+ * The payee lock as it applied to the payment (CP8). The confirmation records the lock it was confirmed under; the
+ * guardrail reads the lock in force when it pays (payee lock PL5), which an owner may have eased since, and a lock eased
+ * frees a held payment at once (due-work watch DW8). So the lock in force is the newest `payee_lock_changed` between the
+ * confirmation and the paying entry (`cutoff`), else the confirmation's. Sent before the wait in force ended does not
+ * match; sent after it but before the wait it was confirmed under is stated, naming who eased it and when, and citing
+ * the change.
+ */
+function payeeLockCheck(ctx: Context, route: ClosePackTransaction["route"], facts: AddressFacts, sentAt: string, cutoff: number): ClosePackCheck {
   if (route === "bank" || !facts.address) return check("not_applicable", "The payee lock covers addresses on chain only.");
   if (facts.address.mirror) return check("not_applicable", "A mirror address Vestiarion made in shadow mode needs no confirmation.");
   const { set, confirmed } = facts;
@@ -572,17 +624,30 @@ function payeeLockCheck(route: ClosePackTransaction["route"], facts: AddressFact
   if (!lock) return check("inferred", "The payee lock was off when the address was confirmed.", { at: confirmed.ts, entries });
   const wait = typeof lock.coolingHours === "number" && lock.coolingHours > 0 ? lock.coolingHours : 0;
   const base = { at: confirmed.ts, entries };
-  if (wait === 0) return check("checked", "The payee lock was on when the address was confirmed, with no wait.", base);
+  const change = newest(ctx.input.entries, (entry) => entry.action === "payee_lock_changed" && entry.seq > confirmed.seq && entry.seq < cutoff && lockOf(entry.detail.to) !== null);
+  const inForce = change ? (lockOf(change.detail.to) as { on: boolean; coolingHours: number }) : { on: true, coolingHours: wait };
+  const inForceWait = inForce.on ? inForce.coolingHours : 0;
+  const cited = change ? [...entries, change.seq] : entries;
   const given = set ? at(set.ts) : Number.NaN;
   const sent = at(sentAt);
-  if (Number.isNaN(given) || Number.isNaN(sent)) return check("checked", `The payee lock was on when the address was confirmed, with a ${wait}-hour wait.`, base);
-  if (sent < given + wait * 3_600_000) return check("contradicted", `It was sent before the payee lock's ${wait}-hour wait had ended.`, { ...base, warn: true });
-  const after = Math.floor((sent - given) / 3_600_000);
-  return check(
-    "checked",
-    `The payee lock was on when the address was confirmed, with a ${wait}-hour wait. It was sent ${after < 1 ? "less than an hour" : hoursWords(after)} after the address was given.`,
-    base
-  );
+  const timed = !Number.isNaN(given) && !Number.isNaN(sent);
+  const after = Math.floor((sent - given) / HOUR_MS);
+  const afterWords = after < 1 ? "less than an hour" : hoursWords(after);
+  if (timed && inForceWait > 0 && sent < given + inForceWait * HOUR_MS) {
+    return check("contradicted", `It was sent before the payee lock's ${inForceWait}-hour wait had ended.`, { ...base, entries: cited, warn: true });
+  }
+  if (timed && change && sent < given + wait * HOUR_MS) {
+    // An owner eased the lock, as Settings lets them, and the payment went out under the lock then in force.
+    const eased = !inForce.on ? "turned it off" : inForce.coolingHours === 0 ? "removed its wait" : `cut its wait to ${hoursWords(inForce.coolingHours)}`;
+    return check(
+      "stated",
+      `The payee lock was on when the address was confirmed, with a ${wait}-hour wait; ${whoWords(ctx.who(change.detail.by))} ${eased} on ${utcWords(change.ts)}. It was sent ${afterWords} after the address was given.`,
+      { at: change.ts, entries: cited, warn: true }
+    );
+  }
+  if (wait === 0) return check("checked", "The payee lock was on when the address was confirmed, with no wait.", base);
+  if (!timed) return check("checked", `The payee lock was on when the address was confirmed, with a ${wait}-hour wait.`, base);
+  return check("checked", `The payee lock was on when the address was confirmed, with a ${wait}-hour wait. It was sent ${afterWords} after the address was given.`, base);
 }
 
 function payToCheck(bill: Bill, route: ClosePackTransaction["route"], documentPayTo: ReadonlyMap<string, string>, destination: string, paying: ClosePackLedgerRow | null): ClosePackCheck {
@@ -643,15 +708,10 @@ function bankOf(intent: ClosePackIntentRow, paying: ClosePackLedgerRow | null): 
 function buildRow(ctx: Context, intent: ClosePackIntentRow, bill: Bill): ClosePackRow {
   const { input } = ctx;
   const own = ownEntries(input.entries, bill.source);
-  const settlement = settlementOf({
-    intent,
-    entries: own,
-    source: { type: bill.source.kind, id: bill.source.id },
-    books: booksOf({ id: bill.source.id, status: bill.status, tx_ref: bill.txRef, settled_at: bill.settledAt }, bill.source.kind),
-    now: input.now.getTime(),
-  });
+  const settlement = settlementOfRow(input.now, intent, bill, own);
   const { transaction, refs } = transactionOf(intent, input.network, bill.milestone, settlement.earlier.length);
-  const { recording, paying, decision } = anchorsOf(bill, own, refs);
+  // The paying entry is what let the current attempt go, as the settlement track and the evidence page read it (CP7).
+  const { recording, paying, decision } = anchorsOf(bill, own, refs, settlement.stages.authorized?.seq ?? null);
   const counterparty = input.counterparties.get(bill.counterpartyId) ?? null;
   const name = counterparty?.name ?? "The payee";
   const route = transaction.route;
@@ -676,7 +736,7 @@ function buildRow(ctx: Context, intent: ClosePackIntentRow, bill: Bill): ClosePa
     guardrails: guardrailsCheck(decision, personPaid),
     screening: screeningCheck(screening, name, decision),
     walletList: walletListCheck(route, screening, input.walletListSince, anchorAt),
-    payeeLock: payeeLockCheck(route, address, paying?.ts ?? sentAt),
+    payeeLock: payeeLockCheck(ctx, route, address, paying?.ts ?? sentAt, cutoff),
     payTo: payToCheck(bill, route, input.documentPayTo, destination, paying),
     milestone: milestoneCheck(ctx, bill, own),
   };
@@ -768,14 +828,7 @@ function openPayment(ctx: Context, intent: ClosePackIntentRow, bill: Bill): Clos
   if (intent.status === "confirmed") state = "settled_later";
   else if ((intent.provider_tx_id ?? "").startsWith("blindpay:") && intent.provider_state === "FAILED") state = "refunded";
   else {
-    const settlement = settlementOf({
-      intent,
-      entries: own,
-      source: { type: bill.source.kind, id: bill.source.id },
-      books: booksOf({ id: bill.source.id, status: bill.status, tx_ref: bill.txRef, settled_at: bill.settledAt }, bill.source.kind),
-      now: input.now.getTime(),
-    });
-    const status = settlement.status;
+    const status = settlementOfRow(input.now, intent, bill, own).status;
     state = status === "confirmed" || status === "reconciled" ? "in_flight" : status;
   }
   const circle = [intent.provider_state, intent.failure_reason].filter((part): part is string => Boolean(part)).join(": ");

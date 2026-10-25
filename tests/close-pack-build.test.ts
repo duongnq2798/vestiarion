@@ -590,6 +590,80 @@ describe("the approval chain (close pack CP7)", () => {
     expect(paidNow.checks.milestone).toMatchObject({ kind: "stated", text: "The work was verified by hand by owner@pinecrest.test.", entries: [61] });
   });
 
+  describe("a person's approval that only recorded a transfer the agent had sent", () => {
+    // The agent's ap_pay sent the transfer; Approvals listed the bill, and a person's approval only reconciled it
+    // (`transferExists` in approvals.ts). The settlement track names the ap_pay as what let it go, and so does the pack.
+    const reconciledBy = (seq: number, ts: string, txRef: string, extra: Record<string, unknown> = {}) =>
+      entry(seq, ts, "approval_paid", { by: APPROVER, invoiceId: INV_A, counterpartyId: NORTHWIND, amount: 100, currency: "USDC", amountPaid: 100, txRef, status: "paid", attempt: 1, ...extra });
+    const agentSent = (resulting: Record<string, unknown>, txRef = TX_A) =>
+      entry(12, "2026-10-02T14:00:00Z", "ap_pay", { ...AGENT_PAID[1].detail, execution: { txRef, ...resulting } }, "agent");
+    const expectCode = (row: ClosePackRow, recordSeq: number) => {
+      expect(row.approval.authorizedBy).toBe("code");
+      expect(row.approval.approvals).toEqual([]);
+      expect(row.approval.agent).toMatchObject({ action: "ap_pay", entry: 12 });
+      expect(row.checks.guardrails).toMatchObject({ kind: "checked", text: "Code checked it before it was sent.", entries: [12] });
+      expect(approvedLines(row)).toEqual(["No person approved it: code checked it and the agent paid it."]);
+      expect(decidedLines(row)).toEqual(["Claude decided to pay it."]);
+      expect(row.record).toMatchObject({ seq: recordSeq, action: "approval_paid" });
+      expect(row.entries).toContain(12);
+      expect(row.entries).toContain(recordSeq);
+    };
+    const reconciled = { executed_at: "2026-10-02T16:00:05Z", updated_at: "2026-10-02T16:00:05Z", confirmed_at: "2026-10-02T16:00:05Z" };
+
+    it("is the agent's payment when its ap_pay sent the transfer and went out, or was held only because Circle's read failed", () => {
+      for (const resulting of [{ resultingStatus: "matched" }, { resultingStatus: "held" }]) {
+        const entries = [...NORTHWIND_ADDRESS, AGENT_PAID[0], agentSent(resulting), reconciledBy(15, "2026-10-02T16:00:00Z", TX_A)];
+        const row = rowOf(buildClosePack(input({ intents: [intent("pay-a", INV_A, reconciled)], invoices: [BILL_A], entries })), "pay-a");
+        expectCode(row, 15);
+      }
+    });
+
+    it("is the agent's payment for a CCTP payout whose mint was late: its ap_pay sent the burn, a reconcile held it, an approval recorded it", () => {
+      const burn = tx("6");
+      const mint = tx("7");
+      const entries = [
+        ...NORTHWIND_ADDRESS,
+        AGENT_PAID[0],
+        agentSent({ resultingStatus: "matched" }, burn),
+        entry(13, "2026-10-02T15:00:00Z", "ap_reconcile", { invoiceId: INV_A, counterpartyId: NORTHWIND, reconciled: true, execution: { txRef: burn, resultingStatus: "held" } }, "agent"),
+        reconciledBy(15, "2026-10-02T16:00:00Z", burn),
+      ];
+      const cctp = intent("pay-a", INV_A, { ...reconciled, destination_chain: "BASE-SEPOLIA", payout_route: "cctp", tx_hash: burn, mint_tx_hash: mint, bridge_fee: "0.01" });
+      const row = rowOf(buildClosePack(input({ intents: [cctp], invoices: [invoice(INV_A, { tx_ref: mint })], entries })), "pay-a");
+      expectCode(row, 15);
+    });
+
+    it("is the agent's payment by the ledger alone when the intent has no submitted_at", () => {
+      const entries = [...NORTHWIND_ADDRESS, AGENT_PAID[0], agentSent({ resultingStatus: "held" }), reconciledBy(15, "2026-10-02T16:00:00Z", TX_A)];
+      const row = rowOf(buildClosePack(input({ intents: [intent("pay-a", INV_A, { ...reconciled, submitted_at: null })], invoices: [BILL_A], entries })), "pay-a");
+      expectCode(row, 15);
+    });
+
+    it("is a person's payment when their approval sent it again after Circle failed the agent's transfer", () => {
+      const again = tx("5");
+      const entries = [
+        ...NORTHWIND_ADDRESS,
+        AGENT_PAID[0],
+        agentSent({ resultingStatus: "matched" }),
+        reconciledBy(15, "2026-10-03T09:00:02Z", again, { attempt: 2, retriedAfter: { providerTxId: "circle-pay-a", providerState: "FAILED", failureReason: "INSUFFICIENT_FUNDS" } }),
+      ];
+      const retried = intent("pay-a", INV_A, {
+        tx_hash: again,
+        transfer_attempt: 2,
+        previous_attempts: [{ attempt: 1, providerState: "FAILED", failureReason: "INSUFFICIENT_FUNDS", failedAt: "2026-10-02T14:05:00Z" }],
+        submitted_at: "2026-10-03T09:00:00Z",
+        executed_at: "2026-10-03T09:00:05Z",
+        updated_at: "2026-10-03T09:00:05Z",
+        confirmed_at: "2026-10-03T09:00:05Z",
+      });
+      const row = rowOf(buildClosePack(input({ intents: [retried], invoices: [invoice(INV_A, { tx_ref: again })], entries })), "pay-a");
+      expect(row.approval.authorizedBy).toBe("person");
+      expect(row.approval.approvals).toMatchObject([{ paid: true, entry: 15 }]);
+      expect(approvedLines(row)[0]).toBe("Approved and paid by approver@pinecrest.test (approver) on 2026-10-03 09:00 UTC");
+      expect(row.record).toMatchObject({ seq: 15, action: "approval_paid" });
+    });
+  });
+
   it("names a member by email, a former member by id, and with people by id no email anywhere", () => {
     const leftPaid = TWO_APPROVALS.map((one) => (one.seq === 23 ? entry(23, one.ts, "approval_paid", { ...one.detail, by: LEFT, approvals: [{ by: ACCOUNTANT, at: "2026-10-11T10:00:00.000Z" }, { by: LEFT, at: "2026-10-12T11:00:00.000Z" }] }) : one));
     const pack = buildClosePack(input({ entries: [...NORTHWIND_ADDRESS, ...HARBOR_ADDRESS, ...AGENT_PAID, ...leftPaid] }));
@@ -828,6 +902,51 @@ describe("the verification record (close pack CP8)", () => {
 
     it("does not apply to a bank payout", () => {
       expect(bankRow().checks.payeeLock).toMatchObject({ kind: "not_applicable", text: "The payee lock covers addresses on chain only." });
+    });
+
+    describe("when the owner changed the lock after the address was confirmed", () => {
+      // The address changed at 11:00 and was confirmed under a 48-hour wait; the agent paid it at 14:00, 3 hours later.
+      const changed = [
+        entry(2, "2026-10-01T08:00:00Z", "create_counterparty", { by: OWNER, counterpartyId: NORTHWIND, address: ADDR_OTHER }),
+        entry(5, "2026-10-02T11:00:00Z", "counterparty_address_changed", { by: OWNER, counterpartyId: NORTHWIND, from: ADDR_OTHER, to: ADDR_N }),
+        entry(6, "2026-10-02T11:30:00Z", "counterparty_address_confirmed", { by: APPROVER, counterpartyId: NORTHWIND, address: ADDR_N, via: "confirm", payeeLock: { coolingHours: 48 } }),
+      ];
+      const lockChanged = (to: { on: boolean; coolingHours: number }) => entry(7, "2026-10-02T12:00:00Z", "payee_lock_changed", { by: OWNER, from: { on: true, coolingHours: 48 }, to }, "human");
+      const packWith = (change: ClosePackLedgerRow) => buildClosePack(input({ intents: [PAY_A], entries: [...changed, change, ...AGENT_PAID] }));
+
+      it("is stated, citing the change, when the owner turned the lock off or removed its wait before it was paid", () => {
+        const cases: Array<[{ on: boolean; coolingHours: number }, string]> = [
+          [{ on: false, coolingHours: 48 }, "turned it off"],
+          [{ on: true, coolingHours: 0 }, "removed its wait"],
+        ];
+        for (const [to, eased] of cases) {
+          const pack = packWith(lockChanged(to));
+          expect(rowOf(pack, "pay-a").checks.payeeLock, eased).toEqual({
+            kind: "stated",
+            text: `The payee lock was on when the address was confirmed, with a 48-hour wait; owner@pinecrest.test ${eased} on 2026-10-02 12:00 UTC. It was sent 3 hours after the address was given.`,
+            notes: [],
+            at: "2026-10-02T12:00:00Z",
+            entries: [5, 6, 7],
+            warn: true,
+          });
+          expect(rowOf(pack, "pay-a").entries).toContain(7);
+          expect(pack.entries.map((one) => one.seq)).toContain(7);
+        }
+      });
+
+      it("still does not match when the wait it was cut to had not ended either", () => {
+        const pack = packWith(lockChanged({ on: true, coolingHours: 24 }));
+        expect(rowOf(pack, "pay-a").checks.payeeLock).toMatchObject({ kind: "contradicted", text: "It was sent before the payee lock's 24-hour wait had ended.", entries: [5, 6, 7], warn: true });
+      });
+
+      it("reads no change made after it was paid, or before the address was confirmed", () => {
+        const after = entry(14, "2026-10-02T15:00:00Z", "payee_lock_changed", { by: OWNER, from: { on: true, coolingHours: 48 }, to: { on: false, coolingHours: 48 } }, "human");
+        const before = entry(4, "2026-10-01T09:00:00Z", "payee_lock_changed", { by: OWNER, from: { on: true, coolingHours: 72 }, to: { on: false, coolingHours: 72 } }, "human");
+        const pack = buildClosePack(input({ intents: [PAY_A], entries: [before, ...changed, after, ...AGENT_PAID] }));
+        expect(rowOf(pack, "pay-a").checks.payeeLock).toMatchObject({ kind: "contradicted", text: "It was sent before the payee lock's 48-hour wait had ended.", entries: [5, 6] });
+        expect(pack.entries.map((one) => one.seq)).not.toContain(4);
+        expect(pack.entries.map((one) => one.seq)).not.toContain(14);
+      });
     });
   });
 
