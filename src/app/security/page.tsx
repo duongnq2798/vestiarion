@@ -495,8 +495,10 @@ export default function SecurityPage() {
             The agent&apos;s model provider is Anthropic, OpenAI or DeepSeek, whichever this deployment configures. It receives what{" "}
             <LegalLink href="/privacy#services">Privacy</LegalLink> lists: the facts of each decision it is asked about; for each email that reaches a
             workspace&apos;s invoice address, its first PDF, .eml or .txt attachment, or else its text, and nothing for one that is too large, holds
-            only images or comes over the workspace&apos;s rate; each document a member has it read; and each plain-text message a linked member
-            sends the Telegram bot. Without a provider, a written rule-based policy decides, and nothing is sent.
+            only images or comes over the workspace&apos;s rate; each document a member has it read; the text of each PDF a vendor sends for a
+            bill&apos;s missing purchase order or goods receipt, or a member attaches to a bill, while vendor requests are in shadow or on, and
+            nothing for an image or a scan; and each plain-text message a linked member sends the Telegram bot. Without a provider, a written
+            rule-based policy decides, and nothing is sent.
           </li>
           <li>
             Each provider handles these requests under its own API terms:{" "}

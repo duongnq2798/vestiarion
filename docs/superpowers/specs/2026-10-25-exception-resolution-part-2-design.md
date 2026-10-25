@@ -65,6 +65,25 @@ read, and a file whose hash differs or that is gone from storage. The kind and t
 (`file_type`, `file_size`) before anything is downloaded, so a 10 MB image is never fetched. If this is wrong: photos
 of documents never match, and a person adds the details, as today.
 
+The cycle never parses a PDF on its own thread. The scheduled tick runs every live workspace's cycle on one thread, and
+pdf.js sets itself no limit, so a PDF of a few kilobytes built to keep it busy (forms drawn inside forms: about 95 s at
+fan-out 10, depth 6, on unpdf 1.8.1) or to fill its memory would hold or end every workspace's cycle, payments included.
+`readPdfBounded` (`src/lib/invoice-document/read.ts`, with `src/lib/invoice-document/pdf-worker.ts`) reads it to the
+text `readDocument` gives, in a `node:worker_threads` worker:
+- with its own heap (256 MB old generation, 32 MB young) and 15 s from its start, after which it is terminated;
+- refusing a PDF of more than 50 pages before any page is read, and reading pages only until the text passes 20,000
+  characters (signed `truncated: true`). Neither stops forms nested inside one page: the time limit is the bound.
+A PDF stopped at either limit, or that the worker cannot parse, is unreadable ("This PDF could not be read."), recorded
+like any other, and leaves the queue. A worker that cannot start or load unpdf fails the stage instead: that is not the
+file's doing, and the next cycle tries again. The worker's script is given as text and loads unpdf from
+`node_modules`, which `serverExternalPackages` in `next.config.ts` keeps there.
+
+Each parse is counted on the row before it begins (`parse_attempts`, 0144's `start_document_parse`), and the count is
+cleared once it ends, whatever it found (`finish_document_parse`). A parse that took the whole run down with it is
+never cleared: a row whose count is already 2 is recorded unreadable with no third parse. Before those functions, the
+stage parses with nothing counted. If this is wrong: a legitimate PDF of more than 50 pages, or one that takes longer
+than 15 s, is not checked, and a person adds the details.
+
 **DK4. The model reads; code compares.** The model is shown the document's text alone, never the bill's vendor, amount
 or purchase order, so an instruction in the document cannot aim at the bill's figures. Each value it returns passes
 `normalizeExtraction` against the same text, as the invoice reader's do. Then `compareDocument`
@@ -183,7 +202,8 @@ the reason on the card.
 **DK10. Shadow.** With vendor requests in shadow, the stage reads, compares and signs `document_checked` with
 `shadow: true`, writes `check_shadow = true`, and never writes the bill. The card says what it would have done. A
 document checked in shadow is not checked again when the setting moves to on. A member may attach the same file again,
-since the same-file rule (DK12) skips only files checked outside shadow. If this is wrong: a vendor's document checked
+since the same-file rule (DK12) counts only a file a check outside shadow compared: matched or mismatched. A file that
+was skipped or unreadable may be sent or attached again. If this is wrong: a vendor's document checked
 in shadow needs a person to attach it again, or to add the details, once the workspace goes on.
 
 **DK11. A member attaches the vendor's document.** Owners and admins (`records.write`, as for **Add details**) see
@@ -205,8 +225,10 @@ limit is 5 MB, as for **From a document**), and `attachDocument` (`src/lib/docum
 cycle code.
 
 A file the function refuses is removed from storage. At most one attachment per bill waits to be checked. A file
-already on the bill, unchecked or checked outside shadow, is refused. Attaching counts as an answered request for part
-1's 7-day cooldown, so the vendor is not emailed while a document the team attached is on the bill.
+already on the bill, unchecked or matched or mismatched outside shadow, is refused. One whose check skipped it or found
+it unreadable was never compared, and may be attached again. Attaching counts as an answered request for part 1's 7-day
+cooldown, so the vendor is not emailed while a document the team attached is on the bill. It does not count toward
+part 1's 20 requests a day, which counts only the requests the agent made (rows with an email domain).
 
 Why have it at all:
 - A vendor who emails the purchase order to the business is the common case, and it gets the same check and the same
@@ -222,7 +244,10 @@ one who types it, and the ledger names who attached it.
 - **One check per request.** `check_document_request` locks the request (`for update`) and checks it once:
   `checked_at` set means `already_checked`. A second cycle, or a second instance, finds it checked and does nothing.
 - **The same file.** Before any read, a request whose file has the SHA-256 of another request of the same bill
-  checked outside shadow is skipped ("it is the same file as one already checked for this bill"), with no model call.
+  checked outside shadow, matched or mismatched, is skipped ("it is the same file as one already checked for this
+  bill"), with no model call. A check that skipped the file or found it unreadable never compared it, so the same file
+  sent or attached again is read: a vendor's document that arrived while a person had the bill claimed, or that was
+  gone from storage, can still be checked.
 - **The file is the one checked.** The function refuses a SHA-256 that is not the row's.
 - **Two documents for one bill.** The older is checked first. Once it adds the purchase order, the newer finds nothing
   missing, or the compare-and-set fails, and is skipped.
@@ -271,7 +296,8 @@ next cycle reads it again, at one more model call.
 - `approval_policies.document_requests` (0142).
 - `document_requests`: `id`, `invoice_id`, `counterparty_id`, `status`, `missing`, `po_reference`, `answered_at`,
   `file_path`, `file_sha256`, `file_type`, `file_size`, `created_at`, and from 0144 `source`, `checked_at`,
-  `check_outcome`, `check_reason`, `check_shadow`, `document_po`, `po_written`.
+  `check_outcome`, `check_reason`, `check_shadow`, `document_po`, `po_written`. Only rows with an email domain (the
+  agent's own requests) count toward part 1's 20 a day.
 - `invoices`: `id`, `direction`, `status`, `amount`, `currency`, `memo`, `po_reference`, `goods_received`,
   `counterparty_id`.
 - `counterparties`: `name`, `notice_email`, `address`, `purchase_order_required`.
@@ -279,8 +305,9 @@ next cycle reads it again, at one more model call.
 - The AP stage: `document_requests.invoice_id, id, source, file_sha256` where `po_written`.
 
 **Writes**
-- `document_requests`: the check columns, through `check_document_request`, and a member's row, through
-  `attach_document`. Both are service-role definer functions; the tenant role still only reads.
+- `document_requests`: the check columns, through `check_document_request`, a member's row, through
+  `attach_document`, and `parse_attempts`, through `start_document_parse` and `finish_document_parse`. All four are
+  service-role definer functions; the tenant role still only reads.
 - `invoices.po_reference`, only through `check_document_request` (DK7).
 - Storage: a member's PDF at `{org}/document-requests/{id}/{sha256}` (upload, never overwrite).
 - The ledger: the two entries below. `document_checked` is signed with `appendLedgerEntry` inside the cycle;
@@ -333,6 +360,7 @@ the tests apply it twice. It redefines no function of another migration. The par
 - `check_shadow boolean not null default false`.
 - `document_po text`, check null or 1-100 characters, with those control characters refused, and `!~* '://|www[.]'`.
 - `po_written boolean not null default false`.
+- `parse_attempts integer not null default 0`, check `parse_attempts >= 0` (DK3).
 
 **Other changes**
 - `alter column email_domain drop not null`, which is idempotent.
@@ -355,7 +383,8 @@ authenticated and `vestiarion_tenant`, and granted to `service_role`. A refusal 
   - It returns `not_waiting` unless the invoice is the org's payable in `awaiting_info`.
   - It refuses a path other than `p_org_id/document-requests/p_id/p_file_sha256`, a SHA-256 that is not 64 hex
     characters, or a size outside 1-4,000,000.
-  - It returns `same_file` when a request of the bill has that SHA-256 and is unchecked or was checked outside shadow.
+  - It returns `same_file` when a request of the bill has that SHA-256 and is unchecked, or was matched or mismatched
+    outside shadow. One skipped or unreadable was never compared, and the file may be attached again.
   - Otherwise it inserts the answered member row (`file_type 'application/pdf'`, `answered_at now()`, `counterparty_id`
     from the invoice, the table's `missing` check), with `on conflict` on the waiting-attachment index `do nothing`. It
     returns `busy` when nothing was inserted, else `attached`.
@@ -369,6 +398,10 @@ authenticated and `vestiarion_tenant`, and granted to `service_role`. A refusal 
     with `skipped` (DK7).
   - Otherwise it sets the check columns and returns `written` or `checked`.
   - It changes no status, amount, currency, address or goods receipt, and moves no money.
+- **`start_document_parse(p_org_id, p_id)`** `returns integer`: on the org's answered request with `checked_at` null,
+  adds one to `parse_attempts` and returns the count before it; null for any other request, which it leaves alone (DK3).
+- **`finish_document_parse(p_org_id, p_id)`** `returns void`: sets `parse_attempts` back to 0 on the org's request with
+  `checked_at` null.
 - `notify pgrst, 'reload schema'`, and a commented "Down" block, as in 0142.
 
 A member's files sit in the same folder, so `documentFilesOf`, `removeWorkspaceDocumentFiles` and the sample-data
@@ -565,6 +598,12 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
 - **The setting goes off with documents unchecked.** They wait, and are checked if it goes back to shadow or on, as
   long as their bill still waits.
 - **The file is gone from storage, or its hash differs.** Unreadable, with no model call.
+- **A PDF that keeps pdf.js busy or fills its memory.** The worker is stopped at 15 s or at its heap, and the file is
+  unreadable; the thread that runs the cycles never parsed it (DK3).
+- **A run that ends during a parse anyway.** The count stays on the row: after two, the file is unreadable with no
+  third parse (DK3).
+- **The PDF reader cannot start or load.** The stage fails and the journal says so; the request waits, its count
+  cleared, for the next cycle.
 - **The ledger append fails after the function committed.** The cycle stage fails and the journal says so. The
   purchase order is on the bill without its `document_checked` entry, and the bill is still held by DK8: the marker is
   in the table, and the `ap_*` entry carries `vendorDocument`.
@@ -588,6 +627,9 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
 - **Untrusted files.**
   - Only PDFs of at most 4,000,000 bytes reach the PDF parser (`unpdf`, server-side, as for **From a document**).
     Images are never parsed.
+  - The cycle parses each in a worker thread with its own heap and a 15 s limit, at most 50 pages, never on the
+    thread every workspace's cycle runs on, and parses no file a third time after two parses that never finished
+    (DK3).
   - A file is known by its first bytes, and read only when its hash is the one recorded.
   - A path is built from the row and checked against the org's folder.
   - The member's upload never overwrites.
@@ -610,7 +652,10 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
 - A fourth setting value, such as checking without emailing vendors.
 - A new email or chat notice for a check. Held bills are told as they are today.
 - Counting a member who attached a document as the bill's author for the self-approval rules.
-- Changing `policy-replay-read.ts` or the agent activity's `TRIGGER_ACTIONS`.
+- Changing the agent activity's `TRIGGER_ACTIONS`. Policy replay does replay `invoice.vendor_document`: it is in
+  `BILL_STAGES` after `treasury.insufficient_eurc` and before the same work and the project's budget, settled from
+  the entry's `vendorDocument`, and `policy-replay-read.ts` gives it words.
+- Parsing a document once at intake rather than in the cycle: the cycle's parse is bounded instead (DK3).
 
 ## Tests (write first)
 
@@ -619,8 +664,8 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
 - `attach_document`:
   - inserts an answered member row with no token and no email domain;
   - returns `not_waiting` for a bill that is not `awaiting_info`, and for a receivable;
-  - returns `same_file` for a repeated SHA-256;
-  - allows a repeat whose earlier check was in shadow;
+  - returns `same_file` for a repeated SHA-256, unchecked, matched or mismatched;
+  - allows a repeat whose earlier check was in shadow, or outside it was skipped or unreadable;
   - returns `busy` for a second unchecked attachment;
   - raises `document_check_invalid` for a path outside the org, a bad SHA-256, or a size of 0 or 4,000,001.
 - `check_document_request`:
@@ -634,8 +679,10 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
   - refuses a reason with a control character (U+2028 included) and a purchase order with a link.
 - The table checks: a member row needs `status = 'answered'` and `file_type 'application/pdf'`; a vendor row needs
   `email_domain`.
-- Grants: anon, authenticated and `vestiarion_tenant` cannot execute either function. The tenant reads the new columns
-  of its own workspace only.
+- `start_document_parse` answers 0, 1, 2 as reads begin, and `finish_document_parse` clears the count; null, and no
+  count, for a checked request, another workspace's or an unknown one; every row starts at 0, a pre-0144 one included.
+- Grants: anon, authenticated and `vestiarion_tenant` cannot execute any of the four functions. The tenant reads the new
+  columns of its own workspace only.
 
 **`tests/document-check-compare.test.ts`** (pure `compareDocument`, hand-made text and readings):
 - **A match.** A match with a typed purchase order adds it as the document spells it ("po-1042" typed, "PO-1042" in
@@ -680,9 +727,27 @@ PO-1042, 200.00 and an address; no model key, so the heuristic reader):
   written.
 - **Unreadable.** An image row, a 4,000,001-byte row, `scan.pdf`, and a hash that differs: unreadable, and the model is
   never called (spy on `extractInvoice`).
-- **Skipped.** The same file as an earlier non-shadow check, and a bill no longer `awaiting_info`: skipped with no read.
+- **Skipped.** The same file as an earlier non-shadow check that matched or mismatched, and a bill no longer
+  `awaiting_info`: skipped with no read. The same file as an earlier non-shadow check that was skipped or unreadable is
+  read, and so is a later copy of a file the same cycle found gone from storage.
   `bill_moved` from the RPC leads to a second call with `skipped`.
+- **A PDF that will not finish reading (DK3).** A nested-forms PDF stops at the time limit the test sets, as
+  unreadable, with no model call; each parse is counted before it begins and cleared after, before the check is
+  recorded; a row whose count is 2 is unreadable with no parse; one at 1 is read; before 0144's functions it is read
+  with nothing counted; a failure to count stops the stage; a request checked elsewhere is parsed and signed nothing.
 - **Limits.** At most 5 per cycle; an empty read token stops the loop.
+
+**`tests/invoice-document-bounded.test.ts`** (`readPdfBounded`, the real worker and unpdf):
+- The same text, hash and cut as `readDocument` on the fixture and a 3-page PDF; the caller's bytes stay whole.
+- A scan, an empty file, one over 4 MB and one that is no PDF are refused as `readDocument` refuses them.
+- A nested-forms PDF of under 4 KB stops at a 1 s limit while a timer on the calling thread keeps ticking; with a
+  24 MB heap it stops as `memory`.
+- 51 pages are refused and 50 read; text past 20,000 characters stops the pages and reads as `truncated`.
+- With no unpdf to load (another working directory), it throws a plain error, not a refusal.
+
+**`tests/document-requests-stage.test.ts`** (addition): 20 documents members attached today, with no email domain, leave
+the agent's 20 a day whole: the bill that qualifies is still asked about and emailed, and the day's read filters on
+`email_domain`.
 
 **`tests/guardrails.test.ts`** (additions):
 - With `vendorDocument` and everything else passing, `pay` and `schedule` are held as `invoice.vendor_document`, with
@@ -731,11 +796,20 @@ PO-1042, 200.00 and an address; no model key, so the heuristic reader):
   - `submitDocument` raises `document_received` (no `userId`) in shadow and on, and not when off;
   - the members' email sentence follows the setting.
 - `tests/document-requests-setting.test.ts`: the panel's copy with `checks` true and false; the On summary.
-- `tests/dal.test.ts`: `PLATFORM_RPCS` includes `attach_document` and `check_document_request`;
+- `tests/dal.test.ts`: `PLATFORM_RPCS` includes `attach_document`, `check_document_request`, `start_document_parse`
+  and `finish_document_parse`;
   `platformStorage().upload` passes `upsert: false` and the content type.
 - `tests/account-deletion.test.ts`: `{ tbl: "document_requests", col: "attached_by", action: "n" }`.
 - `tests/agent-activity.test.ts`: both rule lists gain `invoice.vendor_document`.
 - `tests/bill-next-step.test.ts`: the rule's next step and `codeStoppedLine`.
+- `tests/invoice-decision.test.ts`: a USDC and a EURC bill held on the rule name it in the band, with no limit, its
+  row says "Code stopped it: its purchase order came from the vendor's document, and a person approves it.", and its
+  next step offers no limit to edit.
+- `tests/policy-replay.test.ts`: a 60 USDC bill over a 50 limit, with the marker, tried at 100, is still stopped, on
+  `invoice.vendor_document`; one recorded on the rule replays as stopped; a schedule too; one without the marker goes
+  ahead. `tests/policy-replay-read.test.ts`: every stage has words.
+- `tests/approvals.test.ts`: the waiting payables read `purchase_order_required`; `tests/document-requests-cards.test.tsx`:
+  no **Attach a document** for a bill whose vendor needs no purchase order and whose goods were received.
 - `tests/approval-card-reasons.test.tsx`: `overridesHold` is false for the rule.
 - `tests/decision-trail.test.tsx` and `tests/evidence-chain.test.ts`: the steps and the fact under Screens.
 - `tests/security-page.test.tsx`, `tests/legal-pages.test.tsx`: the new phrases and the dates (Docs).
@@ -826,8 +900,11 @@ PO-1042, 200.00 and an address; no model key, so the heuristic reader):
 - `src/lib/agent/journal.ts`: `CYCLE_STAGES` (after `compliance`), `STAGE_REQUIRES.document_checks: []`, and its
   paragraph in the comment.
 - `src/lib/agent/cycle-soon.ts`: `CycleEventKind` gains `document_received`.
-- `src/lib/dal/index.ts`: `PLATFORM_RPCS` gains `attach_document` and `check_document_request`; `platformStorage()`
-  gains `upload`, and its comment.
+- `src/lib/dal/index.ts`: `PLATFORM_RPCS` gains `attach_document`, `check_document_request`, `start_document_parse`
+  and `finish_document_parse`; `platformStorage()` gains `upload`, and its comment.
+- `next.config.ts`: `serverExternalPackages: ["unpdf"]`, for the worker that parses a vendor's PDF (DK3).
+- `src/lib/policy-replay.ts`: `BILL_STAGES` and the facts that settle a stage; `src/lib/policy-replay-read.ts`:
+  `RULE_WORDS`.
 - `src/lib/agent/guardrails.ts`: `ApGuardrailRule` and `ApGuardrailInput.vendorDocument`.
 - `src/lib/next-step.ts`: `VENDOR_DOCUMENT`, `ruleInBrief` and `ruleNextStep`.
 - `src/lib/rule-words.ts`: `RULE_WORDS`.
@@ -901,17 +978,20 @@ While 0144 has not run, the deployed code reads "not there yet" and checks nothi
 
 **Steps**
 1. **The migration.** The partner runs 0144. Probes:
-   - `checked_at`, `po_written` and `source` exist on `document_requests`;
+   - `checked_at`, `po_written`, `source` and `parse_attempts` exist on `document_requests`;
    - Cobalt's answered request reads `source` `vendor`, `checked_at` null, `po_written` false and `check_shadow` false;
    - pinecrest's `approval_policies.document_requests` is still `on`.
 2. **The check, once.** Start a cycle (**Run cycle now** on the console), or wait for the next one. In that cycle:
+   - the journal's `document_checks` stage succeeded. Had it failed with "the PDF reader could not start", the
+     deployed function would lack `node_modules/unpdf` (DK3): the request waits unchecked, with `parse_attempts` 0, and
+     nothing is recorded as unreadable;
    - `document_checked` is signed for the request: `outcome: "matched"`, `poWritten: true`,
      `poReference: "PO-PC-2026-1030"`, `source: "vendor"`, `missing: ["purchase_order", "goods_receipt"]`, `fileSha256`
      equal to ledger 6506's, `reader` the workspace's model, and `checks` with `vendor` (`document: "name"`), `currency`
      (USDC), `amount` (`document "5.00"`, `bill "5.00"`) and `purchase_order` matching. It carries no text, note or
      email address.
-   - A probe finds the request with `checked_at` set, `check_outcome` `matched`, `document_po` `PO-PC-2026-1030` and
-     `po_written` true, and the bill with `po_reference` `PO-PC-2026-1030`, its amount, currency and goods receipt
+   - A probe finds the request with `checked_at` set, `check_outcome` `matched`, `document_po` `PO-PC-2026-1030`,
+     `po_written` true and `parse_attempts` 0, and the bill with `po_reference` `PO-PC-2026-1030`, its amount, currency and goods receipt
      unchanged.
    - `invoice_reopened` is signed: "purchase order PO-PC-2026-1030 has since been supplied".
    - The AP stage decides it again, and the goods are not received yet, so `invoice.match_incomplete` sends it back to

@@ -832,7 +832,8 @@ plan, on Arc testnet).
   approvals, and the spending limit against running UTC-day and 7-day totals carried from decision to decision, with the
   six days before the window counted as recorded. Every other check is read from the recorded `guardrailRule`: passed
   before it, fired at it, and settled past it only from the facts (no `payout`, a USDC bill, `observed.newPayee`, a
-  bill's recorded `onChainLimit`); anything else is can't tell. A bill paid earlier in the replay counts once: a later
+  bill's recorded `onChainLimit`, a bill's recorded `vendorDocument`, which fires `invoice.vendor_document` after every
+  other rule of `enforceApGuardrails`); anything else is can't tell. A bill paid earlier in the replay counts once: a later
   decision on it, paid in either column, is unchanged.
 - **Running totals:** a decision let through counts what it paid, or its full USDC value if a rule stopped it then; a
   schedule a rule stopped then counts from nothing to its value on its `payOn` day, when the agent decides it again.
@@ -3143,7 +3144,8 @@ pays, nor changes a bill's status, amount or address.
   order or a goods receipt, its counterparty has a notice email and is neither frozen (`frozen_at`, read without it
   before 0137) nor screened high risk, and it has no request drafted or open, none answered or expired in 7 days, and
   none revoked. It keys on the row, never on `guardrailRule`, which most match holds leave null. At most 20 requests
-  made and 20 emailed in 24 hours per workspace. The bills' earlier requests are read 100 bills at a time (`ID_CHUNK`),
+  made and 20 emailed in 24 hours per workspace, counting the agent's own rows only (`email_domain` set): a document a
+  member attached (0144) counts toward its bill's 7 days, not toward the 20. The bills' earlier requests are read 100 bills at a time (`ID_CHUNK`),
   so no read's address grows long enough to be refused.
 - **A sandbox** never emails its vendors (`orgs.mode`, read with the workspace's name): the request goes to the member
   who last set vendor requests to shadow or on, named by the latest `document_requests_changed` and found among the
@@ -3211,11 +3213,23 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   hold below is read from the table). While vendor requests are in shadow or on and the agent is not paused, it takes
   the answered requests with `checked_at` null, oldest answer first, at most 5 a cycle, one `takeDocumentReadToken`
   per read. A request a vendor answered before 0144 ran has `checked_at` null too, so the first cycle after it checks it
-  once. A bill that no longer waits for a document, or a file already checked for the bill outside shadow, is skipped
-  with no read. An image, a file over 4 MB by its row, one not kept at its own path, gone from storage (any other Storage
-  failure fails the stage), whose hash is not the one recorded, a scan or a PDF unpdf cannot read is unreadable, and no
-  model reads it. The rest goes through `readDocument` (its text, up to 20,000 characters) and `extractInvoice`: the
-  model sees the document alone, never the bill, and `decide()` computes the rule-based reading beside it.
+  once. A bill that no longer waits for a document, or a file a check outside shadow already compared for the bill
+  (matched or mismatched), is skipped with no read; one skipped or unreadable before was never compared, and is read
+  when it comes again. An image, a file over 4 MB by its row, one not kept at its own path, gone from storage (any
+  other Storage failure fails the stage), whose hash is not the one recorded, a scan or a PDF unpdf cannot read is
+  unreadable, and no model reads it. The rest goes through `readPdfBounded` (its text, up to 20,000 characters, as
+  `readDocument` reads it) and `extractInvoice`: the model sees the document alone, never the bill, and `decide()`
+  computes the rule-based reading beside it.
+- **The parse** (`readPdfBounded`, `src/lib/invoice-document/pdf-worker.ts`). The scheduled tick runs every live
+  workspace's cycle on one thread, so the cycle never parses an outsider's PDF on it: pdf.js runs in a
+  `node:worker_threads` worker with its own heap (256 MB old, 32 MB young) and is terminated at 15 s. It refuses more
+  than 50 pages before reading one, and stops reading pages once the text passes 20,000 characters (`truncated`).
+  A file stopped at a limit or that cannot be parsed is unreadable, recorded like any other; a worker that cannot load
+  unpdf fails the stage, which is not the file's doing. The worker's script is plain text that imports unpdf from
+  `node_modules`, so `next.config.ts` lists unpdf in `serverExternalPackages` and each function that reads PDFs carries
+  it. Each parse is counted on the row first (`parse_attempts`, `start_document_parse`) and cleared once it ends
+  (`finish_document_parse`, best effort): a row whose count is already 2, two runs that never came back from it, is
+  unreadable with no third parse. Before those functions, it parses with nothing counted.
 - **The compare** (`compareDocument`, pure). Each value the model returns passes `normalizeExtraction` against the
   text. Code then checks, in order: the vendor (the counterparty's `nameKey` as whole words in the text's, or its billing
   domain or a subdomain, never a free email provider's, never the model's `vendorName`); the currency; the amount to its

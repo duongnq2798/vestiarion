@@ -1701,6 +1701,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
       " Only your team can mark the goods received: do it in Add details once you have them, and a person then approves the payment.",
     ],
     ["It is an image. Only a PDF with its text is checked.", "src/lib/document-requests/check.ts"],
+    ["This PDF could not be read.", "src/lib/document-requests/check.ts"],
     ["Vendor requests are in shadow, so the bill was left as it is: add the purchase order yourself.", "src/lib/document-requests/rules.ts"],
     ["Attach a document", "src/components/document-requests/AttachDocumentDialog.tsx"],
     ["Attach and check", "src/components/document-requests/AttachDocumentDialog.tsx"],
