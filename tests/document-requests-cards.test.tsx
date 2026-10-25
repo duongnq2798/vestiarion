@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WaitingPayable } from "@/lib/agent/approvals";
-import type { DocumentRequestView } from "@/lib/document-requests/rules";
+import type { DocumentCheckView, DocumentRequestView } from "@/lib/document-requests/rules";
 
 /**
  * What a bill's card says of the agent's request to its vendor (docs/superpowers/specs/2026-10-23-document-requests-design.md
@@ -216,6 +216,105 @@ describe("the card on Bills (ER3, ER6)", () => {
   });
 });
 
+describe("what the check found, on Approvals and on Bills (document checks DK13)", () => {
+  const checked = (check: DocumentCheckView, over: Partial<Extract<DocumentRequestView, { state: "answered" }>> = {}): DocumentRequestView => ({
+    ...(ANSWERED as Extract<DocumentRequestView, { state: "answered" }>),
+    source: "vendor",
+    check,
+    ...over,
+  });
+  const ADDED: DocumentCheckView = { outcome: "matched", po: "PO-2215", added: true, shadowLeftPo: false };
+  const LINES: Array<[string, DocumentCheckView, boolean, string]> = [
+    ["pending", { outcome: "pending" }, true, "Vestiarion checks it against the bill at its next cycle, usually within a minute."],
+    [
+      "matched",
+      ADDED,
+      true,
+      "Vendor, amount and purchase order PO-2215 match the bill. Vestiarion added the purchase order and checked the bill again. A person approves the payment: the agent does not pay it on its own.",
+    ],
+    [
+      "matched",
+      ADDED,
+      false,
+      "Vendor, amount and purchase order PO-2215 match the bill. Vestiarion added the purchase order. Only your team can mark the goods received: do it in Add details once you have them, and a person then approves the payment.",
+    ],
+    [
+      "matched",
+      { outcome: "matched", po: "PO-2215", added: false, shadowLeftPo: true },
+      true,
+      "Vendor, amount and purchase order PO-2215 match the bill. Vendor requests are in shadow, so the bill was left as it is: add the purchase order yourself.",
+    ],
+    [
+      "matched",
+      { outcome: "matched", po: null, added: false, shadowLeftPo: false },
+      false,
+      "Vendor and amount match the bill. Only your team can mark the goods received: do it in Add details once you have them.",
+    ],
+    [
+      "mismatched",
+      { outcome: "mismatched", reason: "The document says 8.50 USDC; the bill says 8.00 USDC." },
+      true,
+      "The document says 8.50 USDC; the bill says 8.00 USDC. The bill still waits: check it with Northstar Studio, or add the details yourself.",
+    ],
+    [
+      "unreadable",
+      { outcome: "unreadable", reason: "It is a PDF with no text to read, such as a scan." },
+      true,
+      "Vestiarion could not check it. It is a PDF with no text to read, such as a scan. Open it, and add the details yourself.",
+    ],
+    ["skipped", { outcome: "skipped", reason: "It was not checked: the bill no longer waited for a document." }, true, "It was not checked: the bill no longer waited for a document."],
+  ];
+
+  it("says each check's line on Approvals, as the bill's goods stand now", () => {
+    for (const [outcome, check, goodsReceived, line] of LINES) {
+      act(() => {
+        root.render(
+          <TooltipProvider>
+            <ApprovalCard orgSlug="pinecrest" payable={{ ...PAYABLE, goodsReceived }} canDecide viewerId={VIEWER} sandbox={false} canEdit documentRequest={checked(check)} />
+          </TooltipProvider>
+        );
+      });
+      const shown = container.querySelector(`[data-document-check="${outcome}"]`);
+      expect(shown?.textContent, line).toBe(line);
+    }
+  });
+
+  it("says each check's line on Bills, under the document's headline", () => {
+    for (const [outcome, check, goodsReceived, line] of LINES) {
+      const markup = renderToStaticMarkup(
+        <WaitingPayableAction
+          orgSlug="pinecrest"
+          invoice={{ id: PAYABLE.id, counterpartyName: "Northstar Studio", counterpartyId: PAYABLE.counterpartyId, poReference: null, goodsReceived }}
+          added={null}
+          canAddDetails
+          canDecide
+          canFix
+          documentRequest={checked(check)}
+        />
+      );
+      expect(markup, line).toContain(`data-document-check="${outcome}"`);
+      expect(markup.indexOf("Northstar Studio sent a document on Oct 24.")).toBeLessThan(markup.indexOf(`data-document-check="${outcome}"`));
+    }
+  });
+
+  it("names a member who attached the vendor's document", () => {
+    card(checked({ outcome: "pending" }, { source: "member", poReference: null, note: null, answeredAt: "2026-10-25T08:00:00Z" }));
+    expect(container.textContent).toContain("A member attached Northstar Studio's document on Oct 25.");
+    expect(container.textContent).not.toContain("Purchase order they typed");
+  });
+
+  it("says nothing of a check where none was read: before migration 0144, or while vendor requests are off", () => {
+    card(ANSWERED);
+    expect(container.querySelector("[data-document-check]")).toBeNull();
+    expect(container.textContent).toContain("Northstar Studio sent a document on Oct 24.");
+  });
+
+  it("says the check found by an earlier answer, beside a newer request", () => {
+    card({ ...ASKED, sentAt: "2026-10-31T09:00:00Z", expiresAt: "2026-11-14T09:00:00Z", received: checked(ADDED) as Extract<DocumentRequestView, { state: "answered" }> });
+    expect(container.querySelector('[data-document-received] [data-document-check="matched"]')?.textContent).toContain("Vestiarion added the purchase order");
+  });
+});
+
 describe("the Settings section (ER1)", () => {
   const render = (props: Partial<Parameters<typeof DocumentRequestsPanel>[0]> = {}) =>
     renderToStaticMarkup(<DocumentRequestsPanel orgSlug="pinecrest" status={{ setting: "off", ready: true }} canChange={false} {...props} />);
@@ -239,6 +338,29 @@ describe("the Settings section (ER1)", () => {
     const settings = readFileSync(path.join(process.cwd(), "src/app/o/[slug]/settings/page.tsx"), "utf8");
     expect(settings.indexOf('id: "document-requests-title"')).toBeGreaterThan(settings.indexOf('id: "payee-lock-title"'));
     expect(settings.indexOf('id: "document-requests-title"')).toBeLessThan(settings.indexOf('id: "ledger-key-title"'));
+  });
+
+  it("says what the check does once documents are checked, and part 1's copy before migration 0144 (document checks DK1)", () => {
+    expect(documentRequestsSentence("shadow", true)).toBe(
+      "Shadow: each waiting bill's card says what Vestiarion would ask its vendor and what it finds in a document. Nothing is sent, and no bill changes."
+    );
+    expect(documentRequestsSentence("on", true)).toBe(
+      "On: Vestiarion emails the vendor's billing address a link to send the missing document, and checks what comes back against the bill."
+    );
+    expect(documentRequestsSentence("off", true)).toBe("Off: Vestiarion does not ask vendors for missing documents.");
+    const checked = render({ canChange: true, status: { setting: "on", ready: true, checks: true } });
+    expect(checked).toContain("and you can attach one they emailed you. Vestiarion checks its vendor, amount and purchase order against the bill.");
+    expect(checked).toContain("The agent never pays a bill on its own because a document arrived.");
+    expect(checked).toContain("Nothing is asked or checked. You chase vendors yourself, and add the details on the bill.");
+    expect(checked).toContain("See which vendors Vestiarion would ask, and what it finds in a document, on each bill&#x27;s card. Nothing is sent, and no bill changes.");
+    expect(checked).toContain(
+      "Vestiarion emails the vendor once per bill, at most 20 a day, and the link works for 14 days. A document that matches the bill adds its purchase order, and a person approves the payment."
+    );
+    expect(checked).not.toContain("You still add the details");
+    const before = render({ canChange: true, status: { setting: "on", ready: true, checks: false } });
+    expect(before).toContain("You still add the details, and the agent decides the bill again. Nothing is paid because a document arrived.");
+    expect(before).toContain("Vestiarion emails the vendor once per bill, at most 20 a day. The link works for 14 days.");
+    expect(before).not.toContain("attach one they emailed you");
   });
 
   it("says it is not available before the workspace's database has it", () => {

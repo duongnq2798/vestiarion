@@ -3,7 +3,9 @@ import { utcDay } from "../copy";
 /**
  * Asking a vendor for the document a bill is missing (docs/superpowers/specs/2026-10-23-document-requests-design.md): what
  * code decides, and what the cards say. Pure, and safe in client components: the cycle's stage, the vendor's page, the
- * Approvals and Bills cards and Settings all read it the same way. Nothing here pays, or changes a bill (ER7).
+ * Approvals and Bills cards and Settings all read it the same way. Nothing here pays, or changes a bill. What the
+ * cycle's check found in a document (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK13) is
+ * said here too: only the cycle's document_checks stage adds a purchase order, and a person approves the payment.
  */
 
 /** How long a request's link answers (ER4). */
@@ -167,7 +169,21 @@ export function readDocumentFields(input: { poReference: string; note: string })
   return { ok: true, poReference: po || null, note: note || null };
 }
 
-/** A request the vendor answered: what they sent, as a bill's card shows it (ER6). */
+/** Who sent a document: its vendor, through the request's link, or a member, who attached it (document checks DK11). */
+export type DocumentSource = "vendor" | "member";
+
+/**
+ * What the cycle's check found in a document, as its bill's card says it (document checks DK13): waiting for the next
+ * cycle; a match, with the purchase order compared (null when none was), whether the check added it, and whether it was
+ * checked in shadow while the bill lacked it; or a mismatch, a file it could not read, or a skip, with the sentence 0144
+ * kept, which carries only Vestiarion's own words, the counterparty's name, a purchase order, figures and 0x hex.
+ */
+export type DocumentCheckView =
+  | { outcome: "pending" }
+  | { outcome: "matched"; po: string | null; added: boolean; shadowLeftPo: boolean }
+  | { outcome: "mismatched" | "unreadable" | "skipped"; reason: string };
+
+/** A request the vendor answered, or a document a member attached: what was sent, as a bill's card shows it (ER6). */
 export interface DocumentReceivedView {
   state: "answered";
   id?: string;
@@ -177,6 +193,10 @@ export interface DocumentReceivedView {
   note?: string | null;
   fileType?: string | null;
   fileSize?: number | null;
+  /** The vendor when absent, as every request before migration 0144. */
+  source?: DocumentSource;
+  /** What the check found; absent before migration 0144, and for a document not checked while vendor requests are off. */
+  check?: DocumentCheckView;
 }
 
 /**
@@ -218,8 +238,39 @@ export function documentRequestLine(view: DocumentRequestView, vendorName: strin
     case "asked":
       return `Asked ${vendorName} for ${what} on ${shortDay(view.sentAt)}; the link expires ${shortDay(view.expiresAt)}.`;
     case "answered":
-      return `${vendorName} sent a document on ${shortDay(view.answeredAt)}.`;
+      return view.source === "member" ? `A member attached ${vendorName}'s document on ${shortDay(view.answeredAt)}.` : `${vendorName} sent a document on ${shortDay(view.answeredAt)}.`;
     case "expired":
       return `Asked ${vendorName} for ${what} on ${shortDay(view.sentAt)}; the link expired ${shortDay(view.expiresAt)} with no answer.`;
+  }
+}
+
+/** What the matched lines say first: the purchase order compared, or none. */
+const matchedLead = (po: string | null) => (po ? `Vendor, amount and purchase order ${po} match the bill.` : "Vendor and amount match the bill.");
+/** What a match says while the bill's goods are not marked received: the check never marks them (DK6). */
+const GOODS_TO_MARK = " Only your team can mark the goods received: do it in Add details once you have them.";
+
+/**
+ * The card's one line on what the check found (DK13), under the document's headline. The matched lines follow the bill as
+ * it is now (`goodsReceived`): only a person marks its goods received, and a person approves a bill whose purchase order
+ * the check added (DK6, DK8).
+ */
+export function documentCheckLine(check: DocumentCheckView, vendorName: string, goodsReceived: boolean): string {
+  switch (check.outcome) {
+    case "pending":
+      return "Vestiarion checks it against the bill at its next cycle, usually within a minute.";
+    case "matched":
+      if (check.added) {
+        return goodsReceived
+          ? `${matchedLead(check.po)} Vestiarion added the purchase order and checked the bill again. A person approves the payment: the agent does not pay it on its own.`
+          : `${matchedLead(check.po)} Vestiarion added the purchase order. Only your team can mark the goods received: do it in Add details once you have them, and a person then approves the payment.`;
+      }
+      if (check.shadowLeftPo) return `${matchedLead(check.po)} Vendor requests are in shadow, so the bill was left as it is: add the purchase order yourself.`;
+      return `${matchedLead(check.po)}${goodsReceived ? "" : GOODS_TO_MARK}`;
+    case "mismatched":
+      return `${check.reason} The bill still waits: check it with ${vendorName}, or add the details yourself.`;
+    case "unreadable":
+      return `Vestiarion could not check it. ${check.reason} Open it, and add the details yourself.`;
+    case "skipped":
+      return check.reason;
   }
 }

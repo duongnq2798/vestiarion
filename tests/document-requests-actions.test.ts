@@ -77,6 +77,19 @@ describe("the setting (ER1)", () => {
     expect(result).toEqual({ ok: true, message: "Vendor requests are in shadow: each bill's card says what Vestiarion would ask, and nothing is sent." });
   });
 
+  it("says on checks what vendors send once documents are checked, and part 1's words before migration 0144 (document checks DK1)", async () => {
+    allow("owner");
+    changeMock.mockResolvedValueOnce({ from: "shadow", to: "on", checks: true });
+    expect((await run(() => setDocumentRequestsAction(INITIAL, form({ orgSlug: "pinecrest", setting: "on" })))).message).toBe(
+      "Vendor requests are on: Vestiarion emails vendors for a bill's missing purchase order or goods receipt, and checks what they send."
+    );
+    allow("owner");
+    changeMock.mockResolvedValueOnce({ from: "shadow", to: "on", checks: false });
+    expect((await run(() => setDocumentRequestsAction(INITIAL, form({ orgSlug: "pinecrest", setting: "on" })))).message).toBe(
+      "Vendor requests are on: Vestiarion emails vendors for a bill's missing purchase order or goods receipt."
+    );
+  });
+
   it("starts no cycle when turned off", async () => {
     allow("owner");
     changeMock.mockResolvedValueOnce({ from: "on", to: "off" });

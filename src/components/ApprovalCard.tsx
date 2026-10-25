@@ -355,7 +355,14 @@ export default function ApprovalCard({
             </Callout>
           )}
           {documentRequest && (
-            <DocumentRequestLine orgSlug={orgSlug} vendorName={payable.counterpartyName} view={documentRequest} canRevoke={canEdit} className="mt-2" />
+            <DocumentRequestLine
+              orgSlug={orgSlug}
+              vendorName={payable.counterpartyName}
+              view={documentRequest}
+              goodsReceived={payable.goodsReceived}
+              canRevoke={canEdit}
+              className="mt-2"
+            />
           )}
           {unfinished && (
             <p className="mt-2 text-sm text-ink-2">

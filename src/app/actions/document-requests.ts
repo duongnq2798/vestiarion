@@ -30,6 +30,8 @@ const SET: Record<DocumentRequestsSetting, string> = {
   shadow: "Vendor requests are in shadow: each bill's card says what Vestiarion would ask, and nothing is sent.",
   on: "Vendor requests are on: Vestiarion emails vendors for a bill's missing purchase order or goods receipt.",
 };
+/** On, once the workspace checks what vendors send (document checks DK1). */
+const SET_ON_CHECKED = "Vendor requests are on: Vestiarion emails vendors for a bill's missing purchase order or goods receipt, and checks what they send.";
 
 function formString(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -43,10 +45,10 @@ export async function setDocumentRequestsAction(_previous: DocumentRequestsActio
     const setting = formString(formData, "setting");
     if (!(DOCUMENT_REQUESTS_SETTINGS as readonly string[]).includes(setting)) return { ok: false, message: "Choose off, shadow or on." };
     try {
-      const { to } = await changeDocumentRequests({ actorId: auth.user.id, to: setting as DocumentRequestsSetting });
+      const { to, checks } = await changeDocumentRequests({ actorId: auth.user.id, to: setting as DocumentRequestsSetting });
       if (to !== "off") raiseCycleEvent(auth, "document_requests_on");
       revalidateOrgPages();
-      return { ok: true, message: SET[to] };
+      return { ok: true, message: to === "on" && checks ? SET_ON_CHECKED : SET[to] };
     } catch (error) {
       if (error instanceof DocumentRequestsError) return { ok: false, message: error.message };
       console.error("document requests change failed", error instanceof Error ? error.message : "unknown error");

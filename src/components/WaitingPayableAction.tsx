@@ -57,7 +57,9 @@ export function WaitingPayableAction({
   // What code stopped it on comes first: details would not change that decision, unless they are what it lacked.
   const offerDetails = canAddDetails && missing !== null && (step === null || matchIncomplete);
   // An owner or admin revokes a request out (ER6); the line itself is for anyone who sees the card.
-  const request = documentRequest ? <DocumentRequestLine orgSlug={orgSlug} vendorName={invoice.counterpartyName} view={documentRequest} canRevoke={canFix} /> : null;
+  const request = documentRequest ? (
+    <DocumentRequestLine orgSlug={orgSlug} vendorName={invoice.counterpartyName} view={documentRequest} goodsReceived={invoice.goodsReceived} canRevoke={canFix} />
+  ) : null;
   if (!offerDetails && !fix && !canDecide && !added) return request;
   const detailsPrompt = offerDetails
     ? addDetailsPrompt(missing) + (matchIncomplete && fix ? ` Or, if ${invoice.counterpartyName} is paid without purchase orders, mark it so.` : "")
