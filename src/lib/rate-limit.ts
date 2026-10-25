@@ -70,6 +70,17 @@ export function takeEvidencePageToken(userId: string, now = Date.now()): boolean
   return take(evidencePageBuckets, userId, 20, 3_000, now);
 }
 
+const closePackPageBuckets = new Map<string, Bucket>();
+
+/**
+ * Reads of the monthly close pack's page (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md CP11): ten at
+ * once, then one every 6 seconds, per member. Each reads the month's payments and checks every cited entry's signature.
+ * Single-instance, like the cycle guard: a soft brake, since a read costs database time only.
+ */
+export function takeClosePackPageToken(userId: string, now = Date.now()): boolean {
+  return take(closePackPageBuckets, userId, 10, 6_000, now);
+}
+
 const dueWatchBuckets = new Map<string, Bucket>();
 
 /**
