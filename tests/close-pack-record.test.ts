@@ -108,21 +108,33 @@ describe("takeClosePackPageToken (close pack CP11)", () => {
 });
 
 describe("takeClosePackDownloadToken (close pack CP15)", () => {
-  it("lets a member start three downloads at once, then one a minute", () => {
-    const member = `downloader-${Date.now()}`;
+  // The route keys it by person and workspace (`<userId>:<orgId>`), as the ledger's ten in ten minutes counts.
+  it("serves six downloads within a minute, in any tab, then one a minute", () => {
+    const key = `downloader-${Date.now()}:org-a`;
     const start = 3_000_000;
-    for (let download = 0; download < 3; download += 1) expect(takeClosePackDownloadToken(member, start)).toBe(true);
-    expect(takeClosePackDownloadToken(member, start)).toBe(false);
-    expect(takeClosePackDownloadToken(member, start + 59_999)).toBe(false);
-    expect(takeClosePackDownloadToken(member, start + 60_000)).toBe(true);
-    expect(takeClosePackDownloadToken(member, start + 60_000)).toBe(false);
+    for (let download = 0; download < 6; download += 1) expect(takeClosePackDownloadToken(key, start)).toBe(true);
+    expect(takeClosePackDownloadToken(key, start)).toBe(false);
+    expect(takeClosePackDownloadToken(key, start + 59_999)).toBe(false);
+    expect(takeClosePackDownloadToken(key, start + 60_000)).toBe(true);
+    expect(takeClosePackDownloadToken(key, start + 60_000)).toBe(false);
   });
 
-  it("keeps each member's downloads apart, and apart from the page's reads", () => {
+  it("counts downloads made one after another as it counts those started together: six, then the next waits", () => {
+    // CSV then JSON for three months, one every 5 seconds, each after the last has finished.
+    const key = `one-after-another-${Date.now()}:org-a`;
+    const start = 5_000_000;
+    for (let second = 0; second <= 25; second += 5) expect(takeClosePackDownloadToken(key, start + second * 1_000), `+${second}s`).toBe(true);
+    for (let second = 30; second <= 55; second += 5) expect(takeClosePackDownloadToken(key, start + second * 1_000), `+${second}s`).toBe(false);
+    expect(takeClosePackDownloadToken(key, start + 65_000)).toBe(true);
+    expect(takeClosePackDownloadToken(key, start + 70_000)).toBe(false);
+  });
+
+  it("keeps each person's downloads in each workspace apart, and apart from the page's reads", () => {
     const start = 4_000_000;
-    for (let download = 0; download < 3; download += 1) takeClosePackDownloadToken("downloader-a", start);
-    expect(takeClosePackDownloadToken("downloader-a", start)).toBe(false);
-    expect(takeClosePackDownloadToken("downloader-b", start)).toBe(true);
+    for (let download = 0; download < 6; download += 1) takeClosePackDownloadToken("downloader-a:org-a", start);
+    expect(takeClosePackDownloadToken("downloader-a:org-a", start)).toBe(false);
+    expect(takeClosePackDownloadToken("downloader-a:org-b", start)).toBe(true);
+    expect(takeClosePackDownloadToken("downloader-b:org-a", start)).toBe(true);
     expect(takeClosePackPageToken("downloader-a", start)).toBe(true);
   });
 });

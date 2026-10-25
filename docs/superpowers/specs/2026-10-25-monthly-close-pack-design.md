@@ -225,11 +225,14 @@ viewers (`workspace.read`).
 **CP15. Limits.** Downloads: ten per person per workspace in ten minutes, counted from `close_pack_exported` entries
 (`CLOSE_PACK_EXPORT_LIMIT`), as the hand-off counts its own; the eleventh answers 429 with `retry-after: 600`. That
 count holds across instances, but a download appends its entry only once its read is done, so downloads sent at once
-would all count the same earlier ones and each run the whole read. So the route also takes a token from a per-member
-bucket (`takeClosePackDownloadToken`: three at once, then one a minute) right after the session, format and month
-checks, before the membership or the month is read; past it, 429 with `retry-after: 60`. The bucket is per instance,
-a soft brake on a burst, as CP11's is. A reservation entry appended before the read would not do: the entry carries the
-served file's SHA-256 (CP13), known only once it is built. Page reads: CP11. A month holds at most 2,000 payments (`CLOSE_PACK_MAX_PAYMENTS`, rows and not settled together). Past it the
+would all count the same earlier ones and each run the whole read. So the route also takes a token from a bucket per
+person per workspace (`takeClosePackDownloadToken`, keyed `<userId>:<orgId>`: six within a minute, then one a minute)
+once the membership is read, keyed by the workspace's id and never by the slug asked for, and before the ledger is
+counted or the month is read; past it, 429 with `retry-after: 60`. A token bucket cannot tell downloads started
+together from ones made one after another: past six within a minute, in any tab, the next waits, which leaves room
+for CSV and JSON of a few months. The bucket is per instance, a soft brake on a burst, as CP11's is. A reservation
+entry appended before the read would not do: the entry carries the served file's SHA-256 (CP13), known only once it is
+built. Page reads: CP11. A month holds at most 2,000 payments (`CLOSE_PACK_MAX_PAYMENTS`, rows and not settled together). Past it the
 pack is `cut` and says so.
 - If wrong: a business with more than 2,000 payments a month sees a cut pack. That is far above any workspace today,
   and the audit export holds everything.
@@ -796,7 +799,7 @@ export async function recordClosePackExport(input: {
 // src/lib/rate-limit.ts adds (CP11)
 export function takeClosePackPageToken(userId: string, now?: number): boolean; // 10 at once, then one every 6 s
 // and (CP15)
-export function takeClosePackDownloadToken(userId: string, now?: number): boolean; // 3 at once, then one a minute
+export function takeClosePackDownloadToken(key: string, now?: number): boolean; // `<userId>:<orgId>`: 6 within a minute, then one a minute
 
 // src/lib/payee-lock-evidence.ts: export the existing secondPersonOf (no change to what it does)
 // src/lib/evidence-chain.ts: export the existing pullRequestName (no change to what it does)
@@ -1055,7 +1058,7 @@ JSON carries each of them with the public keys, so anyone can check them offline
 | `format` not `csv` or `json` | 400 | "format must be csv or json" |
 | Bad or future `month` | 400 | "month must be YYYY-MM, and not a month still to come" |
 | Not a member, or no such workspace | 404 | "Not found" |
-| Downloads sent at once past the burst bucket (`takeClosePackDownloadToken`) | 429, `retry-after: 60` | "Too many close pack downloads in a row. Try again in a minute." |
+| Past six downloads of one workspace within a minute, in any tab (`takeClosePackDownloadToken`) | 429, `retry-after: 60` | "Too many close pack downloads in a row. Try again in a minute." |
 | Ten downloads in ten minutes | 429, `retry-after: 600` | "Too many close pack downloads in the last 10 minutes. Try again later." |
 | A read failed | 500 | "The close pack could not be read." (logged without detail) |
 
@@ -1262,9 +1265,10 @@ Nothing to apply (CP19). The next free number stays 0144 (Exception resolution p
 - records one `close_pack_exported` whose `sha256` is the SHA-256 of the bytes it served, with `month`, `ended`,
   `format`, the counts and `headSeq`, and no email;
 - the eleventh download in ten minutes answers 429 with `retry-after: 600`, counted from the ledger;
-- six downloads sent at once, each counting the same nine earlier ones, answer three files and three 429s with
-  `retry-after: 60`, the read run three times; the bucket's token is taken only after the session, format and month
-  checks;
+- nine downloads sent at once, each counting the same nine earlier ones, answer six files and three 429s with
+  `retry-after: 60`, the ledger counted and the read run six times; the same person's download of another workspace
+  is served; the bucket's token is taken only for a member, after the session, format and month checks, keyed by
+  person and workspace id;
 - a failed read answers 500, records nothing and names nothing of why;
 - a refused append still serves the file.
 
@@ -1285,8 +1289,9 @@ Existing tests to extend:
 - `tests/docs-links.test.tsx`: `SECTIONS` gets the page and `/docs/guides/accountants#the-monthly-close-pack`.
 - `tests/mainnet-copy-pages.test.tsx`: `PAGES` gets `evidence/close-pack`.
 - `takeClosePackPageToken` is tested in `tests/close-pack-page.test.tsx`: ten page reads at once, then one every 6
-  seconds, per member. `takeClosePackDownloadToken` is tested in `tests/close-pack-record.test.ts`: three downloads at
-  once, then one a minute, per member, apart from the page's reads.
+  seconds, per member. `takeClosePackDownloadToken` is tested in `tests/close-pack-record.test.ts`: six downloads within
+  a minute, then one a minute; downloads one every 5 seconds served six times, the seventh refused; per key, apart
+  from the page's reads.
 - `tests/close-pack-read.test.ts`: the workspace's `payee_lock_changed` entries are read up to the month's end, a page
   at a time by `seq`, and one that eased the lock before a payment is cited and checked.
 - `tests/audit-export-ui.test.tsx`: the Audit log page links `orgHref(slug, "/evidence/close-pack")`.
@@ -1413,8 +1418,8 @@ On pinecrest-studio, live on Arc testnet, after the merge deploys:
 10. The accountant console: pinecrest-studio's card shows "Close pack:" with Sep 2026 and **This month so far**.
 11. A viewer member opens it; an account that is no member gets "not found". An eleventh download within ten minutes
     answers "Too many close pack downloads in the last 10 minutes. Try again later."
-12. Downloads started in several tabs at once: three are served, and the rest answer "Too many close pack downloads in a
-    row. Try again in a minute."
+12. Downloads of one workspace started in several tabs within a minute: six are served, and the rest answer "Too many
+    close pack downloads in a row. Try again in a minute."
 13. A payment the agent sent that a person's approval only recorded later, if the month has one (its **Audit log**
     shows `ap_pay` naming the hash, then `approval_paid` naming the same hash): it reads "No person approved it: code
     checked it and the agent paid it.", as its evidence page's settlement track names the agent.

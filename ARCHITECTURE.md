@@ -4536,10 +4536,10 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
   and before it is sent, with the SHA-256 of the exact bytes served, the CSV's byte-order mark included. It names no one
   by email. It is the brake's count: ten per person per workspace in ten minutes (`CLOSE_PACK_EXPORT_LIMIT`,
   `recentClosePackExportsBy`); the eleventh answers 429 with `retry-after: 600`. Since a download appends its entry only
-  once its read is done, downloads sent at once would all count the same earlier ones: before the membership or the
-  month is read, the route takes a token from a per-member bucket (`takeClosePackDownloadToken`, three at once, then one
-  a minute, per instance), and answers 429 with `retry-after: 60` past it. A failed read answers 500 and records
-  nothing.
+  once its read is done, downloads sent at once would all count the same earlier ones: once the membership is read and
+  before the ledger is counted or the month is read, the route takes a token from a bucket per person per workspace
+  (`takeClosePackDownloadToken`, keyed `<userId>:<orgId>`, six within a minute, in any tab, then one a minute, per
+  instance), and answers 429 with `retry-after: 60` past it. A failed read answers 500 and records nothing.
 - **Who sees it** (CP14). Every member (`workspace.read`), as every evidence page and the hand-off.
 - **Limits** (CP15). At most 2,000 payments a month, rows and not settled together; past it the pack is `cut`.
 - **Where it opens** (CP16). **Monthly close pack** on the Audit log, beside the audit export; each accountant console

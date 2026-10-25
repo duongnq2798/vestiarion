@@ -22,9 +22,11 @@ export const dynamic = "force-dynamic";
  *
  * With no format it answers the signed JSON; with no month, last month. The file is built for this request in the
  * workspace's scope, and its exact bytes are hashed into the download's own `close_pack_exported` entry, appended best
- * effort before it is sent (CP13). Ten downloads per person in ten minutes, counted from those entries (CP15); and, since
- * downloads sent together would all count the same earlier entries, three at once, then one a minute, per instance
- * (`takeClosePackDownloadToken`), taken before the membership or the month is read.
+ * effort before it is sent (CP13). Ten downloads per person per workspace in ten minutes, counted from those entries
+ * (CP15); and, since downloads sent together would all count the same earlier entries, six within a minute, in any tab,
+ * then one a minute, per person per workspace and per instance (`takeClosePackDownloadToken`). Its token is taken once
+ * the membership is read, keyed by the workspace's id and never by the slug asked for, and before the ledger is counted
+ * or the month is read.
  */
 export async function GET(request: Request) {
   if (request.headers.get("sec-fetch-site") === "cross-site") {
@@ -39,13 +41,13 @@ export async function GET(request: Request) {
   const now = new Date();
   const month = closePackMonth(params.get("month"), now);
   if (!month) return NextResponse.json({ error: "month must be YYYY-MM, and not a month still to come" }, { status: 400 });
-  if (!takeClosePackDownloadToken(user.id)) {
-    return NextResponse.json({ error: "Too many close pack downloads in a row. Try again in a minute." }, { status: 429, headers: { "retry-after": "60" } });
-  }
 
   try {
     const membership = await membershipFor(user.id, slug);
     if (!membership || !can(membership.role, "workspace.read")) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!takeClosePackDownloadToken(`${user.id}:${membership.orgId}`)) {
+      return NextResponse.json({ error: "Too many close pack downloads in a row. Try again in a minute." }, { status: 429, headers: { "retry-after": "60" } });
+    }
 
     const result = await inOrg({ user, membership }, async () => {
       if ((await recentClosePackExportsBy(user.id, now)) >= CLOSE_PACK_EXPORT_LIMIT.count) return { limited: true as const };
