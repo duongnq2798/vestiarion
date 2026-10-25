@@ -123,8 +123,9 @@ export function pdfPagesInWorker(bytes: Uint8Array, limits: PdfLimits & { maxCha
         reject(new PdfWorkerRefusal(answer && "refused" in answer && answer.refused === "pages" ? "pages" : "parse"));
       })
     );
-    // A heap filled, or the worker failed in a way its own script did not catch: the file's doing either way.
-    worker.once("error", (error: Error & { code?: string }) => settle(() => reject(new PdfWorkerRefusal(error.code === "ERR_WORKER_OUT_OF_MEMORY" ? "memory" : "stopped"))));
+    // A heap filled, or the worker failed in a way its own script did not catch: the file's doing either way. Listened to
+    // for as long as the worker lives, so no later error reaches the process unheard.
+    worker.on("error", (error: Error & { code?: string }) => settle(() => reject(new PdfWorkerRefusal(error.code === "ERR_WORKER_OUT_OF_MEMORY" ? "memory" : "stopped"))));
     worker.once("exit", () => settle(() => reject(new PdfWorkerRefusal("stopped"))));
   });
 }
