@@ -27,14 +27,18 @@ vi.mock("@/lib/invoice-document/extract", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/invoice-document/extract")>();
   return { ...actual, extractInvoice: (...args: Parameters<typeof actual.extractInvoice>) => (extractSpy(...args), actual.extractInvoice(...args)) };
 });
-// The real bounded reader, watched: which files reach pdf.js at all.
+// The real bounded reader, watched: which files reach pdf.js at all. A test may answer in its place.
 vi.mock("@/lib/invoice-document/read", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/invoice-document/read")>();
-  return { ...actual, readPdfBounded: (...args: Parameters<typeof actual.readPdfBounded>) => (readSpy(...args), actual.readPdfBounded(...args)) };
+  return {
+    ...actual,
+    readPdfBounded: (...args: Parameters<typeof actual.readPdfBounded>) => (readSpy(...args) as ReturnType<typeof actual.readPdfBounded> | undefined) ?? actual.readPdfBounded(...args),
+  };
 });
 
 import { db } from "@/lib/dal";
 import { checkReceivedDocuments } from "@/lib/agent/document-checks";
+import { PdfWorkerRefusal } from "@/lib/invoice-document/pdf-worker";
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c0c";
@@ -99,12 +103,15 @@ interface World {
   answers?: string[];
   /** start_document_parse's answer: the reads of the file begun before and never finished; none by default. */
   parse?: FakeReply;
+  /** Sees every request, before it is answered. */
+  onRequest?: (request: RecordedRequest) => void;
 }
 
 function world(w: World = {}) {
   const waiting = [...(w.waiting ?? [answered()])];
   const answers = [...(w.answers ?? [])];
   return fakeSupabase((request: RecordedRequest): FakeReply => {
+    w.onRequest?.(request);
     if (request.path === "/rest/v1/rpc/start_document_parse") return w.parse ?? { body: 0 };
     if (request.path === "/rest/v1/rpc/finish_document_parse") return { body: null };
     if (request.path === "/rest/v1/approval_policies") {
@@ -129,8 +136,9 @@ function world(w: World = {}) {
   });
 }
 
-const run = (client: ReturnType<typeof fakeSupabase>, options: Parameters<typeof checkReceivedDocuments>[1] = {}) =>
-  runWith(orgTestContext({ config, client: client.client, orgId: ORG }), () => checkReceivedDocuments(db(), { now: NOW, allowRead: () => true, ...options }));
+const runIn = (orgId: string, client: ReturnType<typeof fakeSupabase>, options: Parameters<typeof checkReceivedDocuments>[1] = {}) =>
+  runWith(orgTestContext({ config, client: client.client, orgId }), () => checkReceivedDocuments(db(), { now: NOW, allowRead: () => true, ...options }));
+const run = (client: ReturnType<typeof fakeSupabase>, options: Parameters<typeof checkReceivedDocuments>[1] = {}) => runIn(ORG, client, options);
 const rpcCalls = (client: ReturnType<typeof fakeSupabase>, name: string) => client.requests.filter((r) => r.path === `/rest/v1/rpc/${name}`);
 
 const checks = (client: ReturnType<typeof fakeSupabase>) =>
@@ -488,6 +496,48 @@ describe("a PDF that will not finish reading (DK3)", () => {
     await expect(run(client)).rejects.toThrow(/connection reset/);
     expect(readSpy).not.toHaveBeenCalled();
     expect(checks(client)).toEqual([]);
+  });
+
+  it("leaves a read stopped by the process's memory unfinished, records nothing, and goes on to the next document", async () => {
+    // The memory budget measures the whole process, so the stop may not be the file's doing: its count stays, and the
+    // next cycle reads it again, until two such stops make it unreadable.
+    readSpy.mockImplementationOnce(() => Promise.reject(new PdfWorkerRefusal("memory", { retry: true })));
+    const second = answered({ id: LATER, invoice_id: OTHER_BILL, file_path: keptAt(LATER, PDF_SHA), answered_at: "2026-10-24T10:00:00Z" });
+    const client = world({ waiting: [answered(), second], bills: [bill(), bill({ id: OTHER_BILL })] });
+    const lines = await run(client);
+    expect(parseOrder(client)).toEqual(["start_document_parse", "start_document_parse", "finish_document_parse", "check_document_request"]);
+    expect(rpcCalls(client, "finish_document_parse").map((r) => r.body)).toEqual([{ p_org_id: ORG, p_id: LATER }]);
+    expect(checks(client).map((body) => body.p_id)).toEqual([LATER]);
+    expect(signed().map((entry) => entry.detail.requestId)).toEqual([LATER]);
+    expect(extractSpy).toHaveBeenCalledTimes(1);
+    expect(lines[0]).toEqual({ domain: "ap", message: "Stopped reading Northwind Hosting's document before it finished; the next cycle reads it again" });
+  });
+
+  it("fails the stage when the PDF reader could not start, and clears the count, so the next cycle reads it again", async () => {
+    readSpy.mockImplementationOnce(() => Promise.reject(new Error("the PDF reader could not start: Worker initialization failure: 11")));
+    const client = world();
+    await expect(run(client)).rejects.toThrow(/the PDF reader could not start/);
+    expect(parseOrder(client)).toEqual(["start_document_parse", "finish_document_parse"]);
+    expect(checks(client)).toEqual([]);
+    expect(signed()).toEqual([]);
+  });
+
+  it("parses one document at a time in the process, whichever workspace's cycle asks, so a read cut short has one suspect", async () => {
+    const OTHER_ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c0d";
+    const order: string[] = [];
+    const log = (who: string) => (request: RecordedRequest) => {
+      if (request.path.endsWith("/start_document_parse")) order.push(`${who}:start`);
+      if (request.path.endsWith("/finish_document_parse")) order.push(`${who}:finish`);
+    };
+    const mine = world({ onRequest: log("mine") });
+    const theirs = world({ onRequest: log("theirs"), waiting: [answered({ file_path: `${OTHER_ORG}/document-requests/${REQUEST}/${PDF_SHA}` })] });
+    await Promise.all([run(mine), runIn(OTHER_ORG, theirs)]);
+    expect([
+      ["mine:start", "mine:finish", "theirs:start", "theirs:finish"],
+      ["theirs:start", "theirs:finish", "mine:start", "mine:finish"],
+    ]).toContainEqual(order);
+    expect(checks(mine)[0]).toMatchObject({ p_outcome: "matched" });
+    expect(checks(theirs)[0]).toMatchObject({ p_outcome: "matched" });
   });
 
   it("parses nothing for a request checked elsewhere since the cycle read it, and signs nothing", async () => {

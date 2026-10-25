@@ -16,10 +16,13 @@
 --      po_written    true only when the check added the bill's purchase order: the marker that holds the bill for a
 --                    person (DK8). Only check_document_request below sets it, and no tenant write reaches the table.
 --      parse_attempts
---                    the reads of the file begun and not finished (DK3): the cycle counts one before pdf.js parses the
---                    file, in a worker with a time and a memory limit, and clears it once the parse ends, whatever it
---                    found. A parse that took the whole run down with it is never cleared: after two, the file is
---                    recorded unreadable and not parsed again.
+--                    the reads of the file begun on this request and not finished (DK3): the cycle counts one before
+--                    pdf.js parses the file, in a worker under a time limit, its own heap and a budget for the process's
+--                    memory, one parse at a time per process. A parse that ends, whatever it found, clears the count on
+--                    every request of the workspace with that file. One that took the whole run down with it, or was
+--                    stopped for a reason that may not be the file's, is never cleared: once a file's reads add up to
+--                    two across the workspace's requests, it is recorded unreadable and not parsed again, however often
+--                    it is sent or attached.
 --    email_domain may now be null: a member's row was never emailed.
 -- 2. Four functions, each `security definer`, run by the service role alone:
 --      attach_document(...): a member's answered row, for a payable still waiting for information; one waiting to be
@@ -29,9 +32,10 @@
 --      check_document_request(...): the check, once per request, under a row lock; with p_write_po, the bill's
 --        purchase order, compare-and-set on the bill still waiting for information, with no purchase order and no
 --        payment. It changes no status, amount, currency, address or goods receipt, and moves no money.
---      start_document_parse(p_org_id, p_id) and finish_document_parse(p_org_id, p_id): parse_attempts, on a request
---        still waiting to be checked. start answers how many reads began before this one and never finished, or null
---        for a request that no longer waits.
+--      start_document_parse(p_org_id, p_id) and finish_document_parse(p_org_id, p_id): parse_attempts. start counts a
+--        read on a request still waiting to be checked, and answers how many reads of the same file (its SHA-256) began
+--        before this one, on any of the workspace's requests, and never finished; null for a request that no longer
+--        waits. finish clears the count on every request of the workspace with that file.
 --
 -- Additive and idempotent throughout: scripts/migrate.ts re-runs every migration each time. No function or view of
 -- another migration is redefined.
@@ -213,32 +217,47 @@ begin
 end;
 $$;
 
--- A read of the request's file begins (DK3): counted before pdf.js parses it. The answer is how many reads began before
--- this one and never finished, which the cycle refuses a third; null for a request no longer waiting to be checked.
+-- A read of the request's file begins (DK3): counted before pdf.js parses it. The answer is how many reads of the same
+-- file began before this one, on any of the workspace's requests, and never finished, which the cycle refuses a third:
+-- a file sent or attached again does not start over. Null for a request no longer waiting to be checked.
 create or replace function public.start_document_parse(p_org_id uuid, p_id uuid) returns integer
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
+  v_sha    text;
   v_before integer;
 begin
   update public.document_requests r set parse_attempts = r.parse_attempts + 1
    where r.org_id = p_org_id and r.id = p_id and r.status = 'answered' and r.checked_at is null
-  returning r.parse_attempts - 1 into v_before;
+  returning r.file_sha256 into v_sha;
+  if not found then
+    return null;
+  end if;
+  select coalesce(sum(r.parse_attempts), 0)::integer - 1 into v_before
+    from public.document_requests r
+   where r.org_id = p_org_id and (r.id = p_id or r.file_sha256 = v_sha);
   return v_before;
 end;
 $$;
 
--- The read ended, whatever it found: nothing is left unfinished.
+-- A read of the file ended, whatever it found: it did not take the run down, so no read of it, on any of the
+-- workspace's requests, is left unfinished.
 create or replace function public.finish_document_parse(p_org_id uuid, p_id uuid) returns void
 language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_sha text;
 begin
+  select r.file_sha256 into v_sha from public.document_requests r where r.org_id = p_org_id and r.id = p_id;
+  if not found then
+    return;
+  end if;
   update public.document_requests r set parse_attempts = 0
-   where r.org_id = p_org_id and r.id = p_id and r.checked_at is null and r.parse_attempts <> 0;
+   where r.org_id = p_org_id and (r.id = p_id or r.file_sha256 = v_sha) and r.parse_attempts <> 0;
 end;
 $$;
 

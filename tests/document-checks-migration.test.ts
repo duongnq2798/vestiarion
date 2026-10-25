@@ -395,6 +395,46 @@ describe("start_document_parse and finish_document_parse (DK3)", () => {
   it("starts every request at 0, the ones a vendor answered before 0144 included", async () => {
     expect(await attempts(before.id)).toBe(0);
   });
+
+  it("counts the unfinished reads of the same file on the workspace's other requests, so attaching it again does not start over", async () => {
+    const bill = await waitingBill("dk-parse-again");
+    const member = await createUser(db, "admin@dk-parse-again.example");
+    const vendor = await answeredByVendor(bill);
+    expect(await start(bill.orgId, vendor.id)).toBe(0);
+    expect(await start(bill.orgId, vendor.id)).toBe(1);
+    // Begun twice and never finished: the cycle records it unreadable, with no third parse.
+    expect(await check({ orgId: bill.orgId, id: vendor.id, sha: vendor.sha, outcome: "unreadable", reason: "This PDF could not be read." })).toBe("checked");
+    const again = await attach({ orgId: bill.orgId, invoiceId: bill.invoiceId, by: member, sha: vendor.sha });
+    expect(again.outcome).toBe("attached");
+    expect(await start(bill.orgId, again.id)).toBe(2);
+    // Another file starts from nothing.
+    const other = await answeredByVendor(bill);
+    expect(await start(bill.orgId, other.id)).toBe(0);
+  });
+
+  it("clears the file's count on every request of the workspace once one read of it finishes", async () => {
+    const bill = await waitingBill("dk-parse-clear");
+    const first = await answeredByVendor(bill);
+    expect(await start(bill.orgId, first.id)).toBe(0);
+    const second = await answeredByVendor(bill, first.sha);
+    expect(await start(bill.orgId, second.id)).toBe(1);
+    await finish(bill.orgId, second.id);
+    expect(await attempts(first.id)).toBe(0);
+    expect(await attempts(second.id)).toBe(0);
+    expect(await start(bill.orgId, first.id)).toBe(0);
+  });
+
+  it("counts nothing of another workspace's copy of the same file, and clears nothing of it", async () => {
+    const theirs = await waitingBill("dk-parse-their-copy");
+    const theirRequest = await answeredByVendor(theirs);
+    expect(await start(theirs.orgId, theirRequest.id)).toBe(0);
+    expect(await start(theirs.orgId, theirRequest.id)).toBe(1);
+    const mine = await waitingBill("dk-parse-my-copy");
+    const myRequest = await answeredByVendor(mine, theirRequest.sha);
+    expect(await start(mine.orgId, myRequest.id)).toBe(0);
+    await finish(mine.orgId, myRequest.id);
+    expect(await attempts(theirRequest.id)).toBe(2);
+  });
 });
 
 describe("the table's own checks", () => {

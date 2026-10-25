@@ -13,7 +13,7 @@ import {
 import { missingDocuments, sniffDocumentType, type MissingDocument } from "../document-requests/rules";
 import { readDocumentRequestsSetting } from "../document-requests/setting";
 import { extractInvoice } from "../invoice-document/extract";
-import type { PdfLimits } from "../invoice-document/pdf-worker";
+import { oneParseAtATime, PdfWorkerRefusal, type PdfLimits } from "../invoice-document/pdf-worker";
 import { DocumentReadError, MAX_DOCUMENT_BYTES, readPdfBounded, type ReadDocument } from "../invoice-document/read";
 import { appendLedgerEntry } from "../ledger";
 import { ID_CHUNK } from "../new-payee-facts";
@@ -31,9 +31,12 @@ import { agentPaused } from "./pause";
  * are in shadow or on and the agent is not paused (DK1, DK2). For each: a bill that no longer waits for a document, or a
  * file already compared for it outside shadow, is skipped with no read; an image, a file over 4 MB as its row records it,
  * one not kept where its row says, gone from storage, whose hash is not the one received, a scan or a PDF that cannot be
- * read, is unreadable, and no model reads it (DK3). So is a PDF the worker that parses it stops, at its time or memory
- * limit, and one whose parse began twice and never finished. The rest is read through `readPdfBounded` and, one read
- * token each, `extractInvoice`, which shows the model the document alone; code compares (`compareDocument`, DK4, DK5).
+ * read, is unreadable, and no model reads it (DK3). So is a PDF the pre-scan refuses (its streams would decode past
+ * 16 MB, or cannot be measured), one the worker stops by the file's own doing, and one whose reads, on any request of
+ * the workspace with that file, began twice and never finished. A stop that may not be the file's doing (the process's
+ * memory, a timeout while another PDF was parsed) records nothing: the next cycle reads it again, and the read stays
+ * counted. The rest is read through `readPdfBounded` and, one read token each, `extractInvoice`, which shows the model
+ * the document alone; code compares (`compareDocument`, DK4, DK5).
  *
  * 0144's check_document_request records each check once (DK12). With vendor requests on, a match for a bill that lacks
  * its purchase order adds it, compare-and-set on the bill still waiting with none and no payment, and the follow-up and
@@ -136,20 +139,20 @@ function fileGone(error: { message?: string; statusCode?: string | number; statu
 /** Reads of a file begun that never finished, after which it is unreadable and not parsed again (DK3). */
 export const UNFINISHED_PARSES = 2;
 
+/** A read stopped for a reason that may not be the file's: nothing is recorded, and the next cycle reads it again. */
+interface Retry {
+  retry: true;
+}
+
 /**
  * The document's text and both readings (DK3, DK4), or why there are none: the file is read from where its row says it is
  * kept, under the request's own folder, and only when it is the file received. Null when no read token is left, so the
  * request waits for the next cycle. A Storage failure other than a missing file throws, so the next cycle tries again.
- *
- * pdf.js parses it in a worker, under a time and a memory limit (`readPdfBounded`), never on the thread every live
- * workspace's cycle runs on. Each parse is counted on the row before it begins (0144's start_document_parse) and the
- * count cleared once it ends: a parse that took the whole run down with it is never cleared, and after two such the file
- * is unreadable, with no third parse. Before 0144's functions, it parses with nothing counted.
  */
 async function readKept(
   row: WaitingRow,
   input: { orgId: string; today: string; allowRead: () => boolean; pdfLimits?: Partial<PdfLimits> }
-): Promise<Finding | { text: string; truncated: boolean; extracted: Awaited<ReturnType<typeof extractInvoice>> } | null> {
+): Promise<Finding | Retry | { text: string; truncated: boolean; extracted: Awaited<ReturnType<typeof extractInvoice>> } | null> {
   // The kind and the size the row records, before anything is downloaded: an image of 10 MB is never fetched.
   if (row.file_type !== "application/pdf") return unreadable(UNREADABLE_REASONS.image);
   if (Number(row.file_size) > MAX_DOCUMENT_BYTES) return unreadable(UNREADABLE_REASONS.too_large);
@@ -169,6 +172,30 @@ async function readKept(
   if (kind === "image/png" || kind === "image/jpeg") return unreadable(UNREADABLE_REASONS.image);
   if (kind !== "application/pdf") return unreadable(UNREADABLE_REASONS.unreadable);
 
+  const parsed = await oneParseAtATime(() => parseCounted(row, bytes, input));
+  if (!("document" in parsed)) return parsed;
+  const document = parsed.document;
+  // One read token per model read (DK2): with none left, the rest wait for the next cycle.
+  if (!input.allowRead()) return null;
+  return { text: document.text, truncated: document.truncated, extracted: await extractInvoice(document.text, input.today) };
+}
+
+/**
+ * The file parsed, counted (DK3), in one turn of `oneParseAtATime`: one parse at a time in this process, whichever
+ * workspace's cycle asks, so a run that dies mid-parse leaves one read unfinished, the one that was running.
+ *
+ * Each read is counted before pdf.js parses (0144's start_document_parse), which answers how many reads of the same file,
+ * on any request of the workspace, began and never finished. A parse that ends, whatever it found, clears them all
+ * (finish_document_parse); so does a reader that could not start, which throws, and the next cycle tries again. A stop
+ * that may not be the file's doing (`PdfWorkerRefusal` with `retry`) is not cleared: like a run that never came back, it
+ * counts. After two, the file is unreadable with no third parse, however often it is sent or attached again. Before
+ * 0144's functions, it parses with nothing counted.
+ */
+async function parseCounted(
+  row: WaitingRow,
+  bytes: Uint8Array,
+  input: { orgId: string; pdfLimits?: Partial<PdfLimits> }
+): Promise<Finding | Retry | { document: ReadDocument }> {
   const parse = { p_org_id: input.orgId, p_id: row.id };
   const started = await platformDb().rpc("start_document_parse", parse);
   if (started.error && !beforeMigration(started.error)) throw new Error(`a document's read could not be counted: ${started.error.message}`);
@@ -176,22 +203,23 @@ async function readKept(
   // Checked elsewhere since this cycle read it: its record answers so, and nothing is signed.
   if (counted && started.data === null) return skipped(SKIPPED_REASONS.not_waiting);
   if (counted && Number(started.data) >= UNFINISHED_PARSES) return unreadable(UNREADABLE_REASONS.unreadable);
-  let document: ReadDocument;
+  let ended = true;
   try {
-    document = await readPdfBounded(bytes, input.pdfLimits);
+    return { document: await readPdfBounded(bytes, input.pdfLimits) };
   } catch (error) {
+    if (error instanceof PdfWorkerRefusal && error.retry) {
+      ended = false;
+      return { retry: true };
+    }
     if (!(error instanceof DocumentReadError)) throw error;
     return unreadable(error.code === "scan" ? UNREADABLE_REASONS.scan : error.code === "too_large" ? UNREADABLE_REASONS.too_large : UNREADABLE_REASONS.unreadable);
   } finally {
     // The parse ended, whatever it found. Best effort: a count left behind costs the file one of its two tries.
-    if (counted) {
+    if (counted && ended) {
       const finished = await platformDb().rpc("finish_document_parse", parse);
       if (finished.error) console.error(`[document_checks] a document's read could not be marked finished: ${finished.error.message}`);
     }
   }
-  // One read token per model read (DK2): with none left, the rest wait for the next cycle.
-  if (!input.allowRead()) return null;
-  return { text: document.text, truncated: document.truncated, extracted: await extractInvoice(document.text, input.today) };
 }
 
 /** "invoice INV-2207", or "their invoice" for a bill with no number. */
@@ -326,6 +354,10 @@ export async function checkReceivedDocuments(
     else {
       const read = await readKept(row, { orgId, today, allowRead, pdfLimits: options.pdfLimits });
       if (read === null) break;
+      if ("retry" in read) {
+        lines.push({ domain: "ap", message: `Stopped reading ${vendor}'s document before it finished; the next cycle reads it again` });
+        continue;
+      }
       if ("outcome" in read) finding = read;
       else {
         const counterparty = bill.counterparties;
