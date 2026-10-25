@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { NoOrgScopeError, runWith } from "@/lib/context";
-import { db, platformDb, platformStorage, TENANT_RPCS, TENANT_TABLES, type OrgDb } from "@/lib/dal";
+import { db, PLATFORM_RPCS, platformDb, platformStorage, TENANT_RPCS, TENANT_TABLES, type OrgDb } from "@/lib/dal";
 import { carriesOrg, fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 const ORG_A = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
@@ -221,6 +221,10 @@ describe("the table boundary", () => {
     await result;
     expect(fake.requests.map((request) => [request.path, request.body])).toEqual([["/rest/v1/rpc/create_org", { p_slug: "northstar" }]]);
   });
+
+  it("lets platformDb() attach a member's document and record a document's check (document checks DK7, DK11)", () => {
+    expect(PLATFORM_RPCS).toEqual(expect.arrayContaining(["attach_document", "check_document_request"]));
+  });
 });
 
 describe("platformStorage()", () => {
@@ -241,6 +245,17 @@ describe("platformStorage()", () => {
     expect(signUpload.headers.get("x-upsert")).toBe("true");
     expect(signDownload.path).toBe("/storage/v1/object/sign/documents/o/r/f");
     expect(signDownload.body).toEqual({ expiresIn: 60 });
+  });
+
+  it("uploads a member's PDF where it is kept, as a PDF, and never over a file already there (document checks DK11)", async () => {
+    const fake = fakeSupabase(() => ({ body: { Key: "documents/o/document-requests/r/f", Id: "obj-1" } }));
+    const bytes = new TextEncoder().encode("%PDF-1.4 a member's document");
+    const uploaded = await runWith(contextOf(null, fake.client), () => platformStorage().upload("o/document-requests/r/f", bytes, "application/pdf"));
+    expect(uploaded.error).toBeNull();
+    const [sent] = fake.requests;
+    expect([sent.method, sent.path]).toEqual(["POST", "/storage/v1/object/documents/o/document-requests/r/f"]);
+    expect(sent.headers.get("x-upsert")).toBe("false");
+    expect(sent.headers.get("content-type")).toBe("application/pdf");
   });
 
   it("lists one folder of the documents bucket a page at a time, by name, for a deleted workspace's files", async () => {
