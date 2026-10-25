@@ -1,4 +1,4 @@
-import { ArrowUpRight, Download } from "lucide-react";
+import { ArrowUpRight, Download, ScrollText } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -132,6 +132,18 @@ function WorkspaceCard({ workspace, now, filter }: { workspace: WorkspaceTriage;
           <a href={handoffHref(workspace.slug, "csv", thisMonth)} download className="font-medium text-agent underline-offset-2 hover:underline">
             This month so far
           </a>
+        </p>
+        {/* The month's payments, each with what it rests on, on the workspace's own page (close pack CP16). */}
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-2">
+          <ScrollText aria-hidden className="size-3.5 text-ink-3" />
+          <span>Close pack:</span>
+          <Link href={orgHref(workspace.slug, `/evidence/close-pack?month=${lastMonth.toISOString().slice(0, 7)}`)} className="font-medium text-agent underline-offset-2 hover:underline">
+            {lastLabel}
+          </Link>
+          <span aria-hidden className="text-ink-3">·</span>
+          <Link href={orgHref(workspace.slug, `/evidence/close-pack?month=${thisMonth}`)} className="font-medium text-agent underline-offset-2 hover:underline">
+            This month so far
+          </Link>
         </p>
       </div>
     </Card>

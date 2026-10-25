@@ -70,6 +70,31 @@ export function takeEvidencePageToken(userId: string, now = Date.now()): boolean
   return take(evidencePageBuckets, userId, 20, 3_000, now);
 }
 
+const closePackPageBuckets = new Map<string, Bucket>();
+
+/**
+ * Reads of the monthly close pack's page (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md CP11): ten at
+ * once, then one every 6 seconds, per member. Each reads the month's payments and checks every cited entry's signature.
+ * Single-instance, like the cycle guard: a soft brake, since a read costs database time only.
+ */
+export function takeClosePackPageToken(userId: string, now = Date.now()): boolean {
+  return take(closePackPageBuckets, userId, 10, 6_000, now);
+}
+
+const closePackDownloadBuckets = new Map<string, Bucket>();
+
+/**
+ * Close pack downloads (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md CP15): six within a minute, in
+ * any tab and whether started together or one after another, then one a minute, per person per workspace (the route's
+ * key is `<userId>:<orgId>`). The limit that holds across instances is ten in ten minutes, counted from the ledger's own
+ * `close_pack_exported` entries; but each download appends its entry only once its heavy read is done, so downloads sent
+ * together would all count the same earlier ones. Single-instance, like the cycle guard: a soft brake on a burst, room
+ * enough for CSV and JSON of a few months.
+ */
+export function takeClosePackDownloadToken(key: string, now = Date.now()): boolean {
+  return take(closePackDownloadBuckets, key, 6, 60_000, now);
+}
+
 const dueWatchBuckets = new Map<string, Bucket>();
 
 /**

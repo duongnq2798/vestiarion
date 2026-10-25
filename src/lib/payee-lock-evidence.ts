@@ -143,9 +143,9 @@ const methodOf = (value: unknown): VerificationMethod | null =>
  * lock on, the confirmation itself checked who gave the address and refused them while another member could confirm,
  * failing closed, so its flags answer. With the lock off it checked only when confirmed with Confirm address, best
  * effort, so a different member is the only proof; a payee link or GitHub giver, or a confirmation by approving, is not
- * known either way.
+ * known either way. The monthly close pack asks the same of the address each payment paid (close pack CP7).
  */
-function secondPersonOf(change: CheckedEntry, confirmed: CheckedEntry | undefined): boolean | null {
+export function secondPersonOf(change: CheckedEntry, confirmed: CheckedEntry | undefined): boolean | null {
   if (!confirmed) return null;
   const detail = confirmed.detail;
   if (detail.soloConfirmation === true || detail.byGiver === true) return false;

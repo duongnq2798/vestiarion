@@ -42,6 +42,7 @@ const SECTIONS: Array<[string, string]> = [
   ["src/app/o/[slug]/audit/page.tsx", "/docs/guides/audit-export"],
   ["src/app/o/[slug]/evidence/[kind]/[id]/page.tsx", "/docs/guides/evidence"],
   ["src/app/o/[slug]/evidence/payee-lock/page.tsx", "/docs/guides/evidence-and-receipts"],
+  ["src/app/o/[slug]/evidence/close-pack/page.tsx", "/docs/guides/accountants#the-monthly-close-pack"],
   ["src/app/accountant/page.tsx", "/docs/guides/accountants"],
   ["src/components/UsagePanel.tsx", "/docs/guides/accountants#6-usage-and-limits"],
   ["src/components/vx/PaymentsInFlight.tsx", "/docs/guides/payment-exceptions"],

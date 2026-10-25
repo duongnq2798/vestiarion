@@ -4458,6 +4458,100 @@ new client in with one link, and the client opens their own workspace with the a
   PGRST202) reads as `available: false` on the console and `not_ready` on the page, which say client links are not
   available yet, and the live slice offers no accountant to bring along (`clientLinksAvailable`).
 
+## The monthly close pack
+
+`docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md`. One workspace's calendar month in one table: every
+payment Circle confirmed in it, one row each, with its bill, approval chain, checks, transaction and the signed entry
+that records it, each cell resting on entries the file carries in full. It reads; it decides nothing, pays nothing and
+calls no model. No migration.
+
+**The modules** (`src/lib/close-pack/`). `month.ts` (pure, browser-safe) is the one month parser, `closePackMonth`, with
+`monthEnded`, `monthsBeside` and `closePackMonthFrom` for the page's query; the hand-off's `handoffPeriod` returns
+`closePackMonth(month, now)` and `HandoffPeriod` is `ClosePackMonth`, so the two never disagree on a month. `types.ts`
+holds the shared contract (`ClosePack`, `vestiarion-close-pack/1`, `CLOSE_PACK_MAX_PAYMENTS`). `build.ts` is pure:
+`buildClosePack` reuses `settlementOf` and `booksOf`, the receipt's `intentFacts`, `recordingEntry` and
+`invoiceNumberInDetail`, the decision trail's `decisionChecks`, `deciderName` and `ruleWords`, `bookingFromEntries`,
+`providerOfSource`, the chain and network profiles, `secondPersonOf` (payee lock evidence EP2) and `pullRequestName`,
+so the pack and each evidence page say the same. `words.ts` words every cell once for the page, the CSV and the table.
+`export.ts` writes the signed JSON (`closePackJson`, exactly `JSON.stringify(closePackDocument(...), null, 2)`), the
+table (`closePackTable`, plain strings, for a later Google Sheet written RAW) and the CSV (`closePackCsv`: a byte-order
+mark, CRLF, `csvCell` on every cell) with its 51 `CLOSE_PACK_COLUMNS`. `read.ts` reads; `record.ts` records downloads.
+
+**The read** (`readClosePack`, inside `inOrg` or `withOrg`, through `db()` only, writing nothing). The month's
+`payment_intents` whose `confirmed_at`, `created_at` or `submitted_at` falls in it, a page of 1000 at a time, at most
+2,001 to tell a cut; the month's `escrow_funded` and `escrow_refunded`; the first `compliance_sweep` that recorded
+`sanctionedWallets`; the ledger's head; the members (`listMembers`, `null` on failure); then the bills, milestones and
+`invoices.document_pay_to` (through `readDocumentPayTo`, none before `0136`) a hundred ids per filter; then the payees,
+the bills' and milestones' entries by `detail->>invoiceId` and `detail->>milestoneId`, the `decision_verdict` entries
+by `detail->>subjectId`, and the payees' address entries by `detail->>counterpartyId`, each paged by `seq`; then one
+`compliance_checks` read per distinct payee and anchor time (the agent's decision, else the paying entry, else when it
+was sent), ten at once, a failure marking those payments `unreachable`. It builds twice, as `readEvidence` does: once to
+find the entries the rows cite, then, after `verifyEntry` checks each of those alone with
+`ledgerPublicKeyPems(ledgerVerificationKeyring())`, retired keys included, again with the checks.
+
+**The rules.**
+- **The month** (CP1). A calendar month in UTC; no workspace has a time zone. With none, the last full month; this month
+  is allowed and reads "so far"; a month to come, one before 2020 or anything not `YYYY-MM` is refused.
+- **The rows** (CP2). A `confirmed` intent whose `confirmed_at` falls in the month and whose source is a payable invoice
+  or a milestone: one row per intent (a retry is `earlierAttempts` on it), oldest first. Simulated and shadow-mode rows
+  are marked; an intent whose bill is gone is counted in `withoutBill`, not listed. Each intent is a row of one month.
+- **Not settled** (CP3). Each intent created or sent in the month that is not a row of it, in `settlementOf`'s states,
+  with `settled_later` and a BlindPay `refunded` told apart first; never in the totals.
+- **Escrow** (CP4). The month's `escrow_funded` and `escrow_refunded`, listed apart; a release that paid is a row.
+- **Left out** (CP5). Bills marked paid with no payment, money received, treasury moves, `payment_actuals`, and bookings
+  without a payment; the guide says where each is.
+- **Amounts** (CP6). Six-place decimal strings, summed in millionths as `BigInt`, per token, never across tokens; route
+  fees (`bridge_fee`) are summed, network fees (`fee_usd`) listed per row and never summed.
+- **The approval chain** (CP7). The paying entry, the agent's decision before it, `authorizedBy` (`code`, `person`,
+  `two_people`), the approvals from `approval_paid.detail.approvals`, an accountant's co-sign joined by bill and person
+  to the newest `approval_given` with `cosign: true` before the paying entry, the flags it recorded, a shadow-mode
+  verdict, and the address paid with its giver and its confirmation. The paying entry is what let the current attempt
+  go, as the settlement track reads it (`stages.authorized.seq`); a person's approval that only reconciled a transfer an
+  earlier entry had sent, with no `retriedAfter`, gives way to that entry, by the ledger alone too. People are named by email with their role now
+  (`people: "id"` names them by id only); someone gone is a former member.
+- **The checks** (CP8). Guardrails, screening, OFAC's address list, the payee lock, the invoice's own address and a
+  milestone's verification, each in the evidence chain's words (`EVIDENCE_WORDS`) or "Does not apply", with its entries
+  and a warning for bad news. The payee lock is read against the lock in force when it was sent: the newest
+  `payee_lock_changed` after the confirmation and before the paying entry, or with none, at or before it was sent (the
+  workspace's, read up to the month's end), else the confirmation's; a payment sent under a lock an owner eased is
+  stated, with a warning, citing the change. A pull request is named as text, never linked; the pack reads no chain.
+- **The transaction** (CP9). Its route and the transaction that paid the payee, as a receipt reads it; explorer links are
+  built from the chain profile's `explorerTx` for a hash that is `0x` and 64 hex digits only. A bank payout names its bank
+  code and last 4 digits only.
+- **The record and the books** (CP10). The newest entry recording the transaction (else the newest naming the bill's
+  `tx_ref`), with its server check; the books' `mismatch` and the booking. The pack carries each cited entry once, in
+  full, oldest first, and no other.
+- **The page** (CP11; `/o/[slug]/evidence/close-pack`, `src/components/ClosePackView.tsx`, a `SUBPAGES` row inside the
+  Audit log). `requireMembership` then `inOrg`; `?month=` read once through `closePackMonthFrom`. A member reads it ten
+  times at once, then once every 6 seconds (`takeClosePackPageToken`, per instance), since each read checks every cited
+  signature. Viewing and printing record nothing. The print drops the shell, the controls, the buttons and the links,
+  adds a line only the print shows, and keeps each card on one page where it fits (`break-inside-avoid`).
+- **The downloads** (CP12; `GET /api/evidence/close-pack?org=&month=&format=csv|json`). The audit export's gate in its
+  order: a cross-site request refused (403), the session (401), a bad format or month before the workspace is looked up
+  (400), the membership read afresh (404, as for a workspace that does not exist). JSON by default, last month by
+  default. Files are `vestiarion-close-pack-<slug>-<YYYY-MM>[-so-far].csv|json`. The JSON is not signed with the ledger
+  key, which signs entries only: its entries and its download's own entry make it checkable.
+- **Each download is recorded** (CP13, CP15). `close_pack_exported` (actor `human`, domain `system`)
+  `{ by, month, ended, format, payments, notSettled, sha256, headSeq }`, appended best effort after the file is built
+  and before it is sent, with the SHA-256 of the exact bytes served, the CSV's byte-order mark included. It names no one
+  by email. It is the brake's count: ten per person per workspace in ten minutes (`CLOSE_PACK_EXPORT_LIMIT`,
+  `recentClosePackExportsBy`); the eleventh answers 429 with `retry-after: 600`. Since a download appends its entry only
+  once its read is done, downloads sent at once would all count the same earlier ones: once the membership is read and
+  before the ledger is counted or the month is read, the route takes a token from a bucket per person per workspace
+  (`takeClosePackDownloadToken`, keyed `<userId>:<orgId>`, six within a minute, in any tab, then one a minute, per
+  instance), and answers 429 with `retry-after: 60` past it. A failed read answers 500 and records nothing.
+- **Who sees it** (CP14). Every member (`workspace.read`), as every evidence page and the hand-off.
+- **Limits** (CP15). At most 2,000 payments a month, rows and not settled together; past it the pack is `cut`.
+- **Where it opens** (CP16). **Monthly close pack** on the Audit log, beside the audit export; each accountant console
+  card's **Close pack:** line, with last month and this month so far.
+- **Untrusted text** (CP17). Vendor names, invoice numbers, memos and a vendor's typed PO are shown as text only:
+  escaped by React, guarded by `csvCell`, data in the JSON; a memo is cut to 200 characters. No file is opened or
+  served: documents are named by their SHA-256.
+- **Later surfaces** (CP18). `GET /api/v1/close-packs/{month}` and a Google Sheets export build on
+  `closePackDocument` and `closePackTable` in their own changes; `ClosePackDocument` holds only plain JSON values.
+- **No migration** (CP19). Every column read predates `0136` but `invoices.document_pay_to`, which reads as none before
+  it, so the pay-to check does not apply.
+
 ## Usage metering
 
 `src/lib/usage/` (U1 to U4). One `usage_events` row (migration `0112`, a tenant table under the two policies, append-only
