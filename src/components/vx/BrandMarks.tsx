@@ -1,5 +1,5 @@
 import { cn } from "@/components/ui/cn";
-import type { ProviderId } from "@/lib/connectors/provider";
+import type { MarkedProviderId } from "@/lib/connectors/provider";
 
 /**
  * The marks of the services Vestiarion is built on or connects to
@@ -90,9 +90,10 @@ export const isWordmark = (brand: Brand) => MARKS[brand].wordmark === true;
 /**
  * The mark each connector shows beside its name in Settings and on its connect and launch pages: a symbol, except
  * Xero's wordmark (its kit has no other), Asana's logo (its dots alone come on a white square) and the Zoho Books and
- * Zoho CRM logos (Zoho serves no symbol of its own for either).
+ * Zoho CRM logos (Zoho serves no symbol of its own for either). A connector with no mark here (`UNMARKED_PROVIDERS`)
+ * writes its name beside a neutral icon instead.
  */
-export const PROVIDER_MARKS: Readonly<Record<ProviderId, Brand>> = {
+export const PROVIDER_MARKS: Readonly<Record<MarkedProviderId, Brand>> = {
   xero: "xero",
   quickbooks: "quickbooks",
   hubspot: "hubspot",

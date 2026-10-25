@@ -3462,7 +3462,9 @@ Intuit app; `QUICKBOOKS_ENVIRONMENT` picks sandbox or production companies), Zoh
 (in Zoho's form, `1000.` and capital letters and digits) and `ZOHO_BOOKS_CLIENT_SECRET` (a Zoho server-based client);
 otherwise its card and routes are not there. The Settings card (`AccountingPanel`), the review list (`AccountingBillsReview`), the
 account picker, the launch and connect pages and the server actions (`src/app/actions/accounting.ts`) are one set, given
-the provider.
+the provider. The core's providers are `xero`, `quickbooks` and `zohobooks` (kind `accounting`), `hubspot`, `pipedrive`
+and `zohocrm` (`crm`, below), `asana` (`work`) and `googlesheets` (`export`: it brings nothing in, and writes close
+packs out; see "Google Sheets: the close pack exported").
 
 - **Schema (migration `0101`).** Four tenant tables, with row-level security, the restrictive guard and composite
   foreign keys to their connection, which the tenant role reads, inserts and updates and never deletes:
@@ -4551,7 +4553,7 @@ holds the shared contract (`ClosePack`, `vestiarion-close-pack/1`, `CLOSE_PACK_M
 `providerOfSource`, the chain and network profiles, `secondPersonOf` (payee lock evidence EP2) and `pullRequestName`,
 so the pack and each evidence page say the same. `words.ts` words every cell once for the page, the CSV and the table.
 `export.ts` writes the signed JSON (`closePackJson`, exactly `JSON.stringify(closePackDocument(...), null, 2)`), the
-table (`closePackTable`, plain strings, for a later Google Sheet written RAW) and the CSV (`closePackCsv`: a byte-order
+table (`closePackTable`, plain strings, which the Google Sheets export writes RAW) and the CSV (`closePackCsv`: a byte-order
 mark, CRLF, `csvCell` on every cell) with its 51 `CLOSE_PACK_COLUMNS`. `read.ts` reads; `record.ts` records downloads.
 
 **The read** (`readClosePack`, inside `inOrg` or `withOrg`, through `db()` only, writing nothing). The month's
@@ -4624,10 +4626,104 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
 - **Untrusted text** (CP17). Vendor names, invoice numbers, memos and a vendor's typed PO are shown as text only:
   escaped by React, guarded by `csvCell`, data in the JSON; a memo is cut to 200 characters. No file is opened or
   served: documents are named by their SHA-256.
-- **Later surfaces** (CP18). `GET /api/v1/close-packs/{month}` and a Google Sheets export build on
-  `closePackDocument` and `closePackTable` in their own changes; `ClosePackDocument` holds only plain JSON values.
+- **Later surfaces** (CP18). `GET /api/v1/close-packs/{month}` builds on `closePackDocument` in its own change, and the
+  Google Sheets export (below) on `closePackTable`; `ClosePackDocument` holds only plain JSON values.
 - **No migration** (CP19). Every column read predates `0136` but `invoices.document_pay_to`, which reads as none before
   it, so the pay-to check does not apply.
+
+## Google Sheets: the close pack exported
+
+`docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md`. A workspace connects one Google account, and an
+owner, admin or accountant writes a month's close pack into a spreadsheet in that account's Drive. It writes a copy:
+it reads nothing back into Vestiarion, decides nothing, pays nothing and calls no model. Migration `0145`.
+
+- **A provider on the connector core** (GS1). `googlesheets`, label "Google Sheets", of a new `ProviderKind`, `export`:
+  it brings nothing in. Every `Record<ProviderId, ...>` has its entry; `AccountingProviderId` excludes it and the
+  accounting, CRM and work registries return null for it, so no booking, review list or sync path takes it. It reuses
+  `accounting_connections` and `accounting_tokens`, `startConnect`, `finishConnect`, `saveConnection`,
+  `disconnectConnection`, `freshAccessToken` and `connectionTokenStore`. Its folder, `src/lib/googlesheets/`, holds
+  `settings`, `http`, `oauth`, `provider`, `connect-deps`, `ready`, `table` (pure), `sheets`, `store`, `export`, `views`
+  (pure, browser-safe) and `panel`; the routes are `src/app/api/integrations/googlesheets/{connect,callback}`, the page
+  `/integrations/googlesheets/connect`, the actions `src/app/actions/googlesheets.ts`, the card `GoogleSheetsPanel` and
+  the close pack page's control `src/components/close-pack/SheetsExport.tsx`. The page makes that control from the month
+  and the workspace and hands it to `ClosePackView` as `sheets`, which keeps it at one place in the tree whether the pack
+  was read or not, so a render whose read is refused keeps the export's answer; a done export does not revalidate, since
+  that would read the whole pack again inside the action's 120 seconds, and its answer, which carries its month, stands
+  in for that month's "Last exported" line until the page is read again. The control is keyed by the month, since a
+  month link changes only `?month=` and Next keeps the page's client state across it: another month starts it afresh.
+- **Off, then not set up** (GS2). Without `GOOGLE_SHEETS_CLIENT_ID` and `GOOGLE_SHEETS_CLIENT_SECRET`, or with an id
+  that is not a Google OAuth client id, there is no card, no export control, both routes answer 404 and the connect page
+  is not found. With the client but before `0145`, `googleSheetsReady()` finds no `googlesheets_connector_ready` and
+  throws `NotSetUpError`: the card says Google Sheets is not set up, the connect route sends the person back with
+  `error=not_set_up`, and the close pack page shows no control.
+- **One scope** (GS3). `https://www.googleapis.com/auth/drive.file`, Google's non-sensitive Drive scope: Vestiarion
+  reaches only the files it makes. No identity scope: the account is Drive's `about.get` user. The authorize URL asks
+  `access_type=offline`, `prompt=consent` and `include_granted_scopes=false`; a grant whose `scope` lacks `drive.file`
+  throws `ConnectRefusal("scopes")` before any other call, and nothing is kept.
+- **The account** (GS4, GS6). One per workspace, connected by an owner or admin (`integrations.manage`); not
+  `exclusive`, so one Google account may serve several workspaces. `external_org_id` is the Drive `permissionId`,
+  checked; `external_org_name` is `maskEmail(emailAddress)`, or "A Google account": the full address is stored nowhere.
+- **The month's file** (GS7). Each export lists the Drive files tagged
+  `appProperties.vestiarionClosePack = "<org id>:<YYYY-MM>"` (the id a UUID, the month passed `closePackMonth`), oldest
+  first. None: `files.create` makes a spreadsheet with the name and the tag, and the tag is listed again: an export
+  whose own file is listed and is not the oldest trashes its own and takes the oldest; one whose own file is not listed
+  yet (Drive's search can lag a create) keeps it, so two racers never trash both files, and the next export takes the
+  oldest. Found: the oldest is renamed (so "so far" drops once the month ends); one that answers `gone` is passed over,
+  never trashed. The name is "Vestiarion close pack", the workspace, the month (with "so far") and the network's label,
+  joined by middle dots and cut to 200 characters. The list does not search shared drives: a file moved into one is
+  replaced by a new one in My Drive.
+- **The tabs** (GS8, GS9). `formatTabs`, one `batchUpdate`: **Payments** and **Summary** added back if missing or renamed
+  (a title differing only by case is taken back), the grid sized to the rows (which drops rows from a longer export),
+  the header frozen and bold, the money columns `#,##0.00####`, widths set; any other tab is left alone. The format
+  clears no value, so a values write that fails leaves the last export's rows under its own Summary. A file just made,
+  or found with only Google's first tab (`sheetId` 0, named neither Payments nor Summary, nothing frozen and not 51
+  columns, read from `gridProperties`: a run that made it stopped before its format), has that tab renamed Payments; a
+  Payments tab a person renamed after deleting Summary keeps its frozen header or 51 columns, so it is left alone. Values
+  go RAW, never `USER_ENTERED`, in `values:batchUpdate` requests of at most 500 rows; every row is 51 cells, and a month
+  with no payment also writes row 2 as 51 empty cells with the header and the Summary, so a note there is cleared in
+  that request and the read back is the header alone. `sheetValues` writes six columns as
+  numbers (`bill_amount`, `amount_paid`, `discount`, `network_fee_usd`, `route_fee_usdc` when they have six places
+  and round trip, `earlier_attempts` when it is digits) and every other cell as the table's text, so `=`, `+`, `-` and
+  `@` stay text. The Summary is label and value rows from the pack, ending with how to check it.
+- **The hash and the read back** (GS10). `paymentsSha256` is the SHA-256 of `JSON.stringify` of the tab as written,
+  each row padded with `""` to 51 cells, which Apps Script's `getDataRange().getValues()` reproduces. After writing, the
+  tab is read back once (`UNFORMATTED_VALUE`), padded and hashed: equal hash and row count, or the export failed
+  `mismatch`.
+- **The ledger and the brake** (GS11). Done: `close_pack_exported` with `format: "google_sheets"` and `connectionId`,
+  `spreadsheetId`, `created`. Failed once the values write was sent, or on a mismatch: `close_pack_export_failed`
+  `{ by, month, ended, format, connectionId, spreadsheetId, stage, reason }`, `stage` `write` or `read_back`; every
+  failure from the values write on is recorded (`RECORDED` maps each `GoogleFailure`, `reconnect` and `gone` included),
+  since an earlier request of 500 rows may have landed. A failure before any row was sent records nothing. `recentClosePackExportsBy` counts both kinds, so downloads and exports share
+  the ten in ten minutes, checked before the pack is read or Google is called. The export action also takes the
+  downloads' burst token first (`takeClosePackDownloadToken`, keyed `<userId>:<orgId>`).
+- **Calls to Google** (GS12; `http.ts`). Five fixed addresses (`accounts.google.com/o/oauth2/v2/auth`,
+  `oauth2.googleapis.com/token` and `/revoke`, `www.googleapis.com/drive/v3`, `sheets.googleapis.com/v4`); any other
+  host is refused, with `redirect: "error"`, `cache: "no-store"` and 20 seconds a call. Paths are built from ids that
+  match `SPREADSHEET_ID`; `webViewLink` is never read, and the spreadsheet's link is `spreadsheetUrl(id)`. Failures are
+  read from Google's short reason code only (`rate_limited`, `unauthorized`, `reconnect`, `forbidden`, `drive_full`,
+  `gone`, `unavailable`, `bad_response`), and a log line names the call, the status and that code. At most one retry a
+  call: a 401 refreshes the token once; a rate limit of 10 seconds or less is waited out; a 5xx or timeout repeats only
+  reads and the values write, never a create, an update or the format. No call starts after 90 seconds; the close pack
+  page sets `maxDuration = 120` for its Server Actions.
+- **Tokens and reconnecting** (GS13). Google's refresh answer carries no refresh token, so the one sent is kept.
+  `invalid_grant`, `unauthorized_client` or `invalid_client`, a 401 that stays after a refresh, or a 403 without the
+  Drive permission mark the connection `needs_reconnect` (`markSheetsReconnect`), which the card and the accountant
+  console's connector problems show.
+- **Disconnecting** (GS14). Google's revoke ends the account's whole grant, so it is sent only when
+  `connectedElsewhere("googlesheets", permissionId, orgId)` is false; otherwise the revoke passed does nothing. Either way
+  the tokens are deleted, the connection is revoked and `accounting_disconnected` is signed. Spreadsheets stay. The
+  answer (revoked, not confirmed by Google, or kept for another workspace) is held by the card, not the Disconnect
+  button, which the revalidated page drops in the same render, so it stays beside Connect Google Sheets.
+- **Never due** (GS15). `saveConnection` writes `next_sync_after` `EXPORT_NEVER_DUE` (`9999-12-31T00:00:00.000Z`) for a
+  provider of kind `export`, so `accounting_connections_due` never hands the sweeper a Sheets connection; `0145` does not
+  redefine that function.
+- **Who** (GS5, GS18). Exporting is `accounting.book` (owner, admin, accountant); approvers and viewers see the month's
+  last export and its link, read from the newest `close_pack_exported` of format `google_sheets` for the month, with no
+  button. No Google mark is shown: `PROVIDER_MARKS` excludes `googlesheets`, and the card and the connect page use
+  lucide's `FileSpreadsheet`.
+- **Migration `0145`.** The provider checks of `accounting_connections` and `accounting_tokens` take `googlesheets`,
+  each replaced only while it does not yet (a later widening must keep it); `external_links` is left as it is.
+  `googlesheets_connector_ready(p_org_id)` answers true for the tenant role and `service_role`, and is in `TENANT_RPCS`.
 
 ## Usage metering
 

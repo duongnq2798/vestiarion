@@ -5,19 +5,28 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
+/**
+ * The providers shown with no brand mark (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md GS18):
+ * Google's product icons are not used in another product's interface without Google's brand permission, so the Google
+ * Sheets card and connect page write its name beside a neutral icon. `PROVIDER_MARKS` holds the others.
+ */
+export const UNMARKED_PROVIDERS = ["googlesheets"] as const;
+export type MarkedProviderId = Exclude<ProviderId, (typeof UNMARKED_PROVIDERS)[number]>;
+
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books", zohocrm: "Zoho CRM" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books", zohocrm: "Zoho CRM", googlesheets: "Google Sheets" };
 
 /**
  * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
  * bills, a CRM its companies and deals, and a work tool the tasks a contractor's milestone is delivered in
- * (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A1). The core's words follow it.
+ * (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A1). An export tool brings nothing in: a month's close pack
+ * is written to it (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md GS1). The core's words follow it.
  */
-export type ProviderKind = "accounting" | "crm" | "work";
-export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting", zohocrm: "crm" };
+export type ProviderKind = "accounting" | "crm" | "work" | "export";
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting", zohocrm: "crm", googlesheets: "export" };
 
 /** The kind of a provider named by its id or its label; accounting for a name neither is. */
 export function providerKind(provider: string): ProviderKind {
@@ -125,6 +134,17 @@ export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
     bills: "won deals",
     approval: "A deal won in Zoho CRM becomes a deal in Vestiarion only when you plan it.",
     customer: "account",
+  },
+  // Google Sheets (close pack Sheets GS1): one Google account per workspace, nothing read from it, and a refresh token
+  // that lasts until revoked or six months unused, which an export resets, so no idle days.
+  googlesheets: {
+    possessive: "Google Sheets'",
+    organisation: "Google account",
+    contacts: "no contacts",
+    accounts: "no accounts",
+    idleDays: 0,
+    bills: "close packs",
+    approval: "A close pack in Google Sheets is a copy: the signed ledger stays the record.",
   },
 };
 
@@ -391,5 +411,8 @@ export type ConnectingProvider = Pick<
 /** The CRMs among the providers: those that bring deals in (HubSpot connector H1, Pipedrive connector P1). */
 export type CrmProviderId = "hubspot" | "pipedrive" | "zohocrm";
 
-/** The accounting tools among the providers: those that bring bills in (HubSpot connector H1; Asana acceptance A1). */
-export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana">;
+/**
+ * The accounting tools among the providers: those that bring bills in (HubSpot connector H1; Asana acceptance A1). Google
+ * Sheets brings nothing in (close pack Sheets GS1), so it never reads as one.
+ */
+export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana" | "googlesheets">;

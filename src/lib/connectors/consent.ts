@@ -22,6 +22,7 @@ export const CONSENT_VERSIONS: Record<ProviderId, string> = {
   asana: "asana-2026-10-14",
   zohobooks: "zohobooks-2026-10-16",
   zohocrm: "zohocrm-2026-10-16",
+  googlesheets: "googlesheets-2026-10-25",
 };
 
 /**
@@ -37,6 +38,7 @@ export const CONSENT_HISTORY: Record<ProviderId, readonly string[]> = {
   asana: ["asana-2026-10-14"],
   zohobooks: ["zohobooks-2026-10-16"],
   zohocrm: ["zohocrm-2026-10-16"],
+  googlesheets: ["googlesheets-2026-10-25"],
 };
 
 /**
@@ -133,12 +135,27 @@ const WORK_STATEMENT = (label: string) => [
   `Disconnecting stops the reading at once and deletes the webhooks. Acceptances already recorded stay in Vestiarion's signed ledger.`,
 ];
 
+/**
+ * Google Sheets' statement (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md, the connect page): the
+ * one Drive permission, what an export writes and reads back, the account's id and masked email, that nothing is shared
+ * or comes back, and what disconnecting does with a grant another workspace shares. No model sees any of it.
+ */
+const GOOGLE_SHEETS_STATEMENT: readonly string[] = [
+  "Vestiarion asks Google only for access to the files it makes (Google's drive.file permission). It cannot see, open or list any other file in your Google Drive.",
+  "When an owner, admin or accountant of this workspace exports a month's close pack, Vestiarion makes a spreadsheet for that month in the Drive of the Google account you connect, or updates the one it made before, and writes the pack into it: each payment's payee and address, amounts, invoice number, approvals with members' emails, checks, transaction and signed ledger entry, with a summary naming who exported it. It reads that spreadsheet back once to check it was written in full.",
+  "It reads the Google account's id and email address once, when you connect, to show which Drive the spreadsheets go to. It keeps the id and a masked email, never the full address.",
+  "Vestiarion never shares a spreadsheet: the Google account that holds it decides who sees it. Nothing in a spreadsheet comes back into Vestiarion, and nothing from Google reaches the agent or its model.",
+  "Vestiarion never uses Google data to train or improve any AI model, and never passes it to anyone else without your workspace's say.",
+  "Disconnecting revokes Vestiarion's access at Google, unless another workspace is connected with the same Google account, and deletes the tokens. Spreadsheets already exported stay in that Drive.",
+];
+
 export function consentStatement(provider: ProviderId): string[] {
   const label = PROVIDER_LABELS[provider];
   if (provider === "hubspot") return CRM_STATEMENT(label);
   if (provider === "pipedrive") return [...PIPEDRIVE_STATEMENT];
   if (provider === "zohocrm") return [...ZOHO_CRM_STATEMENT];
   if (provider === "asana") return WORK_STATEMENT(label);
+  if (provider === "googlesheets") return [...GOOGLE_SHEETS_STATEMENT];
   return [
     WHAT_IS_READ[provider],
     `The bills you add are shown to this workspace's members and to its agent. ${MODEL_PROVIDER} sees each bill's facts to decide on it, under that provider's own API terms.`,

@@ -372,6 +372,10 @@ const CLOSE_PACK_PAGE = "src/app/o/[slug]/evidence/close-pack/page.tsx";
 const CLOSE_PACK_VIEW = "src/components/ClosePackView.tsx";
 const CLOSE_PACK_WORDS = "src/lib/close-pack/words.ts";
 const CLOSE_PACK_ROUTE = "src/app/api/evidence/close-pack/route.ts";
+const SHEETS_EXPORT = "src/components/close-pack/SheetsExport.tsx";
+const SHEETS_PANEL = "src/components/GoogleSheetsPanel.tsx";
+const SHEETS_ACTIONS = "src/app/actions/googlesheets.ts";
+const SHEETS_TABLE = "src/lib/googlesheets/table.ts";
 
 /** Invoice capture for Chrome (docs/superpowers/specs/2026-10-15-invoice-capture-design.md): the extension, the consent, the review. */
 const CAPTURE_POPUP = "extensions/chrome-invoice-capture/extension/popup.html";
@@ -589,6 +593,26 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["close_pack_exported", "src/lib/close-pack/record.ts"],
     ["vestiarion-close-pack/1", "src/lib/close-pack/types.ts"],
     ["-so-far", "src/lib/close-pack/export.ts"],
+    // The close pack in Google Sheets (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md GS2-GS14).
+    ["Connect Google Sheets", SHEETS_PANEL],
+    ["Reconnect Google Sheets", SHEETS_PANEL],
+    ["Disconnect Google Sheets", SHEETS_PANEL],
+    ["Connected to the Google Drive of", SHEETS_PANEL],
+    ["Disconnected from", SHEETS_PANEL],
+    ["Google Sheets needs you to reconnect", SHEETS_PANEL],
+    ["Google Sheets is not set up on this deployment yet.", SHEETS_PANEL],
+    ["Continue to Google", "src/app/integrations/googlesheets/connect/page.tsx"],
+    ["Export to Google Sheets", SHEETS_EXPORT],
+    ["Open the spreadsheet", SHEETS_EXPORT],
+    ["Exported 14 payments to Google Sheets.", SHEETS_ACTIONS, "return `Exported ${payments} ${payments === 1 ? \"payment\" : \"payments\"} to Google Sheets.`;"],
+    ["Payments", SHEETS_TABLE, 'PAYMENTS_TAB = "Payments"'],
+    ["Summary", SHEETS_TABLE, 'SUMMARY_TAB = "Summary"'],
+    ["Payments tab SHA-256", SHEETS_TABLE],
+    ["Too many close pack exports in the last 10 minutes. Try again later.", SHEETS_ACTIONS],
+    ["Too many close pack exports in a row. Try again in a minute.", SHEETS_ACTIONS],
+    ["Google asked Vestiarion to slow down. Try again in a minute.", SHEETS_ACTIONS],
+    ["The spreadsheet did not read back as written, so the export is not recorded as done. Export again.", SHEETS_ACTIONS],
+    ["close_pack_export_failed", "src/lib/close-pack/record.ts"],
   ],
   "guides/customer-portal": [
     ["Bills & receivables", APP_NAV],

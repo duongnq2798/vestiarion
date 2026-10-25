@@ -49,8 +49,17 @@ function clock(iso: string, nowMs: number): string {
   return at.toISOString().slice(0, 10) === today ? time : `${time} on ${MONTHS[at.getUTCMonth()]} ${at.getUTCDate()}`;
 }
 
+/**
+ * An export tool's grant (close pack Sheets GS13): Google ends it when its access is removed in the Google Account, or
+ * after six months unused. Google Sheets is the one export tool, so its words name Google.
+ */
+const EXPORT_RECONNECT = (label: string) =>
+  `Google no longer accepts this connection: its access was removed in the Google Account, or it went unused for six months. Reconnect ${label} to export ${providerWords(label).bills} again.`;
+
 const reconnectWords = (label: string) =>
-  providerKind(label) === "work"
+  providerKind(label) === "export"
+    ? EXPORT_RECONNECT(label)
+    : providerKind(label) === "work"
     ? `${label} no longer accepts this connection: the app's access was removed in ${label}. Reconnect ${label} to go on reading the tasks linked to milestones.`
     : providerKind(label) === "crm"
       ? `${label} no longer accepts this connection: the app was uninstalled in ${label}, or its access was removed. Reconnect ${label} to go on bringing its deals in.`
@@ -83,6 +92,10 @@ export function connectionStatus(facts: ConnectionFacts, nowMs: number): StatusV
   const crm = kind === "crm";
   const name = facts.externalOrgName ?? `your ${label} ${providerWords(label).organisation}`;
   if (facts.status === "revoked") {
+    // An export tool reads nothing: what it was given stays where it was written (close pack Sheets GS14).
+    if (kind === "export") {
+      return { tone: "off", title: `Disconnected from ${name}`, detail: [`Spreadsheets already exported stay in that Google Drive. Nothing more is written to ${label}.`], reconnect: false };
+    }
     const kept = kind === "work" ? "Acceptances already recorded stay in Vestiarion." : crm ? "Deals already planned stay in Vestiarion." : "Bills already added stay in Vestiarion.";
     return { tone: "off", title: `Disconnected from ${name}`, detail: [`${kept} Nothing more is read from ${label}.`], reconnect: false };
   }
@@ -92,12 +105,16 @@ export function connectionStatus(facts: ConnectionFacts, nowMs: number): StatusV
       title: `${label} needs you to reconnect`,
       detail: [
         facts.lastError ??
-          (kind === "work"
+          (kind === "work" || kind === "export"
             ? reconnectWords(label)
             : `${label} no longer accepts this connection. Reconnect ${label} to go on bringing its ${crm ? "deals" : "bills"} in.`),
       ],
       reconnect: true,
     };
+  }
+  // An export tool never syncs: a person exports to it (close pack Sheets GS15).
+  if (kind === "export") {
+    return { tone: "ok", title: `Connected to ${name}`, detail: ["An owner, admin or accountant exports a month from Monthly close pack in the Audit log."], reconnect: false };
   }
   const synced = facts.lastSyncedAt ? `Last synced ${ago(facts.lastSyncedAt, nowMs)}.` : null;
   const failedSince =

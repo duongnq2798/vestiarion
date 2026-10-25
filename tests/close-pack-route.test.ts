@@ -44,12 +44,20 @@ const config = configFromEnv({
 const MEMBERSHIP = { orgId: ORG, slug: "pinecrest-studio", name: "Pinecrest Studio", mode: "live" as const, role: "viewer" as const, network: "arc-testnet" as const };
 const NOW = new Date("2026-11-02T09:00:00Z");
 
-function call(query: string, options: { headers?: Record<string, string>; recent?: number } = {}) {
+/** The brake's read: downloads and Google Sheets exports, failed ones too, count together (close pack Sheets GS11). */
+const BRAKE = "in.(close_pack_exported,close_pack_export_failed)";
+
+function call(query: string, options: { headers?: Record<string, string>; recent?: number; recentKinds?: string[] } = {}) {
   const fake = fakeSupabase((request: RecordedRequest) => {
     if (request.path === "/rest/v1/orgs") {
       return { body: { id: ORG, slug: "pinecrest-studio", name: "Pinecrest Studio", mode: "live", ledger_signing_key_enc: null, circle_api_key_enc: null, circle_entity_secret_enc: null, wallet_host: null } };
     }
-    if (request.path === "/rest/v1/ledger_entries" && request.params.get("action") === "eq.close_pack_exported") {
+    if (request.path === "/rest/v1/ledger_entries" && options.recentKinds && request.params.has("detail->>by")) {
+      // The person's recent entries by kind, filtered as the database would by the read's action list.
+      const asked = (request.params.get("action") ?? "").replace(/^in\.\(|\)$/g, "").replace(/^eq\./, "").split(",");
+      return { body: options.recentKinds.filter((kind) => asked.includes(kind)).map((_, index) => ({ id: `x${index}` })) };
+    }
+    if (request.path === "/rest/v1/ledger_entries" && request.params.get("action") === BRAKE) {
       return { body: Array.from({ length: options.recent ?? 0 }, (_, index) => ({ id: `x${index}` })) };
     }
     return { body: [] };
@@ -181,13 +189,22 @@ describe("GET /api/evidence/close-pack (close pack CP12, CP14)", () => {
     expect(answer.status).toBe(429);
     expect(answer.headers.get("retry-after")).toBe("600");
     expect(await answer.json()).toEqual({ error: "Too many close pack downloads in the last 10 minutes. Try again later." });
-    const count = fake.requests.find((request) => request.path === "/rest/v1/ledger_entries" && request.params.get("action") === "eq.close_pack_exported");
+    const count = fake.requests.find((request) => request.path === "/rest/v1/ledger_entries" && request.params.get("action") === BRAKE);
     expect(count?.params.get("detail->>by")).toBe(`eq.${USER}`);
     expect(count?.params.get("ts")).toBe(`gt.${new Date(NOW.getTime() - 10 * 60_000).toISOString()}`);
     expect(readMock).not.toHaveBeenCalled();
     expect(appendEntryMock).not.toHaveBeenCalled();
     // Nine leave room for one more.
     expect((await call("?org=pinecrest-studio&month=2026-10", { recent: 9 }).response).status).toBe(200);
+  });
+
+  it("counts a recent close_pack_export_failed toward the eleventh download: one brake for downloads and Sheets exports (close pack Sheets GS11)", async () => {
+    const nineAndAFailure = [...Array<string>(9).fill("close_pack_exported"), "close_pack_export_failed"];
+    const answer = await call("?org=pinecrest-studio&month=2026-10", { recentKinds: nineAndAFailure }).response;
+    expect(answer.status).toBe(429);
+    expect(readMock).not.toHaveBeenCalled();
+    // The nine downloads alone leave room for one more.
+    expect((await call("?org=pinecrest-studio&month=2026-10", { recentKinds: nineAndAFailure.slice(0, 9) }).response).status).toBe(200);
   });
 
   it("answers a burst of downloads sent at once 429 past six, before the ledger is counted or the month is read (CP15)", async () => {
@@ -203,7 +220,7 @@ describe("GET /api/evidence/close-pack (close pack CP12, CP14)", () => {
     expect(await limited.json()).toEqual({ error: "Too many close pack downloads in a row. Try again in a minute." });
     expect(readMock).toHaveBeenCalledTimes(6);
     expect(appendEntryMock).toHaveBeenCalledTimes(6);
-    const counted = (one: (typeof calls)[number]) => one.fake.requests.some((request) => request.path === "/rest/v1/ledger_entries" && request.params.get("action") === "eq.close_pack_exported");
+    const counted = (one: (typeof calls)[number]) => one.fake.requests.some((request) => request.path === "/rest/v1/ledger_entries" && request.params.get("action") === BRAKE);
     expect(calls.map(counted)).toEqual([true, true, true, true, true, true, false, false, false]);
   });
 

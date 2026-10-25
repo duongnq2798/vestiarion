@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import nextConfig from "../next.config";
 import { MAX_REPORT_BYTES, POST } from "@/app/api/csp-report/route";
 import { ASANA_AUTHORIZE } from "@/lib/asana/http";
+import { GOOGLE_AUTHORIZE } from "@/lib/googlesheets/http";
 import { HUBSPOT_AUTHORIZE } from "@/lib/hubspot/http";
 import { NETWORKS } from "@/lib/network";
 import { PIPEDRIVE_AUTHORIZE } from "@/lib/pipedrive/http";
@@ -103,6 +104,7 @@ describe("the policy (CSP1, CSP2)", () => {
     // Each connect route's tool, and where its consent screen is: a new connect route fails here until it is named.
     const consent: Record<string, string[]> = {
       asana: [ASANA_AUTHORIZE],
+      googlesheets: [GOOGLE_AUTHORIZE],
       hubspot: [HUBSPOT_AUTHORIZE],
       pipedrive: [PIPEDRIVE_AUTHORIZE],
       quickbooks: [INTUIT_AUTHORIZE],

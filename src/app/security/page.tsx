@@ -124,7 +124,7 @@ export default function SecurityPage() {
           <li>the Circle API key and entity secret a workspace connects;</li>
           <li>each workspace&apos;s Ed25519 ledger signing key;</li>
           <li>each webhook endpoint&apos;s signing secret, and the secret of each webhook Asana sends;</li>
-          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM and Asana;</li>
+          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana and Google Sheets;</li>
           <li>a Slack connection&apos;s bot token and posting address, bound to the workspace and the field;</li>
           <li>a Discord channel webhook&apos;s URL, bound to the workspace and the field;</li>
           <li>
@@ -305,7 +305,8 @@ export default function SecurityPage() {
         <ul>
           <li>
             <strong>Connecting.</strong> Only an owner or admin connects a workspace to Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive,
-            Zoho CRM, Asana, Slack or GitHub, and for the first seven only after agreeing to what Vestiarion reads and writes there. The OAuth state is
+            Zoho CRM, Asana, Google Sheets, Slack or GitHub, and for the first eight only after agreeing to what Vestiarion reads and writes there. The
+            OAuth state is
             signed under the master key and expires after 10 minutes, a nonce in an HttpOnly cookie must come back with it, and the callback is
             accepted only for the same signed-in person, whose role is read again.
           </li>
@@ -324,7 +325,8 @@ export default function SecurityPage() {
             accepted only under its Svix signature, within five minutes, and only start a cycle that reads the payout from BlindPay itself.
           </li>
           <li>
-            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM and Asana are encrypted, in a table
+            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana and Google Sheets are encrypted,
+            in a table
             only the platform reads, and are opened only in their own workspace&apos;s scope. They are never shown in the browser, a log, a model&apos;s prompt
             or a webhook.
           </li>
@@ -336,7 +338,13 @@ export default function SecurityPage() {
             <strong>Disconnecting.</strong> <strong>Disconnect</strong> revokes the grant at the provider, then deletes the tokens, even when the
             provider could not be reached, and records the disconnection in the ledger, best effort: a ledger write that fails does not stop it.
             Asana&apos;s webhooks are deleted before its grant is revoked, and revoking Pipedrive&apos;s grant uninstalls the app from the company, as
-            Pipedrive documents it.
+            Pipedrive documents it. Google&apos;s grant is revoked only when no other workspace is connected with the same Google account, since
+            revoking it ends that account&apos;s access for every workspace.
+          </li>
+          <li>
+            <strong>Google Sheets.</strong> Vestiarion asks Google for one permission, drive.file, so it reaches only the spreadsheets it makes. Each
+            export writes cells as values, never formulas, reads the tab back, and records the export in the ledger with the tab&apos;s SHA-256. A
+            link to a spreadsheet is built from its checked id, never from an address Google returns.
           </li>
           <li>
             <strong>Disconnected on the provider&apos;s side.</strong> When someone disconnects QuickBooks Online at Intuit, its Disconnect page asks
@@ -516,7 +524,7 @@ export default function SecurityPage() {
             rule-based policy decides and the ledger says so. Either way, the answer is a proposal the rules in code check.
           </li>
           <li>
-            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM or Asana to
+            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana or Google Sheets to
             train or improve any AI model.
           </li>
         </ul>
