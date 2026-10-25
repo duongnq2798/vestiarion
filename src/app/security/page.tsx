@@ -252,7 +252,8 @@ export default function SecurityPage() {
           </li>
           <li>
             Most requests read. Four add a record, with a write key whose creator can still add records: a counterparty, an invoice, a milestone or a
-            payee link. Writes from one key come in bursts of up to 30, then one every 2 seconds.
+            payee link. Writes from one key come in bursts of up to 30, then one every 2 seconds. Evidence reads from one key come up to 10 at
+            once, then one every 6 seconds.
           </li>
           <li>
             Nothing in the API approves or pays directly. A payable added through it starts the agent&apos;s next cycle, and so does a milestone that
@@ -618,7 +619,9 @@ export default function SecurityPage() {
             before it merges, and release tags and other branches are not protected. Dependencies are not updated automatically.
           </li>
           <li>
-            Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota, and API reads are not limited.
+            Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota. API reads are not limited, except the
+            evidence reads (a payment&apos;s evidence or receipt, the payee lock&apos;s evidence and a monthly close pack): one key makes up to 10 at
+            once, then one every 6 seconds.
           </li>
           <li>
             The app enforces its Content Security Policy: scripts only from the site itself and Google Analytics, connections only to the services it

@@ -47,7 +47,7 @@ The write tools need a read-and-write key: `create_counterparty`, `create_invoic
 
 ## Tools
 
-One tool per [API operation](/docs/api). Its name is the operation's id in snake case, its arguments are the operation's parameters, or for a write the fields of its request body and an optional `idempotencyKey`, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. A read's tool is marked read-only and idempotent. The four write tools are marked as adding records: not read-only, and not idempotent.
+One tool per [API operation](/docs/api), except the evidence reads, which have no tool yet. Its name is the operation's id in snake case, its arguments are the operation's parameters, or for a write the fields of its request body and an optional `idempotencyKey`, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. A read's tool is marked read-only and idempotent. The four write tools are marked as adding records: not read-only, and not idempotent.
 
 - `create_counterparty`, `create_invoice` and `create_milestone` are not destructive. A repeat adds another record, unless it passes the same `idempotencyKey`.
 - `create_payee_link` is marked destructive, because a new link revokes the payee's unused one. It takes no `idempotencyKey`: the link is in its answer only, so a repeat makes a new link.

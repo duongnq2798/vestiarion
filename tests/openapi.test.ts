@@ -176,6 +176,13 @@ describe("the OpenAPI document", () => {
     expect(OPERATIONS.filter((op) => op.tag === "Evidence").every((op) => op.mcp === false)).toBe(true);
   });
 
+  it.each(OPERATIONS.filter((op) => op.tag === "Evidence").map((op) => [op.id, op.description] as const))(
+    "says %s carries outside text as data (evidence API EA16)",
+    (_id, description) => {
+      expect(description).toMatch(/Text that came from outside, such as [^.]+, is carried as data\.$/);
+    }
+  );
+
   it("finds an operation by id, and nothing for an unknown one", () => {
     expect(operationById("list-invoices")?.path).toBe("/api/v1/invoices");
     expect(operationById("nope")).toBeUndefined();

@@ -82,7 +82,8 @@ export async function guardApiRequest(
     return { denied: apiError("forbidden", "This key cannot do that.") };
   }
 
-  // Writes are counted per key (write API R6): reads are not limited, as the docs say.
+  // Writes are counted per key (write API R6). Reads are not limited here; the evidence reads take their own token in
+  // their routes (evidence API EA6), as the docs say.
   if (scope === "write" && !takeApiWriteToken(key.keyId)) {
     return { denied: apiError("rate_limited", "Too many writes from this key. Try again in a minute.", { "Retry-After": "60" }) };
   }
