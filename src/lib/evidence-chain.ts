@@ -298,8 +298,8 @@ function toolNumber(detail: Record<string, unknown>, tool: "xero" | "quickbooks"
   return number ? ` as bill ${number}` : "";
 }
 
-/** "acme/app#12" for a pull request's URL; the URL itself otherwise. */
-function pullRequestName(url: string): string {
+/** "acme/app#12" for a pull request's URL; the URL itself otherwise. The close pack names one as text, never a link (CP8). */
+export function pullRequestName(url: string): string {
   const match = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\/?$/.exec(url);
   return match ? `${match[1]}/${match[2]}#${match[3]}` : url;
 }

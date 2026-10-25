@@ -31,6 +31,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   that could not be checked may be sent or attached again. Each check is recorded once as `document_checked`, with the
   file's SHA-256 and the values compared, never the document's text. Needs migration 0144; until it runs, documents are
   shown, not checked, as before.
+- **Monthly close pack.** One page per workspace and calendar month (UTC) lists every payment Circle confirmed in it,
+  one row each: the bill with its invoice number and document, who decided and approved it (an accountant's co-sign
+  and the address's second person included), what was checked (guardrails, screening, OFAC's list of addresses, the
+  payee lock, the invoice's own address, a milestone's verification), the transaction with its explorer link, and the
+  signed ledger entry that records it, verified against the workspace's keys. A payment the agent sent stays the
+  agent's when a person's approval only recorded it later, and the payee lock is read as it stood when each payment was
+  sent, naming the owner who eased it. Payments not settled in the month and escrow moves are listed apart, and totals
+  keep each token apart. **Print or save as PDF**, **Download CSV** and
+  **Download signed JSON**; each download is recorded in the ledger as `close_pack_exported` with the file's SHA-256.
+  Open it from the **Audit log** or the accountant console. No migration.
 
 ### Fixed
 

@@ -367,6 +367,11 @@ const CLIENT_LINKS_CARD = "src/components/accountant/ClientLinks.tsx";
 const CLIENT_LINKS_LIB = "src/lib/platform/client-links.ts";
 const JOIN_PAGE = "src/app/join/[token]/page.tsx";
 const JOIN_FORM = "src/components/JoinFromClientLinkForm.tsx";
+/** The monthly close pack (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md). */
+const CLOSE_PACK_PAGE = "src/app/o/[slug]/evidence/close-pack/page.tsx";
+const CLOSE_PACK_VIEW = "src/components/ClosePackView.tsx";
+const CLOSE_PACK_WORDS = "src/lib/close-pack/words.ts";
+const CLOSE_PACK_ROUTE = "src/app/api/evidence/close-pack/route.ts";
 
 /** Invoice capture for Chrome (docs/superpowers/specs/2026-10-15-invoice-capture-design.md): the extension, the consent, the review. */
 const CAPTURE_POPUP = "extensions/chrome-invoice-capture/extension/popup.html";
@@ -547,6 +552,43 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["member_joined", CLIENT_LINKS_LIB],
     ["Your accountant was not added.", CONSOLE_PAGE],
     ["Invite them on Members", CONSOLE_PAGE],
+    // The monthly close pack (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md CP11-CP16).
+    ["Monthly close pack", CLOSE_PACK_PAGE],
+    ["Monthly close pack", "src/app/o/[slug]/audit/page.tsx"],
+    ["Close pack:", ACCOUNTANT_CONSOLE],
+    ["Show this month", CLOSE_PACK_VIEW],
+    ["Last month", CLOSE_PACK_VIEW],
+    ["This month so far", CLOSE_PACK_VIEW],
+    ["Payments settled", CLOSE_PACK_VIEW],
+    ["Route fees", CLOSE_PACK_VIEW],
+    ["Signed entries verified", CLOSE_PACK_VIEW],
+    ["Not settled in", CLOSE_PACK_VIEW],
+    ["Escrow", CLOSE_PACK_VIEW],
+    ["Guardrails", CLOSE_PACK_VIEW],
+    ["OFAC address list", CLOSE_PACK_VIEW],
+    ["Invoice's own address", CLOSE_PACK_VIEW],
+    ["View on the explorer", CLOSE_PACK_VIEW],
+    ["Open the payment's evidence", CLOSE_PACK_VIEW, "Open the payment&apos;s evidence"],
+    ["Download CSV", CLOSE_PACK_VIEW],
+    ["Download signed JSON", CLOSE_PACK_VIEW],
+    ["Vestiarion monthly close pack", CLOSE_PACK_VIEW],
+    ["Print or save as PDF", PRINT_BUTTON],
+    ["Does not apply", CLOSE_PACK_WORDS],
+    ["Co-signed by", CLOSE_PACK_WORDS],
+    ["A second person stood behind it", CLOSE_PACK_WORDS],
+    ["No person approved it: code checked it and the agent paid it.", CLOSE_PACK_WORDS],
+    ["Checked by code", "src/lib/evidence-chain.ts"],
+    ["Verified outside", "src/lib/evidence-chain.ts"],
+    ["Does not match", "src/lib/evidence-chain.ts"],
+    ["Marked paid, with no payment recorded.", "src/lib/evidence-chain.ts"],
+    ["That month could not be read, so this shows last month. Choose a month with the Month field.", CLOSE_PACK_PAGE],
+    ["The close pack was read many times in a row. Try again in a minute.", CLOSE_PACK_PAGE],
+    ["Too many close pack downloads in the last 10 minutes. Try again later.", CLOSE_PACK_ROUTE],
+    ["Too many close pack downloads in a row. Try again in a minute.", CLOSE_PACK_ROUTE],
+    ["Sign in to download this close pack.", CLOSE_PACK_ROUTE],
+    ["close_pack_exported", "src/lib/close-pack/record.ts"],
+    ["vestiarion-close-pack/1", "src/lib/close-pack/types.ts"],
+    ["-so-far", "src/lib/close-pack/export.ts"],
   ],
   "guides/customer-portal": [
     ["Bills & receivables", APP_NAV],

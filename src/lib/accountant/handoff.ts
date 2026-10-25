@@ -1,5 +1,6 @@
 import { AGENT_DECISION_ACTIONS } from "../agent/shadow-hold";
 import type { OrgMembership } from "../auth/membership";
+import { closePackMonth, type ClosePackMonth } from "../close-pack/month";
 import { db, unwrap, type OrgDb } from "../dal";
 import { csvCell } from "../ledger-export";
 import { readWorkspaceTriage } from "./read";
@@ -22,40 +23,16 @@ const PAGE = 1000;
 /** The most rows one section takes; past it the document says so. */
 const MAX_ROWS = 10_000;
 
-export interface HandoffPeriod {
-  /** First day, YYYY-MM-DD. */
-  from: string;
-  /** The day after the last, YYYY-MM-DD. */
-  to: string;
-  /** "September 2026". */
-  label: string;
-  /** "2026-09". */
-  key: string;
-}
+/** A calendar month in UTC: `from` its first day, `to` the next month's first day (exclusive), "September 2026", "2026-09". */
+export type HandoffPeriod = ClosePackMonth;
 
-/** `?month=YYYY-MM`, or the last full month (UTC) when absent. A month that does not read, or is still to come, is null. */
+/**
+ * `?month=YYYY-MM`, or the last full month (UTC) when absent. A month that does not read, or is still to come, is null.
+ * The close pack's parser (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md CP1), so the hand-off and the
+ * close pack never disagree on a month.
+ */
 export function handoffPeriod(month: string | null, now: Date = new Date()): HandoffPeriod | null {
-  let year: number;
-  let index: number;
-  if (month === null || month === "") {
-    year = now.getUTCFullYear();
-    index = now.getUTCMonth() - 1;
-  } else {
-    const match = /^(\d{4})-(\d{2})$/.exec(month);
-    if (!match) return null;
-    year = Number(match[1]);
-    index = Number(match[2]) - 1;
-    if (index < 0 || index > 11 || year < 2020) return null;
-  }
-  const from = new Date(Date.UTC(year, index, 1));
-  if (from.getTime() > now.getTime()) return null;
-  const to = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 1));
-  return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
-    label: new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(from),
-    key: from.toISOString().slice(0, 7),
-  };
+  return closePackMonth(month, now);
 }
 
 export interface HandoffDecision {

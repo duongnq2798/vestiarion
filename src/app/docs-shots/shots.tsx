@@ -62,6 +62,8 @@ import { ActualsBills, ActualsSummary } from "@/components/vx/ActualsComparison"
 import { CashScenarios, CoverageList, ScenarioCases, ScenarioFindings } from "@/components/vx/CashScenarios";
 import { cashScenario, DEFAULT_LEVERS, type ScenarioBasis } from "@/lib/cash-scenarios";
 import { EvidenceAccess, EvidenceStepCard, evidenceSub } from "@/components/vx/EvidenceChain";
+import { ClosePackPayment, ClosePackSummary } from "@/components/ClosePackView";
+import { closePackShot } from "./close-pack-fixture";
 import { PageHead } from "@/components/vx/Shell";
 import { evidenceLinkLabel, evidencePath } from "@/lib/evidence-paths";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -146,7 +148,8 @@ export interface DocsShot {
     | "evidence"
     | "apply-payments"
     | "deals"
-    | "customer-portal";
+    | "customer-portal"
+    | "accountants";
   /** The workspace page it is on: its title heads the frame. None for a public page, such as a payee's link. */
   page?: NavKey;
   /** The page's line under its title, where the real page has one. */
@@ -1808,6 +1811,33 @@ export const DOCS_SHOTS = {
   "evidence-chain": { guide: "evidence", render: () => <EvidenceShot head ids={["decision", "payment"]} /> },
   "evidence-signatures": { guide: "evidence", render: () => <EvidenceShot ids={["signatures"]} /> },
   "evidence-access": { guide: "evidence", render: () => <EvidenceAccess kind="invoice" receipt="shared" role="owner" canShare /> },
+  "accountants-close-pack": {
+    guide: "accountants",
+    render: function ClosePackShot() {
+      // The monthly close pack (close pack CP11), as the page shows it inside the Audit log: its figures, then the top of
+      // the payment an accountant co-signed before an approver paid it. The page is long, and a picture of a whole card
+      // would not stay small: the card fades out under its approvals, where its checks begin.
+      const pack = closePackShot();
+      const cosigned = pack.rows.find((row) => row.approval.approvals.some((approval) => approval.cosign));
+      return (
+        <>
+          <PageHead
+            title="Monthly close pack"
+            sub="Every payment settled in the month, one row each: the bill, who approved it, what was checked, the transaction, and the signed entry that records it."
+          />
+          <div className="space-y-6">
+            <ClosePackSummary pack={pack} />
+            {cosigned && (
+              <div className="relative max-h-96 overflow-hidden">
+                <ClosePackPayment row={cosigned} />
+                <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-20 bg-linear-to-b from-transparent to-ground" />
+              </div>
+            )}
+          </div>
+        </>
+      );
+    },
+  },
   "where-a-payment-is-track": {
     guide: "where-a-payment-is",
     page: "invoices",

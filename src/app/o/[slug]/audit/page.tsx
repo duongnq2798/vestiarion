@@ -110,8 +110,12 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
             </dl>
             <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
               <VerifyLedgerBadge orgSlug={slug} />
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <DocsLink href="/docs/guides/audit-export" topic="exporting and checking the ledger" />
+                {/* The month's payments in one table, each with its signed entry (close pack CP16), for every member. */}
+                <Link href={orgHref(slug, "/evidence/close-pack")} className="text-sm font-medium text-agent underline-offset-4 hover:underline">
+                  Monthly close pack
+                </Link>
                 <AuditExportMenu orgSlug={slug} />
               </div>
             </div>

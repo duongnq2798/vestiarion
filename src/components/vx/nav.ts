@@ -88,6 +88,8 @@ const SUBPAGES: ReadonlyArray<{ pattern: RegExp; section: NavKey; label: string 
   { pattern: /^\/o\/[^/]+\/projects\/[^/]+/, section: "projects", label: "Project" },
   // The payee lock's evidence pack sits inside Settings, whose payee lock panel opens it (payee lock evidence EP7).
   { pattern: /^\/o\/[^/]+\/evidence\/payee-lock(?:\/|$)/, section: "settings", label: "Payee lock evidence" },
+  // The monthly close pack sits inside the Audit log, which links it beside the audit export (close pack CP11, CP16).
+  { pattern: /^\/o\/[^/]+\/evidence\/close-pack(?:\/|$)/, section: "audit", label: "Monthly close pack" },
 ];
 
 function subpageOf(pathname: string) {
