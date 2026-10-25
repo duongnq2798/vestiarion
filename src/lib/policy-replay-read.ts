@@ -121,6 +121,7 @@ const RULE_WORDS: Record<string, string> = {
   "counterparty.new_payee": "first payment to an address one person stands behind",
   "invoice.duplicate_of_settled": "repeats a bill already paid",
   "invoice.match_incomplete": "three-way match incomplete",
+  "invoice.vendor_document": "its purchase order came from a vendor's document",
   "fx.rate_unavailable": "no EURC rate",
   "fx.swap_cost_above_cap": "the EURC swap costs too much",
   "fx.swap_usdc_short": "the EURC swap leaves too little USDC",

@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
+import { BILL_STAGES, MILESTONE_STAGES } from "@/lib/policy-replay";
 import { runWith } from "@/lib/context";
 import { MAX_REPLAY_PAGES, replayForApply, RuleReplayError, ruleReplay } from "@/lib/policy-replay-read";
 import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
@@ -289,5 +292,13 @@ describe("replayForApply", () => {
     });
     // It names nothing: no invoice or milestone is read for a summary.
     expect(fake.requests.some((r) => r.path === "/rest/v1/invoices" || r.path === "/rest/v1/milestones")).toBe(false);
+  });
+});
+
+describe("the words for what stops a payment (P8)", () => {
+  it("has words for every check the replay runs, the vendor's document's included (document checks DK8)", () => {
+    const source = readFileSync(path.join(process.cwd(), "src", "lib", "policy-replay-read.ts"), "utf8");
+    for (const stage of new Set([...BILL_STAGES, ...MILESTONE_STAGES])) expect(source, stage).toContain(`  "${stage}": "`);
+    expect(source).toContain(`"invoice.vendor_document": "its purchase order came from a vendor's document",`);
   });
 });
