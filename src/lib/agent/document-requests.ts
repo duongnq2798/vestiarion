@@ -43,9 +43,11 @@ import { agentPaused } from "./pause";
  * would (ER4). A workspace in shadow mode asks as a live one does: its bills are the business's own, and a request asks
  * for a document, never a payment.
  *
- * It keys on the bill as it is, never on the decision's guardrail rule, which most match holds leave null. It never
- * changes a bill's status, amount or address, and moves no money (ER7). Never while the agent is paused; before
- * migration 0142, nothing.
+ * It keys on the bill as it is, never on the decision's guardrail rule, which most match holds leave null. Asking
+ * never changes a bill's status, amount or address, and moves no money. What the vendor sends is checked against the
+ * bill by the document_checks stage (src/lib/agent/document-checks.ts), which may add only its purchase order, for a
+ * person to approve (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK7, DK8). Never while the
+ * agent is paused; before migration 0142, nothing.
  */
 
 const DAY_MS = 86_400_000;

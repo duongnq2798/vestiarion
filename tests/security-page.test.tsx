@@ -67,7 +67,7 @@ describe("/security", () => {
 
   it("renders its heading, the date it was last updated, the site header and the compact footer", () => {
     expect(markup).toMatch(/<h1[^>]*>Security<\/h1>/);
-    expect(body).toContain("Last updated 2026-10-23");
+    expect(body).toContain("Last updated 2026-10-25");
     expect(markup).toMatch(/<header[^>]*class="sticky top-0/);
     for (const href of ["/terms", "/privacy", "/security"]) expect(markup).toContain(`href="${href}"`);
   });
@@ -496,7 +496,10 @@ describe("claims narrowed to what the code does", () => {
     expect(body).toContain("read back from where it is kept and taken only when it is the file checked");
     expect(source("src/lib/document-requests/intake.ts")).toContain("const again = await storage.download(kept);");
     expect(body).not.toContain("which no browser reads");
-    expect(body).toContain("with no public address: only a one-time upload address and a member's one-minute download address reach it");
+    expect(body).toContain("with no public address: only a one-time upload address, the server's upload of a member's PDF, and a member's one-minute download address reach it");
+    // A member's PDF, uploaded by the server, never over another file (document checks DK11).
+    expect(body).toContain("uploads a member's PDF without overwriting");
+    expect(source("src/lib/dal/index.ts")).toContain("bucket.upload(path, bytes, { upsert: false, contentType })");
   });
 
   it("foreign keys carry the workspace, but for the links named, and polymorphic ids have none", () => {

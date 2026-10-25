@@ -199,8 +199,10 @@ limit is 5 MB, as for **From a document**), and `attachDocument` (`src/lib/docum
 3. stores it at `{org}/document-requests/{id}/{sha256}`, with a new `platformStorage().upload` that never overwrites;
 4. calls `attach_document` (0144), which inserts an answered request with `source = 'member'`, `attached_by`, no token
    and no email domain;
-5. signs `document_received { by, via: "attached", ... }`, best effort;
-6. raises `document_received`.
+5. signs `document_received { by, via: "attached", ... }`, best effort.
+
+`attachDocumentAction` then raises `document_received`, as the action that authorized the member, so `attach.ts` imports no
+cycle code.
 
 A file the function refuses is removed from storage. At most one attachment per bill waits to be checked. A file
 already on the bill, unchecked or checked outside shadow, is refused. Attaching counts as an answered request for part
@@ -398,6 +400,8 @@ copy as it is):
   purchase order or goods receipt, and checks what they send."
 - **The `document_requests_changed` summary for On**: "Vestiarion now asks vendors for a bill's missing purchase order
   or goods receipt, and checks what they send against the bill".
+- The summary and the save message follow `checks`, as the rest of the section does: `changeDocumentRequests` reads
+  `readDocumentChecksStatus` and returns `{ from, to, checks }`, and before 0144 both keep part 1's words.
 
 **The bill's card, on Approvals and on Bills** (`DocumentRequestLine`, `documentRequestLine` and a new
 `documentCheckLine` in `src/lib/document-requests/rules.ts`). The headline of an answered request:
@@ -420,6 +424,12 @@ Then one check line (`data-document-check="<outcome|pending>"`):
 | Skipped | "{reason}" |
 
 `DocumentRequestLine` takes a `goodsReceived` prop from the card, so the matched lines follow the bill as it is now.
+
+The card reads each answered request as a `DocumentCheckView` (`src/lib/document-requests/rules.ts`): `pending`;
+`matched` with `po` (the purchase order compared, as the document writes it, or null when none was: the document named
+none, or the counterparty needs none), `added` (`po_written`) and `shadowLeftPo` (checked in shadow, and the bill still
+lacks its purchase order); or `mismatched`, `unreadable` or `skipped` with its `reason`. While vendor requests are off,
+a document not checked yet shows no check line; a result already found still shows.
 
 Reasons (`check_reason`), in check order; the first that applies is used:
 - "The document does not name {Vendor}."
@@ -927,8 +937,10 @@ While 0144 has not run, the deployed code reads "not there yet" and checks nothi
      held for a person to approve]" (or "scheduling refused");
    - pays nothing: a probe finds no `payment_intents` row for the bill.
 
-   The Approvals card shows the band "Its purchase order came from a vendor's document, which a person approves", and
-   the Bills row reads "Code stopped it: its purchase order came from the vendor's document, and a person approves it."
+   The Approvals card reads "Not paid: its purchase order came from Cobalt Cloud's document, which code checked against
+   the bill. Held for a person to approve." On Bills, the card's "Blocked by code, not by the model" band names the rule
+   "Its purchase order came from a vendor's document, which a person approves", and the row reads "Code stopped it: its
+   purchase order came from the vendor's document, and a person approves it."
    If a rule ahead of it stops the bill first, such as a first payment to Cobalt Cloud's address or its payment limit,
    the entry names that rule and still carries `vendorDocument`, and the hold is `invoice.vendor_document` once that
    rule no longer applies.

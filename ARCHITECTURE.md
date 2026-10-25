@@ -3124,7 +3124,10 @@ amount on a later day (docs/superpowers/specs/2026-10-17-term-requests-design.md
 
 A bill waiting for its purchase order or goods receipt, and the agent asks the vendor for the document through a
 one-time link that sends it straight to the bill (docs/superpowers/specs/2026-10-23-document-requests-design.md,
-migration 0142). Part 1 asks, collects and shows; it never pays, and changes no bill's status, amount or address.
+migration 0142). Part 1 asks, collects and shows. Part 2 checks what comes back against the bill
+(docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md, migration 0144): with vendor requests on, a
+document that matches adds the bill's purchase order and nothing else, and a person approves the payment. Neither part
+pays, nor changes a bill's status, amount or address.
 
 - **The setting** (`src/lib/document-requests/setting.ts`). `approval_policies.document_requests`, `off`, `shadow` or
   `on`, off by default; an owner (`approval.policy`) changes it in Settings, beside the payee lock
@@ -3179,7 +3182,8 @@ migration 0142). Part 1 asks, collects and shows; it never pays, and changes no 
   (glibc counts the separators, PGlite does not), so the page never passes what Postgres refuses; and a link. The
   ledger records `document_received` (`by: null`, `via: "document_request"`, with `poReference`, `fileSha256`, `fileType`,
   `fileSize`), and `notifyDocumentReceived` emails the owners and admins after the vendor has its page, saying whether a
-  purchase order number came and never what the vendor typed. No model reads the file.
+  purchase order number came and never what the vendor typed. While vendor requests are in shadow or on and 0144 has
+  run, sending it raises the cycle event `document_received`, with no member, and the email says what the check does.
 - **The cards** (`readDocumentRequests`, `src/lib/document-requests/read.ts`; `DocumentRequestLine`). Approvals
   (`ApprovalCard`) and Bills (`WaitingPayableAction`) show each waiting bill's latest request: what Vestiarion would ask
   (drafted, while shadow, only for a bill still `awaiting_info`, as what its current row lacks), when it asked and until
@@ -3200,6 +3204,54 @@ migration 0142). Part 1 asks, collects and shows; it never pays, and changes no 
   around `delete_sandbox_org`, once it deleted an idle sandbox. Removing the sample data removes the files named by the
   requests to its sample counterparties (`removeDocumentFiles`). Every read of 0142's column, table and functions treats
   their absence as none.
+
+Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/document-requests/check.ts`, rules DK1-DK16):
+
+- **The stage** (stage `document_checks`, after `compliance`, needing none: a failed check stops nothing else, since the
+  hold below is read from the table). While vendor requests are in shadow or on and the agent is not paused, it takes
+  the answered requests with `checked_at` null, oldest answer first, at most 5 a cycle, one `takeDocumentReadToken`
+  per read. A request a vendor answered before 0144 ran has `checked_at` null too, so the first cycle after it checks it
+  once. A bill that no longer waits for a document, or a file already checked for the bill outside shadow, is skipped
+  with no read. An image, a file over 4 MB by its row, one not kept at its own path, gone from storage (any other Storage
+  failure fails the stage), whose hash is not the one recorded, a scan or a PDF unpdf cannot read is unreadable, and no
+  model reads it. The rest goes through `readDocument` (its text, up to 20,000 characters) and `extractInvoice`: the
+  model sees the document alone, never the bill, and `decide()` computes the rule-based reading beside it.
+- **The compare** (`compareDocument`, pure). Each value the model returns passes `normalizeExtraction` against the
+  text. Code then checks, in order: the vendor (the counterparty's `nameKey` as whole words in the text's, or its billing
+  domain or a subdomain, never a free email provider's, never the model's `vendorName`); the currency; the amount to its
+  last decimal, in millionths, where the two readers and every "total due" line must agree; the purchase order (typed
+  and standing alone in the text, read by both readers alike, or on file and not contradicted; nothing compared for a
+  counterparty that needs none); every `0x` address the text writes being the one on file; and the model's `notes`
+  being unset. The first failure gives the reason, built only from the counterparty's name, a purchase order, decimal
+  figures and `0x` hex. Each check is signed as `document_checked` (`appendLedgerEntry`), with the file's SHA-256 and
+  the values compared, never the text, a note, an email address or a link, and with no `observed`.
+- **The function** (`check_document_request`, service-role definer). It locks the request and records the check once
+  (`already_checked` after), refusing a hash that is not the row's. With vendor requests on, a match for a bill that
+  lacks its purchase order writes `invoices.po_reference`, spelled as the document writes it, compare-and-set on the
+  payable being `awaiting_info` with no purchase order and no `payment_intents` row, and sets `po_written` in the same
+  step; a bill that moved in between is recorded as skipped. It never marks goods received, nor writes any other field.
+  In shadow it records and writes nothing (`check_shadow`). The follow-up then sees the purchase order supplied and
+  reopens the bill, and the AP stage decides it in the same cycle.
+- **The rule** (`invoice.vendor_document`, `src/lib/agent/guardrails.ts`). The AP stage reads the bills with
+  `po_written` once (`vendorDocumentsOf`; a failed read stops the stage, and before 0144 it reads none).
+  `enforceApGuardrails` wraps every other rule, the funded EURC swap's early return included, and holds a `pay` or
+  `schedule` they let through for a person to approve. Every `ap_*` entry on such a bill carries
+  `vendorDocument { requestId, source, fileSha256 }`. The hold has no end of its own: Return, the follow-up and a payment
+  Circle never took decide it again and hold it again; only a person's Approve and pay pays it, and `overridesHold` is
+  false for it, so no reason is asked.
+- **Attachments** (`attachDocument`, `src/lib/document-requests/attach.ts`; `AttachDocumentDialog`). An owner or admin
+  (`records.write`) attaches one PDF of at most 4,000,000 bytes, known by its first bytes, while vendor requests are in
+  shadow or on, to a payable `awaiting_info` with a purchase order or goods receipt missing and no payment sent. It is
+  stored at `<org>/document-requests/<id>/<sha256>` by `platformStorage().upload`, which never overwrites, before
+  `attach_document` inserts the answered member row (`source = 'member'`, `attached_by`, no token, no email domain);
+  a file the function refuses (`busy`, `same_file`, `not_waiting`) is removed. At most one attachment per bill waits
+  to be checked. It signs `document_received { by, via: "attached" }` best effort, and the action raises the cycle
+  event `document_received`. The cards say who sent each document and what its check found (`documentCheckLine`);
+  the decision trail and Why it was paid read the two entries.
+- **Before 0144.** Every read and call treats `42P01`, `42703`, `42883`, `PGRST202`, `PGRST204` and `PGRST205` as
+  not there yet: the stage checks nothing, `vendorDocumentsOf` reads none, the cards read part 1's columns again,
+  `readDocumentChecksStatus` says `checks: false` (no Attach a document, part 1's Settings copy, no cycle event), and
+  `attachDocument` says checking documents is not available yet.
 
 ## Which bill first when the cash cannot cover them all
 

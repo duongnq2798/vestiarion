@@ -143,6 +143,7 @@ const SHOTS = {
     await page.click(`document.querySelector("[role=dialog] [role=checkbox]")`);
     await page.waitFor(`document.querySelector("[role=dialog] [role=checkbox]")?.dataset.state === "checked"`);
   },
+  "first-payment-document-checked": async () => {},
   "first-payment-onchain-limit": async () => {},
   "first-payment-audit": async (page) => {
     // Verify asks /api/ledger/verify, which needs a signed-in member and a ledger. The frame carries the
