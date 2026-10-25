@@ -947,6 +947,93 @@ describe("the verification record (close pack CP8)", () => {
         expect(pack.entries.map((one) => one.seq)).not.toContain(4);
         expect(pack.entries.map((one) => one.seq)).not.toContain(14);
       });
+
+      describe("when no entry records what sent it", () => {
+        // A person's approval_paid is appended best-effort, so a payment can have no paying entry: the agent held the
+        // bill at 13:00, the transfer went at 14:00 (submitted_at), and a later reconcile recorded it, or nothing did. A
+        // lock change after 14:00 was not the lock in force when it was sent, wherever the ledger's next entry falls.
+        const held = entry(
+          12,
+          "2026-10-02T13:00:00Z",
+          "ap_hold",
+          {
+            invoiceId: INV_A,
+            counterpartyId: NORTHWIND,
+            decision: { action: "hold" },
+            decisionMode: "anthropic",
+            guardrailBlocked: true,
+            guardrailRule: "counterparty.payment_limit",
+            observed: { amount: 100 },
+            execution: { txRef: null, resultingStatus: "held" },
+          },
+          "agent"
+        );
+        const reconcile = (seq: number, ts: string) =>
+          entry(seq, ts, "ap_reconcile", { invoiceId: INV_A, counterpartyId: NORTHWIND, reconciled: true, execution: { txRef: TX_A, resultingStatus: "paid" } }, "agent");
+        const lockAt = (seq: number, ts: string, from: { on: boolean; coolingHours: number }, to: { on: boolean; coolingHours: number }) =>
+          entry(seq, ts, "payee_lock_changed", { by: OWNER, from, to }, "human");
+        const confirmedUnder = (seq: number, ts: string, coolingHours: number) =>
+          entry(seq, ts, "counterparty_address_confirmed", { by: APPROVER, counterpartyId: NORTHWIND, address: ADDR_N, via: "confirm", payeeLock: { coolingHours } });
+        const unpaid = (entries: ClosePackLedgerRow[]) => {
+          const row = rowOf(buildClosePack(input({ intents: [PAY_A], invoices: [BILL_A], entries: [AGENT_PAID[0], held, ...entries].sort((a, b) => a.seq - b.seq) })), "pay-a");
+          expect(row.approval.authorizedBy).toBeNull();
+          return row;
+        };
+        // Given on Oct 1 at 10:00 and sent on Oct 2 at 14:00: 28 hours later.
+        const givenOct1 = [
+          entry(2, "2026-10-01T08:00:00Z", "create_counterparty", { by: OWNER, counterpartyId: NORTHWIND, address: ADDR_OTHER }),
+          entry(5, "2026-10-01T10:00:00Z", "counterparty_address_changed", { by: OWNER, counterpartyId: NORTHWIND, from: ADDR_OTHER, to: ADDR_N }),
+        ];
+        const records = [
+          ["no recording entry", []],
+          ["a later reconcile", [reconcile(41, "2026-10-21T09:00:00Z")]],
+        ] as const;
+
+        it("stays checked under the wait it was confirmed under when the owner raised the wait after it was sent", () => {
+          for (const [label, recorded] of records) {
+            const row = unpaid([...givenOct1, confirmedUnder(6, "2026-10-01T10:30:00Z", 24), lockAt(40, "2026-10-20T09:00:00Z", { on: true, coolingHours: 24 }, { on: true, coolingHours: 72 }), ...recorded]);
+            expect(row.checks.payeeLock, label).toMatchObject({
+              kind: "checked",
+              text: "The payee lock was on when the address was confirmed, with a 24-hour wait. It was sent 28 hours after the address was given.",
+              entries: [5, 6],
+              warn: false,
+            });
+            expect(row.entries, label).not.toContain(40);
+          }
+        });
+
+        it("still does not match under the wait it was confirmed under when the owner turned the lock off after it was sent", () => {
+          for (const [label, recorded] of records) {
+            const row = unpaid([...givenOct1, confirmedUnder(6, "2026-10-01T10:30:00Z", 72), lockAt(40, "2026-10-20T09:00:00Z", { on: true, coolingHours: 72 }, { on: false, coolingHours: 72 }), ...recorded]);
+            expect(row.checks.payeeLock, label).toMatchObject({ kind: "contradicted", text: "It was sent before the payee lock's 72-hour wait had ended.", entries: [5, 6], warn: true });
+          }
+        });
+
+        it("reads no change made between the send and the reconcile that recorded it, the same afternoon", () => {
+          const sameDay = [["no recording entry", []], ["a reconcile at 20:00", [reconcile(20, "2026-10-02T20:00:00Z")]]] as const;
+          for (const [label, recorded] of sameDay) {
+            const off = unpaid([...changed, lockAt(14, "2026-10-02T15:00:00Z", { on: true, coolingHours: 48 }, { on: false, coolingHours: 48 }), ...recorded]);
+            expect(off.checks.payeeLock, label).toMatchObject({ kind: "contradicted", text: "It was sent before the payee lock's 48-hour wait had ended.", entries: [5, 6], warn: true });
+            expect(off.entries, label).not.toContain(14);
+
+            const raised = unpaid([...changed.slice(0, 2), confirmedUnder(6, "2026-10-02T11:30:00Z", 2), lockAt(14, "2026-10-02T15:00:00Z", { on: true, coolingHours: 2 }, { on: true, coolingHours: 48 }), ...recorded]);
+            expect(raised.checks.payeeLock, label).toMatchObject({
+              kind: "checked",
+              text: "The payee lock was on when the address was confirmed, with a 2-hour wait. It was sent 3 hours after the address was given.",
+              entries: [5, 6],
+            });
+          }
+        });
+
+        it("still reads a change made before it was sent", () => {
+          const row = unpaid([...changed, lockAt(7, "2026-10-02T12:00:00Z", { on: true, coolingHours: 48 }, { on: false, coolingHours: 48 }), reconcile(20, "2026-10-02T20:00:00Z")]);
+          expect(row.checks.payeeLock).toMatchObject({
+            kind: "stated",
+            text: "The payee lock was on when the address was confirmed, with a 48-hour wait; owner@pinecrest.test turned it off on 2026-10-02 12:00 UTC. It was sent 3 hours after the address was given.",
+            entries: [5, 6, 7],
+          });
+        });
+      });
     });
   });
 
