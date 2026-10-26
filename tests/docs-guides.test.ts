@@ -3768,6 +3768,18 @@ describe("the Go live guide's failure table", () => {
   });
 });
 
+describe("the report guide on how often you agreed (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md)", () => {
+  const guide = readSource("guides/report").replace(/\s+/g, " ");
+
+  it("says the split counts real bills only, even where Your verdicts counts the sample data for want of a real bill (AL3)", () => {
+    // Your verdicts counts sample verdicts while the workspace has no real bill (reportScope); the ladder never does.
+    expect(guide).not.toMatch(/as in \*\*Your verdicts\*\*/);
+    expect(guide).not.toContain("splits them by decision and by vendor");
+    expect(guide).toContain("[How often you agreed](#how-often-you-agreed) splits your verdicts on real bills by decision and by vendor.");
+    expect(guide).toContain("Only verdicts on real bills count. Sample data is left out, even while the report and **Your verdicts** count it for want of a real bill.");
+  });
+});
+
 describe("the way into the guides", () => {
   it("is linked from the docs Overview and from the API Quickstart", () => {
     expect(readSource("")).toContain('href="/docs/guides/go-live"');
