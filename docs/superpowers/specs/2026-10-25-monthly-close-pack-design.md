@@ -272,7 +272,8 @@ outside (a payee link, an email, a document a model read). The pack only shows t
   reads "Does not apply" before 0136.
 - It touches no `document_requests` row (0142): a vendor's document comes from its `document_received` entry.
 - If wrong: the read is slower than it should be without an index on `compliance_checks (counterparty_id, created_at)`
-  or on `payment_intents (org_id, confirmed_at)`. Both can come later as an additive index, with no code change.
+  or on `payment_intents (org_id, confirmed_at)`. Both can come later as an additive index, with no code change
+  (listed with the ledger's in docs/superpowers/specs/2026-10-26-close-pack-page-speed-design.md CS10).
 
 **CP20. Docs and lists.** See "Docs and lists to update" below.
 
@@ -848,7 +849,7 @@ filter; ledger reads go a page of 1000 at a time by `seq`, as `readPayeeLockEvid
 | `invoices.document_pay_to` | through `readDocumentPayTo` | the same ids; none before 0136 |
 | `milestones` | `id, contractor_id, title, amount, status, verified, verification_method, verification_status, verification_source, verification_checked_at, verified_at, verification_detail, tx_ref, settled_at, escrow_state, escrow_payee, escrow_amount, escrow_release_tx_hash` | the intents' and escrow moves' milestone ids |
 | `counterparties` | `id, name, address, chain, sample` | the bills' and milestones' payees |
-| `compliance_checks` | `risk_level, source, screening_mode, created_at` | per settled payment: its payee, `status = complete`, `created_at` at or before its anchor, newest one; ten at a time, one read per distinct payee and time |
+| `compliance_checks` | `counterparty_id, risk_level, source, screening_mode, created_at` | per settled payment: its payee, `status = complete`, `created_at` at or before its anchor, newest one (a tie by the larger `id`). Since close pack page speed CS3: one read per hundred payees up to the latest anchor, a page of 1000, picked per payment in memory; one read per distinct payee and time, ten in flight, when that read fails or fills its page |
 | `ledger_entries` `*` | | `detail->>invoiceId` in the invoice ids; `detail->>milestoneId` in the milestone ids |
 | `ledger_entries` `*` | | `action = decision_verdict`, `detail->>subjectId` in the invoice ids |
 | `ledger_entries` `*` | | `detail->>counterpartyId` in the payee ids and `action` in `create_counterparty`, `counterparty_address_changed`, `counterparty_address_confirmed`, `payee_link_created` |
@@ -1247,7 +1248,8 @@ Nothing to apply (CP19). The next free number stays 0144 (Exception resolution p
 - reads the month's payments by when they were confirmed, created or sent, a page of 1000 at a time, in the workspace's
   scope;
 - asks for bills, payees and entries a hundred ids at a time (`[100, 50]` for 150 ids);
-- reads each settled payment's screening check at or before its decision, at most ten at once;
+- reads each settled payment's screening check at or before its decision: a hundred payees a read, and one payee and
+  time at a time, ten in flight, when that read cannot answer (close pack page speed CS3);
 - reads the month's escrow moves, the first sweep that checked the address list, and the head;
 - checks only the cited entries, with the active and the retired key;
 - works before 0136: a `42703` on `document_pay_to` makes the pay-to check not apply, and nothing else changes;

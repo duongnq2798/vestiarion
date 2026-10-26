@@ -4600,17 +4600,29 @@ so the pack and each evidence page say the same. `words.ts` words every cell onc
 table (`closePackTable`, plain strings, which the Google Sheets export writes RAW) and the CSV (`closePackCsv`: a byte-order
 mark, CRLF, `csvCell` on every cell) with its 51 `CLOSE_PACK_COLUMNS`. `read.ts` reads; `record.ts` records downloads.
 
-**The read** (`readClosePack`, inside `inOrg` or `withOrg`, through `db()` only, writing nothing). The month's
+**The read** (`readClosePack`, inside `inOrg` or `withOrg`, through `db()` only, writing nothing). Each read starts the
+moment the reads it needs have answered, a promise per read chained with `.then` (close pack page speed,
+`docs/superpowers/specs/2026-10-26-close-pack-page-speed-design.md` CS2): three rounds. First, together: the month's
 `payment_intents` whose `confirmed_at`, `created_at` or `submitted_at` falls in it, a page of 1000 at a time, at most
-2,001 to tell a cut; the month's `escrow_funded` and `escrow_refunded`; the first `compliance_sweep` that recorded
-`sanctionedWallets`; the ledger's head; the members (`listMembers`, `null` on failure); then the bills, milestones and
-`invoices.document_pay_to` (through `readDocumentPayTo`, none before `0136`) a hundred ids per filter; then the payees,
-the bills' and milestones' entries by `detail->>invoiceId` and `detail->>milestoneId`, the `decision_verdict` entries
-by `detail->>subjectId`, and the payees' address entries by `detail->>counterpartyId`, each paged by `seq`; then one
-`compliance_checks` read per distinct payee and anchor time (the agent's decision, else the paying entry, else when it
-was sent), ten at once, a failure marking those payments `unreachable`. It builds twice, as `readEvidence` does: once to
-find the entries the rows cite, then, after `verifyEntry` checks each of those alone with
-`ledgerPublicKeyPems(ledgerVerificationKeyring())`, retired keys included, again with the checks.
+2,001 to tell a cut; the month's `escrow_funded` and `escrow_refunded`; the workspace's `payee_lock_changed` up to the
+month's end; the first `compliance_sweep` that recorded `sanctionedWallets`; the ledger's head; the members
+(`listMembers`, `null` on failure). Once the payments answer: the bills and `invoices.document_pay_to` (through
+`readDocumentPayTo`, none before `0136`, its hundreds asked for at once), and the entries by `detail->>invoiceId` and the
+`decision_verdict` entries by `detail->>subjectId`, asked for by every invoice a payment names, those naming a customer's
+invoice dropped before building; the milestones and their entries by `detail->>milestoneId` once the escrow moves are in
+too. Once the bills and milestones answer: the payees, their address entries by `detail->>counterpartyId`, and the
+screening. Ids go a hundred per filter and ledger reads are paged by `seq`. The screening (CS3) is each settled
+payment's payee's newest complete check at or before its anchor (the agent's decision, else the paying entry, else
+when it was sent; `screeningAnchors` reads only the entries naming a bill): one `compliance_checks` read per hundred
+payees, up to the latest anchor, newest first with a tie to the larger `id`, a page of 1000, picked per payee and time
+in memory to the microsecond; a hundred whose read fails, fills its page or holds a time that does not parse are read
+one payee and time at a time, ten in flight, a failure marking those payments `unreachable`. `buildClosePack` gets
+exactly the inputs it got before the reads went at once (CS1; `tests/support/close-pack-read-before.ts` is that reader,
+kept for the test). It builds twice, as `readEvidence` does: once to find the entries the rows cite, then, after
+`verifyEntry` checks each of those alone with `ledgerPublicKeyPems(ledgerVerificationKeyring())`, retired keys
+included, again with the checks; the keys object is prepared once, so each key is imported once a read (CS6). Each read
+logs one `close_pack_timing` line (CS7): whole milliseconds for `reads`, `screening`, `verify`, `build` and `total`,
+and the counts of payments, entries read, entries cited and screening requests, naming no workspace or person.
 
 **The rules.**
 - **The month** (CP1). A calendar month in UTC; no workspace has a time zone. With none, the last full month; this month
@@ -4648,7 +4660,13 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
   Audit log). `requireMembership` then `inOrg`; `?month=` read once through `closePackMonthFrom`. A member reads it ten
   times at once, then once every 6 seconds (`takeClosePackPageToken`, per instance), since each read checks every cited
   signature. Viewing and printing record nothing. The print drops the shell, the controls, the buttons and the links,
-  adds a line only the print shows, and keeps each card on one page where it fits (`break-inside-avoid`).
+  adds a line only the print shows, and keeps each card on one page where it fits (`break-inside-avoid`). The pack, the
+  header's clock (`shellClock()`, the day and the last cycle: not `stats()`), `shellStatus()` and the Google Sheets view
+  are read in one `Promise.all` inside the scope (close pack page speed CS4), and the page logs one `close_pack_timing`
+  line (`auth`, `scope`, `reads`, `total`, and whether the pack was read; CS7). Each icon the cards show is drawn once
+  as an SVG `<symbol>` that every check badge and explorer link points at with `<use>`, and the facts' label and value
+  styles are set once on each list (CS8): twenty cards are about 158 KB of markup, from 204 KB. It exports
+  `maxDuration = 300`, as Bills, counterparties and the report do (CS9).
 - **The downloads** (CP12; `GET /api/evidence/close-pack?org=&month=&format=csv|json`). The audit export's gate in its
   order: a cross-site request refused (403), the session (401), a bad format or month before the workspace is looked up
   (400), the membership read afresh (404, as for a workspace that does not exist). JSON by default, last month by
@@ -4674,7 +4692,8 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
 - **Later surfaces** (CP18). `GET /api/v1/close-packs/{month}` builds on `closePackDocument` in its own change, and the
   Google Sheets export (below) on `closePackTable`; `ClosePackDocument` holds only plain JSON values.
 - **No migration** (CP19). Every column read predates `0136` but `invoices.document_pay_to`, which reads as none before
-  it, so the pay-to check does not apply.
+  it, so the pay-to check does not apply. The indexes that would serve its reads once a workspace's ledger is large are
+  listed in the page speed spec (CS10), for a later additive migration.
 
 ## Google Sheets: the close pack exported
 
@@ -4693,7 +4712,7 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   the close pack page's control `src/components/close-pack/SheetsExport.tsx`. The page makes that control from the month
   and the workspace and hands it to `ClosePackView` as `sheets`, which keeps it at one place in the tree whether the pack
   was read or not, so a render whose read is refused keeps the export's answer; a done export does not revalidate, since
-  that would read the whole pack again inside the action's 120 seconds, and its answer, which carries its month, stands
+  that would read the whole pack again inside the action's 300 seconds, and its answer, which carries its month, stands
   in for that month's "Last exported" line until the page is read again. The control is keyed by the month, since a
   month link changes only `?month=` and Next keeps the page's client state across it: another month starts it afresh.
 - **Off, then not set up** (GS2). Without `GOOGLE_SHEETS_CLIENT_ID` and `GOOGLE_SHEETS_CLIENT_SECRET`, or with an id
@@ -4749,7 +4768,7 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   `gone`, `unavailable`, `bad_response`), and a log line names the call, the status and that code. At most one retry a
   call: a 401 refreshes the token once; a rate limit of 10 seconds or less is waited out; a 5xx or timeout repeats only
   reads and the values write, never a create, an update or the format. No call starts after 90 seconds; the close pack
-  page sets `maxDuration = 120` for its Server Actions.
+  page sets `maxDuration = 300` for its Server Actions.
 - **Tokens and reconnecting** (GS13). Google's refresh answer carries no refresh token, so the one sent is kept.
   `invalid_grant`, `unauthorized_client` or `invalid_client`, a 401 that stays after a refresh, or a 403 without the
   Drive permission mark the connection `needs_reconnect` (`markSheetsReconnect`), which the card and the accountant

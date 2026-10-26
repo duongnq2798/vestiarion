@@ -65,6 +65,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   Needs `GOOGLE_SHEETS_CLIENT_ID`, `GOOGLE_SHEETS_CLIENT_SECRET` and migration 0145; until it runs, the Google Sheets
   card says it is not set up yet.
 
+### Changed
+
+- **The monthly close pack opens faster.** The page read its data in waves, each waiting for the slowest read of the
+  one before, then each payment's screening ten at a time, and the header's shadow mode after all of it. It now starts
+  each read the moment what it needs is in, reads a month's screening in one request for up to a hundred payees, reads
+  only the clock its header shows rather than every paid bill and a count of the agent's entries, prepares each
+  signing key once a read rather than once an entry, and draws each icon once rather than on every card, so a month
+  of twenty payments sends about a quarter less markup. Against a test database its reads take three rounds instead
+  of five or six. What the page shows is unchanged, and the CSV, the signed JSON, the API's answer and the Google Sheets
+  export are the same, byte for byte. No migration.
+
 ### Fixed
 
 - **A vendor's document the reader flagged now says what it saw.** When the workspace's model noted something in a
