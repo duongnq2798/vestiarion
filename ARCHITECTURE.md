@@ -1569,7 +1569,10 @@ disagrees with every decision.
   agreed (`readShadowSummary`).
 - **Before a live slice.** The workspace report (below) lists, while shadow mode is on, what we suggest before a slice
   of bills moves to Arc mainnet: verdicts on five decisions, none waiting, and no supplier paid at a mirror address.
-  Suggestions only; it moves nothing.
+  Suggestions only; it moves nothing. Under the steps, the autonomy ladder's first step
+  (`docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md`) shows how often people agreed with the agent by
+  decision kind and by vendor, each figure with the number of verdicts behind it (see the workspace report, below). It
+  only measures: no setting reads it.
 - **Start the live slice** (`docs/superpowers/specs/2026-10-18-live-slice-design.md`). Under those steps an owner
   (`org.administer`, with Arc mainnet open to them) ticks vendors. `startLiveSlice` (`src/lib/live-slice.ts`) refuses
   outside shadow mode, on Arc mainnet, when a slice was opened already, with no vendor or more than 25, then makes a
@@ -1582,7 +1585,9 @@ disagrees with every decision.
   second. The shadow workspace signs `live_slice_started { by, liveOrgId, liveSlug, vendors: [{ counterpartyId, name,
   address }], skipped: [{ counterpartyId, name, reason }] }`. `readLiveSlice` reads it back with whether the new
   workspace is live; the report's last step names it, links it for its opener (`by`, its owner; accountants brought
-  along are members too) and ticks once it is live. No bill, history or verdict moves, and no money. Opening it needs
+  along are members too) and ticks once it is live. Each vendor in the list also says how often people agreed with
+  the agent on its bills, with the count (the ladder's `byVendor` rows, keyed by counterparty id; autonomy ladder AL8),
+  and the list keeps its order by name. No bill, history or verdict moves, and no money. Opening it needs
   no migration; bringing an accountant along needs migration `0143`. Going live keeps the accountant (accountant client
   links AC4): the report lists the workspace's accountants (`sliceAccountants`, best effort) as "Bring your accountant
   ... along", ticked, and `startLiveSlice` gets the ones left ticked as `accountantIds`. Before `0143` runs, the report
@@ -1694,6 +1699,23 @@ The answer is a
 row of `report_baselines` (migration 0095), which the tenant role can only read and add to, and a signed
 `report_baseline_answered` entry; the newest row is read (`src/lib/report-baseline.ts`). The agreement rate the report,
 the console's shadow mode panel and the shared copy show is one function, `agreementRate` (`src/lib/verdict-rate.ts`).
+
+**Agreement by decision and by vendor** (`docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md`, the autonomy
+ladder's first step) is worked out on the report page from the facts `readReportFacts` already read, so it adds no
+query and has no failure of its own (AL6). `ladderVerdicts` (`src/lib/autonomy-ladder.ts`, pure) joins each verdict to
+the action of the decision it is about (what `decision_verdicts.agent_action` stores) and to its payable's
+counterparty; `autonomyLadder` leaves sample counterparties out, even while the report counts sample data for want of
+a real bill, and counts per decision kind (in `AGENT_DECISION_ACTIONS` order, labelled Pay, Schedule, Hold, Flag for
+review, Ask for details) and per vendor (most verdicts first, then name, then id). Each row is `{ key, label, given,
+agreed, disagreed, rate, enough }`: `given` counts decisions, since a bill decided twice can carry two verdicts, and
+`rate` is `agreementRate` only from `VERDICTS_BEFORE_LIVE` (5) verdicts, null below. Agreement here is the verdict
+alone, never the model against the written policy (`agreedWithReference`), the agent against what the business paid
+(`compareActuals`) or /open's flags upheld. The report's block says it counts verdicts on real bills and names Agent vs
+what really happened, the one of those figures on the same page, as a different one (AL1). The page computes it only
+while the readiness steps show; `ReportReadiness` renders it after its steps (`AgreementLadder`, stacked rows on a
+phone), and `LiveSliceStart` takes the `byVendor` rows as `agreement`, showing each rate with its agreed count, as the
+report's table does, so a rate rounded to 100% still shows a Disagree. The shared report keeps its single agreement
+figure, and /open is unchanged.
 
 **A shared report** (same spec, S1-S6, S10-S14) is a public, revocable, live copy of the report. A share is a row of
 `report_shares` (0095) holding the SHA-256 of its link's secret (`vxs_` and 43 base64url characters,
