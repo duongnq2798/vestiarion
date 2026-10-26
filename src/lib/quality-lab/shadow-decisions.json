@@ -1,6 +1,6 @@
 {
   "source": "Every decision the agent made on a bill in shadow mode in the Vestiarion team's own workspaces on Arc testnet, with the person's verdict on each. Customers' workspaces are never exported.",
-  "readAt": "2026-10-26T13:54:37.768Z",
+  "readAt": "2026-10-26T14:27:37.868Z",
   "decisions": [
     {
       "id": "shadow-01",
@@ -100,6 +100,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "held",
@@ -212,6 +216,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "cash_shortfall",
@@ -323,6 +331,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "cash_shortfall",
@@ -427,6 +439,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "held",
@@ -533,6 +549,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "shadow_verdict",
@@ -637,6 +657,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "held",
@@ -743,6 +767,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "cash_shortfall",
@@ -847,6 +875,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "held",
@@ -953,6 +985,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "cash_shortfall",
@@ -1057,6 +1093,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "held",
@@ -1163,6 +1203,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "cash_shortfall",
@@ -1267,6 +1311,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "awaiting_info",
@@ -1373,6 +1421,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "awaiting_info",
         "heldBecause": null,
@@ -1477,6 +1529,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "held",
@@ -1583,6 +1639,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": null,
@@ -1687,6 +1747,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "awaiting_info",
@@ -1793,6 +1857,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "awaiting_info",
         "heldBecause": null,
@@ -1897,6 +1965,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "awaiting_info",
@@ -2003,6 +2075,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": null,
@@ -2107,6 +2183,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "awaiting_info",
@@ -2213,6 +2293,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "awaiting_info",
         "heldBecause": null,
@@ -2317,6 +2401,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "awaiting_info",
@@ -2426,6 +2514,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "cash_shortfall",
@@ -2533,6 +2625,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "scheduled",
@@ -2649,6 +2745,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "awaiting_info",
         "heldBecause": null,
@@ -2763,6 +2863,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "scheduled",
@@ -2886,6 +2990,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "outflow_budget",
@@ -2990,6 +3098,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "awaiting_info",
@@ -3123,6 +3235,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "outflow_budget",
@@ -3255,6 +3371,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "outflow_budget",
@@ -3380,6 +3500,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "outflow_budget",
@@ -3485,6 +3609,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "cash_shortfall",
@@ -3589,6 +3717,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "held",
@@ -3704,6 +3836,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "scheduled",
@@ -3828,6 +3964,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "cash_shortfall",
@@ -3932,6 +4072,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "awaiting_info",
@@ -4038,6 +4182,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": "cash_shortfall",
@@ -4142,6 +4290,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "held",
@@ -4252,6 +4404,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
+      },
       "execution": {
         "resultingStatus": "awaiting_info",
         "heldBecause": null,
@@ -4360,6 +4516,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": false,
+        "coolingHours": 0
       },
       "execution": {
         "resultingStatus": "awaiting_info",
@@ -4472,6 +4632,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
       },
+      "payeeLock": {
+        "on": true,
+        "coolingHours": 4
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": null,
@@ -4582,6 +4746,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
+      },
+      "payeeLock": {
+        "on": true,
+        "coolingHours": 4
       },
       "execution": {
         "resultingStatus": "held",
@@ -4694,6 +4862,10 @@
         "addressChangedHoursBefore": null,
         "addressChangedSinceDecision": true
       },
+      "payeeLock": {
+        "on": true,
+        "coolingHours": 4
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": null,
@@ -4804,6 +4976,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": 0,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": true,
+        "coolingHours": 4
       },
       "execution": {
         "resultingStatus": "held",
@@ -4916,6 +5092,10 @@
         "addressChangedHoursBefore": 0,
         "addressChangedSinceDecision": false
       },
+      "payeeLock": {
+        "on": true,
+        "coolingHours": 4
+      },
       "execution": {
         "resultingStatus": "held",
         "heldBecause": null,
@@ -5026,6 +5206,10 @@
         "role": "vendor",
         "addressChangedHoursBefore": 4,
         "addressChangedSinceDecision": false
+      },
+      "payeeLock": {
+        "on": true,
+        "coolingHours": 4
       },
       "execution": {
         "resultingStatus": "held",
