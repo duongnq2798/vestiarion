@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import type { LadderRow } from "@/lib/autonomy-ladder";
 import type { SliceAddress, SliceSkipReason, SliceVendor } from "@/lib/live-slice";
 
 /**
@@ -22,6 +23,10 @@ import type { SliceAddress, SliceSkipReason, SliceVendor } from "@/lib/live-slic
  *
  * Each of the workspace's accountants is offered too, ticked: "Bring your accountant along"
  * (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md AC4). The owner unticks any to leave behind.
+ *
+ * Beside each vendor, how often the owner agreed with the agent's decisions on its bills, from their verdicts, with
+ * the count, so they tick the vendors with evidence (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md
+ * AL8).
  */
 
 const INITIAL: LiveSliceActionResult = { ok: false, message: "" };
@@ -54,19 +59,30 @@ export interface SliceAccountant {
   email: string;
 }
 
+/** A vendor's agreement in words, with its count; no percentage under five verdicts (autonomy ladder AL4, AL8). */
+function agreementWords(row: LadderRow | undefined): string {
+  if (!row) return "No verdicts yet";
+  if (row.rate === null) return `${row.given} ${row.given === 1 ? "verdict" : "verdicts"}: too few to tell yet`;
+  return `${row.rate}% agreed, from ${row.given} verdicts`;
+}
+
 export function LiveSliceStart({
   orgSlug,
   vendors,
   canStart,
   opened = null,
   accountants = [],
+  agreement,
 }: {
   orgSlug: string;
   vendors: SliceVendor[];
   canStart: boolean;
   opened?: OpenedSlice | null;
   accountants?: SliceAccountant[];
+  /** The report's agreement by vendor, keyed by counterparty id (AL8); a vendor with none says so. */
+  agreement?: LadderRow[];
 }) {
+  const agreementOf = new Map((agreement ?? []).map((row) => [row.key, row]));
   const [result, setResult] = useState<LiveSliceActionResult | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const focusOpened = useRef(false);
@@ -135,6 +151,9 @@ export function LiveSliceStart({
       ) : (
         <form {...start.formProps} className="space-y-3">
           <input type="hidden" name="orgSlug" value={orgSlug} />
+          {agreement && (
+            <p className="text-xs text-ink-3">{"Beside each vendor: how often you agreed with the agent's decisions on its bills, from your verdicts in shadow mode."}</p>
+          )}
           <Card className="overflow-hidden">
             <ul aria-label="Vendors to pay for real" className="divide-y divide-line">
               {vendors.map((vendor) => (
@@ -146,16 +165,19 @@ export function LiveSliceStart({
                     disabled={vendor.paymentLimit === null}
                     label={<span className="font-medium">{vendor.name}</span>}
                     description={
-                      vendor.paymentLimit === null ? (
-                        "No payment limit: set one on Counterparties to carry it"
-                      ) : (
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="tabular-nums">Limit {vendor.paymentLimit} USDC</span>
-                          <Badge tone={ADDRESS[vendor.address].tone} size="sm">
-                            {ADDRESS[vendor.address].label}
-                          </Badge>
-                        </span>
-                      )
+                      <span className="flex flex-wrap items-center gap-2">
+                        {vendor.paymentLimit === null ? (
+                          "No payment limit: set one on Counterparties to carry it"
+                        ) : (
+                          <>
+                            <span className="tabular-nums">Limit {vendor.paymentLimit} USDC</span>
+                            <Badge tone={ADDRESS[vendor.address].tone} size="sm">
+                              {ADDRESS[vendor.address].label}
+                            </Badge>
+                          </>
+                        )}
+                        {agreement && <span className="tabular-nums">{agreementWords(agreementOf.get(vendor.id))}</span>}
+                      </span>
                     }
                   />
                 </li>

@@ -9,9 +9,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { cn } from "@/components/ui/cn";
+import { AgreementLadder } from "@/components/vx/AgreementLadder";
 import { Hash, Money } from "@/components/vx/Primitives";
 import { StatTile } from "@/components/vx/StatTile";
 import { orgHref } from "@/lib/auth/org-paths";
+import type { AutonomyLadder } from "@/lib/autonomy-ladder";
 import { billDigits } from "@/lib/bill-amount";
 import { plural, utcDay } from "@/lib/copy";
 import { networkProfile } from "@/lib/network";
@@ -98,6 +100,7 @@ export function WorkspaceReport({
   value,
   actuals,
   slice,
+  ladder,
 }: {
   slug: string;
   report: Report;
@@ -105,6 +108,8 @@ export function WorkspaceReport({
   actuals?: ReactNode;
   /** The live slice opened from this workspace, and what starts one (live slice L1, L5): shown with Before a live slice. */
   slice?: { opened: ReportSlice | null; start?: ReactNode };
+  /** How often people agreed with the agent, by decision and by vendor (autonomy ladder AL7): shown with Before a live slice. */
+  ladder?: AutonomyLadder | null;
 }) {
   if (report.bills.handled === 0) {
     return (
@@ -128,7 +133,7 @@ export function WorkspaceReport({
     <div className="space-y-8">
       <ReportSummary report={report} />
       {value}
-      {report.readiness && <ReportReadiness steps={report.readiness} slice={slice?.opened ?? null} start={slice?.start} />}
+      {report.readiness && <ReportReadiness steps={report.readiness} slice={slice?.opened ?? null} start={slice?.start} ladder={ladder} />}
       {actuals}
       <ReportLists slug={slug} report={report} />
     </div>
@@ -315,8 +320,21 @@ export function ReportLists({ slug, report }: { slug: string; report: Report }) 
   );
 }
 
-/** What we suggest before a live slice, in shadow mode. */
-export function ReportReadiness({ steps, slice = null, start }: { steps: ReadinessStep[]; slice?: ReportSlice | null; start?: ReactNode }) {
+/**
+ * What we suggest before a live slice, in shadow mode. After the steps, beside the one that counts verdicts, how often
+ * people agreed with the agent by decision and by vendor (autonomy ladder AL7); then what starts the slice.
+ */
+export function ReportReadiness({
+  steps,
+  slice = null,
+  start,
+  ladder = null,
+}: {
+  steps: ReadinessStep[];
+  slice?: ReportSlice | null;
+  start?: ReactNode;
+  ladder?: AutonomyLadder | null;
+}) {
   const mainnetLabel = networkProfile("arc-mainnet").label;
   // The last step is ticked once the live slice opened from here is live (L5); before a slice, it is not counted.
   const shown = steps.map((step) => (step.key === "mainnet" && slice ? { ...step, done: slice.live } : step));
@@ -372,6 +390,11 @@ export function ReportReadiness({ steps, slice = null, start }: { steps: Readine
             );
           })}
         </ol>
+        {ladder && (
+          <div className="border-t border-line px-3 pb-3 pt-4">
+            <AgreementLadder ladder={ladder} />
+          </div>
+        )}
         {start && <div className="border-t border-line px-3 pb-3 pt-4">{start}</div>}
       </Card>
     </section>
