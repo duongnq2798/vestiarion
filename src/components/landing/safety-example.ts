@@ -15,6 +15,7 @@ import { ARC_TESTNET } from "@/lib/network";
  */
 export const SAFETY_EXAMPLE = {
   network: ARC_TESTNET,
+  mode: "shadow mode",
   at: "2026-10-16T00:17:27Z",
   entry: 3710,
   steps: [

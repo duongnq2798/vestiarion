@@ -114,8 +114,33 @@ describe("text colour contrast (WCAG AA)", () => {
     ["on-agent", "ink"],
     ["on-agent-muted", "ink"],
     ["on-agent", "refused"],
+    // The landing's dark safety section sets its links, step labels and rule ids in the line colours.
+    ["agent-line", "ink"],
+    ["proof-line", "ink"],
+    ["held-line", "ink"],
+    ["refused-line", "ink"],
   ])("%s on %s reaches 4.5:1", (foreground, background) => {
     expect(contrast(foreground, background)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+/**
+ * The landing's safety section is ink, and each step of its worked cases sits in a box tinted with its tone, its label
+ * in that tone's line colour (docs/superpowers/specs/2026-10-26-landing-payee-lock-design.md PLL7). Each label stays at
+ * 4.5:1 on its own tint over ink, read from the section's own step tones.
+ */
+describe("the safety section's step labels on their tints", () => {
+  const safety = readFileSync(path.join(process.cwd(), "src", "components", "landing", "Safety.tsx"), "utf8");
+  const tones = [...safety.matchAll(/^\s*(\w+): \{ box: "[^"]*\bbg-([a-z-]+)\/(?:\[(0\.\d+)\]|(\d+))[^"]*", kind: "text-([a-z-]+)" \},?$/gm)].map(
+    ([, tone, tint, fraction, percent, label]) => ({ tone, tint, alpha: fraction ? Number(fraction) : Number(percent) / 100, label })
+  );
+
+  it("reads every tone, the paid one among them", () => {
+    expect(tones.map(({ tone }) => tone).sort()).toEqual(["agent", "held", "paid", "refused"]);
+  });
+
+  it.each(tones)("the $tone step's label reaches 4.5:1 on its tint", ({ tint, alpha, label }) => {
+    expect(ratio(colour(label), over(colour(tint), alpha, colour("ink")))).toBeGreaterThanOrEqual(4.5);
   });
 });
 
