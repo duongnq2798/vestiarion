@@ -177,13 +177,17 @@ describe("adding the invoice (IP1)", () => {
 });
 
 describe("reading what the documents asked for (IP2)", () => {
-  function reader(answer: (sent: RecordedRequest) => { status?: number; body: unknown }) {
+  function reader(answer: (sent: RecordedRequest) => { status?: number; body: unknown } | Promise<{ status?: number; body: unknown }>) {
     const fake = fakeSupabase(answer);
     return { db: fake.client as unknown as Parameters<typeof readDocumentPayTo>[1], requests: fake.requests };
   }
+  const ids = Array.from({ length: 150 }, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
+  const BEFORE_0136 = { status: 400, body: { code: "42703", message: "column invoices.document_pay_to does not exist" } };
+  const DOWN = { status: 500, body: { code: "XX000", message: "down" } };
+  /** The first hundred ids' answer, then the rest's. */
+  const byHundred = (first: { status?: number; body: unknown }, rest: { status?: number; body: unknown }) => (sent: RecordedRequest) => (sent.params.get("id")?.includes(ids[0]) ? first : rest);
 
   it("reads the invoices that named an address, a hundred ids at a time", async () => {
-    const ids = Array.from({ length: 150 }, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
     const { db, requests } = reader(() => ({ body: [{ id: ids[0], document_pay_to: ASKED }] }));
     const found = await readDocumentPayTo(ids, db);
     expect(found.get(ids[0])).toBe(ASKED);
@@ -191,9 +195,30 @@ describe("reading what the documents asked for (IP2)", () => {
     expect(requests[0].params.get("document_pay_to")).toBe("not.is.null");
   });
 
+  it("asks for every hundred at once (close pack page speed CS5)", async () => {
+    let inFlight = 0;
+    let most = 0;
+    const { db } = reader(async () => {
+      inFlight += 1;
+      most = Math.max(most, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return { body: [] };
+    });
+    await readDocumentPayTo(ids, db);
+    expect(most).toBe(2);
+  });
+
   it("reads none before migration 0136, and stops on any other failure", async () => {
-    expect((await readDocumentPayTo(["a"], reader(() => ({ status: 400, body: { code: "42703", message: "column invoices.document_pay_to does not exist" } })).db)).size).toBe(0);
-    await expect(readDocumentPayTo(["a"], reader(() => ({ status: 500, body: { code: "XX000", message: "down" } })).db)).rejects.toThrow(/could not be read/);
+    expect((await readDocumentPayTo(["a"], reader(() => BEFORE_0136).db)).size).toBe(0);
+    await expect(readDocumentPayTo(["a"], reader(() => DOWN).db)).rejects.toThrow(/could not be read/);
+  });
+
+  it("answers as it did a hundred at a time: the first hundred that failed decides (close pack page speed CS5)", async () => {
+    // A later hundred before 0136 still reads as none; a failure in an earlier hundred still stops it.
+    expect((await readDocumentPayTo(ids, reader(byHundred({ body: [{ id: ids[0], document_pay_to: ASKED }] }, BEFORE_0136)).db)).size).toBe(0);
+    await expect(readDocumentPayTo(ids, reader(byHundred(DOWN, BEFORE_0136)).db)).rejects.toThrow(/could not be read/);
+    expect((await readDocumentPayTo(ids, reader(byHundred(BEFORE_0136, DOWN)).db)).size).toBe(0);
   });
 });
 

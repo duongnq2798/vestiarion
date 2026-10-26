@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { bodyHashOf, canonicalJson } from "@/lib/ledger";
 import { canonicalJson as sharedCanonicalJson } from "@/lib/canonical-json";
 import { ledgerKeyId } from "@/lib/ledger-keys";
@@ -81,6 +81,30 @@ describe("verifySignedLink", () => {
 
   it("says it could not check when the key is not known here", async () => {
     expect(await verifySignedLink(link(signed(DETAIL)), { other: OTHER_PEM })).toEqual({ ok: null, reason: "The key that signed this entry is not known here." });
+  });
+});
+
+describe("many entries checked with one set of keys (close pack page speed CS6)", () => {
+  it("imports each key once, however many entries it checks, with the same answers", async () => {
+    const importKey = vi.spyOn(globalThis.crypto.subtle, "importKey");
+    const keys = { other: OTHER_PEM, [KEY_ID]: PEM };
+    const rows = Array.from({ length: 5 }, (_, index) => signed({ ...DETAIL, index }));
+    const forged = signed(DETAIL, { key: other.privateKey });
+    const checks = await Promise.all([...rows, forged].map((row) => verifyEntry(row, keys)));
+    expect(checks).toEqual([...rows.map(() => ({ ok: true })), { ok: false, reason: "The signature does not verify with the workspace's key." }]);
+    // The labelled key alone: OTHER_PEM is filed under a name that is not its id, so it is never a candidate.
+    expect(importKey).toHaveBeenCalledTimes(1);
+    importKey.mockRestore();
+  });
+
+  it("reads the keys again when the same object is given other keys", async () => {
+    const keys: Record<string, string> = { [KEY_ID]: PEM };
+    expect(await verifyEntry(signed(DETAIL), keys)).toEqual({ ok: true });
+    keys[KEY_ID] = OTHER_PEM;
+    expect(await verifyEntry(signed(DETAIL), keys)).toEqual({ ok: null, reason: "The key that signed this entry is not known here." });
+    delete keys[KEY_ID];
+    keys[ledgerKeyId(other.publicKey)] = OTHER_PEM;
+    expect(await verifyEntry(signed(DETAIL, { keyId: null }), keys)).toEqual({ ok: false, reason: "The signature does not verify with the workspace's key." });
   });
 });
 

@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import type { LedgerEntryInput, LedgerRow } from "@/lib/ledger";
@@ -10,9 +10,14 @@ import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type Recorded
 /**
  * What the close pack reads (docs/superpowers/specs/2026-10-25-monthly-close-pack-design.md, "Data it reads and writes",
  * CP14, CP15, CP19): the month's payments, their bills, payees and entries, a hundred ids at a time, through `db()` in
- * the workspace's scope; each settled payment's screening check at the time of its decision, ten at once; the escrow
- * moves, the first sweep that checked payout addresses and the ledger's head; then each cited entry's signature with the
+ * the workspace's scope; each settled payment's screening check at the time of its decision; the escrow moves, the
+ * first sweep that checked payout addresses and the ledger's head; then each cited entry's signature with the
  * workspace's keys, the retired one included. It writes nothing.
+ *
+ * Read at once (docs/superpowers/specs/2026-10-26-close-pack-page-speed-design.md CS1, CS3, CS7): the screening is one
+ * read per hundred payees, picked per payment in memory to the microsecond, and one read per payee and time, ten at
+ * once, only when that read fills its page or fails; the pack, and every input it is built from, are the reader's
+ * before (`tests/support/close-pack-read-before.ts`); and each read logs one timing line.
  */
 
 const retired = crypto.generateKeyPairSync("ed25519");
@@ -21,7 +26,7 @@ vi.mock("@/lib/ledger", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/ledger")>()),
   ledgerVerificationKeyring: () => ({ active: active.publicKey, retired: [retired.publicKey] }),
 }));
-const { verifySpy } = vi.hoisted(() => ({ verifySpy: vi.fn() }));
+const { verifySpy, buildSpy } = vi.hoisted(() => ({ verifySpy: vi.fn(), buildSpy: vi.fn() }));
 vi.mock("@/lib/receipts/verify", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/receipts/verify")>();
   return {
@@ -32,9 +37,22 @@ vi.mock("@/lib/receipts/verify", async (importOriginal) => {
     },
   };
 });
+// What the pack is built from, each time it is built: the same inputs as before, not only the same pack.
+vi.mock("@/lib/close-pack/build", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/close-pack/build")>();
+  return {
+    ...actual,
+    buildClosePack: (input: Parameters<typeof actual.buildClosePack>[0]) => {
+      buildSpy(input);
+      return actual.buildClosePack(input);
+    },
+  };
+});
 
-import { readClosePack } from "@/lib/close-pack/read";
+import { closePackJson } from "@/lib/close-pack/export";
 import { closePackMonth } from "@/lib/close-pack/month";
+import { readClosePack } from "@/lib/close-pack/read";
+import { readClosePackBefore } from "./support/close-pack-read-before";
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c01";
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000c1";
@@ -141,6 +159,40 @@ const page = <T,>(rows: readonly T[], request: RecordedRequest) => {
   return rows.slice(offset, offset + limit);
 };
 
+/** A screening check as `compliance_checks` holds it. */
+interface Check {
+  id: string;
+  counterparty_id: string;
+  status: string;
+  risk_level: string;
+  source: string;
+  screening_mode: string;
+  created_at: string;
+}
+
+/** A Postgres time to the microsecond, as the database compares and orders them: what the fake filters by. */
+const instant = (ts: string) => {
+  const [, base, fraction = "", zone] = /^(.+:\d\d)(?:\.(\d+))?(Z|[+-]\d\d:\d\d)$/.exec(ts) ?? [];
+  return Date.parse(`${base}${zone}`) * 1000 + Number(fraction.padEnd(6, "0"));
+};
+const CLEAR = { status: "complete", risk_level: "clear", source: "opensanctions:yente", screening_mode: "live" };
+
+/**
+ * What PostgREST answers a screening read with, for one payee or many: their complete checks at or before the time,
+ * newest first, a tie by the larger id when the read asks for it, a page at a time. With no checks given, every payee
+ * has one clear check on New Year's Day.
+ */
+function screeningRows(request: RecordedRequest, payees: string[], checks?: Check[]) {
+  const p = request.params;
+  const until = instant((p.get("created_at") ?? "").replace(/^lte\./, ""));
+  const byId = (p.get("order") ?? "").includes("id.desc");
+  const all = checks ?? payees.map((payee, index) => ({ id: `0b6c1c9e-0000-4000-8000-${String(index).padStart(12, "0")}`, counterparty_id: payee, ...CLEAR, created_at: "2026-01-01T00:00:00Z" }));
+  const rows = all
+    .filter((check) => payees.includes(check.counterparty_id) && (p.get("status") !== "eq.complete" || check.status === "complete") && instant(check.created_at) <= until)
+    .sort((a, b) => instant(b.created_at) - instant(a.created_at) || (byId ? b.id.localeCompare(a.id) : 0));
+  return page(rows, request);
+}
+
 interface World {
   intents?: Array<Record<string, unknown>>;
   invoices?: Array<Record<string, unknown>>;
@@ -148,7 +200,11 @@ interface World {
   rows?: typeof ROWS;
   members?: "fail";
   payTo?: "before-0136" | Record<string, string>;
+  checks?: Check[];
+  /** A read of one payee's check at one time. */
   screening?: (counterparty: string) => FakeReply;
+  /** A read of many payees' checks: one that fails, or one that fills its page of 1000. */
+  batch?: "fail" | "full";
 }
 
 function database(world: World = {}) {
@@ -156,6 +212,7 @@ function database(world: World = {}) {
   const invoices = world.invoices ?? INVOICES;
   const counterparties = world.counterparties ?? COUNTERPARTIES;
   const rows = world.rows ?? ROWS;
+  // One payee's reads in flight at once, the most there were.
   let screeningNow = 0;
   let screeningMost = 0;
   const fake = fakeSupabase(async (request: RecordedRequest): Promise<FakeReply> => {
@@ -179,19 +236,28 @@ function database(world: World = {}) {
         return { body: counterparties.filter((row) => ids.includes(String(row.id))) };
       }
       case "/rest/v1/compliance_checks": {
+        const asked = p.get("counterparty_id") ?? "";
+        if (asked.startsWith("in.")) {
+          if (world.batch === "fail") return { status: 500, body: { message: "upstream" } };
+          if (world.batch === "full") return { body: Array.from({ length: 1000 }, () => ({ counterparty_id: inList(asked)[0], ...CLEAR, risk_level: "medium", created_at: "2025-06-01T00:00:00Z" })) };
+          return { body: screeningRows(request, inList(asked), world.checks) };
+        }
         screeningNow += 1;
         screeningMost = Math.max(screeningMost, screeningNow);
         await new Promise((resolve) => setTimeout(resolve, 2));
         screeningNow -= 1;
-        const counterparty = (p.get("counterparty_id") ?? "").replace(/^eq\./, "");
+        const counterparty = asked.replace(/^eq\./, "");
         if (world.screening) return world.screening(counterparty);
-        return { body: [{ risk_level: "clear", source: "opensanctions:yente", screening_mode: "live", created_at: "2026-01-01T00:00:00Z" }] };
+        return { body: screeningRows(request, [counterparty], world.checks) };
       }
       case "/rest/v1/ledger_entries": {
         if (p.get("order") === "seq.desc") return { body: [{ seq: rows.length, hash: rows[rows.length - 1].hash }] };
         if (p.get("action") === "eq.compliance_sweep") return { body: [{ ts: "2025-12-01T00:00:00Z" }] };
         if (p.get("action") === "in.(escrow_funded,escrow_refunded)") return { body: page(rows.filter((row) => row.action.startsWith("escrow")), request) };
-        if (p.get("action") === "eq.decision_verdict") return { body: [] };
+        if (p.get("action") === "eq.decision_verdict") {
+          const subjects = inList(p.get("detail->>subjectId"));
+          return { body: page(rows.filter((row) => row.action === "decision_verdict" && subjects.includes(String(row.detail.subjectId))), request) };
+        }
         if (p.get("action") === "eq.payee_lock_changed") return { body: page(rows.filter((row) => row.action === "payee_lock_changed"), request) };
         const invoiceIds = inList(p.get("detail->>invoiceId"));
         if (invoiceIds.length > 0) return { body: page(rows.filter((row) => invoiceIds.includes(String(row.detail.invoiceId))), request) };
@@ -220,8 +286,83 @@ function database(world: World = {}) {
 const WORKSPACE = { slug: "northwind-studio", name: "Northwind Studio" };
 const ledgerReads = (requests: RecordedRequest[]) => requests.filter((request) => request.path === "/rest/v1/ledger_entries");
 
+/**
+ * A month with more in it than the pack shows: an invoice to a customer paid in the month, with its own entry and a
+ * verdict naming it (read, never built from); a verdict on the first bill; times written to the microsecond as Postgres
+ * writes them; and each payee's checks around its payment's time.
+ */
+const INV3 = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001a3";
+/** The agent's decision on the first bill, to the microsecond. */
+const AT_DECISION = "2026-01-05T10:00:00.123456+00:00";
+const RICH_TIMES = [
+  "2025-12-20T08:00:00+00:00",
+  "2026-01-04T08:00:00.5+00:00",
+  AT_DECISION,
+  "2025-12-21T08:00:00+00:00",
+  "2026-01-05T11:00:00+00:00",
+  "2026-01-06T10:00:00+00:00",
+  "2026-01-07T10:00:00+00:00",
+  "2026-01-08T10:00:00+00:00",
+  "2026-01-08T11:00:00+00:00",
+  "2026-01-09T10:00:00+00:00",
+  "2026-01-09T11:00:00+00:00",
+];
+const RICH_ROWS = buildChain(
+  [
+    ...OLD,
+    ...NEW,
+    { actor: "human", domain: "ar", action: "create_invoice", summary: "Added an invoice to a customer", detail: { by: USER, invoiceId: INV3, counterpartyId: CP2, amount: 30, currency: "USDC" } },
+    { actor: "human", domain: "ap", action: "decision_verdict", summary: "Agreed with the agent: PAY", detail: { by: USER, entrySeq: 3, subject: "invoice", subjectId: INV1, agentAction: "ap_pay", verdict: "agree" } },
+    { actor: "human", domain: "ap", action: "decision_verdict", summary: "Agreed with the agent", detail: { by: USER, entrySeq: 9, subject: "invoice", subjectId: INV3, verdict: "agree" } },
+  ],
+  active.privateKey,
+  ledgerKeyId(active.publicKey)
+).map((row, index) => ({ ...row, ts: RICH_TIMES[index], org_id: ORG }));
+const checkRow = (n: number, counterparty: string, created: string, fields: Partial<Check> = {}): Check => ({
+  id: `0b6c1c9e-0000-4000-8000-0000000c0${String(n).padStart(3, "0")}`,
+  counterparty_id: counterparty,
+  ...CLEAR,
+  created_at: created,
+  ...fields,
+});
+const RICH: World = {
+  rows: RICH_ROWS,
+  intents: [...INTENTS, intent("pay-3", INV3, { amount: "30.000000", destination: PAYEE2, tx_hash: `0x${"3".repeat(64)}`, confirmed_at: "2026-01-08T10:00:05Z" })],
+  invoices: [...INVOICES, invoiceRow(INV3, CP2, { direction: "receivable", amount: "30.000000", tx_ref: `0x${"3".repeat(64)}` })],
+  checks: [
+    checkRow(1, CP1, "2025-12-01T00:00:00+00:00"),
+    checkRow(2, CP1, AT_DECISION, { risk_level: "low" }),
+    checkRow(3, CP1, "2026-01-05T10:00:00.123457+00:00", { risk_level: "high" }),
+    checkRow(4, CP1, "2026-01-05T09:00:00+00:00", { status: "failed" }),
+    checkRow(5, CP2, "2026-01-07T00:00:00+00:00"),
+  ],
+};
+
+const screeningReads = (requests: RecordedRequest[]) => requests.filter((request) => request.path === "/rest/v1/compliance_checks");
+/** The reads of many payees' checks at once, and of one payee's at one time. */
+const manyAtOnce = (requests: RecordedRequest[]) => screeningReads(requests).filter((request) => request.params.get("counterparty_id")?.startsWith("in."));
+const onePayee = (requests: RecordedRequest[]) => screeningReads(requests).filter((request) => request.params.get("counterparty_id")?.startsWith("eq."));
+
+/** A hundred and fifty bills, each to its own payee, paid through January. */
+function manyPayees(): World {
+  const many = Array.from({ length: 150 }, (_, index) => {
+    const n = String(index).padStart(3, "0");
+    return { invoice: `0b6c1c9e-4a4f-4a7e-9b1e-000000010${n}`, counterparty: `0b6c1c9e-4a4f-4a7e-9b1e-000000020${n}` };
+  });
+  return {
+    intents: many.map((one, index) => intent(`pay-${index}`, one.invoice, { confirmed_at: `2026-01-${String(1 + (index % 28)).padStart(2, "0")}T10:00:05Z` })),
+    invoices: many.map((one) => invoiceRow(one.invoice, one.counterparty)),
+    counterparties: many.map((one) => ({ id: one.counterparty, org_id: ORG, name: "A payee", address: PAYEE1, chain: "ARC-TESTNET", sample: false })),
+  };
+}
+
+beforeEach(() => {
+  vi.spyOn(console, "info").mockImplementation(() => {});
+});
+
 afterEach(() => {
   verifySpy.mockClear();
+  buildSpy.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -243,16 +384,8 @@ describe("reading the month (close pack CP2, CP14)", () => {
     expect(db.fake.requests.some((request) => request.path === "/rest/v1/orgs")).toBe(false);
   });
 
-  it("asks for bills, payees and entries a hundred ids at a time", async () => {
-    const many = Array.from({ length: 150 }, (_, index) => {
-      const n = String(index).padStart(3, "0");
-      return { invoice: `0b6c1c9e-4a4f-4a7e-9b1e-000000010${n}`, counterparty: `0b6c1c9e-4a4f-4a7e-9b1e-000000020${n}` };
-    });
-    const db = database({
-      intents: many.map((one, index) => intent(`pay-${index}`, one.invoice, { confirmed_at: `2026-01-${String(1 + (index % 28)).padStart(2, "0")}T10:00:05Z` })),
-      invoices: many.map((one) => invoiceRow(one.invoice, one.counterparty)),
-      counterparties: many.map((one) => ({ id: one.counterparty, org_id: ORG, name: "A payee", address: PAYEE1, chain: "ARC-TESTNET", sample: false })),
-    });
+  it("asks for bills, payees, entries and screening checks a hundred ids at a time", async () => {
+    const db = database(manyPayees());
     const pack = await db.run(() => readClosePack({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
     expect(pack.rows).toHaveLength(150);
     const sizes = (path: string, key: string, select?: (request: RecordedRequest) => boolean) =>
@@ -263,24 +396,63 @@ describe("reading the month (close pack CP2, CP14)", () => {
     expect(sizes("/rest/v1/ledger_entries", "detail->>invoiceId", (request) => request.params.get("action") === null)).toEqual([100, 50]);
     expect(sizes("/rest/v1/ledger_entries", "detail->>subjectId")).toEqual([100, 50]);
     expect(sizes("/rest/v1/ledger_entries", "detail->>counterpartyId")).toEqual([100, 50]);
-    // Each settled payment's screening, one read per distinct payee and time, never more than ten at once.
-    expect(db.fake.requests.filter((request) => request.path === "/rest/v1/compliance_checks")).toHaveLength(150);
-    expect(db.most()).toBeLessThanOrEqual(10);
-    expect(db.most()).toBeGreaterThan(1);
+    // Each settled payment's screening: one read per hundred payees, not one per payee and time (CS3).
+    expect(manyAtOnce(db.fake.requests).map((request) => inList(request.params.get("counterparty_id")).length)).toEqual([100, 50]);
+    expect(onePayee(db.fake.requests)).toHaveLength(0);
+    expect(pack.rows.every((row) => row.checks.screening.kind === "verified")).toBe(true);
   });
 
-  it("reads each settled payment's screening check at or before its decision, newest first", async () => {
-    const db = database();
+  it("reads one payee and time at a time, never more than ten at once, when a hundred payees' checks fill a page", async () => {
+    const db = database({ ...manyPayees(), batch: "full" });
+    const pack = await db.run(() => readClosePack({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
+    // The page that filled is not taken: each payee's own read is.
+    expect(pack.rows.every((row) => row.checks.screening.text === "A payee was screened clear by OpenSanctions.")).toBe(true);
+    const each = onePayee(db.fake.requests);
+    expect(each).toHaveLength(150);
+    expect(db.most()).toBeLessThanOrEqual(10);
+    expect(db.most()).toBeGreaterThan(1);
+    expect(each[0].params.get("status")).toBe("eq.complete");
+    expect(each[0].params.get("order")).toBe("created_at.desc,id.desc");
+    expect(each[0].params.get("limit")).toBe("1");
+    expect(each[0].params.get("select")).toBe("risk_level,source,screening_mode,created_at");
+  });
+
+  it("reads the payees' complete checks up to the latest payment's decision, newest first, a page of 1000", async () => {
+    const db = database(RICH);
     await db.run(() => readClosePack({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
-    const checks = db.fake.requests.filter((request) => request.path === "/rest/v1/compliance_checks");
-    const first = checks.find((request) => request.params.get("counterparty_id") === `eq.${CP1}`)!;
-    expect(first.params.get("status")).toBe("eq.complete");
-    expect(first.params.get("created_at")).toBe(`lte.${PAID1.ts}`);
-    expect(first.params.get("order")).toBe("created_at.desc");
-    expect(first.params.get("limit")).toBe("1");
-    expect(first.params.get("select")).toBe("risk_level,source,screening_mode,created_at");
-    // The approval that paid the second bill, when no decision of the agent's is recorded.
-    expect(checks.find((request) => request.params.get("counterparty_id") === `eq.${CP2}`)!.params.get("created_at")).toBe(`lte.${PAID2.ts}`);
+    const reads = screeningReads(db.fake.requests);
+    expect(reads).toHaveLength(1);
+    const [read] = reads;
+    expect(inList(read.params.get("counterparty_id"))).toEqual([CP1, CP2]);
+    expect(read.params.get("status")).toBe("eq.complete");
+    // The later of the two payments' times: the approval that paid the second bill on January 6, when no decision of the
+    // agent's is recorded; the first bill's is the agent's decision on January 5.
+    expect(read.params.get("created_at")).toBe("lte.2026-01-06T10:00:00+00:00");
+    expect(RICH_ROWS[PAID2.seq - 1].action).toBe("approval_paid");
+    expect(read.params.get("order")).toBe("created_at.desc,id.desc");
+    expect(read.params.get("offset")).toBe("0");
+    expect(read.params.get("limit")).toBe("1000");
+    expect(read.params.get("select")).toBe("counterparty_id,risk_level,source,screening_mode,created_at");
+  });
+
+  it("takes each payment's newest complete check at or before its own time, to the microsecond", async () => {
+    const pack = await database(RICH).run(() => readClosePack({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
+    const [first, second] = pack.rows;
+    // At its decision's very microsecond, not the one a microsecond later, nor the failed one, nor an older one.
+    expect(first.checks.screening).toMatchObject({ kind: "verified", at: AT_DECISION, text: "Northwind Supplies was screened low risk by OpenSanctions." });
+    // Its only check came after it was paid.
+    expect(second.checks.screening.kind).toBe("missing");
+  });
+
+  it("takes the check with the larger id when two were made at the same moment, read at once or one at a time", async () => {
+    const twins: Check[] = [
+      { id: "0b6c1c9e-0000-4000-8000-00000000c0a1", counterparty_id: CP1, ...CLEAR, risk_level: "high", created_at: "2026-01-01T00:00:00+00:00" },
+      { id: "0b6c1c9e-0000-4000-8000-00000000c0b2", counterparty_id: CP1, ...CLEAR, created_at: "2026-01-01T00:00:00+00:00" },
+    ];
+    for (const batch of [undefined, "full" as const]) {
+      const pack = await database({ checks: twins, batch }).run(() => readClosePack({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
+      expect(pack.rows[0].checks.screening.text, String(batch)).toBe("Northwind Supplies was screened clear by OpenSanctions.");
+    }
   });
 
   it("reads the month's escrow moves, the first sweep that checked the address list, and the head", async () => {
@@ -379,8 +551,10 @@ describe("reading what may not be there (close pack CP19, CP7, CP8)", () => {
   });
 
   it("marks a payment whose screening read failed as could not open, and shows the others", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    // The read of both payees fails, so each is read on its own (CS3), and only the second payee's read fails too.
     const db = database({
+      batch: "fail",
       screening: (counterparty) =>
         counterparty === CP2 ? { status: 500, body: { message: "upstream" } } : { body: [{ risk_level: "clear", source: "opensanctions:yente", screening_mode: "live", created_at: "2026-01-01T00:00:00Z" }] },
     });
@@ -388,6 +562,8 @@ describe("reading what may not be there (close pack CP19, CP7, CP8)", () => {
     expect(pack.rows[0].checks.screening.kind).toBe("verified");
     expect(pack.rows[1].checks.screening).toMatchObject({ kind: "unreachable", text: "The screening record could not be read just now." });
     expect(pack.unread).toEqual(["screening"]);
+    expect(onePayee(db.fake.requests).map((request) => request.params.get("counterparty_id"))).toEqual([`eq.${CP1}`, `eq.${CP2}`]);
+    expect(errors.mock.calls.map(([line]) => line)).toEqual(["close pack: screening records not read at once", "close pack: a screening record not read"]);
   });
 
   it("names people by email by default, and by id for the API", async () => {
@@ -443,5 +619,53 @@ describe("limits and writes (close pack CP15)", () => {
       expect(request.method === "GET" || rpcRead, `${request.method} ${request.path}`).toBe(true);
     }
     expect(db.fake.requests.some((request) => request.path.includes("append_ledger_entry"))).toBe(false);
+  });
+});
+
+describe("the same pack as before (close pack page speed CS1)", () => {
+  const read = async (world: World, reader: typeof readClosePack) => {
+    buildSpy.mockClear();
+    const pack = await database(world).run(() => reader({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
+    return { pack, inputs: buildSpy.mock.calls.map(([input]) => input) };
+  };
+
+  it.each([
+    ["the plain month", {}],
+    ["a month with a customer's invoice, verdicts and checks around each payment", RICH],
+    ["a month whose payees' checks fill a page", { ...RICH, batch: "full" as const }],
+    ["a hundred and fifty payees", manyPayees()],
+  ])("builds %s from the same inputs, into the same bytes, as the reader before", async (_name, world) => {
+    const after = await read(world, readClosePack);
+    const before = await read(world, readClosePackBefore);
+    expect(after.inputs).toHaveLength(2);
+    expect(after.inputs).toEqual(before.inputs);
+    expect(after.pack).toEqual(before.pack);
+    expect(closePackJson(after.pack, { origin: "https://vestiarion.test" })).toBe(closePackJson(before.pack, { origin: "https://vestiarion.test" }));
+  });
+
+  it("reads the customer's invoice's entries with the bills', and builds from the bills' alone", async () => {
+    const db = database(RICH);
+    buildSpy.mockClear();
+    await db.run(() => readClosePack({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
+    const byInvoice = ledgerReads(db.fake.requests).find((request) => request.params.has("detail->>invoiceId"))!;
+    expect(inList(byInvoice.params.get("detail->>invoiceId"))).toEqual([INV1, INV2, INV3]);
+    const [input] = buildSpy.mock.calls.map(([one]) => one as { entries: Array<{ seq: number; detail: Record<string, unknown> }> });
+    expect(input.entries.some((entry) => entry.detail.invoiceId === INV3 || entry.detail.subjectId === INV3)).toBe(false);
+    expect(input.entries.some((entry) => entry.detail.subjectId === INV1)).toBe(true);
+  });
+});
+
+describe("the timing line (close pack page speed CS7)", () => {
+  it("logs one line a read, in whole milliseconds a stage, with counts and no workspace, person or record named", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    await database().run(() => readClosePack({ month: JANUARY, workspace: WORKSPACE, now: NOW }));
+    const lines = info.mock.calls.filter(([name]) => name === "close_pack_timing");
+    expect(lines).toHaveLength(1);
+    const line = String(lines[0][1]);
+    const fields = JSON.parse(line) as Record<string, unknown>;
+    expect(Object.keys(fields)).toEqual(["stage", "reads", "screening", "verify", "build", "total", "payments", "entries", "cited", "screeningReads"]);
+    expect(fields).toMatchObject({ stage: "read", payments: 2, entries: ROWS.length, cited: 7, screeningReads: 1 });
+    for (const stage of ["reads", "screening", "verify", "build", "total"]) expect(Number.isInteger(fields[stage]) && (fields[stage] as number) >= 0, stage).toBe(true);
+    for (const named of [ORG, USER, WORKSPACE.slug, WORKSPACE.name, "owner@northwind.test", CP1, INV1, "pay-1"]) expect(line).not.toContain(named);
   });
 });

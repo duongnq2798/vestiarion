@@ -67,16 +67,45 @@ function pemToDer(pem: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
-/** The keys an entry may be checked against: the one its label names, if that key really has that id; any key for an unlabelled entry. */
-async function candidateKeys(row: Pick<PublicLedgerRow, "signing_key_id">, keys: Record<string, string>): Promise<Uint8Array<ArrayBuffer>[]> {
-  const filed = await Promise.all(
-    Object.entries(keys).map(async ([id, pem]) => {
+/** A key as it is filed: the id it is filed under, its DER, the id its DER really has, and once used, the key imported. */
+interface FiledKey {
+  id: string;
+  der: Uint8Array<ArrayBuffer>;
+  trueId: string;
+  imported?: Promise<CryptoKey>;
+}
+
+/**
+ * Each keys object's keys, filed once (docs/superpowers/specs/2026-10-26-close-pack-page-speed-design.md CS6): a reader
+ * checking sixty entries with one keys object, as a close pack does, decodes, hashes and imports each key once rather
+ * than once an entry. Held only as long as the object is, and filed again if its keys changed since.
+ */
+const FILED = new WeakMap<Record<string, string>, { pems: string; filed: Promise<FiledKey[]> }>();
+
+function filedKeys(keys: Record<string, string>): Promise<FiledKey[]> {
+  const pems = JSON.stringify(Object.entries(keys));
+  const held = FILED.get(keys);
+  if (held?.pems === pems) return held.filed;
+  const filed = Promise.all(
+    Object.entries(keys).map(async ([id, pem]): Promise<FiledKey> => {
       const der = pemToDer(pem);
       return { id, der, trueId: (await sha256Hex(der)).slice(0, 16) };
     })
   );
-  const genuine = filed.filter((key) => key.id === key.trueId);
-  return (row.signing_key_id ? genuine.filter((key) => key.id === row.signing_key_id) : genuine).map((key) => key.der);
+  FILED.set(keys, { pems, filed });
+  return filed;
+}
+
+/** The keys an entry may be checked against: the one its label names, if that key really has that id; any key for an unlabelled entry. */
+async function candidateKeys(row: Pick<PublicLedgerRow, "signing_key_id">, keys: Record<string, string>): Promise<FiledKey[]> {
+  const genuine = (await filedKeys(keys)).filter((key) => key.id === key.trueId);
+  return row.signing_key_id ? genuine.filter((key) => key.id === row.signing_key_id) : genuine;
+}
+
+/** The key, imported for Ed25519 the first time an entry needs it. */
+function importedKey(key: FiledKey): Promise<CryptoKey> {
+  key.imported ??= subtle().importKey("spki", key.der, { name: "Ed25519" }, false, ["verify"]);
+  return key.imported;
 }
 
 export async function verifyEntry(row: PublicLedgerRow, keys: Record<string, string>): Promise<EntryCheck> {
@@ -95,8 +124,8 @@ export async function verifySignedLink(row: SignedLink, keys: Record<string, str
   if (candidates.length === 0) return { ok: null, reason: UNKNOWN_KEY };
   let signed = false;
   try {
-    for (const der of candidates) {
-      const key = await subtle().importKey("spki", der, { name: "Ed25519" }, false, ["verify"]);
+    for (const candidate of candidates) {
+      const key = await importedKey(candidate);
       if (await subtle().verify({ name: "Ed25519" }, key, hexToBytes(row.signature), hexToBytes(row.body_hash))) {
         signed = true;
         break;
