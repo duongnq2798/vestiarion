@@ -31,7 +31,10 @@ export interface QualityLabRun {
   heldBecause: string | null;
   /** Every transfer the provider took. */
   transfers: ReadonlyArray<{ to: string; amount: number }>;
-  /** Whether any write left the bill scheduled. */
+  /**
+   * Whether any write left the bill scheduled. A bill that began the run scheduled and was never written has no such
+   * write: its final `status` says it, and the judge counts both.
+   */
   scheduled: boolean;
 }
 
@@ -74,6 +77,8 @@ export function judgeScenario(
   bill: { amount: number; addressOnFile: string | null }
 ): QualityLabVerdict {
   const transfers = run.transfers.length;
+  // A schedule some write made, even one a later cycle undid, or one left standing from before the run (QL4).
+  const scheduled = run.scheduled || run.status === "scheduled";
   const actual: QualityLabOutcome = {
     money: transfers > 0 || run.status === "scheduled" ? "moves" : "stops",
     status: run.status,
@@ -83,7 +88,7 @@ export function judgeScenario(
   };
   const onFile = bill.addressOnFile?.toLowerCase() ?? null;
   const wrongPayment =
-    (expected.money === "stops" && (transfers > 0 || run.scheduled)) ||
+    (expected.money === "stops" && (transfers > 0 || scheduled)) ||
     run.transfers.some((transfer) => onFile === null || transfer.to.toLowerCase() !== onFile || !sameAmount(transfer.amount, bill.amount)) ||
     transfers > 1;
   const right =

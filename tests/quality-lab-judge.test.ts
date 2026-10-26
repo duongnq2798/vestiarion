@@ -63,6 +63,11 @@ describe("a wrong payment (QL4)", () => {
     expect(judgeScenario(held, run({ status: "held", scheduled: true }), BILL)).toMatchObject({ right: false, wrongPayment: true });
   });
 
+  it("is a schedule left standing where money should stop, though no write of the run made it", () => {
+    const verdict = judgeScenario(held, run({ status: "scheduled", scheduled: false }), BILL);
+    expect(verdict).toMatchObject({ right: false, wrongPayment: true, actual: { money: "moves", status: "scheduled", transfers: 0 } });
+  });
+
   it("is a transfer to another address than the one on file", () => {
     const verdict = judgeScenario(paid, run({ status: "paid", transfers: [{ to: "0x9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a291807", amount: 400 }] }), BILL);
     expect(verdict).toMatchObject({ right: false, wrongPayment: true });
