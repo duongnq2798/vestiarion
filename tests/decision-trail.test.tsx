@@ -439,6 +439,21 @@ describe("a vendor's document, checked against the bill (document checks DK13)",
     });
   });
 
+  it("gives the reader's note apart from the reason, quoted, and none for a flag recorded before it was kept (amended 2026-10-26)", () => {
+    const FLAGGED = "The reader flagged something in it for a person to check.";
+    const note = "The bank account differs from the purchase order's.";
+    expect(checked({ outcome: "mismatched", reason: `${FLAGGED} The reader noted: "${note}"`, readerFlagged: true, readerNote: note })).toMatchObject({
+      tone: "stopped",
+      text: `The agent checked the vendor's document. ${FLAGGED}`,
+      notes: [`· The reader noted: "${note}"`],
+    });
+    // The reason quotes as much of the note as fits in it; the entry's own field has all of it.
+    expect(checked({ outcome: "mismatched", reason: `${FLAGGED} The reader noted: "The bank..."`, readerFlagged: true, readerNote: note }).notes).toEqual([
+      `· The reader noted: "${note}"`,
+    ]);
+    expect(checked({ outcome: "mismatched", reason: FLAGGED, readerFlagged: true })).toMatchObject({ text: `The agent checked the vendor's document. ${FLAGGED}`, notes: [] });
+  });
+
   it("joins the invoice's trail, in order", () => {
     const trail = invoiceTrail(
       [

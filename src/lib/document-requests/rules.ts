@@ -181,12 +181,36 @@ export type DocumentSource = "vendor" | "member";
  * What the cycle's check found in a document, as its bill's card says it (document checks DK13): waiting for the next
  * cycle; a match, with the purchase order compared (null when none was), whether the check added it, and whether it was
  * checked in shadow while the bill lacked it; or a mismatch, a file it could not read, or a skip, with the sentence 0144
- * kept, which carries only Vestiarion's own words, the counterparty's name, a purchase order, figures and 0x hex.
+ * kept, which carries only Vestiarion's own words, the counterparty's name, a purchase order, figures and 0x hex, and,
+ * after a mismatch's sentence, the reader's note quoted as the reader's (`readerNoteWords`; amended 2026-10-26).
  */
 export type DocumentCheckView =
   | { outcome: "pending" }
   | { outcome: "matched"; po: string | null; added: boolean; shadowLeftPo: boolean }
   | { outcome: "mismatched" | "unreadable" | "skipped"; reason: string };
+
+/**
+ * How a check's reason quotes what the reader (the model) noted in a document, after Vestiarion's own sentence (document
+ * checks DK4, amended 2026-10-26): named as the reader's and in quotation marks, so it never reads as Vestiarion's words.
+ * The note is cleaned first (`readerNoteOf` in ./check.ts) and holds no double quotation mark, so it cannot close its quote.
+ */
+export function readerNoteWords(note: string): string {
+  return `The reader noted: "${note}"`;
+}
+
+/** What comes between a reason's sentence and the note it quotes. */
+const READER_NOTE_LEAD = ` ${readerNoteWords("")}`.slice(0, -1);
+
+/**
+ * A reason split into Vestiarion's sentence and the reader's note it quotes at its end, if any. Every sentence of
+ * Vestiarion's ends with a period, so only `readerNoteWords` ends a reason with a quotation mark; a reason recorded before
+ * 2026-10-26, which quotes none, is its sentence alone.
+ */
+export function splitReaderNote(reason: string): { sentence: string; note: string | null } {
+  const at = reason.lastIndexOf(READER_NOTE_LEAD);
+  const note = at > 0 && reason.endsWith('"') ? reason.slice(at + READER_NOTE_LEAD.length, -1) : "";
+  return note && !note.includes('"') ? { sentence: reason.slice(0, at), note } : { sentence: reason, note: null };
+}
 
 /** A request the vendor answered, or a document a member attached: what was sent, as a bill's card shows it (ER6). */
 export interface DocumentReceivedView {
@@ -257,7 +281,7 @@ const GOODS_TO_MARK = " Only your team can mark the goods received: do it in Add
 /**
  * The card's one line on what the check found (DK13), under the document's headline. The matched lines follow the bill as
  * it is now (`goodsReceived`): only a person marks its goods received, and a person approves a bill whose purchase order
- * the check added (DK6, DK8).
+ * the check added (DK6, DK8). A mismatch's line is Vestiarion's sentence alone: the reader's note is `documentCheckNote`.
  */
 export function documentCheckLine(check: DocumentCheckView, vendorName: string, goodsReceived: boolean): string {
   switch (check.outcome) {
@@ -272,10 +296,21 @@ export function documentCheckLine(check: DocumentCheckView, vendorName: string, 
       if (check.shadowLeftPo) return `${matchedLead(check.po)} Vendor requests are in shadow, so the bill was left as it is: add the purchase order yourself.`;
       return `${matchedLead(check.po)}${goodsReceived ? "" : GOODS_TO_MARK}`;
     case "mismatched":
-      return `${check.reason} The bill still waits: check it with ${vendorName}, or add the details yourself.`;
+      return `${splitReaderNote(check.reason).sentence} The bill still waits: check it with ${vendorName}, or add the details yourself.`;
     case "unreadable":
       return `Vestiarion could not check it. ${check.reason} Open it, and add the details yourself.`;
     case "skipped":
       return check.reason;
   }
+}
+
+/**
+ * What the reader noted in a mismatched document, as the card says it beneath the line (DK13, amended 2026-10-26):
+ * `The reader noted: "..."`, the model's words from an untrusted document, shown as plain text. Null for any other check,
+ * and for a check recorded before the note was kept, which says the flag's sentence alone.
+ */
+export function documentCheckNote(check: DocumentCheckView): string | null {
+  if (check.outcome !== "mismatched") return null;
+  const { note } = splitReaderNote(check.reason);
+  return note === null ? null : readerNoteWords(note);
 }

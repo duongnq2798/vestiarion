@@ -43,7 +43,9 @@ import { agentPaused } from "./pause";
  * AP stages after it decide the bill again in this cycle, where `invoice.vendor_document` holds it for a person (DK7,
  * DK8). It never marks goods received (DK6), and writes nothing else on any bill. In shadow it writes nothing (DK10).
  * Each check is signed as `document_checked`, with the file's hash and the values compared: never the document's text,
- * the model's note, the vendor's note or an email address. A request a vendor answered before 0144 ran waits unchecked,
+ * the vendor's note or an email address. A document the model flagged carries its note, cleaned and quoted as the
+ * reader's (`readerNote`, and after the sentence of `reason` and 0144's `check_reason`; DK4, amended 2026-10-26), in
+ * shadow too, so a person can see what it saw. A request a vendor answered before 0144 ran waits unchecked,
  * like any new one, and the first cycle after it checks it. Before 0144, nothing (DK15).
  */
 
@@ -421,8 +423,9 @@ export async function checkReceivedDocuments(
       domain: "ap",
       action: "document_checked",
       summary: words.summary,
-      // The values compared and the file's hash: never the document's text, a note, an email address or a link. No
-      // `observed`: the follow-up keeps reading the bill's facts from its last decision.
+      // The values compared and the file's hash: never the document's text, the vendor's note, an email address or a
+      // link. The model's note, cleaned (`readerNoteOf`: no link, email address or token), only when it flagged the
+      // document. No `observed`: the follow-up keeps reading the bill's facts from its last decision.
       detail: {
         invoiceId: row.invoice_id,
         counterpartyId: row.counterparty_id,
@@ -439,7 +442,9 @@ export async function checkReceivedDocuments(
         checks: finding.checks,
         ...(documentPo ? { poReference: documentPo } : {}),
         poWritten: written,
-        ...(finding.comparison?.readerFlagged ? { readerFlagged: true } : {}),
+        ...(finding.comparison?.readerFlagged
+          ? { readerFlagged: true, ...(finding.comparison.readerNote ? { readerNote: finding.comparison.readerNote } : {}) }
+          : {}),
         ...(finding.truncated ? { truncated: true } : {}),
         ...(shadow ? { shadow: true } : {}),
       },

@@ -1,7 +1,7 @@
 import { totalLineFigures } from "../invoice-document/extract";
 import { nameKey } from "../invoice-document/match";
 import { normalizeExtraction, rawExtractionSchema, type RawExtraction } from "../invoice-document/normalize";
-import { emailDomainOf } from "./rules";
+import { emailDomainOf, readerNoteWords } from "./rules";
 
 /**
  * Comparing a vendor's document with its bill (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK4,
@@ -15,6 +15,10 @@ import { emailDomainOf } from "./rules";
  * order, the address it asks to be paid to, and the model's flag. The first that fails gives the reason, in Vestiarion's
  * own words: only the counterparty's name, a purchase order as the document or the vendor wrote it, decimal figures and
  * 0x hex go into a sentence, never other text from the document.
+ *
+ * The model's note, when it set one, is the one thing of its reading kept as it wrote it (DK4, amended 2026-10-26): a
+ * person must see what it saw. It is model text about an untrusted document, so it is cleaned (`readerNoteOf`) and
+ * quoted after the sentence as the reader's (`readerNoteWords`), never in Vestiarion's own words.
  */
 
 /** The bill as the check compares it, read when it is checked. */
@@ -71,8 +75,10 @@ export interface DocumentComparison {
   poReference: string | null;
   /** Whether a purchase order was compared: the bill lacked one, or has one. Not for a counterparty that needs none. */
   poCompared: boolean;
-  /** The model set its note: something needs a person. The note itself is never kept. */
+  /** The model set its note: something needs a person. */
   readerFlagged: boolean;
+  /** That note, cleaned (`readerNoteOf`); null when the model set none, or one with nothing left once cleaned. */
+  readerNote: string | null;
 }
 
 /** Why a document could not be read, as the card and the ledger say it (DK3). */
@@ -94,6 +100,15 @@ export const SKIPPED_REASONS = {
 
 /** The longest reason 0144's check_document_request takes. */
 export const MAX_CHECK_REASON = 300;
+
+/** The flag's own sentence, when no other check failed: as every flag recorded before the note was kept says it. */
+export const READER_FLAGGED = "The reader flagged something in it for a person to check.";
+
+/** The longest reader's note kept: after the flag's own sentence, a reason always quotes it whole. */
+export const MAX_READER_NOTE = 200;
+
+/** The least of a note a reason quotes after a long sentence: with less room than this, the note is in `readerNote` alone. */
+const MIN_NOTE_IN_REASON = 40;
 
 const EMPTY: RawExtraction = rawExtractionSchema.parse({});
 const MILLION = BigInt(1_000_000);
@@ -192,6 +207,64 @@ function vendorNamed(bill: CheckBill, text: string): string | null {
 function vendorWords(name: string): string {
   const clean = name.replace(UNSEEN_ALL, "").replace(/\s+/g, " ").trim();
   return clean && Array.from(clean).length <= MAX_NAME_IN_REASON ? clean : "the vendor";
+}
+
+/** Removed from a reader's note: format characters (bidi controls such as U+202E, zero-width ones, U+FEFF) and half a surrogate pair. */
+const NOTE_INVISIBLE = /[\p{Cf}\p{Cs}]/gu;
+/** A line or a tab in a reader's note: one space. */
+const NOTE_BREAK = /[\p{Cc}\p{Zl}\p{Zp}]/gu;
+/** A link, which a person might open from the card. */
+const NOTE_LINK = /(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S*/gi;
+const NOTE_EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
+/**
+ * A token: 32 or more letters, digits, "_", "-", "+", "/" or "=" in a row, such as a link's token or an API key; never
+ * 0x hex alone, an address or a transaction hash, which a note may name.
+ */
+const NOTE_TOKEN = /(?<![\w+\/=-])(?!0[xX][0-9a-fA-F]+(?![\w+\/=-]))[\w+\/=-]{32,}(?![\w+\/=-])/g;
+/** Every double quotation mark a note could close its quote with: straight, curly, low, guillemets, primes, fullwidth. */
+const NOTE_DOUBLE_QUOTE = new RegExp(
+  `[${[0x22, 0xab, 0xbb, 0x201c, 0x201d, 0x201e, 0x201f, 0x2033, 0x2036, 0x275d, 0x275e, 0x2e42, 0x301d, 0x301e, 0x301f, 0xff02]
+    .map((code) => String.fromCodePoint(code))
+    .join("")}]`,
+  "gu"
+);
+
+/** At most `max` characters, cut by whole characters with "..." when longer. */
+function capped(value: string, max: number): string {
+  const characters = Array.from(value);
+  return characters.length <= max ? value : `${characters.slice(0, max - 3).join("").trimEnd()}...`;
+}
+
+/**
+ * The model's note as the card, the ledger and 0144 keep it (DK4, amended 2026-10-26), stricter than **From a document**'s
+ * `modelNote`: no format or control character, one line, no link, email address or token, no double quotation mark
+ * (each becomes "'"), whitespace collapsed, at most 200 characters. Null when nothing is left.
+ */
+export function readerNoteOf(notes: string | null): string | null {
+  if (notes === null) return null;
+  const visible = notes.replace(NOTE_INVISIBLE, "").replace(NOTE_BREAK, " ").replace(/\s+/g, " ").trim();
+  // Far more than is kept, and little enough that no pattern below takes long on a model's longest answer.
+  const clean = Array.from(visible)
+    .slice(0, 10 * MAX_READER_NOTE)
+    .join("")
+    .replace(NOTE_LINK, "(link removed)")
+    .replace(NOTE_EMAIL, "(email address removed)")
+    .replace(NOTE_TOKEN, "(token removed)")
+    .replace(NOTE_DOUBLE_QUOTE, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+  return clean ? capped(clean, MAX_READER_NOTE) : null;
+}
+
+/**
+ * A reason with the reader's note quoted after its sentence, within 300 characters: whole when it fits, cut to fit with
+ * "..." when at least 40 characters of it do, else the sentence alone, the note then kept in `readerNote` only.
+ */
+function withReaderNote(sentence: string, note: string | null): string {
+  if (note === null) return sentence;
+  const room = MAX_CHECK_REASON - Array.from(sentence).length - Array.from(` ${readerNoteWords("")}`).length;
+  if (Array.from(note).length > room && room < MIN_NOTE_IN_REASON) return sentence;
+  return `${sentence} ${readerNoteWords(capped(note, room))}`;
 }
 
 /** A reason as 0144 takes it: no control or format character, at most 300 characters. */
@@ -356,14 +429,17 @@ export function compareDocument(bill: CheckBill, reading: DocumentReading): Docu
   const payToStep = payToCheck(bill, reading.text);
   // Set only when something needs a person: figures that do not add up, a changed address, or instructions to the reader.
   const readerFlagged = reading.raw.notes !== null;
+  const readerNote = readerNoteOf(reading.raw.notes);
   const steps = [vendorStep, currencyStep, amountStep, ...(po.step ? [po.step] : []), payToStep];
-  const failure = steps.find((step) => step.failure !== null)?.failure ?? (readerFlagged ? "The reader flagged something in it for a person to check." : null);
+  const failure = steps.find((step) => step.failure !== null)?.failure ?? (readerFlagged ? READER_FLAGGED : null);
   return {
     outcome: failure === null ? "matched" : "mismatched",
-    reason: failure === null ? null : checkReasonOf(failure),
+    // Vestiarion's sentence, then what the reader noted, quoted as the reader's.
+    reason: failure === null ? null : withReaderNote(checkReasonOf(failure), readerNote),
     checks: [...steps.map((step) => step.record), invoiceNumberCheck(bill, reading.text)],
     poReference: po.poReference,
     poCompared: po.step !== null,
     readerFlagged,
+    readerNote,
   };
 }
