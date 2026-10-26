@@ -373,14 +373,130 @@ describe("the class each decision gets (SR6, SR7)", () => {
     });
   });
 
-  it("says when money moves one way and not the other", () => {
+  it("says when money moves one way and not the other, no wrong payment when money moved then and no one disagreed", () => {
     const one = decision("shadow-24");
     const unknowns = [{ fact: "project" as const, reason: "The project's answer is not in the record." }];
     const runs = [run(scheduled, { variant: { project: "lets_through" } }), run({ action: "schedule", rule: "project.budget_exceeded", money: "stops" }, { variant: { project: "stops" } })];
-    expect(judgeReplay(one, { ...plan(one), unknowns }, runs)).toMatchObject({
+    expect(judgeReplay(one, { ...plan(one), unknowns }, runs)).toEqual({
+      now: null,
       class: "cannot_rebuild",
       reason: "The project's answer is not in the record. Money moves one way and not the other.",
+      wrongPayment: false,
     });
+  });
+
+  it("cannot be rebuilt, and is a wrong payment, when one way the record does not rule out moves money where code stopped it then (shadow-43)", () => {
+    // Stopped then by the new payee check, which code weighs after the payee lock's wait: the way past the wait is the
+    // record's own. Were the new payee check broken, that way would pay.
+    const one = decision("shadow-43");
+    expect(plan(one).then).toEqual({ action: "pay", rule: "counterparty.new_payee", money: "stops" });
+    expect(plan(one).unknowns.map((unknown) => unknown.fact)).toEqual(["address_change"]);
+    const runs = [
+      run(paid, { variant: { address_change: "lets_through" } }),
+      run({ action: "pay", rule: "counterparty.cooling_off", money: "stops" }, { variant: { address_change: "stops" } }),
+    ];
+    expect(judgeReplay(one, plan(one), runs)).toEqual({
+      now: null,
+      class: "cannot_rebuild",
+      reason: `${plan(one).unknowns[0].reason} Money moves one way and not the other. In a way the record does not rule out, money moves where code stopped it then.`,
+      wrongPayment: true,
+    });
+  });
+
+  it("is a wrong payment when a fact the rule then does not rest on is unknown, and one way moves money", () => {
+    const limited = decision("shadow-01", (copy) => {
+      copy.guardrailBlocked = true;
+      copy.guardrailRule = "counterparty.payment_limit";
+      copy.payeeOnFile.role = null;
+    });
+    expect(plan(limited).unknowns.map((unknown) => unknown.fact)).toEqual(["role"]);
+    const runs = [
+      run(paid, { variant: { role: "lets_through" } }),
+      run({ action: "pay", rule: "counterparty.client_payable", money: "stops" }, { variant: { role: "stops" } }),
+    ];
+    expect(judgeReplay(limited, plan(limited), runs)).toMatchObject({ class: "cannot_rebuild", wrongPayment: true });
+  });
+
+  it("is a wrong payment when one way moves money on a decision the person disagreed with", () => {
+    const one = decision("shadow-24", (copy) => {
+      copy.verdict = "disagree";
+    });
+    const unknowns = [{ fact: "project" as const, reason: "The project's answer is not in the record." }];
+    const runs = [run(scheduled, { variant: { project: "lets_through" } }), run({ action: "schedule", rule: "project.budget_exceeded", money: "stops" }, { variant: { project: "stops" } })];
+    expect(judgeReplay(one, { ...plan(one), unknowns }, runs)).toEqual({
+      now: null,
+      class: "cannot_rebuild",
+      reason: "The project's answer is not in the record. Money moves one way and not the other. In a way the record does not rule out, money moves on a decision the person disagreed with.",
+      wrongPayment: true,
+    });
+  });
+
+  it("is no wrong payment when only the way that relaxes the very fact behind the rule then moves money: the record rules that way out", () => {
+    const cases: Array<[string, "address_change" | "pay_to" | "role" | "sanctions" | "spending_limits" | "project"]> = [
+      ["counterparty.cooling_off", "address_change"],
+      ["invoice.pay_to_differs", "pay_to"],
+      ["counterparty.client_payable", "role"],
+      ["counterparty.high_risk", "sanctions"],
+      ["workspace.outflow_budget", "spending_limits"],
+      ["workspace.onchain_limit", "spending_limits"],
+      ["workspace.onchain_limit_route", "spending_limits"],
+      ["project.budget_exceeded", "project"],
+    ];
+    for (const [rule, fact] of cases) {
+      const one = decision("shadow-01", (copy) => {
+        copy.guardrailBlocked = true;
+        copy.guardrailRule = rule;
+      });
+      const unknowns = [{ fact, reason: "Not in the record." }];
+      const stopped: ShadowOutcome = { action: "pay", rule, money: "stops" };
+      const relaxed = [run(paid, { variant: { [fact]: "lets_through" } }), run(stopped, { variant: { [fact]: "stops" } })];
+      expect(judgeReplay(one, { ...plan(one), unknowns }, relaxed), rule).toMatchObject({ class: "cannot_rebuild", wrongPayment: false });
+      // The way that keeps the fact is the record's own: money moving there is a wrong payment.
+      const kept = [run(stopped, { variant: { [fact]: "lets_through" } }), run(paid, { variant: { [fact]: "stops" } })];
+      expect(judgeReplay(one, { ...plan(one), unknowns }, kept), rule).toMatchObject({ class: "cannot_rebuild", wrongPayment: true });
+    }
+    // shadow-42, stopped then by the payee lock's wait: past the wait is the way the record rules out.
+    const waited = decision("shadow-42");
+    const runs = [
+      run(paid, { variant: { address_change: "lets_through" } }),
+      run({ action: "pay", rule: "counterparty.cooling_off", money: "stops" }, { variant: { address_change: "stops" } }),
+    ];
+    expect(judgeReplay(waited, plan(waited), runs)).toMatchObject({ class: "cannot_rebuild", wrongPayment: false });
+  });
+
+  it("is a wrong payment, saying so, when code records a stop and money moves all the same", () => {
+    const letThrough = decision("shadow-01");
+    const ignored: ShadowOutcome = { action: "pay", rule: "counterparty.new_payee", money: "moves" };
+    expect(judgeReplay(letThrough, plan(letThrough), [run(ignored)])).toEqual({
+      now: ignored,
+      class: "now_stopped",
+      reason: "Code recorded a stop because a first payment to a new address needs two people, but money moved.",
+      wrongPayment: true,
+    });
+    const stoppedThen = decision("shadow-14");
+    const same: ShadowOutcome = { action: "pay", rule: "counterparty.no_address", money: "moves" };
+    expect(judgeReplay(stoppedThen, plan(stoppedThen), [run(same)])).toEqual({
+      now: same,
+      class: "now_let_through",
+      reason: "Code recorded a stop because the payee had no payment address yet, but money moved.",
+      wrongPayment: true,
+    });
+    // One way of an unknown fact is enough, even one the record rules out.
+    const one = decision("shadow-24");
+    const unknowns = [{ fact: "project" as const, reason: "The project's answer is not in the record." }];
+    const runs = [run(scheduled, { variant: { project: "lets_through" } }), run({ action: "schedule", rule: "project.budget_exceeded", money: "moves" }, { variant: { project: "stops" } })];
+    expect(judgeReplay(one, { ...plan(one), unknowns }, runs)).toEqual({
+      now: null,
+      class: "cannot_rebuild",
+      reason: "The project's answer is not in the record. Money moves either way. One way, code recorded a stop because its project's budget had no room left for it, but money moved.",
+      wrongPayment: true,
+    });
+    const cooled = decision("shadow-42");
+    const cooling = [
+      run({ action: "pay", rule: "counterparty.new_payee", money: "stops" }, { variant: { address_change: "lets_through" } }),
+      run({ action: "pay", rule: "counterparty.cooling_off", money: "moves" }, { variant: { address_change: "stops" } }),
+    ];
+    expect(judgeReplay(cooled, plan(cooled), cooling)).toMatchObject({ class: "cannot_rebuild", wrongPayment: true });
   });
 
   it("is the one outcome every way ends in when the unknown facts do not change it", () => {
@@ -462,6 +578,7 @@ describe("the replay in words (SR10, SR11)", () => {
     expect(replayOutcomeWords({ action: "request_info", rule: null, money: "stops" })).toBe("Information asked for, as the model answered");
     expect(replayOutcomeWords({ action: "flag_fraud", rule: null, money: "stops" })).toBe("Flagged, as the model answered");
     expect(replayOutcomeWords(noAddress)).toBe("Stopped because the payee had no payment address yet");
+    expect(replayOutcomeWords({ ...noAddress, money: "moves" })).toBe("Recorded as stopped because the payee had no payment address yet, but money moved");
     expect(replayOutcomeWords(null)).toBe("Not known");
     expect(answerWords({ action: "pay", payOnInDays: null, fundWithSwap: null })).toBe("Pay now");
     expect(answerWords({ action: "schedule", payOnInDays: 4, fundWithSwap: false })).toBe("Schedule in 4 days");
@@ -476,5 +593,6 @@ describe("the replay in words (SR10, SR11)", () => {
     expect(replayClassWords({ class: "cannot_rebuild", reason: "Why.", wrongPayment: false })).toBe("Cannot rebuild. Why.");
     expect(replayClassWords({ class: "now_let_through", reason: "Why.", wrongPayment: true })).toBe("Now let through, a wrong payment. Why.");
     expect(replayClassWords({ class: "now_stopped", reason: "Why.", wrongPayment: false })).toBe("Now stopped. Why.");
+    expect(replayClassWords({ class: "same", reason: null, wrongPayment: true })).toBe("Same, a wrong payment");
   });
 });

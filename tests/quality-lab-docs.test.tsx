@@ -43,6 +43,12 @@ describe("the Quality Lab's docs page (QL8)", () => {
     expect(Object.keys(PAGE_LOADERS)).toContain("research/quality-lab");
   });
 
+  it("is described, under its title and in search, as both halves: the scenarios and the replayed shadow decisions", () => {
+    const page = DOCS_NAV.flatMap((section) => section.pages).find((one) => one.slug === "research/quality-lab")!;
+    expect(page.description).toContain("with the model's answers scripted");
+    expect(page.description).toContain("the team's own shadow-mode decisions replayed through the same code with the model's answers as recorded");
+  });
+
   it("has every group's heading and table, in the groups' order", () => {
     const tables = [...SOURCE.matchAll(/<QualityLabTable group="([a-z]+)" \/>/g)].map((match) => match[1]);
     expect(tables).toEqual(QUALITY_LAB_GROUPS.map((group) => group.id));
@@ -187,7 +193,16 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
   it("says what it is, what then, now and a wrong payment mean, and the data's limits", () => {
     for (const part of [
       "The team runs its own workspaces this way on Arc testnet.",
-      "Each decision is rebuilt from its signed record: the ledger entry the agent wrote when it decided, and nothing else.",
+      "Each decision is rebuilt from its exported record: the signed ledger entry the agent wrote when it decided, and a few facts read beside it at export.",
+      "The payee's role comes from the payee's row as it is at export.",
+      "are kept only while the address has not changed since the decision.",
+      "or to the last minute of its day when the entry was written after midnight.",
+      "four answers are handed in as recorded rather than worked out: the contract's, the room left under the agent's spending limit, earlier work for the same purchase order or deliverable, and the project's budget.",
+      "Code let money move then when it let through a payment or a schedule: in shadow mode a payment that passed waited for the person's verdict instead of being sent",
+      "money that moves although code records a stop",
+      "A decision that cannot be rebuilt is still a wrong payment when money moves in any way the record does not rule out.",
+      "An answer to pay or schedule a EURC bill, a payout to another chain or a bank payout is not rebuilt",
+      "A hold, a flag or a request for information on one moves no money and meets no rule, so it is replayed",
       "The model answers exactly as it did: the same action, and the same day for a schedule. It is not asked again.",
       "**Then** is what code did at the time",
       "**Now** is what today's code does with the same answer on the same facts",
@@ -207,6 +222,12 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
   it("types no figure: its line and its rows come from the committed file", () => {
     expect(section).not.toMatch(/\d+ (real )?decisions?\b/);
     expect(section).not.toMatch(/shadow-\d+/);
+  });
+
+  it("claims no more than the export reads: not the entry alone, not money sent in shadow mode, not every answer on a EURC bill refused", () => {
+    expect(section).not.toContain("and nothing else");
+    expect(section).not.toContain("Money moved then when");
+    expect(section).not.toMatch(/^- \*\*USDC bills on Arc\.\*\* A EURC bill/m);
   });
 
   it("renders the line and every decision's row from the committed file", () => {
@@ -229,6 +250,23 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
       ])
     );
     expect(rows).toHaveLength(SHADOW.summary.decisions);
+  });
+
+  it("styles each result from its class and wrong payment, never from its words: a wrong payment first, whatever its class", () => {
+    const base = SHADOW.decisions[0];
+    const decisions: ShadowReplayResults["decisions"] = [
+      { ...base, id: "same-wrong", class: "same", reason: null, wrongPayment: true },
+      { ...base, id: "same-right", class: "same", reason: null, wrongPayment: false },
+      { ...base, id: "cannot-wrong", class: "cannot_rebuild", now: null, reason: "Why.", wrongPayment: true },
+      { ...base, id: "stopped", class: "now_stopped", reason: "Why.", wrongPayment: false },
+    ];
+    const markup = renderToStaticMarkup(<ShadowReplayTable results={{ summary: SHADOW.summary, decisions }} />);
+    const cells = [...markup.matchAll(/<tr>(.*?)<\/tr>/g)].slice(1).map((row) => [...row[1].matchAll(/<td class="([^"]*)"[^>]*>(.*?)<\/td>/g)].at(-1)!);
+    expect(cells.map((cell) => text(cell[2]))).toEqual(["Same, a wrong payment", "Same", "Cannot rebuild, a wrong payment. Why.", "Now stopped. Why."]);
+    const classes = cells.map((cell) => cell[1].split(/\s+/));
+    expect(classes.map((names) => names.includes("text-refused"))).toEqual([true, false, true, false]);
+    expect(classes[1]).toContain("text-ink-2");
+    expect(classes[3]).toContain("text-held");
   });
 
   it("writes the same line and rows in the page's Markdown view", () => {

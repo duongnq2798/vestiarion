@@ -9,6 +9,8 @@ import { scoreWords, shadowReplayWords, wrongPaymentWords } from "@/lib/quality-
 
 /** The docs page with every scenario and its result. */
 export const QUALITY_LAB_HREF = "/docs/research/quality-lab";
+/** Its section listing every replayed shadow decision, with what then, now and a wrong payment mean there. */
+export const QUALITY_LAB_REPLAY_HREF = `${QUALITY_LAB_HREF}#real-decisions-replayed`;
 
 /**
  * The Quality Lab's result (docs/superpowers/specs/2026-10-26-quality-lab-design.md QL7), on /open and /how-it-decides:
@@ -16,7 +18,8 @@ export const QUALITY_LAB_HREF = "/docs/research/quality-lab";
  * what right and a wrong payment mean, and the docs page. A server component over the file the lab's test holds equal
  * to its run, so nothing here is typed by hand. It names no network: the lab runs over a fake provider, on no chain.
  * Under the score, one line on the team's own shadow-mode decisions replayed through today's code, from the replay's
- * committed file (docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md SR10).
+ * committed file (docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md SR10), and a link to the docs
+ * page's section that lists every replayed decision and says what its classes and a wrong payment there mean.
  */
 export function QualityLabResult({ id, heading: Heading = "h2", className }: { id: string; heading?: "h2" | "h3"; className?: string }) {
   const { summary } = QUALITY_LAB_RESULTS;
@@ -56,13 +59,22 @@ export function QualityLabResult({ id, heading: Heading = "h2", className }: { i
           amount other than the bill&apos;s, or a second transfer for one bill.
         </p>
       </div>
-      <Link
-        href={QUALITY_LAB_HREF}
-        prefetch={landingPrefetch(QUALITY_LAB_HREF)}
-        className="mt-4 inline-block text-[0.9375rem] font-semibold text-agent underline-offset-4 hover:underline"
-      >
-        Every scenario and its result →
-      </Link>
+      <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
+        <Link
+          href={QUALITY_LAB_HREF}
+          prefetch={landingPrefetch(QUALITY_LAB_HREF)}
+          className="inline-block text-[0.9375rem] font-semibold text-agent underline-offset-4 hover:underline"
+        >
+          Every scenario and its result →
+        </Link>
+        <Link
+          href={QUALITY_LAB_REPLAY_HREF}
+          prefetch={landingPrefetch(QUALITY_LAB_REPLAY_HREF)}
+          className="inline-block text-[0.9375rem] font-semibold text-agent underline-offset-4 hover:underline"
+        >
+          Every replayed decision →
+        </Link>
+      </p>
     </div>
   );
 }

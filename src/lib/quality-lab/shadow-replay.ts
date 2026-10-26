@@ -492,6 +492,33 @@ function matters(fact: ShadowUnknownFact, runs: readonly ShadowReplayRun[]): boo
   );
 }
 
+/**
+ * The unknown fact a rule recorded then rests on (SR7): that rule stopping the decision shows the fact was the way that
+ * stops, so a run with it the other way is a world the record rules out.
+ */
+const FACT_BEHIND: Readonly<Record<string, ShadowUnknownFact>> = {
+  "counterparty.cooling_off": "address_change",
+  "invoice.pay_to_differs": "pay_to",
+  "counterparty.client_payable": "role",
+  "counterparty.high_risk": "sanctions",
+  "workspace.outflow_budget": "spending_limits",
+  "workspace.onchain_limit": "spending_limits",
+  "workspace.onchain_limit_route": "spending_limits",
+  "project.budget_exceeded": "project",
+};
+
+/** Whether a run relaxes the very fact behind the rule code recorded then, which the record rules out (SR7). */
+function ruledOut(then: ShadowOutcome, run: ShadowReplayRun): boolean {
+  const fact = then.rule === null ? undefined : FACT_BEHIND[then.rule];
+  return fact !== undefined && run.variant[fact] === "lets_through";
+}
+
+/** Code recorded a stop, and money moved all the same (SR7): a wrong payment in any world. */
+const stopIgnored = (outcome: ShadowOutcome) => outcome.rule !== null && outcome.money === "moves";
+
+/** "recorded a stop because ..., but money moved.", after "Code" or "One way, code". */
+const stopIgnoredWords = (rule: string) => `recorded a stop because ${because(rule)}, but money moved.`;
+
 /** The class a decision gets (SR6), and whether it is a wrong payment (SR7), from every replay of it. */
 export function judgeReplay(
   decision: ShadowDecision,
@@ -502,6 +529,8 @@ export function judgeReplay(
   if (plan.unsupported !== null) return { now: null, class: "cannot_rebuild", reason: plan.unsupported, wrongPayment: transfersWrong };
   if (runs.length === 0) throw new Error(`${decision.id} was not replayed`);
   const then = plan.then;
+  // Money must not move where code stopped it then, or where the person disagreed.
+  const mustStop = then.money === "stops" || decision.verdict === "disagree";
   if (new Set(runs.map((run) => key(run.outcome))).size > 1) {
     const named = plan.unknowns.filter((unknown) => matters(unknown.fact, runs));
     const money = runs.every((run) => run.outcome.money === "stops")
@@ -510,10 +539,27 @@ export function judgeReplay(
         ? "Money moves either way."
         : "Money moves one way and not the other.";
     const reasons = (named.length > 0 ? named : plan.unknowns).map((unknown) => unknown.reason);
-    return { now: null, class: "cannot_rebuild", reason: [...reasons, money].join(" "), wrongPayment: transfersWrong };
+    // Every way the record does not rule out counts: the record's own world is one of them, and which one is not known.
+    const movesWrongly = mustStop && runs.some((run) => run.outcome.money === "moves" && !stopIgnored(run.outcome) && !ruledOut(then, run));
+    const ignored = runs.find((run) => stopIgnored(run.outcome));
+    const wrong = [
+      movesWrongly
+        ? `In a way the record does not rule out, money moves ${then.money === "stops" ? "where code stopped it then" : "on a decision the person disagreed with"}.`
+        : null,
+      ignored ? `One way, code ${stopIgnoredWords(ignored.outcome.rule!)}` : null,
+    ].filter((part): part is string => part !== null);
+    return {
+      now: null,
+      class: "cannot_rebuild",
+      reason: [...reasons, money, ...wrong].join(" "),
+      wrongPayment: transfersWrong || movesWrongly || ignored !== undefined,
+    };
   }
   const now = runs[0].outcome;
-  const wrongPayment = transfersWrong || (now.money === "moves" && (then.money === "stops" || decision.verdict === "disagree"));
+  const wrongPayment = transfersWrong || stopIgnored(now) || (now.money === "moves" && mustStop);
+  if (stopIgnored(now)) {
+    return { now, class: then.money === "stops" ? "now_let_through" : "now_stopped", reason: `Code ${stopIgnoredWords(now.rule!)}`, wrongPayment };
+  }
   if (now.rule === then.rule && now.money === then.money) {
     const reason =
       now.action === then.action

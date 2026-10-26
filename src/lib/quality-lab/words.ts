@@ -81,10 +81,16 @@ const ANSWERED: Record<ShadowAction, string> = {
   request_info: "Information asked for, as the model answered",
 };
 
-/** What code did with a decision, then or now: "Let through to pay", "Stopped because the payee had no address yet". */
+/**
+ * What code did with a decision, then or now: "Let through to pay", "Stopped because the payee had no address yet". A
+ * stop code recorded while money moved all the same is said as that, never as stopped (shadow replay SR7).
+ */
 export function replayOutcomeWords(outcome: ShadowOutcome | null): string {
   if (!outcome) return "Not known";
-  if (outcome.rule) return `Stopped because ${ruleWords(outcome.rule) ?? `a check in code (${outcome.rule})`}`;
+  if (outcome.rule) {
+    const because = ruleWords(outcome.rule) ?? `a check in code (${outcome.rule})`;
+    return outcome.money === "moves" ? `Recorded as stopped because ${because}, but money moved` : `Stopped because ${because}`;
+  }
   return ANSWERED[outcome.action];
 }
 

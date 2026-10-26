@@ -239,9 +239,13 @@ replay SR4)".
   written after midnight is replayed at the last minute of `decidedOn`.
 - If wrong: a replay in shadow mode would hold every payment that passed and could never show one code lets through.
 
-**SR2. The world is rebuilt from the recorded facts, and nothing else.**
+**SR2. The world is rebuilt from the exported record, and nothing else.**
 - `replayWorld(decision, variant)` in `src/lib/quality-lab/shadow-replay.ts`, pure, turns a decision into plain data;
-  the runner turns that into rows. It never reads anything but the decision.
+  the runner turns that into rows. It never reads anything but the exported decision. That is the signed ledger entry
+  the agent wrote, and the facts the export reads beside it: the payee lock in force, from the workspace's signed lock
+  changes (SX9); the payee's role, from its row as it is at export; and, only while the address has not changed since
+  the decision, how many whole hours before it the address last changed and whether the document's pay-to differed
+  from it (SX3, SX4). The public page says the same, and never that the entry alone is enough.
 - The bill: its amount in USDC, whether it had a purchase order, goods received, its due day, its early-payment
   discount and late fee, the day an earlier cycle scheduled it for when it is decided on or after it, whether its
   document named an address and whether that was the one on file, whether it is in a project, whether its purchase
@@ -260,7 +264,9 @@ replay SR4)".
   bills to another payee with the recorded total and count. The reserve's balance is not in the record; the replay
   counts none, which can only make a later day's shortfall more likely, never less. Its yield is derived from the
   recorded float value when the bill had a discount, and is 0 otherwise.
-- The checks after the guardrails: the same work as recorded, and the project's recorded answer.
+- The checks after the guardrails: the same work as recorded, and the project's recorded answer. These, the spending
+  limit's room and the contract's verdict are handed in, not worked out (SR1), so the replay tests how today's code
+  weighs them, not how it reads them; the docs page says so.
 - The model answers exactly as recorded: the action, the pay-on day as days from `decidedOn`, the swap choice and its
   confidence. When code moved the date (`timingRule`), the answer is the model's own: `pay.no_gain` was a pay, and
   `payon.*` a schedule for the requested day.
@@ -273,7 +279,8 @@ replay SR4)".
   bill was due, its amount, the risk level, goods received, whether a purchase order is needed, the operating balance,
   the spending limit's figures), a stop whose rule is not recorded, and a contract on Arc that could not carry the
   payment. These are USDC bills paid on Arc only, which is all the team's shadow workspaces
-  hold today.
+  hold today. A hold, a flag or a request for information on such a bill is not refused: it is replayed as a USDC bill
+  on Arc (below), and the docs page says the refusal covers an answer to pay or schedule only.
 - A hold code made for cash before its checks (`cash.priority`, `pay.cash_ahead`) is refused whatever its action: the
   record keeps the hold, not the model's own answer.
 - A hold, a flag or a request for information is always replayed. Code never weighs a guardrail for one and never
@@ -295,9 +302,10 @@ replay SR4)".
 - If wrong: a replay that filled an unknown with the value that matches the outcome then would agree with itself.
 
 **SR5. Then and now.**
-- Then (`thenOutcome`): the rule code recorded when it stopped the decision (`guardrailBlocked`), or let through. Money
-  moved then when code let through a pay or a schedule: in shadow mode a pay that passed waited for the person's
-  verdict, and counts as money that would have moved. A hold, a flag or a request for information moved none.
+- Then (`thenOutcome`): the rule code recorded when it stopped the decision (`guardrailBlocked`), or let through. Code
+  let money move then when it let through a pay or a schedule: in shadow mode a pay that passed waited for the person's
+  verdict instead of being sent, so it counts as money that would have moved. A hold, a flag or a request for
+  information let none move.
 - Now: the replay's own entry, its action, and the rule when it was stopped, or let through. Money moves when the
   provider took a transfer, or the bill is left scheduled: a schedule counts as money that will move, as in the
   scenarios. Transfers are counted from the provider, never inferred from a status.
@@ -311,16 +319,41 @@ replay SR4)".
 - **Cannot rebuild**: SR3 or SR4, with the reason.
 - Where the same rule stops it but code now gives the answer another action (a pay now made a schedule, say), the class
   is the same and the reason says so.
+- A replay in which code records a stop and money moves all the same keeps the class its rule and money give (now let
+  through when money stopped then, now stopped otherwise), but its reason says "Code recorded a stop because ..., but
+  money moved.", its Now column says "Recorded as stopped because ..., but money moved", and it is a wrong payment
+  (SR7), never a safe "Stopped now because ...".
 - If wrong: a class that hid a change of rule would report as the same outcome a decision code now treats differently.
 
 **SR7. A wrong payment fails CI.**
 - A wrong payment is money that moves now where code stopped it then (now let through), money that moves now on a
-  decision the person disagreed with, or any transfer to an address other than the one on file, for an amount other
-  than the bill's (less an early-payment discount through its deadline's day), or a second transfer for the bill.
-- `tests/quality-lab-shadow.test.ts` fails on any, naming the decision. A decision the person agreed to pay that code
-  now stops is a safe miss: shown as now stopped, never failed.
+  decision the person disagreed with, money that moves in a run where code records a stop (`rule` set and money
+  moving: a blocked decision never reaches the provider, so this is money leaving past a stop), or any transfer to an
+  address other than the one on file, for an amount other than the bill's (less an early-payment discount through its
+  deadline's day), or a second transfer for the bill.
+- When the runs over the unknown facts end differently (SR4), the decision cannot be rebuilt, and it is still a wrong
+  payment when any run moves money where code stopped it then or the person disagreed. Which run is the record's own
+  world is not known, so every run counts, but one: a run whose variant relaxes ("lets through") the very fact behind
+  the rule recorded then, since that rule stopping the decision shows the fact was the other way. The pairs are
+  `counterparty.cooling_off` and the address's wait (`address_change`), `invoice.pay_to_differs` and the document's
+  pay-to (`pay_to`), `counterparty.client_payable` and the role (`role`), `counterparty.high_risk` and OFAC's list
+  (`sanctions`), `workspace.outflow_budget`, `workspace.onchain_limit` and `workspace.onchain_limit_route` and the
+  spending limits (`spending_limits`), and `project.budget_exceeded` and the project's answer (`project`). This only
+  discounts a run for the wrong-payment test; it never settles an unknown for the class (SR4). A run where code records
+  a stop and money moves is never discounted. For example shadow-43, stopped then by `counterparty.new_payee` with its
+  address's wait unknown: were the new payee check broken, the way past the wait, which is the record's own since the
+  wait is checked first, would pay, and that fails CI; for shadow-42, stopped then by the wait, the way past the wait is
+  discounted.
+- The reason says why a cannot-rebuild decision is a wrong payment: "In a way the record does not rule out, money moves
+  where code stopped it then." (or "on a decision the person disagreed with"), or "One way, code recorded a stop
+  because ..., but money moved."
+- `tests/quality-lab-shadow.test.ts` fails on any, naming the decision, and holds the rule to a case built from
+  shadow-43 given facts the new payee check lets through: it must come back cannot rebuild and a wrong payment. A
+  decision the person agreed to pay that code now stops is a safe miss: shown as now stopped, never failed. Both
+  cannot-rebuild decisions in today's file stop money in every run, so neither is a wrong payment.
 - A product guardrail is never changed to make the replay pass: a wrong payment is a finding, reported as one.
-- If wrong: a replay that passed on a wrong payment would publish a claim the code breaks.
+- If wrong: a replay that passed on a wrong payment would publish a claim the code breaks; one that only went stale
+  would be cleared by `npm run quality-lab`, which rewrites the file without failing.
 
 **SR8. The rebuild is held to the record.**
 - Every run's own ledger entry is mapped as the export maps a recorded one (`exportShadowDecisions`), and the facts the
@@ -351,14 +384,22 @@ replay SR4)".
   outcome, 2 cannot be rebuilt from the record, 0 wrong payments", with the real numbers, naming only the classes that
   are not zero (`shadowReplayWords` in `src/lib/quality-lab/words.ts`).
 - It names no network, as the block does not (QL7), and says "team" plainly: customers' decisions are never in it.
+- The block links the docs page's "Real decisions, replayed" (`#real-decisions-replayed`, "Every replayed decision"),
+  where the classes and a wrong payment in the replay are defined, beside its link to the scenarios. /open's lede says
+  the block is not read when the page loads: it comes from the tests that run the scenarios and replay the team's
+  exported decisions, on every change.
 - If wrong: a number typed by hand would drift from the code.
 
 **SR11. The docs page shows every decision.**
 - `content/docs/research/quality-lab.mdx` gains "Real decisions, replayed": what it is, the definitions, the data's
-  limits (the team's own workspaces only, customers never exported; facts rebuilt from the signed record; the model's
-  answers as recorded, not asked again), how to refresh it, the summary (`<ShadowReplaySummary />`) and one row per
-  decision (`<ShadowReplayTable />`), rendered from the committed file on the page and in its Markdown view
-  (`MDX_TO_MARKDOWN`), never typed.
+  limits (the team's own workspaces only, customers never exported; facts rebuilt from the exported record, which is
+  the signed entry and the few facts read beside it (SR2), and four answers handed in as recorded; the model's answers
+  as recorded, not asked again; an answer to pay or schedule a EURC, other-chain or bank-payout bill refused, a hold on
+  one replayed), how to refresh it, the summary (`<ShadowReplaySummary />`) and one row per decision
+  (`<ShadowReplayTable />`), rendered from the committed file on the page and in its Markdown view (`MDX_TO_MARKDOWN`),
+  never typed. The page's description in the docs navigation names both halves.
+- The table colours a result from its `wrongPayment` and `class` fields, never from its words: a wrong payment is
+  refused whatever its class, a same row is plain, and any other is held.
 - A test holds the page's figures and rows to the file.
 - If wrong: a typed table would disagree with the file after the next export.
 
@@ -380,7 +421,8 @@ replay SR4)".
   shadow-42 (`counterparty.cooling_off` then) and shadow-43 (`counterparty.new_payee` then): the payee's address changed
   again after them, so how long before each it had changed is not in the record, and the payee lock's 4-hour wait
   cannot be weighed. Within the wait the cooling-off stops each, past it the new payee check does: money stops either
-  way. shadow-41, held then because its changed address was unconfirmed, is the same either way.
+  way, so neither is a wrong payment (SR7). shadow-41, held then because its changed address was unconfirmed, is the
+  same either way.
 - One decision reaches the same outcome by another action: shadow-15, a pay on a bill due in 8 days, is now made a
   schedule for its due day (`pay.no_gain`, since there was no discount and no shortfall), and the same rule,
   `counterparty.no_address`, stops it.

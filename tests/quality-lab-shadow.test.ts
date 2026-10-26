@@ -415,7 +415,20 @@ describe("the replay rebuilds each rule the record carries (SR2, SR8)", () => {
     const stoppedNow = rebuiltFor(null, (copy) => {
       copy.observed.newPayee = { addressBy: "member", askedVia: null, confirmed: false, unanswered: false, twoParties: false };
     });
-    expect(await replayDecision(stoppedNow)).toMatchObject({ class: "now_stopped", wrongPayment: false, now: { rule: "counterparty.new_payee" } });
+    expect(await replayDecision(stoppedNow)).toMatchObject({ class: "now_stopped", wrongPayment: false, now: { rule: "counterparty.new_payee", money: "stops" } });
+  });
+
+  it("fails as a wrong payment money that moves, one way the record does not rule out, where code stopped it then (shadow-43)", { timeout: 30_000 }, async () => {
+    // shadow-43 was stopped then by the new payee check, and its payee's address changed again since, so the payee
+    // lock's wait is run both ways. Code weighs the wait before the new payee check, so the way past the wait is the
+    // record's own. Given facts the new payee check lets through, as a check broken since would, that way pays.
+    const copy = structuredClone(DECISIONS.find((one) => one.id === "shadow-43")!);
+    expect(copy.guardrailRule).toBe("counterparty.new_payee");
+    copy.id = "shadow-43-new-payee-passes";
+    copy.observed.newPayee = null;
+    const result = await replayDecision(copy);
+    expect(result).toMatchObject({ class: "cannot_rebuild", now: null, wrongPayment: true });
+    expect(result.reason).toContain("Money moves one way and not the other.");
   });
 
   it("fails as a wrong payment money that moves now where code stopped it then", { timeout: 30_000 }, async () => {

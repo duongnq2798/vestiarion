@@ -4988,10 +4988,12 @@ replayed through the same code (`docs/superpowers/specs/2026-10-26-quality-lab-s
   whole file when anything in it looks like an address, hash, email or id, with or without its `0x` or dashes. The
   script reads in one read-only transaction and is run by hand, never in CI.
 - **The replay** (SR1-SR13 in the same spec) is `tests/quality-lab-shadow.test.ts`, over the same harness and stand-ins.
-  Each decision is rebuilt from its record alone as a world of its own: `replayWorld` (`src/lib/quality-lab/shadow-replay.ts`,
-  pure) turns it into plain data (the bill, its payee with its address's hours and the new payee check's facts, the
-  workspace's lock, two-approvals figure, spending limit room and contract verdict as recorded, and what else fell due,
-  as held bills to another payee), and the runner into rows. The harness gains three optional inputs the scenarios do
+  Each decision is rebuilt from its exported record alone as a world of its own: the signed entry, and what the export
+  reads beside it (the payee lock from the workspace's signed lock changes; the payee's role from its row at export;
+  the address's hours and the document's pay-to only while the address has not changed since). `replayWorld`
+  (`src/lib/quality-lab/shadow-replay.ts`, pure) turns it into plain data (the bill, its payee with its address's hours
+  and the new payee check's facts, the workspace's lock, two-approvals figure, spending limit room and contract verdict
+  as recorded, and what else fell due, as held bills to another payee), and the runner into rows. The harness gains three optional inputs the scenarios do
   not use: `spendingLimitRoom`, `obligations` and `reserveApy`. The model answers as recorded (the model's own answer
   where code moved its date), and the stage runs live, outside shadow mode, so a payment that passes is sent and
   counted. Then is the recorded rule or let through; now is the replay's rule or let through, with money counted from
@@ -4999,8 +5001,13 @@ replayed through the same code (`docs/superpowers/specs/2026-10-26-quality-lab-s
   through, or cannot rebuild. A fact the record does not carry (SX10) is never guessed: `planReplay` lists it, the
   runner replays every combination of its two ways, and a decision whose combinations end differently cannot be rebuilt,
   with the reason; EURC, other chains, bank payouts and holds made for cash before the checks are refused up front.
-  Money that moves now where code stopped it then, or where the person disagreed, or a transfer elsewhere, for another
-  amount or twice, is a wrong payment and fails CI. Each run's own entry, mapped by `exportShadowDecisions`, must
+  Money that moves now where code stopped it then, or where the person disagreed, or in a run where code records a
+  stop, or a transfer elsewhere, for another amount or twice, is a wrong payment and fails CI. A decision that cannot
+  be rebuilt is one too when any run moves money where code stopped it then or the person disagreed, except a run
+  whose variant relaxes the very fact behind the rule recorded then (`FACT_BEHIND`: the address's wait for
+  `counterparty.cooling_off`, the spending limits for `workspace.outflow_budget`, and so on), which the record rules
+  out. `ShadowReplayTable` colours a result from its `wrongPayment` and `class`, not its words, and the result block
+  links the decisions (`#real-decisions-replayed`). Each run's own entry, mapped by `exportShadowDecisions`, must
   record the facts it was rebuilt from, and a decision rebuilt for each rule the record carries must come back stopped
   by it. The results (`src/lib/data/quality-lab-shadow.json`) are held to the run like the scenarios'; one line under
   the scenario score in `QualityLabResult` (`shadowReplayWords`) and the docs page's "Real decisions, replayed" show
