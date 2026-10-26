@@ -79,6 +79,35 @@ describe("the Quality Lab's docs page (QL8)", () => {
   });
 });
 
+/**
+ * The three places that name the lab's stand-ins (QL1) name all four: the docs page, the harness's header and
+ * ARCHITECTURE.md's Quality Lab section. A stand-in left out of one would read as code the lab runs for real.
+ */
+describe("the stand-ins, where they are named (QL1)", () => {
+  const harness = readFileSync(path.join(process.cwd(), "tests", "support", "ap-harness.ts"), "utf8");
+  const architecture = readFileSync(path.join(process.cwd(), "ARCHITECTURE.md"), "utf8");
+  const section = architecture.slice(architecture.indexOf("## The Quality Lab\n"));
+  const places = {
+    "the docs page": SOURCE,
+    "the harness's header": harness.slice(harness.indexOf("/**"), harness.indexOf("*/") + 2),
+    "ARCHITECTURE.md's Quality Lab section": section.slice(0, section.indexOf("\n## ", 1)),
+  };
+  // Markdown and comments wrap anywhere, so any run of whitespace stands for a space.
+  const standIns = {
+    "the database": /the\s+database|`fakeSupabase`/,
+    "the clock": /the\s+clock/,
+    "the payment provider": /the\s+payment\s+provider|`LabChain`/,
+    "the spending limit contract's answer on Arc": /spending\s+limit\s+contract('s\s+answer)?\s+on\s+Arc/,
+  };
+
+  it.each(Object.entries(places))("%s names every stand-in", (_place, words) => {
+    expect(words.length).toBeGreaterThan(200);
+    for (const [standIn, pattern] of Object.entries(standIns)) {
+      expect(words, standIn).toMatch(pattern);
+    }
+  });
+});
+
 /** Every page that describes the lab says no more than it does: answers often an attacker's, and USDC bills only. */
 describe("the Quality Lab where other pages describe it (QL9)", () => {
   const controls = readFileSync(path.join(process.cwd(), "content", "docs", "guides", "controls.mdx"), "utf8");

@@ -4897,12 +4897,12 @@ Fixed scenarios run through the agent's real decision code in CI on every change
 - **The runner** is `tests/quality-lab.test.ts`, over `tests/support/ap-harness.ts`. `decide` is statically imported by
   the orchestrator and `ApStageInput` has no seam for it, so the answer is scripted with `vi.mock`, and the money path
   gains no seam. Everything after the model is `runApStage` as production runs it, over `fakeSupabase`, the
-  `payment_intents` fake and a really signed ledger; the book is written back between cycles. Two of the stage's
-  inputs are handed in rather than read: the spending limit contract's answer on Arc (`onChainLimitGate` with a
-  scripted verdict, so `spendingLimitVerdict` never asks Arc) and the new payee facts (`loadNewPayeeFacts` does not
-  run; `newPayeeCheckFor` on them does). `LabChain` counts every send it takes as a transfer, even a second one under
-  the same idempotency key, which Circle would fold into the first. `tests/ap-stage.test.ts` and the files that copy
-  its fake are unchanged.
+  `payment_intents` fake, the clock (faked for `Date` only) and a really signed ledger; the book is written back
+  between cycles. Two of the stage's inputs are handed in rather than read: the spending limit contract's answer on
+  Arc (`onChainLimitGate` with a scripted verdict, so `spendingLimitVerdict` never asks Arc) and the new payee facts
+  (`loadNewPayeeFacts` does not run; `newPayeeCheckFor` on them does). `LabChain`, the stand-in payment provider,
+  counts every send it takes as a transfer, even a second one under the same idempotency key, which Circle would fold
+  into the first. `tests/ap-stage.test.ts` and the files that copy its fake are unchanged.
 - **Judging** is `judgeScenario` (`src/lib/quality-lab/judge.ts`): right when money moved or stopped as expected, with
   the expected status, rule, hold reason and transfers; a wrong payment is a transfer or schedule where money should
   stop, a transfer to an address other than the one on file or for an amount other than the bill's, or a second

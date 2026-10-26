@@ -34,11 +34,12 @@ QL4)".
   (`tests/support/payment-intents.ts`), the invoice write, and a ledger entry really signed with the organization's key
   (`signedOrgs()`). The clock is faked for `Date` only. The book is written back, so a later cycle reads what an earlier
   one wrote.
-- The stand-ins are named wherever the lab is described: the database (`fakeSupabase`), the clock, the payment
-  provider (`LabChain`), and the spending limit contract's answer on Arc, which the runner scripts through
-  `onChainLimitGate`'s `verdict`, so `spendingLimitVerdict` never asks Arc. The new payee facts (who entered and
-  confirmed a payee's address, and where it was paid before) are handed to the stage through its existing `newPayee`
-  input, so `loadNewPayeeFacts` does not run; `newPayeeCheckFor` on those facts does.
+- The docs page, the harness's header and ARCHITECTURE.md's Quality Lab section name the stand-ins, and a test holds
+  all four in each: the database (`fakeSupabase`), the clock, the payment provider (`LabChain`), and the spending limit
+  contract's answer on Arc, which the runner scripts through `onChainLimitGate`'s `verdict`, so `spendingLimitVerdict`
+  never asks Arc. The new payee facts (who entered and confirmed a payee's address, and where it was paid before) are
+  handed to the stage through its existing `newPayee` input, so `loadNewPayeeFacts` does not run; `newPayeeCheckFor`
+  on those facts does.
 - `tests/ap-stage.test.ts` and the other files that copy its fake are left as they are.
 - If wrong: a lab that stubs the code it claims to test proves nothing. A seam added for the lab would be a new way into
   the money path.
