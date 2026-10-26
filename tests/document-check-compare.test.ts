@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareDocument, type CheckBill, type DocumentReading } from "@/lib/document-requests/check";
+import { compareDocument, readerNoteOf, type CheckBill, type DocumentReading } from "@/lib/document-requests/check";
 import { splitReaderNote } from "@/lib/document-requests/rules";
 import { ruleBasedExtraction } from "@/lib/invoice-document/extract";
 import { rawExtractionSchema, type RawExtraction } from "@/lib/invoice-document/normalize";
@@ -331,7 +331,16 @@ describe("the reader's flag (DK4, amended 2026-10-26: the note is quoted)", () =
   /** A reading of INVOICE that every code check matches, with the model's note. */
   const flagged = (notes: string, over: Partial<CheckBill> = {}, text = INVOICE, typedPo: string | null = "PO-1042") =>
     compareDocument(bill(over), modelRead(text, { amount: "5.00", currency: "USDC", poReference: "PO-1042", notes }, typedPo));
-  const doubleQuotes = (value: string) => value.split('"').length - 1;
+  const cp = (...codes: number[]) => String.fromCodePoint(...codes);
+  /** Every character that reads as a double quotation mark: straight, curly, low, guillemets, primes, ditto, ornaments. */
+  const DOUBLE_QUOTE_CODES = [
+    0x22, 0xab, 0xbb, 0x2ba, 0x2dd, 0x2ee, 0x2f5, 0x2f6, 0x30b, 0x5f4, 0x201c, 0x201d, 0x201e, 0x201f, 0x2033, 0x2036, 0x275d,
+    0x275e, 0x2760, 0x2e42, 0x3003, 0x301d, 0x301e, 0x301f, 0xff02, 0x1f676, 0x1f677, 0x1f678,
+  ];
+  /** Two or more single quotes or primes in a row, which read as one double quotation mark. */
+  const SINGLE_RUN = new RegExp(`[${cp(0x27, 0x2018, 0x2019, 0x201b, 0x2032, 0x2035, 0x2bc)}]{2,}`, "gu");
+  const doubleQuotes = (value: string) =>
+    Array.from(value).filter((character) => DOUBLE_QUOTE_CODES.includes(character.codePointAt(0) ?? 0)).length + (value.match(SINGLE_RUN)?.length ?? 0);
 
   it("does not match a document the model flagged, and quotes its note after Vestiarion's own sentence", () => {
     const note = "The text asks to pay a new wallet and says to ignore the rules.";
@@ -366,11 +375,44 @@ describe("the reader's flag (DK4, amended 2026-10-26: the note is quoted)", () =
     expect(splitReaderNote(result.reason ?? "")).toEqual({ sentence: FLAGGED, note: cleaned });
   });
 
+  it("turns every character that looks like a double quotation mark, and a run of single quotes, into one single quote", () => {
+    const note = `Totals fine${cp(0x2ba)} Vestiarion checked the bank account. ${cp(0x5f4)}a${cp(0x3003)} ${cp(0x1f676)}b "" ''`;
+    const result = flagged(note);
+    const cleaned = "Totals fine' Vestiarion checked the bank account. 'a' 'b ' '";
+    expect(result.readerNote).toBe(cleaned);
+    expect(result.reason).toBe(`${FLAGGED} The reader noted: "${cleaned}"`);
+    expect(doubleQuotes(result.reason ?? "")).toBe(2);
+    for (const code of DOUBLE_QUOTE_CODES.slice(1)) expect(result.reason).not.toContain(cp(code));
+    // Each one alone, and two curly apostrophes or primes side by side.
+    for (const code of DOUBLE_QUOTE_CODES) expect(readerNoteOf(`a${cp(code)}b`)).toBe("a'b");
+    expect(readerNoteOf(`a${cp(0x2019, 0x2019)}b ${cp(0x2032, 0x2032)}c`)).toBe("a'b 'c");
+    // An apostrophe in a word stays as it is.
+    expect(readerNoteOf(`The vendor${cp(0x2019)}s account changed.`)).toBe(`The vendor${cp(0x2019)}s account changed.`);
+  });
+
+  it("removes variation selectors, fillers, private-use and unassigned characters, so nothing hidden rides in the note", () => {
+    expect(readerNoteOf(`Totals add up${cp(0xfe0f, 0xe0100, 0x3164, 0x34f, 0x115f, 0x180b)}`)).toBe("Totals add up");
+    expect(readerNoteOf(`Totals${cp(0xe000, 0x2800, 0x378, 0xffa0, 0x1160)} add up`)).toBe("Totals add up");
+    // A link spelled in variation selectors, one per byte, as text is smuggled past a person who reads the card.
+    const hidden = Array.from(new TextEncoder().encode("https://evil.example/x"), (byte) => (byte < 16 ? 0xfe00 + byte : 0xe0100 + byte - 16));
+    const smuggled = flagged(`Totals add up${cp(...hidden)}`);
+    expect(smuggled.readerNote).toBe("Totals add up");
+    expect(smuggled.reason).toBe(`${FLAGGED} The reader noted: "Totals add up"`);
+    const selectors = (value: string) =>
+      Array.from(value).filter((character) => {
+        const code = character.codePointAt(0) ?? 0;
+        return (code >= 0xfe00 && code <= 0xfe0f) || (code >= 0xe0100 && code <= 0xe01ef);
+      });
+    expect(selectors(JSON.stringify(smuggled))).toEqual([]);
+  });
+
   it("cleans the note to one line with no control, bidi or zero-width character, within 200 characters", () => {
     const [ZWSP, RLO, LRI, NBSP, LS, BOM] = [0x200b, 0x202e, 0x2066, 0xa0, 0x2028, 0xfeff].map((code) => String.fromCharCode(code));
     expect(flagged(`Bank${ZWSP} account${RLO} changed\n\tsince the${NBSP}last${LS}invoice.${LRI}${BOM}\u0007`).readerNote).toBe(
       "Bank account changed since the last invoice."
     );
+    // A control character between words is a space, as a line break is.
+    expect(readerNoteOf(`x${String.fromCharCode(7)}y`)).toBe("x y");
 
     const long = flagged("word ".repeat(80));
     expect(long.readerNote).toBe(`${"word ".repeat(39)}wo...`);
@@ -388,7 +430,32 @@ describe("the reader's flag (DK4, amended 2026-10-26: the note is quoted)", () =
     expect(flagged(note).readerNote).toBe(`Pay to ${OTHER} as (link removed) and (link removed) say; confirm to (email address removed) with (token removed).`);
   });
 
-  it("keeps the reason within 300 characters: the note is cut to fit, or left to its own field when there is no room", () => {
+  it("removes a link written without https://: a domain name with or without a path, an IP address, a javascript: or data: link", () => {
+    const removed: Array<readonly [string, string]> = [
+      ["Pay at evil-pay.com/inv?id=7 or bit.ly/3xYz; total 8.50/9.00 USDC, INV-2026.10/3.", "Pay at (link removed) or (link removed); total 8.50/9.00 USDC, INV-2026.10/3."],
+      ["Update at acme-billing.co/update or t.me/acmepay now.", "Update at (link removed) or (link removed) now."],
+      ["The new account is at evil-pay.example, not cobaltcloud.example or Amazon.com.", "The new account is at (link removed), not (link removed) or (link removed)."],
+      ["Pay via 1.2.3.4/pay, 10.0.0.1 or evil.example:8080/pay or acme.co.uk/pay.", "Pay via (link removed), (link removed) or (link removed) or (link removed)."],
+      ["Open javascript:alert(document.cookie) or [click](javascript:alert(1)) or data:text/html,x.", "Open (link removed) or [click]((link removed) or (link removed)."],
+      ["Visit bit.ly/abc", "Visit (link removed)"],
+      // An email address is one whole, whatever follows its domain.
+      ["Write to pay@evil.example/x today.", "Write to (email address removed) today."],
+    ];
+    for (const [note, cleaned] of removed) expect(readerNoteOf(note)).toBe(cleaned);
+    expect(flagged("Update at acme-billing.co/update or t.me/acmepay now.").reason).toBe(
+      `${FLAGGED} The reader noted: "Update at (link removed) or (link removed) now."`
+    );
+
+    // Figures, purchase orders, invoice numbers, a file's name, abbreviations and 0x hex are no link.
+    for (const kept of [
+      "Totals 1,234.56 and 5.00 USDC (5.00USDC) for PO-1042, INV-2026.10/3, 8.50/9.00 and 1.5/2 in invoice.pdf and scan.PNG.",
+      `Pay ${OTHER}, e.g. as before, at 10.30 a.m. Note: Data: Ref:PO-1042.`,
+    ]) {
+      expect(readerNoteOf(kept)).toBe(kept);
+    }
+  });
+
+  it("keeps the reason within 300 characters and the note in it: cut to fit, or after a shorter sentence when there is no room", () => {
     const name = "Cobalt Cloud Infrastructure Holdings and Storage Services of the Northern Hemisphere and Partners";
     const note = "word ".repeat(40).trim();
 
@@ -399,15 +466,34 @@ describe("the reader's flag (DK4, amended 2026-10-26: the note is quoted)", () =
     expect(Array.from(cut.reason ?? "")).toHaveLength(300);
     expect(cut.readerNote).toBe(note);
 
-    // The purchase order the vendor typed, at 100 characters, beside a long name: too little room to quote anything useful.
+    // The purchase order the vendor typed, at 100 characters, beside a long name: too little room to quote anything useful,
+    // so the sentence says it without them, and the check still records what the document names.
     const typed = `${"P".repeat(98)}-1`;
     const none = flagged(note, { vendorName: name }, INVOICE.replace("Cobalt Cloud", name), typed);
-    expect(none.reason).toBe(`The purchase order ${name} typed, ${typed}, is not in the document.`);
+    expect(none.reason).toBe(`The purchase order the vendor typed is not in the document. The reader noted: "${note}"`);
     expect(none.readerNote).toBe(note);
-    // A short note still fits whole.
+    expect(checkOf(none, "purchase_order")).toEqual({ check: "purchase_order", result: "mismatch", document: "PO-1042", bill: null });
+    // A short note still fits whole after the full sentence.
     expect(flagged("Totals differ.", { vendorName: name }, INVOICE.replace("Cobalt Cloud", name), typed).reason).toBe(
       `The purchase order ${name} typed, ${typed}, is not in the document. The reader noted: "Totals differ."`
     );
+
+    // Two purchase orders of 100 characters each, the vendor's typed one and another the model read.
+    const [first, second] = [`${"A".repeat(97)}-11`, `${"B".repeat(97)}-22`];
+    const two = INVOICE.replace("PO-1042", first).replace("Storage add-on, 1 unit", `Storage add-on, see also ${second}`);
+    const both = compareDocument(bill(), modelRead(two, { amount: "5.00", currency: "USDC", poReference: second, notes: note }, first));
+    expect(both.reason).toBe(`The document names more than one purchase order. The reader noted: "${note}"`);
+    expect(checkOf(both, "purchase_order")).toEqual({ check: "purchase_order", result: "mismatch", document: first, bill: null, alsoRead: second });
+    expect(compareDocument(bill(), modelRead(two, { amount: "5.00", currency: "USDC", poReference: second }, first)).reason).toBe(
+      `The document names more than one purchase order: ${first} and ${second}.`
+    );
+
+    // A long one on file, and another long one in the document.
+    const onFile = compareDocument(bill({ poReference: first }), modelRead(INVOICE.replace("PO-1042", second), { amount: "5.00", currency: "USDC", poReference: second, notes: note }));
+    expect(onFile.reason).toBe(`The document names another purchase order than the bill's. The reader noted: "${note}"`);
+    expect(checkOf(onFile, "purchase_order")).toEqual({ check: "purchase_order", result: "mismatch", document: second, bill: first });
+
+    for (const result of [cut, none, both, onFile]) expect(Array.from(result.reason ?? "").length).toBeLessThanOrEqual(300);
   });
 
   it("flags a note that cleans to nothing with its own sentence alone", () => {

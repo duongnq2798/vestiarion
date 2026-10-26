@@ -3252,10 +3252,14 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   counterparty that needs none); every `0x` address the text writes being the one on file; and the model's `notes`
   being unset. The first failure gives the reason, built only from the counterparty's name, a purchase order, decimal
   figures and `0x` hex. A set `notes` is then quoted after that sentence as the reader's (` The reader noted: "…"`,
-  `readerNoteWords` in `rules.ts`), within 0144's 300 characters, once `readerNoteOf` has cleaned it: format and control
-  characters out, one line, links, email addresses and tokens replaced, double quotation marks as `'` so it cannot close
-  its quote, at most 200 characters. The card and the decision trail split it back out (`splitReaderNote`) and show it
-  apart, in plain text. Each check is signed as `document_checked` (`appendLedgerEntry`), with the file's SHA-256 and
+  `readerNoteWords` in `rules.ts`), within 0144's 300 characters, once `readerNoteOf` has cleaned it: format,
+  default-ignorable (variation selectors, Hangul fillers), private-use and unassigned characters out, control characters
+  as spaces, one line; links (with a scheme, `javascript:` and `data:` among them, from `www.`, a domain name with or
+  without a path, an IPv4 address; never a file's name such as `invoice.pdf`), email addresses and tokens replaced;
+  double quotation marks, characters that look like one and runs of single quotes as `'` so it cannot close its quote;
+  at most 200 characters. When the note does not fit after a purchase order sentence naming long values, the reason
+  says that check's short sentence instead (`Step.shortFailure`), so the note is always quoted. The card and the
+  decision trail split it back out (`splitReaderNote`) and show it apart, in plain text. Each check is signed as `document_checked` (`appendLedgerEntry`), with the file's SHA-256 and
   the values compared, the cleaned note as `readerNote` when the model flagged it, never the text, the vendor's note,
   an email address or a link, and with no `observed`.
 - **The function** (`check_document_request`, service-role definer). It locks the request and records the check once

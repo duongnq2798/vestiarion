@@ -72,8 +72,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   Approvals and on Bills said only "The reader flagged something in it for a person to check.", even when its vendor,
   amount and purchase order matched. Beneath that line, the card now quotes the note in italics, named as the reader's
   and never as Vestiarion's words, such as The reader noted: "The bank account on this invoice differs from the one on
-  the purchase order." The note is cleaned first: no hidden or control characters, links, email addresses or long codes,
-  and at most 200 characters. `document_checked` records it as `readerNote`, and its reason and the decision trail
+  the purchase order." The note is cleaned first: no hidden or control characters (variation selectors and other
+  invisible ones included), links (with https:// or without, such as pay.example.com/invoice, or an IP address), email
+  addresses, long codes or characters that read as a double quotation mark, and at most 200 characters. When the line
+  would name long purchase orders, it says the same without them, such as "The document names more than one purchase
+  order.", so the note still fits beneath it. `document_checked` records it as `readerNote`, and its reason and the decision trail
   quote it too, in shadow as well. Documents checked before keep their sentence alone. No migration.
 - **A PDF built to expand when opened is refused before it is read.** From a document, invoices by email, the Chrome
   extension and chats now refuse a PDF whose contents would expand to more than 16 MB once decompressed, such as a file

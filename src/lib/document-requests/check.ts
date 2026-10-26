@@ -107,7 +107,10 @@ export const READER_FLAGGED = "The reader flagged something in it for a person t
 /** The longest reader's note kept: after the flag's own sentence, a reason always quotes it whole. */
 export const MAX_READER_NOTE = 200;
 
-/** The least of a note a reason quotes after a long sentence: with less room than this, the note is in `readerNote` alone. */
+/**
+ * The least of a note a reason quotes after a long sentence: with less room than this, the reason says the failing check's
+ * short sentence instead (`Step.shortFailure`), after which the whole note fits.
+ */
 const MIN_NOTE_IN_REASON = 40;
 
 const EMPTY: RawExtraction = rawExtractionSchema.parse({});
@@ -209,25 +212,51 @@ function vendorWords(name: string): string {
   return clean && Array.from(clean).length <= MAX_NAME_IN_REASON ? clean : "the vendor";
 }
 
-/** Removed from a reader's note: format characters (bidi controls such as U+202E, zero-width ones, U+FEFF) and half a surrogate pair. */
-const NOTE_INVISIBLE = /[\p{Cf}\p{Cs}]/gu;
+/** Characters, by code point, for a character class. */
+const anyOf = (codes: number[]) => codes.map((code) => String.fromCodePoint(code)).join("");
+
+/**
+ * Removed from a reader's note: format characters (bidi controls such as U+202E, zero-width ones, U+FEFF), other
+ * default-ignorable ones (variation selectors, U+034F, Hangul fillers, tag characters), the blank U+2800, private-use and
+ * unassigned code points, and half a surrogate pair. None shows, so text spelled in them would reach a program reading
+ * the note and never the person reading the card.
+ */
+const NOTE_INVISIBLE = new RegExp(`[${/\p{Cf}\p{Cs}\p{Default_Ignorable_Code_Point}\p{Co}\p{Cn}/u.source}${anyOf([0x2800])}]`, "gu");
 /** A line or a tab in a reader's note: one space. */
 const NOTE_BREAK = /[\p{Cc}\p{Zl}\p{Zp}]/gu;
-/** A link, which a person might open from the card. */
-const NOTE_LINK = /(?:[a-z][a-z0-9+.-]*:\/\/|www\.)\S*/gi;
+/**
+ * A link a person might open from the card, or a chat tool a note is sent to would: one with a scheme (`https://`, or one
+ * such as `javascript:` or `data:` written without slashes) or starting `www.`, up to the next space, less the punctuation
+ * that ends a sentence after it.
+ */
+const NOTE_LINK = /(?:[a-z][a-z0-9+.-]*:\/\/|\b(?:javascript|vbscript|data|file|blob|mailto|tel|sms|intent):(?=\S)|www\.)(?:\S*[^\s.,;:!?'"])?/gi;
 const NOTE_EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
+/**
+ * A link written without a scheme, which a chat tool links all the same: a domain name whose last label is letters, never
+ * a file's name such as invoice.pdf, or an IPv4 address, with any port and path. Figures (5.00, 1,234.56, 8.50/9.00),
+ * purchase orders, invoice numbers (INV-2026.10/3), abbreviations (e.g.) and 0x hex are none. After `NOTE_EMAIL`, so an
+ * email address is replaced whole.
+ */
+const NOTE_BARE_HOST =
+  /(?<![\w@.\/-])(?:(?:\w(?:[\w-]*\w)?\.)+(?!(?:pdf|png|jpe?g|gif|csv|xlsx?|docx?|txt|xml|json|html?)(?![\w-]))[a-z]{2,63}|\d{1,3}(?:\.\d{1,3}){3})(?![\w-]|\.\w)(?::\d{1,5})?(?:\/(?:\S*[^\s.,;:!?'"])?)?/gi;
 /**
  * A token: 32 or more letters, digits, "_", "-", "+", "/" or "=" in a row, such as a link's token or an API key; never
  * 0x hex alone, an address or a transaction hash, which a note may name.
  */
 const NOTE_TOKEN = /(?<![\w+\/=-])(?!0[xX][0-9a-fA-F]+(?![\w+\/=-]))[\w+\/=-]{32,}(?![\w+\/=-])/g;
-/** Every double quotation mark a note could close its quote with: straight, curly, low, guillemets, primes, fullwidth. */
+/**
+ * Every character a note could close its quote with: double quotation marks straight, curly, low, guillemets, primes and
+ * modifier double primes, the ditto mark, gershayim, ornaments, fullwidth.
+ */
 const NOTE_DOUBLE_QUOTE = new RegExp(
-  `[${[0x22, 0xab, 0xbb, 0x201c, 0x201d, 0x201e, 0x201f, 0x2033, 0x2036, 0x275d, 0x275e, 0x2e42, 0x301d, 0x301e, 0x301f, 0xff02]
-    .map((code) => String.fromCodePoint(code))
-    .join("")}]`,
+  `[${anyOf([
+    0x22, 0xab, 0xbb, 0x2ba, 0x2dd, 0x2ee, 0x2f5, 0x2f6, 0x30b, 0x5f4, 0x201c, 0x201d, 0x201e, 0x201f, 0x2033, 0x2036, 0x275d,
+    0x275e, 0x2760, 0x2e42, 0x3003, 0x301d, 0x301e, 0x301f, 0xff02, 0x1f676, 0x1f677, 0x1f678,
+  ])}]`,
   "gu"
 );
+/** Two or more single quotes or primes in a row, which read together as a double quotation mark: one "'". */
+const NOTE_SINGLE_RUN = new RegExp(`[${anyOf([0x27, 0x2018, 0x2019, 0x201b, 0x2032, 0x2035, 0x2bc])}]{2,}`, "gu");
 
 /** At most `max` characters, cut by whole characters with "..." when longer. */
 function capped(value: string, max: number): string {
@@ -237,8 +266,11 @@ function capped(value: string, max: number): string {
 
 /**
  * The model's note as the card, the ledger and 0144 keep it (DK4, amended 2026-10-26), stricter than **From a document**'s
- * `modelNote`: no format or control character, one line, no link, email address or token, no double quotation mark
- * (each becomes "'"), whitespace collapsed, at most 200 characters. Null when nothing is left.
+ * `modelNote`: no format, default-ignorable, private-use or unassigned character (`NOTE_INVISIBLE`, first, so nothing
+ * hidden splits a link or a token); control characters and line breaks as spaces, one line; a link (`NOTE_LINK`, then
+ * `NOTE_BARE_HOST`: with a scheme, from www., a domain name or an IPv4 address), an email address and a token replaced; no
+ * double quotation mark or character that looks like one, nor a run of single quotes (each becomes "'"); whitespace
+ * collapsed; at most 200 characters. Null when nothing is left.
  */
 export function readerNoteOf(notes: string | null): string | null {
   if (notes === null) return null;
@@ -249,8 +281,10 @@ export function readerNoteOf(notes: string | null): string | null {
     .join("")
     .replace(NOTE_LINK, "(link removed)")
     .replace(NOTE_EMAIL, "(email address removed)")
+    .replace(NOTE_BARE_HOST, "(link removed)")
     .replace(NOTE_TOKEN, "(token removed)")
     .replace(NOTE_DOUBLE_QUOTE, "'")
+    .replace(NOTE_SINGLE_RUN, "'")
     .replace(/\s+/g, " ")
     .trim();
   return clean ? capped(clean, MAX_READER_NOTE) : null;
@@ -258,13 +292,17 @@ export function readerNoteOf(notes: string | null): string | null {
 
 /**
  * A reason with the reader's note quoted after its sentence, within 300 characters: whole when it fits, cut to fit with
- * "..." when at least 40 characters of it do, else the sentence alone, the note then kept in `readerNote` only.
+ * "..." when at least 40 characters of it do, else after the failing check's `short` sentence, which names no purchase
+ * order or name and leaves room for the whole note. So a reason that quotes a note always shows it on the card.
  */
-function withReaderNote(sentence: string, note: string | null): string {
+function withReaderNote(sentence: string, short: string, note: string | null): string {
   if (note === null) return sentence;
-  const room = MAX_CHECK_REASON - Array.from(sentence).length - Array.from(` ${readerNoteWords("")}`).length;
-  if (Array.from(note).length > room && room < MIN_NOTE_IN_REASON) return sentence;
-  return `${sentence} ${readerNoteWords(capped(note, room))}`;
+  const roomAfter = (lead: string) => MAX_CHECK_REASON - Array.from(lead).length - Array.from(` ${readerNoteWords("")}`).length;
+  const fits = (lead: string) => Array.from(note).length <= roomAfter(lead) || roomAfter(lead) >= MIN_NOTE_IN_REASON;
+  const lead = fits(sentence) ? sentence : short;
+  // Every sentence leaves 40 characters or has a short one under 80; should one ever not, the reason stays within 300.
+  if (!fits(lead)) return sentence;
+  return `${lead} ${readerNoteWords(capped(note, roomAfter(lead)))}`;
 }
 
 /** A reason as 0144 takes it: no control or format character, at most 300 characters. */
@@ -276,7 +314,19 @@ interface Step {
   record: DocumentCheck;
   /** The sentence when this check fails; null when it passes. */
   failure: string | null;
+  /**
+   * The same failure said shortly, naming no purchase order or name, for a reason whose sentence leaves too little room
+   * for the reader's note (`withReaderNote`); the values stay in `record`. Only for a sentence that can run long.
+   */
+  shortFailure?: string;
 }
+
+/** The purchase order checks' short sentences: each sentence of theirs names up to two purchase orders of 100 characters. */
+const PO_SHORT = {
+  typed: "The purchase order the vendor typed is not in the document.",
+  several: "The document names more than one purchase order.",
+  other: "The document names another purchase order than the bill's.",
+} as const;
 
 function vendorCheck(bill: CheckBill, text: string, vendor: string): Step {
   const named = vendorNamed(bill, text);
@@ -357,6 +407,7 @@ function purchaseOrderCheck(bill: CheckBill, reading: DocumentReading, vendor: s
       step: {
         record: { check: "purchase_order", result: differs ? "mismatch" : read ? "match" : "absent", document: differs ?? read, bill: onFile },
         failure: differs ? `The document names purchase order ${differs}; the bill's is ${onFile}.` : null,
+        shortFailure: PO_SHORT.other,
       },
     };
   }
@@ -370,7 +421,11 @@ function purchaseOrderCheck(bill: CheckBill, reading: DocumentReading, vendor: s
     if (!written) {
       return {
         poReference: read,
-        step: { record: { check: "purchase_order", result: "mismatch", document: read, bill: null }, failure: `The purchase order ${vendor} typed, ${typed}, is not in the document.` },
+        step: {
+          record: { check: "purchase_order", result: "mismatch", document: read, bill: null },
+          failure: `The purchase order ${vendor} typed, ${typed}, is not in the document.`,
+          shortFailure: PO_SHORT.typed,
+        },
       };
     }
     if (model !== null && !same(model, written)) {
@@ -379,6 +434,7 @@ function purchaseOrderCheck(bill: CheckBill, reading: DocumentReading, vendor: s
         step: {
           record: { check: "purchase_order", result: "mismatch", document: written, bill: null, alsoRead: model },
           failure: `The document names more than one purchase order: ${written} and ${model}.`,
+          shortFailure: PO_SHORT.several,
         },
       };
     }
@@ -390,6 +446,7 @@ function purchaseOrderCheck(bill: CheckBill, reading: DocumentReading, vendor: s
       step: {
         record: { check: "purchase_order", result: "mismatch", document: model, bill: null, alsoRead: rule },
         failure: `The document names more than one purchase order: ${model} and ${rule}.`,
+        shortFailure: PO_SHORT.several,
       },
     };
   }
@@ -431,11 +488,12 @@ export function compareDocument(bill: CheckBill, reading: DocumentReading): Docu
   const readerFlagged = reading.raw.notes !== null;
   const readerNote = readerNoteOf(reading.raw.notes);
   const steps = [vendorStep, currencyStep, amountStep, ...(po.step ? [po.step] : []), payToStep];
-  const failure = steps.find((step) => step.failure !== null)?.failure ?? (readerFlagged ? READER_FLAGGED : null);
+  const failed = steps.find((step) => step.failure !== null);
+  const failure = failed?.failure ?? (readerFlagged ? READER_FLAGGED : null);
   return {
     outcome: failure === null ? "matched" : "mismatched",
     // Vestiarion's sentence, then what the reader noted, quoted as the reader's.
-    reason: failure === null ? null : withReaderNote(checkReasonOf(failure), readerNote),
+    reason: failure === null ? null : withReaderNote(checkReasonOf(failure), checkReasonOf(failed?.shortFailure ?? failure), readerNote),
     checks: [...steps.map((step) => step.record), invoiceNumberCheck(bill, reading.text)],
     poReference: po.poReference,
     poCompared: po.step !== null,
