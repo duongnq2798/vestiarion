@@ -82,6 +82,8 @@ The last two run after every other check, and only ever hold: a payment another 
 
 Payments in EURC and to payees on other chains have checks of their own, such as a cap on the swap's or the transfer's cost.
 
+On every change to the code, [the Quality Lab](/docs/research/quality-lab) runs fixed scenarios through these checks, the model's answers scripted as an attacker would want them, and a payment made where money should stop fails the change.
+
 ## Limits
 
 - **Each payee's limit.** Every vendor and contractor has a **Payment limit (USDC)**: the most the agent pays it on one bill without a person. Screening sets how much of it applies: all of it for a payee screened clear, a quarter for medium risk, and none for high risk. See [Changing a payment limit](/docs/guides/first-payment#changing-a-payment-limit).

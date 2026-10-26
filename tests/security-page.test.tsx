@@ -67,7 +67,7 @@ describe("/security", () => {
 
   it("renders its heading, the date it was last updated, the site header and the compact footer", () => {
     expect(markup).toMatch(/<h1[^>]*>Security<\/h1>/);
-    expect(body).toContain("Last updated 2026-10-25");
+    expect(body).toContain("Last updated 2026-10-26");
     expect(markup).toMatch(/<header[^>]*class="sticky top-0/);
     for (const href of ["/terms", "/privacy", "/security"]) expect(markup).toContain(`href="${href}"`);
   });
@@ -793,6 +793,22 @@ describe("claims narrowed to what the code does", () => {
     expect(retention).not.toMatch(/API keys go/);
     expect(privacy).toContain("as do the payment approvals you gave, which the ledger keeps, and your Slack and Telegram links");
     expect(section("connectors")).toContain("without calling any provider or uninstalling the Slack app");
+  });
+
+  it("AI: the Quality Lab runs in CI, and a wrong payment in it fails CI (Quality Lab QL9)", () => {
+    const ai = section("ai");
+    expect(ai).toContain(
+      "Every change runs the Quality Lab in CI: fixed scenarios, prompt injection in an invoice's memo or purchase order among them, go through the real decision code with the model's answers scripted, often to what an attacker would want."
+    );
+    expect(ai).toContain("A payment where money should stop, to an address other than the one on file, for an amount other than the bill's, or twice for one bill fails CI.");
+    expect(ai).toContain("The lab does not measure the model's own judgement.");
+    expect(markup.split('id="ai"')[1]?.split("<section")[0]).toContain('href="/docs/research/quality-lab"');
+    // The lab is a test file, so `npm run test` in CI runs it, and it fails on any wrong payment.
+    const lab = source("tests/quality-lab.test.ts");
+    expect(lab).toContain("expect(verdict.wrongPayment, `wrong payment in ${scenario.id}: ${outcomeWords(verdict.actual)}`).toBe(false);");
+    expect(lab).toContain('vi.mock("@/lib/agent/decide"');
+    expect(source(".github/workflows/ci.yml")).toContain("npm run test");
+    expect(source("src/lib/quality-lab/judge.ts")).toContain("transfers > 1;");
   });
 
   it("AI: no training promise for a provider, the providers' own terms linked, base URLs named, and exactly what is read", () => {

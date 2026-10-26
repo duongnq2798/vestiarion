@@ -138,9 +138,13 @@ QL4)".
 - If wrong: a page whose table was typed would disagree with the file after the next change.
 
 **QL9. Every statement about it is held true.**
-- /security, "AI use", gains one sentence on the Quality Lab; the page's date moves to 2026-10-26 with its test.
-- README (Safety architecture and Development), ARCHITECTURE.md (a Quality Lab section, and the Developer docs list of
-  committed generated files), `docs/self-hosting.md`'s script table and CHANGELOG.md say what it is.
+- /security, "AI use", gains one item on the Quality Lab; the page's date moves to 2026-10-26 with its test, which also
+  holds the item to the lab's test file and CI.
+- README (Safety architecture, Verifiable activity and Development), ARCHITECTURE.md (a Quality Lab section, /open and
+  /how-it-decides, and the Developer docs list of committed generated files), `docs/self-hosting.md`'s script table,
+  the controls guide's checks in code, and CHANGELOG.md say what it is.
+- /open's intro says every figure is read from the production database; it now adds that the Quality Lab's result
+  comes from the test instead.
 - No `/api/v1`, webhook or ledger change, so `content/docs/changelog.mdx` is unchanged.
 - If wrong: a public page that says more than the lab does is a claim the code does not back.
 
@@ -161,6 +165,7 @@ QL4)".
 - `src/lib/quality-lab/scenarios.ts`: the scenarios and groups (QL2, QL3).
 - `src/lib/quality-lab/judge.ts`: right and wrong payment (QL4), and the results file's types.
 - `src/lib/quality-lab/words.ts`: an outcome in words, for the block, the page and its Markdown.
+- `src/lib/quality-lab/results.ts`: the committed results as imported, each group's count, and each group's table rows.
 - `src/lib/data/quality-lab.json`: the committed results (QL5).
 - `tests/support/ap-harness.ts`, `tests/quality-lab.test.ts`, `scripts/quality-lab.mjs` (QL1, QL6).
 - `src/components/open/QualityLabResult.tsx` on `src/app/open/page.tsx` and in `src/components/landing/Claims.tsx` (QL7).
