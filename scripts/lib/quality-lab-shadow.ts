@@ -30,6 +30,13 @@ export interface ShadowExportClient {
  * pay-to differs, and whether that address changed since the decision, by its time or by a change the ledger recorded
  * after it (a mirror's leaves no time); how many whole hours before the decision it last changed, never when; and its
  * role, which nothing changes after the payee is added.
+ *
+ * The workspace's payee lock in force at the decision (SX9), from its signed ledger: what the latest `payee_lock_changed`
+ * before the decision changed it to, or with none, the setting a workspace starts with, off with no wait (0135). Kept
+ * only when what the first change after the decision changed it from, or with none the setting on file, is that same
+ * setting: otherwise a change went unrecorded (its entry is written best effort, and an Arc mainnet workspace starts
+ * with the lock on and no such entry), and when it happened is unknown, so both are null. Only the setting's two values
+ * are read from a change, never who made it.
  */
 export const SHADOW_ENTRIES_SQL = `
   select e.seq, e.ts, e.org_id, e.action, e.detail,
@@ -43,10 +50,29 @@ export const SHADOW_ENTRIES_SQL = `
                          and a.detail->>'counterpartyId' = e.detail->>'counterpartyId' and a.seq > e.seq) as address_changed_since,
          case when c.address_changed_at <= e.ts
               then floor(extract(epoch from (e.ts - c.address_changed_at)) / 3600)::int end as address_changed_hours_before,
-         c.role as payee_role
+         c.role as payee_role,
+         l.on_at_decision as payee_lock_on, l.hours_at_decision as payee_lock_cooling_hours
     from public.ledger_entries e
     join public.orgs o on o.id = e.org_id
     join public.counterparties c on c.org_id = e.org_id and c.id::text = e.detail->>'counterpartyId'
+    left join lateral (
+      select case when known.agrees then (known.at_decision->>'on')::boolean end as on_at_decision,
+             case when known.agrees then (known.at_decision->>'coolingHours')::numeric end as hours_at_decision
+        from (select said.at_decision,
+                     jsonb_typeof(said.at_decision->'on') = 'boolean' and jsonb_typeof(said.at_decision->'coolingHours') = 'number'
+                       and said.at_decision->'on' = said.next_known->'on'
+                       and said.at_decision->'coolingHours' = said.next_known->'coolingHours' as agrees
+                from (select coalesce(changes.before_decision->'lock', '{"on": false, "coolingHours": 0}'::jsonb) as at_decision,
+                             coalesce(changes.after_decision->'lock', changes.on_file, '{"on": false, "coolingHours": 0}'::jsonb) as next_known
+                        from (select (select jsonb_build_object('lock', b.detail->'to') from public.ledger_entries b
+                                       where b.org_id = e.org_id and b.domain = 'system' and b.action = 'payee_lock_changed'
+                                         and b.seq < e.seq order by b.seq desc limit 1) as before_decision,
+                                     (select jsonb_build_object('lock', n.detail->'from') from public.ledger_entries n
+                                       where n.org_id = e.org_id and n.domain = 'system' and n.action = 'payee_lock_changed'
+                                         and n.seq > e.seq order by n.seq limit 1) as after_decision,
+                                     (select jsonb_build_object('on', p.payee_lock, 'coolingHours', p.payee_lock_cooling_hours)
+                                        from public.approval_policies p where p.org_id = e.org_id) as on_file) changes) said) known
+    ) l on true
    where e.actor = 'agent'
      and e.domain = 'ap'
      and e.action = any($1::text[])

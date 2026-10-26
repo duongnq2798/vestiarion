@@ -1,6 +1,7 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AGENT_DECISION_ACTIONS } from "@/lib/agent/shadow-hold";
+import { COOLING_HOURS_MAX } from "@/lib/payee-lock-rules";
 import {
   assertShareable,
   exportShadowDecisions,
@@ -15,7 +16,7 @@ import { applyMigrations, createDatabase, createUser, FOUNDING_ORG_ID } from "./
 
 /**
  * The export half of replaying the shadow-mode decisions (docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-
- * design.md SX1-SX8): only the team's own workspaces, only fields the code names, no text, names or identifiers, and the
+ * design.md SX1-SX9): only the team's own workspaces, only fields the code names, no text, names or identifiers, and the
  * whole output refused when anything in it looks private.
  */
 
@@ -182,11 +183,24 @@ function foundingHold(): ShadowLedgerRow {
     address_changed_since: false,
     address_changed_hours_before: 30,
     payee_role: "contractor",
+    // The payee lock, never turned on.
+    payee_lock_on: false,
+    payee_lock_cooling_hours: 0,
   };
 }
 
-/** The payee's row as the read gives it beside the entry: its address unchanged since the decision, never changed at all. */
-const ON_FILE = { address_on_file: ADDRESS_ON_FILE, address_changed_since: false, address_changed_hours_before: null, payee_role: "vendor" } as const;
+/**
+ * The payee's row as the read gives it beside the entry: its address unchanged since the decision, never changed at all;
+ * and the payee lock in force, on with a 24-hour wait, its hours as Postgres's numeric arrives.
+ */
+const ON_FILE = {
+  address_on_file: ADDRESS_ON_FILE,
+  address_changed_since: false,
+  address_changed_hours_before: null,
+  payee_role: "vendor",
+  payee_lock_on: true,
+  payee_lock_cooling_hours: "24",
+} as const;
 
 /** The team workspace's payment of bill A, held for a verdict, with a duplicate match against bill B. */
 function teamPay(): ShadowLedgerRow {
@@ -325,7 +339,7 @@ describe("exportShadowDecisions (shadow replay SX1-SX5, SX8)", () => {
       [
         "agreedWithReference", "amountPaid", "bill", "cashAhead", "cashPriority", "currency", "decidedAt", "decidedOn", "decision",
         "decisionMode", "discountTaken", "eurc", "execution", "guardrailBlocked", "guardrailRule", "id", "observed", "onChainLimit",
-        "outflowBudget", "paidToBank", "payee", "payeeOnFile", "payout", "reevaluation", "referenceAction", "requestedPayOnInDays",
+        "outflowBudget", "paidToBank", "payee", "payeeLock", "payeeOnFile", "payout", "reevaluation", "referenceAction", "requestedPayOnInDays",
         "scheduledForInDays", "terms", "timing", "timingRule", "vendorDocument", "verdict", "workspace",
       ].sort()
     );
@@ -419,6 +433,28 @@ describe("exportShadowDecisions (shadow replay SX1-SX5, SX8)", () => {
     // A role that is not one of the three is dropped.
     const odd = { ...teamPay(), payee_role: "Acme's landlord" };
     expect(exportShadowDecisions([odd], [], READ_AT).decisions[0].payeeOnFile.role).toBeNull();
+  });
+
+  it("keeps the payee lock in force at the decision as a boolean and whole hours, or null when it is not known (SX9)", () => {
+    const [hold, pay] = exported().decisions;
+    expect(hold.payeeLock).toEqual({ on: false, coolingHours: 0 });
+    expect(pay.payeeLock).toEqual({ on: true, coolingHours: 24 });
+    const lockOf = (on: unknown, hours: unknown) =>
+      exportShadowDecisions([{ ...teamPay(), payee_lock_on: on as boolean | null, payee_lock_cooling_hours: hours as number | string | null }], [], READ_AT)
+        .decisions[0].payeeLock;
+    expect(lockOf(true, 0)).toEqual({ on: true, coolingHours: 0 });
+    // A wait is kept while the lock is off (PL1), and applies only once it is on.
+    expect(lockOf(false, "48")).toEqual({ on: false, coolingHours: 48 });
+    expect(lockOf(true, COOLING_HOURS_MAX)).toEqual({ on: true, coolingHours: 168 });
+    // The read could not account for the setting at the decision: unknown, never taken as off.
+    expect(lockOf(null, null)).toBeNull();
+    expect(lockOf(null, 24)).toBeNull();
+    // Anything but a boolean and whole hours within the setting's bounds is unknown too.
+    const odd: Array<[unknown, unknown]> = [
+      [true, null], ["true", 24], [1, 24], [true, 1.5], [true, "1.5"], [true, -1], [true, "-1"], [true, 169], [true, "24 hours"],
+      [true, Number.NaN], [true, Number.POSITIVE_INFINITY], [true, { hours: 24 }],
+    ];
+    for (const [on, hours] of odd) expect(lockOf(on, hours), `${String(on)} ${String(hours)}`).toBeNull();
   });
 
   it("says whether the document's pay-to differs as it did at the decision, or that it is unknown (SX4)", () => {
@@ -651,6 +687,32 @@ describe("runShadowExport (shadow replay SX2, SX7)", () => {
     expect(entries).not.toMatch(/c\.address_changed_at as|c\.address_confirmed_at|c\.name|c\.\*/);
   });
 
+  it("reads the payee lock in force at each decision from the signed ledger, as a boolean and a number, never who changed it (SX9)", async () => {
+    const client = new FakeClient([], []);
+    await runShadowExport({ client, write: () => {}, now: READ_AT });
+    const entries = squash(client.queries[1].text);
+    // What the latest change before the decision, by the ledger's order, changed it to.
+    expect(entries).toContain(
+      "select jsonb_build_object('lock', b.detail->'to') from public.ledger_entries b where b.org_id = e.org_id and b.domain = 'system' " +
+        "and b.action = 'payee_lock_changed' and b.seq < e.seq order by b.seq desc limit 1"
+    );
+    // What the first change after it changed it from, or the setting on file with none: what was in force must be it.
+    expect(entries).toContain(
+      "select jsonb_build_object('lock', n.detail->'from') from public.ledger_entries n where n.org_id = e.org_id and n.domain = 'system' " +
+        "and n.action = 'payee_lock_changed' and n.seq > e.seq order by n.seq limit 1"
+    );
+    expect(entries).toContain(
+      "select jsonb_build_object('on', p.payee_lock, 'coolingHours', p.payee_lock_cooling_hours) from public.approval_policies p where p.org_id = e.org_id"
+    );
+    // With no change before it, the setting a workspace starts with on Arc testnet: off, with no wait (0135).
+    expect(entries).toContain(`'{"on": false, "coolingHours": 0}'::jsonb`);
+    expect(entries).toContain("l.on_at_decision as payee_lock_on, l.hours_at_decision as payee_lock_cooling_hours");
+    // Only the setting's two values: never who changed it, the change's summary or its time.
+    expect(entries).not.toContain("'by'");
+    expect(entries).not.toMatch(/\.summary|\b[bn]\.ts\b/);
+    expect(entries.match(/\b[bn]\.detail\b[^ ]*/g)).toEqual(["b.detail->'to')", "n.detail->'from')"]);
+  });
+
   it("reads each kept decision's verdict, never its reason", async () => {
     const client = new FakeClient([teamPay(), foundingHold()], VERDICTS);
     await runShadowExport({ client, write: () => {}, now: READ_AT });
@@ -686,11 +748,12 @@ describe("runShadowExport (shadow replay SX2, SX7)", () => {
   });
 });
 
-/** The real query on the real schema (PGlite with every migration): what it keeps, and what it never reads (SX1, SX2). */
-describe("the export's read on the migrated schema (SX1, SX2)", () => {
+/** The real query on the real schema (PGlite with every migration): what it keeps, and what it never reads (SX1, SX2, SX9). */
+describe("the export's read on the migrated schema (SX1, SX2, SX9)", () => {
   let db: PGlite;
   let file: ShadowDecisionsFile;
   let line: string;
+  let teamMember: string;
 
   async function org(slug: string, createdBy: string | null, network = "arc-testnet"): Promise<string> {
     const result = await db.query<{ id: string }>(
@@ -714,6 +777,24 @@ describe("the export's read on the migrated schema (SX1, SX2)", () => {
       `insert into public.ledger_entries (org_id, ts, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash)
        values ($1, $2, 'human', 'compliance', 'counterparty_address_changed', 'changed', $3, 'b', 's', 'p', gen_random_uuid()::text)`,
       [orgId, at, JSON.stringify({ counterpartyId, via: "mirror", from: null, to: DOCUMENT_PAY_TO })]
+    );
+  }
+
+  /** An owner's change to the payee lock, as `changePayeeLock` signs it (src/lib/payee-lock.ts): who, from what, to what. */
+  async function lockChanged(orgId: string, at: string, by: string, from: object, to: object): Promise<void> {
+    await db.query(
+      `insert into public.ledger_entries (org_id, ts, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash)
+       values ($1, $2, 'human', 'system', 'payee_lock_changed', 'Changed the payee lock', $3, 'b', 's', 'p', gen_random_uuid()::text)`,
+      [orgId, at, JSON.stringify({ by, from, to })]
+    );
+  }
+
+  /** The lock on file now, as `changePayeeLock`'s upsert, or a workspace's creation on Arc mainnet, leaves it. */
+  async function lockOnFile(orgId: string, on: boolean, coolingHours: number): Promise<void> {
+    await db.query(
+      `insert into public.approval_policies (org_id, payee_lock, payee_lock_cooling_hours) values ($1, $2, $3)
+       on conflict (org_id) do update set payee_lock = excluded.payee_lock, payee_lock_cooling_hours = excluded.payee_lock_cooling_hours`,
+      [orgId, on, coolingHours]
     );
   }
 
@@ -747,12 +828,21 @@ describe("the export's read on the migrated schema (SX1, SX2)", () => {
     db = await createDatabase();
     await applyMigrations(db);
     const team = await createUser(db, "team@vestiarion.test");
+    teamMember = team;
     await db.query("select public.set_platform_team_member('team@vestiarion.test', true)");
     const owner = await createUser(db, "owner@customer.test");
 
     const ours = await org("team-shop", team);
     const customer = await org("customer-shop", owner);
     const ourMainnet = await org("team-mainnet", team, "arc-mainnet");
+
+    // The team workspace's payee lock, turned on with a 4-hour wait and then given 24 hours, both before its decisions.
+    const off = { on: false, coolingHours: 0 };
+    await lockChanged(ours, "2026-10-10T09:00:00Z", team, off, { on: true, coolingHours: 4 });
+    await lockChanged(ours, "2026-10-10T10:00:00Z", team, { on: true, coolingHours: 4 }, { on: true, coolingHours: 24 });
+    // The customer's lock, changed before every decision: it is the customer's alone.
+    await lockChanged(customer, "2026-10-10T11:00:00Z", owner, off, { on: true, coolingHours: 72 });
+    await lockOnFile(customer, true, 72);
 
     const foundingVendor = await payee(FOUNDING_ORG_ID, "Founding vendor");
     const ourVendor = await payee(ours, "Our vendor");
@@ -794,6 +884,25 @@ describe("the export's read on the migrated schema (SX1, SX2)", () => {
     await addressChanged(ours, mirroredAfter, "2026-10-13T13:00:00Z");
     // A change to another payee after these decisions says nothing of theirs.
     await addressChanged(ours, ourSample, "2026-10-13T14:00:00Z");
+    // The team's lock turned off after its decisions, which none of them was made under.
+    await lockChanged(ours, "2026-10-13T15:00:00Z", team, { on: true, coolingHours: 24 }, { on: false, coolingHours: 24 });
+    await lockOnFile(ours, false, 24);
+
+    // A team workspace whose lock is on with no change on record, as a change whose entry failed (it is written best
+    // effort) leaves it, or as Arc mainnet's starting lock is: when it was turned on is not in the ledger.
+    const unrecorded = await org("team-unrecorded", team);
+    const unrecordedVendor = await payee(unrecorded, "Unrecorded vendor");
+    await lockOnFile(unrecorded, true, 24);
+    await entry(unrecorded, "2026-10-14T10:00:00Z", "ap_hold", decisionOn(unrecordedVendor, 301));
+
+    // A team workspace whose one recorded change starts from a lock the ledger never saw set: unknown before it, known
+    // after it.
+    const missed = await org("team-missed", team);
+    const missedVendor = await payee(missed, "Missed vendor");
+    await entry(missed, "2026-10-15T10:00:00Z", "ap_hold", decisionOn(missedVendor, 401));
+    await lockChanged(missed, "2026-10-15T11:00:00Z", team, { on: true, coolingHours: 48 }, { on: false, coolingHours: 48 });
+    await lockOnFile(missed, false, 48);
+    await entry(missed, "2026-10-15T12:00:00Z", "ap_hold", decisionOn(missedVendor, 402));
 
     const writes: string[] = [];
     line = await runShadowExport({ client: { query: (text, params) => db.query(text, params) }, write: (_path, text) => void writes.push(text), now: READ_AT });
@@ -811,8 +920,11 @@ describe("the export's read on the migrated schema (SX1, SX2)", () => {
       ["shadow-03", "w2", "hold", 201, null],
       ["shadow-04", "w2", "hold", 202, null],
       ["shadow-05", "w2", "hold", 203, null],
+      ["shadow-06", "w3", "hold", 301, null],
+      ["shadow-07", "w4", "hold", 401, null],
+      ["shadow-08", "w4", "hold", 402, null],
     ]);
-    expect(line).toBe("5 shadow decisions from 2 workspaces: 1 agreed, 0 disagreed, 4 with no verdict. Wrote src/lib/quality-lab/shadow-decisions.json");
+    expect(line).toBe("8 shadow decisions from 4 workspaces: 1 agreed, 0 disagreed, 7 with no verdict. Wrote src/lib/quality-lab/shadow-decisions.json");
   });
 
   it("never carries a customer's decision, its verdict, or any verdict's reason, though its creator is gone", () => {
@@ -830,6 +942,28 @@ describe("the export's read on the migrated schema (SX1, SX2)", () => {
       [201, { role: "contractor", addressChangedHoursBefore: 3, addressChangedSinceDecision: false }, { present: true, differs: true }],
       [202, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: true }, { present: true, differs: null }],
       [203, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: true }, { present: true, differs: null }],
+      [301, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
+      [401, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
+      [402, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
     ]);
+  });
+
+  it("takes the payee lock each decision was made under from the signed ledger, and none it cannot account for (SX9)", () => {
+    expect(file.decisions.map((decision) => [decision.observed.amount, decision.payeeLock])).toEqual([
+      // The founding workspace never changed it and has no row: off, as a workspace that never set it reads.
+      [101, { on: false, coolingHours: 0 }],
+      // The team's: the latest change before each decision, never the one after them, nor the customer's.
+      [102, { on: true, coolingHours: 24 }],
+      [201, { on: true, coolingHours: 24 }],
+      [202, { on: true, coolingHours: 24 }],
+      [203, { on: true, coolingHours: 24 }],
+      // On with no change recorded: unknown, never taken as off.
+      [301, null],
+      // Before a change from a setting the ledger never recorded: unknown; after it, what it changed to.
+      [401, null],
+      [402, { on: false, coolingHours: 48 }],
+    ]);
+    // Who changed it never reaches the file.
+    expect(JSON.stringify(file)).not.toContain(teamMember);
   });
 });

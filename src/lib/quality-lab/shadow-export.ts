@@ -2,10 +2,11 @@ import { AGENT_DECISION_ACTIONS } from "../agent/shadow-hold";
 import { FOUNDING_ORG_ID } from "../dal/org-config";
 import { NO_SWAP_ROUTE, SWAP_NOT_QUOTED, SWAP_QUOTE_UNANSWERED, SWAP_QUOTE_UNREADABLE, swapUnavailableForFx } from "../fx/swap-service";
 import { payToDiffers } from "../invoice-pay-to-rules";
+import { COOLING_HOURS_MAX } from "../payee-lock-rules";
 
 /**
  * The shadow-mode decisions the Quality Lab replays, exported from the team's own workspaces into a committed file
- * (docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md SX1-SX8). Pure: `npm run quality-lab:shadow`
+ * (docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md SX1-SX10). Pure: `npm run quality-lab:shadow`
  * (scripts/quality-lab-shadow.ts) hands it the rows it read, and writes what this returns once `assertShareable` passes.
  *
  * Built on an allowlist (SX3): every field of a decision's ledger detail that reaches the file is named below, one by
@@ -161,6 +162,16 @@ export interface ShadowPayeeOnFile {
   addressChangedSinceDecision: boolean;
 }
 
+/**
+ * The workspace's payee lock in force when the decision was made (SX9), which `counterparty.cooling_off` weighs with
+ * `payeeOnFile.addressChangedHoursBefore`: from the workspace's signed ledger, never from who changed it.
+ */
+export interface ShadowPayeeLock {
+  on: boolean;
+  /** Hours a changed address waits before it is paid, 0 to 168; kept while the lock is off, applied only once it is on. */
+  coolingHours: number;
+}
+
 /** The EURC figures a EURC bill was weighed with, and the swap it was offered or why there was none. */
 export interface ShadowEurc {
   usdcValue: number | null;
@@ -226,6 +237,8 @@ export interface ShadowDecision {
   discountTaken: number | null;
   observed: ShadowObserved;
   payeeOnFile: ShadowPayeeOnFile;
+  /** The payee lock in force at the decision, or null when the ledger cannot account for it (SX9): unknown, never off. */
+  payeeLock: ShadowPayeeLock | null;
   /** `chainMode` is `live` or `simulate`. */
   execution: { resultingStatus: string | null; heldBecause: string | null; chainMode: string | null };
 }
@@ -257,6 +270,10 @@ export interface ShadowLedgerRow {
   address_changed_hours_before: number | string | null;
   /** The payee's role. */
   payee_role: string | null;
+  /** Whether the payee lock was on at the decision, as the ledger accounts for it (SX9); null when it cannot. */
+  payee_lock_on: boolean | null;
+  /** Its wait in hours, as Postgres's numeric arrives (a string from `pg`); null when the ledger cannot account for it. */
+  payee_lock_cooling_hours: number | string | null;
 }
 
 /** One verdict as the script reads it: never its reason. */
@@ -353,6 +370,16 @@ function payeeOnFileOf(row: ShadowLedgerRow): ShadowPayeeOnFile {
     addressChangedHoursBefore: !since && hours !== null && Number.isInteger(hours) && hours >= 0 ? hours : null,
     addressChangedSinceDecision: since,
   };
+}
+
+/**
+ * The payee lock as the read found it in force at the decision (SX9): a boolean and whole hours within the setting's
+ * bounds, or null. Anything else, a read that could not account for it included, is unknown, never taken as off.
+ */
+function payeeLockOf(row: ShadowLedgerRow): ShadowPayeeLock | null {
+  const hours = num(row.payee_lock_cooling_hours);
+  if (typeof row.payee_lock_on !== "boolean" || hours === null || !Number.isInteger(hours) || hours < 0 || hours > COOLING_HOURS_MAX) return null;
+  return { on: row.payee_lock_on, coolingHours: hours };
 }
 
 /**
@@ -632,6 +659,7 @@ function decisionOf(row: ShadowLedgerRow, detail: Detail, day: string, names: Ps
     discountTaken: num(detail.discountTaken),
     observed: observedOf(detail.observed, row, guardrailRule, names),
     payeeOnFile: payeeOnFileOf(row),
+    payeeLock: payeeLockOf(row),
     execution: { resultingStatus: token(execution.resultingStatus), heldBecause: token(execution.heldBecause), chainMode: token(execution.chainMode) },
   };
 }

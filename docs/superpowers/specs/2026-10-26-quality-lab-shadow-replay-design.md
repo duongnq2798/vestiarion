@@ -77,7 +77,8 @@ SX3)".
     whole hours before the decision its address last changed, which the payee lock's cooling-off weighs in hours. That
     time is kept only when the address has not changed since the decision: not by its `address_changed_at`, and not by
     a `counterparty_address_changed` entry after the decision's (a mirror address clears the time). Otherwise it is
-    null, and `addressChangedSinceDecision` says so.
+    null, and `addressChangedSinceDecision` says so;
+  - beside the entry, from the workspace's signed ledger, the payee lock in force at the decision (`payeeLock`, SX9).
 - If wrong: a field added to the ledger detail later, a memo, a name, would reach a public file with no one deciding it.
 
 **SX4. No text, names or identifiers; pseudonyms link decisions.**
@@ -120,9 +121,9 @@ SX3)".
 **SX7. The script reads once, read-only, and writes one file.**
 - `npm run quality-lab:shadow` (`scripts/quality-lab-shadow.ts`) connects as `npm run research:replay` does (`.env.local`
   then `.env`, `SUPABASE_DB_URL`, or the project id and database password), opens `begin transaction read only`, makes
-  one read of the entries (joined to `orgs`, `platform_team` and `counterparties` for SX1 and SX2, and looking for a
-  later `counterparty_address_changed` entry for SX3) and one of their verdicts, commits and closes. It writes nothing
-  to the database.
+  one read of the entries (joined to `orgs`, `platform_team` and `counterparties` for SX1 and SX2, looking for a later
+  `counterparty_address_changed` entry for SX3, and reading the workspace's `payee_lock_changed` entries and its
+  `approval_policies` row for SX9) and one of their verdicts, commits and closes. It writes nothing to the database.
 - It writes `src/lib/quality-lab/shadow-decisions.json` (2-space JSON, LF, a trailing newline) and prints one line: how
   many decisions, from how many workspaces, and their verdicts.
 - The query and write are `runShadowExport({ client, write, now })` in `scripts/lib/quality-lab-shadow.ts`, which takes
@@ -137,3 +138,73 @@ SX3)".
 - Its types (`ShadowDecisionsFile`, `ShadowDecision` and their parts) are exported from
   `src/lib/quality-lab/shadow-export.ts` for the replay.
 - If wrong: a replay would guess the shape of what it reads.
+
+**SX9. The payee lock each decision was made under.**
+- `counterparty.cooling_off` (`enforceApGuardrails`, `inCoolingOff` in `src/lib/payee-lock-rules.ts`) holds a payment
+  or a schedule to an address changed less than the lock's wait ago, while the lock is on. The AP stage reads the lock
+  once, when it begins, and `changePayeeLock` refuses a change while a cycle runs (PL1), so the lock a decision was made
+  under is the one in force when its entry was written.
+- Each decision carries `payeeLock: { on, coolingHours }`, from the workspace's signed ledger: the `to` of its latest
+  `payee_lock_changed` entry (domain `system`, written by `changePayeeLock` in `src/lib/payee-lock.ts`) before the
+  decision's, by the ledger's order; with none, the setting a workspace starts with, off with no wait (the column
+  defaults, 0135; a workspace with no `approval_policies` row reads as off).
+- Kept only when the ledger accounts for it: the first change after the decision must have changed it from that same
+  setting, or with no change after it, the setting on file now (`approval_policies`) must be it. Otherwise a change went
+  unrecorded, and when it happened is unknown: `changePayeeLock` writes its entry best effort, after the setting, so a
+  failed append leaves a change with no entry; and an Arc mainnet workspace starts with the lock on
+  (`MAINNET_STARTING_PAYEE_LOCK`, recorded in its `org_created` entry, never as a change; none is exported, SX2). Then
+  `payeeLock` is null: unknown, never off.
+- Read in SQL, which returns only a boolean and a number; the mapping keeps a boolean and whole hours from 0 to
+  `COOLING_HOURS_MAX` (168), and turns anything else into null. Who changed it (`by`), when, and the change's summary
+  are never read.
+- Not covered: a change that passed `changePayeeLock`'s check for a running cycle just as a cycle began, after that
+  cycle read the lock. The ledger puts it before the cycle's decisions, which were made under the lock before it.
+- If wrong: a replay would weigh a changed address under a wait the decision was not made under, and count a difference
+  that is not one, or miss one that is.
+
+**SX10. What the export cannot rebuild.**
+- `enforceApGuardrails` (`src/lib/agent/guardrails.ts`, `ApGuardrailInput`) is filled in `decideApPayable`
+  (`src/lib/agent/orchestrator.ts`). The file carries each of its inputs, as recorded or so the replay derives it:
+  - as recorded: the action; the risk level, payment limit and two-approvals figure; the purchase order's presence,
+    goods received and whether a purchase order is required; whether the address is missing, and unconfirmed (as
+    `addressUnconfirmed` measured it); the new payee check's `twoParties` and `unanswered`, present only for a first
+    payment; the currency; `paidToBank`; the spending limit's figures; the contract's coverage and verdict; the vendor
+    document's source; the payee's role (`payeeOnFile.role`); the address's last change as hours before the decision
+    (`payeeOnFile`) and the payee lock (SX9);
+  - the amount weighed: `eurc.usdcValue` for a EURC bill, `observed.amount` otherwise;
+  - the duplicates: the entry keeps the five strongest matches (`DUPLICATE_MATCHES_IN_CONTEXT`) and the guardrail weighs
+    all of them, but a match refuses only at a confidence of 0.9 or more against money already committed, any other
+    match is capped at 0.85, and matches are kept strongest first, so a match that refuses is always among those kept;
+  - `fxAvailable`: not a EURC bill, or `eurc.fxRate` is not null;
+  - `bridge`: present when `payout` is. Its fee percent is `payout.feeUsdc` over `observed.amount` (0 for EURC, which
+    never crosses); `gatewayShort` is a Gateway route whose `gatewayBalanceUsdc` is below the amount and its fee (only a
+    route an earlier attempt took can be);
+  - `eurcShort`: for a EURC bill, `eurc.eurcBalance` against the amount less the early-payment discount when
+    `terms.earlyPayDiscount.deadlineInDays` is 0 or more (`discountApplies`). A null balance with `execution.chainMode`
+    `live` is one that could not be read; with `simulate`, none is checked. Its swap is `decision.fundWithSwap`,
+    `eurc.swapOffer`, `observed.operatingBalance` (in shadow mode nothing is sent before the entry is written, so it is
+    the balance the check saw) and `eurc.usdcDueWithin7Days`;
+  - `now`: the entry's time, from which the address's hours are counted. The guardrail's clock read a moment earlier, so
+    a wait that ended in between is not told apart;
+  - the reasoning, the vendor's name and whether the network has a faucet change only the words of a hold, which the
+    replay does not compare.
+- Not exported, or exported as unknown. A replay must count a decision that depends on one as "cannot rebuild", never
+  as the same or a different outcome:
+  1. An address on OFAC's SDN list (`sanctionedWallet`, over the list the cycle's sweep read) is weighed as high risk
+     whatever `counterparties.risk_level` says, and `observed.riskLevel` is that column. A decision held as
+     `counterparty.high_risk` whose `riskLevel` is not `high` shows the address was listed, and one the guardrail
+     weighed past that rule shows it was not. Otherwise (the decision was not to pay or schedule, or
+     `invoice.duplicate_of_settled` stopped it first) whether it was listed is not in the ledger, so a replay that pays
+     or schedules it cannot be rebuilt.
+  2. The spending limit and the contract's check are read only for a payment now to a payee with an address (the
+     contract's not for a bank payout). A replay that pays a bill the decision did not pay has neither, and cannot
+     rebuild `workspace.outflow_budget`, `workspace.onchain_limit_route` or `workspace.onchain_limit`.
+  3. The address changed again after the decision (`payeeOnFile.addressChangedSinceDecision`): its hours before the
+     decision are unknown, and `counterparty.cooling_off` cannot be rebuilt unless `payeeLock` is known to be off or to
+     have no wait.
+  4. `observed.documentPayTo.differs` is null (SX4): `invoice.pay_to_differs` cannot be rebuilt.
+  5. `payeeLock` is null (SX9): `counterparty.cooling_off` cannot be rebuilt when the address changed at or before the
+     decision, or when that is unknown (3). An address that never changed waits under no lock.
+- Each counts only for a replayed payment or schedule that reaches the rule. A hold, a flag or a request for information
+  meets no rule, and a rule ahead of it that stops the replayed decision settles the outcome whatever the unknown input.
+- If wrong: a replay would count as a regression, or as agreement, an outcome that rests on an input it never had.

@@ -4976,7 +4976,9 @@ Fixed scenarios run through the agent's real decision code in CI on every change
   former customer's. Customers' workspaces are never read into it. `exportShadowDecisions`
   (`src/lib/quality-lab/shadow-export.ts`) passes only the fields it names, as numbers, booleans and rule names, with
   pseudonyms local to the file for workspaces, bills and payees, and dates as days from the day the decision measured
-  its timing on; of the payee's row it keeps only what still says what the decision saw. `assertShareable` refuses the
+  its timing on; of the payee's row it keeps only what still says what the decision saw, and of the workspace's signed
+  ledger the payee lock each decision was made under, or null where a change went unrecorded. The spec lists the
+  guardrail inputs the file does not carry, which a replay counts as "cannot rebuild". `assertShareable` refuses the
   whole file when anything in it looks like an address, hash, email or id, with or without its `0x` or dashes. The
   script reads in one read-only transaction and is run by hand, never in CI.
 - Not covered: the model's judgement (scripted), live payments (proved on Arc testnet and Arc mainnet by transactions),
