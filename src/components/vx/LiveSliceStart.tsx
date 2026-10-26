@@ -59,11 +59,15 @@ export interface SliceAccountant {
   email: string;
 }
 
-/** A vendor's agreement in words, with its count; no percentage under five verdicts (autonomy ladder AL4, AL8). */
+/**
+ * A vendor's agreement in words, with its count; no percentage under five verdicts (autonomy ladder AL4, AL8). The
+ * agreed count goes with the rate, as in the report's table, since a whole percent can round one Disagree in 200 up to
+ * 100%.
+ */
 function agreementWords(row: LadderRow | undefined): string {
   if (!row) return "No verdicts yet";
   if (row.rate === null) return `${row.given} ${row.given === 1 ? "verdict" : "verdicts"}: too few to tell yet`;
-  return `${row.rate}% agreed, from ${row.given} verdicts`;
+  return `${row.rate}% agreed, ${row.agreed} of ${row.given} verdicts`;
 }
 
 export function LiveSliceStart({

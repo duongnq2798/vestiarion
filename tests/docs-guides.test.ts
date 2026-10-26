@@ -2933,7 +2933,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Pay, Schedule, Hold, Flag for review and Ask for details", LADDER_LIBRARY, 'ap_flag_fraud: "Flag for review"'],
     ["Ask for details", LADDER_LIBRARY],
     // Each vendor's agreement in the live slice's list (autonomy ladder AL8).
-    ["83% agreed, from 6 verdicts", LIVE_SLICE_START, "% agreed, from ${row.given} verdicts"],
+    ["83% agreed, 5 of 6 verdicts", LIVE_SLICE_START, "% agreed, ${row.agreed} of ${row.given} verdicts"],
     ["2 verdicts: too few to tell yet", LIVE_SLICE_START, ": too few to tell yet"],
     ["No verdicts yet", LIVE_SLICE_START],
     ["Beside each vendor: how often you agreed with the agent's decisions on its bills, from your verdicts in shadow mode.", LIVE_SLICE_START],

@@ -19,8 +19,10 @@ Code comments and test names cite the ids, for example "(autonomy ladder AL4)".
 
 - **AL1. One definition of agreement.** Agreement here is the shadow-mode verdict and nothing else: a row of
   `decision_verdicts` (migration 0084), Agree or Disagree on one of the agent's decisions. It is counted with
-  `agreementRate` (`src/lib/verdict-rate.ts`), the function the console's shadow mode panel, the workspace report, the
-  shared report and /open already use. Other agreement figures exist and are not this one:
+  `agreementRate` (`src/lib/verdict-rate.ts`), the function the console's shadow mode panel, the workspace report and
+  the shared report already use. /open counts the same verdicts the same way, agreed out of agreed plus disagreed, in
+  its own code (`open_verdicts`, migration 0086, formatted by its own figures table), not with this function. Other
+  agreement figures exist and are not this one:
   - the model against the written policy (`agreedWithReference` on every AP decision entry, the research note's figure);
   - the agent against what the business recorded paying (`compareActuals`, the report's **Agent and business agreed**);
   - /open's flags upheld and approval resolutions (`open_outcomes`).
@@ -78,9 +80,11 @@ Code comments and test names cite the ids, for example "(autonomy ladder AL4)".
   ticks are unchanged. On a phone each row stacks its name and count over its figure, as the currency report's tables
   do, so nothing scrolls sideways at 375 px.
 - **AL8. In the live slice's vendor picker.** Each vendor's own row says, beside its checkbox, how often the owner
-  agreed with the agent on its bills: "83% agreed, from 6 verdicts", "2 verdicts: too few to tell yet", or "No verdicts
-  yet". The vendors keep their order (by name) and every existing word. A vendor with no payment limit, which cannot go,
-  shows it too. A line above the list says where the figures come from.
+  agreed with the agent on its bills: "83% agreed, 5 of 6 verdicts", "2 verdicts: too few to tell yet", or "No verdicts
+  yet". The rate always comes with the agreed count, as in the report's table (AL4): a whole percent rounds 199 of 200
+  up to 100%, and the count keeps that one Disagree in view where the owner ticks a vendor for real USDC. The vendors
+  keep the list's own order (by name), not the ladder's most verdicts first, and every existing word. A vendor with no
+  payment limit, which cannot go, shows it too. A line above the list says where the figures come from.
 - **AL9. Not in the shared report.** The shared report keeps its one agreement figure, which these rows add up to
   (AL3). Step 1 is a decision aid for the owner about what to hand over, not a claim to an outside reader. A shared copy
   already lists each decided bill's newest decision with its verdict. Per-vendor rows would also need the share's name
@@ -95,8 +99,10 @@ Planned, so that step 1's rows are read for what they are: a measurement.
   its own, within its limits", inside a workspace.
 - It would use the rows here as the evidence shown at that moment.
 
-None of this exists. Today the only ways to give the agent more room are the ones the product already has: turning
-shadow mode off, the live slice, a payee's payment limit and the agent's spending limit.
+None of this exists. Today an owner gives the agent more room only with the controls the product already has, among
+them: turning shadow mode off, the live slice, a payee's payment limit, the agent's spending limit, the figure above
+which a payment needs two approvals, a vendor's purchase-order requirement, the payee lock, a project's budget and, on
+Arc mainnet with a treasury in the owner's own wallet, the daily and 7-day figures set in its contract.
 
 ## Where it is
 

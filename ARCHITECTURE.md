@@ -1695,10 +1695,12 @@ review, Ask for details) and per vendor (most verdicts first, then name, then id
 agreed, disagreed, rate, enough }`: `given` counts decisions, since a bill decided twice can carry two verdicts, and
 `rate` is `agreementRate` only from `VERDICTS_BEFORE_LIVE` (5) verdicts, null below. Agreement here is the verdict
 alone, never the model against the written policy (`agreedWithReference`), the agent against what the business paid
-(`compareActuals`) or /open's flags upheld, and the report says so where it shows them. The page computes it only while
-the readiness steps show; `ReportReadiness` renders it after its steps (`AgreementLadder`, stacked rows on a phone),
-and `LiveSliceStart` takes the `byVendor` rows as `agreement`. The shared report keeps its single agreement figure, and
-/open is unchanged.
+(`compareActuals`) or /open's flags upheld. The report's block says it counts verdicts on real bills and names Agent vs
+what really happened, the one of those figures on the same page, as a different one (AL1). The page computes it only
+while the readiness steps show; `ReportReadiness` renders it after its steps (`AgreementLadder`, stacked rows on a
+phone), and `LiveSliceStart` takes the `byVendor` rows as `agreement`, showing each rate with its agreed count, as the
+report's table does, so a rate rounded to 100% still shows a Disagree. The shared report keeps its single agreement
+figure, and /open is unchanged.
 
 **A shared report** (same spec, S1-S6, S10-S14) is a public, revocable, live copy of the report. A share is a row of
 `report_shares` (0095) holding the SHA-256 of its link's secret (`vxs_` and 43 base64url characters,
