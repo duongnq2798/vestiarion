@@ -98,10 +98,10 @@ function iconOf(name: IconName): LucideIcon {
   return evidenceIcon(name);
 }
 
-/** The icons a pack shows: its rows' check kinds, and the arrow where a transaction links to its explorer. */
-function iconsOf(pack: ClosePack): Set<IconName> {
-  const names = new Set<IconName>(pack.rows.flatMap((row) => CHECKS.map(([key]) => row.checks[key].kind)));
-  if (pack.rows.some((row) => row.transaction.explorerUrl) || pack.escrow.some((move) => move.explorerUrl)) names.add("explorer");
+/** The icons these cards and escrow moves show: each check's kind, and the arrow where a transaction links to its explorer. */
+function iconsOf(rows: readonly ClosePackRow[], escrow: ClosePack["escrow"] = []): Set<IconName> {
+  const names = new Set<IconName>(rows.flatMap((row) => CHECKS.map(([key]) => row.checks[key].kind)));
+  if (rows.some((row) => row.transaction.explorerUrl) || escrow.some((move) => move.explorerUrl)) names.add("explorer");
   return names;
 }
 
@@ -109,6 +109,8 @@ function iconsOf(pack: ClosePack): Set<IconName> {
  * Each icon the page shows, drawn once (close pack page speed CS8). A month's cards repeat the same few, six check badges
  * and an explorer link a card, and an icon drawn where it shows is its whole SVG in the page and its drawing again in
  * the data React sends with it. Each badge and link points here instead (`IconUse`). Hidden: the words beside each say it.
+ * The report draws one for the whole pack; the card exported on its own (`ClosePackPayment`) draws its own, so whatever
+ * shows a part points only at icons drawn with it.
  */
 function IconSheet({ names }: { names: ReadonlySet<IconName> }) {
   if (names.size === 0) return null;
@@ -362,8 +364,24 @@ function TransactionFact({ row }: { row: ClosePackRow }) {
   );
 }
 
-/** One payment settled in the month: its bill, who decided and approved it, its checks, its transaction and its signed entry. */
+/**
+ * One payment settled in the month, shown on its own (the guide's screenshot): the card, with the icons it points at
+ * drawn beside it, as the report draws them for the whole pack (close pack page speed CS8).
+ */
 export function ClosePackPayment({ row }: { row: ClosePackRow }) {
+  return (
+    <>
+      <IconSheet names={iconsOf([row])} />
+      <PaymentCard row={row} />
+    </>
+  );
+}
+
+/**
+ * One payment settled in the month: its bill, who decided and approved it, its checks, its transaction and its signed
+ * entry. Its icons point at a sheet drawn with it: the report's, or `ClosePackPayment`'s.
+ */
+function PaymentCard({ row }: { row: ClosePackRow }) {
   const bill = row.bill;
   const address = addressLines(row);
   return (
@@ -455,7 +473,8 @@ export function ClosePackPayment({ row }: { row: ClosePackRow }) {
   );
 }
 
-export function ClosePackPayments({ pack }: { pack: ClosePack }) {
+/** The month's cards, inside the report, whose icon sheet they point at. */
+function ClosePackPayments({ pack }: { pack: ClosePack }) {
   return (
     <section aria-labelledby="close-pack-payments" className="space-y-3">
       <h2 id="close-pack-payments" className="text-lg font-semibold text-ink">
@@ -466,7 +485,7 @@ export function ClosePackPayments({ pack }: { pack: ClosePack }) {
       ) : (
         <div className="space-y-3">
           {pack.rows.map((row) => (
-            <ClosePackPayment key={row.paymentId} row={row} />
+            <PaymentCard key={row.paymentId} row={row} />
           ))}
         </div>
       )}
@@ -508,8 +527,11 @@ export function ClosePackNotSettled({ pack }: { pack: ClosePack }) {
   );
 }
 
-/** Money locked for a milestone, or taken back, in the month: a lock pays no one, so neither is in the totals (CP4). */
-export function ClosePackEscrow({ pack }: { pack: ClosePack }) {
+/**
+ * Money locked for a milestone, or taken back, in the month: a lock pays no one, so neither is in the totals (CP4).
+ * Inside the report, whose icon sheet its explorer links point at.
+ */
+function ClosePackEscrow({ pack }: { pack: ClosePack }) {
   if (pack.escrow.length === 0) return null;
   return (
     <section aria-labelledby="close-pack-escrow" className="space-y-3">
@@ -541,7 +563,7 @@ function ClosePackReport({ pack }: { pack: ClosePack }) {
   const { entries } = pack.totals;
   return (
     <>
-      <IconSheet names={iconsOf(pack)} />
+      <IconSheet names={iconsOf(pack.rows, pack.escrow)} />
       <ClosePackSummary pack={pack} />
       <ClosePackPayments pack={pack} />
       <ClosePackNotSettled pack={pack} />

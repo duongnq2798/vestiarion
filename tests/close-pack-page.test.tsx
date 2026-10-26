@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { ClosePackView } from "@/components/ClosePackView";
+import { ClosePackPayment, ClosePackView } from "@/components/ClosePackView";
 import { SheetsExport } from "@/components/close-pack/SheetsExport";
 import type { ClosePack, ClosePackCheck, ClosePackOpenPayment, ClosePackOpenState } from "@/lib/close-pack/types";
 import { CHECK_KIND_WORDS } from "@/lib/close-pack/words";
@@ -306,6 +306,18 @@ describe("what the page sends (close pack page speed CS8)", () => {
   it("says each check's kind in words beside its icon, as before", () => {
     for (const [index, card] of cards.entries()) {
       for (const check of Object.values(TWENTY.rows[index].checks) as ClosePackCheck[]) expect(textOf(card)).toContain(CHECK_KIND_WORDS[check.kind]);
+    }
+  });
+
+  it("keeps the card it exports whole on its own: it draws each icon it points at, once", () => {
+    expect(PACK.rows.some((row) => row.transaction.explorerUrl)).toBe(true);
+    for (const row of PACK.rows) {
+      const card = renderToStaticMarkup(<ClosePackPayment row={row} />);
+      const drawn = [...card.matchAll(/<symbol id="(close-pack-icon-[a-z-]+)"/g)].map(([, id]) => id);
+      const used = [...card.matchAll(/<use href="#(close-pack-icon-[a-z-]+)"/g)].map(([, id]) => id);
+      expect(new Set(drawn).size, row.paymentId).toBe(drawn.length);
+      expect(new Set(used), row.paymentId).toEqual(new Set(drawn));
+      expect(used, row.paymentId).toHaveLength(6 + (row.transaction.explorerUrl ? 1 : 0));
     }
   });
 

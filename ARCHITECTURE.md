@@ -4664,8 +4664,9 @@ and the counts of payments, entries read, entries cited and screening requests, 
   header's clock (`shellClock()`, the day and the last cycle: not `stats()`), `shellStatus()` and the Google Sheets view
   are read in one `Promise.all` inside the scope (close pack page speed CS4), and the page logs one `close_pack_timing`
   line (`auth`, `scope`, `reads`, `total`, and whether the pack was read; CS7). Each icon the cards show is drawn once
-  as an SVG `<symbol>` that every check badge and explorer link points at with `<use>`, and the facts' label and value
-  styles are set once on each list (CS8): twenty cards are about 158 KB of markup, from 204 KB. It exports
+  as an SVG `<symbol>` that every check badge and explorer link points at with `<use>` (the card the accountants
+  guide's screenshot shows alone, `ClosePackPayment`, draws its own), and the facts' label and value styles are set
+  once on each list (CS8): twenty cards are about 158 KB of markup, from 204 KB. It exports
   `maxDuration = 300`, as Bills, counterparties and the report do (CS9).
 - **The downloads** (CP12; `GET /api/evidence/close-pack?org=&month=&format=csv|json`). The audit export's gate in its
   order: a cross-site request refused (403), the session (401), a bad format or month before the workspace is looked up

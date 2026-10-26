@@ -120,6 +120,16 @@ describe("the screenshot script", () => {
   });
 });
 
+describe("the close pack card's screenshot (close pack page speed CS8)", () => {
+  it("draws every icon the card points at on the screenshot's own page, where the card is shown without the rest of the pack", () => {
+    const shot = renderToStaticMarkup(<>{DOCS_SHOTS["accountants-close-pack"].render()}</>);
+    const ids = new Set([...shot.matchAll(/\sid="([^"]+)"/g)].map(([, id]) => id));
+    const used = [...shot.matchAll(/<use href="#([^"]+)"/g)].map(([, id]) => id);
+    expect(used.length).toBeGreaterThanOrEqual(6);
+    expect(used.filter((id) => !ids.has(id))).toEqual([]);
+  });
+});
+
 describe("the frames' page lines", () => {
   it.each(DOCS_SHOT_NAMES.filter((name) => "sub" in DOCS_SHOTS[name]).map((name) => [name] as const))("%s quotes its page's line", (name) => {
     const shot = DOCS_SHOTS[name] as { page: string; sub: string };

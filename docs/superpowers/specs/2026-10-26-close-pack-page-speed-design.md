@@ -108,10 +108,13 @@ workspace, person, record or month; Vercel files the line under its request.
 
 **CS8. Less to send.** The view (`src/components/ClosePackView.tsx`) now draws each icon it shows once, as an SVG
 `<symbol>` (`IconSheet`), and each check badge and explorer link points at it with `<use>` (`IconUse`); the badge's own
-icon slot takes it (`EvidenceLabel`'s new `icon`). The facts' label and value styles are set once on each list
-(`FACTS`) rather than on each of a card's eleven facts. Nothing the person sees, prints or downloads changes: the words
-beside each icon, the visible text (34,035 characters for twenty cards, before and after) and the files are the same.
-Measured by rendering `ClosePackView` to static markup with `tests/support/close-pack-fixtures.ts`'s `samplePack`:
+icon slot takes it (`EvidenceLabel`'s new `icon`). A `<use>` draws nothing where its symbol is not on the page, so the
+sheet is drawn with whatever shows the icons: the report draws one for the whole pack, and the card exported on its
+own (`ClosePackPayment`, which the accountants guide's screenshot shows without the rest of the pack) draws one for its
+own icons; the month's list of cards and the escrow moves, which point at the report's, are no longer exported. The
+facts' label and value styles are set once on each list (`FACTS`) rather than on each of a card's eleven facts.
+Nothing the person sees, prints or downloads changes: the words beside each icon, the visible text (34,035 characters
+for twenty cards, before and after) and the files are the same. Measured by rendering `ClosePackView` to static markup with `tests/support/close-pack-fixtures.ts`'s `samplePack`:
 
 | | Before | After |
 | --- | --- | --- |
@@ -198,7 +201,9 @@ After deploy, open the team workspace's October 2026 pack once, then three times
   all; the header reads no count and no paid bill; one timing line for the page and one for its read.
 - `tests/close-pack-page.test.tsx`: `maxDuration = 300`, as Bills, counterparties and the report; the pack, `shellClock`,
   `shellStatus` and the Sheets view in one `Promise.all`, no `stats()`; each icon drawn once and each badge and link
-  pointing at it; each check's kind still in words; twenty cards in under 165,000 bytes of markup.
+  pointing at it; each check's kind still in words; the card exported on its own drawing each icon it points at, once;
+  twenty cards in under 165,000 bytes of markup.
+- `tests/docs-screenshots.test.tsx`: the accountants guide's screenshot of a card draws every icon the card points at.
 - `tests/mainnet-copy-pages.test.tsx`: the close pack page, like Bills, hands the header `shellStatus()` read with its
   other reads inside the scope.
 - `tests/receipts-verify.test.ts`: one import for many entries checked with one keys object, the same answers; a keys
