@@ -102,6 +102,7 @@ export const PAGE_LOADERS: Record<string, () => Promise<MdxModule>> = {
   "guides/accountants": () => import("../../../content/docs/guides/accountants.mdx"),
   "guides/controls": () => import("../../../content/docs/guides/controls.mdx"),
   "research/model-vs-policy": () => import("../../../content/docs/research/model-vs-policy.mdx"),
+  "research/quality-lab": () => import("../../../content/docs/research/quality-lab.mdx"),
   "get-started/quickstart": () => import("../../../content/docs/get-started/quickstart.mdx"),
   "get-started/sdk": () => import("../../../content/docs/get-started/sdk.mdx"),
   "get-started/cli": () => import("../../../content/docs/get-started/cli.mdx"),

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Headline, NetworkNumbers, QuietNetwork } from "@/components/open/NetworkNumbers";
 import { PeriodNav } from "@/components/open/PeriodNav";
+import { QualityLabResult } from "@/components/open/QualityLabResult";
 import { Badge } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
 import { Disclosure } from "@/components/ui/Disclosure";
@@ -95,7 +96,8 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
             <Heading as="h1" size="section" className="mt-3 text-ink">Vestiarion, in production</Heading>
             <p className="mt-5 text-lede leading-relaxed text-ink-2">
               Who uses Vestiarion, what its agent decided, what stopped it, and what settled. Every figure is read from Vestiarion&apos;s production
-              database when this page loads, with nothing entered by hand.
+              database when this page loads, with nothing entered by hand. The Quality Lab&apos;s result below comes from the test that runs its
+              scenarios on every change.
             </p>
           </header>
 
@@ -147,13 +149,18 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
             </div>
           )}
 
+          {/* Not a figure of one network: the lab runs over a fake provider, on every change (Quality Lab QL7). */}
+          <section aria-labelledby="quality-lab" className="mt-20 border-t border-line pt-12">
+            <QualityLabResult id="quality-lab" />
+          </section>
+
           <section aria-labelledby="method" className="mt-20 border-t border-line pt-12">
             <Eyebrow>Methodology</Eyebrow>
             <h2 id="method" className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">
               How the figures are counted
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-2">
-              The same definitions hold for every figure on this page, on both networks and for every period.
+              The same definitions hold for every figure of both networks, for every period. The Quality Lab&apos;s result above states its own.
             </p>
             <div className="mt-5 grid gap-3 lg:grid-cols-2">
               <Method title="Networks, periods and freshness">

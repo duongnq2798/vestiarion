@@ -37,6 +37,7 @@
     "spending-limit:compile": "tsx scripts/compile-spending-limit.ts",
     "research:model-vs-policy": "tsx scripts/model-vs-policy.ts",
     "research:replay": "tsx scripts/replay-ap-decisions.ts",
+    "quality-lab": "node scripts/quality-lab.mjs",
     "telegram:setup": "tsx scripts/telegram-setup.ts",
     "sdk:types": "tsx scripts/sdk-types.ts",
     "sdk:pack": "tsx scripts/sdk-pack.ts",

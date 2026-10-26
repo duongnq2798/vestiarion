@@ -886,6 +886,11 @@ mainnet plan).
     the workspaces opened in the period and how many reached each step: a real bill, the agent's decision on one, a
     confirmed live payment, payments on two UTC days, a verdict, two people. `npm run numbers` prints it per network
     (`src/lib/platform/funnel.ts`); /open does not show it.
+  - After the networks and before the method, a section of its own shows the Quality Lab's result
+    (`src/components/open/QualityLabResult.tsx`, see "The Quality Lab"): it is not a figure of one network, and it is
+    read from the committed results, not the database, which the page's intro says. The method's definitions hold for
+    the networks' figures; the block states its own. Its heading holds "Quality Lab" above the score, so the section
+    is named by what it scores.
 - **The landing, the bill's journey** (`docs/superpowers/specs/2026-10-19-bill-journey-design.md`): the sole h1 is
   "Your AI agent for bills and payments", with "Every bill. A clear way through." as a large display paragraph. The
   hero has an application frame (workspace sidebar, bill status and verification actions), followed by a five-stage
@@ -925,7 +930,8 @@ mainnet plan).
     highlighted by `build/highlight.ts` without changing a character, with a copy button for exactly that code.
     `tests/landing-build-on-it.test.tsx` holds each snippet to the OpenAPI operations, the SDK guide and the MCP guide.
   - The technical showcase is `/how-it-decides`: the decision receipt replayed in its arch beside the live ledger's
-    head, the decision loop step by step, and the claims with the receipts behind them.
+    head, the decision loop step by step, and the claims with the receipts behind them, then the Quality Lab's result
+    after the four claims ("Four claims you can check" is unchanged).
   - The questions' answer about Arc mainnet says it is open to anyone only while `MAINNET_ALLOWLIST` holds `*`
     (`mainnetOpenToEveryone`).
   - `LandingPage` remains synchronous. It starts both networks' open numbers, latest/recent decisions and one shared
@@ -4337,6 +4343,13 @@ repository's GitHub namespace and its version to `MCP_SERVER_VERSION` (`src/lib/
 reports as `serverInfo.version`. Publishing it, and the Postman collections' public workspace, are a maintainer's
 steps, in `docs/distribution/`.
 
+The Quality Lab's results, `src/lib/data/quality-lab.json`, are a committed generated file too: `npm run quality-lab`
+(`scripts/quality-lab.mjs`) runs `tests/quality-lab.test.ts` with `QUALITY_LAB_WRITE=1`, which writes them from the run,
+and the same test fails while the committed file differs from the run, naming the script. Its docs page,
+`content/docs/research/quality-lab.mdx`, types no figure: `<QualityLabScore />` and `<QualityLabTable group>`
+(`src/components/docs/QualityLab.tsx`) render the score and each group's scenarios from that file, and the `.md` view
+writes the same words from `src/lib/quality-lab/results.ts`.
+
 The SDK's and the CLI's versions are their own. The product's version is a git tag, `vX.Y.Z` or `vX.Y.Z-beta.N`, published as a GitHub
 Release by `.github/workflows/release.yml`, which a maintainer starts by hand once the tag is pushed; `CHANGELOG.md`
 says what each release changed for the people using it. A tag deploys nothing: Vercel deploys `main`. How to release,
@@ -4925,6 +4938,40 @@ and the docs pages point at them through `docsSocialMetadata()` in
 `src/lib/docs/social.ts`. A summary is cut short enough that it never reaches
 the footer, whether the title takes one line or two.
 
+## The Quality Lab
+
+Fixed scenarios run through the agent's real decision code in CI on every change, and the result is public
+(`docs/superpowers/specs/2026-10-26-quality-lab-design.md`).
+
+- **Scenarios** are plain data in `src/lib/quality-lab/scenarios.ts`, in nine groups: prompt injection in an invoice's
+  memo or purchase order, the payee and its address (unconfirmed, inside the payee lock's wait, a first payment, none, a
+  client), screening (OFAC's list, high risk, unscreened), limits and approvals (the payee's limit, two approvals, the
+  agent's spending limit, the contract on Arc), matching and duplicates (no purchase order, goods not received, a repeat
+  of a paid bill, the same work as a milestone, a purchase order a vendor's document wrote), the pause and shadow mode,
+  the model holding or flagging, sending money once (an answer lost after the provider took the send or before it, two
+  cycles at once), and clean bills that should be paid or scheduled. Each says only what differs from one 400 USDC bill
+  due today, and the model's scripted answer, often what an attacker would want.
+- **The runner** is `tests/quality-lab.test.ts`, over `tests/support/ap-harness.ts`. `decide` is statically imported by
+  the orchestrator and `ApStageInput` has no seam for it, so the answer is scripted with `vi.mock`, and the money path
+  gains no seam. Everything after the model is `runApStage` as production runs it, over `fakeSupabase`, the
+  `payment_intents` fake, the clock (faked for `Date` only) and a really signed ledger; the book is written back
+  between cycles. Two of the stage's inputs are handed in rather than read: the spending limit contract's answer on
+  Arc (`onChainLimitGate` with a scripted verdict, so `spendingLimitVerdict` never asks Arc) and the new payee facts
+  (`loadNewPayeeFacts` does not run; `newPayeeCheckFor` on them does). `LabChain`, the stand-in payment provider,
+  counts every send it takes as a transfer, even a second one under the same idempotency key, which Circle would fold
+  into the first. `tests/ap-stage.test.ts` and the files that copy its fake are unchanged.
+- **Judging** is `judgeScenario` (`src/lib/quality-lab/judge.ts`): right when money moved or stopped as expected, with
+  the expected status, rule, hold reason and transfers; a wrong payment is a transfer or schedule where money should
+  stop, a transfer to an address other than the one on file or for an amount other than the bill's, or a second
+  transfer for one bill. A wrong payment fails the test, and so CI; a scenario that is not right otherwise is recorded
+  as not right and fails nothing.
+- **The results** (`src/lib/data/quality-lab.json`) keep stable fields only, never a hash, sequence, time or id, since
+  the signing key is made per run. `QualityLabResult` shows them on /open and /how-it-decides, and the research page
+  `/docs/research/quality-lab` lists every scenario. /security's AI use says the lab runs in CI.
+- Not covered: the model's judgement (scripted), live payments (proved on Arc testnet and Arc mainnet by transactions),
+  milestones, whose checks are inline in `executeCycle`, EURC, payouts to other chains, bank payouts, and a person's
+  approvals.
+
 ## Verification
 
 Pure contract and payload behavior is covered by `tests/api-contract.test.ts`;
@@ -4933,5 +4980,5 @@ authentication and per-workspace scoping are covered by
 TypeScript, lint, and the complete Vitest suite. The suite never reaches the
 network: `tests/setup.ts` refuses any request to a host other than loopback, so a
 stub that leaves a chain read open fails at once rather than waiting on a real
-RPC. `npm run build` validates the production route graph. Live API checks use the local app plus a real
+RPC. The suite includes the Quality Lab (see "The Quality Lab"). `npm run build` validates the production route graph. Live API checks use the local app plus a real
 workspace API key (created on `/o/<slug>/settings`) and Supabase data.

@@ -14,6 +14,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Quality Lab: fixed scenarios through the real decision code on every change.** 39 scenarios run in CI through the
+  agent's real decision code, with the model's answers scripted, often to what an attacker would want: prompt
+  injection in an invoice's memo or purchase order, a payee whose address just changed or is still inside the payee
+  lock's wait, a first payment to a new address, OFAC's list, the limits and two approvals, a repeat of a paid bill, a
+  purchase order a vendor's own document wrote, the pause and shadow mode, a send whose answer was lost after the
+  provider took it, two cycles reaching one bill, and clean bills that should be paid or scheduled. Transfers are
+  counted from the payment provider's stand-in, never from a status. Any transfer or schedule where money should stop,
+  any transfer to an address other than the one on file or for an amount other than the bill's, or a second transfer
+  for one bill is a wrong payment, and fails CI. How many scenarios were right and how many wrong payments there were
+  is on Open numbers and How the agent decides, and every scenario with what was expected and what happened is in the
+  docs (Trust and controls, "The Quality Lab"). `npm run quality-lab` runs the scenarios and writes the committed
+  result, which the test holds to the run. It does not measure the model's own judgement. No migration.
 - **How often you agreed, by decision and by vendor.** In shadow mode, the report's **Before a live slice** now shows,
   under its steps, how often you agreed with the agent's decisions, split by what the agent decided (Pay, Schedule,
   Hold, Flag for review, Ask for details) and by vendor, each with the number of verdicts behind it. Under five

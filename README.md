@@ -244,6 +244,7 @@ flowchart LR
 | **Stop switches** | Anyone who can approve can pause the agent for the workspace; an owner's wallet can stop the contract; an operator can stop every payment on every deployment within 10 seconds |
 | **Audit trail** | Every entry is Ed25519-signed and covers the hash of the one before. The verifier names the first entry that breaks; signed webhooks push each entry as it is written |
 | **Shadow mode** | On Arc testnet a business keeps paying its bills itself, a person agrees or disagrees with each agent decision, and only agreed payments are made. What the business really paid is recorded beside each decision, never guessed |
+| **Quality Lab** | Every change runs fixed scenarios through the real decision code in CI, the model's answers scripted, often to what an attacker would want: prompt injection in a memo or purchase order, a payee whose address just changed, a send whose answer was lost, clean bills that should be paid. A transfer or schedule where money should stop, one to another address or for another amount, or a second one for a bill fails CI. The result is on [Open numbers](https://www.vestiarion.xyz/open) and, scenario by scenario, in [the Quality Lab](https://www.vestiarion.xyz/docs/research/quality-lab) |
 
 The contract source is in [`contracts/`](contracts). It was written for Vestiarion and has not been audited.
 
@@ -525,6 +526,8 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
   same signed entries.
 - **[Research](https://www.vestiarion.xyz/docs/research/model-vs-policy)** — three weeks of the model's decisions
   recorded beside the written policy's, including where code had to refuse it.
+- **[Quality Lab](https://www.vestiarion.xyz/docs/research/quality-lab)** — fixed scenarios run through the real
+  decision code on every change, each one's expected and actual outcome, and how many wrong payments: none may merge.
 - **[Address lookalike checker](https://www.vestiarion.xyz/check-address)** — a free page that compares an address with
   ones you know, with a broader rule than the lookalike warning on Counterparties, and checks its characters, checksum
   and OFAC's list in the browser.
@@ -585,6 +588,14 @@ npm run verify   # typecheck, lint and the full test suite: what CI runs
 The suite needs no Supabase, Circle or model key: it covers the ledger's tamper cases, risk tiering, treasury
 economics, guardrails and provider fallback, and runs every migration on an in-process Postgres (PGlite) to hold the
 database's half of the hash chain to the verifier.
+
+It also runs the Quality Lab (`tests/quality-lab.test.ts`): the scenarios in `src/lib/quality-lab/scenarios.ts`
+through the real AP stage, with the model's answers scripted. It fails on any wrong payment, and while
+`src/lib/data/quality-lab.json` is not what the run gives. After a change to the decision code or the scenarios:
+
+```bash
+npm run quality-lab   # runs the scenarios and writes src/lib/data/quality-lab.json; commit it
+```
 
 [docs/self-hosting.md](docs/self-hosting.md) covers the rest: environment variables, the founding workspace, every
 script, going live per path, the scheduled jobs (Supabase Cron), Circle notifications, GitHub, and what is live versus

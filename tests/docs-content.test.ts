@@ -219,6 +219,7 @@ describe("the docs navigation", () => {
       ["guides/evidence-and-receipts", "Share the evidence pack and receipts"],
       ["guides/audit-export", "Verify an audit export"],
       ["research/model-vs-policy", "When the model and the policy disagree"],
+      ["research/quality-lab", "The Quality Lab"],
       ["contracts", "Contracts on Arc"],
     ]);
     expect(pagesOf("Connect your tools")).toEqual([

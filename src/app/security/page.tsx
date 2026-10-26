@@ -20,7 +20,7 @@ export default function SecurityPage() {
     <LegalPage
       eyebrow="Trust"
       title="Security"
-      updated="2026-10-25"
+      updated="2026-10-26"
       intro="How Vestiarion protects the data and the money it handles, for anyone reviewing the app, its API or its integrations. Every statement describes what the code does today, and the code is public, so each one can be checked against it. What we do not claim is at the end."
     >
       <LegalSection id="architecture" title="Architecture and data flow">
@@ -523,6 +523,12 @@ export default function SecurityPage() {
           <li>
             A model&apos;s answer must parse against a fixed schema. An answer that does not is shown its error once, and if it still fails, the
             rule-based policy decides and the ledger says so. Either way, the answer is a proposal the rules in code check.
+          </li>
+          <li>
+            Every change runs the <LegalLink href="/docs/research/quality-lab">Quality Lab</LegalLink> in CI: fixed scenarios, prompt injection in an
+            invoice&apos;s memo or purchase order among them, go through the real decision code with the model&apos;s answers scripted, often to what
+            an attacker would want. A payment where money should stop, to an address other than the one on file, for an amount other than the
+            bill&apos;s, or twice for one bill fails CI. The lab does not measure the model&apos;s own judgement.
           </li>
           <li>
             Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana or Google Sheets to

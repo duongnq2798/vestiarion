@@ -105,6 +105,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "guides/evidence-and-receipts", title: "Share the evidence pack and receipts", description: "For an insurer, an auditor or a payee: the payee lock's evidence pack for a period, what each insurer question is answered from, its PDF, CSV and signed JSON checked offline; and a payment's shared receipt, what the payee sees and its three checks, saved as a PDF, renewed or stopped." },
       { slug: "guides/audit-export", title: "Verify an audit export", description: "Download a workspace's signed ledger and check it with a standalone verifier." },
       { slug: "research/model-vs-policy", title: "When the model and the policy disagree", description: "Production decisions beside the written policy's answer to the same facts: where they differed, and where code refused the model." },
+      { slug: "research/quality-lab", title: "The Quality Lab", description: "Fixed scenarios, from prompt injection to a provider's lost answer, run through the real decision code on every change with the model's answers scripted: what each expected, what happened, and how a wrong payment is counted." },
       { slug: "contracts", title: "Contracts on Arc", description: "The contracts Vestiarion deploys and the Circle contracts it calls, with their addresses." },
     ],
   },
