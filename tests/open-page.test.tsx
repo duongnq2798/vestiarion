@@ -82,10 +82,10 @@ function byNetwork(numbers: { mainnet: OpenNumbers | Error; testnet: OpenNumbers
   });
 }
 
-/** The markup of one network's section, up to the next network's or the method. */
+/** The markup of one network's section, up to the next network's, the Quality Lab's or the method. */
 function sectionOf(markup: string, id: "mainnet" | "testnet"): string {
   const start = markup.indexOf(`<section aria-labelledby="${id}"`);
-  const next = markup.slice(start + 1).search(/<section aria-labelledby="(mainnet|testnet|method)"/);
+  const next = markup.slice(start + 1).search(/<section aria-labelledby="(mainnet|testnet|quality-lab|method)"/);
   return markup.slice(start, next === -1 ? undefined : start + 1 + next);
 }
 

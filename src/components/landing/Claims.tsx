@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Receipt, Seal, Verdict } from "@/components/landing/evidence/Evidence";
+import { QualityLabResult } from "@/components/open/QualityLabResult";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Reveal } from "@/components/ui/Reveal";
 import { CredentialChecks } from "./Credentials";
@@ -94,7 +95,8 @@ function ClaimArtifact({ index }: { index: number }) {
 /**
  * One claims section (docs/superpowers/specs/2026-10-08-landing-motion-design.md M3), on /how-it-decides since landing
  * clarity: the four claims a reader can check at their source, then the four design claims, each with the receipt that
- * shows it, two by two, and a link to where each is shown or can be checked.
+ * shows it, two by two, and a link to where each is shown or can be checked. Then the Quality Lab's result, the first
+ * claim run against fixed scenarios on every change (docs/superpowers/specs/2026-10-26-quality-lab-design.md QL7).
  */
 export function Claims({ screeningMode }: { screeningMode: "live" | "simulate" }) {
   return (
@@ -130,6 +132,10 @@ export function Claims({ screeningMode }: { screeningMode: "live" | "simulate" }
             </Reveal>
           ))}
         </div>
+
+        <Reveal className="mt-5">
+          <QualityLabResult id="quality-lab" heading="h3" />
+        </Reveal>
       </div>
     </section>
   );
