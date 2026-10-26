@@ -823,6 +823,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Approve and pay", APPROVAL_CARD],
     ["You created this invoice", APPROVAL_CARD],
     ["You gave this payee's address", APPROVAL_CARD],
+    // The payee lock, named where the landing's safety section leads (landing payee lock PLL8).
+    ["Payee lock", PAYEE_LOCK_PANEL],
     ["Two approvals", "src/components/TwoApprovalsPanel.tsx"],
     ["Payments above (USDC)", "src/components/TwoApprovalsPanel.tsx"],
     ["Pause agent", PAUSE],

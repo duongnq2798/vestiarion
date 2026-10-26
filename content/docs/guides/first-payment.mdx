@@ -208,6 +208,10 @@ With the lock on:
   - **Approve and pay** and **Pay now** say when it can be paid.
   - A verified milestone waits too. Its card on **Contractors** reads "Payee lock wait" and says until when.
 
+Here is the lock at work in the team's own workspace, live on Arc testnet, on Oct 20, 2026, with the lock on and a 4-hour wait. A vendor's payment address changed to a new wallet that held 0 USDC. The agent decided to pay the vendor's 3.00 USDC bill, and code held it as `counterparty.address_unconfirmed`. The member who had entered the address was refused when they tried to confirm it, and a second member confirmed it with a record of how they checked it. The agent decided to pay again, and code held it for the wait as `counterparty.cooling_off`. Once the wait was over, the agent paid: [`0x49787501…0551`](https://explorer.testnet.arc.io/tx/0x49787501b6738cc2653bfb93a51293d4f036ff85a41115dc7f5b5f07db720551), 3 USDC to the confirmed address, confirmed on chain in block 68200055 at 15:16:04 UTC and recorded in the ledger at 15:16:07 UTC.
+
+The lock is held by Vestiarion's code and by people, not by a contract. What the transaction shows is what followed: the payment settled only after both holds ended, to the confirmed address, for the bill's amount. The landing page's safety section shows the same case step by step.
+
 Whether the lock is on or off, a counterparty's row warns about an address that is the same as another counterparty's, or that looks like it:
 - "Same address as" the other counterparty;
 - "Looks like" the other counterparty's address, when the two share their first 6 and last 4 characters after `0x`. That is the pattern address poisoning uses.
