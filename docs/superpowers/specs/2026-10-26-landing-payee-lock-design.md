@@ -46,8 +46,13 @@ visitor should see that, step by step, with a link they can check.
 2. Code holds it: the agent decided to pay, `counterparty.address_unconfirmed` held it.
 3. A second person confirms: the member who entered the address was refused, in the product's words; a second member
    confirmed it.
-4. Code holds it again: the agent decided to pay again, `counterparty.cooling_off` held it through the 4-hour wait.
+4. Code holds it again: the agent decided to pay again, `counterparty.cooling_off` held it through the 4-hour wait;
+   the address was confirmed by then (entry 4863), but it had changed at 11:14:01 UTC (entry 4839), less than an hour
+   earlier.
 5. Paid: after the wait the bill reopened and the agent paid 3.00 USDC to the confirmed address.
+- Each step says only what that workspace recorded. Why the lock or its wait exists is general process, so it is said
+  with the lock's description (PLL5), never in a step (`docs/design/visual-system.md`: "Explain general process
+  separately from observed events").
 - Each step shows its ledger entry number and its UTC time to the second, from that entry; the header shows the day.
 - Each step's tone is one of the dark section's: neutral for an event, amber for a hold, and a new green "paid" tone
   (`border-proof-line/40 bg-proof/10`, label `text-proof-line`, as `HowItWorks` uses on ink) for the payment.
@@ -69,8 +74,13 @@ visitor should see that, step by step, with a link they can check.
   person confirms it, recording how they checked it with the vendor, and any wait you set has passed; whoever entered
   the address cannot confirm it while someone else can.
 - One more says how it is set: an owner turns it on in Settings, with a wait of 4, 24, 48 or 72 hours, or none (read
-  from `COOLING_HOURS_CHOICES`), and a workspace created on Arc mainnet starts with it on, with no wait.
-- This general text is set apart from the observed steps.
+  from `COOLING_HOURS_CHOICES`), and a workspace created on Arc mainnet starts with it on, with no wait. Between the
+  two, one says why a wait helps, in the product's own reason (the Settings panel's 24-hour choice, the first-payment
+  guide): "A wait gives the real vendor time to notice a change they did not make."
+- This general text is set apart from the observed steps. On a wide screen it is the left column's first row, at its
+  own height (`lg:grid-rows-[auto_1fr]`); the proof sits right under it, in the row that takes whatever height the
+  steps, on the right across both rows, need beyond the two. Without the row sizes the steps' height was shared
+  between both rows and left a blank under the text.
 
 **PLL6. Links.**
 - "View the payee lock case source" opens the committed `payee-lock-example.ts` on GitHub, as the refusal links its own.
@@ -87,7 +97,12 @@ visitor should see that, step by step, with a link they can check.
 - The first-payment guide's payee lock section gains the proof: the transaction link and what it shows, on Arc testnet.
 - The controls guide, which "Explore all safety controls" opens, names the payee lock beside the address checks.
 - `ARCHITECTURE.md`'s landing Safety bullet and `CHANGELOG.md` say what changed. The README's proof already cites the
-  transaction correctly. No API, webhook or ledger change, so no API changelog entry. No migration.
+  transaction correctly. Its safety table's payee lock row, stale since the lock started on for Arc mainnet, said
+  "Opt-in", that only someone other than whoever entered an address confirms it, and that approving never confirms
+  one; it now says what the code does and the landing says: off on Arc testnet until an owner turns it on, on with no
+  wait for a workspace created on Arc mainnet, a lone member confirms alone and the record says so, and with the lock
+  on approving no longer confirms an address. No API, webhook or ledger change, so no API changelog entry. No
+  migration.
 
 ## Tests
 
@@ -95,7 +110,12 @@ visitor should see that, step by step, with a link they can check.
   `<ol>` is still the refusal's three steps; the second case's label with its network and "live", its five steps in
   order with their entries and times, its two rules in the product's words, the refusal quoted as the product says it,
   the transaction link, block and both times, the honest scope, the source and guide links, and no name of the vendor
-  or workspace. The guide and the README cite the same transaction.
+  or workspace. The guide and the README cite the same transaction. Why a wait helps sits before the steps, and no
+  step says it; step 4 says when the address changed, held to step 1's time. The wide-screen grid sizes its rows
+  `auto` then `1fr`, with the steps across both.
+- `tests/readme-facts.test.ts`: the README's payee lock row, held to `MAINNET_STARTING_PAYEE_LOCK` and
+  `COOLING_HOURS_CHOICES`: off on Arc testnet, on with no wait on Arc mainnet, the four waits, the lone member's
+  confirmation, and approving no longer confirming an address with the lock on.
 - `tests/landing-prefetch.test.tsx`: the guide link is not prefetched.
 - `tests/network-constants-ratchet.test.ts`: `payee-lock-example.ts` reads `ARC_TESTNET` on purpose, with why.
 - `tests/ui-tokens.test.ts`: the dark section's line colours on ink and on their step tints.

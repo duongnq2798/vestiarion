@@ -187,9 +187,11 @@ function Example() {
 
 /**
  * The payee lock, by name, and one real payment it held (docs/superpowers/specs/2026-10-26-landing-payee-lock-design.md
- * PLL1-PLL6): what the lock does, set apart from what happened; the five steps at the times the ledger recorded them;
- * then the payment on Arc, with the chain's time told from the ledger's. The lock is held by code and people, so the
- * proof claims only what the transaction shows. Laid out in two columns on a wide screen, the steps on the right.
+ * PLL1-PLL6): what the lock does and why a wait helps, set apart from what happened; the five steps at the times the
+ * ledger recorded them, each saying only what was recorded; then the payment on Arc, with the chain's time told from the
+ * ledger's. The lock is held by code and people, so the proof claims only what the transaction shows. Laid out in two
+ * columns on a wide screen, the steps on the right; on the left the description keeps its own height (`auto`), and the
+ * proof sits right under it, its row (`1fr`) taking whatever height the steps need beyond the two.
  */
 function PayeeLockExample() {
   const e = PAYEE_LOCK_EXAMPLE;
@@ -207,7 +209,7 @@ function PayeeLockExample() {
           </time>
         </CaseLabel>
       </div>
-      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-6">
+      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:grid-rows-[auto_1fr] lg:gap-6">
         <div className="min-w-0">
           <p className="text-pretty text-[0.9375rem] leading-relaxed text-on-agent-muted">
             <strong className="font-semibold text-surface">The payee lock.</strong> With it on, a changed payment address is paid only after a person
@@ -215,7 +217,7 @@ function PayeeLockExample() {
             someone else can.
           </p>
           <p className="mt-3 text-pretty text-sm leading-relaxed text-on-agent-muted">
-            {`An owner turns it on in Settings, with a wait of ${WAIT_WORDS}, or none. A workspace created on Arc mainnet starts with it on, with no wait.`}
+            {`An owner turns it on in Settings, with a wait of ${WAIT_WORDS}, or none. A wait gives the real vendor time to notice a change they did not make. A workspace created on Arc mainnet starts with it on, with no wait.`}
           </p>
         </div>
         <ol className="grid min-w-0 gap-3 lg:col-start-2 lg:row-span-2 lg:row-start-1">

@@ -901,12 +901,14 @@ mainnet plan).
     are written there rather than read, and the page makes no read for either case:
     - a refusal (`safety-example.ts`: historical ledger entry #3710 in a team workspace in shadow mode on Arc testnet,
       refused by `workspace.outflow_budget`);
-    - the payee lock, named and explained in one sentence (`payee-lock-example.ts`, spec
-      `2026-10-26-landing-payee-lock-design.md`): in the team's live workspace on Arc testnet on Oct 20, 2026, a
-      vendor's address changed (#4839), the agent's payment was held as `counterparty.address_unconfirmed` (#4843), the
-      member who entered the address could not confirm it and a second member did (#4863), it was held again as
-      `counterparty.cooling_off` for the 4-hour wait (#4866), then paid (#4919). Each step shows the time its entry was
-      recorded. The proof links transaction `0x49787501…0551` and tells its block time (15:16:04 UTC, block 68200055)
+    - the payee lock, named and explained apart from the steps, with how it is set and why a wait helps
+      (`payee-lock-example.ts`, spec `2026-10-26-landing-payee-lock-design.md`): in the team's live workspace on Arc
+      testnet on Oct 20, 2026, a vendor's address changed (#4839), the agent's payment was held as
+      `counterparty.address_unconfirmed` (#4843), the member who entered the address could not confirm it and a second
+      member did (#4863), it was held again as `counterparty.cooling_off` for the 4-hour wait (#4866), then paid
+      (#4919). Each step shows the time its entry was recorded and says only what was recorded. On a wide screen the
+      explanation keeps its own height in the left column, the proof right under it, and the steps run down the right.
+      The proof links transaction `0x49787501…0551` and tells its block time (15:16:04 UTC, block 68200055)
       from the ledger's (15:16:07 UTC). It says the lock is held by code and people, not by a contract: the transaction
       shows only that the payment settled after both holds ended, to the confirmed address, for the bill's amount. Its
       links open the committed source and `/docs/guides/first-payment#payee-lock`, unprefetched.

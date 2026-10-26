@@ -19,7 +19,8 @@ import { ARC_TESTNET } from "@/lib/network";
  * `handleOps`), not through the spending-limit contract. The lock is held by code and by people, not by a contract; the
  * transaction shows only that the payment settled after both holds ended, to the confirmed address, for the bill's
  * amount. Neither the vendor nor the workspace is named. A past decision's facts do not change, so they are written
- * here rather than read.
+ * here rather than read. Each step says only what these entries record (PLL3); why the lock or its wait exists is
+ * general, and the page says it apart, beside the steps (PLL5).
  */
 export const PAYEE_LOCK_EXAMPLE = {
   network: ARC_TESTNET,
@@ -57,7 +58,7 @@ export const PAYEE_LOCK_EXAMPLE = {
       at: "2026-10-20T12:11:00Z",
       entry: 4866,
       title: "The AI decided to pay again. Code held it for the 4-hour wait.",
-      detail: "The wait gives the real vendor time to notice a change they did not make.",
+      detail: "The address was confirmed by then, but it had changed at 11:14:01 UTC, less than an hour earlier.",
       rule: "counterparty.cooling_off",
       tone: "held",
     },
