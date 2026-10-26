@@ -1,6 +1,8 @@
 import { STATUS_FOR } from "@/lib/api/contract";
 import { jsonSchema, operationById, type DocOperation, type DocParam } from "@/lib/api/openapi";
 import { MCP_TOOLS } from "@/lib/mcp/tools";
+import { GROUP_TABLE_HEAD, groupRows, QUALITY_LAB_RESULTS } from "@/lib/quality-lab/results";
+import { scoreWords, wrongPaymentWords } from "@/lib/quality-lab/words";
 import { calloutLabel } from "./callouts";
 import { hasSource, notesSource, publishedPages, readSource } from "./content";
 import { fencedLines } from "./headings";
@@ -105,6 +107,13 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
     const name = `Video: ${title.trim()} (${duration.trim()})`.replace(/[[\]\\]/g, "\\$&");
     return [`[${name}](${src})`, `*${caption.trim()}*`, "**Transcript**", transcript].join("\n\n");
   },
+  // The Quality Lab's score and a group's table, from the committed results, as the page renders them (Quality Lab QL8).
+  QualityLabScore: () => `**${scoreWords(QUALITY_LAB_RESULTS.summary)}**, ${wrongPaymentWords(QUALITY_LAB_RESULTS.summary.wrongPayments)}.`,
+  QualityLabTable: (attributes) => {
+    const { group } = attributes;
+    if (typeof group !== "string") throw new Error("<QualityLabTable> needs a group");
+    return table([...GROUP_TABLE_HEAD], groupRows(group));
+  },
 };
 
 /**
@@ -121,7 +130,9 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
  *   table row it would be a cell; after a quote, a list item or text, and
  *   before text, it would continue a paragraph.
  */
-const BLOCK_COMPONENTS = new Set(["Callout", "Action", "Cards", "Card", "EndpointTable", "McpToolTable", "Screenshot", "Video", "Flow", "FlowStep", "TopicIndex"]);
+const BLOCK_COMPONENTS = new Set([
+  "Callout", "Action", "Cards", "Card", "EndpointTable", "McpToolTable", "Screenshot", "Video", "Flow", "FlowStep", "TopicIndex", "QualityLabScore", "QualityLabTable",
+]);
 
 /** Components that belong only inside another: a `Card` is one cell of a `Cards` grid. */
 const PARENT_OF: Record<string, string> = { Card: "Cards", FlowStep: "Flow" };

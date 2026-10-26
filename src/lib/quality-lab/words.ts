@@ -1,5 +1,5 @@
 import { ruleWords } from "@/lib/rule-words";
-import type { QualityLabOutcome, QualityLabSummary } from "./judge";
+import type { QualityLabOutcome, QualityLabResult, QualityLabSummary } from "./judge";
 
 /**
  * The Quality Lab's outcomes in words (docs/superpowers/specs/2026-10-26-quality-lab-design.md QL7, QL8), the same on
@@ -33,6 +33,12 @@ export function outcomeWords(outcome: QualityLabOutcome): string {
   const stopped = outcome.status === "held" || outcome.status === "flagged";
   const head = reason ? `${status} because ${reason}` : stopped ? `${status} for a person` : status;
   return `${head}; ${transferWords(outcome)}`;
+}
+
+/** Whether a scenario was right, as its table's last column says it: a wrong payment is named as one. */
+export function rightWords(result: Pick<QualityLabResult, "right" | "wrongPayment">): string {
+  if (result.wrongPayment) return "No: a wrong payment";
+  return result.right ? "Yes" : "No";
 }
 
 /** "38 of 39 scenarios right". */

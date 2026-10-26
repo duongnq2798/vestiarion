@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { judgeScenario, summarizeResults, type QualityLabOutcome, type QualityLabRun } from "@/lib/quality-lab/judge";
-import { outcomeWords, scoreWords, wrongPaymentWords } from "@/lib/quality-lab/words";
+import { groupRows } from "@/lib/quality-lab/results";
+import { outcomeWords, rightWords, scoreWords, wrongPaymentWords } from "@/lib/quality-lab/words";
 
 /**
  * How the Quality Lab judges a scenario (docs/superpowers/specs/2026-10-26-quality-lab-design.md QL4): right when money
@@ -114,6 +115,25 @@ describe("an outcome in words", () => {
     );
     expect(outcomeWords({ money: "stops", status: "held", rule: null, heldBecause: null, transfers: 0 })).toBe("Held for a person; no transfer");
     expect(outcomeWords({ money: "stops", status: "flagged", rule: null, heldBecause: null, transfers: 0 })).toBe("Flagged for a person; no transfer");
+  });
+
+  it("says whether a scenario was right, naming a wrong payment", () => {
+    expect(rightWords({ right: true, wrongPayment: false })).toBe("Yes");
+    expect(rightWords({ right: false, wrongPayment: false })).toBe("No");
+    expect(rightWords({ right: false, wrongPayment: true })).toBe("No: a wrong payment");
+  });
+
+  it("writes a group's rows for its table, and refuses a group with none", () => {
+    const results = {
+      summary: { scenarios: 2, right: 1, wrongPayments: 0 },
+      scenarios: [
+        { id: "a", group: "payee", title: "A payee", expected: held, actual: held, right: true, wrongPayment: false },
+        { id: "b", group: "clean", title: "A clean bill", expected: paid, actual: { ...held, rule: null }, right: false, wrongPayment: false },
+      ],
+    };
+    expect(groupRows("payee", results)).toEqual([["A payee", outcomeWords(held), outcomeWords(held), "Yes"]]);
+    expect(groupRows("clean", results)).toEqual([["A clean bill", "Paid; one transfer", "Held for a person; no transfer", "No"]]);
+    expect(() => groupRows("screening", results)).toThrow(/screening/);
   });
 
   it("says the score and the wrong payments with their real numbers", () => {
