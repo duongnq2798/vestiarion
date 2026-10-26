@@ -1,0 +1,5037 @@
+{
+  "source": "Every decision the agent made on a bill in shadow mode in the Vestiarion team's own workspaces on Arc testnet, with the person's verdict on each. Customers' workspaces are never exported.",
+  "readAt": "2026-10-26T13:54:37.768Z",
+  "decisions": [
+    {
+      "id": "shadow-01",
+      "decidedAt": "2026-10-08T03:00:00.000Z",
+      "decidedOn": "2026-10-08",
+      "workspace": "w1",
+      "bill": "b1",
+      "payee": "p1",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 4.5,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 4.5,
+        "paymentLimit": 5000,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 6.5,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 2,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "shadow_verdict",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-02",
+      "decidedAt": "2026-10-08T05:23:00.000Z",
+      "decidedOn": "2026-10-08",
+      "workspace": "w1",
+      "bill": "b2",
+      "payee": "p2",
+      "verdict": "agree",
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": false,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 4.2,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 4.2,
+        "paymentLimit": 10,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "mirror",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": true
+        },
+        "addressHistory": null,
+        "operatingBalance": 2,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 3,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-03",
+      "decidedAt": "2026-10-08T05:24:00.000Z",
+      "decidedOn": "2026-10-08",
+      "workspace": "w1",
+      "bill": "b3",
+      "payee": "p2",
+      "verdict": null,
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 4.3,
+        "earlierObligations": {
+          "total": 4.2,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 4.3,
+        "paymentLimit": 10,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 1,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "mirror",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": true
+        },
+        "addressHistory": null,
+        "operatingBalance": 2,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 4,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-04",
+      "decidedAt": "2026-10-08T05:28:00.000Z",
+      "decidedOn": "2026-10-08",
+      "workspace": "w1",
+      "bill": "b4",
+      "payee": "p2",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 2.35,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 2.35,
+        "paymentLimit": 10,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.25,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 2,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 13.5,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 5,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "shadow_verdict",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-05",
+      "decidedAt": "2026-10-08T05:34:00.000Z",
+      "decidedOn": "2026-10-08",
+      "workspace": "w1",
+      "bill": "b5",
+      "payee": "p2",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 2.7,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 2.7,
+        "paymentLimit": 10,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.25,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 2,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 11.15,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 6,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "shadow_verdict",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-06",
+      "decidedAt": "2026-10-08T12:21:00.000Z",
+      "decidedOn": "2026-10-08",
+      "workspace": "w1",
+      "bill": "b6",
+      "payee": "p2",
+      "verdict": null,
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 50,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 50,
+        "paymentLimit": 10,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.25,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 2,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 28.45,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 7,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-07",
+      "decidedAt": "2026-10-08T16:52:00.000Z",
+      "decidedOn": "2026-10-08",
+      "workspace": "w1",
+      "bill": "b6",
+      "payee": "p2",
+      "verdict": null,
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 50,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 50,
+        "paymentLimit": 100,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.25,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 2,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 1
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 28.45,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 7,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-08",
+      "decidedAt": "2026-10-08T17:03:00.000Z",
+      "decidedOn": "2026-10-08",
+      "workspace": "w1",
+      "bill": "b6",
+      "payee": "p2",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 50,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 50,
+        "paymentLimit": 100,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.2,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 3,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 57.5,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 7,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "shadow_verdict",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-09",
+      "decidedAt": "2026-10-10T01:48:00.000Z",
+      "decidedOn": "2026-10-10",
+      "workspace": "w1",
+      "bill": "b7",
+      "payee": "p2",
+      "verdict": null,
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 27,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 27,
+        "paymentLimit": 100,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.2,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 3,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 8.5,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 8,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-10",
+      "decidedAt": "2026-10-10T01:48:00.000Z",
+      "decidedOn": "2026-10-10",
+      "workspace": "w1",
+      "bill": "b7",
+      "payee": "p2",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.97
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 27,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 27,
+        "paymentLimit": 100,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.167,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 4,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 31.05,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 8,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "shadow_verdict",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-11",
+      "decidedAt": "2026-10-12T03:42:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b8",
+      "payee": "p3",
+      "verdict": "agree",
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": false,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": -6,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 31.39,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 31.39,
+        "paymentLimit": 31.39,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 19.803,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 10,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-12",
+      "decidedAt": "2026-10-12T03:42:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b9",
+      "payee": "p4",
+      "verdict": "agree",
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 8,
+        "targetInDays": 8,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 8
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 54.13,
+        "earlierObligations": {
+          "total": 31.39,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 54.13,
+        "paymentLimit": 54.13,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 19.803,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 10,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-13",
+      "decidedAt": "2026-10-12T03:45:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b8",
+      "payee": "p3",
+      "verdict": "agree",
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": -6,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 31.39,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 31.39,
+        "paymentLimit": 31.39,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 1,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 90.233,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 10,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-14",
+      "decidedAt": "2026-10-12T03:46:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b8",
+      "payee": "p3",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "counterparty.no_address",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": -6,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 31.39,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 31.39,
+        "paymentLimit": 31.39,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.25,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 1,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 90.233,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 10,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-15",
+      "decidedAt": "2026-10-12T03:46:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b9",
+      "payee": "p4",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.92
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "schedule",
+      "agreedWithReference": false,
+      "guardrailBlocked": true,
+      "guardrailRule": "counterparty.no_address",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 8,
+        "targetInDays": 8,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 8
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 54.13,
+        "earlierObligations": {
+          "total": 31.39,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 54.13,
+        "paymentLimit": 54.13,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 90.233,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 10,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-16",
+      "decidedAt": "2026-10-12T05:20:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b10",
+      "payee": "p5",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": -16,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 59.54,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 59.54,
+        "paymentLimit": 59.54,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 4.713,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 12,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-17",
+      "decidedAt": "2026-10-12T05:20:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b11",
+      "payee": "p6",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 7,
+        "targetInDays": 7,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 7
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 108.6,
+        "earlierObligations": {
+          "total": 59.54,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 108.6,
+        "paymentLimit": 108.6,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 4.713,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 12,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-18",
+      "decidedAt": "2026-10-12T06:50:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b12",
+      "payee": "p7",
+      "verdict": "agree",
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": false,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": -44,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 86.44,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 86.44,
+        "paymentLimit": 21.61,
+        "riskLevel": "medium",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 117.533,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 13,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-19",
+      "decidedAt": "2026-10-12T09:32:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b12",
+      "payee": "p7",
+      "verdict": null,
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": -44,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 86.44,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 86.44,
+        "paymentLimit": 21.61,
+        "riskLevel": "medium",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 117.533,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 13,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-20",
+      "decidedAt": "2026-10-12T09:35:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b13",
+      "payee": "p5",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 18,
+        "targetInDays": 18,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 18
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 12.5,
+        "earlierObligations": {
+          "total": 86.44,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 12.5,
+        "paymentLimit": 59.54,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": false,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 117.3974,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 14,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-21",
+      "decidedAt": "2026-10-12T11:37:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b14",
+      "payee": "p8",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 2,
+        "targetInDays": 2,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 2
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 130,
+        "earlierObligations": {
+          "total": 86.44,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 130,
+        "paymentLimit": 130,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": false,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 117.3974,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 16,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-22",
+      "decidedAt": "2026-10-12T11:37:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b15",
+      "payee": "p9",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.98
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": false,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 7,
+        "targetInDays": 7,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 7
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 125.03,
+        "earlierObligations": {
+          "total": 216.44,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 125.03,
+        "paymentLimit": 31.2575,
+        "riskLevel": "medium",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": false,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 117.3974,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 16,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-23",
+      "decidedAt": "2026-10-12T11:41:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b16",
+      "payee": "p5",
+      "verdict": null,
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 18,
+        "targetInDays": 4,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 4
+        },
+        "discountValue": 1,
+        "discountAvailableUntilInDays": 4,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 49,
+        "earlierObligations": {
+          "total": 216.44,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": {
+          "percent": 2,
+          "deadlineInDays": 4
+        },
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 50,
+        "paymentLimit": 59.54,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.25,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 2,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 117.3974,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 17,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-24",
+      "decidedAt": "2026-10-12T11:44:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b16",
+      "payee": "p5",
+      "verdict": null,
+      "decision": {
+        "action": "schedule",
+        "payOnInDays": 4,
+        "fundWithSwap": false,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "schedule",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 18,
+        "targetInDays": 4,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 4
+        },
+        "discountValue": 1,
+        "discountAvailableUntilInDays": 4,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 49,
+        "earlierObligations": {
+          "total": 216.44,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": {
+          "percent": 2,
+          "deadlineInDays": 4
+        },
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 50,
+        "paymentLimit": 59.54,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.2,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 2,
+            "heldOrFlagged": 1,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 380.9974,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 17,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "scheduled",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-25",
+      "decidedAt": "2026-10-12T11:50:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b14",
+      "payee": "p8",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 2,
+        "targetInDays": 2,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 2
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 130,
+        "earlierObligations": {
+          "total": 86.44,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 130,
+        "paymentLimit": 130,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": false,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "mirror",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": true
+        },
+        "addressHistory": {
+          "workspacesPaid": 0,
+          "paymentsConfirmed": 0,
+          "priceUsdc": 0.001
+        },
+        "operatingBalance": 380.9974,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 17,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-26",
+      "decidedAt": "2026-10-12T11:51:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b14",
+      "payee": "p8",
+      "verdict": null,
+      "decision": {
+        "action": "schedule",
+        "payOnInDays": 2,
+        "fundWithSwap": false,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "schedule",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 2,
+        "targetInDays": 2,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 2
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 130,
+        "earlierObligations": {
+          "total": 86.44,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 130,
+        "paymentLimit": 130,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "mirror",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": true
+        },
+        "addressHistory": {
+          "workspacesPaid": 0,
+          "paymentsConfirmed": 0,
+          "priceUsdc": 0.001
+        },
+        "operatingBalance": 380.9974,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 17,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "scheduled",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-27",
+      "decidedAt": "2026-10-12T11:53:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b17",
+      "payee": "p4",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.98
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "workspace.outflow_budget",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 24,
+        "earlierObligations": {
+          "total": 86.44,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": {
+        "dailyUsdc": 15,
+        "weeklyUsdc": null,
+        "spentToday": 0,
+        "spentThisWeek": 0,
+        "remaining": 15,
+        "binding": "day"
+      },
+      "onChainLimit": {
+        "covered": true,
+        "uncoveredBecause": null,
+        "verdict": {
+          "state": "refused",
+          "error": "OverDailyLimit",
+          "spent": 0,
+          "amount": 24,
+          "limit": 15
+        }
+      },
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 24,
+        "paymentLimit": 54.13,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 380.9974,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 18,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "outflow_budget",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-28",
+      "decidedAt": "2026-10-12T11:58:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b18",
+      "payee": "p10",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": -51,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 163.56,
+        "earlierObligations": {
+          "total": 86.44,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 163.56,
+        "paymentLimit": 163.56,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 356.9974,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 19,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-29",
+      "decidedAt": "2026-10-12T11:59:00.000Z",
+      "decidedOn": "2026-10-12",
+      "workspace": "w1",
+      "bill": "b18",
+      "payee": "p10",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "workspace.outflow_budget",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": -51,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 163.56,
+        "earlierObligations": {
+          "total": 86.44,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": {
+        "dailyUsdc": 15,
+        "weeklyUsdc": null,
+        "spentToday": 0,
+        "spentThisWeek": 0,
+        "remaining": 15,
+        "binding": "day"
+      },
+      "onChainLimit": {
+        "covered": true,
+        "uncoveredBecause": null,
+        "verdict": {
+          "state": "refused",
+          "error": "OverDailyLimit",
+          "spent": 0,
+          "amount": 163.56,
+          "limit": 15
+        }
+      },
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 163.56,
+        "paymentLimit": 163.56,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "mirror",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": true
+        },
+        "addressHistory": {
+          "workspacesPaid": 0,
+          "paymentsConfirmed": 0,
+          "priceUsdc": 0.001
+        },
+        "operatingBalance": 356.9974,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 19,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "outflow_budget",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-30",
+      "decidedAt": "2026-10-14T00:17:00.000Z",
+      "decidedOn": "2026-10-14",
+      "workspace": "w1",
+      "bill": "b14",
+      "payee": "p8",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "workspace.outflow_budget",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": 0,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 130,
+        "earlierObligations": {
+          "total": 86.44,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": {
+        "dailyUsdc": 15,
+        "weeklyUsdc": null,
+        "spentToday": 0,
+        "spentThisWeek": 0,
+        "remaining": 15,
+        "binding": "day"
+      },
+      "onChainLimit": {
+        "covered": true,
+        "uncoveredBecause": null,
+        "verdict": {
+          "state": "refused",
+          "error": "OverDailyLimit",
+          "spent": 0,
+          "amount": 130,
+          "limit": 15
+        }
+      },
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 130,
+        "paymentLimit": 130,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "mirror",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": true
+        },
+        "addressHistory": {
+          "workspacesPaid": 0,
+          "paymentsConfirmed": 0,
+          "priceUsdc": 0.001
+        },
+        "operatingBalance": 219.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 19,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "outflow_budget",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-31",
+      "decidedAt": "2026-10-16T00:17:00.000Z",
+      "decidedOn": "2026-10-16",
+      "workspace": "w1",
+      "bill": "b16",
+      "payee": "p5",
+      "verdict": null,
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "workspace.outflow_budget",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": 0,
+      "timing": {
+        "dueInDays": 14,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": 1,
+        "discountAvailableUntilInDays": 0,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 49,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": {
+          "percent": 2,
+          "deadlineInDays": 0
+        },
+        "lateFee": null
+      },
+      "outflowBudget": {
+        "dailyUsdc": 15,
+        "weeklyUsdc": null,
+        "spentToday": 0,
+        "spentThisWeek": 0,
+        "remaining": 15,
+        "binding": "day"
+      },
+      "onChainLimit": {
+        "covered": true,
+        "uncoveredBecause": null,
+        "verdict": {
+          "state": "refused",
+          "error": "OverDailyLimit",
+          "spent": 0,
+          "amount": 49,
+          "limit": 15
+        }
+      },
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 50,
+        "paymentLimit": 59.54,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.2,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 2,
+            "heldOrFlagged": 1,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": true,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 105.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 19,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "outflow_budget",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-32",
+      "decidedAt": "2026-10-17T12:58:00.000Z",
+      "decidedOn": "2026-10-17",
+      "workspace": "w1",
+      "bill": "b19",
+      "payee": "p11",
+      "verdict": "agree",
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.82
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 7,
+        "targetInDays": 7,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 7
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 12,
+        "earlierObligations": {
+          "total": 125.03,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 12,
+        "paymentLimit": 50,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 105.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 20,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-33",
+      "decidedAt": "2026-10-17T13:26:00.000Z",
+      "decidedOn": "2026-10-17",
+      "workspace": "w1",
+      "bill": "b19",
+      "payee": "p11",
+      "verdict": null,
+      "decision": {
+        "action": "schedule",
+        "payOnInDays": 7,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "schedule",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "counterparty.no_address",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 7,
+        "targetInDays": 7,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 7
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 12,
+        "earlierObligations": {
+          "total": 125.03,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 12,
+        "paymentLimit": 50,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 1,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 165.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 20,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-34",
+      "decidedAt": "2026-10-17T13:56:00.000Z",
+      "decidedOn": "2026-10-17",
+      "workspace": "w1",
+      "bill": "b19",
+      "payee": "p11",
+      "verdict": "agree",
+      "decision": {
+        "action": "schedule",
+        "payOnInDays": 7,
+        "fundWithSwap": false,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "schedule",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 7,
+        "targetInDays": 7,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 7
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 12,
+        "earlierObligations": {
+          "total": 125.03,
+          "count": 1
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 12,
+        "paymentLimit": 50,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 1,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "mirror",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": true
+        },
+        "addressHistory": {
+          "workspacesPaid": 0,
+          "paymentsConfirmed": 0,
+          "priceUsdc": 0.001
+        },
+        "operatingBalance": 165.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 20,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "scheduled",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-35",
+      "decidedAt": "2026-10-17T14:28:00.000Z",
+      "decidedOn": "2026-10-17",
+      "workspace": "w1",
+      "bill": "b19",
+      "payee": "p11",
+      "verdict": null,
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": 7,
+      "timing": {
+        "dueInDays": 7,
+        "targetInDays": 7,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 7
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 12,
+        "earlierObligations": {
+          "total": 330.03,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": {
+        "scheduledForInDays": 7,
+        "cashCounted": 165.4374,
+        "dueBefore": {
+          "total": 330.03,
+          "count": 2
+        },
+        "needed": 12
+      },
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 12,
+        "paymentLimit": 50,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 1,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "mirror",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": true
+        },
+        "addressHistory": {
+          "workspacesPaid": 0,
+          "paymentsConfirmed": 0,
+          "priceUsdc": 0.001
+        },
+        "operatingBalance": 165.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 21,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-36",
+      "decidedAt": "2026-10-17T14:28:00.000Z",
+      "decidedOn": "2026-10-17",
+      "workspace": "w1",
+      "bill": "b20",
+      "payee": "p12",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": -34,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 205,
+        "earlierObligations": {
+          "total": 0,
+          "count": 0
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 205,
+        "paymentLimit": 205,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": null,
+          "status": "no_history_yet",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": false,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 165.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": true,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 21,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-37",
+      "decidedAt": "2026-10-17T14:36:00.000Z",
+      "decidedOn": "2026-10-17",
+      "workspace": "w1",
+      "bill": "b21",
+      "payee": "p2",
+      "verdict": null,
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "hold",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 14,
+        "targetInDays": 14,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 14
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 9.8,
+        "earlierObligations": {
+          "total": 392.03,
+          "count": 4
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 9.8,
+        "paymentLimit": 100,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.167,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 4,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 165.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 22,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-38",
+      "decidedAt": "2026-10-17T14:38:00.000Z",
+      "decidedOn": "2026-10-17",
+      "workspace": "w1",
+      "bill": "b22",
+      "payee": "p4",
+      "verdict": null,
+      "decision": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": false,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 14,
+        "targetInDays": 14,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 14
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 18.4,
+        "earlierObligations": {
+          "total": 401.83,
+          "count": 5
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 18.4,
+        "paymentLimit": 54.13,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": null,
+        "operatingBalance": 165.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 25,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": "cash_shortfall",
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-39",
+      "decidedAt": "2026-10-17T14:38:00.000Z",
+      "decidedOn": "2026-10-17",
+      "workspace": "w1",
+      "bill": "b23",
+      "payee": "p10",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 19,
+        "targetInDays": 19,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 19
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 26,
+        "earlierObligations": {
+          "total": 432.73,
+          "count": 7
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 26,
+        "paymentLimit": 163.56,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": {
+          "workspacesPaid": 0,
+          "paymentsConfirmed": 0,
+          "priceUsdc": 0.001
+        },
+        "operatingBalance": 165.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 25,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-40",
+      "decidedAt": "2026-10-17T14:38:00.000Z",
+      "decidedOn": "2026-10-17",
+      "workspace": "w1",
+      "bill": "b24",
+      "payee": "p8",
+      "verdict": null,
+      "decision": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "request_info",
+      "agreedWithReference": true,
+      "guardrailBlocked": false,
+      "guardrailRule": null,
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 16,
+        "targetInDays": 16,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 16
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": true,
+        "amountDueAtTarget": 12.5,
+        "earlierObligations": {
+          "total": 420.23,
+          "count": 6
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 12.5,
+        "paymentLimit": 130,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 1,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 0,
+            "heldByOurPolicy": 0
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": true,
+        "twoApprovalsAbove": null,
+        "newPayee": null,
+        "addressHistory": {
+          "workspacesPaid": 0,
+          "paymentsConfirmed": 0,
+          "priceUsdc": 0.001
+        },
+        "operatingBalance": 165.4374,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 25,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "awaiting_info",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-41",
+      "decidedAt": "2026-10-20T11:33:00.000Z",
+      "decidedOn": "2026-10-20",
+      "workspace": "w2",
+      "bill": "b25",
+      "payee": "p13",
+      "verdict": null,
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "counterparty.address_unconfirmed",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 1.5,
+        "earlierObligations": {
+          "total": 8.8,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 1.5,
+        "paymentLimit": 2,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 1,
+            "heldByOurPolicy": 1
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "member",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": false
+        },
+        "addressHistory": null,
+        "operatingBalance": 11.845001,
+        "addressUnconfirmed": true,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 11,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-42",
+      "decidedAt": "2026-10-20T11:34:00.000Z",
+      "decidedOn": "2026-10-20",
+      "workspace": "w2",
+      "bill": "b25",
+      "payee": "p13",
+      "verdict": null,
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.93
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "counterparty.cooling_off",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 1.5,
+        "earlierObligations": {
+          "total": 8.8,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 1.5,
+        "paymentLimit": 2,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 1,
+            "heldByOurPolicy": 1
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "member",
+          "askedVia": null,
+          "confirmed": true,
+          "unanswered": false,
+          "twoParties": false
+        },
+        "addressHistory": null,
+        "operatingBalance": 13.57,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 11,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-43",
+      "decidedAt": "2026-10-20T15:33:00.000Z",
+      "decidedOn": "2026-10-20",
+      "workspace": "w2",
+      "bill": "b25",
+      "payee": "p13",
+      "verdict": "agree",
+      "decision": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "pay",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "counterparty.new_payee",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 0,
+        "targetInDays": 0,
+        "recommendation": {
+          "action": "pay",
+          "payOnInDays": null
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 1.5,
+        "earlierObligations": {
+          "total": 8.8,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 1.5,
+        "paymentLimit": 2,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 1,
+            "heldByOurPolicy": 1
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "member",
+          "askedVia": null,
+          "confirmed": true,
+          "unanswered": false,
+          "twoParties": false
+        },
+        "addressHistory": null,
+        "operatingBalance": 13.57,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 11,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": null,
+        "addressChangedSinceDecision": true
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-44",
+      "decidedAt": "2026-10-20T18:11:00.000Z",
+      "decidedOn": "2026-10-20",
+      "workspace": "w2",
+      "bill": "b26",
+      "payee": "p13",
+      "verdict": null,
+      "decision": {
+        "action": "schedule",
+        "payOnInDays": 1,
+        "fundWithSwap": false,
+        "confidence": 0.92
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "schedule",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "counterparty.address_unconfirmed",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 1,
+        "targetInDays": 1,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 1
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 1,
+        "earlierObligations": {
+          "total": 8.8,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 1,
+        "paymentLimit": 2,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 1,
+            "heldByOurPolicy": 1
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "member",
+          "askedVia": null,
+          "confirmed": false,
+          "unanswered": false,
+          "twoParties": false
+        },
+        "addressHistory": null,
+        "operatingBalance": 12.07,
+        "addressUnconfirmed": true,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 12,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": 0,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-45",
+      "decidedAt": "2026-10-20T18:12:00.000Z",
+      "decidedOn": "2026-10-20",
+      "workspace": "w2",
+      "bill": "b26",
+      "payee": "p13",
+      "verdict": null,
+      "decision": {
+        "action": "schedule",
+        "payOnInDays": 1,
+        "fundWithSwap": null,
+        "confidence": 0.95
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "schedule",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "counterparty.cooling_off",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 1,
+        "targetInDays": 1,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 1
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 1,
+        "earlierObligations": {
+          "total": 8.8,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 1,
+        "paymentLimit": 2,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 1,
+            "heldByOurPolicy": 1
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "member",
+          "askedVia": null,
+          "confirmed": true,
+          "unanswered": false,
+          "twoParties": false
+        },
+        "addressHistory": null,
+        "operatingBalance": 12.994999,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 12,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": 0,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    },
+    {
+      "id": "shadow-46",
+      "decidedAt": "2026-10-20T22:15:00.000Z",
+      "decidedOn": "2026-10-20",
+      "workspace": "w2",
+      "bill": "b26",
+      "payee": "p13",
+      "verdict": null,
+      "decision": {
+        "action": "schedule",
+        "payOnInDays": 1,
+        "fundWithSwap": false,
+        "confidence": 0.9
+      },
+      "decisionMode": "deepseek",
+      "referenceAction": "schedule",
+      "agreedWithReference": true,
+      "guardrailBlocked": true,
+      "guardrailRule": "counterparty.new_payee",
+      "currency": "USDC",
+      "timingRule": null,
+      "requestedPayOnInDays": null,
+      "scheduledForInDays": null,
+      "timing": {
+        "dueInDays": 1,
+        "targetInDays": 1,
+        "recommendation": {
+          "action": "schedule",
+          "payOnInDays": 1
+        },
+        "discountValue": null,
+        "discountAvailableUntilInDays": null,
+        "floatValueToDue": 0,
+        "shortfall": false,
+        "amountDueAtTarget": 1,
+        "earlierObligations": {
+          "total": 8.8,
+          "count": 2
+        }
+      },
+      "terms": {
+        "earlyPayDiscount": null,
+        "lateFee": null
+      },
+      "outflowBudget": null,
+      "onChainLimit": null,
+      "vendorDocument": null,
+      "paidToBank": false,
+      "payout": null,
+      "eurc": null,
+      "cashAhead": null,
+      "cashPriority": null,
+      "reevaluation": null,
+      "amountPaid": null,
+      "discountTaken": null,
+      "observed": {
+        "amount": 1,
+        "paymentLimit": 2,
+        "riskLevel": "clear",
+        "performanceHistory": {
+          "score": 0.333,
+          "status": "measured_from_ledger",
+          "inputs": {
+            "paidWithoutIntervention": 0,
+            "informationRequested": 0,
+            "heldOrFlagged": 0,
+            "duplicateSubmissions": 0,
+            "riskTierChanges": 1,
+            "heldByOurPolicy": 1
+          }
+        },
+        "poPresent": false,
+        "goodsReceived": true,
+        "purchaseOrderRequired": false,
+        "twoApprovalsAbove": null,
+        "newPayee": {
+          "addressBy": "member",
+          "askedVia": null,
+          "confirmed": true,
+          "unanswered": false,
+          "twoParties": false
+        },
+        "addressHistory": null,
+        "operatingBalance": 12.994999,
+        "addressUnconfirmed": false,
+        "addressMissing": false,
+        "documentPayTo": {
+          "present": false,
+          "differs": false
+        },
+        "projectId": null,
+        "project": null,
+        "sameWork": [],
+        "duplicateCheck": {
+          "candidatesConsidered": 12,
+          "matchesTotal": 0,
+          "matchesShown": 0,
+          "matches": []
+        }
+      },
+      "payeeOnFile": {
+        "role": "vendor",
+        "addressChangedHoursBefore": 4,
+        "addressChangedSinceDecision": false
+      },
+      "execution": {
+        "resultingStatus": "held",
+        "heldBecause": null,
+        "chainMode": "live"
+      }
+    }
+  ]
+}
