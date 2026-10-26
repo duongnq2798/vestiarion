@@ -10,10 +10,10 @@ import { DOCS_NAV } from "@/lib/docs/nav";
 import results from "@/lib/data/quality-lab.json";
 import shadow from "@/lib/data/quality-lab-shadow.json";
 import type { ShadowReplayResults } from "@/lib/quality-lab/shadow-replay";
-import { SHADOW_TABLE_HEAD, shadowRows } from "@/lib/quality-lab/shadow-results";
+import { SHADOW_NOTES_HEAD, SHADOW_TABLE_HEAD, shadowRows } from "@/lib/quality-lab/shadow-results";
 import type { QualityLabResult } from "@/lib/quality-lab/judge";
 import { QUALITY_LAB_GROUPS, QUALITY_LAB_SCENARIOS } from "@/lib/quality-lab/scenarios";
-import { answerWords, outcomeWords, replayClassWords, replayOutcomeWords, rightWords, scoreWords, shadowReplayWords, verdictWords, wrongPaymentWords } from "@/lib/quality-lab/words";
+import { answerWords, outcomeWords, replayOutcomeWords, replayResultWords, rightWords, scoreWords, shadowReplayWords, verdictWords, wrongPaymentWords } from "@/lib/quality-lab/words";
 
 /**
  * The Quality Lab's docs page (docs/superpowers/specs/2026-10-26-quality-lab-design.md QL8): registered after the
@@ -181,6 +181,12 @@ describe("the page's Markdown view (QL8)", () => {
 describe("the replay of the team's shadow decisions, on the docs page (shadow replay SR11)", () => {
   const SHADOW = shadow as unknown as ShadowReplayResults;
   const section = SOURCE.slice(SOURCE.indexOf("## Real decisions, replayed\n"), SOURCE.indexOf("## What it does not cover\n"));
+  // Each distinct reason once, numbered in the order the table first meets it, with the decisions it applies to.
+  const REASONS = [...new Set(SHADOW.decisions.map((decision) => decision.reason).filter((reason): reason is string => reason !== null))];
+  const NOTES = REASONS.map((reason) => `${SHADOW.decisions.filter((decision) => decision.reason === reason).map((decision) => decision.id).join(", ")}: ${reason}`);
+  const noteOf = (reason: string | null) => (reason === null ? null : REASONS.indexOf(reason) + 1);
+  const cellsOf = (markup: string) => [...markup.matchAll(/<tr>(.*?)<\/tr>/g)].slice(1).map((row) => [...row[1].matchAll(/<td[^>]*>(.*?)<\/td>/g)].map((cell) => text(cell[1])));
+  const notesOf = (markup: string) => [...markup.matchAll(/<li[^>]*>(.*?)<\/li>/g)].map((item) => text(item[1]));
 
   it("has its section after the scenarios and before what the lab does not cover, with its line and its table", () => {
     expect(SOURCE.indexOf("## Real decisions, replayed\n")).toBeGreaterThan(SOURCE.indexOf("### Clean bills\n"));
@@ -219,6 +225,7 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
       "Customers' workspaces are never read into the file, whatever they hold.",
       "**Facts the record does not carry are never guessed.**",
       "**Recorded answers, not the model's judgement.**",
+      "A result with a reason names a note under the table, which gives each reason once with the decisions it applies to.",
       "npm run quality-lab:shadow\nnpm run quality-lab",
       "src/lib/data/quality-lab-shadow.json",
     ]) {
@@ -249,7 +256,7 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
     const markup = renderToStaticMarkup(<ShadowReplayTable />);
     const head = [...markup.matchAll(/<th[^>]*>(.*?)<\/th>/g)].map((cell) => text(cell[1]));
     expect(head).toEqual([...SHADOW_TABLE_HEAD]);
-    const rows = [...markup.matchAll(/<tr>(.*?)<\/tr>/g)].slice(1).map((row) => [...row[1].matchAll(/<td[^>]*>(.*?)<\/td>/g)].map((cell) => text(cell[1])));
+    const rows = cellsOf(markup);
     expect(rows).toEqual(
       SHADOW.decisions.map((decision) => [
         expect.stringMatching(new RegExp(`^${decision.id}, [A-Z][a-z]{2} \\d{1,2}$`)),
@@ -257,10 +264,37 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
         verdictWords(decision.verdict),
         replayOutcomeWords(decision.then),
         replayOutcomeWords(decision.now),
-        replayClassWords(decision),
+        replayResultWords(decision, noteOf(decision.reason)),
       ])
     );
     expect(rows).toHaveLength(SHADOW.summary.decisions);
+    // The id and the day stand on two lines when the column is narrow, but say what the Markdown view's cell says.
+    expect(rows.map((row) => row[0])).toEqual(shadowRows().map((row) => row[0]));
+  });
+
+  it("keeps each result to a few words, and gives each distinct reason once, in a numbered note under the table", () => {
+    expect(REASONS.length).toBeGreaterThan(0);
+    const markup = renderToStaticMarkup(<ShadowReplayTable />);
+    const rows = cellsOf(markup);
+    for (const row of rows) {
+      expect(row[5].length, row[5]).toBeLessThanOrEqual(60);
+    }
+    SHADOW.decisions.forEach((decision, index) => {
+      if (decision.reason !== null) expect(rows[index][5], decision.id).toMatch(new RegExp(`, note ${noteOf(decision.reason)}$`));
+    });
+    expect(text(markup.slice(markup.indexOf("</table>")))).toMatch(new RegExp(`^${SHADOW_NOTES_HEAD} `));
+    expect(markup).toMatch(/<\/table>.*<ol[^>]*>/);
+    expect(notesOf(markup)).toEqual(NOTES);
+    for (const reason of REASONS) {
+      expect(text(markup).split(reason).length - 1, reason).toBe(1);
+    }
+  });
+
+  it("writes no notes when no decision has a reason", () => {
+    const decisions = SHADOW.decisions.map((decision) => ({ ...decision, class: "same" as const, reason: null }));
+    const markup = renderToStaticMarkup(<ShadowReplayTable results={{ summary: SHADOW.summary, decisions }} />);
+    expect(text(markup.slice(markup.indexOf("</table>")))).toBe("");
+    expect(markup).not.toContain("<ol");
   });
 
   it("styles each result from its class and wrong payment, never from its words: a wrong payment first, whatever its class", () => {
@@ -269,23 +303,33 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
       { ...base, id: "same-wrong", class: "same", reason: null, wrongPayment: true },
       { ...base, id: "same-right", class: "same", reason: null, wrongPayment: false },
       { ...base, id: "cannot-wrong", class: "cannot_rebuild", now: null, reason: "Why.", wrongPayment: true },
-      { ...base, id: "stopped", class: "now_stopped", reason: "Why.", wrongPayment: false },
+      { ...base, id: "stopped", class: "now_stopped", reason: "Because.", wrongPayment: false },
       { ...base, id: "stop-ignored", class: "now_stopped", reason: "Why.", wrongPayment: true },
     ];
     const markup = renderToStaticMarkup(<ShadowReplayTable results={{ summary: SHADOW.summary, decisions }} />);
     const cells = [...markup.matchAll(/<tr>(.*?)<\/tr>/g)].slice(1).map((row) => [...row[1].matchAll(/<td class="([^"]*)"[^>]*>(.*?)<\/td>/g)].at(-1)!);
-    expect(cells.map((cell) => text(cell[2]))).toEqual(["Same, a wrong payment", "Same", "Cannot rebuild, a wrong payment. Why.", "Now stopped. Why.", "A wrong payment. Why."]);
+    expect(cells.map((cell) => text(cell[2]))).toEqual(["Same, a wrong payment", "Same", "Cannot rebuild, a wrong payment, note 1", "Now stopped, note 2", "A wrong payment, note 1"]);
+    // A reason two decisions share is one note, numbered where the table first meets it.
+    expect(notesOf(markup)).toEqual(["cannot-wrong, stop-ignored: Why.", "stopped: Because."]);
     const classes = cells.map((cell) => cell[1].split(/\s+/));
     expect(classes.map((names) => names.includes("text-refused"))).toEqual([true, false, true, false, true]);
     expect(classes[1]).toContain("text-ink-2");
     expect(classes[3]).toContain("text-held");
   });
 
-  it("writes the same line and rows in the page's Markdown view", () => {
+  it("writes the same line, rows and notes in the page's Markdown view", () => {
     expect(MARKDOWN).toContain(shadowReplayWords(SHADOW.summary));
     expect(MARKDOWN).toContain(`| ${SHADOW_TABLE_HEAD.join(" | ")} |`);
-    for (const row of shadowRows()) {
+    const rows = shadowRows();
+    expect(rows.map((row) => row.at(-1))).toEqual(SHADOW.decisions.map((decision) => replayResultWords(decision, noteOf(decision.reason))));
+    for (const row of rows) {
       expect(MARKDOWN, row[0]).toContain(`| ${row.join(" | ")} |`);
+    }
+    const lastRow = `| ${rows.at(-1)!.join(" | ")} |`;
+    const notes = NOTES.map((note, index) => `${index + 1}. ${note}`).join("\n");
+    expect(MARKDOWN).toContain(`${lastRow}\n\n**${SHADOW_NOTES_HEAD}**\n\n${notes}\n`);
+    for (const reason of REASONS) {
+      expect(MARKDOWN.split(reason).length - 1, reason).toBe(1);
     }
   });
 });

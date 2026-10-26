@@ -125,15 +125,27 @@ const CLASS_WORDS: Record<ShadowReplayClass, string> = {
 };
 
 /**
- * A decision's class with its reason, a wrong payment named as one: "Cannot rebuild. The payee's address changed...". A
- * wrong payment classed now stopped is a stop code recorded while money moved (shadow replay SR6, SR7): it is named only
- * as a wrong payment, never as stopped.
+ * A decision's class, a wrong payment named as one: "Cannot rebuild", "Now let through, a wrong payment". A wrong payment
+ * classed now stopped is a stop code recorded while money moved (shadow replay SR6, SR7): it is named only as a wrong
+ * payment, never as stopped.
  */
+function classHead(result: Pick<ShadowReplayResult, "class" | "wrongPayment">): string {
+  if (!result.wrongPayment) return CLASS_WORDS[result.class];
+  return result.class === "now_stopped" ? "A wrong payment" : `${CLASS_WORDS[result.class]}, a wrong payment`;
+}
+
+/** A decision's class with its reason, a wrong payment named as one: "Cannot rebuild. The payee's address changed...". */
 export function replayClassWords(result: Pick<ShadowReplayResult, "class" | "reason" | "wrongPayment">): string {
-  const head = !result.wrongPayment
-    ? CLASS_WORDS[result.class]
-    : result.class === "now_stopped"
-      ? "A wrong payment"
-      : `${CLASS_WORDS[result.class]}, a wrong payment`;
+  const head = classHead(result);
   return result.reason ? `${head}. ${result.reason}` : head;
+}
+
+/**
+ * A decision's result as the docs page's table says it (shadow replay SR11): its class, a wrong payment named as one, and
+ * the number of the note under the table that gives its reason, "Cannot rebuild, note 1". The reason itself is said once,
+ * in that note, however many decisions share it, so a row stays a few words high.
+ */
+export function replayResultWords(result: Pick<ShadowReplayResult, "class" | "wrongPayment">, note: number | null): string {
+  const head = classHead(result);
+  return note === null ? head : `${head}, note ${note}`;
 }

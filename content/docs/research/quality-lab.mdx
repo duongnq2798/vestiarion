@@ -106,14 +106,14 @@ Shadow mode runs the agent on a workspace's real bills while the business keeps 
 
 - **The team's own workspaces only.** Only the founding workspace and those a team member created are exported. Customers' workspaces are never read into the file, whatever they hold.
 - **No names, addresses or ids.** The file keeps numbers, yes-or-no facts and rule names, with each date counted in days from its decision. Workspaces, bills and payees are named by pseudonyms local to the file.
-- **Facts the record does not carry are never guessed.** When a payee's address changed again after a decision, how long before it the address had changed is not known; a schedule never read the spending limits; a decision made before the check for earlier work existed has no answer to it. The replay runs such a decision both ways. If the outcome differs, the decision cannot be rebuilt, and its row says why and whether money stops either way.
+- **Facts the record does not carry are never guessed.** When a payee's address changed again after a decision, how long before it the address had changed is not known; a schedule never read the spending limits; a decision made before the check for earlier work existed has no answer to it. The replay runs such a decision both ways. If the outcome differs, the decision cannot be rebuilt, and its note under the table says why and whether money stops either way.
 - **Earlier work before Oct 13, 2026.** An entry records earlier work for the same purchase order or delivered work only when the check finds some, and the check was added on Oct 13, 2026. So the entry of a decision made by then names none, whether there was any or not. The replay runs a payment or schedule from then both ways: with no earlier work, and with an earlier milestone for the same delivered work, which today's code holds for a person. Where that changes whether money moves, the decision cannot be rebuilt.
-- **USDC bills on Arc.** An answer to pay or schedule a EURC bill, a payout to another chain or a bank payout is not rebuilt, and shows as cannot rebuild with the reason. A hold, a flag or a request for information on one moves no money and meets no rule, so it is replayed, as a USDC bill on Arc.
+- **USDC bills on Arc.** An answer to pay or schedule a EURC bill, a payout to another chain or a bank payout is not rebuilt, and shows as cannot rebuild, with the reason in its note. A hold, a flag or a request for information on one moves no money and meets no rule, so it is replayed, as a USDC bill on Arc.
 - **Recorded answers, not the model's judgement.** The replay measures what today's code does with each answer the model gave then, not whether the model would give it again.
 
 ### Every decision
 
-Each row gives the model's answer, the person's verdict, what code did then and does now, and the result.
+Each row gives the model's answer, the person's verdict, what code did then and does now, and the result. A result with a reason names a note under the table, which gives each reason once with the decisions it applies to.
 
 <ShadowReplayTable />
 

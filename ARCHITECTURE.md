@@ -4351,7 +4351,8 @@ and the same test fails while the committed file differs from the run, naming th
 writes the same words from `src/lib/quality-lab/results.ts`. The replay of the team's shadow decisions,
 `src/lib/data/quality-lab-shadow.json`, is generated the same way by the same script, from `tests/quality-lab-shadow.test.ts`,
 and `<ShadowReplaySummary />` and `<ShadowReplayTable />` render its line and every decision from
-`src/lib/quality-lab/shadow-results.ts`. Its input, `src/lib/quality-lab/shadow-decisions.json`, is exported by hand
+`src/lib/quality-lab/shadow-results.ts`, each row's result in a few words and each distinct reason once, in numbered
+notes under the table (`shadowNotes`). Its input, `src/lib/quality-lab/shadow-decisions.json`, is exported by hand
 (`npm run quality-lab:shadow`), never in CI.
 
 The SDK's and the CLI's versions are their own. The product's version is a git tag, `vX.Y.Z` or `vX.Y.Z-beta.N`, published as a GitHub

@@ -15,7 +15,7 @@ import {
   type ShadowReplayResult,
   type ShadowReplayRun,
 } from "@/lib/quality-lab/shadow-replay";
-import { answerWords, replayClassWords, replayOutcomeWords, shadowReplayWords, verdictWords } from "@/lib/quality-lab/words";
+import { answerWords, replayClassWords, replayOutcomeWords, replayResultWords, shadowReplayWords, verdictWords } from "@/lib/quality-lab/words";
 
 /**
  * The replay of the shadow-mode decisions, the parts that touch no harness
@@ -684,5 +684,17 @@ describe("the replay in words (SR10, SR11)", () => {
     expect(
       replayClassWords({ class: "now_stopped", reason: "Code recorded a stop because a first payment to a new address needs two people, but money moved.", wrongPayment: true })
     ).toBe("A wrong payment. Code recorded a stop because a first payment to a new address needs two people, but money moved.");
+  });
+
+  it("says the docs table's result in a few words, naming the note that gives its reason (SR11)", () => {
+    expect(replayResultWords({ class: "same", wrongPayment: false }, null)).toBe("Same");
+    expect(replayResultWords({ class: "same", wrongPayment: false }, 2)).toBe("Same, note 2");
+    expect(replayResultWords({ class: "cannot_rebuild", wrongPayment: false }, 1)).toBe("Cannot rebuild, note 1");
+    expect(replayResultWords({ class: "cannot_rebuild", wrongPayment: true }, 1)).toBe("Cannot rebuild, a wrong payment, note 1");
+    expect(replayResultWords({ class: "now_let_through", wrongPayment: true }, 3)).toBe("Now let through, a wrong payment, note 3");
+    expect(replayResultWords({ class: "same", wrongPayment: true }, null)).toBe("Same, a wrong payment");
+    // A stop code recorded while money moved is named only as a wrong payment here too (SR6, SR7).
+    expect(replayResultWords({ class: "now_stopped", wrongPayment: true }, 4)).toBe("A wrong payment, note 4");
+    expect(replayResultWords({ class: "now_stopped", wrongPayment: false }, 4)).toBe("Now stopped, note 4");
   });
 });

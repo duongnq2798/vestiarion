@@ -337,9 +337,9 @@ replay SR4)".
 - A replay in which code records a stop and money moves all the same keeps the class its rule and money give (now let
   through when money stopped then, now stopped otherwise), but its reason says "Code recorded a stop because ..., but
   money moved.", its Now column says "Recorded as stopped because ..., but money moved", and it is a wrong payment
-  (SR7), never a safe "Stopped now because ...". Its result is said "A wrong payment. Code recorded a stop because
-  ..., but money moved." (`replayClassWords`), never "Now stopped", and the summary counts it only as a wrong payment
-  (SR9).
+  (SR7), never a safe "Stopped now because ...". Its result is said "A wrong payment", with the reason "Code recorded a
+  stop because ..., but money moved." (`replayClassWords`; the docs table gives the reason in a note under it, SR11),
+  never "Now stopped", and the summary counts it only as a wrong payment (SR9).
 - If wrong: a class that hid a change of rule would report as the same outcome a decision code now treats differently.
 
 **SR7. A wrong payment fails CI.**
@@ -428,9 +428,17 @@ replay SR4)".
   the line counts each decision once (SR9), how to refresh it, the summary (`<ShadowReplaySummary />`) and one row per decision
   (`<ShadowReplayTable />`), rendered from the committed file on the page and in its Markdown view (`MDX_TO_MARKDOWN`),
   never typed. The page's description in the docs navigation names both halves.
+- A row's result says its class in a few words (`replayResultWords`), a wrong payment named as one, and, when the
+  decision has a reason, the number of its note: "Cannot rebuild, note 1". Under the table a numbered list, Notes,
+  gives each distinct reason once with the decisions it applies to, numbered in the order the table first meets it
+  (`shadowNotes`). The Markdown view writes the same table and notes. A reason is a few lines of prose that several
+  decisions share: in a narrow result cell it made each such row hundreds of pixels tall.
+- The table fits the page's column on a laptop: the answer's head is "Answer" (the line above the table says whose),
+  its cells are tighter than other tables', and a decision's id and day may stand on two lines. On a phone it scrolls
+  inside its own frame, never the page.
 - The table colours a result from its `wrongPayment` and `class` fields, never from its words: a wrong payment is
   refused whatever its class, a same row is plain, and any other is held.
-- A test holds the page's figures and rows to the file.
+- A test holds the page's figures, rows and notes to the file.
 - If wrong: a typed table would disagree with the file after the next export.
 
 **SR12. Refreshing it.**

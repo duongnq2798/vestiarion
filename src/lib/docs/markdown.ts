@@ -2,7 +2,7 @@ import { STATUS_FOR } from "@/lib/api/contract";
 import { jsonSchema, operationById, type DocOperation, type DocParam } from "@/lib/api/openapi";
 import { MCP_TOOLS } from "@/lib/mcp/tools";
 import { GROUP_TABLE_HEAD, groupRows, QUALITY_LAB_RESULTS } from "@/lib/quality-lab/results";
-import { QUALITY_LAB_SHADOW_RESULTS, SHADOW_TABLE_HEAD, shadowRows } from "@/lib/quality-lab/shadow-results";
+import { QUALITY_LAB_SHADOW_RESULTS, SHADOW_NOTES_HEAD, SHADOW_TABLE_HEAD, shadowNoteWords, shadowNotes, shadowRows } from "@/lib/quality-lab/shadow-results";
 import { scoreWords, shadowReplayWords, wrongPaymentWords } from "@/lib/quality-lab/words";
 import { calloutLabel } from "./callouts";
 import { hasSource, notesSource, publishedPages, readSource } from "./content";
@@ -115,10 +115,15 @@ export const MDX_TO_MARKDOWN: Record<string, (attributes: JsxAttributes, childre
     if (typeof group !== "string") throw new Error("<QualityLabTable> needs a group");
     return table([...GROUP_TABLE_HEAD], groupRows(group));
   },
-  // The replay of the team's shadow-mode decisions: its line and one row per decision, as the page renders them (shadow
-  // replay SR11).
+  // The replay of the team's shadow-mode decisions: its line, one row per decision, and the numbered notes under the
+  // table that give each distinct reason once, as the page renders them (shadow replay SR11).
   ShadowReplaySummary: () => shadowReplayWords(QUALITY_LAB_SHADOW_RESULTS.summary),
-  ShadowReplayTable: () => table([...SHADOW_TABLE_HEAD], shadowRows()),
+  ShadowReplayTable: () => {
+    const notes = shadowNotes();
+    const rows = table([...SHADOW_TABLE_HEAD], shadowRows());
+    if (notes.length === 0) return rows;
+    return [rows, `**${SHADOW_NOTES_HEAD}**`, notes.map((note) => `${note.number}. ${shadowNoteWords(note)}`).join("\n")].join("\n\n");
+  },
 };
 
 /**
