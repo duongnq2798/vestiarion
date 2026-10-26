@@ -1,4 +1,5 @@
 import { AGENT_DECISION_ACTIONS } from "../../src/lib/agent/shadow-hold";
+import { FOUNDING_ORG_ID } from "../../src/lib/dal/org-config";
 import {
   assertShareable,
   exportShadowDecisions,
@@ -19,15 +20,30 @@ export interface ShadowExportClient {
 
 /**
  * Every agent decision on a bill made in shadow mode in the team's own workspaces on Arc testnet (SX1, SX2): the founding
- * workspace (no creator) and those a platform team member created, as open_verdicts (0086) splits them; never the
- * guardrail fixture's entries, never a sample payee's bills. `side` repeats the split, so the mapping can refuse a row
- * the filter should have left out. The payee's address on file is read only to tell whether a document's pay-to differs.
+ * workspace, by its id ($2), and those a platform team member created, as every reader that publishes rows picks them
+ * (0087, 0100, 0134). Never a workspace with no creator otherwise: its creator deleted their account (0023), and it may
+ * be a former customer's (0037). Never the guardrail fixture's entries, never a sample payee's bills. `side` names which
+ * of the two each row is, so the mapping can refuse a row the filter should have left out, and check the founding one's
+ * id itself.
+ *
+ * Of the payee's row, only what it says of the decision (SX3, SX4): its address on file, to tell whether a document's
+ * pay-to differs, and whether that address changed since the decision, by its time or by a change the ledger recorded
+ * after it (a mirror's leaves no time); how many whole hours before the decision it last changed, never when; and its
+ * role, which nothing changes after the payee is added.
  */
 export const SHADOW_ENTRIES_SQL = `
   select e.seq, e.ts, e.org_id, e.action, e.detail,
-         case when o.created_by is not null and not exists (select 1 from public.platform_team t where t.user_id = o.created_by)
-              then 'customers' else 'ours' end as side,
-         c.address as address_on_file
+         case when o.id = $2::uuid then 'founding'
+              when exists (select 1 from public.platform_team t where t.user_id = o.created_by) then 'team'
+              else 'customers' end as side,
+         c.address as address_on_file,
+         coalesce(c.address_changed_at > e.ts, false)
+           or exists (select 1 from public.ledger_entries a
+                       where a.org_id = e.org_id and a.domain = 'compliance' and a.action = 'counterparty_address_changed'
+                         and a.detail->>'counterpartyId' = e.detail->>'counterpartyId' and a.seq > e.seq) as address_changed_since,
+         case when c.address_changed_at <= e.ts
+              then floor(extract(epoch from (e.ts - c.address_changed_at)) / 3600)::int end as address_changed_hours_before,
+         c.role as payee_role
     from public.ledger_entries e
     join public.orgs o on o.id = e.org_id
     join public.counterparties c on c.org_id = e.org_id and c.id::text = e.detail->>'counterpartyId'
@@ -38,7 +54,7 @@ export const SHADOW_ENTRIES_SQL = `
      and not (e.detail ? 'guardrailFixture')
      and not c.sample
      and o.network = 'arc-testnet'
-     and (o.created_by is null or exists (select 1 from public.platform_team t where t.user_id = o.created_by))
+     and (o.id = $2::uuid or exists (select 1 from public.platform_team t where t.user_id = o.created_by))
    order by e.ts, e.seq`;
 
 /** The verdicts on those decisions: what was given, never its reason or who gave it. */
@@ -58,7 +74,7 @@ export async function runShadowExport(input: {
 }): Promise<string> {
   const { client, write } = input;
   await client.query("begin transaction read only");
-  const entries = (await client.query(SHADOW_ENTRIES_SQL, [[...AGENT_DECISION_ACTIONS]])).rows as ShadowLedgerRow[];
+  const entries = (await client.query(SHADOW_ENTRIES_SQL, [[...AGENT_DECISION_ACTIONS], FOUNDING_ORG_ID])).rows as ShadowLedgerRow[];
   const verdicts = (await client.query(SHADOW_VERDICTS_SQL, [entries.map((entry) => String(entry.seq))])).rows as ShadowVerdictRow[];
   await client.query("commit");
 

@@ -4971,11 +4971,14 @@ Fixed scenarios run through the agent's real decision code in CI on every change
 - **The shadow decisions** (`docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md`, export only so
   far): `npm run quality-lab:shadow` exports every agent decision on a bill made in shadow mode in the team's own
   workspaces on Arc testnet, with each person's verdict, to `src/lib/quality-lab/shadow-decisions.json`, for a replay
-  through the same runner. Customers' workspaces are never read into it. `exportShadowDecisions`
+  through the same runner. The team's own are the founding workspace, by its id, and those a `platform_team` member
+  created, as the readers that publish rows pick them; never one whose creator deleted their account, which may be a
+  former customer's. Customers' workspaces are never read into it. `exportShadowDecisions`
   (`src/lib/quality-lab/shadow-export.ts`) passes only the fields it names, as numbers, booleans and rule names, with
-  pseudonyms local to the file for workspaces, bills and payees, and dates as days from the decision; `assertShareable`
-  refuses the whole file when anything in it looks like an address, hash, email or id. The script reads in one
-  read-only transaction and is run by hand, never in CI.
+  pseudonyms local to the file for workspaces, bills and payees, and dates as days from the day the decision measured
+  its timing on; of the payee's row it keeps only what still says what the decision saw. `assertShareable` refuses the
+  whole file when anything in it looks like an address, hash, email or id, with or without its `0x` or dashes. The
+  script reads in one read-only transaction and is run by hand, never in CI.
 - Not covered: the model's judgement (scripted), live payments (proved on Arc testnet and Arc mainnet by transactions),
   milestones, whose checks are inline in `executeCycle`, EURC, payouts to other chains, bank payouts, and a person's
   approvals.

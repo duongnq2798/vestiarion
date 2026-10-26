@@ -1,4 +1,6 @@
 import { AGENT_DECISION_ACTIONS } from "../agent/shadow-hold";
+import { FOUNDING_ORG_ID } from "../dal/org-config";
+import { NO_SWAP_ROUTE, SWAP_NOT_QUOTED, SWAP_QUOTE_UNANSWERED, SWAP_QUOTE_UNREADABLE, swapUnavailableForFx } from "../fx/swap-service";
 import { payToDiffers } from "../invoice-pay-to-rules";
 
 /**
@@ -10,7 +12,7 @@ import { payToDiffers } from "../invoice-pay-to-rules";
  * one, and passes only as a number, a boolean or an enum-like token. Everything else is dropped, so a field the ledger
  * gains later never reaches this public file until someone names it here. No text, name, reference, address, email,
  * id, hash or ledger number is kept (SX4): ids that link decisions become pseudonyms local to the file, and dates
- * become days from the decision's own day (SX5).
+ * become days from the day the decision measured its timing on (SX5).
  */
 
 /** Where the script writes the file, from the repository's root. */
@@ -132,8 +134,12 @@ export interface ShadowObserved {
   operatingBalance: number | null;
   addressUnconfirmed: boolean | null;
   addressMissing: boolean;
-  /** Whether the bill's document named an address to pay, and whether it differs from the one on file at export. */
-  documentPayTo: { present: boolean; differs: boolean };
+  /**
+   * Whether the bill's document named an address to pay, and whether it differed from the one on file at the decision:
+   * true when the decision was held for exactly that (`invoice.pay_to_differs`), else measured against the address on
+   * file at export when it has not changed since the decision, else null (unknown).
+   */
+  documentPayTo: { present: boolean; differs: boolean | null };
   /** The project's pseudonym, or null for a bill in none. */
   projectId: string | null;
   project: ShadowProjectCheck | null;
@@ -141,12 +147,44 @@ export interface ShadowObserved {
   duplicateCheck: { candidatesConsidered: number | null; matchesTotal: number | null; matchesShown: number | null; matches: ShadowDuplicateMatch[] } | null;
 }
 
+/**
+ * What the payee's row says of the decision, read beside its entry (SX3): its role, which nothing changes once the payee
+ * is added, and when its address last changed as whole hours before the decision, which the cooling-off weighs. That
+ * time is known only while the address has not changed since; otherwise both are as unknown as they say.
+ */
+export interface ShadowPayeeOnFile {
+  /** `vendor`, `client` or `contractor`. */
+  role: string | null;
+  /** Whole hours from the address's last change to the decision; null when it never changed, or changed since. */
+  addressChangedHoursBefore: number | null;
+  /** Whether the address changed after the decision, or the read could not say: then the hours are unknown. */
+  addressChangedSinceDecision: boolean;
+}
+
+/** The EURC figures a EURC bill was weighed with, and the swap it was offered or why there was none. */
+export interface ShadowEurc {
+  usdcValue: number | null;
+  fxRate: number | null;
+  /** The least USDC the FX quote would give (`fx.usdcMinimum`). */
+  usdcMinimum: number | null;
+  eurcBalance: number | null;
+  usdcDueWithin7Days: number | null;
+  swapOffer: { usdcIn: number | null; costPercent: number | null; eurcMinimum: number | null } | null;
+  /** Why no swap was offered, as a kind (`swapUnavailableKind`), never the sentence. */
+  swapUnavailable: string | null;
+}
+
 /** One exported decision. Pseudonyms (`w1`, `b1`, `p1`, `pj1`, `m1`) are local to the file and stable within it. */
 export interface ShadowDecision {
   /** `shadow-01`, `shadow-02`, ... in the order the decisions were made. */
   id: string;
-  /** When it was decided, to the minute (ISO, UTC). */
+  /** When its entry was written, to the minute (ISO, UTC). */
   decidedAt: string;
+  /**
+   * The UTC day every `…InDays` counts from (SX5): the day the decision code measured its timing on (`timing.today`), or
+   * the day of `decidedAt` when the entry records none. A cycle that crosses midnight writes its entry the day after.
+   */
+  decidedOn: string;
   workspace: string;
   bill: string | null;
   payee: string | null;
@@ -172,15 +210,24 @@ export interface ShadowDecision {
   /** Who sent the vendor's document the bill's purchase order came from (`vendor` or `member`), or null for none. */
   vendorDocument: string | null;
   paidToBank: boolean;
-  payout: { chain: string | null; route: string | null; feeUsdc: number | null } | null;
-  eurc: { usdcValue: number | null; fxRate: number | null; eurcBalance: number | null } | null;
+  /** A payee on another chain: the route, its fee, the Gateway balance a Gateway payout was weighed against, both quotes. */
+  payout: {
+    chain: string | null;
+    route: string | null;
+    feeUsdc: number | null;
+    gatewayBalanceUsdc: number | null;
+    quotes: { cctpFeeUsdc: number | null; gatewayFeeUsdc: number | null } | null;
+  } | null;
+  eurc: ShadowEurc | null;
   cashAhead: ShadowCashAhead | null;
   cashPriority: { waits: boolean | null; byPerson: boolean } | null;
   reevaluation: { trigger: string | null; previousAction: string | null } | null;
   amountPaid: number | null;
   discountTaken: number | null;
   observed: ShadowObserved;
-  execution: { resultingStatus: string | null; heldBecause: string | null };
+  payeeOnFile: ShadowPayeeOnFile;
+  /** `chainMode` is `live` or `simulate`. */
+  execution: { resultingStatus: string | null; heldBecause: string | null; chainMode: string | null };
 }
 
 export interface ShadowDecisionsFile {
@@ -196,11 +243,20 @@ export interface ShadowLedgerRow {
   ts: Date | string;
   org_id: string;
   action: string;
-  /** `ours` or `customers`, as open_verdicts (0086) splits workspaces: the export refuses any but `ours` (SX2). */
+  /**
+   * `founding` (the founding workspace, by its id), `team` (one a platform team member created) or `customers`: the
+   * export refuses the whole file for any other, and for `founding` on any workspace but the founding one (SX2).
+   */
   side: string;
   detail: unknown;
   /** The payee's address on file at export, read only to tell whether a document's pay-to differs (SX4); never kept. */
   address_on_file: string | null;
+  /** Whether the payee's address changed after the decision; anything but false is taken as unknown. */
+  address_changed_since: boolean | null;
+  /** Whole hours from the address's last change to the decision, when it changed at or before it. */
+  address_changed_hours_before: number | string | null;
+  /** The payee's role. */
+  payee_role: string | null;
 }
 
 /** One verdict as the script reads it: never its reason. */
@@ -254,6 +310,61 @@ function daysFrom(day: string, value: unknown): number | null {
   const other = dayOf(value);
   if (other === null) return null;
   return Math.round((Date.parse(`${other}T00:00:00.000Z`) - Date.parse(`${day}T00:00:00.000Z`)) / DAY_MS);
+}
+
+/**
+ * The day a decision's dates count from (SX5): the day its timing was measured on (`timing.today`, the decision code's
+ * `now`, taken before the model's answer and the checks), when that is a real calendar day within a day of the entry's;
+ * the entry's own day otherwise.
+ */
+function anchorDay(detail: Detail, at: number): string {
+  const written = new Date(at).toISOString().slice(0, 10);
+  const today = record(detail.timing)?.today;
+  if (typeof today !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return written;
+  const measured = Date.parse(`${today}T00:00:00.000Z`);
+  if (Number.isNaN(measured) || new Date(measured).toISOString().slice(0, 10) !== today) return written;
+  return Math.abs(daysFrom(written, today) ?? Number.POSITIVE_INFINITY) <= 1 ? today : written;
+}
+
+/**
+ * Why a EURC bill was offered no swap, as a kind (`swapUnavailable` records a sentence, src/lib/fx/swap-service.ts and
+ * the AP stage's own): Circle's answers by name, the swap's minimum short of the need, a payment already started (or
+ * unreadable, which counts as started), and `other` for any sentence not known here. Never the sentence.
+ */
+function swapUnavailableKind(value: unknown): string | null {
+  if (typeof value !== "string" || value === "") return null;
+  if (value === NO_SWAP_ROUTE) return "no_route";
+  if (value === SWAP_QUOTE_UNREADABLE) return "quote_unreadable";
+  if (value === SWAP_QUOTE_UNANSWERED) return "quote_unanswered";
+  if (value === SWAP_NOT_QUOTED) return "not_quoted";
+  if (swapUnavailableForFx(value)) return "minimum_short";
+  if (/\ba payment for this invoice\b/i.test(value)) return "payment_started";
+  return "other";
+}
+
+const ROLES: ReadonlySet<string> = new Set(["vendor", "client", "contractor"]);
+
+function payeeOnFileOf(row: ShadowLedgerRow): ShadowPayeeOnFile {
+  // Anything but a plain false is unknown: a time that cannot be shown to be the decision's is never kept.
+  const since = row.address_changed_since !== false;
+  const hours = num(row.address_changed_hours_before);
+  return {
+    role: typeof row.payee_role === "string" && ROLES.has(row.payee_role) ? row.payee_role : null,
+    addressChangedHoursBefore: !since && hours !== null && Number.isInteger(hours) && hours >= 0 ? hours : null,
+    addressChangedSinceDecision: since,
+  };
+}
+
+/**
+ * Whether the document's pay-to differed from the address on file at the decision (SX4): it did when the decision was
+ * held for exactly that; it never did when the document named none; otherwise it is measured against the address on
+ * file at export, but only when that address has not changed since the decision, and is unknown when it has.
+ */
+function payToDiffered(payTo: string | null, row: ShadowLedgerRow, guardrailRule: string | null): boolean | null {
+  if (payTo === null) return false;
+  if (guardrailRule === "invoice.pay_to_differs") return true;
+  if (row.address_changed_since !== false) return null;
+  return payToDiffers(payTo, row.address_on_file);
 }
 
 /** Pseudonyms local to the file, assigned in the order they are first met (SX4). */
@@ -382,7 +493,7 @@ function projectOf(value: unknown): ShadowProjectCheck | null {
   };
 }
 
-function observedOf(value: unknown, addressOnFile: string | null, names: Pseudonyms): ShadowObserved {
+function observedOf(value: unknown, row: ShadowLedgerRow, guardrailRule: string | null, names: Pseudonyms): ShadowObserved {
   const observed = record(value) ?? {};
   const history = record(observed.addressHistory);
   const duplicates = record(observed.duplicateCheck);
@@ -424,7 +535,7 @@ function observedOf(value: unknown, addressOnFile: string | null, names: Pseudon
     operatingBalance: num(observed.operatingBalance),
     addressUnconfirmed: bool(observed.addressUnconfirmed),
     addressMissing: observed.addressMissing === true,
-    documentPayTo: { present: payTo !== null, differs: payToDiffers(payTo, addressOnFile) },
+    documentPayTo: { present: payTo !== null, differs: payToDiffered(payTo, row, guardrailRule) },
     projectId,
     project: projectOf(observed.project),
     sameWork,
@@ -434,13 +545,39 @@ function observedOf(value: unknown, addressOnFile: string | null, names: Pseudon
   };
 }
 
+function eurcOf(detail: Detail): ShadowEurc | null {
+  if (!("usdcValue" in detail || "eurcBalance" in detail)) return null;
+  const fx = record(detail.fx);
+  const offer = record(detail.swapOffer);
+  return {
+    usdcValue: num(detail.usdcValue),
+    fxRate: num(fx?.rate),
+    usdcMinimum: num(fx?.usdcMinimum),
+    eurcBalance: num(detail.eurcBalance),
+    usdcDueWithin7Days: num(detail.usdcDueWithin7Days),
+    swapOffer: offer ? { usdcIn: num(offer.usdcIn), costPercent: num(offer.costPercent), eurcMinimum: num(offer.eurcMinimum) } : null,
+    swapUnavailable: swapUnavailableKind(detail.swapUnavailable),
+  };
+}
+
+function payoutOf(value: unknown): ShadowDecision["payout"] {
+  const payout = record(value);
+  if (!payout) return null;
+  const quotes = record(payout.quotes);
+  return {
+    chain: token(payout.chain),
+    route: token(payout.route),
+    feeUsdc: num(payout.feeUsdc),
+    gatewayBalanceUsdc: num(payout.gatewayBalanceUsdc),
+    quotes: quotes ? { cctpFeeUsdc: num(quotes.cctpFeeUsdc), gatewayFeeUsdc: num(quotes.gatewayFeeUsdc) } : null,
+  };
+}
+
 function decisionOf(row: ShadowLedgerRow, detail: Detail, day: string, names: Pseudonyms, verdict: ShadowVerdict | null, id: string): ShadowDecision {
   const decision = record(detail.decision) ?? {};
   const fromLedger = row.action.slice("ap_".length) as ShadowAction;
   const action = typeof decision.action === "string" && `ap_${decision.action}` === row.action ? (decision.action as ShadowAction) : fromLedger;
-  const payout = record(detail.payout);
-  const fx = record(detail.fx);
-  const isEurc = "usdcValue" in detail || "eurcBalance" in detail;
+  const guardrailRule = token(detail.guardrailRule);
   const cashAhead = record(detail.cashAhead);
   const dueBefore = record(cashAhead?.dueBefore);
   const cashPriority = record(detail.cashPriority);
@@ -453,6 +590,7 @@ function decisionOf(row: ShadowLedgerRow, detail: Detail, day: string, names: Ps
   return {
     id,
     decidedAt: `${new Date(row.ts).toISOString().slice(0, 16)}:00.000Z`,
+    decidedOn: day,
     workspace,
     bill,
     payee,
@@ -467,7 +605,7 @@ function decisionOf(row: ShadowLedgerRow, detail: Detail, day: string, names: Ps
     referenceAction: token(record(detail.referenceDecision)?.action),
     agreedWithReference: bool(detail.agreedWithReference),
     guardrailBlocked: bool(detail.guardrailBlocked),
-    guardrailRule: token(detail.guardrailRule),
+    guardrailRule,
     currency: typeof detail.currency === "string" && CURRENCY.test(detail.currency) ? detail.currency : null,
     timingRule: token(detail.timingRule),
     requestedPayOnInDays: daysFrom(day, detail.requestedPayOn),
@@ -478,8 +616,8 @@ function decisionOf(row: ShadowLedgerRow, detail: Detail, day: string, names: Ps
     onChainLimit: onChainLimitOf(detail.onChainLimit),
     vendorDocument: token(record(detail.vendorDocument)?.source),
     paidToBank: detail.paidToBank === true,
-    payout: payout ? { chain: token(payout.chain), route: token(payout.route), feeUsdc: num(payout.feeUsdc) } : null,
-    eurc: isEurc ? { usdcValue: num(detail.usdcValue), fxRate: num(fx?.rate), eurcBalance: num(detail.eurcBalance) } : null,
+    payout: payoutOf(detail.payout),
+    eurc: eurcOf(detail),
     cashAhead: cashAhead
       ? {
           scheduledForInDays: daysFrom(day, cashAhead.scheduledFor),
@@ -492,8 +630,9 @@ function decisionOf(row: ShadowLedgerRow, detail: Detail, day: string, names: Ps
     reevaluation: reevaluation ? { trigger: token(reevaluation.trigger), previousAction: token(reevaluation.previousAction) } : null,
     amountPaid: num(detail.amountPaid),
     discountTaken: num(detail.discountTaken),
-    observed: observedOf(detail.observed, row.address_on_file, names),
-    execution: { resultingStatus: token(execution.resultingStatus), heldBecause: token(execution.heldBecause) },
+    observed: observedOf(detail.observed, row, guardrailRule, names),
+    payeeOnFile: payeeOnFileOf(row),
+    execution: { resultingStatus: token(execution.resultingStatus), heldBecause: token(execution.heldBecause), chainMode: token(execution.chainMode) },
   };
 }
 
@@ -511,11 +650,19 @@ function exportable(row: ShadowLedgerRow): Detail | null {
 }
 
 /**
+ * Whether a row is the team's own (SX2): a team member's workspace, or the founding one by its own id. A workspace with
+ * no creator is neither: its creator deleted their account (0023), and it may be a former customer's (0037).
+ */
+function ours(row: ShadowLedgerRow): boolean {
+  return row.side === "team" || (row.side === "founding" && row.org_id === FOUNDING_ORG_ID);
+}
+
+/**
  * The file the script writes (SX3-SX5, SX8): the exportable rows in time order, the ledger's order breaking a tie, each
- * through the allowlist, with its verdict. Throws when any row is a customer's (SX2), whatever else it holds.
+ * through the allowlist, with its verdict. Throws when any row is not the team's own (SX2), whatever else it holds.
  */
 export function exportShadowDecisions(rows: readonly ShadowLedgerRow[], verdicts: readonly ShadowVerdictRow[], readAt: Date): ShadowDecisionsFile {
-  if (rows.some((row) => row.side !== "ours")) {
+  if (!rows.every(ours)) {
     throw new Error("A customer's workspace reached the shadow export: nothing is exported (shadow replay SX2)");
   }
   const given = new Map<string, ShadowVerdict>();
@@ -529,7 +676,7 @@ export function exportShadowDecisions(rows: readonly ShadowLedgerRow[], verdicts
   const width = Math.max(2, String(kept.length).length);
   const names = new Pseudonyms();
   const decisions = kept.map(({ row, detail, at, seq }, index) =>
-    decisionOf(row, detail, new Date(at).toISOString().slice(0, 10), names, given.get(`${row.org_id}:${seq}`) ?? null, `shadow-${String(index + 1).padStart(width, "0")}`)
+    decisionOf(row, detail, anchorDay(detail, at), names, given.get(`${row.org_id}:${seq}`) ?? null, `shadow-${String(index + 1).padStart(width, "0")}`)
   );
   return { source: SHADOW_DECISIONS_SOURCE, readAt: readAt.toISOString(), decisions };
 }
@@ -537,6 +684,8 @@ export function exportShadowDecisions(rows: readonly ShadowLedgerRow[], verdicts
 const ADDRESS_OR_HASH = /0x[0-9a-f]{40}/i;
 const EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+/** 32 hex digits in a row: an address without its `0x`, a UUID without its dashes, a hash. Each is shaped like a token. */
+const BARE_HEX = /[0-9a-f]{32}/i;
 const LONGEST = 40;
 
 /** Why a string may not be published, or null when it may (SX6). */
@@ -544,6 +693,7 @@ function unshareable(value: string): string | null {
   if (ADDRESS_OR_HASH.test(value)) return "looks like an address or a hash";
   if (EMAIL.test(value)) return "looks like an email address";
   if (UUID.test(value)) return "looks like a UUID";
+  if (BARE_HEX.test(value)) return "looks like an id or a hash without its 0x or dashes";
   if (value.length > LONGEST) return `is longer than ${LONGEST} characters`;
   return null;
 }
@@ -574,8 +724,9 @@ function walk(value: unknown, path: string): void {
 
 /**
  * Refuses the whole file, naming the path of the first offending value and never the value, when any key or string in
- * its decisions or its time looks like an address or hash, an email address or a UUID, or is longer than 40 characters,
- * or when its source is not this module's own sentence (SX6). The script calls it before writing.
+ * its decisions or its time looks like an address or hash, an email address or a UUID, holds 32 hex digits in a row (one
+ * of those without its `0x` or dashes), or is longer than 40 characters, or when its source is not this module's own
+ * sentence (SX6). The script calls it before writing.
  */
 export function assertShareable(file: ShadowDecisionsFile): void {
   if (file.source !== SHADOW_DECISIONS_SOURCE) refuse("source", "is not the export's own sentence");

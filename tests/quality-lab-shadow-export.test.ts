@@ -158,6 +158,7 @@ function foundingHold(): ShadowLedgerRow {
   const detail = apDetail({ invoiceId: BILL_C, counterpartyId: NORTHWIND, action: "hold" });
   detail.guardrailBlocked = true;
   detail.guardrailRule = "counterparty.address_unconfirmed";
+  detail.timing = { ...(detail.timing as Record<string, unknown>), today: "2026-10-11" };
   const observed = detail.observed as Record<string, unknown>;
   observed.addressUnconfirmed = true;
   observed.poReference = null;
@@ -169,17 +170,33 @@ function foundingHold(): ShadowLedgerRow {
   (observed.duplicateCheck as Record<string, unknown>).matchesTotal = 0;
   (observed.duplicateCheck as Record<string, unknown>).matchesShown = 0;
   (detail.execution as Record<string, unknown>).heldBecause = undefined;
-  return { seq: "5188", ts: new Date("2026-10-11T15:02:09.000Z"), org_id: FOUNDING, action: "ap_hold", side: "ours", detail, address_on_file: null };
+  return {
+    seq: "5188",
+    ts: new Date("2026-10-11T15:02:09.000Z"),
+    org_id: FOUNDING,
+    action: "ap_hold",
+    side: "founding",
+    detail,
+    address_on_file: null,
+    // Its address changed 30 hours before the decision, and not since.
+    address_changed_since: false,
+    address_changed_hours_before: 30,
+    payee_role: "contractor",
+  };
 }
+
+/** The payee's row as the read gives it beside the entry: its address unchanged since the decision, never changed at all. */
+const ON_FILE = { address_on_file: ADDRESS_ON_FILE, address_changed_since: false, address_changed_hours_before: null, payee_role: "vendor" } as const;
 
 /** The team workspace's payment of bill A, held for a verdict, with a duplicate match against bill B. */
 function teamPay(): ShadowLedgerRow {
-  return { seq: "5201", ts: new Date("2026-10-12T09:41:27.512Z"), org_id: TEAM, action: "ap_pay", side: "ours", detail: apDetail({ invoiceId: BILL_A, counterpartyId: ACME, action: "pay" }), address_on_file: ADDRESS_ON_FILE };
+  return { seq: "5201", ts: new Date("2026-10-12T09:41:27.512Z"), org_id: TEAM, action: "ap_pay", side: "team", detail: apDetail({ invoiceId: BILL_A, counterpartyId: ACME, action: "pay" }), ...ON_FILE };
 }
 
 /** Bill A decided a second time: scheduled for five days on. */
 function teamScheduleAgain(): ShadowLedgerRow {
   const detail = apDetail({ invoiceId: BILL_A, counterpartyId: ACME, action: "schedule", payOn: "2026-10-19" });
+  detail.timing = { ...(detail.timing as Record<string, unknown>), today: "2026-10-14" };
   detail.timingRule = "payon.after_due";
   detail.requestedPayOn = "2026-10-25";
   detail.scheduledFor = "2026-10-16T00:00:00.000Z";
@@ -189,27 +206,53 @@ function teamScheduleAgain(): ShadowLedgerRow {
   observed.newPayee = { addressBy: "payee", linkCreatedBy: MEMBER, confirmedBy: null, unanswered: true, twoParties: false };
   (detail.execution as Record<string, unknown>).resultingStatus = "scheduled";
   delete (detail.execution as Record<string, unknown>).heldBecause;
-  return { seq: 5230, ts: "2026-10-14T08:00:59.000Z", org_id: TEAM, action: "ap_schedule", side: "ours", detail, address_on_file: ADDRESS_ON_FILE };
+  return { seq: 5230, ts: "2026-10-14T08:00:59.000Z", org_id: TEAM, action: "ap_schedule", side: "team", detail, ...ON_FILE };
 }
 
 /** Bill B, the duplicate match's other bill, decided at the same minute as the schedule and after it in the ledger. */
 function teamHoldOther(): ShadowLedgerRow {
   const detail = apDetail({ invoiceId: BILL_B, counterpartyId: ACME, action: "hold" });
   delete (detail.observed as Record<string, unknown>).duplicateCheck;
-  return { seq: 5231n, ts: "2026-10-14T08:00:59.000Z", org_id: TEAM, action: "ap_hold", side: "ours", detail, address_on_file: ADDRESS_ON_FILE };
+  return { seq: 5231n, ts: "2026-10-14T08:00:59.000Z", org_id: TEAM, action: "ap_hold", side: "team", detail, ...ON_FILE };
 }
 
 /** Planted by the guardrail fixture: never exported (SX1). */
 function fixture(): ShadowLedgerRow {
   const detail = { ...apDetail({ invoiceId: BILL_A, counterpartyId: ACME, action: "pay" }), guardrailFixture: true };
-  return { seq: "5300", ts: "2026-10-15T08:00:00.000Z", org_id: TEAM, action: "ap_pay", side: "ours", detail, address_on_file: ADDRESS_ON_FILE };
+  return { seq: "5300", ts: "2026-10-15T08:00:00.000Z", org_id: TEAM, action: "ap_pay", side: "team", detail, ...ON_FILE };
 }
 
 /** Decided while the workspace was live: never exported (SX1). */
 function live(): ShadowLedgerRow {
   const detail = apDetail({ invoiceId: BILL_A, counterpartyId: ACME, action: "pay" });
   delete detail.shadow;
-  return { seq: "5301", ts: "2026-10-15T09:00:00.000Z", org_id: TEAM, action: "ap_pay", side: "ours", detail, address_on_file: ADDRESS_ON_FILE };
+  return { seq: "5301", ts: "2026-10-15T09:00:00.000Z", org_id: TEAM, action: "ap_pay", side: "team", detail, ...ON_FILE };
+}
+
+/**
+ * A EURC bill paid to Base through Gateway, decided in a cycle that began on 2026-10-17 and wrote its entry after UTC
+ * midnight: its dates count from the day its timing was measured on.
+ */
+function teamEurcAcrossMidnight(): ShadowLedgerRow {
+  const detail = apDetail({ invoiceId: BILL_C, counterpartyId: NORTHWIND, action: "pay" });
+  detail.currency = "EURC";
+  detail.timing = { ...(detail.timing as Record<string, unknown>), today: "2026-10-17", dueOn: "2026-10-20" };
+  detail.payout = {
+    chain: "base",
+    route: "gateway",
+    domain: 6,
+    feeUsdc: 0.02,
+    gatewayBalanceUsdc: 12.5,
+    quotes: { cctpFeeUsdc: 0.03, gatewayFeeUsdc: 0.02 },
+  };
+  detail.usdcValue = 108.4;
+  detail.fx = { rate: 1.084, source: "circle", quotedAt: "2026-10-17T23:59:10.000Z", usdcMinimum: 108.1 };
+  detail.eurcBalance = 40;
+  detail.usdcDueWithin7Days = 250;
+  detail.swapOffer = { usdcIn: 66.2, eurcEstimated: 60.4, eurcMinimum: 60.1, usdcPerEurc: 1.084, costPercent: 0.4, provider: "Some DEX" };
+  detail.swapUnavailable = null;
+  detail.swap = { swapId: DOCUMENT_REQUEST, state: "confirmed", usdcIn: 66.2, eurcReceived: 60.3, swapTxHash: TX_HASH, reason: null };
+  return { seq: "5400", ts: "2026-10-18T00:00:31.000Z", org_id: TEAM, action: "ap_pay", side: "team", detail, ...ON_FILE, payee_role: "client" };
 }
 
 const VERDICTS: ShadowVerdictRow[] = [
@@ -248,6 +291,14 @@ describe("exportShadowDecisions (shadow replay SX1-SX5, SX8)", () => {
   it("refuses the whole export when a row is a customer's (SX2)", () => {
     const customer = { ...teamPay(), side: "customers" };
     expect(() => exportShadowDecisions([foundingHold(), customer], VERDICTS, READ_AT)).toThrow(/customer/);
+    // The founding side holds only for the founding workspace's own id: a workspace whose creator deleted their account
+    // is not the founding workspace, whatever the read called it.
+    const notFounding = { ...teamPay(), side: "founding" };
+    expect(() => exportShadowDecisions([foundingHold(), notFounding], VERDICTS, READ_AT)).toThrow(/customer/);
+    // A side the export does not know, or none, is refused as well.
+    for (const side of ["ours", "", "team "]) {
+      expect(() => exportShadowDecisions([{ ...teamPay(), side }], VERDICTS, READ_AT), side).toThrow(/customer/);
+    }
   });
 
   it("maps each verdict to its own decision, and none to a decision without one, never its reason (SX1)", () => {
@@ -272,10 +323,10 @@ describe("exportShadowDecisions (shadow replay SX1-SX5, SX8)", () => {
     const pay = exported().decisions[1];
     expect(Object.keys(pay).sort()).toEqual(
       [
-        "agreedWithReference", "amountPaid", "bill", "cashAhead", "cashPriority", "currency", "decidedAt", "decision", "decisionMode",
-        "discountTaken", "eurc", "execution", "guardrailBlocked", "guardrailRule", "id", "observed", "onChainLimit", "outflowBudget",
-        "paidToBank", "payee", "payout", "reevaluation", "referenceAction", "requestedPayOnInDays", "scheduledForInDays", "terms",
-        "timing", "timingRule", "vendorDocument", "verdict", "workspace",
+        "agreedWithReference", "amountPaid", "bill", "cashAhead", "cashPriority", "currency", "decidedAt", "decidedOn", "decision",
+        "decisionMode", "discountTaken", "eurc", "execution", "guardrailBlocked", "guardrailRule", "id", "observed", "onChainLimit",
+        "outflowBudget", "paidToBank", "payee", "payeeOnFile", "payout", "reevaluation", "referenceAction", "requestedPayOnInDays",
+        "scheduledForInDays", "terms", "timing", "timingRule", "vendorDocument", "verdict", "workspace",
       ].sort()
     );
     expect(Object.keys(pay.observed).sort()).toEqual(
@@ -285,7 +336,7 @@ describe("exportShadowDecisions (shadow replay SX1-SX5, SX8)", () => {
         "sameWork", "twoApprovalsAbove",
       ].sort()
     );
-    expect(pay.execution).toEqual({ resultingStatus: "held", heldBecause: "shadow_verdict" });
+    expect(pay.execution).toEqual({ resultingStatus: "held", heldBecause: "shadow_verdict", chainMode: "live" });
     const json = JSON.stringify(exported());
     for (const unknown of ["futureField", "futureObserved", "futureExecution", FUTURE_VALUE]) expect(json).not.toContain(unknown);
   });
@@ -350,9 +401,95 @@ describe("exportShadowDecisions (shadow replay SX1-SX5, SX8)", () => {
     expect([schedule.timingRule, schedule.requestedPayOnInDays, schedule.scheduledForInDays]).toEqual(["payon.after_due", 11, 2]);
     expect(schedule.observed.documentPayTo).toEqual({ present: true, differs: false });
     expect(schedule.observed.newPayee).toEqual({ addressBy: "payee", askedVia: "payee_link", confirmed: false, unanswered: true, twoParties: false });
-    expect(schedule.execution).toEqual({ resultingStatus: "scheduled", heldBecause: null });
+    expect(schedule.execution).toEqual({ resultingStatus: "scheduled", heldBecause: null, chainMode: "live" });
     expect(hold).toMatchObject({ guardrailBlocked: true, guardrailRule: "counterparty.address_unconfirmed", verdict: null });
     expect(hold.observed).toMatchObject({ poPresent: false, addressUnconfirmed: true, documentPayTo: { present: false, differs: false }, projectId: null, project: null, sameWork: [] });
+  });
+
+  it("keeps the payee's role and how long before the decision its address changed, only while that is still known (SX3)", () => {
+    const [hold, pay] = exported().decisions;
+    expect(hold.payeeOnFile).toEqual({ role: "contractor", addressChangedHoursBefore: 30, addressChangedSinceDecision: false });
+    expect(pay.payeeOnFile).toEqual({ role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false });
+    // Changed again since: when it changed before the decision is no longer on file.
+    const changed = { ...foundingHold(), address_changed_since: true };
+    expect(exportShadowDecisions([changed], [], READ_AT).decisions[0].payeeOnFile).toEqual({ role: "contractor", addressChangedHoursBefore: null, addressChangedSinceDecision: true });
+    // A read that does not say is taken as changed: unknown, never a guess.
+    const unsaid = { ...foundingHold(), address_changed_since: null };
+    expect(exportShadowDecisions([unsaid], [], READ_AT).decisions[0].payeeOnFile.addressChangedSinceDecision).toBe(true);
+    // A role that is not one of the three is dropped.
+    const odd = { ...teamPay(), payee_role: "Acme's landlord" };
+    expect(exportShadowDecisions([odd], [], READ_AT).decisions[0].payeeOnFile.role).toBeNull();
+  });
+
+  it("says whether the document's pay-to differs as it did at the decision, or that it is unknown (SX4)", () => {
+    // Held because the document asked for another address, which then became the one on file: it differed.
+    const resolved = teamPay();
+    const detail = resolved.detail as Record<string, unknown>;
+    detail.guardrailBlocked = true;
+    detail.guardrailRule = "invoice.pay_to_differs";
+    resolved.address_on_file = DOCUMENT_PAY_TO;
+    resolved.address_changed_since = true;
+    expect(exportShadowDecisions([resolved], [], READ_AT).decisions[0].observed.documentPayTo).toEqual({ present: true, differs: true });
+    // The address changed since for another reason: today's address says nothing about the decision's.
+    const changed = { ...teamScheduleAgain(), address_changed_since: true };
+    expect(exportShadowDecisions([changed], [], READ_AT).decisions[0].observed.documentPayTo).toEqual({ present: true, differs: null });
+    // A document that named no address never differs, whatever changed.
+    const none = { ...foundingHold(), address_changed_since: true };
+    expect(exportShadowDecisions([none], [], READ_AT).decisions[0].observed.documentPayTo).toEqual({ present: false, differs: false });
+  });
+
+  it("keeps the payout's Gateway balance and quotes, a EURC bill's swap figures and why there was none (SX3)", () => {
+    const [decision] = exportShadowDecisions([teamEurcAcrossMidnight()], [], READ_AT).decisions;
+    expect(decision.payout).toEqual({ chain: "base", route: "gateway", feeUsdc: 0.02, gatewayBalanceUsdc: 12.5, quotes: { cctpFeeUsdc: 0.03, gatewayFeeUsdc: 0.02 } });
+    expect(decision.eurc).toEqual({
+      usdcValue: 108.4,
+      fxRate: 1.084,
+      usdcMinimum: 108.1,
+      eurcBalance: 40,
+      usdcDueWithin7Days: 250,
+      swapOffer: { usdcIn: 66.2, costPercent: 0.4, eurcMinimum: 60.1 },
+      swapUnavailable: null,
+    });
+    expect(decision.payeeOnFile.role).toBe("client");
+    const json = JSON.stringify(decision);
+    for (const secret of ["Some DEX", "quotedAt", "2026-10-17T23", "eurcEstimated", "swapId", "eurcReceived", "domain"]) expect(json, secret).not.toContain(secret);
+    // Why no swap was offered, as a kind: Circle's sentences and the code's own become tokens, anything else `other`.
+    const reasons: Array<[unknown, string | null]> = [
+      ["No USDC→EURC route on Arc testnet right now.", "no_route"],
+      ["The USDC→EURC quote could not be read.", "quote_unreadable"],
+      ["Circle's Stablecoin Service did not answer for a USDC→EURC quote.", "quote_unanswered"],
+      ["The USDC→EURC swap could not be quoted.", "not_quoted"],
+      ["The swap's minimum, 59.9 EURC, would not cover the 60.1 EURC needed.", "minimum_short"],
+      ["A payment for this invoice has already started, so no swap is made for it.", "payment_started"],
+      ["Whether a payment for this invoice has started could not be read, so no swap is made for it.", "payment_started"],
+      ["Something Acme said", "other"],
+      [null, null],
+      [{ reason: "x" }, null],
+    ];
+    for (const [reason, kind] of reasons) {
+      const row = teamEurcAcrossMidnight();
+      const eurcDetail = row.detail as Record<string, unknown>;
+      eurcDetail.swapOffer = null;
+      eurcDetail.swapUnavailable = reason;
+      const [eurcDecision] = exportShadowDecisions([row], [], READ_AT).decisions;
+      expect([eurcDecision.eurc?.swapUnavailable, eurcDecision.eurc?.swapOffer], String(reason)).toEqual([kind, null]);
+    }
+  });
+
+  it("counts a decision's dates from the day its timing was measured on, not the day its entry was written (SX5)", () => {
+    const [decision] = exportShadowDecisions([teamEurcAcrossMidnight()], [], READ_AT).decisions;
+    expect([decision.decidedAt, decision.decidedOn]).toEqual(["2026-10-18T00:00:00.000Z", "2026-10-17"]);
+    // Due on the 20th, the discount until the 15th, the late fee from the 21st: counted from the 17th.
+    expect([decision.timing?.dueInDays, decision.terms?.earlyPayDiscount?.deadlineInDays, decision.terms?.lateFee?.startsOnInDays]).toEqual([3, -2, 4]);
+    // No day recorded, one that is not a date, or one too far from the entry's: the entry's own day.
+    for (const today of [undefined, "2026-02-31", "17 October", "2026-10-12", 20261017]) {
+      const row = teamEurcAcrossMidnight();
+      (row.detail as { timing: Record<string, unknown> }).timing.today = today;
+      const [fallback] = exportShadowDecisions([row], [], READ_AT).decisions;
+      expect([fallback.decidedOn, fallback.timing?.dueInDays], String(today)).toEqual(["2026-10-18", 2]);
+    }
+    // The last one's timing says the 12th, two days before its entry: its entry's day.
+    expect(exported().decisions.map((each) => each.decidedOn)).toEqual(["2026-10-11", "2026-10-12", "2026-10-14", "2026-10-14"]);
   });
 
   it("turns a named field that is not what it should be into null (SX3)", () => {
@@ -397,6 +534,29 @@ describe("assertShareable (shadow replay SX6)", () => {
     expect(broken((file) => {
       file.decisions[0].execution.heldBecause = TX_HASH;
     })).toThrow(/decisions\[0\]\.execution\.heldBecause/);
+  });
+
+  it("refuses an address without its 0x and a UUID without its dashes, both shaped like tokens", () => {
+    // 40 hex digits, starting with a letter: a token, and no longer than 40 characters.
+    const bareAddress = "ab1d5e7a9c3f2e6d8a0b1c2d3e4f5a6b7c8d9e0f";
+    const bareUuid = "d5f3a2b1-4c6e-4f80-9a1b-2c3d4e5f6a7b".replaceAll("-", "");
+    expect(bareAddress).toHaveLength(40);
+    expect(bareUuid).toMatch(/^[a-f][0-9a-f]{31}$/);
+    for (const [value, path] of [
+      [bareAddress, /decisions\[1\]\.execution\.heldBecause/],
+      [bareUuid, /decisions\[1\]\.execution\.heldBecause/],
+      [`x_${bareUuid}`, /decisions\[1\]\.execution\.heldBecause/],
+    ] as const) {
+      const check = broken((file) => {
+        file.decisions[1].execution.heldBecause = value;
+      });
+      expect(check, value).toThrow(path);
+      expect(check, value).toThrow(/id or a hash/);
+    }
+    // Shorter runs of hex digits, as in a date or a figure, pass.
+    expect(broken((file) => {
+      file.decisions[1].execution.heldBecause = "deadbeef_cafe";
+    })).not.toThrow();
   });
 
   it("refuses an email address, a UUID and a string longer than 40 characters", () => {
@@ -461,7 +621,11 @@ describe("runShadowExport (shadow replay SX2, SX7)", () => {
     const entries = squash(client.queries[1].text);
     expect(entries).toContain("from public.ledger_entries e");
     expect(entries).toContain("join public.orgs o on o.id = e.org_id");
-    expect(entries).toContain("(o.created_by is null or exists (select 1 from public.platform_team t where t.user_id = o.created_by))");
+    // The founding workspace by its id, as every reader that publishes rows picks it (0087, 0100, 0134): a workspace
+    // whose creator deleted their account has no creator either, and may be a former customer's (0037).
+    expect(entries).toContain("(o.id = $2::uuid or exists (select 1 from public.platform_team t where t.user_id = o.created_by))");
+    expect(entries).not.toMatch(/created_by is (not )?null/);
+    expect(entries).toContain("case when o.id = $2::uuid then 'founding' when exists (select 1 from public.platform_team t where t.user_id = o.created_by) then 'team' else 'customers' end as side");
     expect(entries).toContain("e.detail->>'shadow' = 'true'");
     expect(entries).toContain("not (e.detail ? 'guardrailFixture')");
     expect(entries).toContain("join public.counterparties c on c.org_id = e.org_id and c.id::text = e.detail->>'counterpartyId'");
@@ -470,7 +634,21 @@ describe("runShadowExport (shadow replay SX2, SX7)", () => {
     expect(entries).toContain("e.actor = 'agent'");
     expect(entries).toContain("e.domain = 'ap'");
     expect(entries).toContain("e.action = any($1::text[])");
-    expect(client.queries[1].params).toEqual([[...AGENT_DECISION_ACTIONS]]);
+    expect(client.queries[1].params).toEqual([[...AGENT_DECISION_ACTIONS], FOUNDING]);
+  });
+
+  it("reads of the payee only whether its address changed since the decision, and how long before it, never when", async () => {
+    const client = new FakeClient([], []);
+    await runShadowExport({ client, write: () => {}, now: READ_AT });
+    const entries = squash(client.queries[1].text);
+    expect(entries).toContain(
+      "coalesce(c.address_changed_at > e.ts, false) or exists (select 1 from public.ledger_entries a where a.org_id = e.org_id " +
+        "and a.domain = 'compliance' and a.action = 'counterparty_address_changed' and a.detail->>'counterpartyId' = e.detail->>'counterpartyId' " +
+        "and a.seq > e.seq) as address_changed_since"
+    );
+    expect(entries).toContain("case when c.address_changed_at <= e.ts then floor(extract(epoch from (e.ts - c.address_changed_at)) / 3600)::int end as address_changed_hours_before");
+    expect(entries).toContain("c.role as payee_role");
+    expect(entries).not.toMatch(/c\.address_changed_at as|c\.address_confirmed_at|c\.name|c\.\*/);
   });
 
   it("reads each kept decision's verdict, never its reason", async () => {
@@ -522,12 +700,21 @@ describe("the export's read on the migrated schema (SX1, SX2)", () => {
     return result.rows[0].id;
   }
 
-  async function payee(orgId: string, name: string, sample = false): Promise<string> {
+  async function payee(orgId: string, name: string, sample = false, more: { role?: string; changedAt?: string } = {}): Promise<string> {
     const result = await db.query<{ id: string }>(
-      "insert into public.counterparties (org_id, name, role, sample, address) values ($1, $2, 'vendor', $3, $4) returning id",
-      [orgId, name, sample, ADDRESS_ON_FILE]
+      "insert into public.counterparties (org_id, name, role, sample, address, address_changed_at) values ($1, $2, $3, $4, $5, $6) returning id",
+      [orgId, name, more.role ?? "vendor", sample, ADDRESS_ON_FILE, more.changedAt ?? null]
     );
     return result.rows[0].id;
+  }
+
+  /** A person's change to a payee's address, as `counterparty_address_changed` records it (a mirror leaves the time null). */
+  async function addressChanged(orgId: string, counterpartyId: string, at: string): Promise<void> {
+    await db.query(
+      `insert into public.ledger_entries (org_id, ts, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash)
+       values ($1, $2, 'human', 'compliance', 'counterparty_address_changed', 'changed', $3, 'b', 's', 'p', gen_random_uuid()::text)`,
+      [orgId, at, JSON.stringify({ counterpartyId, via: "mirror", from: null, to: DOCUMENT_PAY_TO })]
+    );
   }
 
   async function entry(orgId: string, at: string, action: string, detail: object, domain = "ap"): Promise<number> {
@@ -586,6 +773,28 @@ describe("the export's read on the migrated schema (SX1, SX2)", () => {
     await verdict(customer, customers, "disagree");
     await entry(ourMainnet, "2026-10-12T16:00:00Z", "ap_pay", decisionOn(mainnetVendor, 108));
 
+    // A customer's workspace on Arc testnet in shadow mode, as a client link opens it, whose creator then deleted their
+    // account: its creator is cleared (0023), and it is still a customer's.
+    const former = await createUser(db, "former@customer.test");
+    const formerShop = await org("former-shop", former);
+    const formerVendor = await payee(formerShop, "Former customer's vendor");
+    const formers = await entry(formerShop, "2026-10-12T17:00:00Z", "ap_pay", decisionOn(formerVendor, 888));
+    await verdict(formerShop, formers, "disagree");
+    await db.query("delete from auth.users where id = $1", [former]);
+    const cleared = await db.query<{ created_by: string | null }>("select created_by from public.orgs where id = $1", [formerShop]);
+    expect(cleared.rows).toEqual([{ created_by: null }]);
+
+    // The payee's address: changed 3 hours 45 minutes before a decision, changed after one, and given a mirror after one.
+    const changedBefore = await payee(ours, "Changed before", false, { role: "contractor", changedAt: "2026-10-13T06:15:00Z" });
+    const changedAfter = await payee(ours, "Changed after", false, { changedAt: "2026-10-14T00:00:00Z" });
+    const mirroredAfter = await payee(ours, "Mirrored after");
+    await entry(ours, "2026-10-13T10:00:00Z", "ap_hold", decisionOn(changedBefore, 201, { observed: { amount: 201, documentPayTo: DOCUMENT_PAY_TO } }));
+    await entry(ours, "2026-10-13T11:00:00Z", "ap_hold", decisionOn(changedAfter, 202, { observed: { amount: 202, documentPayTo: ADDRESS_ON_FILE } }));
+    await entry(ours, "2026-10-13T12:00:00Z", "ap_hold", decisionOn(mirroredAfter, 203, { observed: { amount: 203, documentPayTo: DOCUMENT_PAY_TO } }));
+    await addressChanged(ours, mirroredAfter, "2026-10-13T13:00:00Z");
+    // A change to another payee after these decisions says nothing of theirs.
+    await addressChanged(ours, ourSample, "2026-10-13T14:00:00Z");
+
     const writes: string[] = [];
     line = await runShadowExport({ client: { query: (text, params) => db.query(text, params) }, write: (_path, text) => void writes.push(text), now: READ_AT });
     file = JSON.parse(writes[0]) as ShadowDecisionsFile;
@@ -599,14 +808,28 @@ describe("the export's read on the migrated schema (SX1, SX2)", () => {
     expect(file.decisions.map((decision) => [decision.id, decision.workspace, decision.decision.action, decision.observed.amount, decision.verdict])).toEqual([
       ["shadow-01", "w1", "hold", 101, null],
       ["shadow-02", "w2", "pay", 102, "agree"],
+      ["shadow-03", "w2", "hold", 201, null],
+      ["shadow-04", "w2", "hold", 202, null],
+      ["shadow-05", "w2", "hold", 203, null],
     ]);
-    expect(line).toBe("2 shadow decisions from 2 workspaces: 1 agreed, 0 disagreed, 1 with no verdict. Wrote src/lib/quality-lab/shadow-decisions.json");
+    expect(line).toBe("5 shadow decisions from 2 workspaces: 1 agreed, 0 disagreed, 4 with no verdict. Wrote src/lib/quality-lab/shadow-decisions.json");
   });
 
-  it("never carries a customer's decision, its verdict, or any verdict's reason", () => {
+  it("never carries a customer's decision, its verdict, or any verdict's reason, though its creator is gone", () => {
     const json = JSON.stringify(file);
     expect(json).not.toContain("777");
+    expect(json).not.toContain("888");
     expect(json).not.toContain("disagree");
     expect(json).not.toContain("A reason the person wrote");
+  });
+
+  it("tells from the payee's row whether its address changed since each decision, and how many hours before", () => {
+    expect(file.decisions.map((decision) => [decision.observed.amount, decision.payeeOnFile, decision.observed.documentPayTo])).toEqual([
+      [101, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
+      [102, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
+      [201, { role: "contractor", addressChangedHoursBefore: 3, addressChangedSinceDecision: false }, { present: true, differs: true }],
+      [202, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: true }, { present: true, differs: null }],
+      [203, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: true }, { present: true, differs: null }],
+    ]);
   });
 });
