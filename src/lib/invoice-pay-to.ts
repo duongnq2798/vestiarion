@@ -14,16 +14,18 @@ const ID_CHUNK = 100;
 /**
  * The addresses the given invoices' documents asked to be paid to, by invoice id: those that named one. None before
  * migration 0136, when the column is not there; any other failure throws, so a stage that needs it stops rather than
- * pays past it.
+ * pays past it. Every hundred ids is asked for at once, and the answers are taken in order, so the first hundred that
+ * failed decides, as when they were asked for one after another
+ * (docs/superpowers/specs/2026-10-26-close-pack-page-speed-design.md CS5).
  */
 export async function readDocumentPayTo(
   invoiceIds: readonly string[],
   db: Pick<ReturnType<typeof orgScopedDb>, "from"> = orgScopedDb()
 ): Promise<Map<string, string>> {
+  const chunks = Array.from({ length: Math.ceil(invoiceIds.length / ID_CHUNK) }, (_, index) => invoiceIds.slice(index * ID_CHUNK, (index + 1) * ID_CHUNK));
+  const reads = await Promise.all(chunks.map(async (chunk) => db.from("invoices").select("id, document_pay_to").in("id", chunk).not("document_pay_to", "is", null)));
   const found = new Map<string, string>();
-  for (let start = 0; start < invoiceIds.length; start += ID_CHUNK) {
-    const chunk = invoiceIds.slice(start, start + ID_CHUNK);
-    const read = await db.from("invoices").select("id, document_pay_to").in("id", chunk).not("document_pay_to", "is", null);
+  for (const read of reads) {
     if (read.error) {
       if (read.error.code === "42703" || read.error.code === "PGRST204") return new Map();
       throw new Error(`the invoices' document addresses could not be read: ${read.error.message}`);

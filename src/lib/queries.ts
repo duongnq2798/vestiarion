@@ -260,18 +260,37 @@ export interface DashboardStats {
   onchainTransfers: number;
 }
 
-export async function stats(): Promise<DashboardStats> {
-  const client = db();
+/** What the shell's header shows of the cycle: the simulated day, the clock it runs on, and when a cycle last ran. */
+export type ShellClock = Pick<DashboardStats, "day" | "clockMode" | "lastCycleAt">;
 
-  const [paidInvoices, paidMilestones, clock, decisions, flagged, latestCycle] = await Promise.all([
-    client.from("invoices").select("amount, paid_amount, tx_ref, currency").eq("status", "paid"),
-    client.from("milestones").select("amount, tx_ref").eq("status", "paid"),
+/**
+ * The header's clock alone, in two reads (docs/superpowers/specs/2026-10-26-close-pack-page-speed-design.md CS4): for a
+ * page that needs nothing else of `stats()`, which also adds up every paid bill and counts the agent's entries.
+ */
+export async function shellClock(): Promise<ShellClock> {
+  const client = db();
+  const [clock, latestCycle] = await Promise.all([
     // No row yet is not an error: an organization that has never run a
     // simulated cycle has no sim_clock row until its first one.
     client.from("sim_clock").select("current_day").maybeSingle(),
+    client.from("ledger_entries").select("ts").eq("action", "cycle_complete").order("seq", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  return {
+    day: (clock.data as { current_day: number } | null)?.current_day ?? 0,
+    clockMode: cycleClockMode(),
+    lastCycleAt: (latestCycle.data as { ts: string } | null)?.ts ?? null,
+  };
+}
+
+export async function stats(): Promise<DashboardStats> {
+  const client = db();
+
+  const [paidInvoices, paidMilestones, decisions, flagged, clock] = await Promise.all([
+    client.from("invoices").select("amount, paid_amount, tx_ref, currency").eq("status", "paid"),
+    client.from("milestones").select("amount, tx_ref").eq("status", "paid"),
     client.from("ledger_entries").select("*", { count: "exact", head: true }).eq("actor", "agent"),
     client.from("invoices").select("*", { count: "exact", head: true }).eq("status", "flagged"),
-    client.from("ledger_entries").select("ts").eq("action", "cycle_complete").order("seq", { ascending: false }).limit(1).maybeSingle(),
+    shellClock(),
   ]);
 
   // What actually left: an invoice paid with an early-payment discount
@@ -289,9 +308,7 @@ export async function stats(): Promise<DashboardStats> {
   ];
 
   return {
-    day: (clock.data as { current_day: number } | null)?.current_day ?? 0,
-    clockMode: cycleClockMode(),
-    lastCycleAt: (latestCycle.data as { ts: string } | null)?.ts ?? null,
+    ...clock,
     totalPaidOut: paid.filter((r) => r.usdc).reduce((sum, r) => sum + num(r.amount), 0),
     decisionsLogged: decisions.count ?? 0,
     flagged: flagged.count ?? 0,

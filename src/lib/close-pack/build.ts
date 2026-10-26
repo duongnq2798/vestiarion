@@ -416,9 +416,13 @@ function sortIntents(input: Pick<ClosePackInput, "intents" | "invoices" | "miles
 
 /**
  * For each settled payment, whose screening to read and as of when: the agent's decision, else the paying entry, else
- * when it was sent (CP8). The reader asks for each distinct payee and time once.
+ * when it was sent (CP8). The reader asks for each distinct payee and time once. Only the entries naming a bill or a
+ * milestone (`invoiceId`, `milestoneId`) count, so the reader asks as soon as those are read, beside the payees
+ * (docs/superpowers/specs/2026-10-26-close-pack-page-speed-design.md CS3).
  */
-export function screeningAnchors(input: Omit<ClosePackInput, "screening" | "checks">): Map<string, { counterpartyId: string; at: string }> {
+export function screeningAnchors(
+  input: Pick<ClosePackInput, "network" | "month" | "now" | "intents" | "invoices" | "milestones" | "entries">
+): Map<string, { counterpartyId: string; at: string }> {
   const found = new Map<string, { counterpartyId: string; at: string }>();
   for (const { intent, bill } of sortIntents(input).rows) {
     const own = ownEntries(input.entries, bill.source);

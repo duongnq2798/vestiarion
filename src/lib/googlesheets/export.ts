@@ -41,7 +41,7 @@ export interface SheetExportDeps {
   origin?: string;
 }
 
-/** An export starts no new call after this long (GS12): the close pack page's actions have 120 seconds. */
+/** An export starts no new call after this long (GS12): the close pack page's actions have 300 seconds. */
 export const EXPORT_DEADLINE_MS = 90_000;
 
 type FailedReason = Parameters<typeof recordClosePackExportFailed>[0]["reason"];
