@@ -26,6 +26,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   is on Open numbers and How the agent decides, and every scenario with what was expected and what happened is in the
   docs (Trust and controls, "The Quality Lab"). `npm run quality-lab` runs the scenarios and writes the committed
   result, which the test holds to the run. It does not measure the model's own judgement. No migration.
+- **Quality Lab: the team's real shadow-mode decisions, replayed through today's code.** Every decision the agent made
+  on a bill in the team's own workspaces in shadow mode on Arc testnet is rebuilt from its signed record and run through
+  today's decision code in CI on every change, with the model answering exactly as it did then, and outside shadow mode,
+  so a payment that passes is sent to the payment provider's stand-in and counted. Each decision is compared with what
+  code did then: the same outcome, now stopped by a rule that did not stop it then, now let through, or cannot be
+  rebuilt when the outcome depends on a fact the record does not carry, which the replay runs both ways instead of
+  guessing. Money that moves now where code stopped it then, or on a decision the person disagreed with, is a wrong
+  payment and fails CI. Of the 46 decisions exported today, 44 reach the same outcome and 2 cannot be rebuilt (their
+  payee's address changed again since, so the payee lock's wait cannot be weighed; money stops either way), with 0
+  wrong payments. One line beside the scenarios' result on Open numbers and How the agent decides says so, and the docs
+  page ("The Quality Lab", "Real decisions, replayed") lists every decision. Customers' workspaces are never exported.
+  `npm run quality-lab` now writes both result files. No migration.
 - **How often you agreed, by decision and by vendor.** In shadow mode, the report's **Before a live slice** now shows,
   under its steps, how often you agreed with the agent's decisions, split by what the agent decided (Pay, Schedule,
   Hold, Flag for review, Ask for details) and by vendor, each with the number of verdicts behind it. Under five

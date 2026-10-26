@@ -1,6 +1,7 @@
 # Quality Lab: replaying the shadow-mode decisions (2026-10-26)
 
-Status: the export is accepted and built; the replay is the next change and gets its own section here.
+Status: the export and the replay are accepted and built. The export (SX1-SX10) writes the file; the replay (SR1-SR13)
+runs it through today's decision code in CI and publishes the result beside the scenarios.
 
 ## Why
 
@@ -215,3 +216,171 @@ SX3)".
 - Each counts only for a replayed payment or schedule that reaches the rule. A hold, a flag or a request for information
   meets no rule, and a rule ahead of it that stops the replayed decision settles the outcome whatever the unknown input.
 - If wrong: a replay would count as a regression, or as agreement, an outcome that rests on an input it never had.
+
+## Replay
+
+The replay asks one question of every exported decision: given the model's answer as recorded, on the facts the
+decision was made on, would today's code let money move? Code comments and tests cite these ids, for example "(shadow
+replay SR4)".
+
+**SR1. The runner is a vitest file over the lab's harness, run live.**
+- `tests/quality-lab-shadow.test.ts` replays every decision in `src/lib/quality-lab/shadow-decisions.json` and nothing
+  else: no database, no key, no network. Like the scenarios (Quality Lab QL1) it must be a vitest file, since the
+  model's answer is scripted through `vi.mock("@/lib/agent/decide")`.
+- Each decision gets its own world in `tests/support/ap-harness.ts`, and `runApStage` runs once over it for real, with
+  the same stand-ins as the scenarios: the database (`fakeSupabase`), the clock, the payment provider (`LabChain`) and
+  the spending limit contract's answer on Arc. The harness gains three inputs, each optional and unused by the
+  scenarios, so `tests/quality-lab.test.ts` still writes the same `src/lib/data/quality-lab.json`: the spending limit's
+  room handed in as the decision recorded it (`spendingLimitRoom`), the checks after the guardrails (`obligations`), and
+  the reserve's yield (`reserveApy`, 0.045 when absent).
+- Shadow mode is off in the replay: a pay that passes every check is sent, so the provider counts it. The question is
+  whether code would let the money move, not whether a person was asked.
+- The clock is the decision's minute (`decidedAt`) on the day its dates count from (`decidedOn`, SX5); a decision
+  written after midnight is replayed at the last minute of `decidedOn`.
+- If wrong: a replay in shadow mode would hold every payment that passed and could never show one code lets through.
+
+**SR2. The world is rebuilt from the recorded facts, and nothing else.**
+- `replayWorld(decision, variant)` in `src/lib/quality-lab/shadow-replay.ts`, pure, turns a decision into plain data;
+  the runner turns that into rows. It never reads anything but the decision.
+- The bill: its amount in USDC, whether it had a purchase order, goods received, its due day, its early-payment
+  discount and late fee, the day an earlier cycle scheduled it for when it is decided on or after it, whether its
+  document named an address and whether that was the one on file, whether it is in a project, whether its purchase
+  order came from the vendor's document, and a paid bill it repeats when a recorded match would refuse it (a match
+  refuses only at 0.9 or more against committed money, so it is rebuilt as a paid bill with the same purchase order and
+  amount, which the real duplicate check scores 0.95).
+- The payee: its risk level, payment limit, role, whether its address is missing, and an address on OFAC's list when
+  the record shows it was listed (SX10.1); whether its address was unconfirmed, and how many hours before the decision
+  it changed, rebuilt at the middle of the recorded whole hour (an export of 4 is 4.5 hours), which tells a wait of
+  whole hours apart the same way the exact time did; and the new payee check's facts, rebuilt as the ledger entries
+  that give the recorded answer: who gave the address (a member, the payee through a link or GitHub, or a mirror),
+  whether it was confirmed and by whom, and whether it was paid there before (`observed.newPayee` absent).
+- The workspace: the operating balance the decision saw, the payee lock in force (SX9), the two-approvals figure, the
+  spending limit's room and the contract's verdict as recorded (none when the record has none: they are recorded
+  whenever a payment now to an address reads them), and what fell due by the bill's day besides it, rebuilt as held
+  bills to another payee with the recorded total and count. The reserve's balance is not in the record; the replay
+  counts none, which can only make a later day's shortfall more likely, never less. Its yield is derived from the
+  recorded float value when the bill had a discount, and is 0 otherwise.
+- The checks after the guardrails: the same work as recorded, and the project's recorded answer.
+- The model answers exactly as recorded: the action, the pay-on day as days from `decidedOn`, the swap choice and its
+  confidence. When code moved the date (`timingRule`), the answer is the model's own: `pay.no_gain` was a pay, and
+  `payon.*` a schedule for the requested day.
+- If wrong: a world the record does not describe would replay a decision that was never made.
+
+**SR3. What the replay does not rebuild.**
+- For an answer to pay or schedule, the replay refuses up front, as "cannot rebuild" with the reason in plain words: a
+  EURC bill, a payee on another chain, a bank payout, a bill decided before its day because cash would not cover it then
+  (`cashAhead`) or otherwise before the day it was scheduled for, a fact the rules read that the record lacks (when the
+  bill was due, its amount, the risk level, goods received, whether a purchase order is needed, the operating balance,
+  the spending limit's figures), a stop whose rule is not recorded, and a contract on Arc that could not carry the
+  payment. These are USDC bills paid on Arc only, which is all the team's shadow workspaces
+  hold today.
+- A hold code made for cash before its checks (`cash.priority`, `pay.cash_ahead`) is refused whatever its action: the
+  record keeps the hold, not the model's own answer.
+- A hold, a flag or a request for information is always replayed. Code never weighs a guardrail for one and never
+  turns one into a payment, so a fact the record lacks is filled with a neutral value (pending rather than scheduled for
+  a later day, for one), and the fidelity check (SR8) compares only facts the record has.
+- If wrong: a replay of a bill it cannot rebuild would count a guess as an outcome.
+
+**SR4. A fact the record does not carry is run both ways, never guessed.**
+- `planReplay` lists, for an answer to pay or schedule, each fact SX10 says the record may not carry: whether the
+  address was on OFAC's list (when a repeat of a paid bill stopped it first), the spending limit and the contract's
+  figures (when the decision was not a payment now to an address), whether the address was in the payee lock's wait
+  (when it changed again since, or the lock is unknown), whether the document's pay-to differed, the payee's role, and
+  the project's answer.
+- Each is rebuilt both ways, the way that lets a payment through and the way that stops it, and the runner replays
+  every combination. When every combination ends the same, that is the outcome. When they differ, the decision is
+  "cannot rebuild", naming each fact whose two ways changed the outcome and saying whether money stops either way.
+- The record's own outcome is never used to settle an unknown, except where SX10.1 says the record shows it: a
+  decision held as `counterparty.high_risk` whose risk level is not high was listed; one weighed past that rule was not.
+- If wrong: a replay that filled an unknown with the value that matches the outcome then would agree with itself.
+
+**SR5. Then and now.**
+- Then (`thenOutcome`): the rule code recorded when it stopped the decision (`guardrailBlocked`), or let through. Money
+  moved then when code let through a pay or a schedule: in shadow mode a pay that passed waited for the person's
+  verdict, and counts as money that would have moved. A hold, a flag or a request for information moved none.
+- Now: the replay's own entry, its action, and the rule when it was stopped, or let through. Money moves when the
+  provider took a transfer, or the bill is left scheduled: a schedule counts as money that will move, as in the
+  scenarios. Transfers are counted from the provider, never inferred from a status.
+- If wrong: a replay that read the status would miss a payment made while the status said held.
+
+**SR6. Each decision gets one class.**
+- **Same**: the same rule stops it, or code lets it through both times, and money moves or stops as it did then.
+- **Now stopped**: money moved then and stops now, or a different rule stops it now; the reason names the rule now in
+  its words (`ruleWords`).
+- **Now let through**: code stopped it then, or it moved no money, and money moves now.
+- **Cannot rebuild**: SR3 or SR4, with the reason.
+- Where the same rule stops it but code now gives the answer another action (a pay now made a schedule, say), the class
+  is the same and the reason says so.
+- If wrong: a class that hid a change of rule would report as the same outcome a decision code now treats differently.
+
+**SR7. A wrong payment fails CI.**
+- A wrong payment is money that moves now where code stopped it then (now let through), money that moves now on a
+  decision the person disagreed with, or any transfer to an address other than the one on file, for an amount other
+  than the bill's (less an early-payment discount through its deadline's day), or a second transfer for the bill.
+- `tests/quality-lab-shadow.test.ts` fails on any, naming the decision. A decision the person agreed to pay that code
+  now stops is a safe miss: shown as now stopped, never failed.
+- A product guardrail is never changed to make the replay pass: a wrong payment is a finding, reported as one.
+- If wrong: a replay that passed on a wrong payment would publish a claim the code breaks.
+
+**SR8. The rebuild is held to the record.**
+- Every run's own ledger entry is mapped as the export maps a recorded one (`exportShadowDecisions`), and the facts the
+  world was rebuilt from must come back as recorded: the amount, payment limit, risk level, purchase order, goods
+  received, whether a purchase order is needed, the two-approvals figure, whether the address is missing or
+  unconfirmed, the document's pay-to, the new payee check, the due day, the terms, the day it was scheduled for, what
+  fell due besides it, the vendor's document, and the spending limit's figures when the replay read them. Only facts
+  the record has are compared.
+- A test replays a decision for each rule the record carries, built from a real one (high risk, an address on OFAC's
+  list, unscreened, a client, no address, unconfirmed, the payee lock's wait, pay-to, the match, a new payee, the
+  payment limit, two approvals, the spending limit, the contract, a repeat of a paid bill, the vendor's document, the
+  same work, the project's budget), and each must come back the same, with that rule.
+- If wrong: a rebuild that drifted would report the drift as a change in the code.
+
+**SR9. The results are a committed file of stable fields.**
+- `src/lib/data/quality-lab-shadow.json`: for each decision its `id`, `day` (`decidedOn`), the scripted `answer`
+  (action, pay-on day in days, swap), the person's `verdict`, `then` and `now` (action, rule, money; `now` is null when
+  it cannot be rebuilt), `class`, `reason` and `wrongPayment`; and a summary `{ decisions, same, nowStopped,
+  nowLetThrough, cannotRebuild, wrongPayments, agreed, disagreed, noVerdict }`. No time, hash, sequence or UUID.
+- The test holds the committed file equal to the run, with the message "run npm run quality-lab and commit
+  src/lib/data/quality-lab-shadow.json", line endings normalised. With `QUALITY_LAB_WRITE=1` it writes the file instead,
+  and `npm run quality-lab` runs both lab files that way, so it writes both result files.
+- If wrong: a file that changed every run could never be held to it.
+
+**SR10. One line beside the scenarios.**
+- `QualityLabResult` on /open and /how-it-decides gains one line under the scenario score, from the committed file:
+  "46 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 44 reach the same
+  outcome, 2 cannot be rebuilt from the record, 0 wrong payments", with the real numbers, naming only the classes that
+  are not zero (`shadowReplayWords` in `src/lib/quality-lab/words.ts`).
+- It names no network, as the block does not (QL7), and says "team" plainly: customers' decisions are never in it.
+- If wrong: a number typed by hand would drift from the code.
+
+**SR11. The docs page shows every decision.**
+- `content/docs/research/quality-lab.mdx` gains "Real decisions, replayed": what it is, the definitions, the data's
+  limits (the team's own workspaces only, customers never exported; facts rebuilt from the signed record; the model's
+  answers as recorded, not asked again), how to refresh it, the summary (`<ShadowReplaySummary />`) and one row per
+  decision (`<ShadowReplayTable />`), rendered from the committed file on the page and in its Markdown view
+  (`MDX_TO_MARKDOWN`), never typed.
+- A test holds the page's figures and rows to the file.
+- If wrong: a typed table would disagree with the file after the next export.
+
+**SR12. Refreshing it.**
+- The team runs `npm run quality-lab:shadow` (SX7: read-only, the team's own workspaces) and commits the new
+  `shadow-decisions.json`, then `npm run quality-lab`, and commits `quality-lab-shadow.json`. CI only reads both.
+- If wrong: a CI job with a database password could export more than SX2 allows.
+
+**SR13. No migration, and no change to the decision code.**
+- No table, function, index or ledger entry, and no guardrail changes. The test reads and writes nothing outside its
+  fakes and the result file.
+
+### What the first replay found
+
+- 46 decisions, 18 with a verdict of agree, none disagreed: 33 that code let through then (5 pays, 3 schedules, 12
+  holds, 13 requests for information) and 13 it stopped (`counterparty.no_address` 3, `workspace.outflow_budget` 4,
+  `counterparty.address_unconfirmed` 2, `counterparty.cooling_off` 2, `counterparty.new_payee` 2).
+- 44 reach the same outcome, 2 cannot be rebuilt, 0 wrong payments, none now stopped or now let through. The 2 are
+  shadow-42 (`counterparty.cooling_off` then) and shadow-43 (`counterparty.new_payee` then): the payee's address changed
+  again after them, so how long before each it had changed is not in the record, and the payee lock's 4-hour wait
+  cannot be weighed. Within the wait the cooling-off stops each, past it the new payee check does: money stops either
+  way. shadow-41, held then because its changed address was unconfirmed, is the same either way.
+- One decision reaches the same outcome by another action: shadow-15, a pay on a bill due in 8 days, is now made a
+  schedule for its due day (`pay.no_gain`, since there was no discount and no shortfall), and the same rule,
+  `counterparty.no_address`, stops it.

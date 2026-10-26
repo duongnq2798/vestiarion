@@ -4348,7 +4348,11 @@ The Quality Lab's results, `src/lib/data/quality-lab.json`, are a committed gene
 and the same test fails while the committed file differs from the run, naming the script. Its docs page,
 `content/docs/research/quality-lab.mdx`, types no figure: `<QualityLabScore />` and `<QualityLabTable group>`
 (`src/components/docs/QualityLab.tsx`) render the score and each group's scenarios from that file, and the `.md` view
-writes the same words from `src/lib/quality-lab/results.ts`.
+writes the same words from `src/lib/quality-lab/results.ts`. The replay of the team's shadow decisions,
+`src/lib/data/quality-lab-shadow.json`, is generated the same way by the same script, from `tests/quality-lab-shadow.test.ts`,
+and `<ShadowReplaySummary />` and `<ShadowReplayTable />` render its line and every decision from
+`src/lib/quality-lab/shadow-results.ts`. Its input, `src/lib/quality-lab/shadow-decisions.json`, is exported by hand
+(`npm run quality-lab:shadow`), never in CI.
 
 The SDK's and the CLI's versions are their own. The product's version is a git tag, `vX.Y.Z` or `vX.Y.Z-beta.N`, published as a GitHub
 Release by `.github/workflows/release.yml`, which a maintainer starts by hand once the tag is pushed; `CHANGELOG.md`
@@ -4941,7 +4945,8 @@ the footer, whether the title takes one line or two.
 ## The Quality Lab
 
 Fixed scenarios run through the agent's real decision code in CI on every change, and the result is public
-(`docs/superpowers/specs/2026-10-26-quality-lab-design.md`).
+(`docs/superpowers/specs/2026-10-26-quality-lab-design.md`). Beside them, the team's real shadow-mode decisions are
+replayed through the same code (`docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md`).
 
 - **Scenarios** are plain data in `src/lib/quality-lab/scenarios.ts`, in nine groups: prompt injection in an invoice's
   memo or purchase order, the payee and its address (unconfirmed, inside the payee lock's wait, a first payment, none, a
@@ -4968,10 +4973,10 @@ Fixed scenarios run through the agent's real decision code in CI on every change
 - **The results** (`src/lib/data/quality-lab.json`) keep stable fields only, never a hash, sequence, time or id, since
   the signing key is made per run. `QualityLabResult` shows them on /open and /how-it-decides, and the research page
   `/docs/research/quality-lab` lists every scenario. /security's AI use says the lab runs in CI.
-- **The shadow decisions** (`docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md`, export only so
-  far): `npm run quality-lab:shadow` exports every agent decision on a bill made in shadow mode in the team's own
-  workspaces on Arc testnet, with each person's verdict, to `src/lib/quality-lab/shadow-decisions.json`, for a replay
-  through the same runner. The team's own are the founding workspace, by its id, and those a `platform_team` member
+- **The shadow decisions** (`docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md`, SX1-SX10 for the
+  export): `npm run quality-lab:shadow` exports every agent decision on a bill made in shadow mode in the team's own
+  workspaces on Arc testnet, with each person's verdict, to `src/lib/quality-lab/shadow-decisions.json`, which the
+  replay below reads. The team's own are the founding workspace, by its id, and those a `platform_team` member
   created, as the readers that publish rows pick them; never one whose creator deleted their account, which may be a
   former customer's. Customers' workspaces are never read into it. `exportShadowDecisions`
   (`src/lib/quality-lab/shadow-export.ts`) passes only the fields it names, as numbers, booleans and rule names, with
@@ -4982,7 +4987,25 @@ Fixed scenarios run through the agent's real decision code in CI on every change
   rebuild". `assertShareable` refuses the
   whole file when anything in it looks like an address, hash, email or id, with or without its `0x` or dashes. The
   script reads in one read-only transaction and is run by hand, never in CI.
-- Not covered: the model's judgement (scripted), live payments (proved on Arc testnet and Arc mainnet by transactions),
+- **The replay** (SR1-SR13 in the same spec) is `tests/quality-lab-shadow.test.ts`, over the same harness and stand-ins.
+  Each decision is rebuilt from its record alone as a world of its own: `replayWorld` (`src/lib/quality-lab/shadow-replay.ts`,
+  pure) turns it into plain data (the bill, its payee with its address's hours and the new payee check's facts, the
+  workspace's lock, two-approvals figure, spending limit room and contract verdict as recorded, and what else fell due,
+  as held bills to another payee), and the runner into rows. The harness gains three optional inputs the scenarios do
+  not use: `spendingLimitRoom`, `obligations` and `reserveApy`. The model answers as recorded (the model's own answer
+  where code moved its date), and the stage runs live, outside shadow mode, so a payment that passes is sent and
+  counted. Then is the recorded rule or let through; now is the replay's rule or let through, with money counted from
+  `LabChain` (a schedule counts as moving). `judgeReplay` gives each decision one class: same, now stopped, now let
+  through, or cannot rebuild. A fact the record does not carry (SX10) is never guessed: `planReplay` lists it, the
+  runner replays every combination of its two ways, and a decision whose combinations end differently cannot be rebuilt,
+  with the reason; EURC, other chains, bank payouts and holds made for cash before the checks are refused up front.
+  Money that moves now where code stopped it then, or where the person disagreed, or a transfer elsewhere, for another
+  amount or twice, is a wrong payment and fails CI. Each run's own entry, mapped by `exportShadowDecisions`, must
+  record the facts it was rebuilt from, and a decision rebuilt for each rule the record carries must come back stopped
+  by it. The results (`src/lib/data/quality-lab-shadow.json`) are held to the run like the scenarios'; one line under
+  the scenario score in `QualityLabResult` (`shadowReplayWords`) and the docs page's "Real decisions, replayed" show
+  them.
+- Not covered: the model's judgement (scripted, or as recorded in the replay), live payments (proved on Arc testnet and Arc mainnet by transactions),
   milestones, whose checks are inline in `executeCycle`, EURC, payouts to other chains, bank payouts, and a person's
   approvals.
 

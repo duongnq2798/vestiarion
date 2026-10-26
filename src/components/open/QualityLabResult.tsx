@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { groupCounts, QUALITY_LAB_RESULTS } from "@/lib/quality-lab/results";
-import { scoreWords, wrongPaymentWords } from "@/lib/quality-lab/words";
+import { QUALITY_LAB_SHADOW_RESULTS } from "@/lib/quality-lab/shadow-results";
+import { scoreWords, shadowReplayWords, wrongPaymentWords } from "@/lib/quality-lab/words";
 
 /** The docs page with every scenario and its result. */
 export const QUALITY_LAB_HREF = "/docs/research/quality-lab";
@@ -14,6 +15,8 @@ export const QUALITY_LAB_HREF = "/docs/research/quality-lab";
  * the committed results' score and wrong payments with their real numbers, each group's count, how the scenarios run,
  * what right and a wrong payment mean, and the docs page. A server component over the file the lab's test holds equal
  * to its run, so nothing here is typed by hand. It names no network: the lab runs over a fake provider, on no chain.
+ * Under the score, one line on the team's own shadow-mode decisions replayed through today's code, from the replay's
+ * committed file (docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md SR10).
  */
 export function QualityLabResult({ id, heading: Heading = "h2", className }: { id: string; heading?: "h2" | "h3"; className?: string }) {
   const { summary } = QUALITY_LAB_RESULTS;
@@ -30,6 +33,7 @@ export function QualityLabResult({ id, heading: Heading = "h2", className }: { i
             Each scenario runs through the real decision code on every change, with the model&apos;s answers scripted, often to what an attacker
             would want.
           </p>
+          <p className="mt-2 text-[0.9375rem] leading-7 text-ink-2">{shadowReplayWords(QUALITY_LAB_SHADOW_RESULTS.summary)}</p>
         </div>
         <Badge tone={summary.wrongPayments === 0 ? "proof" : "refused"} dot className="font-mono">
           {wrongPaymentWords(summary.wrongPayments)}

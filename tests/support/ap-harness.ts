@@ -5,6 +5,8 @@ import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
 import { runApStage, type CycleLogLine } from "@/lib/agent/orchestrator";
 import { onChainLimitGate, type OnChainLimitGate } from "@/lib/agent/onchain-limit";
+import type { ObligationGate } from "@/lib/agent/obligation-gate";
+import type { BudgetRoom } from "@/lib/agent/outflow-budget";
 import { CycleMetricsCollector } from "@/lib/agent/cycle-metrics";
 import type { DecideParams } from "@/lib/agent/decide";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
@@ -29,6 +31,11 @@ import { APPENDED_LEDGER_ROW, signedOrgs } from "./signed-org";
  * whose verdict the test scripts, so `spendingLimitVerdict` never asks Arc; with none, no contract is enforced, as for a
  * workspace without one), and the new payee facts (`newPayee`), so `loadNewPayeeFacts` does not run while the check on
  * them does. The book is written back: what one cycle wrote, the next one reads.
+ *
+ * The replay of the team's shadow decisions (docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md SR1)
+ * hands in three more, each as a decision recorded it, and unused by the scenarios: the agent's spending limit's room
+ * (`spendingLimitRoom`, so its own figures are weighed, not read), the checks after the guardrails (`obligations`: the
+ * same work and the project's answer) and the reserve's yield (`reserveApy`).
  *
  * Call `apHarness()` at the top of a test file, so the signing hooks register there.
  */
@@ -135,6 +142,12 @@ export interface ApWorldOptions {
   /** The bills whose purchase order a vendor's document wrote, as the stage's read of `document_requests` finds them. */
   vendorDocuments?: string[];
   chain?: LabChain;
+  /** The agent's spending limit's room as a decision weighed it, handed in rather than read; null for none set. */
+  spendingLimitRoom?: BudgetRoom | null;
+  /** The checks after the guardrails, handed in rather than read from the workspace's milestones and projects. */
+  obligations?: ObligationGate;
+  /** The reserve's yield, as a fraction; 0.045 when absent. */
+  reserveApy?: number;
 }
 
 /** A PostgREST filter value `eq.x`, `is.null` or `in.(a,b)` as a test on one column's value. */
@@ -229,12 +242,14 @@ export function apHarness() {
             provider: chain,
             operating: { id: LAB_ACCOUNT },
             operatingBalance,
-            reserveApy: 0.045,
+            reserveApy: options.reserveApy ?? 0.045,
             reserveBalance: 0,
             metrics,
             lines,
             onChainLimit: options.onChainLimit ?? onChainLimitGate({ read: async () => null }),
             ...(options.newPayee ? { newPayee: { load: async () => options.newPayee! } } : {}),
+            ...("spendingLimitRoom" in options ? { budget: { room: async () => options.spendingLimitRoom ?? null, spend: () => {} } } : {}),
+            ...(options.obligations ? { obligations: options.obligations } : {}),
           })
         )
       );

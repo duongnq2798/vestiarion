@@ -24,8 +24,9 @@ import OpenPage from "@/app/open/page";
 import { Claims } from "@/components/landing/Claims";
 import { QualityLabResult } from "@/components/open/QualityLabResult";
 import results from "@/lib/data/quality-lab.json";
+import shadow from "@/lib/data/quality-lab-shadow.json";
 import { QUALITY_LAB_GROUPS } from "@/lib/quality-lab/scenarios";
-import { scoreWords, wrongPaymentWords } from "@/lib/quality-lab/words";
+import { scoreWords, shadowReplayWords, wrongPaymentWords } from "@/lib/quality-lab/words";
 
 const text = (markup: string) =>
   markup
@@ -74,6 +75,15 @@ describe("the Quality Lab's result (QL7)", () => {
   it("names no network, and says nothing the lab does not do", () => {
     expect(words).not.toMatch(/testnet|mainnet/i);
     expect(words).not.toMatch(/real money|fictional|simulated money|powered by/i);
+  });
+
+  it("says, under the score, how the team's real shadow decisions fare through today's code, from the replay's file (shadow replay SR10)", () => {
+    const line = shadowReplayWords(shadow.summary);
+    expect(line).toMatch(/^\d+ real decisions? from the team's own shadow-mode workspaces, replayed through today's code: /);
+    expect(line).toContain(wrongPaymentWords(shadow.summary.wrongPayments));
+    expect(words).toContain(line);
+    expect(words.indexOf(line)).toBeGreaterThan(words.indexOf("often to what an attacker would want."));
+    expect(words.indexOf(line)).toBeLessThan(words.indexOf("A scenario is right when"));
   });
 
   it("takes the heading level its page needs", () => {

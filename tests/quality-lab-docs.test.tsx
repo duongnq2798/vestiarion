@@ -3,14 +3,17 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { useMDXComponents } from "../mdx-components";
-import { QualityLabScore, QualityLabTable } from "@/components/docs/QualityLab";
+import { QualityLabScore, QualityLabTable, ShadowReplaySummary, ShadowReplayTable } from "@/components/docs/QualityLab";
 import { PAGE_LOADERS } from "@/lib/docs/content";
 import { mdxToMarkdown, pageMarkdown } from "@/lib/docs/markdown";
 import { DOCS_NAV } from "@/lib/docs/nav";
 import results from "@/lib/data/quality-lab.json";
+import shadow from "@/lib/data/quality-lab-shadow.json";
+import type { ShadowReplayResults } from "@/lib/quality-lab/shadow-replay";
+import { SHADOW_TABLE_HEAD, shadowRows } from "@/lib/quality-lab/shadow-results";
 import type { QualityLabResult } from "@/lib/quality-lab/judge";
 import { QUALITY_LAB_GROUPS, QUALITY_LAB_SCENARIOS } from "@/lib/quality-lab/scenarios";
-import { outcomeWords, rightWords, scoreWords, wrongPaymentWords } from "@/lib/quality-lab/words";
+import { answerWords, outcomeWords, replayClassWords, replayOutcomeWords, rightWords, scoreWords, shadowReplayWords, verdictWords, wrongPaymentWords } from "@/lib/quality-lab/words";
 
 /**
  * The Quality Lab's docs page (docs/superpowers/specs/2026-10-26-quality-lab-design.md QL8): registered after the
@@ -160,5 +163,79 @@ describe("the page's Markdown view (QL8)", () => {
 
   it("names every scenario in the source, and only those", () => {
     expect(SCENARIOS.map((scenario) => scenario.id)).toEqual(QUALITY_LAB_SCENARIOS.map((scenario) => scenario.id));
+  });
+});
+
+/**
+ * The replay of the team's shadow-mode decisions on the same page
+ * (docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md SR11): what it is, the definitions, the data's
+ * limits and how to refresh it, with its line and one row per decision rendered from the committed file, on the page and
+ * in its Markdown view alike, never typed.
+ */
+describe("the replay of the team's shadow decisions, on the docs page (shadow replay SR11)", () => {
+  const SHADOW = shadow as unknown as ShadowReplayResults;
+  const section = SOURCE.slice(SOURCE.indexOf("## Real decisions, replayed\n"), SOURCE.indexOf("## What it does not cover\n"));
+
+  it("has its section after the scenarios and before what the lab does not cover, with its line and its table", () => {
+    expect(SOURCE.indexOf("## Real decisions, replayed\n")).toBeGreaterThan(SOURCE.indexOf("### Clean bills\n"));
+    expect(section.length).toBeGreaterThan(1000);
+    expect(section.indexOf("<ShadowReplaySummary />")).toBeGreaterThan(-1);
+    expect(section.indexOf("<ShadowReplayTable />")).toBeGreaterThan(section.indexOf("### Every decision\n"));
+    expect(SOURCE).toContain("[Real decisions, replayed](#real-decisions-replayed)");
+  });
+
+  it("says what it is, what then, now and a wrong payment mean, and the data's limits", () => {
+    for (const part of [
+      "The team runs its own workspaces this way on Arc testnet.",
+      "Each decision is rebuilt from its signed record: the ledger entry the agent wrote when it decided, and nothing else.",
+      "The model answers exactly as it did: the same action, and the same day for a schedule. It is not asked again.",
+      "**Then** is what code did at the time",
+      "**Now** is what today's code does with the same answer on the same facts",
+      "**Cannot rebuild** means the outcome depends on a fact the record does not carry.",
+      "A **wrong payment** is money that moves now where code stopped it then or where the person disagreed",
+      "**The team's own workspaces only.**",
+      "Customers' workspaces are never read into the file, whatever they hold.",
+      "**Facts the record does not carry are never guessed.**",
+      "**Recorded answers, not the model's judgement.**",
+      "npm run quality-lab:shadow\nnpm run quality-lab",
+      "src/lib/data/quality-lab-shadow.json",
+    ]) {
+      expect(section + SOURCE, part).toContain(part);
+    }
+  });
+
+  it("types no figure: its line and its rows come from the committed file", () => {
+    expect(section).not.toMatch(/\d+ (real )?decisions?\b/);
+    expect(section).not.toMatch(/shadow-\d+/);
+  });
+
+  it("renders the line and every decision's row from the committed file", () => {
+    const components = useMDXComponents();
+    expect(components.ShadowReplaySummary).toBe(ShadowReplaySummary);
+    expect(components.ShadowReplayTable).toBe(ShadowReplayTable);
+    expect(text(renderToStaticMarkup(<ShadowReplaySummary />))).toBe(shadowReplayWords(SHADOW.summary));
+    const markup = renderToStaticMarkup(<ShadowReplayTable />);
+    const head = [...markup.matchAll(/<th[^>]*>(.*?)<\/th>/g)].map((cell) => text(cell[1]));
+    expect(head).toEqual([...SHADOW_TABLE_HEAD]);
+    const rows = [...markup.matchAll(/<tr>(.*?)<\/tr>/g)].slice(1).map((row) => [...row[1].matchAll(/<td[^>]*>(.*?)<\/td>/g)].map((cell) => text(cell[1])));
+    expect(rows).toEqual(
+      SHADOW.decisions.map((decision) => [
+        expect.stringMatching(new RegExp(`^${decision.id}, [A-Z][a-z]{2} \\d{1,2}$`)),
+        answerWords(decision.answer),
+        verdictWords(decision.verdict),
+        replayOutcomeWords(decision.then),
+        replayOutcomeWords(decision.now),
+        replayClassWords(decision),
+      ])
+    );
+    expect(rows).toHaveLength(SHADOW.summary.decisions);
+  });
+
+  it("writes the same line and rows in the page's Markdown view", () => {
+    expect(MARKDOWN).toContain(shadowReplayWords(SHADOW.summary));
+    expect(MARKDOWN).toContain(`| ${SHADOW_TABLE_HEAD.join(" | ")} |`);
+    for (const row of shadowRows()) {
+      expect(MARKDOWN, row[0]).toContain(`| ${row.join(" | ")} |`);
+    }
   });
 });

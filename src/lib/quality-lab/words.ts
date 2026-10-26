@@ -1,5 +1,7 @@
 import { ruleWords } from "@/lib/rule-words";
 import type { QualityLabOutcome, QualityLabResult, QualityLabSummary } from "./judge";
+import type { ShadowAction, ShadowVerdict } from "./shadow-export";
+import type { ShadowAnswer, ShadowOutcome, ShadowReplayClass, ShadowReplayResult, ShadowReplaySummary } from "./shadow-replay";
 
 /**
  * The Quality Lab's outcomes in words (docs/superpowers/specs/2026-10-26-quality-lab-design.md QL7, QL8), the same on
@@ -49,4 +51,73 @@ export function scoreWords(summary: QualityLabSummary): string {
 /** "0 wrong payments", with the real number. */
 export function wrongPaymentWords(count: number): string {
   return `${count} wrong payment${count === 1 ? "" : "s"}`;
+}
+
+// The replay of the team's shadow-mode decisions in words (docs/superpowers/specs/2026-10-26-quality-lab-shadow-
+// replay-design.md SR10, SR11), the same on the result block, the docs page and its Markdown view.
+
+/**
+ * "46 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 44 reach the same
+ * outcome, 2 cannot be rebuilt from the record, 0 wrong payments.", with the real numbers and only the classes that are
+ * not zero. It names no network, as the block does not (QL7).
+ */
+export function shadowReplayWords(summary: ShadowReplaySummary): string {
+  const one = (count: number, single: string, many: string) => `${count} ${count === 1 ? single : many}`;
+  const parts = [
+    summary.same > 0 ? one(summary.same, "reaches the same outcome", "reach the same outcome") : null,
+    summary.nowStopped > 0 ? one(summary.nowStopped, "is now stopped by a rule that did not stop it then", "are now stopped by a rule that did not stop them then") : null,
+    summary.nowLetThrough > 0 ? one(summary.nowLetThrough, "is now let through where code stopped it then", "are now let through where code stopped them then") : null,
+    summary.cannotRebuild > 0 ? `${summary.cannotRebuild} cannot be rebuilt from the record` : null,
+  ].filter((part): part is string => part !== null);
+  const decisions = one(summary.decisions, "real decision", "real decisions");
+  return `${decisions} from the team's own shadow-mode workspaces, replayed through today's code: ${[...parts, wrongPaymentWords(summary.wrongPayments)].join(", ")}.`;
+}
+
+const ANSWERED: Record<ShadowAction, string> = {
+  pay: "Let through to pay",
+  schedule: "Let through to schedule",
+  hold: "Held, as the model answered",
+  flag_fraud: "Flagged, as the model answered",
+  request_info: "Information asked for, as the model answered",
+};
+
+/** What code did with a decision, then or now: "Let through to pay", "Stopped because the payee had no address yet". */
+export function replayOutcomeWords(outcome: ShadowOutcome | null): string {
+  if (!outcome) return "Not known";
+  if (outcome.rule) return `Stopped because ${ruleWords(outcome.rule) ?? `a check in code (${outcome.rule})`}`;
+  return ANSWERED[outcome.action];
+}
+
+/** The model's answer as the replay scripted it: "Pay now", "Schedule in 4 days". */
+export function answerWords(answer: ShadowAnswer): string {
+  switch (answer.action) {
+    case "pay":
+      return "Pay now";
+    case "schedule":
+      return answer.payOnInDays === null ? "Schedule" : `Schedule in ${answer.payOnInDays} day${answer.payOnInDays === 1 ? "" : "s"}`;
+    case "hold":
+      return "Hold";
+    case "request_info":
+      return "Ask for information";
+    case "flag_fraud":
+      return "Flag as fraud";
+  }
+}
+
+/** The person's verdict: "Agreed", "Disagreed", or "None" when none was given. */
+export function verdictWords(verdict: ShadowVerdict | null): string {
+  return verdict === "agree" ? "Agreed" : verdict === "disagree" ? "Disagreed" : "None";
+}
+
+const CLASS_WORDS: Record<ShadowReplayClass, string> = {
+  same: "Same",
+  now_stopped: "Now stopped",
+  now_let_through: "Now let through",
+  cannot_rebuild: "Cannot rebuild",
+};
+
+/** A decision's class with its reason, a wrong payment named as one: "Cannot rebuild. The payee's address changed...". */
+export function replayClassWords(result: Pick<ShadowReplayResult, "class" | "reason" | "wrongPayment">): string {
+  const head = result.wrongPayment ? `${CLASS_WORDS[result.class]}, a wrong payment` : CLASS_WORDS[result.class];
+  return result.reason ? `${head}. ${result.reason}` : head;
 }
