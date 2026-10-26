@@ -188,10 +188,11 @@ function Example() {
 /**
  * The payee lock, by name, and one real payment it held (docs/superpowers/specs/2026-10-26-landing-payee-lock-design.md
  * PLL1-PLL6): what the lock does and why a wait helps, set apart from what happened; the five steps at the times the
- * ledger recorded them, each saying only what was recorded; then the payment on Arc, with the chain's time told from the
- * ledger's. The lock is held by code and people, so the proof claims only what the transaction shows. Laid out in two
- * columns on a wide screen, the steps on the right; on the left the description keeps its own height (`auto`), and the
- * proof sits right under it, its row (`1fr`) taking whatever height the steps need beyond the two.
+ * ledger recorded them, each saying only what happened in that workspace, never how the lock works in general; then the
+ * payment on Arc, with the chain's time told from the ledger's. The lock is held by code and people, so the proof claims
+ * only what the transaction shows. Laid out in two columns on a wide screen, the steps on the right; on the left the
+ * description keeps its own height (`auto`), and the proof sits right under it, its row (`1fr`) taking whatever height
+ * the steps need beyond the two.
  */
 function PayeeLockExample() {
   const e = PAYEE_LOCK_EXAMPLE;

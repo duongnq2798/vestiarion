@@ -19,8 +19,9 @@ import { ARC_TESTNET } from "@/lib/network";
  * `handleOps`), not through the spending-limit contract. The lock is held by code and by people, not by a contract; the
  * transaction shows only that the payment settled after both holds ended, to the confirmed address, for the bill's
  * amount. Neither the vendor nor the workspace is named. A past decision's facts do not change, so they are written
- * here rather than read. Each step says only what these entries record (PLL3); why the lock or its wait exists is
- * general, and the page says it apart, beside the steps (PLL5).
+ * here rather than read. Each step says only what happened in that workspace (PLL3): what these entries record, the
+ * refusal above, and the new wallet's balance, 0 USDC before and 3 USDC after, which the chain shows and no entry
+ * holds. Why the lock or its wait exists is general, and the page says it apart, beside the steps (PLL5).
  */
 export const PAYEE_LOCK_EXAMPLE = {
   network: ARC_TESTNET,

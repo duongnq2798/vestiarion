@@ -906,8 +906,10 @@ mainnet plan).
       testnet on Oct 20, 2026, a vendor's address changed (#4839), the agent's payment was held as
       `counterparty.address_unconfirmed` (#4843), the member who entered the address could not confirm it and a second
       member did (#4863), it was held again as `counterparty.cooling_off` for the 4-hour wait (#4866), then paid
-      (#4919). Each step shows the time its entry was recorded and says only what was recorded. On a wide screen the
-      explanation keeps its own height in the left column, the proof right under it, and the steps run down the right.
+      (#4919). Each step shows the time its entry was recorded and says only what happened in that workspace, never how
+      the lock works in general: what its ledger recorded, the refused confirmation (from the lock's rollout record,
+      not a ledger entry, as the page says) and the new wallet's balance on chain. On a wide screen the explanation
+      keeps its own height in the left column, the proof right under it, and the steps run down the right.
       The proof links transaction `0x49787501…0551` and tells its block time (15:16:04 UTC, block 68200055)
       from the ledger's (15:16:07 UTC). It says the lock is held by code and people, not by a contract: the transaction
       shows only that the payment settled after both holds ended, to the confirmed address, for the bill's amount. Its

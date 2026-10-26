@@ -50,9 +50,11 @@ visitor should see that, step by step, with a link they can check.
    the address was confirmed by then (entry 4863), but it had changed at 11:14:01 UTC (entry 4839), less than an hour
    earlier.
 5. Paid: after the wait the bill reopened and the agent paid 3.00 USDC to the confirmed address.
-- Each step says only what that workspace recorded. Why the lock or its wait exists is general process, so it is said
-  with the lock's description (PLL5), never in a step (`docs/design/visual-system.md`: "Explain general process
-  separately from observed events").
+- Each step says only what happened in that workspace: what its ledger recorded, the refused confirmation (from the
+  payee lock spec's rollout record; no ledger entry holds it, and the page says so) and the new wallet's balance, 0
+  USDC before and 3 USDC after, which the chain shows and no ledger entry holds. Why the lock or its wait exists is
+  general process, so it is said with the lock's description (PLL5), never in a step (`docs/design/visual-system.md`:
+  "Explain general process separately from observed events").
 - Each step shows its ledger entry number and its UTC time to the second, from that entry; the header shows the day.
 - Each step's tone is one of the dark section's: neutral for an event, amber for a hold, and a new green "paid" tone
   (`border-proof-line/40 bg-proof/10`, label `text-proof-line`, as `HowItWorks` uses on ink) for the payment.
@@ -99,10 +101,12 @@ visitor should see that, step by step, with a link they can check.
 - `ARCHITECTURE.md`'s landing Safety bullet and `CHANGELOG.md` say what changed. The README's proof already cites the
   transaction correctly. Its safety table's payee lock row, stale since the lock started on for Arc mainnet, said
   "Opt-in", that only someone other than whoever entered an address confirms it, and that approving never confirms
-  one; it now says what the code does and the landing says: off on Arc testnet until an owner turns it on, on with no
-  wait for a workspace created on Arc mainnet, a lone member confirms alone and the record says so, and with the lock
-  on approving no longer confirms an address. No API, webhook or ledger change, so no API changelog entry. No
-  migration.
+  one; it now says what the code does and the landing says: off on Arc testnet until an owner turns it on; a
+  workspace created on Arc mainnet starts with it on, with no wait, and an owner can change it there too (the start is
+  not a floor, unlike the two approvals figure beside it); a call or a message names the contact used, which the
+  person confirming says was on file before the change (they tick it; nothing compares it with stored contacts); a
+  lone member confirms alone and the record says so; and with the lock on approving no longer confirms an address. No
+  API, webhook or ledger change, so no API changelog entry. No migration.
 
 ## Tests
 
@@ -113,9 +117,16 @@ visitor should see that, step by step, with a link they can check.
   or workspace. The guide and the README cite the same transaction. Why a wait helps sits before the steps, and no
   step says it; step 4 says when the address changed, held to step 1's time. The wide-screen grid sizes its rows
   `auto` then `1fr`, with the steps across both.
-- `tests/readme-facts.test.ts`: the README's payee lock row, held to `MAINNET_STARTING_PAYEE_LOCK` and
-  `COOLING_HOURS_CHOICES`: off on Arc testnet, on with no wait on Arc mainnet, the four waits, the lone member's
-  confirmation, and approving no longer confirming an address with the lock on.
+- `tests/readme-facts.test.ts`: the README's payee lock row, each claim held to the code that makes it true:
+  - off on Arc testnet: only workspace creation's Arc mainnet branch writes a lock, and `payeeLockFromRow` reads no
+    row as `PAYEE_LOCK_OFF`;
+  - a workspace created on Arc mainnet starts on with no wait (`MAINNET_STARTING_PAYEE_LOCK`), and an owner can change
+    it there too: the action needs `approval.policy` (owners) and `changePayeeLock` checks no network;
+  - the contact for a call or a message is what the person confirming says was on file (`parseVerification`);
+  - the four waits (`COOLING_HOURS_CHOICES`);
+  - with the lock on, `confirmCounterpartyAddress` refuses whoever entered the address while another member can
+    confirm it, records `soloConfirmation` where no one else can, and refuses a confirmation by approving, which
+    approving makes with the lock off (its source, as the landing test reads the refusal's words).
 - `tests/landing-prefetch.test.tsx`: the guide link is not prefetched.
 - `tests/network-constants-ratchet.test.ts`: `payee-lock-example.ts` reads `ARC_TESTNET` on purpose, with why.
 - `tests/ui-tokens.test.ts`: the dark section's line colours on ink and on their step tints.

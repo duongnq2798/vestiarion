@@ -142,7 +142,7 @@ describe("the landing's safety section", () => {
       expect(words).toContain("Code held it for the 4-hour wait.");
     });
 
-    it("says in each step only what that workspace recorded, never why the lock exists (PLL3)", () => {
+    it("says in each step only what happened in that workspace, never why the lock exists (PLL3)", () => {
       const steps = text(block.match(/<ol\b[\s\S]*?<\/ol>/)?.[0] ?? "");
       const [changed, , confirmed, heldAgain] = e.steps;
       expect(steps).toContain(`The address was confirmed by then, but it had changed at ${changed.at.slice(11, 19)} UTC, less than an hour earlier.`);
