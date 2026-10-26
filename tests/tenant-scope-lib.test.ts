@@ -15,7 +15,7 @@ import {
   listLedgerEntryPage,
   verifyLedger,
 } from "@/lib/ledger";
-import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, stats } from "@/lib/queries";
+import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, shellClock, stats } from "@/lib/queries";
 import { LedgerSigningKeyError } from "@/lib/ledger-keys";
 import { carriesOrg, fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
@@ -42,6 +42,7 @@ const READS: Array<[string, () => Promise<unknown>]> = [
   ["listTreasuryActions", () => listTreasuryActions()],
   ["latestForecast", () => latestForecast()],
   ["stats", () => stats()],
+  ["shellClock", () => shellClock()],
   ["listLedgerEntries", () => listLedgerEntries(5)],
   ["listLedgerEntriesAfter", () => listLedgerEntriesAfter(1)],
   ["listLedgerEntriesByDomain", () => listLedgerEntriesByDomain("treasury", 2)],

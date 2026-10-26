@@ -4,7 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ClosePackView } from "@/components/ClosePackView";
 import { SheetsExport } from "@/components/close-pack/SheetsExport";
-import type { ClosePack, ClosePackOpenPayment, ClosePackOpenState } from "@/lib/close-pack/types";
+import type { ClosePack, ClosePackCheck, ClosePackOpenPayment, ClosePackOpenState } from "@/lib/close-pack/types";
+import { CHECK_KIND_WORDS } from "@/lib/close-pack/words";
 import type { ClosePackSheetsView } from "@/lib/googlesheets/views";
 import { takeClosePackPageToken } from "@/lib/rate-limit";
 import { ADDR_H, ADDR_N, DOC_SHA, samplePack, tx } from "./support/close-pack-fixtures";
@@ -281,12 +282,58 @@ describe("Export to Google Sheets beside the downloads (close pack Sheets GS5)",
   });
 });
 
+describe("what the page sends (close pack page speed CS8)", () => {
+  // A month of twenty payments, as the production month measured was.
+  const TWENTY: ClosePack = { ...PACK, rows: Array.from({ length: 20 }, (_, index) => ({ ...PACK.rows[index % PACK.rows.length], paymentId: `pay-${index}` })) };
+  const markup = render(TWENTY);
+  const cards = [...markup.matchAll(/<article[\s\S]*?<\/article>/g)].map(([card]) => card);
+
+  it("draws each icon once for the page, and each check's badge and explorer link points at it", () => {
+    const drawn = [...markup.matchAll(/<symbol id="(close-pack-icon-[a-z-]+)"/g)].map(([, id]) => id);
+    expect(drawn.length).toBeGreaterThan(0);
+    expect(new Set(drawn).size).toBe(drawn.length);
+    const used = [...markup.matchAll(/<use href="#(close-pack-icon-[a-z-]+)"/g)].map(([, id]) => id);
+    expect(new Set(used)).toEqual(new Set(drawn));
+    expect(markup).toMatch(/<svg aria-hidden="true"[^>]*><defs><symbol id="close-pack-icon-/);
+    expect(cards).toHaveLength(20);
+    cards.forEach((card, index) => {
+      const row = TWENTY.rows[index];
+      expect(card, row.paymentId).not.toContain("lucide");
+      expect(card.match(/<svg aria-hidden="true" viewBox="0 0 24 24"[^>]*><use href="#close-pack-icon-/g)?.length, row.paymentId).toBe(6 + (row.transaction.explorerUrl ? 1 : 0));
+    });
+  });
+
+  it("says each check's kind in words beside its icon, as before", () => {
+    for (const [index, card] of cards.entries()) {
+      for (const check of Object.values(TWENTY.rows[index].checks) as ClosePackCheck[]) expect(textOf(card)).toContain(CHECK_KIND_WORDS[check.kind]);
+    }
+  });
+
+  it("sends a month of twenty payments in under 165,000 bytes of markup (157,657 now, 204,279 before)", () => {
+    expect(markup.length).toBeLessThan(165_000);
+  });
+});
+
 describe("the page (close pack CP11, CP14)", () => {
   const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "evidence", "close-pack", "page.tsx"), "utf8");
 
-  it("gives its Server Actions 120 seconds, and reads the Google Sheets view for the person's role (close pack Sheets GS5, GS12)", () => {
-    expect(page).toContain("export const maxDuration = 120;");
+  it("gives its Server Actions 300 seconds, as Bills, counterparties and the report do, and reads the Google Sheets view for the person's role (close pack Sheets GS5, GS12; close pack page speed CS9)", () => {
+    // Over the 90 seconds after which an export starts no call to Google, and the same as the other workspace pages that
+    // set one, so the page is not alone in its own function.
+    expect(page).toContain("export const maxDuration = 300;");
+    for (const other of ["invoices", "counterparties", "report"]) {
+      expect(readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", other, "page.tsx"), "utf8"), other).toContain("export const maxDuration = 300;");
+    }
     expect(page).toContain("closePackSheetsView({ month, role: access.membership.role })");
+  });
+
+  it("reads the pack, the header's clock, shadow mode and the Sheets view at once, and only the clock the header shows (close pack page speed CS4)", () => {
+    const start = page.indexOf("await Promise.all([");
+    const reads = page.slice(start, page.indexOf("]);", start));
+    expect(start).toBeGreaterThan(-1);
+    for (const read of ["readClosePack(", "shellClock(),", "shellStatus(),", "closePackSheetsView({ month, role: access.membership.role })"]) expect(reads, read).toContain(read);
+    expect(page).not.toContain("stats()");
+    expect(page).toContain("status={status}");
   });
 
   it("makes Export to Google Sheets from the month and the workspace, and renders the view whether the pack was read or not (close pack Sheets GS5)", () => {

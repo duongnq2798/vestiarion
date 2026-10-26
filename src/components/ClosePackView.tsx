@@ -1,4 +1,4 @@
-import { ArrowUpRight, FileJson, FileSpreadsheet, Minus } from "lucide-react";
+import { ArrowUpRight, FileJson, FileSpreadsheet, Minus, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { PrintButton } from "@/components/PrintButton";
@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
-import { EvidenceLabel } from "@/components/vx/EvidenceChain";
+import { EvidenceLabel, evidenceIcon } from "@/components/vx/EvidenceChain";
 import { closePackMonth, monthsBeside, type ClosePackMonth } from "@/lib/close-pack/month";
 import type { ClosePack, ClosePackCheck, ClosePackChecks, ClosePackRow, ClosePackTotal } from "@/lib/close-pack/types";
 import {
@@ -71,12 +71,69 @@ function ordinal(n: number): string {
 /** The month's heading: "October 2026", or "October 2026 so far" for a month not ended. */
 const monthWords = (pack: ClosePack) => `${pack.month.label}${pack.ended ? "" : " so far"}`;
 
+/**
+ * A card's facts as a list: each label small and quiet, each value plain, kept whole in print. Set once on the list
+ * rather than on each of a card's eleven facts, which a month of cards repeats (close pack page speed CS8).
+ */
+const FACTS = "grid gap-x-6 gap-y-3 sm:grid-cols-2 [&>div]:min-w-0 [&>div]:break-inside-avoid [&_dt]:text-xs [&_dt]:font-medium [&_dt]:text-ink-3 [&_dd]:mt-0.5 [&_dd]:text-sm [&_dd]:text-ink";
+
+/** One fact, inside a list styled by `FACTS`. */
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="min-w-0 break-inside-avoid">
-      <dt className="text-xs font-medium text-ink-3">{label}</dt>
-      <dd className="mt-0.5 text-sm text-ink">{children}</dd>
+    <div>
+      <dt>{label}</dt>
+      <dd>{children}</dd>
     </div>
+  );
+}
+
+/** The icons the cards and the escrow moves show: each check's kind, and the explorer link's arrow. */
+type IconName = ClosePackCheck["kind"] | "explorer";
+
+const iconId = (name: IconName) => `close-pack-icon-${name.replace("_", "-")}`;
+
+function iconOf(name: IconName): LucideIcon {
+  if (name === "explorer") return ArrowUpRight;
+  if (name === "not_applicable") return Minus;
+  return evidenceIcon(name);
+}
+
+/** The icons a pack shows: its rows' check kinds, and the arrow where a transaction links to its explorer. */
+function iconsOf(pack: ClosePack): Set<IconName> {
+  const names = new Set<IconName>(pack.rows.flatMap((row) => CHECKS.map(([key]) => row.checks[key].kind)));
+  if (pack.rows.some((row) => row.transaction.explorerUrl) || pack.escrow.some((move) => move.explorerUrl)) names.add("explorer");
+  return names;
+}
+
+/**
+ * Each icon the page shows, drawn once (close pack page speed CS8). A month's cards repeat the same few, six check badges
+ * and an explorer link a card, and an icon drawn where it shows is its whole SVG in the page and its drawing again in
+ * the data React sends with it. Each badge and link points here instead (`IconUse`). Hidden: the words beside each say it.
+ */
+function IconSheet({ names }: { names: ReadonlySet<IconName> }) {
+  if (names.size === 0) return null;
+  return (
+    <svg aria-hidden className="hidden">
+      <defs>
+        {[...names].map((name) => {
+          const Icon = iconOf(name);
+          return (
+            <symbol key={name} id={iconId(name)} viewBox="0 0 24 24">
+              <Icon />
+            </symbol>
+          );
+        })}
+      </defs>
+    </svg>
+  );
+}
+
+/** An icon from `IconSheet`, by reference: it takes the colour of the text around it, as a drawn icon does. */
+function IconUse({ name, className }: { name: IconName; className?: string }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24" className={className}>
+      <use href={`#${iconId(name)}`} />
+    </svg>
   );
 }
 
@@ -97,7 +154,7 @@ function ExplorerLink({ href }: { href: string }) {
   return (
     <a href={href} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-0.5 ${LINK} print:hidden`}>
       View on the explorer
-      <ArrowUpRight aria-hidden className="size-3.5" />
+      <IconUse name="explorer" className="size-3.5" />
       <span className="sr-only">(opens in a new tab)</span>
     </a>
   );
@@ -113,14 +170,15 @@ function EvidenceLinkTo({ href }: { href: string }) {
 
 /** How a check is known, in words beside its icon; a check with nothing to look at is neutral (CP8). */
 function CheckKind({ check }: { check: ClosePackCheck }) {
+  const icon = <IconUse name={check.kind} />;
   if (check.kind === "not_applicable") {
     return (
-      <Badge size="sm" icon={<Minus aria-hidden />}>
+      <Badge size="sm" icon={icon}>
         {CHECK_KIND_WORDS.not_applicable}
       </Badge>
     );
   }
-  return <EvidenceLabel kind={check.kind} />;
+  return <EvidenceLabel kind={check.kind} icon={icon} />;
 }
 
 /** The month field, the months around it, the downloads and print (CP11, CP12). */
@@ -329,7 +387,7 @@ export function ClosePackPayment({ row }: { row: ClosePackRow }) {
           )}
           {row.payee.bank && <Badge size="sm">Bank payout</Badge>}
         </div>
-        <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <dl className={`mt-4 ${FACTS}`}>
           <Fact label="Bill">{billWords(row)}</Fact>
           {bill.kind === "invoice" && bill.poReference && <Fact label="Purchase order">{bill.poReference}</Fact>}
           {bill.kind === "invoice" && (
@@ -379,7 +437,7 @@ export function ClosePackPayment({ row }: { row: ClosePackRow }) {
             })}
           </ul>
         </div>
-        <dl className="mt-4 grid gap-x-6 gap-y-3 border-t border-line pt-3 sm:grid-cols-2">
+        <dl className={`mt-4 border-t border-line pt-3 ${FACTS}`}>
           <TransactionFact row={row} />
           <Fact label="Books">{booksWords(row)}</Fact>
           <Fact label="Signed entry">
@@ -483,6 +541,7 @@ function ClosePackReport({ pack }: { pack: ClosePack }) {
   const { entries } = pack.totals;
   return (
     <>
+      <IconSheet names={iconsOf(pack)} />
       <ClosePackSummary pack={pack} />
       <ClosePackPayments pack={pack} />
       <ClosePackNotSettled pack={pack} />
