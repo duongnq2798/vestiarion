@@ -5,7 +5,9 @@ import { describe, expect, it, vi } from "vitest";
  * Start the live slice on the report (docs/superpowers/specs/2026-10-18-live-slice-design.md L1, L3, L5): the vendors an
  * owner may carry, each saying how its address goes over, a vendor with no limit not offered; once opened, what went over
  * and the way to its Settings; the report's last step, which names the slice, links it for its opener and ticks once it
- * is live.
+ * is live. Beside each vendor, how often the owner agreed with the agent on its bills, with the agreed count and the
+ * verdicts behind it, the vendors in the list's own order (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md
+ * AL8).
  */
 
 vi.mock("server-only", () => ({}));
@@ -14,6 +16,7 @@ vi.mock("@/app/actions/live-slice", () => ({ startLiveSliceAction: vi.fn() }));
 
 const { LiveSliceStart } = await import("@/components/vx/LiveSliceStart");
 const { ReportReadiness } = await import("@/components/vx/WorkspaceReport");
+const { agreementRate } = await import("@/lib/verdict-rate");
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&rsquo;/g, "'").replace(/\s+/g, " ");
 
@@ -67,6 +70,44 @@ describe("LiveSliceStart", () => {
     expect(html).toContain('name="accountantId"');
     expect(html).toContain('value="u-books"');
     expect(text(renderToStaticMarkup(<LiveSliceStart orgSlug="acme-shadow" vendors={vendors} canStart />))).not.toContain("Bring your accountant");
+  });
+
+  it("says beside each vendor how often the owner agreed with the agent on its bills, with the count (autonomy ladder AL4, AL8)", () => {
+    // As the report passes them: the ladder's byVendor rows, most verdicts first (AL5), an order unlike the list's.
+    const agreement = [
+      // A vendor the picker does not offer (another role, or gone) changes nothing.
+      { key: "z", label: "Quill Studio", given: 9, agreed: 9, disagreed: 0, rate: 100, enough: true },
+      { key: "d", label: "Harbor Freight Co.", given: 6, agreed: 5, disagreed: 1, rate: 83, enough: true },
+      { key: "b", label: "Lumen Print Co.", given: 2, agreed: 1, disagreed: 1, rate: null, enough: false },
+      { key: "c", label: "Taller Norte", given: 1, agreed: 1, disagreed: 0, rate: null, enough: false },
+    ];
+    const words = text(renderToStaticMarkup(<LiveSliceStart orgSlug="acme-shadow" vendors={vendors} canStart agreement={agreement} />));
+    expect(words).toContain("Beside each vendor: how often you agreed with the agent's decisions on its bills, from your verdicts in shadow mode.");
+    expect(words).toContain("Cobalt Cloud Limit 200 USDC Its own address, confirmed again there No verdicts yet");
+    expect(words).toContain("Lumen Print Co. Limit 50 USDC Mirror address: it adds its own there 2 verdicts: too few to tell yet");
+    // One that cannot go shows it too.
+    expect(words).toContain("Taller Norte No payment limit: set one on Counterparties to carry it 1 verdict: too few to tell yet");
+    expect(words).toContain("Harbor Freight Co. Limit 80 USDC Paid on another chain: it adds its Arc address there 83% agreed, 5 of 6 verdicts");
+    expect(words).not.toContain("Quill Studio");
+    // The vendors keep the list's order, by name as read, not the rows' most verdicts first.
+    const at = (name: string) => words.indexOf(name);
+    const order = [at("Cobalt Cloud"), at("Lumen Print Co."), at("Taller Norte"), at("Harbor Freight Co.")];
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+
+    const without = text(renderToStaticMarkup(<LiveSliceStart orgSlug="acme-shadow" vendors={vendors} canStart />));
+    expect(without).not.toContain("Beside each vendor");
+    expect(without).not.toContain("No verdicts yet");
+  });
+
+  it("names the agreed count, so a rate rounded to 100% still shows a verdict the owner disagreed with (autonomy ladder AL8)", () => {
+    const counts = { agreed: 199, disagreed: 1 };
+    const rate = agreementRate(counts);
+    expect(rate).toBe(100);
+    const agreement = [{ key: "a", label: "Cobalt Cloud", given: 200, ...counts, rate, enough: true }];
+    const words = text(renderToStaticMarkup(<LiveSliceStart orgSlug="acme-shadow" vendors={vendors} canStart agreement={agreement} />));
+    expect(words).toContain("Cobalt Cloud Limit 200 USDC Its own address, confirmed again there 100% agreed, 199 of 200 verdicts");
+    expect(words).not.toContain("200 of 200");
   });
 
   it("tells anyone else that an owner starts it", () => {

@@ -26,7 +26,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   is on Open numbers and How the agent decides, and every scenario with what was expected and what happened is in the
   docs (Trust and controls, "The Quality Lab"). `npm run quality-lab` runs the scenarios and writes the committed
   result, which the test holds to the run. It does not measure the model's own judgement. No migration.
-
+- **How often you agreed, by decision and by vendor.** In shadow mode, the report's **Before a live slice** now shows,
+  under its steps, how often you agreed with the agent's decisions, split by what the agent decided (Pay, Schedule,
+  Hold, Flag for review, Ask for details) and by vendor, each with the number of verdicts behind it. Under five
+  verdicts a row says **Too few to tell yet** instead of a percentage. It counts your shadow-mode verdicts on real
+  bills only, as **Your verdicts** does once the workspace has a real bill. The report says so beside the figures, and
+  that they are not **Agent vs what really happened**, which compares the agent with what your business paid. Under
+  **Start the live slice**, each vendor shows the same figure beside its checkbox with how many verdicts you agreed
+  with, such as "83% agreed, 5 of 6 verdicts", so you can tick the vendors where the agent already decides as you
+  would. It only measures: nothing here changes what the agent may do. No migration.
 - **Vendor documents checked against the bill.** While vendor requests are in shadow or on, each PDF a vendor sends for
   a bill's missing purchase order or goods receipt is read within a minute, and code checks its vendor, currency,
   amount, purchase order and any address it asks to be paid to against the bill. With vendor requests on, a document
@@ -77,6 +85,33 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   spreadsheet's id. Disconnecting revokes the access at Google and deletes the tokens; the spreadsheets stay in Drive.
   Needs `GOOGLE_SHEETS_CLIENT_ID`, `GOOGLE_SHEETS_CLIENT_SECRET` and migration 0145; until it runs, the Google Sheets
   card says it is not set up yet.
+- **The payee lock on the landing page, with a payment it held.** The safety section now names the payee lock and says
+  in one sentence what it does: a changed payment address is paid only after a person confirms it, recording how they
+  checked it with the vendor, and after any wait you set; beside it, why a wait helps. Under the refusal it already
+  showed, "What happens when a payment address changes?" follows a real payment in the team's own live workspace on
+  Arc testnet: a vendor's address changed to a new wallet, code held the agent's 3.00 USDC payment while no one had
+  confirmed it, the member who had entered the address could not confirm it and a second member did, code held it
+  again for the 4-hour wait, the address having changed less than an hour before, and only then did the agent pay.
+  Each step shows when the signed ledger recorded it and says only what happened in that workspace, never how the lock
+  works in general, and the transaction links to the explorer, its block time told apart from the ledger's. The page
+  says the lock is held by Vestiarion's code and by people, not by a contract. The first-payment guide's payee lock
+  section links the same transaction, and the controls guide now names the payee lock. The README's payee lock row no
+  longer calls the lock opt-in: it is off on Arc testnet until an owner turns it on, and a workspace created on Arc
+  mainnet starts with it on, with no wait, which an owner can change there too; a call or a message names the contact
+  used, which the person confirming says was on file before the change; where no one else can, the member who entered
+  an address confirms it alone and the record says so; and with the lock on, approving a payment no longer confirms its
+  address. No migration.
+
+### Changed
+
+- **The monthly close pack opens faster.** The page read its data in waves, each waiting for the slowest read of the
+  one before, then each payment's screening ten at a time, and the header's shadow mode after all of it. It now starts
+  each read the moment what it needs is in, reads a month's screening in one request for up to a hundred payees, reads
+  only the clock its header shows rather than every paid bill and a count of the agent's entries, prepares each
+  signing key once a read rather than once an entry, and draws each icon once rather than on every card, so a month
+  of twenty payments sends about a quarter less markup. Against a test database its reads take three rounds instead
+  of five or six. What the page shows is unchanged, and the CSV, the signed JSON, the API's answer and the Google Sheets
+  export are the same, byte for byte. No migration.
 
 ### Fixed
 

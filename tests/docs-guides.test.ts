@@ -410,6 +410,10 @@ const RECEIPT_AMOUNTS = "src/lib/receipts/amounts.ts";
 const RECEIPT_PAGE = "src/app/receipt/[token]/page.tsx";
 const RECEIPT_BROWSER_CHECK = "src/components/receipt/BrowserCheck.tsx";
 const RECEIPT_PDF = "src/components/receipt/SavePdfButton.tsx";
+/** How often people agreed, by decision and by vendor (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md AL7, AL8). */
+const AGREEMENT_LADDER = "src/components/vx/AgreementLadder.tsx";
+const LADDER_LIBRARY = "src/lib/autonomy-ladder.ts";
+const LIVE_SLICE_START = "src/components/vx/LiveSliceStart.tsx";
 
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/collections": [
@@ -823,6 +827,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Approve and pay", APPROVAL_CARD],
     ["You created this invoice", APPROVAL_CARD],
     ["You gave this payee's address", APPROVAL_CARD],
+    // The payee lock, named where the landing's safety section leads (landing payee lock PLL8).
+    ["Payee lock", PAYEE_LOCK_PANEL],
     ["Two approvals", "src/components/TwoApprovalsPanel.tsx"],
     ["Payments above (USDC)", "src/components/TwoApprovalsPanel.tsx"],
     ["Pause agent", PAUSE],
@@ -2916,6 +2922,23 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Leave no decision waiting for your verdict", REPORT],
     ["Have each supplier's own Arc address", REPORT],
     ["Open a workspace on", REPORT],
+    // How often you agreed, by decision and by vendor (autonomy ladder AL2, AL4, AL5, AL7).
+    ["How often you agreed, by decision and by vendor", AGREEMENT_LADDER],
+    ["By decision", AGREEMENT_LADDER],
+    ["By vendor", AGREEMENT_LADDER],
+    ["Most verdicts first", AGREEMENT_LADDER],
+    ["Verdicts", AGREEMENT_LADDER],
+    ["Agreed", AGREEMENT_LADDER],
+    ["Too few to tell yet", AGREEMENT_LADDER],
+    ["No verdict on a real bill yet.", AGREEMENT_LADDER],
+    ["Agent vs what really happened", AGREEMENT_LADDER],
+    ["Pay, Schedule, Hold, Flag for review and Ask for details", LADDER_LIBRARY, 'ap_flag_fraud: "Flag for review"'],
+    ["Ask for details", LADDER_LIBRARY],
+    // Each vendor's agreement in the live slice's list (autonomy ladder AL8).
+    ["83% agreed, 5 of 6 verdicts", LIVE_SLICE_START, "% agreed, ${row.agreed} of ${row.given} verdicts"],
+    ["2 verdicts: too few to tell yet", LIVE_SLICE_START, ": too few to tell yet"],
+    ["No verdicts yet", LIVE_SLICE_START],
+    ["Beside each vendor: how often you agreed with the agent's decisions on its bills, from your verdicts in shadow mode.", LIVE_SLICE_START],
     // Start the live slice (live slice L1, L3, L5).
     ["Go live with", REPORT, "Go live with ${slice.name}"],
     ["Start the live slice", "src/components/vx/LiveSliceStart.tsx"],
@@ -3234,6 +3257,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["test_usdc_added", TEST_USDC_LIBRARY],
     ["Test USDC is for shadow mode. An owner turns it on in Settings.", TEST_USDC_LIBRARY],
     ["Go live on Arc testnet first: test USDC goes to the operating wallet.", TEST_USDC_LIBRARY],
+    // How often you agreed, by decision and by vendor, on the report (autonomy ladder AL4, AL7).
+    ["How often you agreed, by decision and by vendor", AGREEMENT_LADDER],
+    ["By decision", AGREEMENT_LADDER],
+    ["By vendor", AGREEMENT_LADDER],
+    ["Too few to tell yet", AGREEMENT_LADDER],
+    ["Flag for review", LADDER_LIBRARY],
     // Start the live slice, from the report (live slice L1, L4, L6).
     ["Start the live slice", "src/components/vx/LiveSliceStart.tsx"],
     ["live_slice_started", "src/lib/live-slice.ts"],
@@ -3738,6 +3767,18 @@ describe("the Go live guide's failure table", () => {
   it.each(Object.keys(GO_LIVE_ERRORS) as GoLiveErrorCode[])("has a row for %s, with its exact message", (code) => {
     const message = new GoLiveError(code).message;
     expect(guide).toMatch(new RegExp(`^\\| ${message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\|`, "m"));
+  });
+});
+
+describe("the report guide on how often you agreed (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md)", () => {
+  const guide = readSource("guides/report").replace(/\s+/g, " ");
+
+  it("says the split counts real bills only, even where Your verdicts counts the sample data for want of a real bill (AL3)", () => {
+    // Your verdicts counts sample verdicts while the workspace has no real bill (reportScope); the ladder never does.
+    expect(guide).not.toMatch(/as in \*\*Your verdicts\*\*/);
+    expect(guide).not.toContain("splits them by decision and by vendor");
+    expect(guide).toContain("[How often you agreed](#how-often-you-agreed) splits your verdicts on real bills by decision and by vendor.");
+    expect(guide).toContain("Only verdicts on real bills count. Sample data is left out, even while the report and **Your verdicts** count it for want of a real bill.");
   });
 });
 

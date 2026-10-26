@@ -261,7 +261,8 @@ export function reportScope(facts: ReportFacts): {
 export function buildReport(facts: ReportFacts): WorkspaceReport {
   const { source, bills, billsById, decisions, payments } = reportScope(facts);
   const actions = facts.personActions.filter((action) => billsById.has(action.invoiceId)).sort((a, b) => a.seq - b.seq);
-  // Verdicts on the agent's decisions about real bills only.
+  // Verdicts on the agent's decisions about the bills in scope: the real bills, or the sample data while there is none.
+  // The autonomy ladder leaves sample data out even then (src/lib/autonomy-ladder.ts, AL3).
   const decisionSeqs = new Set(decisions.map((decision) => decision.seq));
   const verdicts = facts.verdicts.filter((verdict) => decisionSeqs.has(verdict.entrySeq));
   const verdictBySeq = new Map(verdicts.map((verdict) => [verdict.entrySeq, verdict.verdict]));

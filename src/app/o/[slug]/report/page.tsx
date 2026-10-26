@@ -10,6 +10,7 @@ import { WorkspaceReport } from "@/components/vx/WorkspaceReport";
 import { sectionTitle } from "@/components/vx/nav";
 import { readActualsFacts } from "@/lib/actual-payments";
 import { orgHref } from "@/lib/auth/org-paths";
+import { autonomyLadder, ladderVerdicts } from "@/lib/autonomy-ladder";
 import { readCurrencyReport } from "@/lib/currency-report-read";
 import { compareActuals } from "@/lib/actual-payments-compare";
 import { actualsCsvTemplate } from "@/lib/actual-payments-csv";
@@ -76,6 +77,10 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     const canShare = can(access.membership.role, "report.share");
     const canAnswer = can(access.membership.role, "org.administer");
     const report = buildReport(facts);
+    // How often people agreed with the agent, by decision and by vendor, beside the readiness steps and in the vendor
+    // picker (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md AL6-AL8): worked out from the facts read
+    // above, with no read of its own.
+    const ladder = report.readiness ? autonomyLadder(ladderVerdicts(facts)) : null;
     // In shadow mode, the live slice opened from here, or the vendors one would carry (live slice L1, L5). Best effort:
     // a read that fails shows the steps alone.
     const sliceRead = report.readiness
@@ -108,6 +113,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
                 canStart={canAnswer}
                 accountants={accountants}
                 opened={opened ? { name: opened.name, slug: opened.slug, vendors: opened.vendors, skipped: opened.skipped } : null}
+                agreement={ladder?.byVendor}
               />
             ),
         }
@@ -179,6 +185,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
             slug={slug}
             report={report}
             slice={slice}
+            ladder={ladder}
             value={
               <ReportValue
                 value={value}

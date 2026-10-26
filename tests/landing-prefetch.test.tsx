@@ -55,6 +55,8 @@ describe("the landing's links", () => {
     const docs = links.filter((link) => link.href.startsWith("/docs"));
     expect(docs.length).toBeGreaterThan(20);
     expect(docs.filter((link) => !link.off).map((link) => link.href)).toEqual([]);
+    // The safety section's payee lock case links its guide (landing payee lock PLL6).
+    expect(docs.map((link) => link.href)).toContain("/docs/guides/first-payment#payee-lock");
   });
 
   it("still prefetch the call to action, sign-in and how the agent decides", () => {

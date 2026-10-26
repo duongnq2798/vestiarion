@@ -901,9 +901,24 @@ mainnet plan).
   - Each call to action carries `data-cta`; Google Analytics, where it runs, sends `cta_click` with that name and the
     redacted path, nothing else. Activation itself is read from the database (`/admin/growth`).
   - Safety and control (`src/components/landing/Safety.tsx`): three principles, each saying what holds it (the team,
-    rules in code and Arc mainnet's spending-limit contract, the signed ledger), then one past refusal step by step
-    (`safety-example.ts`: historical ledger entry #3710 in a team workspace in shadow mode on Arc testnet, refused by
-    `workspace.outflow_budget`). A past decision's facts do not change, so they are written there rather than read.
+    rules in code and Arc mainnet's spending-limit contract, the signed ledger), then two past cases step by step, each
+    labelled with its network and its own mode in the team's workspace. A past decision's facts do not change, so they
+    are written there rather than read, and the page makes no read for either case:
+    - a refusal (`safety-example.ts`: historical ledger entry #3710 in a team workspace in shadow mode on Arc testnet,
+      refused by `workspace.outflow_budget`);
+    - the payee lock, named and explained apart from the steps, with how it is set and why a wait helps
+      (`payee-lock-example.ts`, spec `2026-10-26-landing-payee-lock-design.md`): in the team's live workspace on Arc
+      testnet on Oct 20, 2026, a vendor's address changed (#4839), the agent's payment was held as
+      `counterparty.address_unconfirmed` (#4843), the member who entered the address could not confirm it and a second
+      member did (#4863), it was held again as `counterparty.cooling_off` for the 4-hour wait (#4866), then paid
+      (#4919). Each step shows the time its entry was recorded and says only what happened in that workspace, never how
+      the lock works in general: what its ledger recorded, the refused confirmation (from the lock's rollout record,
+      not a ledger entry, as the page says) and the new wallet's balance on chain. On a wide screen the explanation
+      keeps its own height in the left column, the proof right under it, and the steps run down the right.
+      The proof links transaction `0x49787501…0551` and tells its block time (15:16:04 UTC, block 68200055)
+      from the ledger's (15:16:07 UTC). It says the lock is held by code and people, not by a contract: the transaction
+      shows only that the payment settled after both holds ended, to the confirmed address, for the bill's amount. Its
+      links open the committed source and `/docs/guides/first-payment#payee-lock`, unprefetched.
   - Integrations (`src/components/landing/Integrations.tsx`): Xero and QuickBooks Online first, each with what comes in
     and what goes back; Xero's loop in four steps, labelled as the supported workflow rather than one payment; the nine
     other tools in three rows of three, each linking to its guide; then Arc and Circle as what the payments run on. Each
@@ -1560,7 +1575,10 @@ disagrees with every decision.
   agreed (`readShadowSummary`).
 - **Before a live slice.** The workspace report (below) lists, while shadow mode is on, what we suggest before a slice
   of bills moves to Arc mainnet: verdicts on five decisions, none waiting, and no supplier paid at a mirror address.
-  Suggestions only; it moves nothing.
+  Suggestions only; it moves nothing. Under the steps, the autonomy ladder's first step
+  (`docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md`) shows how often people agreed with the agent by
+  decision kind and by vendor, each figure with the number of verdicts behind it (see the workspace report, below). It
+  only measures: no setting reads it.
 - **Start the live slice** (`docs/superpowers/specs/2026-10-18-live-slice-design.md`). Under those steps an owner
   (`org.administer`, with Arc mainnet open to them) ticks vendors. `startLiveSlice` (`src/lib/live-slice.ts`) refuses
   outside shadow mode, on Arc mainnet, when a slice was opened already, with no vendor or more than 25, then makes a
@@ -1573,7 +1591,9 @@ disagrees with every decision.
   second. The shadow workspace signs `live_slice_started { by, liveOrgId, liveSlug, vendors: [{ counterpartyId, name,
   address }], skipped: [{ counterpartyId, name, reason }] }`. `readLiveSlice` reads it back with whether the new
   workspace is live; the report's last step names it, links it for its opener (`by`, its owner; accountants brought
-  along are members too) and ticks once it is live. No bill, history or verdict moves, and no money. Opening it needs
+  along are members too) and ticks once it is live. Each vendor in the list also says how often people agreed with
+  the agent on its bills, with the count (the ladder's `byVendor` rows, keyed by counterparty id; autonomy ladder AL8),
+  and the list keeps its order by name. No bill, history or verdict moves, and no money. Opening it needs
   no migration; bringing an accountant along needs migration `0143`. Going live keeps the accountant (accountant client
   links AC4): the report lists the workspace's accountants (`sliceAccountants`, best effort) as "Bring your accountant
   ... along", ticked, and `startLiveSlice` gets the ones left ticked as `accountantIds`. Before `0143` runs, the report
@@ -1685,6 +1705,23 @@ The answer is a
 row of `report_baselines` (migration 0095), which the tenant role can only read and add to, and a signed
 `report_baseline_answered` entry; the newest row is read (`src/lib/report-baseline.ts`). The agreement rate the report,
 the console's shadow mode panel and the shared copy show is one function, `agreementRate` (`src/lib/verdict-rate.ts`).
+
+**Agreement by decision and by vendor** (`docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md`, the autonomy
+ladder's first step) is worked out on the report page from the facts `readReportFacts` already read, so it adds no
+query and has no failure of its own (AL6). `ladderVerdicts` (`src/lib/autonomy-ladder.ts`, pure) joins each verdict to
+the action of the decision it is about (what `decision_verdicts.agent_action` stores) and to its payable's
+counterparty; `autonomyLadder` leaves sample counterparties out, even while the report counts sample data for want of
+a real bill, and counts per decision kind (in `AGENT_DECISION_ACTIONS` order, labelled Pay, Schedule, Hold, Flag for
+review, Ask for details) and per vendor (most verdicts first, then name, then id). Each row is `{ key, label, given,
+agreed, disagreed, rate, enough }`: `given` counts decisions, since a bill decided twice can carry two verdicts, and
+`rate` is `agreementRate` only from `VERDICTS_BEFORE_LIVE` (5) verdicts, null below. Agreement here is the verdict
+alone, never the model against the written policy (`agreedWithReference`), the agent against what the business paid
+(`compareActuals`) or /open's flags upheld. The report's block says it counts verdicts on real bills and names Agent vs
+what really happened, the one of those figures on the same page, as a different one (AL1). The page computes it only
+while the readiness steps show; `ReportReadiness` renders it after its steps (`AgreementLadder`, stacked rows on a
+phone), and `LiveSliceStart` takes the `byVendor` rows as `agreement`, showing each rate with its agreed count, as the
+report's table does, so a rate rounded to 100% still shows a Disagree. The shared report keeps its single agreement
+figure, and /open is unchanged.
 
 **A shared report** (same spec, S1-S6, S10-S14) is a public, revocable, live copy of the report. A share is a row of
 `report_shares` (0095) holding the SHA-256 of its link's secret (`vxs_` and 43 base64url characters,
@@ -4613,17 +4650,29 @@ so the pack and each evidence page say the same. `words.ts` words every cell onc
 table (`closePackTable`, plain strings, which the Google Sheets export writes RAW) and the CSV (`closePackCsv`: a byte-order
 mark, CRLF, `csvCell` on every cell) with its 51 `CLOSE_PACK_COLUMNS`. `read.ts` reads; `record.ts` records downloads.
 
-**The read** (`readClosePack`, inside `inOrg` or `withOrg`, through `db()` only, writing nothing). The month's
+**The read** (`readClosePack`, inside `inOrg` or `withOrg`, through `db()` only, writing nothing). Each read starts the
+moment the reads it needs have answered, a promise per read chained with `.then` (close pack page speed,
+`docs/superpowers/specs/2026-10-26-close-pack-page-speed-design.md` CS2): three rounds. First, together: the month's
 `payment_intents` whose `confirmed_at`, `created_at` or `submitted_at` falls in it, a page of 1000 at a time, at most
-2,001 to tell a cut; the month's `escrow_funded` and `escrow_refunded`; the first `compliance_sweep` that recorded
-`sanctionedWallets`; the ledger's head; the members (`listMembers`, `null` on failure); then the bills, milestones and
-`invoices.document_pay_to` (through `readDocumentPayTo`, none before `0136`) a hundred ids per filter; then the payees,
-the bills' and milestones' entries by `detail->>invoiceId` and `detail->>milestoneId`, the `decision_verdict` entries
-by `detail->>subjectId`, and the payees' address entries by `detail->>counterpartyId`, each paged by `seq`; then one
-`compliance_checks` read per distinct payee and anchor time (the agent's decision, else the paying entry, else when it
-was sent), ten at once, a failure marking those payments `unreachable`. It builds twice, as `readEvidence` does: once to
-find the entries the rows cite, then, after `verifyEntry` checks each of those alone with
-`ledgerPublicKeyPems(ledgerVerificationKeyring())`, retired keys included, again with the checks.
+2,001 to tell a cut; the month's `escrow_funded` and `escrow_refunded`; the workspace's `payee_lock_changed` up to the
+month's end; the first `compliance_sweep` that recorded `sanctionedWallets`; the ledger's head; the members
+(`listMembers`, `null` on failure). Once the payments answer: the bills and `invoices.document_pay_to` (through
+`readDocumentPayTo`, none before `0136`, its hundreds asked for at once), and the entries by `detail->>invoiceId` and the
+`decision_verdict` entries by `detail->>subjectId`, asked for by every invoice a payment names, those naming a customer's
+invoice dropped before building; the milestones and their entries by `detail->>milestoneId` once the escrow moves are in
+too. Once the bills and milestones answer: the payees, their address entries by `detail->>counterpartyId`, and the
+screening. Ids go a hundred per filter and ledger reads are paged by `seq`. The screening (CS3) is each settled
+payment's payee's newest complete check at or before its anchor (the agent's decision, else the paying entry, else
+when it was sent; `screeningAnchors` reads only the entries naming a bill): one `compliance_checks` read per hundred
+payees, up to the latest anchor, newest first with a tie to the larger `id`, a page of 1000, picked per payee and time
+in memory to the microsecond; a hundred whose read fails, fills its page or holds a time that does not parse are read
+one payee and time at a time, ten in flight, a failure marking those payments `unreachable`. `buildClosePack` gets
+exactly the inputs it got before the reads went at once (CS1; `tests/support/close-pack-read-before.ts` is that reader,
+kept for the test). It builds twice, as `readEvidence` does: once to find the entries the rows cite, then, after
+`verifyEntry` checks each of those alone with `ledgerPublicKeyPems(ledgerVerificationKeyring())`, retired keys
+included, again with the checks; the keys object is prepared once, so each key is imported once a read (CS6). Each read
+logs one `close_pack_timing` line (CS7): whole milliseconds for `reads`, `screening`, `verify`, `build` and `total`,
+and the counts of payments, entries read, entries cited and screening requests, naming no workspace or person.
 
 **The rules.**
 - **The month** (CP1). A calendar month in UTC; no workspace has a time zone. With none, the last full month; this month
@@ -4661,7 +4710,14 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
   Audit log). `requireMembership` then `inOrg`; `?month=` read once through `closePackMonthFrom`. A member reads it ten
   times at once, then once every 6 seconds (`takeClosePackPageToken`, per instance), since each read checks every cited
   signature. Viewing and printing record nothing. The print drops the shell, the controls, the buttons and the links,
-  adds a line only the print shows, and keeps each card on one page where it fits (`break-inside-avoid`).
+  adds a line only the print shows, and keeps each card on one page where it fits (`break-inside-avoid`). The pack, the
+  header's clock (`shellClock()`, the day and the last cycle: not `stats()`), `shellStatus()` and the Google Sheets view
+  are read in one `Promise.all` inside the scope (close pack page speed CS4), and the page logs one `close_pack_timing`
+  line (`auth`, `scope`, `reads`, `total`, and whether the pack was read; CS7). Each icon the cards show is drawn once
+  as an SVG `<symbol>` that every check badge and explorer link points at with `<use>` (the card the accountants
+  guide's screenshot shows alone, `ClosePackPayment`, draws its own), and the facts' label and value styles are set
+  once on each list (CS8): twenty cards are about 158 KB of markup, from 204 KB. It exports
+  `maxDuration = 300`, as Bills, counterparties and the report do (CS9).
 - **The downloads** (CP12; `GET /api/evidence/close-pack?org=&month=&format=csv|json`). The audit export's gate in its
   order: a cross-site request refused (403), the session (401), a bad format or month before the workspace is looked up
   (400), the membership read afresh (404, as for a workspace that does not exist). JSON by default, last month by
@@ -4687,7 +4743,8 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
 - **Later surfaces** (CP18). `GET /api/v1/close-packs/{month}` builds on `closePackDocument` in its own change, and the
   Google Sheets export (below) on `closePackTable`; `ClosePackDocument` holds only plain JSON values.
 - **No migration** (CP19). Every column read predates `0136` but `invoices.document_pay_to`, which reads as none before
-  it, so the pay-to check does not apply.
+  it, so the pay-to check does not apply. The indexes that would serve its reads once a workspace's ledger is large are
+  listed in the page speed spec (CS10), for a later additive migration.
 
 ## Google Sheets: the close pack exported
 
@@ -4706,7 +4763,7 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   the close pack page's control `src/components/close-pack/SheetsExport.tsx`. The page makes that control from the month
   and the workspace and hands it to `ClosePackView` as `sheets`, which keeps it at one place in the tree whether the pack
   was read or not, so a render whose read is refused keeps the export's answer; a done export does not revalidate, since
-  that would read the whole pack again inside the action's 120 seconds, and its answer, which carries its month, stands
+  that would read the whole pack again inside the action's 300 seconds, and its answer, which carries its month, stands
   in for that month's "Last exported" line until the page is read again. The control is keyed by the month, since a
   month link changes only `?month=` and Next keeps the page's client state across it: another month starts it afresh.
 - **Off, then not set up** (GS2). Without `GOOGLE_SHEETS_CLIENT_ID` and `GOOGLE_SHEETS_CLIENT_SECRET`, or with an id
@@ -4762,7 +4819,7 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
   `gone`, `unavailable`, `bad_response`), and a log line names the call, the status and that code. At most one retry a
   call: a 401 refreshes the token once; a rate limit of 10 seconds or less is waited out; a 5xx or timeout repeats only
   reads and the values write, never a create, an update or the format. No call starts after 90 seconds; the close pack
-  page sets `maxDuration = 120` for its Server Actions.
+  page sets `maxDuration = 300` for its Server Actions.
 - **Tokens and reconnecting** (GS13). Google's refresh answer carries no refresh token, so the one sent is kept.
   `invalid_grant`, `unauthorized_client` or `invalid_client`, a 401 that stays after a refresh, or a 403 without the
   Drive permission mark the connection `needs_reconnect` (`markSheetsReconnect`), which the card and the accountant

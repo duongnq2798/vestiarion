@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { EvidenceBrowserCheck } from "@/components/EvidenceBrowserCheck";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -64,11 +65,19 @@ export const LINK_STATE: Record<EvidenceLink["state"], string> = {
   cannot_open: "Can't be opened",
 };
 
-/** A label in words with its icon: never by colour alone (E3). */
-export function EvidenceLabel({ kind, prefix, className }: { kind: EvidenceKind; prefix?: string; className?: string }) {
+/** A label's icon. */
+export function evidenceIcon(kind: EvidenceKind): LucideIcon {
+  return LABEL[kind].icon;
+}
+
+/**
+ * A label in words with its icon: never by colour alone (E3). `icon` draws the kind's icon some other way, as the close
+ * pack does, which points each badge at one drawn once for its page (close pack page speed CS8).
+ */
+export function EvidenceLabel({ kind, prefix, className, icon }: { kind: EvidenceKind; prefix?: string; className?: string; icon?: ReactNode }) {
   const { icon: Icon, tone } = LABEL[kind];
   return (
-    <Badge size="sm" tone={tone} icon={<Icon aria-hidden />} className={className}>
+    <Badge size="sm" tone={tone} icon={icon ?? <Icon aria-hidden />} className={className}>
       {prefix && <span className="sr-only">{prefix} </span>}
       {EVIDENCE_WORDS[kind]}
     </Badge>

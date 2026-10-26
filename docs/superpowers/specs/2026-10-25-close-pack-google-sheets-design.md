@@ -252,7 +252,8 @@ tagged with `appProperties { vestiarionClosePack: "<org id>:<YYYY-MM>" }`, which
     idempotent; never `files.create`, `files.update` or the format `batchUpdate`: the next export finds the file by its
     tag instead (GS7).
 - An export starts no new call after 90 seconds and fails `unavailable`. The close pack page sets
-  `export const maxDuration = 120`, which its server actions take (Next 16 `maxDuration`, "Server Actions").
+  `export const maxDuration = 120`, which its server actions take (Next 16 `maxDuration`, "Server Actions"); 300 since
+  docs/superpowers/specs/2026-10-26-close-pack-page-speed-design.md CS9.
 - A log line names the call, the status and the reason code. Never a token, a body, an email or a spreadsheet's name.
 - One export is about seven calls (list, create or rename, get, format, values, read back, and a second list after a
   create). Google allows 60 a minute per user and project.
@@ -578,7 +579,7 @@ the same place in the tree whether the pack was read or not: a render whose read
 shows its refusal in the pack's place and keeps the export's answer. The page keys it by the month
 (`key={month.key}`): the month links change only `?month=`, which Next does not remount the page for, so the control
 starts again on another month, with that month's own "Last exported" line, and stays mounted across renders of the same
-month. The page sets `export const maxDuration = 120` and
+month. The page sets `export const maxDuration = 120` (300 since the close pack page speed change, CS9) and
 reads the view with `closePackSheetsView({ month, role: membership.role })` (best effort: a read that fails is
 `hidden`, logged).
 
@@ -594,8 +595,8 @@ reads the view with `closePackSheetsView({ month, role: membership.role })` (bes
 `approver` and `viewer` get `hidden` for `connect` and `reconnect`, and `ready` without the button.
 
 The action's answers (`exportClosePackToSheetsAction`), kept sticky in the component so a revalidated page does not drop
-them. A done export does not revalidate: that would read the whole pack again inside the action's 120 seconds, after an
-export that may have used most of them. Its answer carries its month and stands in for the page's older "Last exported"
+them. A done export does not revalidate: that would read the whole pack again inside the action's 120 seconds (300
+since close pack page speed CS9), after an export that may have used most of them. Its answer carries its month and stands in for the page's older "Last exported"
 line, for that month only, until the page is read again; a `reconnect` revalidates, so the card and the page say so:
 - done: "Exported 14 payments to Google Sheets." (one: "Exported 1 payment to Google Sheets."; none: "Exported this
   month to Google Sheets: no payment settled in it yet."), then "In the Google Drive of du***@gmail.com." and **Open the
@@ -830,7 +831,7 @@ Existing tests to extend:
   `googleSheetsSettingsFromEnv` mocked on; naming no model provider, as Asana.
 - `tests/connectors-status.test.ts`: an `export` connection's revoked and reconnect words.
 - `tests/close-pack-page.test.tsx`: `vi.mock("@/app/actions/googlesheets", ...)`; each `sheets` view renders; the page
-  exports `maxDuration = 120`.
+  exports `maxDuration = 120` (300 since close pack page speed CS9).
 - `tests/close-pack-route.test.ts`: a recent `close_pack_export_failed` counts toward the eleventh download.
 - `tests/dal.test.ts` and `tests/tenant-rpcs-migration.test.ts`: `googlesheets_connector_ready` in `TENANT_RPCS`.
 - `tests/security-page.test.tsx` and `tests/legal-pages.test.tsx`: the new dates; the subprocessor matches both ways.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { stats } from "@/lib/queries";
+import { shellClock, stats } from "@/lib/queries";
 import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
 /**
@@ -53,5 +53,31 @@ describe("stats — paid out to date", () => {
     expect(result.totalPaidOut).toBe(542);
     const [paid] = fake.requests.filter((r) => r.path === "/rest/v1/invoices" && r.params.get("status") === "eq.paid");
     expect(paid.params.get("select")).toContain("paid_amount");
+  });
+});
+
+describe("shellClock — the header's clock alone (close pack page speed CS4)", () => {
+  it("reads the simulated day and the last cycle, and nothing stats() adds up or counts", async () => {
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/sim_clock") return { body: [{ current_day: 12 }] };
+      if (request.path === "/rest/v1/ledger_entries") return { body: [{ ts: "2026-10-26T08:00:00+00:00" }] };
+      return { body: [] };
+    });
+    const clock = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => shellClock());
+    expect(clock).toEqual({ day: 12, clockMode: expect.any(String), lastCycleAt: "2026-10-26T08:00:00+00:00" });
+    expect(fake.requests.map((request) => request.path).sort()).toEqual(["/rest/v1/ledger_entries", "/rest/v1/sim_clock"]);
+    const [cycle] = fake.requests.filter((request) => request.path === "/rest/v1/ledger_entries");
+    expect(cycle.params.get("action")).toBe("eq.cycle_complete");
+    expect(cycle.params.get("order")).toBe("seq.desc");
+    expect(cycle.params.get("limit")).toBe("1");
+  });
+
+  it("reads day 0 and no cycle for a workspace that has never run one, as stats() does", async () => {
+    const fake = fakeSupabase(() => ({ body: [] }));
+    const run = <T,>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), fn);
+    const clock = await run(() => shellClock());
+    expect(clock).toMatchObject({ day: 0, lastCycleAt: null });
+    const all = await run(() => stats());
+    expect({ day: all.day, clockMode: all.clockMode, lastCycleAt: all.lastCycleAt }).toEqual(clock);
   });
 });
