@@ -160,7 +160,7 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
               How the figures are counted
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-ink-2">
-              The same definitions hold for every figure on this page, on both networks and for every period.
+              The same definitions hold for every figure of both networks, for every period. The Quality Lab&apos;s result above states its own.
             </p>
             <div className="mt-5 grid gap-3 lg:grid-cols-2">
               <Method title="Networks, periods and freshness">

@@ -25,7 +25,10 @@ import { APPENDED_LEDGER_ROW, signedOrgs } from "./signed-org";
  * table, the invoice write, and a ledger entry really signed with the organization's key (`signedOrgs`). What is faked:
  * PostgREST (`fakeSupabase`), the clock (`today`, `Date` only, so promises and fetches still run), the chain provider
  * (`LabChain`, which counts what it took), and the model, which the test file stubs with `vi.mock` and scripts here
- * (`scriptModel`). The book is written back: what one cycle wrote, the next one reads.
+ * (`scriptModel`). Two inputs are handed in rather than read: the spending limit contract's answer on Arc (`onChainLimit`,
+ * whose verdict the test scripts, so `spendingLimitVerdict` never asks Arc; with none, no contract is enforced, as for a
+ * workspace without one), and the new payee facts (`newPayee`), so `loadNewPayeeFacts` does not run while the check on
+ * them does. The book is written back: what one cycle wrote, the next one reads.
  *
  * Call `apHarness()` at the top of a test file, so the signing hooks register there.
  */

@@ -79,6 +79,11 @@ describe("the Quality Lab's result (QL7)", () => {
   it("takes the heading level its page needs", () => {
     expect(renderToStaticMarkup(<QualityLabResult id="lab" heading="h3" />)).toMatch(/<h3 id="lab"[^>]*>/);
   });
+
+  it("names what it scores in its heading, so the heading and a section it labels say which scenarios", () => {
+    const heading = /<h2 id="quality-lab"[^>]*>(.*?)<\/h2>/s.exec(markup)?.[1] ?? "";
+    expect(text(heading)).toBe(`Quality Lab ${scoreWords(results.summary)}`);
+  });
 });
 
 describe("the Quality Lab on /open (QL7)", () => {
@@ -89,6 +94,12 @@ describe("the Quality Lab on /open (QL7)", () => {
     expect(lab).toBeGreaterThan(page.indexOf('<section aria-labelledby="mainnet"'));
     expect(lab).toBeLessThan(page.indexOf('<section aria-labelledby="method"'));
     expect(text(page)).toContain(scoreWords(results.summary));
+  });
+
+  it("is left out of the method's definitions, which hold for the networks' figures, and states its own", async () => {
+    const page = text(renderToStaticMarkup(await OpenPage({ searchParams: Promise.resolve({}) })));
+    expect(page).toContain("The same definitions hold for every figure of both networks, for every period. The Quality Lab's result above states its own.");
+    expect(page).not.toContain("every figure on this page");
   });
 });
 

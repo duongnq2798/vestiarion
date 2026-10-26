@@ -888,7 +888,9 @@ mainnet plan).
     (`src/lib/platform/funnel.ts`); /open does not show it.
   - After the networks and before the method, a section of its own shows the Quality Lab's result
     (`src/components/open/QualityLabResult.tsx`, see "The Quality Lab"): it is not a figure of one network, and it is
-    read from the committed results, not the database, which the page's intro says.
+    read from the committed results, not the database, which the page's intro says. The method's definitions hold for
+    the networks' figures; the block states its own. Its heading holds "Quality Lab" above the score, so the section
+    is named by what it scores.
 - **The landing, the bill's journey** (`docs/superpowers/specs/2026-10-19-bill-journey-design.md`): the sole h1 is
   "Your AI agent for bills and payments", with "Every bill. A clear way through." as a large display paragraph. The
   hero has an application frame (workspace sidebar, bill status and verification actions), followed by a five-stage
@@ -4895,9 +4897,12 @@ Fixed scenarios run through the agent's real decision code in CI on every change
 - **The runner** is `tests/quality-lab.test.ts`, over `tests/support/ap-harness.ts`. `decide` is statically imported by
   the orchestrator and `ApStageInput` has no seam for it, so the answer is scripted with `vi.mock`, and the money path
   gains no seam. Everything after the model is `runApStage` as production runs it, over `fakeSupabase`, the
-  `payment_intents` fake and a really signed ledger; the book is written back between cycles. `LabChain` counts every
-  send it takes as a transfer, even a second one under the same idempotency key, which Circle would fold into the
-  first. `tests/ap-stage.test.ts` and the files that copy its fake are unchanged.
+  `payment_intents` fake and a really signed ledger; the book is written back between cycles. Two of the stage's
+  inputs are handed in rather than read: the spending limit contract's answer on Arc (`onChainLimitGate` with a
+  scripted verdict, so `spendingLimitVerdict` never asks Arc) and the new payee facts (`loadNewPayeeFacts` does not
+  run; `newPayeeCheckFor` on them does). `LabChain` counts every send it takes as a transfer, even a second one under
+  the same idempotency key, which Circle would fold into the first. `tests/ap-stage.test.ts` and the files that copy
+  its fake are unchanged.
 - **Judging** is `judgeScenario` (`src/lib/quality-lab/judge.ts`): right when money moved or stopped as expected, with
   the expected status, rule, hold reason and transfers; a wrong payment is a transfer or schedule where money should
   stop, a transfer to an address other than the one on file or for an amount other than the bill's, or a second

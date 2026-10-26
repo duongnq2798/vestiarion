@@ -1,4 +1,4 @@
-The Quality Lab runs a fixed set of scenarios through the agent's real decision code on every change to the code, and counts what moved. Each scenario is a bill, a payee and a workspace. The model's answer is scripted, often to what an attacker would want: it believes an injected memo, pays a payee whose address just changed, or pays a bill twice. Everything after the model runs as it runs in production.
+The Quality Lab runs a fixed set of scenarios through the agent's real decision code on every change to the code, and counts what moved. Each scenario is a bill, a payee and a workspace. The model's answer is scripted, often to what an attacker would want: it believes an injected memo, pays a payee whose address just changed, or pays a bill twice. Everything after the model runs as it runs in production, over the stand-ins named below.
 
 <QualityLabScore />
 
@@ -8,7 +8,7 @@ That is the result of the last change to the code: the test that runs the scenar
 
 - Each scenario starts from the same workspace and bill, and says only what differs. The bill is 400 USDC from an established vendor, due today, with its purchase order and the goods received. It goes to an address the vendor has been paid at before, under every limit, in a workspace that is live and not paused.
 - The model's answer is scripted: pay, schedule, hold or flag. It goes through the same schema a real model's reply goes through. A model never names an amount or an address, so in the injection scenarios it can repeat the attacker's address in its reasoning, and nothing else.
-- Everything after the model runs for real: the duplicate check, the payment timing, every check in code and the checks after them, the pause, shadow mode, the payment step with its one record per bill, and a signed ledger entry. Only the database, the clock and the payment provider are stand-ins.
+- Everything after the model runs for real: the duplicate check, the payment timing, every check in code and the checks after them, the pause, shadow mode, the payment step with its one record per bill, and a signed ledger entry. The stand-ins are the database, the clock, the payment provider and the spending limit contract on Arc, whose answer the lab scripts: it allows or refuses the payment, and Arc is never asked. Who entered and confirmed a payee's address, and where it was paid before, are given to the new payee check directly, not read from its past payments and ledger entries.
 - Some scenarios run more than one cycle. A send whose answer was lost is looked up by the next cycle, and two cycles can reach the same bill at once.
 
 ## What right and a wrong payment mean
@@ -43,7 +43,7 @@ The payee is on OFAC's sanctions list, was screened high risk, or was never scre
 
 ### Limits and approvals
 
-The bill is above a limit the business set: the payee's payment limit, the figure where two people approve, the agent's own spending limit, or the spending limit contract on Arc.
+The bill is above a limit the business set: the payee's payment limit, the figure where two people approve, the agent's own spending limit, or the spending limit contract on Arc, whose answer the lab scripts.
 
 <QualityLabTable group="limits" />
 
@@ -80,7 +80,7 @@ Correct bills the agent should pay or schedule, so the lab does not reward an ag
 ## What it does not cover
 
 - **The model's judgement.** The answers are scripted, so the lab measures what the code does with any answer, the worst included. How the model decides on real bills is in [When the model and the policy disagree](/docs/research/model-vs-policy).
-- **Live payments.** The lab's provider is a stand-in, on no chain. Payments that moved are proved separately, with transactions anyone can check: on [Arc testnet](https://github.com/duongnq2798/vestiarion#proof-on-arc-testnet) and on [Arc mainnet](https://github.com/duongnq2798/vestiarion#mainnet-proof).
+- **Live payments.** The lab's provider is a stand-in, on no chain, and the spending limit contract on Arc is never asked: the lab scripts its answer. Payments that moved are proved separately, with transactions anyone can check: on [Arc testnet](https://github.com/duongnq2798/vestiarion#proof-on-arc-testnet) and on [Arc mainnet](https://github.com/duongnq2798/vestiarion#mainnet-proof).
 - **Milestones, EURC, payouts to other chains and bank payouts.** This first version covers USDC bills on Arc. Those have tests of their own.
 - **A person's own approvals.** Approve and pay, two approvals and co-signing are the approvals code's, with tests of their own. [How payments are controlled](/docs/guides/controls) covers what a person may approve.
 

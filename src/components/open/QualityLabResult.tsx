@@ -21,9 +21,10 @@ export function QualityLabResult({ id, heading: Heading = "h2", className }: { i
     <div className={cn("rounded-2xl border border-line bg-surface p-5 sm:p-6", className)}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-2xl">
-          <Eyebrow className="text-xs">Quality Lab</Eyebrow>
-          <Heading id={id} className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-            {scoreWords(summary)}
+          {/* The caption is inside the heading, so the heading and a section it labels name what is scored (QL7). */}
+          <Heading id={id} className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
+            <Eyebrow className="block text-xs">Quality Lab</Eyebrow>
+            <span className="mt-2 block">{scoreWords(summary)}</span>
           </Heading>
           <p className="mt-3 text-[0.9375rem] leading-7 text-ink-2">
             Each scenario runs through the real decision code on every change, with the model&apos;s answers scripted, often to what an attacker

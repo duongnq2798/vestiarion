@@ -34,6 +34,11 @@ QL4)".
   (`tests/support/payment-intents.ts`), the invoice write, and a ledger entry really signed with the organization's key
   (`signedOrgs()`). The clock is faked for `Date` only. The book is written back, so a later cycle reads what an earlier
   one wrote.
+- The stand-ins are named wherever the lab is described: the database (`fakeSupabase`), the clock, the payment
+  provider (`LabChain`), and the spending limit contract's answer on Arc, which the runner scripts through
+  `onChainLimitGate`'s `verdict`, so `spendingLimitVerdict` never asks Arc. The new payee facts (who entered and
+  confirmed a payee's address, and where it was paid before) are handed to the stage through its existing `newPayee`
+  input, so `loadNewPayeeFacts` does not run; `newPayeeCheckFor` on those facts does.
 - `tests/ap-stage.test.ts` and the other files that copy its fake are left as they are.
 - If wrong: a lab that stubs the code it claims to test proves nothing. A seam added for the lab would be a new way into
   the money path.
@@ -87,6 +92,8 @@ QL4)".
   expected one, and it made no wrong payment.
 - A **wrong payment** is any transfer or schedule in a scenario whose money should stop; any transfer whose
   destination or amount differs from the address on file and the bill's amount; or a second transfer for the same bill.
+  A schedule is any write of the run that left the bill scheduled, even one a later cycle undid, or the bill's status
+  once the run ends: a bill that began scheduled and that no cycle touched is still a schedule.
 - Transfers are counted from the fake provider: each send it took is one, whatever its idempotency key. Unlike Circle,
   it never folds a second send under the same key into the first, so the count is stricter than production.
 - The judging is `judgeScenario` in `src/lib/quality-lab/judge.ts`, pure, and its definitions are the ones the docs
@@ -119,6 +126,8 @@ QL4)".
   <scenarios> scenarios right" and "<n> wrong payments", with the real number; each group's count; one line saying each
   scenario runs through the real decision code on every change, with the model's answers scripted, often to the
   attacker's wish; the definitions (QL4); and a link to the docs page.
+- Its heading holds "Quality Lab" above the score, so the heading, and the /open section it labels, name what is
+  scored to someone moving by headings or landmarks.
 - On /open it is its own section, after the networks and before the method: it is not a figure of one network. It
   draws no table (the page's tests count its tables).
 - On /how-it-decides it sits in the claims section, after the four claims. "Four claims you can check" is unchanged.
@@ -142,9 +151,12 @@ QL4)".
   holds the item to the lab's test file and CI.
 - README (Safety architecture, Verifiable activity and Development), ARCHITECTURE.md (a Quality Lab section, /open and
   /how-it-decides, and the Developer docs list of committed generated files), `docs/self-hosting.md`'s script table,
-  the controls guide's checks in code, and CHANGELOG.md say what it is.
+  the controls guide's checks in code, and CHANGELOG.md say what it is. The controls guide says it runs scenarios for
+  USDC bills through most of those checks (not the project's budget, EURC or other chains), with the model's answers
+  scripted, often as an attacker would want them.
 - /open's intro says every figure is read from the production database; it now adds that the Quality Lab's result
-  comes from the test instead.
+  comes from the test instead. Its method says its definitions hold for every figure of both networks, for every
+  period, and that the Quality Lab's result states its own: the result is of no network and no period.
 - No `/api/v1`, webhook or ledger change, so `content/docs/changelog.mdx` is unchanged.
 - If wrong: a public page that says more than the lab does is a claim the code does not back.
 

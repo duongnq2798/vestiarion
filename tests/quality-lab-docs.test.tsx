@@ -69,6 +69,25 @@ describe("the Quality Lab's docs page (QL8)", () => {
       expect(SOURCE, part).toContain(part);
     }
   });
+
+  it("names every stand-in: the contract's answer on Arc is scripted, and the new payee facts are given", () => {
+    expect(SOURCE).toContain(
+      "The stand-ins are the database, the clock, the payment provider and the spending limit contract on Arc, whose answer the lab scripts"
+    );
+    expect(SOURCE).toContain("are given to the new payee check directly, not read from its past payments and ledger entries.");
+    expect(SOURCE).not.toMatch(/Only the database, the clock and the payment provider are stand-ins/);
+  });
+});
+
+/** Every page that describes the lab says no more than it does: answers often an attacker's, and USDC bills only. */
+describe("the Quality Lab where other pages describe it (QL9)", () => {
+  const controls = readFileSync(path.join(process.cwd(), "content", "docs", "guides", "controls.mdx"), "utf8");
+  const line = controls.split("\n").find((row) => row.includes("(/docs/research/quality-lab)")) ?? "";
+
+  it("says in the controls guide that it covers most of the checks, for USDC bills, with answers often an attacker's", () => {
+    expect(line).toContain("runs fixed scenarios for USDC bills through most of these checks");
+    expect(line).toContain("often as an attacker would want them");
+  });
 });
 
 describe("the score and the tables, on the page (QL8)", () => {

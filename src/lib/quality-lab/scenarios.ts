@@ -141,7 +141,7 @@ export interface QualityLabScenario {
     payeeLockHours?: number;
     /** The agent's own daily spending limit, in USDC. */
     dailySpendingLimit?: number;
-    /** The spending limit contract on Arc, and what it says of this payment. */
+    /** The spending limit contract on Arc, and what it says of this payment: an answer the runner scripts, never asking Arc. */
     spendingLimitOnArc?: "allows" | "refuses";
   };
   history?: {
