@@ -782,10 +782,15 @@ describe("the export's read on the migrated schema (SX1, SX2, SX9)", () => {
 
   /** An owner's change to the payee lock, as `changePayeeLock` signs it (src/lib/payee-lock.ts): who, from what, to what. */
   async function lockChanged(orgId: string, at: string, by: string, from: object, to: object): Promise<void> {
+    await lockEntry(orgId, at, { by, from, to });
+  }
+
+  /** A `payee_lock_changed` entry with the detail given, which may not be the shape `changePayeeLock` signs. */
+  async function lockEntry(orgId: string, at: string, detail: object): Promise<void> {
     await db.query(
       `insert into public.ledger_entries (org_id, ts, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash)
        values ($1, $2, 'human', 'system', 'payee_lock_changed', 'Changed the payee lock', $3, 'b', 's', 'p', gen_random_uuid()::text)`,
-      [orgId, at, JSON.stringify({ by, from, to })]
+      [orgId, at, JSON.stringify(detail)]
     );
   }
 
@@ -888,8 +893,8 @@ describe("the export's read on the migrated schema (SX1, SX2, SX9)", () => {
     await lockChanged(ours, "2026-10-13T15:00:00Z", team, { on: true, coolingHours: 24 }, { on: false, coolingHours: 24 });
     await lockOnFile(ours, false, 24);
 
-    // A team workspace whose lock is on with no change on record, as a change whose entry failed (it is written best
-    // effort) leaves it, or as Arc mainnet's starting lock is: when it was turned on is not in the ledger.
+    // A team workspace whose lock is on with a 24-hour wait and no change on record, as a change whose entry failed (it
+    // is written best effort) leaves it: when it was turned on is not in the ledger.
     const unrecorded = await org("team-unrecorded", team);
     const unrecordedVendor = await payee(unrecorded, "Unrecorded vendor");
     await lockOnFile(unrecorded, true, 24);
@@ -903,6 +908,37 @@ describe("the export's read on the migrated schema (SX1, SX2, SX9)", () => {
     await lockChanged(missed, "2026-10-15T11:00:00Z", team, { on: true, coolingHours: 48 }, { on: false, coolingHours: 48 });
     await lockOnFile(missed, false, 48);
     await entry(missed, "2026-10-15T12:00:00Z", "ap_hold", decisionOn(missedVendor, 402));
+
+    // A team workspace whose lock is on with no wait and no change on record, the shape of Arc mainnet's starting lock
+    // (MAINNET_STARTING_PAYEE_LOCK): it differs from the starting setting only in being on.
+    const onNoWait = await org("team-on-no-wait", team);
+    const onNoWaitVendor = await payee(onNoWait, "On with no wait vendor");
+    await lockOnFile(onNoWait, true, 0);
+    await entry(onNoWait, "2026-10-16T10:00:00Z", "ap_hold", decisionOn(onNoWaitVendor, 501));
+
+    // A team workspace given a 4-hour wait on record, then 24 hours by a change whose entry failed: the lock stayed on,
+    // and only its wait differs from what the ledger says.
+    const rewaited = await org("team-rewaited", team);
+    const rewaitedVendor = await payee(rewaited, "Rewaited vendor");
+    await lockChanged(rewaited, "2026-10-17T09:00:00Z", team, off, { on: true, coolingHours: 4 });
+    await entry(rewaited, "2026-10-17T10:00:00Z", "ap_hold", decisionOn(rewaitedVendor, 601));
+    await lockOnFile(rewaited, true, 24);
+
+    // A team workspace whose one change has no `to`: what it changed the lock to is unknown, though the setting on file
+    // is the one a workspace starts with.
+    const noTo = await org("team-no-to", team);
+    const noToVendor = await payee(noTo, "No to vendor");
+    await lockEntry(noTo, "2026-10-18T09:00:00Z", { by: team, from: off });
+    await entry(noTo, "2026-10-18T10:00:00Z", "ap_hold", decisionOn(noToVendor, 701));
+    await lockOnFile(noTo, false, 0);
+
+    // A team workspace whose changes name the lock as text, though the next one agrees with the last: not a setting.
+    const textLock = await org("team-text-lock", team);
+    const textLockVendor = await payee(textLock, "Text lock vendor");
+    await lockEntry(textLock, "2026-10-19T09:00:00Z", { by: team, from: off, to: { on: "yes", coolingHours: 24 } });
+    await entry(textLock, "2026-10-19T10:00:00Z", "ap_hold", decisionOn(textLockVendor, 801));
+    await lockChanged(textLock, "2026-10-19T11:00:00Z", team, { on: "yes", coolingHours: 24 }, off);
+    await lockOnFile(textLock, false, 0);
 
     const writes: string[] = [];
     line = await runShadowExport({ client: { query: (text, params) => db.query(text, params) }, write: (_path, text) => void writes.push(text), now: READ_AT });
@@ -923,8 +959,12 @@ describe("the export's read on the migrated schema (SX1, SX2, SX9)", () => {
       ["shadow-06", "w3", "hold", 301, null],
       ["shadow-07", "w4", "hold", 401, null],
       ["shadow-08", "w4", "hold", 402, null],
+      ["shadow-09", "w5", "hold", 501, null],
+      ["shadow-10", "w6", "hold", 601, null],
+      ["shadow-11", "w7", "hold", 701, null],
+      ["shadow-12", "w8", "hold", 801, null],
     ]);
-    expect(line).toBe("8 shadow decisions from 4 workspaces: 1 agreed, 0 disagreed, 7 with no verdict. Wrote src/lib/quality-lab/shadow-decisions.json");
+    expect(line).toBe("12 shadow decisions from 8 workspaces: 1 agreed, 0 disagreed, 11 with no verdict. Wrote src/lib/quality-lab/shadow-decisions.json");
   });
 
   it("never carries a customer's decision, its verdict, or any verdict's reason, though its creator is gone", () => {
@@ -945,6 +985,10 @@ describe("the export's read on the migrated schema (SX1, SX2, SX9)", () => {
       [301, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
       [401, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
       [402, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
+      [501, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
+      [601, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
+      [701, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
+      [801, { role: "vendor", addressChangedHoursBefore: null, addressChangedSinceDecision: false }, { present: false, differs: false }],
     ]);
   });
 
@@ -962,6 +1006,14 @@ describe("the export's read on the migrated schema (SX1, SX2, SX9)", () => {
       // Before a change from a setting the ledger never recorded: unknown; after it, what it changed to.
       [401, null],
       [402, { on: false, coolingHours: 48 }],
+      // Each half of the check on its own: on with no wait against the starting off, and 24 hours on file against the
+      // 4 the ledger last recorded. Either is a change the ledger missed.
+      [501, null],
+      [601, null],
+      // A change with no `to` is unknown, never the starting setting, though the setting on file is that one; and a
+      // lock named as text is no setting, though the next change names the same text.
+      [701, null],
+      [801, null],
     ]);
     // Who changed it never reaches the file.
     expect(JSON.stringify(file)).not.toContain(teamMember);

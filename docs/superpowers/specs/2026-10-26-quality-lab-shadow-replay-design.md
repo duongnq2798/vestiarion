@@ -205,6 +205,13 @@ SX3)".
   4. `observed.documentPayTo.differs` is null (SX4): `invoice.pay_to_differs` cannot be rebuilt.
   5. `payeeLock` is null (SX9): `counterparty.cooling_off` cannot be rebuilt when the address changed at or before the
      decision, or when that is unknown (3). An address that never changed waits under no lock.
+  6. After the guardrails, the project budget (`project.budget_exceeded`, project budgets P5) is checked, and its
+     reservation recorded (`observed.project`), only for a payment or schedule they let through that no earlier
+     milestone for the same work held (`obligations.reserve` in `decideApPayable`). A replay that pays or schedules a
+     bill in a project (`projectId` is not null) whose decision did not go ahead (it was not to pay or schedule, or a
+     guardrail or the same work held it) has no `project`, and cannot rebuild `project.budget_exceeded`. A bill in no
+     project never meets it, and the same work (`sameWork`, P9) is recorded whether or not the bill went ahead, so
+     `obligation.duplicate_reference` can be rebuilt.
 - Each counts only for a replayed payment or schedule that reaches the rule. A hold, a flag or a request for information
   meets no rule, and a rule ahead of it that stops the replayed decision settles the outcome whatever the unknown input.
 - If wrong: a replay would count as a regression, or as agreement, an outcome that rests on an input it never had.
