@@ -194,7 +194,8 @@ make sure `git config user.email` is a verified email on the account. `git tag -
 own: `sdk/package.json` and `VERSION` in `sdk/src/version.ts`. A new version is packed with `npm run sdk:pack` into
 `public/sdk/vestiarion-sdk-<version>.tgz`, committed, and published from that file by an owner of the npm organization
 (`npm publish public/sdk/vestiarion-sdk-<version>.tgz --access public`), as [ARCHITECTURE.md](../ARCHITECTURE.md#developer-docs)
-describes. On npm today: 0.1.0, 0.2.0, 0.3.2, 0.3.3, 0.3.4 and 0.3.5 (0.3.0 and 0.3.1 were packed but not published).
+describes. On npm today: 0.1.0, 0.2.0, 0.3.2, 0.3.3, 0.3.4, 0.3.5, 0.3.6, 0.3.7 and 0.4.0 (0.3.0 and 0.3.1 were packed but not
+published).
 
 The README's npm badge names the version itself, since shields.io's npm lookup cannot read this package: a version
 published to npm changes `v0.3.5` in that badge's address too, and `tests/readme-facts.test.ts` holds it to
