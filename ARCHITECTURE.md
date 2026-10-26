@@ -3251,8 +3251,13 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   and standing alone in the text, read by both readers alike, or on file and not contradicted; nothing compared for a
   counterparty that needs none); every `0x` address the text writes being the one on file; and the model's `notes`
   being unset. The first failure gives the reason, built only from the counterparty's name, a purchase order, decimal
-  figures and `0x` hex. Each check is signed as `document_checked` (`appendLedgerEntry`), with the file's SHA-256 and
-  the values compared, never the text, a note, an email address or a link, and with no `observed`.
+  figures and `0x` hex. A set `notes` is then quoted after that sentence as the reader's (` The reader noted: "…"`,
+  `readerNoteWords` in `rules.ts`), within 0144's 300 characters, once `readerNoteOf` has cleaned it: format and control
+  characters out, one line, links, email addresses and tokens replaced, double quotation marks as `'` so it cannot close
+  its quote, at most 200 characters. The card and the decision trail split it back out (`splitReaderNote`) and show it
+  apart, in plain text. Each check is signed as `document_checked` (`appendLedgerEntry`), with the file's SHA-256 and
+  the values compared, the cleaned note as `readerNote` when the model flagged it, never the text, the vendor's note,
+  an email address or a link, and with no `observed`.
 - **The function** (`check_document_request`, service-role definer). It locks the request and records the check once
   (`already_checked` after), refusing a hash that is not the row's. With vendor requests on, a match for a bill that
   lacks its purchase order writes `invoices.po_reference`, spelled as the document writes it, compare-and-set on the
