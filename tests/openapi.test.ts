@@ -8,12 +8,17 @@ import { ApiErrorSchema } from "@/lib/api/schemas";
 import type { AuthenticatedKey } from "@/lib/platform/api-keys";
 import { GET as getCounterparties } from "@/app/api/v1/counterparties/route";
 import { GET as getCounterparty } from "@/app/api/v1/counterparties/[id]/route";
+import { GET as getClosePack } from "@/app/api/v1/close-packs/[month]/route";
 import { GET as getInsights } from "@/app/api/v1/insights/route";
+import { GET as getInvoiceEvidence } from "@/app/api/v1/invoices/[id]/evidence/route";
+import { GET as getInvoiceReceipt } from "@/app/api/v1/invoices/[id]/receipt/route";
 import { GET as getInvoices } from "@/app/api/v1/invoices/route";
 import { GET as getLedger } from "@/app/api/v1/ledger/route";
 import { GET as getLedgerVerify } from "@/app/api/v1/ledger/verify/route";
+import { GET as getMilestoneEvidence } from "@/app/api/v1/milestones/[id]/evidence/route";
 import { GET as getMilestones } from "@/app/api/v1/milestones/route";
 import { GET as getOpenApi } from "@/app/api/v1/openapi.json/route";
+import { GET as getPayeeLockEvidence } from "@/app/api/v1/payee-lock/evidence/route";
 import { GET as getStatus } from "@/app/api/v1/status/route";
 import { GET as getTreasury } from "@/app/api/v1/treasury/route";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
@@ -150,9 +155,33 @@ describe("the OpenAPI document", () => {
         "create-milestone",
         "get-treasury",
         "get-insights",
+        "get-invoice-evidence",
+        "get-milestone-evidence",
+        "get-invoice-receipt",
+        "get-payee-lock-evidence",
+        "get-close-pack",
       ]
     `);
   });
+
+  it("gives the evidence reads no MCP tool yet, and every other operation one (evidence API EA9)", () => {
+    expect(OPERATIONS.filter((op) => op.mcp === false).map((op) => op.id)).toEqual([
+      "get-invoice-evidence",
+      "get-milestone-evidence",
+      "get-invoice-receipt",
+      "get-payee-lock-evidence",
+      "get-close-pack",
+    ]);
+    expect(OPERATIONS.filter((op) => op.mcp === false).every((op) => op.tag === "Evidence" && op.scope === "read")).toBe(true);
+    expect(OPERATIONS.filter((op) => op.tag === "Evidence").every((op) => op.mcp === false)).toBe(true);
+  });
+
+  it.each(OPERATIONS.filter((op) => op.tag === "Evidence").map((op) => [op.id, op.description] as const))(
+    "says %s carries outside text as data (evidence API EA16)",
+    (_id, description) => {
+      expect(description).toMatch(/Text that came from outside, such as [^.]+, is carried as data\.$/);
+    }
+  );
 
   it("finds an operation by id, and nothing for an unknown one", () => {
     expect(operationById("list-invoices")?.path).toBe("/api/v1/invoices");
@@ -205,6 +234,9 @@ vi.mock("next/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("next/server")>();
   return { ...actual, after: () => {} };
 });
+
+// The evidence reads share a brake per key (evidence API EA6), tested on its own: here each of them reads.
+vi.mock("@/lib/rate-limit", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/rate-limit")>()), takeApiEvidenceToken: () => true }));
 
 vi.mock("@/lib/platform/api-keys", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/platform/api-keys")>();
@@ -265,11 +297,51 @@ const NULL_ROWS: Record<string, unknown[]> = {
   }],
 };
 
+/**
+ * The evidence reads' own rows (evidence API EA1): their ids are UUIDs, which the null rows' are not, so each reads a
+ * payable, a milestone, a confirmed simulated payment, a shared receipt and the entries about them, nullable columns null.
+ */
+const EVIDENCE_INVOICE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001e1";
+const EVIDENCE_MILESTONE = "0b6c1c9e-4a4f-4a7e-9b1e-0000000002e1";
+const evidenceEntry = (seq: number, action: string, detail: Record<string, unknown>) => ({
+  seq, id: `0b6c1c9e-4a4f-4a7e-9b1e-${String(seq).padStart(12, "0")}`, ts: AT, actor: "human", domain: "ap", action, summary: action, detail,
+  body_hash: "b".repeat(64), signature: "s".repeat(128), prev_hash: "0".repeat(64), hash: String(seq).padStart(64, "a"), signing_key_id: null,
+});
+const EVIDENCE_ENTRIES = [
+  evidenceEntry(1, "create_invoice", { invoiceId: EVIDENCE_INVOICE, counterpartyId: COUNTERPARTY_ID, amount: 1.5, currency: "USDC" }),
+  evidenceEntry(2, "approval_paid", { invoiceId: EVIDENCE_INVOICE, counterpartyId: COUNTERPARTY_ID, txRef: "sim_1", status: "paid" }),
+  evidenceEntry(3, "create_milestone", { milestoneId: EVIDENCE_MILESTONE, counterpartyId: COUNTERPARTY_ID, amount: 2 }),
+];
+const EVIDENCE_ROWS: Record<string, unknown[]> = {
+  ...NULL_ROWS,
+  "/rest/v1/invoices": [{
+    id: EVIDENCE_INVOICE, direction: "payable", counterparty_id: COUNTERPARTY_ID, status: "paid", amount: "1.5", currency: "USDC", memo: null, po_reference: null,
+    goods_received: null, due_date: AT, tx_ref: "sim_1", paid_amount: null, settled_at: AT, created_at: AT,
+  }],
+  "/rest/v1/milestones": [{
+    id: EVIDENCE_MILESTONE, contractor_id: COUNTERPARTY_ID, title: "Milestone", amount: "2", status: "pending", verified: false, verification_method: "unverified",
+    verification_status: "unverified", verification_source: null, verification_checked_at: null, verified_at: null, verification_detail: null, tx_ref: null,
+    settled_at: null, escrow_state: null, escrow_payee: null, escrow_amount: null, escrow_release_tx_hash: null,
+  }],
+  "/rest/v1/payment_intents": [{
+    id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000005e1", source_type: "invoice", source_id: EVIDENCE_INVOICE, status: "confirmed", provider: "simulate", provider_mode: "simulate",
+    provider_tx_id: "sim_1", provider_state: null, failure_reason: null, last_error: null, amount: "1.5", token: "USDC", destination: "0x221B000000000000000000000000000000001bc3",
+    tx_hash: null, chain: "ARC-TESTNET", destination_chain: null, mint_tx_hash: null, bridge_fee: null, payout_route: null, network: "arc-testnet", fee_usd: 0,
+    fee_source: "simulated_profile", transfer_attempt: null, previous_attempts: null, batch_key: null, created_at: "2026-01-05T10:00:00+00:00",
+    updated_at: "2026-01-05T10:00:00+00:00", submitted_at: null, executed_at: null, confirmed_at: "2026-01-05T10:00:05+00:00",
+  }],
+  "/rest/v1/payment_receipts": [{ id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000006e1", entry_seq: 2, created_at: AT, revoked_at: null, created_by: null }],
+  "/rest/v1/ledger_entries": EVIDENCE_ENTRIES,
+  "/rest/v1/rpc/ledger_entries_for_targets": EVIDENCE_ENTRIES,
+};
+
 function database(tables: Record<string, unknown[]>) {
   return (request: RecordedRequest) => (request.path === "/rest/v1/orgs" ? { body: ORG_ROW } : { body: tables[request.path] ?? [] });
 }
 
-async function call(tables: Record<string, unknown[]>, handler: (request: Request) => Promise<Response>, url: string) {
+type Handler = (request: Request) => Promise<Response>;
+
+async function call(tables: Record<string, unknown[]>, handler: Handler, url: string) {
   const fake = fakeSupabase(database(tables));
   const request = new Request(`https://vestiarion.invalid${url}`, { headers: { authorization: `Bearer vxk_abcdefgh_${"A".repeat(43)}` } });
   return runWith({ config, db: fake.client, fetch: fake.fetch }, () => handler(request));
@@ -277,7 +349,19 @@ async function call(tables: Record<string, unknown[]>, handler: (request: Reques
 
 const detail = (request: Request) => getCounterparty(request, { params: Promise.resolve({ id: COUNTERPARTY_ID }) });
 
-const ROUTES: Array<[id: string, url: string, handler: (request: Request) => Promise<Response>]> = [
+const withParams = <P,>(handler: (request: Request, context: { params: Promise<P> }) => Promise<Response>, value: P): Handler => (request) =>
+  handler(request, { params: Promise.resolve(value) });
+
+/** The evidence reads, each over its own rows; the three that read one record answer 404 in an empty workspace. */
+const EVIDENCE_ROUTES: Array<[id: string, url: string, handler: Handler, record: boolean]> = [
+  ["get-invoice-evidence", `/api/v1/invoices/${EVIDENCE_INVOICE}/evidence`, withParams(getInvoiceEvidence, { id: EVIDENCE_INVOICE }), true],
+  ["get-milestone-evidence", `/api/v1/milestones/${EVIDENCE_MILESTONE}/evidence`, withParams(getMilestoneEvidence, { id: EVIDENCE_MILESTONE }), true],
+  ["get-invoice-receipt", `/api/v1/invoices/${EVIDENCE_INVOICE}/receipt`, withParams(getInvoiceReceipt, { id: EVIDENCE_INVOICE }), true],
+  ["get-payee-lock-evidence", "/api/v1/payee-lock/evidence?from=2026-01-01&to=2026-01-31", getPayeeLockEvidence, false],
+  ["get-close-pack", "/api/v1/close-packs/2026-01", withParams(getClosePack, { month: "2026-01" }), false],
+];
+
+const ROUTES: Array<[id: string, url: string, handler: Handler]> = [
   ["get-status", "/api/v1/status", getStatus],
   ["list-ledger-entries", "/api/v1/ledger", getLedger],
   ["verify-ledger", "/api/v1/ledger/verify", getLedgerVerify],
@@ -291,7 +375,22 @@ const ROUTES: Array<[id: string, url: string, handler: (request: Request) => Pro
 
 describe("each route's real 200 parses", () => {
   it("drives every documented read; each write's 201 is parsed in its own route's tests", () => {
-    expect(ROUTES.map(([id]) => id).sort()).toEqual(OPERATIONS.filter((op) => op.method === "get").map((op) => op.id).sort());
+    expect([...ROUTES, ...EVIDENCE_ROUTES].map(([id]) => id).sort()).toEqual(OPERATIONS.filter((op) => op.method === "get").map((op) => op.id).sort());
+  });
+
+  it.each(EVIDENCE_ROUTES)("%s, over its own rows, with every nullable column null", async (id, url, handler) => {
+    const response = await call(EVIDENCE_ROWS, handler, url);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(operationById(id)!.response.parse(body)).toEqual(body);
+  });
+
+  it.each(EVIDENCE_ROUTES)("%s, with an empty workspace: a record read answers 404, a period's read 200", async (id, url, handler, record) => {
+    const response = await call({}, handler, url);
+    expect(response.status).toBe(record ? 404 : 200);
+    const body = await response.json();
+    if (record) expect(ApiErrorSchema.parse(body).error.code).toBe("not_found");
+    else expect(operationById(id)!.response.parse(body)).toEqual(body);
   });
 
   it.each(ROUTES)("%s, with every nullable column null", async (id, url, handler) => {

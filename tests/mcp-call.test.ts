@@ -168,7 +168,15 @@ describe("callOperation", () => {
     expect(JSON.parse(result.content[0].text)).toEqual({ error: { code: "not_found", message: `Counterparty "${id}" was not found.` } });
   });
 
-  it.each(OPERATIONS.filter((op) => op.method === "get").map((op) => [op.id]))("%s runs its route in the key's workspace, and names only that one", async (operationId) => {
+  it("has no route for an operation with no tool yet, such as a close pack (evidence API EA9)", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(KEY_A);
+    const fake = fakeSupabase(database());
+    const result = await inScope(fake, () => callOperation("get-close-pack", { month: "2026-01" }, AUTHORIZATION, ORIGIN));
+    expect(result).toEqual({ content: [{ type: "text", text: "No such operation." }], isError: true });
+    expect(fake.requests).toEqual([]);
+  });
+
+  it.each(OPERATIONS.filter((op) => op.method === "get" && op.mcp !== false).map((op) => [op.id]))("%s runs its route in the key's workspace, and names only that one", async (operationId) => {
     vi.mocked(authenticateApiKey).mockResolvedValue(KEY_A);
     const fake = fakeSupabase(database());
     const args = operationId === "get-counterparty" ? { id: "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de" } : {};

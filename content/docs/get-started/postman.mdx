@@ -78,7 +78,7 @@ The agent decides the invoice as it decides one typed into the console, with eve
 
 ## The reference collection
 
-**Vestiarion API reference** has one request per operation, in a folder per tag: Workspace, Ledger, Payables and receivables, Counterparties, Milestones, Treasury and Insights. Each request's description is its reference page's, with a link to it, and says which key it needs.
+**Vestiarion API reference** has one request per operation, in a folder per tag: Workspace, Ledger, Payables and receivables, Counterparties, Milestones, Treasury, Insights and Evidence. Each request's description is its reference page's, with a link to it, and says which key it needs.
 
 - **Parameters.** Every query parameter is listed with its description and allowed values, and switched off. Tick one under **Params** to send it.
 - **Writes.** A `POST` has the reference page's example body. Every `POST` but **Create a payee link**, which keeps no outcome for a key, also has an example `Idempotency-Key`. Replace the example's values with your own before you send one: an address in an example is not yours.
@@ -88,4 +88,4 @@ The agent decides the invoice as it decides one typed into the console, with eve
 
 The collections are rebuilt from the OpenAPI document whenever an operation, a parameter, an example or an error changes, and served from the same URLs. To update yours, import the same URL again: Postman recognizes the collection and offers to replace it. A fork from the [public workspace](#from-the-public-workspace) takes the change with **Pull changes**, once the workspace's copy has been updated too. The [changelog](/docs/changelog) says what changed in the API.
 
-Prefer code? The [TypeScript SDK](/docs/get-started/sdk) and the [command-line interface](/docs/get-started/cli) make the same requests.
+Prefer code? The [TypeScript SDK](/docs/get-started/sdk) and the [command-line interface](/docs/get-started/cli) make the same requests; the CLI has every one but the evidence reads.

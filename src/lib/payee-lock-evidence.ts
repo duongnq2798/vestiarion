@@ -1,5 +1,5 @@
 import { SIGNED_ENTRY_PROVES } from "./evidence-chain";
-import { CHECK_AN_ENTRY, type EvidenceKey } from "./evidence-export";
+import { CHECK_AN_ENTRY, type EvidenceKey, type SignedEntry } from "./evidence-export";
 import type { LedgerRow } from "./ledger";
 import { networkProfile, type Network } from "./network";
 import { txUrl } from "./payee-chains";
@@ -24,8 +24,12 @@ const PERSON_PAID = new Set(["approval_paid", "milestone_approval_paid"]);
 /** An entry with the server's own check of its signature and chain link. */
 export type CheckedEntry = LedgerRow & { check?: EntryCheck };
 
+/**
+ * Who did a step. A member is named by user id, and by email in a member's download; through the API the email is null
+ * (evidence API EA3).
+ */
 export type Who =
-  | { kind: "member"; email: string }
+  | { kind: "member"; userId: string; email: string | null }
   | { kind: "former_member"; id: string }
   | { kind: "payee_link"; linkId: string | null }
   | { kind: "github"; login: string | null }
@@ -44,6 +48,8 @@ export interface PayeeLockEvidenceInput {
   members: ReadonlyMap<string, string>;
   keys: EvidenceKey[];
   now: Date;
+  /** "email" for a member's download; "id" for the API, which names no one by email (evidence API EA3). Default "email". */
+  people?: "email" | "id";
 }
 
 /** A period of whole UTC days, either end open (EP1). */
@@ -87,18 +93,28 @@ const record = (value: unknown): Record<string, unknown> | null =>
   value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 const same = (a: string | null, b: string | null) => a !== null && b !== null && a.toLowerCase() === b.toLowerCase();
 
-function person(id: unknown, members: ReadonlyMap<string, string>): Who {
+type People = { members: ReadonlyMap<string, string>; people: "email" | "id" };
+
+function person(id: unknown, { members, people }: People): Who {
   const userId = str(id);
   if (!userId) return { kind: "unknown" };
   const email = members.get(userId);
-  return email ? { kind: "member", email } : { kind: "former_member", id: userId.slice(0, 8) };
+  if (email === undefined) return { kind: "former_member", id: userId.slice(0, 8) };
+  return { kind: "member", userId, email: people === "id" ? null : email };
 }
 
 /** Who entered an address, as its change entry names them (EP2). */
-function enteredBy(detail: Record<string, unknown>, members: ReadonlyMap<string, string>): Who {
+function enteredBy(detail: Record<string, unknown>, people: People): Who {
   if (detail.via === "payee_link") return { kind: "payee_link", linkId: str(detail.linkId) };
   if (detail.via === "github") return { kind: "github", login: str(detail.login) };
-  return person(detail.by, members);
+  return person(detail.by, people);
+}
+
+/** A lock as a `payee_lock_changed` entry signs it, or null for anything else (evidence API EA2). */
+function lockOf(value: unknown): PayeeLock | null {
+  const lock = record(value);
+  if (!lock || typeof lock.on !== "boolean" || typeof lock.coolingHours !== "number" || !Number.isFinite(lock.coolingHours)) return null;
+  return { on: lock.on, coolingHours: lock.coolingHours };
 }
 
 /** The transaction an entry names, if any: a payment's or one it reconciles. */
@@ -157,7 +173,74 @@ export function secondPersonOf(change: CheckedEntry, confirmed: CheckedEntry | u
   return confirmer && giver && change.detail.via === undefined ? true : null;
 }
 
-export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
+/** One payout address change: who entered it, how it was confirmed and by whom, what it held back, and the first payment to it. */
+export interface PayeeLockEvidenceChange {
+  counterparty: { id: string; name: string | null };
+  change: { at: string; from: string | null; to: string | null; chain: string | null; enteredBy: Who; entry: number };
+  confirmation: {
+    at: string;
+    by: Who;
+    /** With Confirm address (`confirm`), or by approving a payment to it (`approval`). */
+    via: string | null;
+    record: { method: VerificationMethod | null; methodLabel: string | null; contact: string | null; contactOnFileBefore: boolean; note: string | null } | null;
+    secondPerson: boolean | null;
+    soloConfirmation: boolean;
+    byGiver: boolean;
+    giverUnknown: boolean;
+    waitHours: number | null;
+    payableFrom: string | null;
+    lookalikeOf: Array<{ id: string; name: string | null }>;
+    looksLikeEarlier: string | null;
+    entry: number;
+  } | null;
+  holds: Array<{ at: string; rule: string; subject: { kind: "invoice" | "milestone"; id: string } | null; entry: number }>;
+  firstPayment: {
+    at: string;
+    amount: number | null;
+    currency: string;
+    txRef: string;
+    txUrl: string | null;
+    decidedBy: "person" | "agent";
+    subject: { kind: "invoice" | "milestone"; id: string } | null;
+    entry: number;
+  } | null;
+  checks: {
+    recordKept: boolean | null;
+    contactOnFileBefore: boolean | null;
+    secondPerson: boolean | null;
+    paidAfterConfirmation: boolean | null;
+    paidAfterWait: boolean | null;
+  };
+}
+
+/** The pack as a file: what Download signed JSON gives, and `GET /api/v1/payee-lock/evidence` answers (evidence API EA10). */
+export interface PayeeLockEvidence {
+  format: typeof PAYEE_LOCK_EVIDENCE_FORMAT;
+  exportedAt: string;
+  workspace: { slug: string; name: string };
+  network: { id: Network; label: string };
+  period: Period;
+  lock: { now: PayeeLock; changes: Array<{ at: string; by: Who; from: PayeeLock | null; to: PayeeLock | null; entry: number }> };
+  summary: {
+    changes: number;
+    confirmed: number;
+    confirmedWithRecord: number;
+    confirmedBySecondPerson: number;
+    heldWhileUnconfirmed: number;
+    heldForTheWait: number;
+    heldAsNewPayee: number;
+    paid: number;
+    paidOnlyAfterConfirmation: number;
+  };
+  changes: PayeeLockEvidenceChange[];
+  signedEntryProves: string;
+  checkAnEntry: string[];
+  keys: EvidenceKey[];
+  entries: SignedEntry[];
+}
+
+export function payeeLockEvidence(input: PayeeLockEvidenceInput): PayeeLockEvidence {
+  const people: People = { members: input.members, people: input.people ?? "email" };
   const sorted = [...input.entries].sort((a, b) => a.seq - b.seq);
   const cited = new Set<number>();
   const cite = (entry: CheckedEntry) => {
@@ -168,7 +251,7 @@ export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
   const isChange = (entry: CheckedEntry) => entry.action === "counterparty_address_changed";
 
   // A mirror address Vestiarion made in shadow mode is not a payee's change, and needs no confirmation (EP2).
-  const changes = sorted
+  const changes: PayeeLockEvidenceChange[] = sorted
     .filter(
       (entry) =>
         isChange(entry) && entry.detail.via !== "mirror" && str(entry.detail.to) !== null && counterpartyOf(entry) !== null && inPeriod(entry.ts, input.period)
@@ -212,13 +295,13 @@ export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
           from: str(change.detail.from),
           to,
           chain: str(change.detail.chain),
-          enteredBy: enteredBy(change.detail, input.members),
+          enteredBy: enteredBy(change.detail, people),
           entry: cite(change),
         },
         confirmation: confirmed
           ? {
               at: confirmed.ts,
-              by: person(confirmed.detail.by, input.members),
+              by: person(confirmed.detail.by, people),
               // With Confirm address (`confirm`), which checks for lookalikes, or by approving a payment to it (`approval`).
               via: str(confirmed.detail.via),
               record: verification
@@ -267,9 +350,9 @@ export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
 
   const lockChanges = sorted
     .filter((entry) => entry.action === "payee_lock_changed" && inPeriod(entry.ts, input.period))
-    .map((entry) => ({ at: entry.ts, by: person(entry.detail.by, input.members), from: entry.detail.from ?? null, to: entry.detail.to ?? null, entry: cite(entry) }));
+    .map((entry) => ({ at: entry.ts, by: person(entry.detail.by, people), from: lockOf(entry.detail.from), to: lockOf(entry.detail.to), entry: cite(entry) }));
 
-  const count = (test: (row: (typeof changes)[number]) => boolean) => changes.filter(test).length;
+  const count = (test: (row: PayeeLockEvidenceChange) => boolean) => changes.filter(test).length;
   const heldFor = (rule: string) => count((row) => row.holds.some((hold) => hold.rule === rule));
 
   return {
@@ -292,7 +375,7 @@ export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
     },
     changes,
     signedEntryProves: SIGNED_ENTRY_PROVES,
-    checkAnEntry: CHECK_AN_ENTRY,
+    checkAnEntry: [...CHECK_AN_ENTRY],
     keys: input.keys,
     entries: sorted
       .filter((entry) => cited.has(entry.seq))
@@ -309,10 +392,9 @@ export function payeeLockEvidence(input: PayeeLockEvidenceInput) {
         signature: entry.signature,
         prev_hash: entry.prev_hash,
         hash: entry.hash,
-        signing_key_id: entry.signing_key_id,
+        signing_key_id: entry.signing_key_id ?? null,
         check: (entry.check ?? null) as EntryCheck | null,
       })),
   };
 }
 
-export type PayeeLockEvidence = ReturnType<typeof payeeLockEvidence>;

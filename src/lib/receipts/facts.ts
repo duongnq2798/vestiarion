@@ -59,6 +59,26 @@ export interface ReceiptIntent {
 
 export type BuiltReceipt = { ok: true; facts: ReceiptFacts; records: { seq: number; hash: string } } | { ok: false; reason: string };
 
+/** Why a payable has no receipt yet, by name (evidence API EA4): `simulated` never changes; `not_paid` and `not_minted` pass. */
+export type ReceiptNotReady = "not_payable" | "not_paid" | "simulated" | "not_minted" | "no_transaction" | "not_recorded";
+
+/** The builder's refusals, each by its code: the sentences a receipt has always given. */
+export const RECEIPT_REFUSALS: Readonly<Record<ReceiptNotReady, string>> = {
+  not_payable: "Only a payment the workspace made has a receipt.",
+  not_paid: "This invoice is not paid yet.",
+  simulated: "A simulated payment has nothing on chain to show.",
+  not_minted: "The payee's chain has not minted this payout yet.",
+  no_transaction: "This payment has no transaction on chain to show.",
+  not_recorded: "No ledger entry records this payment's transaction.",
+};
+
+const REFUSAL_CODES = Object.keys(RECEIPT_REFUSALS) as ReceiptNotReady[];
+
+/** The code of one of the builder's refusals; "not_recorded" for none of them, which never happens. */
+export function receiptNotReady(reason: string): ReceiptNotReady {
+  return REFUSAL_CODES.find((code) => RECEIPT_REFUSALS[code] === reason) ?? "not_recorded";
+}
+
 const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 /** The entries that record a payment's transaction: the agent's decision, a person's approval, a later reconcile. */
@@ -96,13 +116,13 @@ export function buildReceipt(input: {
   entries: LedgerEntry[];
 }): BuiltReceipt {
   const { invoice, intent } = input;
-  if (invoice.direction !== "payable") return refuse("Only a payment the workspace made has a receipt.");
-  if (invoice.status !== "paid" || !intent || intent.status !== "confirmed") return refuse("This invoice is not paid yet.");
+  if (invoice.direction !== "payable") return refuse(RECEIPT_REFUSALS.not_payable);
+  if (invoice.status !== "paid" || !intent || intent.status !== "confirmed") return refuse(RECEIPT_REFUSALS.not_paid);
   const stated = intentFacts(intent);
   if (!stated.ok) return stated;
 
   const records = recordingEntry({ invoiceId: invoice.id }, input.entries, stated.facts.txHash, stated.facts.sourceTxHash ?? null);
-  if (!records) return refuse("No ledger entry records this payment's transaction.");
+  if (!records) return refuse(RECEIPT_REFUSALS.not_recorded);
 
   // What a receipt states beside the payment itself (RV2): the invoice it pays, what a discount took off, and who paid
   // the fees. The evidence chain reads `intentFacts` without them.
@@ -124,19 +144,19 @@ export function buildReceipt(input: {
  * (docs/superpowers/specs/2026-10-10-evidence-chain-design.md E4), which reads the same transaction from the chain.
  */
 export function intentFacts(intent: ReceiptIntent): { ok: true; facts: ReceiptFacts } | { ok: false; reason: string } {
-  if (intent.status !== "confirmed") return { ok: false, reason: "This invoice is not paid yet." };
-  if (intent.provider_mode !== "live") return { ok: false, reason: "A simulated payment has nothing on chain to show." };
+  if (intent.status !== "confirmed") return { ok: false, reason: RECEIPT_REFUSALS.not_paid };
+  if (intent.provider_mode !== "live") return { ok: false, reason: RECEIPT_REFUSALS.simulated };
 
   // The intent's own network (network threading P1): its home chain is the one a direct payment was made on.
   const own = homeChain(networkOf(intent.network)).id;
   const crossChain = intent.destination_chain !== null && intent.destination_chain !== own;
   const route: ReceiptRoute = intent.payout_route === "gateway" ? "gateway" : crossChain ? "cctp" : "direct";
   // The payee is paid by the mint on their chain, once there is one; a CCTP burn alone is not their payment (R4).
-  if (route === "cctp" && !intent.mint_tx_hash) return { ok: false, reason: "The payee's chain has not minted this payout yet." };
+  if (route === "cctp" && !intent.mint_tx_hash) return { ok: false, reason: RECEIPT_REFUSALS.not_minted };
   const txHash = route === "direct" ? intent.tx_hash : (intent.mint_tx_hash ?? intent.tx_hash);
   const sourceTxHash = route === "cctp" ? intent.tx_hash : null;
   if (!txHash || !TX_HASH.test(txHash) || (sourceTxHash !== null && !TX_HASH.test(sourceTxHash)) || !ADDRESS.test(intent.destination)) {
-    return { ok: false, reason: "This payment has no transaction on chain to show." };
+    return { ok: false, reason: RECEIPT_REFUSALS.no_transaction };
   }
 
   const fee = intent.bridge_fee == null ? null : Number(intent.bridge_fee);

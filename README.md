@@ -8,7 +8,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/duongnq2798/vestiarion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/duongnq2798/vestiarion/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/duongnq2798/vestiarion?include_prereleases&style=flat-square&label=release)](https://github.com/duongnq2798/vestiarion/releases)
-[![npm](https://img.shields.io/badge/%40vestiarion%2Fsdk-v0.3.7-cb3837?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@vestiarion/sdk)
+[![npm](https://img.shields.io/badge/%40vestiarion%2Fsdk-v0.4.0-cb3837?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
 <a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
@@ -432,11 +432,11 @@ run in production, with its ledger entries and transactions.
 | **[Slack](https://www.vestiarion.xyz/docs/guides/slack)** | Decisions in a channel; `/vestiarion today`, `waiting`, `ledger`; Approve and pay, Reject and Return buttons on Arc testnet within a limit; add an invoice from a message |
 | **[Telegram](https://www.vestiarion.xyz/docs/guides/telegram)** | Each member's own chat: decisions with reasons, bills waiting for approval with a Review link, `/today`, `/waiting`, `/ledger`, invoices read from a PDF. The bot never approves or pays |
 | **[Discord](https://www.vestiarion.xyz/docs/guides/discord)** | Bills the agent holds or flags for a person, posted to a channel through its webhook after each cycle, each with a link to review it in Approvals. A link never approves |
-| **[REST API](https://www.vestiarion.xyz/docs/api)** | `/api/v1` with per-member keys: read everything, and with write access add counterparties, invoices, milestones and payee links. A key never approves or pays |
-| **[TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk)** | [`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk): a typed client for every `/api/v1` operation, plus webhook and ledger verification |
-| **[CLI](https://www.vestiarion.xyz/docs/get-started/cli)** | [`@vestiarion/cli`](https://www.npmjs.com/package/@vestiarion/cli): the `vestiarion` command for every `/api/v1` operation, asking before each write, plus offline checks of audit exports and webhook signatures |
+| **[REST API](https://www.vestiarion.xyz/docs/api)** | `/api/v1` with per-member keys: read everything, each payment's evidence and receipt and the monthly close pack included, and with write access add counterparties, invoices, milestones and payee links. A key never approves or pays |
+| **[TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk)** | [`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk): a typed client for every `/api/v1` operation, plus webhook and ledger verification, and offline checks of evidence, receipts and close packs |
+| **[CLI](https://www.vestiarion.xyz/docs/get-started/cli)** | [`@vestiarion/cli`](https://www.npmjs.com/package/@vestiarion/cli): the `vestiarion` command for every `/api/v1` operation but the evidence reads, asking before each write, plus offline checks of audit exports and webhook signatures |
 | **[Postman](https://www.vestiarion.xyz/docs/get-started/postman)** | A Getting Started collection, from a key to a first call and a first write, and an API reference collection with every `/api/v1` operation, both generated from the OpenAPI document and served at `/postman/` |
-| **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** | `/api/mcp`, whose tools are the `/api/v1` operations, for AI agents; [`server.json`](server.json) describes it for the MCP Registry |
+| **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** | `/api/mcp`, whose tools are the `/api/v1` operations but the evidence reads, for AI agents; [`server.json`](server.json) describes it for the MCP Registry |
 | **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |
 | **[GitHub](https://www.vestiarion.xyz/docs/guides/github)** | Milestone verification from merged pull requests, bounties, and payment comments |
 | **[Email](https://www.vestiarion.xyz/docs/guides/email-invoices)** | A workspace address that reads forwarded invoices into drafts a person adds |

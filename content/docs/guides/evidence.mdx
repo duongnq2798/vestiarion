@@ -136,6 +136,8 @@ Each entry is checked alone, twice: its body hash, its Ed25519 signature with th
 
 The file is named for the workspace, the kind of record and the start of its id, such as `vestiarion-evidence-your-workspace-invoice-5f1e2d3c.json`. Every member can download it, viewers included, as they can the audit export. Downloading it is not recorded in the ledger: it carries one payment's evidence, which every member can already see. To print the page, print it from your browser.
 
+An integration reads the same file with a workspace API key, from `GET /api/v1/invoices/{id}/evidence` or `GET /api/v1/milestones/{id}/evidence`, with members named by user id rather than email. See [Get a payable's evidence](/docs/api/get-invoice-evidence).
+
 ## Who can see this
 
 At the foot of the page, **Who can see this** says who may see, download and share it:

@@ -287,6 +287,16 @@ describe("the figures and settings it quotes, as the code has them", () => {
     expect(api).not.toContain("30 a minute");
   });
 
+  it("an API key's evidence reads: their own limit, in the API section and in what is not claimed", () => {
+    // A bucket of 10 that refills one every 6 seconds, shared by the five evidence reads.
+    expect(source("src/lib/rate-limit.ts")).toContain("return take(apiEvidenceBuckets, keyId, 10, 6_000, now);");
+    expect(section("api")).toContain("Evidence reads from one key come up to 10 at once, then one every 6 seconds.");
+    const notClaimed = section("not-claimed");
+    expect(notClaimed).toContain("API reads are not limited, except the evidence reads");
+    expect(notClaimed).toContain("one key makes up to 10 at once, then one every 6 seconds");
+    expect(notClaimed).not.toContain("and API reads are not limited.");
+  });
+
   it("connector tokens: the state's life, the refresh margin and the lease", () => {
     expect(STATE_TTL_MS).toBe(10 * 60_000);
     expect(EXPIRY_MARGIN_MS).toBe(60_000);

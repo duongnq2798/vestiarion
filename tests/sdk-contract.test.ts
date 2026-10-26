@@ -1,18 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GET as getClosePack } from "@/app/api/v1/close-packs/[month]/route";
 import { GET as getCounterparty } from "@/app/api/v1/counterparties/[id]/route";
 import { GET as listCounterparties, POST as createCounterparty } from "@/app/api/v1/counterparties/route";
 import { GET as getInsights } from "@/app/api/v1/insights/route";
+import { GET as getInvoiceEvidence } from "@/app/api/v1/invoices/[id]/evidence/route";
+import { GET as getInvoiceReceipt } from "@/app/api/v1/invoices/[id]/receipt/route";
 import { GET as listInvoices, POST as createInvoice } from "@/app/api/v1/invoices/route";
 import { GET as listLedger } from "@/app/api/v1/ledger/route";
 import { GET as verifyLedger } from "@/app/api/v1/ledger/verify/route";
+import { GET as getMilestoneEvidence } from "@/app/api/v1/milestones/[id]/evidence/route";
 import { GET as listMilestones, POST as createMilestone } from "@/app/api/v1/milestones/route";
+import { GET as getPayeeLockEvidence } from "@/app/api/v1/payee-lock/evidence/route";
 import { POST as createPayeeLink } from "@/app/api/v1/payee-links/route";
 import { GET as getStatus } from "@/app/api/v1/status/route";
 import { GET as getTreasury } from "@/app/api/v1/treasury/route";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { authenticateApiKey, type AuthenticatedKey } from "@/lib/platform/api-keys";
-import { Vestiarion, VestiarionError, type FetchLike, type Invoice, type Milestone, type PayeeLink } from "../sdk/src/index";
+import { Vestiarion, VestiarionError, type ClosePack, type FetchLike, type Invoice, type Milestone, type PayeeLink, type PaymentEvidence } from "../sdk/src/index";
 import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 
@@ -62,14 +67,26 @@ const ROUTES: Record<string, (request: Request) => Promise<Response>> = {
   "POST /api/v1/payee-links": createPayeeLink,
   "GET /api/v1/treasury": getTreasury,
   "GET /api/v1/insights": getInsights,
+  "GET /api/v1/payee-lock/evidence": getPayeeLockEvidence,
 };
+
+/** The routes with a path parameter, as Next.js hands it to them: decoded, in a Promise. */
+const WITH_PARAMS: Array<[RegExp, (request: Request, value: string) => Promise<Response>]> = [
+  [/^\/api\/v1\/counterparties\/([^/]+)$/, (request, id) => getCounterparty(request, { params: Promise.resolve({ id }) })],
+  [/^\/api\/v1\/invoices\/([^/]+)\/evidence$/, (request, id) => getInvoiceEvidence(request, { params: Promise.resolve({ id }) })],
+  [/^\/api\/v1\/invoices\/([^/]+)\/receipt$/, (request, id) => getInvoiceReceipt(request, { params: Promise.resolve({ id }) })],
+  [/^\/api\/v1\/milestones\/([^/]+)\/evidence$/, (request, id) => getMilestoneEvidence(request, { params: Promise.resolve({ id }) })],
+  [/^\/api\/v1\/close-packs\/([^/]+)$/, (request, month) => getClosePack(request, { params: Promise.resolve({ month }) })],
+];
 
 /** A fetch served by the app's own route handlers, in this process. */
 const routeFetch: FetchLike = async (url, init) => {
   const { pathname } = new URL(url);
   const request = new Request(url, { method: init.method, headers: init.headers, body: init.body });
-  const detail = /^\/api\/v1\/counterparties\/([^/]+)$/.exec(pathname);
-  if (init.method === "GET" && detail) return getCounterparty(request, { params: Promise.resolve({ id: decodeURIComponent(detail[1]) }) });
+  for (const [pattern, handler] of WITH_PARAMS) {
+    const match = pattern.exec(pathname);
+    if (init.method === "GET" && match) return handler(request, decodeURIComponent(match[1]));
+  }
   const route = ROUTES[`${init.method} ${pathname}`];
   return route ? route(request) : new Response(JSON.stringify({ error: { code: "not_found", message: "No such route." } }), { status: 404 });
 };
@@ -139,6 +156,34 @@ describe("the SDK against the API's routes", () => {
     const error = await run((sdk) => sdk.counterparties.get("0b6c1c9e-4a4f-4a7e-9b1e-00000000ffff")).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(VestiarionError);
     expect(error).toMatchObject({ status: 404, code: "not_found" });
+  });
+
+  it("reads a payable's evidence through its route, members by id, and throws an unknown one's 404 (evidence API EA12)", async () => {
+    const { run } = workspace();
+    const evidence: PaymentEvidence = await run((sdk) => sdk.invoices.evidence(INVOICE));
+    expect(evidence).toMatchObject({ format: "vestiarion-evidence/1", subject: { kind: "invoice", id: INVOICE }, workspace: { slug: "northstar", name: "Northstar" } });
+    const missing = await run((sdk) => sdk.milestones.evidence("0b6c1c9e-4a4f-4a7e-9b1e-00000000ffff")).catch((caught: unknown) => caught);
+    expect(missing).toMatchObject({ status: 404, code: "not_found" });
+    const malformed = await run((sdk) => sdk.invoices.receipt("a/b")).catch((caught: unknown) => caught);
+    expect(malformed).toMatchObject({ status: 404, code: "not_found", message: 'Payable invoice "a/b" was not found.' });
+  });
+
+  it("reads an empty month's close pack and a period's payee lock evidence through their routes", async () => {
+    const { run } = workspace();
+    const pack: ClosePack = await run((sdk) => sdk.closePacks.get("2026-01"));
+    expect(pack).toMatchObject({ format: "vestiarion-close-pack/1", month: { key: "2026-01", ended: true }, rows: [], entries: [] });
+    const lock = await run((sdk) => sdk.payeeLock.evidence({ from: "2026-10-01", to: "2026-10-31" }));
+    expect(lock).toMatchObject({ format: "vestiarion-payee-lock-evidence/1", period: { from: "2026-10-01", to: "2026-10-31" }, changes: [] });
+    const refused = await run((sdk) => sdk.closePacks.get("2026-13")).catch((caught: unknown) => caught);
+    expect(refused).toMatchObject({ status: 400, code: "invalid_request" });
+  });
+
+  it("throws the eleventh evidence read of a key as rate_limited, with the minute to wait (evidence API EA6)", async () => {
+    const { run } = workspace();
+    for (let read = 0; read < 10; read += 1) await run((sdk) => sdk.closePacks.get("2026-01"));
+    const error = await run((sdk) => sdk.closePacks.get("2026-01")).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(VestiarionError);
+    expect(error).toMatchObject({ status: 429, code: "rate_limited", retryAfter: 60, message: "Too many evidence reads from this key. Try again in a minute." });
   });
 
   it("adds an invoice with a read-and-write key, sending the caller's Idempotency-Key, and returns it typed", async () => {

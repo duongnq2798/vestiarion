@@ -48,7 +48,13 @@ async function namesOf(orgDb: OrgDb, ids: readonly string[]): Promise<Array<{ id
   return rows;
 }
 
-export async function readPayeeLockEvidence(input: { workspace: { slug: string; name: string }; period: Period; now?: Date }): Promise<PayeeLockEvidence> {
+/** `people`: "email" for a member's page and download, "id" for the API, which names no one by email (evidence API EA3). */
+export async function readPayeeLockEvidence(input: {
+  workspace: { slug: string; name: string };
+  period: Period;
+  now?: Date;
+  people?: "email" | "id";
+}): Promise<PayeeLockEvidence> {
   const orgDb = db();
   const { from, until } = bounds(input.period);
   const inPeriodRows = await allRows((start, end) => {
@@ -99,6 +105,7 @@ export async function readPayeeLockEvidence(input: { workspace: { slug: string; 
     members: new Map(members.map((member) => [member.userId, member.email])),
     keys,
     now: input.now ?? new Date(),
+    people: input.people ?? "email",
   });
 
   // Each entry the pack cites, checked alone with the workspace's keys (EP5).

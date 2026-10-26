@@ -25,26 +25,45 @@ import { approvedLines, booksWords, checkCell, CHECK_KIND_MEANINGS, CHECK_KIND_W
  * file's SHA-256 (CP13).
  */
 
-export type ClosePackDocument = {
+/** The month, and whether it has ended: false for this month so far. */
+export interface ClosePackDocumentMonth extends ClosePackMonth {
+  ended: boolean;
+}
+
+/** A settled payment's row, with its evidence page's full address. */
+export interface ClosePackDocumentRow extends ClosePackRow {
+  evidenceUrl: string;
+}
+
+/** A payment not settled in the month, with its evidence page's full address. */
+export interface ClosePackDocumentOpenPayment extends ClosePackOpenPayment {
+  evidenceUrl: string;
+}
+
+/**
+ * The signed JSON, and `GET /api/v1/close-packs/{month}`'s answer (evidence API EA2, EA10). Interfaces, not
+ * intersections, so `tests/api-schemas.test.ts` can hold the API's schema equal to it.
+ */
+export interface ClosePackDocument {
   format: typeof CLOSE_PACK_FORMAT;
   exportedAt: string;
   workspace: { slug: string; name: string };
   network: { id: Network; label: string };
-  month: ClosePackMonth & { ended: boolean };
+  month: ClosePackDocumentMonth;
   ledgerHead: { seq: number; hash: string } | null;
   cut: boolean;
   unread: Array<"members" | "screening">;
   totals: ClosePackTotals;
-  rows: Array<ClosePackRow & { evidenceUrl: string }>;
-  notSettled: Array<ClosePackOpenPayment & { evidenceUrl: string }>;
+  rows: ClosePackDocumentRow[];
+  notSettled: ClosePackDocumentOpenPayment[];
   escrow: ClosePackEscrowMove[];
   /** Each check kind's words and what it means. */
   labels: Record<ClosePackCheckKind, { words: string; meaning: string }>;
   signedEntryProves: string;
-  checkAnEntry: readonly string[];
+  checkAnEntry: string[];
   keys: EvidenceKey[];
   entries: ClosePackEntry[];
-};
+}
 
 const KINDS = Object.keys(CHECK_KIND_WORDS) as ClosePackCheckKind[];
 
@@ -68,7 +87,7 @@ export function closePackDocument(pack: ClosePack, options: { origin: string }):
     escrow: pack.escrow,
     labels: Object.fromEntries(KINDS.map((kind) => [kind, { words: CHECK_KIND_WORDS[kind], meaning: CHECK_KIND_MEANINGS[kind] }])) as ClosePackDocument["labels"],
     signedEntryProves: SIGNED_ENTRY_PROVES,
-    checkAnEntry: CHECK_AN_ENTRY,
+    checkAnEntry: [...CHECK_AN_ENTRY],
     keys: pack.keys,
     entries: pack.entries,
   };

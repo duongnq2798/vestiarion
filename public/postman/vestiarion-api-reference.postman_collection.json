@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "8c2d4e61-7a95-4b3f-8e10-4f6a9b2c7d35",
     "name": "Vestiarion API reference",
-    "description": "Read a workspace's ledger, books, counterparties, milestones, treasury and insights, and add counterparties, invoices, milestones and payee links, with a workspace API key.\n\nEvery `/api/v1` operation, generated from the OpenAPI document at https://www.vestiarion.xyz/api/v1/openapi.json: one request per operation, in a folder per tag, with its parameters, its body and a saved example of each answer it documents. Optional parameters are listed and switched off; tick one to send it.\n\n**Authentication.** Each request sends `{{apiKey}}` as `Authorization: Bearer`. Import the Vestiarion environment, choose it, and paste a workspace API key as the value of `apiKey`. That value stays on your machine: never share it, and leave the variable's shared value empty. A read-only key reads everything; the `POST` requests need a read-and-write key. No request can approve, reject or pay: no API call can.\n\nNew to the API? Start with the \"Vestiarion: Getting Started\" collection. Guide: https://www.vestiarion.xyz/docs/get-started/postman",
+    "description": "Read a workspace's ledger, books, counterparties, milestones, treasury and insights, each payment's evidence and receipt and the monthly close pack, and add counterparties, invoices, milestones and payee links, with a workspace API key.\n\nEvery `/api/v1` operation, generated from the OpenAPI document at https://www.vestiarion.xyz/api/v1/openapi.json: one request per operation, in a folder per tag, with its parameters, its body and a saved example of each answer it documents. Optional parameters are listed and switched off; tick one to send it.\n\n**Authentication.** Each request sends `{{apiKey}}` as `Authorization: Bearer`. Import the Vestiarion environment, choose it, and paste a workspace API key as the value of `apiKey`. That value stays on your machine: never share it, and leave the variable's shared value empty. A read-only key reads everything; the `POST` requests need a read-and-write key. No request can approve, reject or pay: no API call can.\n\nNew to the API? Start with the \"Vestiarion: Getting Started\" collection. Guide: https://www.vestiarion.xyz/docs/get-started/postman",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -3750,6 +3750,1421 @@
                     "api",
                     "v1",
                     "insights"
+                  ]
+                }
+              },
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"internal\",\n    \"message\": \"The request could not be completed.\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Evidence",
+      "item": [
+        {
+          "name": "Get a payable's evidence",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"answers 200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoices/:id/evidence",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "invoices",
+                ":id",
+                "evidence"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                  "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                }
+              ]
+            },
+            "description": "Why a payable was paid, or why it is not paid yet, as one signed document: the evidence chain its evidence page shows, from what was agreed to the signatures. Each fact is labelled by how it is known and cites the ledger entries it rests on, and every one of those entries is carried in full with the workspace's public keys, so each can be checked offline with the SDK's `verifyEvidence`. It is the file the page's Download evidence gives, in the format `vestiarion-evidence/1`, with members named by user id, never by email.\n\nA receivable, or an id this workspace does not hold, including another workspace's, answers `404`. Each call reads the transaction on its chain and checks the links people gave, so the evidence reads have a limit of their own per key. Text that came from outside, such as a vendor's name, an invoice number or a memo, is carried as data.\n\n**Key:** any workspace API key; a read-only one is enough.\n\nReference: https://www.vestiarion.xyz/docs/api/get-invoice-evidence"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"format\": \"vestiarion-evidence/1\",\n    \"exportedAt\": \"2026-10-25T09:00:00.000Z\",\n    \"workspace\": {\n      \"slug\": \"northstar-studio\",\n      \"name\": \"Northstar Studio\"\n    },\n    \"network\": {\n      \"id\": \"arc-testnet\",\n      \"label\": \"Arc testnet\"\n    },\n    \"subject\": {\n      \"kind\": \"invoice\",\n      \"id\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n      \"title\": \"October catalogue print run\",\n      \"payee\": \"Harbor Print Co.\",\n      \"amount\": 1250,\n      \"paidAmount\": null,\n      \"currency\": \"USDC\",\n      \"status\": \"paid\",\n      \"paid\": true,\n      \"closed\": false,\n      \"simulated\": false,\n      \"onChain\": true\n    },\n    \"labels\": {\n      \"checked\": {\n        \"words\": \"Checked by code\",\n        \"meaning\": \"A rule Vestiarion runs computed it: the three-way match, the guardrails, a signature, the written policy.\",\n        \"facts\": 4\n      },\n      \"verified\": {\n        \"words\": \"Verified outside\",\n        \"meaning\": \"Someone outside Vestiarion answered: the chain's record of the transaction, GitHub, the screening service.\",\n        \"facts\": 2\n      },\n      \"stated\": {\n        \"words\": \"Stated by a person\",\n        \"meaning\": \"A member or the payee entered it. The page names who, and when.\",\n        \"facts\": 7\n      },\n      \"inferred\": {\n        \"words\": \"Inferred\",\n        \"meaning\": \"Read, not recorded: the model's judgement, sample data, or a setting as it is today.\",\n        \"facts\": 1\n      },\n      \"missing\": {\n        \"words\": \"Missing\",\n        \"meaning\": \"Nothing records it. Where it can still be added, the page says how.\",\n        \"facts\": 0\n      },\n      \"unreachable\": {\n        \"words\": \"Could not open\",\n        \"meaning\": \"A check got no answer, or a link can't be opened (deleted, private, refused or expired): it never counts as verified.\",\n        \"facts\": 0\n      },\n      \"contradicted\": {\n        \"words\": \"Does not match\",\n        \"meaning\": \"A check answered, and its answer contradicts the record.\",\n        \"facts\": 0\n      }\n    },\n    \"steps\": [\n      {\n        \"id\": \"agreed\",\n        \"title\": \"What was agreed\",\n        \"label\": \"Stated by a person\",\n        \"kind\": \"stated\",\n        \"facts\": [\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"Purchase order PO-1187 is on the bill.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n            \"at\": \"2026-10-03T10:00:00.000Z\",\n            \"entries\": [\n              5607\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"delivered\",\n        \"title\": \"What was delivered\",\n        \"label\": \"Stated by a person\",\n        \"kind\": \"stated\",\n        \"facts\": [\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"The goods or services are marked received.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n            \"at\": \"2026-10-03T10:00:00.000Z\",\n            \"entries\": [\n              5607\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"bill\",\n        \"title\": \"The bill\",\n        \"label\": \"Stated by a person\",\n        \"kind\": \"stated\",\n        \"facts\": [\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"1,250.00 USDC, read from a PDF by Claude, then added on Bills & receivables by the person who checked it.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n            \"at\": \"2026-10-03T10:00:00.000Z\",\n            \"notes\": [\n              \"The document's SHA-256 is e32253322f3ee8aebb662b9ee42946b3d6b0141da8fc66cddf85ec61e12d0252; the document itself is not kept.\"\n            ],\n            \"entries\": [\n              5607\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"payee\",\n        \"title\": \"The payee\",\n        \"label\": \"Stated by a person\",\n        \"kind\": \"stated\",\n        \"facts\": [\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"0x8c4f…cbba was given on Counterparties.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n            \"at\": \"2026-10-02T09:00:00.000Z\",\n            \"entries\": [\n              5605\n            ]\n          },\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"The address was confirmed on Counterparties.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n            \"at\": \"2026-10-02T09:40:00.000Z\",\n            \"entries\": [\n              5606\n            ]\n          },\n          {\n            \"label\": \"Verified outside\",\n            \"kind\": \"verified\",\n            \"text\": \"Harbor Print Co. was screened clear by OpenSanctions.\",\n            \"who\": null,\n            \"at\": \"2026-10-01T08:21:00.000Z\",\n            \"entries\": []\n          }\n        ]\n      },\n      {\n        \"id\": \"decision\",\n        \"title\": \"The decision\",\n        \"label\": \"Inferred\",\n        \"kind\": \"inferred\",\n        \"facts\": [\n          {\n            \"label\": \"Inferred\",\n            \"kind\": \"inferred\",\n            \"text\": \"Claude decided to hold it for a person, as the written policy would.\",\n            \"who\": null,\n            \"at\": \"2026-10-03T10:01:00.000Z\",\n            \"notes\": [\n              \"The model's judgement, from the facts it was given.\"\n            ],\n            \"entries\": [\n              5608\n            ]\n          },\n          {\n            \"label\": \"Checked by code\",\n            \"kind\": \"checked\",\n            \"text\": \"Code refused it before anything was sent.\",\n            \"who\": null,\n            \"at\": \"2026-10-03T10:01:00.000Z\",\n            \"notes\": [\n              \"✓ Purchase order PO-1187 on file and the goods received\",\n              \"✓ Counterparty screened clear\",\n              \"✓ 1,250.00 USDC within its 2,000.00 USDC limit\",\n              \"✓ No duplicate found\",\n              \"✗ Code refused it before anything was sent: workspace.two_approvals\"\n            ],\n            \"warn\": true,\n            \"entries\": [\n              5608\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"people\",\n        \"title\": \"People\",\n        \"label\": \"Stated by a person\",\n        \"kind\": \"stated\",\n        \"facts\": [\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"Gave the first of two approvals.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b03\",\n            \"at\": \"2026-10-03T14:00:00.000Z\",\n            \"entries\": [\n              5609\n            ]\n          },\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"Approved and paid it.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n            \"at\": \"2026-10-03T15:20:00.000Z\",\n            \"notes\": [\n              \"Approved by 4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b03 on Oct 3, 2026, 14:00 UTC\",\n              \"Approved by 4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02 on Oct 3, 2026, 15:20 UTC\"\n            ],\n            \"entries\": [\n              5610\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"payment\",\n        \"title\": \"The payment\",\n        \"label\": \"Checked by code\",\n        \"kind\": \"checked\",\n        \"facts\": [\n          {\n            \"label\": \"Verified outside\",\n            \"kind\": \"verified\",\n            \"text\": \"Paid 1,250.00 USDC to 0x8c4f…cbba on Arc testnet.\",\n            \"who\": null,\n            \"at\": \"2026-10-03T15:20:06.000Z\",\n            \"notes\": [\n              \"Block 4210331 on Arc testnet holds a transfer of 1,250.00 USDC to the payee in this transaction.\"\n            ],\n            \"link\": {\n              \"href\": \"https://explorer.testnet.arc.io/tx/0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n              \"label\": \"The transaction\",\n              \"state\": \"checked\"\n            },\n            \"entries\": []\n          },\n          {\n            \"label\": \"Checked by code\",\n            \"kind\": \"checked\",\n            \"text\": \"Entry #5610 records this transaction.\",\n            \"who\": null,\n            \"at\": \"2026-10-03T15:20:00.000Z\",\n            \"entries\": [\n              5610\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"receipt\",\n        \"title\": \"The receipt\",\n        \"label\": \"Checked by code\",\n        \"kind\": \"checked\",\n        \"facts\": [\n          {\n            \"label\": \"Checked by code\",\n            \"kind\": \"checked\",\n            \"text\": \"Shared. Its signed entry verifies and names entry #5610, which records this transaction.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n            \"at\": \"2026-10-04T09:00:00.000Z\",\n            \"notes\": [\n              \"Its link was shown once, to the person who shared it, and opens a public page anyone can check.\"\n            ],\n            \"entries\": [\n              5612,\n              5610\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"signatures\",\n        \"title\": \"Signatures\",\n        \"label\": \"Checked by code\",\n        \"kind\": \"checked\",\n        \"caveat\": \"A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.\",\n        \"facts\": [\n          {\n            \"label\": \"Checked by code\",\n            \"kind\": \"checked\",\n            \"text\": \"7 entries verify: each is signed with the workspace's key, and its hash follows from its content, its signature and the hash before it.\",\n            \"who\": null,\n            \"at\": null,\n            \"notes\": [\n              \"The Audit log checks the whole chain, entry after entry.\"\n            ],\n            \"entries\": [\n              5605,\n              5606,\n              5607,\n              5608,\n              5609,\n              5610,\n              5612\n            ]\n          }\n        ]\n      }\n    ],\n    \"signedEntryProves\": \"A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.\",\n    \"checkAnEntry\": [\n      \"body_hash = sha256(canonical JSON of { actor, domain, action, summary, detail }, keys sorted)\",\n      \"signature = Ed25519 over the 32 bytes of body_hash, by the key signing_key_id names\",\n      \"hash = sha256(prev_hash || body_hash || signature), the hex strings joined\"\n    ],\n    \"keys\": [\n      {\n        \"id\": \"36e3209ae2e6a600\",\n        \"status\": \"active\",\n        \"publicKeyPem\": \"-----BEGIN PUBLIC KEY-----\\nMCowBQYDK2VwAyEAhXbIpeLpKB5bbwxtRVDFBlWIDaY3sitQ9KiQ0xCR7No=\\n-----END PUBLIC KEY-----\\n\"\n      }\n    ],\n    \"entries\": [\n      {\n        \"seq\": 5605,\n        \"id\": \"2ebe4be1-9898-4a8a-a182-166563617e2c\",\n        \"ts\": \"2026-10-02T09:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"counterparty_address_changed\",\n        \"summary\": \"Changed Harbor Print Co.'s payout address\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"from\": \"0x5a1b2c3d4e5f60718293a4b5c6d7e8f901234567\",\n          \"to\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"chain\": \"ARC-TESTNET\"\n        },\n        \"body_hash\": \"32deece8f6598ac091688f95cc7650bf4b024509accc6c8bc08d02c24fbc7f8c\",\n        \"signature\": \"118fa4acab75d62884243ec3aa11a1069e3a3c8b7446d92b2b212515e89743e64bf7203888218494ca1576cf3f8346a2859853d060ce522881150f0f5b9dd505\",\n        \"prev_hash\": \"7890fd259c2a528efe9e2a57ff9b2d79385a4e7a684bcd2b12a1f93de96853d9\",\n        \"hash\": \"5a4e61f31d16b7c1c873867f7a2b4756deb63d9d2624a6892ef1340b3ed3ae89\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5606,\n        \"id\": \"386d19ec-b651-485a-9fcc-6dc7f3979a15\",\n        \"ts\": \"2026-10-02T09:40:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"counterparty_address_confirmed\",\n        \"summary\": \"Confirmed Harbor Print Co.'s new payout address\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"address\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"chain\": \"ARC-TESTNET\",\n          \"via\": \"confirm\",\n          \"verification\": {\n            \"method\": \"call\",\n            \"contact\": \"Harbor Print's accounts line, from the vendor file\",\n            \"contactOnFileBefore\": true,\n            \"note\": \"Read back the new address on the call.\"\n          },\n          \"payeeLock\": {\n            \"coolingHours\": 24\n          }\n        },\n        \"body_hash\": \"7c040055d7b5699ea69746fd510b4a6870b8b62f40c989c82e070f5bee081482\",\n        \"signature\": \"9d4c736dcab1e695a202ca4d879346525d786ffb9937d4e4897c4ab212a8767240341e79e31028d15744b046fbfeff9666726576f1fac3df5ccbde06e9727301\",\n        \"prev_hash\": \"5a4e61f31d16b7c1c873867f7a2b4756deb63d9d2624a6892ef1340b3ed3ae89\",\n        \"hash\": \"ecedf7e736213c37131c6f2fdf3f5dae528f9d5b687b08122e9a6335dbcce355\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5607,\n        \"id\": \"5de39c47-b242-47eb-a130-2507bbed570c\",\n        \"ts\": \"2026-10-03T10:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"create_invoice\",\n        \"summary\": \"Added a bill from Harbor Print Co. for 1250 USDC\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"counterpartyName\": \"Harbor Print Co.\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"dueDate\": \"2026-10-20\",\n          \"poReference\": \"PO-1187\",\n          \"goodsReceived\": true,\n          \"invoiceNumber\": \"HP-2026-0412\",\n          \"document\": {\n            \"kind\": \"pdf\",\n            \"reader\": \"anthropic\",\n            \"sha256\": \"e32253322f3ee8aebb662b9ee42946b3d6b0141da8fc66cddf85ec61e12d0252\"\n          }\n        },\n        \"body_hash\": \"6c61a8524fad3add846231b1b10dd84aa9e9ab6294c2768f6d81bd3d0b8c5680\",\n        \"signature\": \"8d3e9041ed41b198745e104251cec68b6a498a35ac2ef01cd0a975c8cc9f9381bf2821fe83edd5f3f4802e07e8957574f85c5ee843a6e84f0eefa0169b90630c\",\n        \"prev_hash\": \"ecedf7e736213c37131c6f2fdf3f5dae528f9d5b687b08122e9a6335dbcce355\",\n        \"hash\": \"199d4e27b5e16792511e46cd55e8fee83ef76fc053e047b10c7de190fd8e740a\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5608,\n        \"id\": \"0ce02bf7-374c-4fb6-84c2-0166c9f1ff82\",\n        \"ts\": \"2026-10-03T10:01:00.000Z\",\n        \"actor\": \"agent\",\n        \"domain\": \"ap\",\n        \"action\": \"ap_hold\",\n        \"summary\": \"Held 1250 USDC to Harbor Print Co. for two approvals\",\n        \"detail\": {\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"decision\": {\n            \"action\": \"hold\"\n          },\n          \"decisionMode\": \"anthropic\",\n          \"agreedWithReference\": true,\n          \"guardrailBlocked\": true,\n          \"guardrailRule\": \"workspace.two_approvals\",\n          \"currency\": \"USDC\",\n          \"observed\": {\n            \"amount\": 1250,\n            \"paymentLimit\": 2000,\n            \"riskLevel\": \"clear\",\n            \"poReference\": \"PO-1187\",\n            \"goodsReceived\": true,\n            \"purchaseOrderRequired\": true,\n            \"twoApprovalsAbove\": 1000,\n            \"duplicateCheck\": {\n              \"matchesTotal\": 0\n            }\n          },\n          \"execution\": {\n            \"txRef\": null,\n            \"resultingStatus\": \"held\",\n            \"heldBecause\": \"workspace.two_approvals\"\n          }\n        },\n        \"body_hash\": \"c07c1ba045c308aeb910895f5a6bb782d263e15272d1d28339396ec008382f83\",\n        \"signature\": \"7aa3967f9c3f52719dfa8e16560f3d7dd1419ea15534de8b817cabb475ec1ea9904ec13920d755fb9040a7c8efc7b7e47389953fbcf83cfef675ae3ef7187d09\",\n        \"prev_hash\": \"199d4e27b5e16792511e46cd55e8fee83ef76fc053e047b10c7de190fd8e740a\",\n        \"hash\": \"c1748b31d24cd308c9d9d8a252fc03cfe972c95086235a3297a7d03e7834119d\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5609,\n        \"id\": \"b25a0a4d-2154-4a99-9bae-547345b3d082\",\n        \"ts\": \"2026-10-03T14:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"approval_given\",\n        \"summary\": \"Co-signed 1250 USDC to Harbor Print Co.; an owner, admin or approver's approval pays it (payments above 1000 USDC need two)\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b03\",\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"address\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"twoApprovalsAbove\": 1000,\n          \"cosign\": true\n        },\n        \"body_hash\": \"4bef2a60c1877a389424b70010085956e2cd5fcdb869a9da181df759e18d8236\",\n        \"signature\": \"2a5d35e580537d00a24bd0cfba8bdb931c355d2146a811105a11a4b6afe8f291dfad6b0516fd900a08f626470b26cbe045ef72d0cb090160c3c81fbfa531f501\",\n        \"prev_hash\": \"c1748b31d24cd308c9d9d8a252fc03cfe972c95086235a3297a7d03e7834119d\",\n        \"hash\": \"87750f493b785c931c8c69551ad76a1418b935eb8d2704a5c0fca19833cf959e\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5610,\n        \"id\": \"eab46f04-8b5a-44f1-803b-98e6b0a80f72\",\n        \"ts\": \"2026-10-03T15:20:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"approval_paid\",\n        \"summary\": \"Approved and paid 1250 USDC to Harbor Print Co.\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"amountPaid\": 1250,\n          \"discountTaken\": 0,\n          \"overrode\": \"held\",\n          \"txRef\": \"0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n          \"status\": \"paid\",\n          \"attempt\": 1,\n          \"firstPayment\": true,\n          \"approvals\": [\n            {\n              \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b03\",\n              \"at\": \"2026-10-03T14:00:00.000Z\"\n            },\n            {\n              \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n              \"at\": \"2026-10-03T15:20:00.000Z\"\n            }\n          ],\n          \"twoApprovalsAbove\": 1000\n        },\n        \"body_hash\": \"dae21d642023e245c099621bc1a8a1689b0f6d243b62803f464b4e35859c8400\",\n        \"signature\": \"035c519ac40e1dd2bbc7d70e08180b0e624cbc16df3b3a74c2a609c40c26cbe04f0d2a28bb01edbe1f0c0f5c9a52c76127f2c4affc71f7ae0fcdeac82f32b60b\",\n        \"prev_hash\": \"87750f493b785c931c8c69551ad76a1418b935eb8d2704a5c0fca19833cf959e\",\n        \"hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5612,\n        \"id\": \"33e7453e-1c5e-47b4-9d75-b2444045656d\",\n        \"ts\": \"2026-10-04T09:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"receipt_shared\",\n        \"summary\": \"Receipt: 1250 USDC paid on Arc testnet\",\n        \"detail\": {\n          \"receipt\": {\n            \"amount\": 1250,\n            \"token\": \"USDC\",\n            \"paidAt\": \"2026-10-03T15:20:06.000Z\",\n            \"payee\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n            \"chain\": \"ARC-TESTNET\",\n            \"txHash\": \"0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n            \"route\": \"direct\",\n            \"invoiceNumber\": \"HP-2026-0412\",\n            \"feesPaidBy\": \"sender\"\n          },\n          \"records\": {\n            \"seq\": 5610,\n            \"hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\"\n          }\n        },\n        \"body_hash\": \"51ed22303181009c5ae6edfffda627d61365f3688187cd106dc4dc774bc0b9bc\",\n        \"signature\": \"7c119a4807056a07dd11ff42f36e4333b8b31182df148388a15479a7cc8ce8cbffe483133de7c3d07981bba1506af73a23404a973343ec66180d5abf18556001\",\n        \"prev_hash\": \"655b287db5c7d17fdf9f87425bd3a434555a89ea8dbc71125b319d7569dfd785\",\n        \"hash\": \"b2687ac1ce1ae6f949ccd43e446e22fe7b36dc6dda1eebaa66d40afdca2fba81\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 unauthorized",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"unauthorized\",\n    \"message\": \"A valid API key is required.\"\n  }\n}"
+            },
+            {
+              "name": "403 forbidden",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"forbidden\",\n    \"message\": \"This key cannot do that.\"\n  }\n}"
+            },
+            {
+              "name": "404 not_found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Payable invoice \\\"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\\\" was not found.\"\n  }\n}"
+            },
+            {
+              "name": "429 rate_limited",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many evidence reads from this key. Try again in a minute.\"\n  }\n}"
+            },
+            {
+              "name": "500 internal",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"internal\",\n    \"message\": \"The request could not be completed.\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get a milestone's evidence",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"answers 200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/milestones/:id/evidence",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "milestones",
+                ":id",
+                "evidence"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61",
+                  "description": "The milestone's id, as `GET /api/v1/milestones` lists it."
+                }
+              ]
+            },
+            "description": "Why a contractor's milestone was paid, or why it is not paid yet, as one signed document: what was agreed, what was delivered and how it was verified, who decided, and the payment, each fact citing the ledger entries it rests on, which the document carries in full with the workspace's public keys. The format is a payable's, `vestiarion-evidence/1`, with members named by user id.\n\nAn id this workspace does not hold, including another workspace's, answers `404`. Text that came from outside, such as a pull request's title or a contractor's name, is carried as data.\n\n**Key:** any workspace API key; a read-only one is enough.\n\nReference: https://www.vestiarion.xyz/docs/api/get-milestone-evidence"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/milestones/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "milestones",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61",
+                      "description": "The milestone's id, as `GET /api/v1/milestones` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"format\": \"vestiarion-evidence/1\",\n    \"exportedAt\": \"2026-10-25T09:00:00.000Z\",\n    \"workspace\": {\n      \"slug\": \"northstar-studio\",\n      \"name\": \"Northstar Studio\"\n    },\n    \"network\": {\n      \"id\": \"arc-testnet\",\n      \"label\": \"Arc testnet\"\n    },\n    \"subject\": {\n      \"kind\": \"milestone\",\n      \"id\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\",\n      \"title\": \"Checkout page redesign\",\n      \"payee\": \"Lumen Dev\",\n      \"amount\": 800,\n      \"paidAmount\": null,\n      \"currency\": \"USDC\",\n      \"status\": \"paid\",\n      \"paid\": true,\n      \"closed\": false,\n      \"simulated\": false,\n      \"onChain\": true\n    },\n    \"labels\": {\n      \"checked\": {\n        \"words\": \"Checked by code\",\n        \"meaning\": \"A rule Vestiarion runs computed it: the three-way match, the guardrails, a signature, the written policy.\",\n        \"facts\": 4\n      },\n      \"verified\": {\n        \"words\": \"Verified outside\",\n        \"meaning\": \"Someone outside Vestiarion answered: the chain's record of the transaction, GitHub, the screening service.\",\n        \"facts\": 3\n      },\n      \"stated\": {\n        \"words\": \"Stated by a person\",\n        \"meaning\": \"A member or the payee entered it. The page names who, and when.\",\n        \"facts\": 3\n      },\n      \"inferred\": {\n        \"words\": \"Inferred\",\n        \"meaning\": \"Read, not recorded: the model's judgement, sample data, or a setting as it is today.\",\n        \"facts\": 1\n      },\n      \"missing\": {\n        \"words\": \"Missing\",\n        \"meaning\": \"Nothing records it. Where it can still be added, the page says how.\",\n        \"facts\": 0\n      },\n      \"unreachable\": {\n        \"words\": \"Could not open\",\n        \"meaning\": \"A check got no answer, or a link can't be opened (deleted, private, refused or expired): it never counts as verified.\",\n        \"facts\": 0\n      },\n      \"contradicted\": {\n        \"words\": \"Does not match\",\n        \"meaning\": \"A check answered, and its answer contradicts the record.\",\n        \"facts\": 0\n      }\n    },\n    \"steps\": [\n      {\n        \"id\": \"agreed\",\n        \"title\": \"What was agreed\",\n        \"label\": \"Stated by a person\",\n        \"kind\": \"stated\",\n        \"facts\": [\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"“Checkout page redesign”, 800.00 USDC for Lumen Dev, added on Contractors.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n            \"at\": \"2026-10-03T16:00:00.000Z\",\n            \"entries\": [\n              5611\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"delivered\",\n        \"title\": \"What was delivered\",\n        \"label\": \"Verified outside\",\n        \"kind\": \"verified\",\n        \"facts\": [\n          {\n            \"label\": \"Verified outside\",\n            \"kind\": \"verified\",\n            \"text\": \"GitHub reported pull request northstar-studio/site#48 merged.\",\n            \"who\": null,\n            \"at\": \"2026-10-08T09:00:00.000Z\",\n            \"notes\": [\n              \"Vestiarion asked GitHub on Oct 8, 2026, 09:10 UTC.\"\n            ],\n            \"link\": {\n              \"href\": \"https://github.com/northstar-studio/site/pull/48\",\n              \"label\": \"northstar-studio/site#48\",\n              \"state\": \"checked\",\n              \"given\": true\n            },\n            \"entries\": [\n              5613\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"payee\",\n        \"title\": \"The payee\",\n        \"label\": \"Stated by a person\",\n        \"kind\": \"stated\",\n        \"facts\": [\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"0x3e7d…9e01 was given on Counterparties.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n            \"at\": \"2026-10-01T08:30:00.000Z\",\n            \"entries\": [\n              5603\n            ]\n          },\n          {\n            \"label\": \"Stated by a person\",\n            \"kind\": \"stated\",\n            \"text\": \"The address was confirmed on Counterparties.\",\n            \"who\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n            \"at\": \"2026-10-01T09:05:00.000Z\",\n            \"entries\": [\n              5604\n            ]\n          },\n          {\n            \"label\": \"Verified outside\",\n            \"kind\": \"verified\",\n            \"text\": \"Lumen Dev was screened clear by OpenSanctions.\",\n            \"who\": null,\n            \"at\": \"2026-10-01T08:31:00.000Z\",\n            \"entries\": []\n          }\n        ]\n      },\n      {\n        \"id\": \"decision\",\n        \"title\": \"The decision\",\n        \"label\": \"Inferred\",\n        \"kind\": \"inferred\",\n        \"facts\": [\n          {\n            \"label\": \"Inferred\",\n            \"kind\": \"inferred\",\n            \"text\": \"Claude decided to release it, as the written policy would.\",\n            \"who\": null,\n            \"at\": \"2026-10-08T09:11:00.000Z\",\n            \"notes\": [\n              \"The model's judgement, from the facts it was given.\"\n            ],\n            \"entries\": [\n              5614\n            ]\n          },\n          {\n            \"label\": \"Checked by code\",\n            \"kind\": \"checked\",\n            \"text\": \"Code checked it before anything was sent.\",\n            \"who\": null,\n            \"at\": \"2026-10-08T09:11:00.000Z\",\n            \"notes\": [\n              \"✓ The work verified\",\n              \"✓ Counterparty screened clear\",\n              \"✓ 800.00 USDC within its 1,000.00 USDC limit\"\n            ],\n            \"entries\": [\n              5614\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"people\",\n        \"title\": \"People\",\n        \"label\": \"Checked by code\",\n        \"kind\": \"checked\",\n        \"facts\": [\n          {\n            \"label\": \"Checked by code\",\n            \"kind\": \"checked\",\n            \"text\": \"No person approved it: code let the agent pay it within the workspace's rules.\",\n            \"who\": null,\n            \"at\": null,\n            \"entries\": [\n              5614\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"payment\",\n        \"title\": \"The payment\",\n        \"label\": \"Checked by code\",\n        \"kind\": \"checked\",\n        \"facts\": [\n          {\n            \"label\": \"Verified outside\",\n            \"kind\": \"verified\",\n            \"text\": \"Paid 800.00 USDC to 0x3e7d…9e01 on Arc testnet.\",\n            \"who\": null,\n            \"at\": \"2026-10-08T09:11:06.000Z\",\n            \"notes\": [\n              \"Block 4388902 on Arc testnet holds a transfer of 800.00 USDC to the payee in this transaction.\"\n            ],\n            \"link\": {\n              \"href\": \"https://explorer.testnet.arc.io/tx/0xaa4864c775958bc6f6fd541460df2a351093dd600e37329351639dd191f2030c\",\n              \"label\": \"The transaction\",\n              \"state\": \"checked\"\n            },\n            \"entries\": []\n          },\n          {\n            \"label\": \"Checked by code\",\n            \"kind\": \"checked\",\n            \"text\": \"Entry #5614 records this transaction.\",\n            \"who\": null,\n            \"at\": \"2026-10-08T09:11:00.000Z\",\n            \"entries\": [\n              5614\n            ]\n          }\n        ]\n      },\n      {\n        \"id\": \"signatures\",\n        \"title\": \"Signatures\",\n        \"label\": \"Checked by code\",\n        \"kind\": \"checked\",\n        \"caveat\": \"A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.\",\n        \"facts\": [\n          {\n            \"label\": \"Checked by code\",\n            \"kind\": \"checked\",\n            \"text\": \"5 entries verify: each is signed with the workspace's key, and its hash follows from its content, its signature and the hash before it.\",\n            \"who\": null,\n            \"at\": null,\n            \"notes\": [\n              \"The Audit log checks the whole chain, entry after entry.\"\n            ],\n            \"entries\": [\n              5603,\n              5604,\n              5611,\n              5613,\n              5614\n            ]\n          }\n        ]\n      }\n    ],\n    \"signedEntryProves\": \"A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.\",\n    \"checkAnEntry\": [\n      \"body_hash = sha256(canonical JSON of { actor, domain, action, summary, detail }, keys sorted)\",\n      \"signature = Ed25519 over the 32 bytes of body_hash, by the key signing_key_id names\",\n      \"hash = sha256(prev_hash || body_hash || signature), the hex strings joined\"\n    ],\n    \"keys\": [\n      {\n        \"id\": \"36e3209ae2e6a600\",\n        \"status\": \"active\",\n        \"publicKeyPem\": \"-----BEGIN PUBLIC KEY-----\\nMCowBQYDK2VwAyEAhXbIpeLpKB5bbwxtRVDFBlWIDaY3sitQ9KiQ0xCR7No=\\n-----END PUBLIC KEY-----\\n\"\n      }\n    ],\n    \"entries\": [\n      {\n        \"seq\": 5603,\n        \"id\": \"b546c398-0533-46f3-bd08-f4616db95c2c\",\n        \"ts\": \"2026-10-01T08:30:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"create_counterparty\",\n        \"summary\": \"Added Lumen Dev as a contractor\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c02\",\n          \"name\": \"Lumen Dev\",\n          \"role\": \"contractor\",\n          \"address\": \"0x3e7d9c1b5a2f4e6d8c0b1a2f3e4d5c6b7a8f9e01\",\n          \"chain\": \"ARC-TESTNET\"\n        },\n        \"body_hash\": \"e2ccbd8cdd6456350288c1f13d3571f64f76645ff2838676d50a8a2e7c9c07d6\",\n        \"signature\": \"c91c53067e8c830328533a50e3953214eacd8275acab44914cd3afe94145495f4dfde94cee390caad3e8f0865ccb99fc316863af556363381a50c40d1838840f\",\n        \"prev_hash\": \"0a40c77a63ada232560e392c2e6b2a0ba790cd489c98dbf1e51856fc0c2e0af4\",\n        \"hash\": \"09c9fc837135aa8c1570b36ab1dc22a6cf727dccc9d3364978b6c293db7b8144\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5604,\n        \"id\": \"893c07ed-20c4-44c8-9af6-2c01c57d5188\",\n        \"ts\": \"2026-10-01T09:05:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"counterparty_address_confirmed\",\n        \"summary\": \"Confirmed Lumen Dev's payout address\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c02\",\n          \"address\": \"0x3e7d9c1b5a2f4e6d8c0b1a2f3e4d5c6b7a8f9e01\",\n          \"chain\": \"ARC-TESTNET\",\n          \"via\": \"confirm\",\n          \"payeeLock\": {\n            \"coolingHours\": 24\n          }\n        },\n        \"body_hash\": \"ce8d26688d5e5e11714bd759bdfce422f27e29eb30f5c81e0e8a3db1ba9868db\",\n        \"signature\": \"db01ada362a26c4d8dab8528cae2cb0961fc9fcb1d81fa5266504f2fa989b21ee43d3d4efcdfddf8f892a23e158ded92a601562d12b52fc5b4755fa63e9a9306\",\n        \"prev_hash\": \"09c9fc837135aa8c1570b36ab1dc22a6cf727dccc9d3364978b6c293db7b8144\",\n        \"hash\": \"7890fd259c2a528efe9e2a57ff9b2d79385a4e7a684bcd2b12a1f93de96853d9\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5611,\n        \"id\": \"a85a44cf-3b4c-46e0-a700-2f5f69baeb00\",\n        \"ts\": \"2026-10-03T16:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"contractor\",\n        \"action\": \"create_milestone\",\n        \"summary\": \"Added a milestone for Lumen Dev: Checkout page redesign, 800 USDC\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"milestoneId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c02\",\n          \"counterpartyName\": \"Lumen Dev\",\n          \"amount\": 800,\n          \"verificationSource\": \"https://github.com/northstar-studio/site/pull/48\"\n        },\n        \"body_hash\": \"a6c87fb49341cf5cac1db041ef3b707aa1e6292ee79c759486bb48c8a561c984\",\n        \"signature\": \"bff59cdb1df88107c19201024c97d9eb21a78a2a10449f38377f24a4af3edc9abca146874511813b9d03360845656921afe09b14594fe7707f9fe24ecac1c903\",\n        \"prev_hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\",\n        \"hash\": \"655b287db5c7d17fdf9f87425bd3a434555a89ea8dbc71125b319d7569dfd785\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5613,\n        \"id\": \"78398ac1-68ee-49b5-bdd6-ac91c8efd46a\",\n        \"ts\": \"2026-10-08T09:10:00.000Z\",\n        \"actor\": \"system\",\n        \"domain\": \"contractor\",\n        \"action\": \"verify_milestone_github\",\n        \"summary\": \"GitHub reported northstar-studio/site#48 merged\",\n        \"detail\": {\n          \"milestoneId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\",\n          \"verificationSource\": \"https://github.com/northstar-studio/site/pull/48\",\n          \"verificationStatus\": \"verified\",\n          \"pullRequest\": \"https://github.com/northstar-studio/site/pull/48\",\n          \"mergedAt\": \"2026-10-08T09:00:00.000Z\"\n        },\n        \"body_hash\": \"02cda18d117ee8a85b545b2f763e98c76da513ae29cd6c5be13edddcb7e521e9\",\n        \"signature\": \"476786c4a530c5812390de35db83f990bea1da69a5da3830d38b46df99dbcba6de19c61901ec410c2c959292b6dd5731d65181403668b6ed9577cf87a8bf6a0c\",\n        \"prev_hash\": \"b2687ac1ce1ae6f949ccd43e446e22fe7b36dc6dda1eebaa66d40afdca2fba81\",\n        \"hash\": \"913a2752c8857418c9c9cfdf90c1066d64c2385b162b53f33daf2a6e9fb1ead8\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5614,\n        \"id\": \"b35a5cdd-fbc9-43eb-8fc4-88bdfcf580c1\",\n        \"ts\": \"2026-10-08T09:11:00.000Z\",\n        \"actor\": \"agent\",\n        \"domain\": \"contractor\",\n        \"action\": \"milestone_release\",\n        \"summary\": \"Released 800 USDC to Lumen Dev for Checkout page redesign\",\n        \"detail\": {\n          \"milestoneId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c02\",\n          \"decision\": {\n            \"action\": \"release\"\n          },\n          \"decisionMode\": \"anthropic\",\n          \"agreedWithReference\": true,\n          \"guardrailBlocked\": false,\n          \"observed\": {\n            \"amount\": 800,\n            \"paymentLimit\": 1000,\n            \"riskLevel\": \"clear\",\n            \"verification\": {\n              \"verified\": true,\n              \"method\": \"github\",\n              \"source\": \"https://github.com/northstar-studio/site/pull/48\",\n              \"note\": null\n            }\n          },\n          \"execution\": {\n            \"txRef\": \"0xaa4864c775958bc6f6fd541460df2a351093dd600e37329351639dd191f2030c\",\n            \"resultingStatus\": \"paid\"\n          }\n        },\n        \"body_hash\": \"40a6a70c89faeecaea30c2e9375a532f7a4d1c0384cc158119f1219678dfeefb\",\n        \"signature\": \"fbf6d5a4cda2134e5d946f23774303f56c359b60b2006bacb1a37c74ef0c8c83ff3ac20bce50b29ec74756fa41fc8e06fc200b6894d7de8f642d3325dae5a703\",\n        \"prev_hash\": \"913a2752c8857418c9c9cfdf90c1066d64c2385b162b53f33daf2a6e9fb1ead8\",\n        \"hash\": \"fb8324e5ec87a4b8073032fb05e1d44a2773a714e317a4e5909943d6cc5b1c61\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 unauthorized",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/milestones/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "milestones",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61",
+                      "description": "The milestone's id, as `GET /api/v1/milestones` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"unauthorized\",\n    \"message\": \"A valid API key is required.\"\n  }\n}"
+            },
+            {
+              "name": "403 forbidden",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/milestones/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "milestones",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61",
+                      "description": "The milestone's id, as `GET /api/v1/milestones` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"forbidden\",\n    \"message\": \"This key cannot do that.\"\n  }\n}"
+            },
+            {
+              "name": "404 not_found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/milestones/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "milestones",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61",
+                      "description": "The milestone's id, as `GET /api/v1/milestones` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Milestone \\\"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\\\" was not found.\"\n  }\n}"
+            },
+            {
+              "name": "429 rate_limited",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/milestones/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "milestones",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61",
+                      "description": "The milestone's id, as `GET /api/v1/milestones` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many evidence reads from this key. Try again in a minute.\"\n  }\n}"
+            },
+            {
+              "name": "500 internal",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/milestones/:id/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "milestones",
+                    ":id",
+                    "evidence"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61",
+                      "description": "The milestone's id, as `GET /api/v1/milestones` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"internal\",\n    \"message\": \"The request could not be completed.\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get a payable's receipt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"answers 200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/invoices/:id/receipt",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "invoices",
+                ":id",
+                "receipt"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                  "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                }
+              ]
+            },
+            "description": "What a receipt states for a paid payable, in the format `vestiarion-receipt/1`: the amount and token, when it was paid, the address paid and its chain, the transaction, its route and fee, the vendor's invoice number, and what an early-payment discount took off; the ledger entry that recorded the transaction; and two checks, of that entry's signature and of the transaction on the payee's chain. When a member has shared the receipt, `shared` says when, names the `receipt_shared` entry that signed its statement, and says whether its link opens now. The link is never in the answer: Vestiarion keeps only its hash.\n\nA payable with no receipt yet answers `200` with `ready: false` and a `notReady` code: `not_paid`; `simulated`, a sandbox's payment, which moves nothing on chain; `not_minted`, a payout to another chain whose mint is not recorded yet; `no_transaction`; or `not_recorded`. A receivable, or an id this workspace does not hold, answers `404`. Text that came from outside, such as a vendor's name or an invoice number, is carried as data.\n\n**Key:** any workspace API key; a read-only one is enough.\n\nReference: https://www.vestiarion.xyz/docs/api/get-invoice-receipt"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/receipt",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "receipt"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"format\": \"vestiarion-receipt/1\",\n    \"exportedAt\": \"2026-10-25T09:00:00.000Z\",\n    \"workspace\": {\n      \"slug\": \"northstar-studio\",\n      \"name\": \"Northstar Studio\"\n    },\n    \"network\": {\n      \"id\": \"arc-testnet\",\n      \"label\": \"Arc testnet\"\n    },\n    \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n    \"ready\": true,\n    \"notReady\": null,\n    \"facts\": {\n      \"amount\": 1250,\n      \"token\": \"USDC\",\n      \"paidAt\": \"2026-10-03T15:20:06.000Z\",\n      \"payee\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n      \"chain\": \"ARC-TESTNET\",\n      \"txHash\": \"0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n      \"route\": \"direct\",\n      \"invoiceNumber\": \"HP-2026-0412\",\n      \"feesPaidBy\": \"sender\"\n    },\n    \"records\": {\n      \"seq\": 5610,\n      \"hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\"\n    },\n    \"invoiceEntry\": 5607,\n    \"shared\": {\n      \"at\": \"2026-10-04T09:00:00.000Z\",\n      \"entry\": 5612,\n      \"linkOpen\": true,\n      \"changes\": []\n    },\n    \"checks\": {\n      \"recorded\": {\n        \"ok\": true\n      },\n      \"onChain\": {\n        \"state\": \"matches\",\n        \"block\": 4210331,\n        \"received\": 1250\n      }\n    },\n    \"signedEntryProves\": \"A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.\",\n    \"checkAnEntry\": [\n      \"body_hash = sha256(canonical JSON of { actor, domain, action, summary, detail }, keys sorted)\",\n      \"signature = Ed25519 over the 32 bytes of body_hash, by the key signing_key_id names\",\n      \"hash = sha256(prev_hash || body_hash || signature), the hex strings joined\"\n    ],\n    \"keys\": [\n      {\n        \"id\": \"36e3209ae2e6a600\",\n        \"status\": \"active\",\n        \"publicKeyPem\": \"-----BEGIN PUBLIC KEY-----\\nMCowBQYDK2VwAyEAhXbIpeLpKB5bbwxtRVDFBlWIDaY3sitQ9KiQ0xCR7No=\\n-----END PUBLIC KEY-----\\n\"\n      }\n    ],\n    \"entries\": [\n      {\n        \"seq\": 5607,\n        \"id\": \"5de39c47-b242-47eb-a130-2507bbed570c\",\n        \"ts\": \"2026-10-03T10:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"create_invoice\",\n        \"summary\": \"Added a bill from Harbor Print Co. for 1250 USDC\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"counterpartyName\": \"Harbor Print Co.\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"dueDate\": \"2026-10-20\",\n          \"poReference\": \"PO-1187\",\n          \"goodsReceived\": true,\n          \"invoiceNumber\": \"HP-2026-0412\",\n          \"document\": {\n            \"kind\": \"pdf\",\n            \"reader\": \"anthropic\",\n            \"sha256\": \"e32253322f3ee8aebb662b9ee42946b3d6b0141da8fc66cddf85ec61e12d0252\"\n          }\n        },\n        \"body_hash\": \"6c61a8524fad3add846231b1b10dd84aa9e9ab6294c2768f6d81bd3d0b8c5680\",\n        \"signature\": \"8d3e9041ed41b198745e104251cec68b6a498a35ac2ef01cd0a975c8cc9f9381bf2821fe83edd5f3f4802e07e8957574f85c5ee843a6e84f0eefa0169b90630c\",\n        \"prev_hash\": \"ecedf7e736213c37131c6f2fdf3f5dae528f9d5b687b08122e9a6335dbcce355\",\n        \"hash\": \"199d4e27b5e16792511e46cd55e8fee83ef76fc053e047b10c7de190fd8e740a\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5610,\n        \"id\": \"eab46f04-8b5a-44f1-803b-98e6b0a80f72\",\n        \"ts\": \"2026-10-03T15:20:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"approval_paid\",\n        \"summary\": \"Approved and paid 1250 USDC to Harbor Print Co.\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"amountPaid\": 1250,\n          \"discountTaken\": 0,\n          \"overrode\": \"held\",\n          \"txRef\": \"0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n          \"status\": \"paid\",\n          \"attempt\": 1,\n          \"firstPayment\": true,\n          \"approvals\": [\n            {\n              \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b03\",\n              \"at\": \"2026-10-03T14:00:00.000Z\"\n            },\n            {\n              \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n              \"at\": \"2026-10-03T15:20:00.000Z\"\n            }\n          ],\n          \"twoApprovalsAbove\": 1000\n        },\n        \"body_hash\": \"dae21d642023e245c099621bc1a8a1689b0f6d243b62803f464b4e35859c8400\",\n        \"signature\": \"035c519ac40e1dd2bbc7d70e08180b0e624cbc16df3b3a74c2a609c40c26cbe04f0d2a28bb01edbe1f0c0f5c9a52c76127f2c4affc71f7ae0fcdeac82f32b60b\",\n        \"prev_hash\": \"87750f493b785c931c8c69551ad76a1418b935eb8d2704a5c0fca19833cf959e\",\n        \"hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5612,\n        \"id\": \"33e7453e-1c5e-47b4-9d75-b2444045656d\",\n        \"ts\": \"2026-10-04T09:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"receipt_shared\",\n        \"summary\": \"Receipt: 1250 USDC paid on Arc testnet\",\n        \"detail\": {\n          \"receipt\": {\n            \"amount\": 1250,\n            \"token\": \"USDC\",\n            \"paidAt\": \"2026-10-03T15:20:06.000Z\",\n            \"payee\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n            \"chain\": \"ARC-TESTNET\",\n            \"txHash\": \"0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n            \"route\": \"direct\",\n            \"invoiceNumber\": \"HP-2026-0412\",\n            \"feesPaidBy\": \"sender\"\n          },\n          \"records\": {\n            \"seq\": 5610,\n            \"hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\"\n          }\n        },\n        \"body_hash\": \"51ed22303181009c5ae6edfffda627d61365f3688187cd106dc4dc774bc0b9bc\",\n        \"signature\": \"7c119a4807056a07dd11ff42f36e4333b8b31182df148388a15479a7cc8ce8cbffe483133de7c3d07981bba1506af73a23404a973343ec66180d5abf18556001\",\n        \"prev_hash\": \"655b287db5c7d17fdf9f87425bd3a434555a89ea8dbc71125b319d7569dfd785\",\n        \"hash\": \"b2687ac1ce1ae6f949ccd43e446e22fe7b36dc6dda1eebaa66d40afdca2fba81\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "401 unauthorized",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/receipt",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "receipt"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"unauthorized\",\n    \"message\": \"A valid API key is required.\"\n  }\n}"
+            },
+            {
+              "name": "403 forbidden",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/receipt",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "receipt"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"forbidden\",\n    \"message\": \"This key cannot do that.\"\n  }\n}"
+            },
+            {
+              "name": "404 not_found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/receipt",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "receipt"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"not_found\",\n    \"message\": \"Payable invoice \\\"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\\\" was not found.\"\n  }\n}"
+            },
+            {
+              "name": "429 rate_limited",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/receipt",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "receipt"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many evidence reads from this key. Try again in a minute.\"\n  }\n}"
+            },
+            {
+              "name": "500 internal",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/invoices/:id/receipt",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    ":id",
+                    "receipt"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51",
+                      "description": "The payable's id, as `GET /api/v1/invoices` lists it."
+                    }
+                  ]
+                }
+              },
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"internal\",\n    \"message\": \"The request could not be completed.\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get the payee lock's evidence",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"answers 200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payee-lock/evidence",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payee-lock",
+                "evidence"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-10-01",
+                  "description": "The first day, as `YYYY-MM-DD`, in UTC. Leave it out to start from the first change.",
+                  "disabled": true
+                },
+                {
+                  "key": "to",
+                  "value": "2026-10-31",
+                  "description": "The last day, included, as `YYYY-MM-DD`, in UTC. Leave it out to run to now.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Every payout address change in a period, in the format `vestiarion-payee-lock-evidence/1`: who entered it, how it was checked and by whom, whether a second person stood behind it, what it held back, and the first payment to it, each fact citing the signed entries it rests on, which the document carries in full with the workspace's public keys. It is the file the evidence pack's Download signed JSON gives, with members named by user id, never by email.\n\nDays are whole UTC days; leave out `from` or `to` for an open end. A day that does not read, or a `from` after `to`, answers `400`, as does a period whose answer would be over 4 MB: ask for a shorter one. Text that came from outside, such as a payee's name, is carried as data.\n\n**Key:** any workspace API key; a read-only one is enough.\n\nReference: https://www.vestiarion.xyz/docs/api/get-payee-lock-evidence"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payee-lock/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payee-lock",
+                    "evidence"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-10-01",
+                      "description": "The first day, as `YYYY-MM-DD`, in UTC. Leave it out to start from the first change.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-10-31",
+                      "description": "The last day, included, as `YYYY-MM-DD`, in UTC. Leave it out to run to now.",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"format\": \"vestiarion-payee-lock-evidence/1\",\n    \"exportedAt\": \"2026-10-25T09:00:00.000Z\",\n    \"workspace\": {\n      \"slug\": \"northstar-studio\",\n      \"name\": \"Northstar Studio\"\n    },\n    \"network\": {\n      \"id\": \"arc-testnet\",\n      \"label\": \"Arc testnet\"\n    },\n    \"period\": {\n      \"from\": \"2026-10-01\",\n      \"to\": \"2026-10-31\"\n    },\n    \"lock\": {\n      \"now\": {\n        \"on\": true,\n        \"coolingHours\": 24\n      },\n      \"changes\": [\n        {\n          \"at\": \"2026-10-01T08:00:00.000Z\",\n          \"by\": {\n            \"kind\": \"member\",\n            \"userId\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n            \"email\": null\n          },\n          \"from\": {\n            \"on\": false,\n            \"coolingHours\": 0\n          },\n          \"to\": {\n            \"on\": true,\n            \"coolingHours\": 24\n          },\n          \"entry\": 5601\n        }\n      ]\n    },\n    \"summary\": {\n      \"changes\": 1,\n      \"confirmed\": 1,\n      \"confirmedWithRecord\": 1,\n      \"confirmedBySecondPerson\": 1,\n      \"heldWhileUnconfirmed\": 0,\n      \"heldForTheWait\": 0,\n      \"heldAsNewPayee\": 0,\n      \"paid\": 1,\n      \"paidOnlyAfterConfirmation\": 1\n    },\n    \"changes\": [\n      {\n        \"counterparty\": {\n          \"id\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"name\": \"Harbor Print Co.\"\n        },\n        \"change\": {\n          \"at\": \"2026-10-02T09:00:00.000Z\",\n          \"from\": \"0x5a1b2c3d4e5f60718293a4b5c6d7e8f901234567\",\n          \"to\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"chain\": \"ARC-TESTNET\",\n          \"enteredBy\": {\n            \"kind\": \"member\",\n            \"userId\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n            \"email\": null\n          },\n          \"entry\": 5605\n        },\n        \"confirmation\": {\n          \"at\": \"2026-10-02T09:40:00.000Z\",\n          \"by\": {\n            \"kind\": \"member\",\n            \"userId\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n            \"email\": null\n          },\n          \"via\": \"confirm\",\n          \"record\": {\n            \"method\": \"call\",\n            \"methodLabel\": \"Called them on a number we had before\",\n            \"contact\": \"Harbor Print's accounts line, from the vendor file\",\n            \"contactOnFileBefore\": true,\n            \"note\": \"Read back the new address on the call.\"\n          },\n          \"secondPerson\": true,\n          \"soloConfirmation\": false,\n          \"byGiver\": false,\n          \"giverUnknown\": false,\n          \"waitHours\": 24,\n          \"payableFrom\": \"2026-10-03T09:00:00.000Z\",\n          \"lookalikeOf\": [],\n          \"looksLikeEarlier\": null,\n          \"entry\": 5606\n        },\n        \"holds\": [],\n        \"firstPayment\": {\n          \"at\": \"2026-10-03T15:20:00.000Z\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"txRef\": \"0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n          \"txUrl\": \"https://explorer.testnet.arc.io/tx/0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n          \"decidedBy\": \"person\",\n          \"subject\": {\n            \"kind\": \"invoice\",\n            \"id\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\"\n          },\n          \"entry\": 5610\n        },\n        \"checks\": {\n          \"recordKept\": true,\n          \"contactOnFileBefore\": true,\n          \"secondPerson\": true,\n          \"paidAfterConfirmation\": true,\n          \"paidAfterWait\": true\n        }\n      }\n    ],\n    \"signedEntryProves\": \"A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.\",\n    \"checkAnEntry\": [\n      \"body_hash = sha256(canonical JSON of { actor, domain, action, summary, detail }, keys sorted)\",\n      \"signature = Ed25519 over the 32 bytes of body_hash, by the key signing_key_id names\",\n      \"hash = sha256(prev_hash || body_hash || signature), the hex strings joined\"\n    ],\n    \"keys\": [\n      {\n        \"id\": \"36e3209ae2e6a600\",\n        \"status\": \"active\",\n        \"publicKeyPem\": \"-----BEGIN PUBLIC KEY-----\\nMCowBQYDK2VwAyEAhXbIpeLpKB5bbwxtRVDFBlWIDaY3sitQ9KiQ0xCR7No=\\n-----END PUBLIC KEY-----\\n\"\n      }\n    ],\n    \"entries\": [\n      {\n        \"seq\": 5601,\n        \"id\": \"4c91f0f4-911a-4545-8288-0db0bc9e02b8\",\n        \"ts\": \"2026-10-01T08:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"system\",\n        \"action\": \"payee_lock_changed\",\n        \"summary\": \"Turned the payee lock on, with a 24-hour wait\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"from\": {\n            \"on\": false,\n            \"coolingHours\": 0\n          },\n          \"to\": {\n            \"on\": true,\n            \"coolingHours\": 24\n          }\n        },\n        \"body_hash\": \"885a533140980dec04bcd50c470e75d411c28ce68a93c82faf03954b6ab8f368\",\n        \"signature\": \"12afb9acc4ac110589546ef7f2a8eb8df4312c8a72295159cdbd94be406abe8e737093639f9c52ca49e62ad298b9721b9968a3db9eda98df003a399f18c78b0c\",\n        \"prev_hash\": \"f930fef40d20e33527aea73c7a45b25da454cddb7ed988f4428566c590afd18a\",\n        \"hash\": \"e0060f2d92de74e98a2f37aa7fca828b96325cd810ea0f85b55e7367c6c900d9\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5605,\n        \"id\": \"2ebe4be1-9898-4a8a-a182-166563617e2c\",\n        \"ts\": \"2026-10-02T09:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"counterparty_address_changed\",\n        \"summary\": \"Changed Harbor Print Co.'s payout address\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"from\": \"0x5a1b2c3d4e5f60718293a4b5c6d7e8f901234567\",\n          \"to\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"chain\": \"ARC-TESTNET\"\n        },\n        \"body_hash\": \"32deece8f6598ac091688f95cc7650bf4b024509accc6c8bc08d02c24fbc7f8c\",\n        \"signature\": \"118fa4acab75d62884243ec3aa11a1069e3a3c8b7446d92b2b212515e89743e64bf7203888218494ca1576cf3f8346a2859853d060ce522881150f0f5b9dd505\",\n        \"prev_hash\": \"7890fd259c2a528efe9e2a57ff9b2d79385a4e7a684bcd2b12a1f93de96853d9\",\n        \"hash\": \"5a4e61f31d16b7c1c873867f7a2b4756deb63d9d2624a6892ef1340b3ed3ae89\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5606,\n        \"id\": \"386d19ec-b651-485a-9fcc-6dc7f3979a15\",\n        \"ts\": \"2026-10-02T09:40:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"counterparty_address_confirmed\",\n        \"summary\": \"Confirmed Harbor Print Co.'s new payout address\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"address\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"chain\": \"ARC-TESTNET\",\n          \"via\": \"confirm\",\n          \"verification\": {\n            \"method\": \"call\",\n            \"contact\": \"Harbor Print's accounts line, from the vendor file\",\n            \"contactOnFileBefore\": true,\n            \"note\": \"Read back the new address on the call.\"\n          },\n          \"payeeLock\": {\n            \"coolingHours\": 24\n          }\n        },\n        \"body_hash\": \"7c040055d7b5699ea69746fd510b4a6870b8b62f40c989c82e070f5bee081482\",\n        \"signature\": \"9d4c736dcab1e695a202ca4d879346525d786ffb9937d4e4897c4ab212a8767240341e79e31028d15744b046fbfeff9666726576f1fac3df5ccbde06e9727301\",\n        \"prev_hash\": \"5a4e61f31d16b7c1c873867f7a2b4756deb63d9d2624a6892ef1340b3ed3ae89\",\n        \"hash\": \"ecedf7e736213c37131c6f2fdf3f5dae528f9d5b687b08122e9a6335dbcce355\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5610,\n        \"id\": \"eab46f04-8b5a-44f1-803b-98e6b0a80f72\",\n        \"ts\": \"2026-10-03T15:20:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"approval_paid\",\n        \"summary\": \"Approved and paid 1250 USDC to Harbor Print Co.\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"amountPaid\": 1250,\n          \"discountTaken\": 0,\n          \"overrode\": \"held\",\n          \"txRef\": \"0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n          \"status\": \"paid\",\n          \"attempt\": 1,\n          \"firstPayment\": true,\n          \"approvals\": [\n            {\n              \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b03\",\n              \"at\": \"2026-10-03T14:00:00.000Z\"\n            },\n            {\n              \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n              \"at\": \"2026-10-03T15:20:00.000Z\"\n            }\n          ],\n          \"twoApprovalsAbove\": 1000\n        },\n        \"body_hash\": \"dae21d642023e245c099621bc1a8a1689b0f6d243b62803f464b4e35859c8400\",\n        \"signature\": \"035c519ac40e1dd2bbc7d70e08180b0e624cbc16df3b3a74c2a609c40c26cbe04f0d2a28bb01edbe1f0c0f5c9a52c76127f2c4affc71f7ae0fcdeac82f32b60b\",\n        \"prev_hash\": \"87750f493b785c931c8c69551ad76a1418b935eb8d2704a5c0fca19833cf959e\",\n        \"hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "400 invalid_request",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payee-lock/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payee-lock",
+                    "evidence"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-10-01",
+                      "description": "The first day, as `YYYY-MM-DD`, in UTC. Leave it out to start from the first change.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-10-31",
+                      "description": "The last day, included, as `YYYY-MM-DD`, in UTC. Leave it out to run to now.",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"invalid_request\",\n    \"message\": \"from and to must be days as YYYY-MM-DD, from no later than to\"\n  }\n}"
+            },
+            {
+              "name": "401 unauthorized",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payee-lock/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payee-lock",
+                    "evidence"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-10-01",
+                      "description": "The first day, as `YYYY-MM-DD`, in UTC. Leave it out to start from the first change.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-10-31",
+                      "description": "The last day, included, as `YYYY-MM-DD`, in UTC. Leave it out to run to now.",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"unauthorized\",\n    \"message\": \"A valid API key is required.\"\n  }\n}"
+            },
+            {
+              "name": "403 forbidden",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payee-lock/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payee-lock",
+                    "evidence"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-10-01",
+                      "description": "The first day, as `YYYY-MM-DD`, in UTC. Leave it out to start from the first change.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-10-31",
+                      "description": "The last day, included, as `YYYY-MM-DD`, in UTC. Leave it out to run to now.",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"forbidden\",\n    \"message\": \"This key cannot do that.\"\n  }\n}"
+            },
+            {
+              "name": "429 rate_limited",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payee-lock/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payee-lock",
+                    "evidence"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-10-01",
+                      "description": "The first day, as `YYYY-MM-DD`, in UTC. Leave it out to start from the first change.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-10-31",
+                      "description": "The last day, included, as `YYYY-MM-DD`, in UTC. Leave it out to run to now.",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many evidence reads from this key. Try again in a minute.\"\n  }\n}"
+            },
+            {
+              "name": "500 internal",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/payee-lock/evidence",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payee-lock",
+                    "evidence"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-10-01",
+                      "description": "The first day, as `YYYY-MM-DD`, in UTC. Leave it out to start from the first change.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-10-31",
+                      "description": "The last day, included, as `YYYY-MM-DD`, in UTC. Leave it out to run to now.",
+                      "disabled": true
+                    }
+                  ]
+                }
+              },
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"internal\",\n    \"message\": \"The request could not be completed.\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get a monthly close pack",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"answers 200 OK\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/close-packs/:month",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "close-packs",
+                ":month"
+              ],
+              "variable": [
+                {
+                  "key": "month",
+                  "value": "2026-10",
+                  "description": "The month, as `YYYY-MM`: a calendar month in UTC."
+                }
+              ]
+            },
+            "description": "Every payment settled in a calendar month (UTC), one row each: the bill with its invoice number and its document's SHA-256, who decided and approved it, what was checked, the transaction, the books, and the signed entry that records it; then the payments not settled in the month and the escrow moves, apart, totals per token, and every cited entry in full with the workspace's public keys. The format is `vestiarion-close-pack/1`, the file the Monthly close pack page's Download signed JSON gives, with members named by user id.\n\n`month` is `YYYY-MM`. This month is allowed, and reads so far: `month.ended` is `false`. A month still to come, or one before 2020, answers `400`, as does a month whose answer would be over 4 MB: download that one from the workspace. A month of more than 2,000 payments is cut at 2,000 and says so in `cut`. Reading it records nothing in the ledger. Text that came from outside, such as a vendor's name, an invoice number or a memo, is carried as data.\n\n**Key:** any workspace API key; a read-only one is enough.\n\nReference: https://www.vestiarion.xyz/docs/api/get-close-pack"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/close-packs/:month",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "close-packs",
+                    ":month"
+                  ],
+                  "variable": [
+                    {
+                      "key": "month",
+                      "value": "2026-10",
+                      "description": "The month, as `YYYY-MM`: a calendar month in UTC."
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"data\": {\n    \"format\": \"vestiarion-close-pack/1\",\n    \"exportedAt\": \"2026-10-25T09:00:00.000Z\",\n    \"workspace\": {\n      \"slug\": \"northstar-studio\",\n      \"name\": \"Northstar Studio\"\n    },\n    \"network\": {\n      \"id\": \"arc-testnet\",\n      \"label\": \"Arc testnet\"\n    },\n    \"month\": {\n      \"from\": \"2026-10-01\",\n      \"to\": \"2026-11-01\",\n      \"label\": \"October 2026\",\n      \"key\": \"2026-10\",\n      \"ended\": false\n    },\n    \"ledgerHead\": {\n      \"seq\": 5618,\n      \"hash\": \"d24bfd6b9277f9a31e8ac125531af4c9f3209f12534561425fa45d313e24e55c\"\n    },\n    \"cut\": false,\n    \"unread\": [],\n    \"totals\": {\n      \"onChain\": [\n        {\n          \"token\": \"USDC\",\n          \"payments\": 2,\n          \"amount\": \"2050.000000\",\n          \"routeFeesUsdc\": \"0.000000\"\n        }\n      ],\n      \"simulated\": [],\n      \"shadow\": 0,\n      \"notSettled\": {\n        \"in_flight\": 1\n      },\n      \"withoutBill\": 0,\n      \"entries\": {\n        \"cited\": 11,\n        \"verified\": 11,\n        \"failed\": 0,\n        \"unchecked\": 0\n      }\n    },\n    \"rows\": [\n      {\n        \"paymentId\": \"c5d6e7f8-0a1b-4c2d-8e3f-4a5b6c7d8e01\",\n        \"source\": {\n          \"kind\": \"invoice\",\n          \"id\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\"\n        },\n        \"paidAt\": \"2026-10-03T15:20:06.000Z\",\n        \"sentAt\": \"2026-10-03T15:20:01.000Z\",\n        \"amount\": \"1250.000000\",\n        \"token\": \"USDC\",\n        \"discount\": null,\n        \"simulated\": false,\n        \"shadow\": false,\n        \"payee\": {\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"name\": \"Harbor Print Co.\",\n          \"address\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"bank\": null\n        },\n        \"bill\": {\n          \"kind\": \"invoice\",\n          \"id\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"number\": \"HP-2026-0412\",\n          \"amount\": \"1250.000000\",\n          \"currency\": \"USDC\",\n          \"written\": null,\n          \"dueDate\": \"2026-10-20\",\n          \"poReference\": \"PO-1187\",\n          \"memo\": \"October catalogue print run\",\n          \"document\": {\n            \"sha256\": \"e32253322f3ee8aebb662b9ee42946b3d6b0141da8fc66cddf85ec61e12d0252\",\n            \"kind\": \"pdf\"\n          },\n          \"vendorDocuments\": [],\n          \"entry\": 5607\n        },\n        \"approval\": {\n          \"authorizedBy\": \"two_people\",\n          \"agent\": {\n            \"action\": \"ap_hold\",\n            \"decider\": \"Claude\",\n            \"guardrailRule\": \"workspace.two_approvals\",\n            \"shadow\": false,\n            \"at\": \"2026-10-03T10:01:00.000Z\",\n            \"entry\": 5608\n          },\n          \"approvals\": [\n            {\n              \"who\": {\n                \"kind\": \"member\",\n                \"userId\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b03\",\n                \"email\": null,\n                \"roleNow\": \"accountant\"\n              },\n              \"at\": \"2026-10-03T14:00:00.000Z\",\n              \"cosign\": true,\n              \"paid\": false,\n              \"via\": null,\n              \"entry\": 5609\n            },\n            {\n              \"who\": {\n                \"kind\": \"member\",\n                \"userId\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n                \"email\": null,\n                \"roleNow\": \"approver\"\n              },\n              \"at\": \"2026-10-03T15:20:00.000Z\",\n              \"cosign\": false,\n              \"paid\": true,\n              \"via\": null,\n              \"entry\": 5610\n            }\n          ],\n          \"verdict\": null,\n          \"flags\": {\n            \"soleApprover\": false,\n            \"addressGiverApproved\": false,\n            \"firstPayment\": true,\n            \"fewApprovers\": false\n          },\n          \"address\": {\n            \"address\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n            \"mirror\": false,\n            \"givenBy\": {\n              \"kind\": \"member\",\n              \"userId\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n              \"email\": null,\n              \"roleNow\": \"owner\"\n            },\n            \"givenAt\": \"2026-10-02T09:00:00.000Z\",\n            \"confirmedBy\": {\n              \"kind\": \"member\",\n              \"userId\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n              \"email\": null,\n              \"roleNow\": \"approver\"\n            },\n            \"confirmedAt\": \"2026-10-02T09:40:00.000Z\",\n            \"confirmedWith\": \"confirm\",\n            \"secondPerson\": true,\n            \"entries\": [\n              5605,\n              5606\n            ]\n          }\n        },\n        \"checks\": {\n          \"guardrails\": {\n            \"kind\": \"checked\",\n            \"text\": \"The agent held it: it is above the figure where two people approve. A person decided to pay it.\",\n            \"notes\": [\n              \"✓ Purchase order PO-1187 on file and the goods received\",\n              \"✓ Counterparty screened clear\",\n              \"✓ 1,250.00 USDC within its 2,000.00 USDC limit\",\n              \"✓ No duplicate found\",\n              \"✗ Code refused it before anything was sent: workspace.two_approvals\"\n            ],\n            \"at\": \"2026-10-03T10:01:00.000Z\",\n            \"entries\": [\n              5608\n            ],\n            \"warn\": false\n          },\n          \"screening\": {\n            \"kind\": \"verified\",\n            \"text\": \"Harbor Print Co. was screened clear by OpenSanctions.\",\n            \"notes\": [],\n            \"at\": \"2026-10-01T08:21:00.000Z\",\n            \"entries\": [],\n            \"warn\": false\n          },\n          \"walletList\": {\n            \"kind\": \"checked\",\n            \"text\": \"Its payout address was not on OFAC's SDN list when it was paid: every screening and payment checks it.\",\n            \"notes\": [],\n            \"at\": \"2026-10-03T10:01:00.000Z\",\n            \"entries\": [],\n            \"warn\": false\n          },\n          \"payeeLock\": {\n            \"kind\": \"checked\",\n            \"text\": \"The payee lock was on when the address was confirmed, with a 24-hour wait. It was sent 30 hours after the address was given.\",\n            \"notes\": [],\n            \"at\": \"2026-10-02T09:40:00.000Z\",\n            \"entries\": [\n              5605,\n              5606\n            ],\n            \"warn\": false\n          },\n          \"payTo\": {\n            \"kind\": \"checked\",\n            \"text\": \"The address its document asked to be paid to is the one paid.\",\n            \"notes\": [],\n            \"at\": null,\n            \"entries\": [],\n            \"warn\": false\n          },\n          \"milestone\": {\n            \"kind\": \"not_applicable\",\n            \"text\": \"A bill has no milestone to verify.\",\n            \"notes\": [],\n            \"at\": null,\n            \"entries\": [],\n            \"warn\": false\n          }\n        },\n        \"transaction\": {\n          \"route\": \"direct\",\n          \"txHash\": \"0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n          \"chain\": \"ARC-TESTNET\",\n          \"chainLabel\": \"Arc testnet\",\n          \"explorerUrl\": \"https://explorer.testnet.arc.io/tx/0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n          \"sourceTxHash\": null,\n          \"sourceExplorerUrl\": null,\n          \"simulatedRef\": null,\n          \"note\": null,\n          \"networkFeeUsd\": \"0.004100\",\n          \"networkFeeSource\": \"chain_reported\",\n          \"routeFeeUsdc\": null,\n          \"earlierAttempts\": 0\n        },\n        \"record\": {\n          \"seq\": 5610,\n          \"action\": \"approval_paid\",\n          \"ts\": \"2026-10-03T15:20:00.000Z\",\n          \"hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\",\n          \"signature\": \"035c519ac40e1dd2bbc7d70e08180b0e624cbc16df3b3a74c2a609c40c26cbe04f0d2a28bb01edbe1f0c0f5c9a52c76127f2c4affc71f7ae0fcdeac82f32b60b\",\n          \"signingKeyId\": \"36e3209ae2e6a600\",\n          \"check\": {\n            \"ok\": true\n          }\n        },\n        \"books\": {\n          \"markedPaid\": true,\n          \"mismatch\": null,\n          \"booked\": null\n        },\n        \"evidencePath\": \"/o/northstar-studio/evidence/invoice/7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n        \"entries\": [\n          5605,\n          5606,\n          5607,\n          5608,\n          5609,\n          5610\n        ],\n        \"evidenceUrl\": \"https://www.vestiarion.xyz/o/northstar-studio/evidence/invoice/7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\"\n      },\n      {\n        \"paymentId\": \"c5d6e7f8-0a1b-4c2d-8e3f-4a5b6c7d8e02\",\n        \"source\": {\n          \"kind\": \"milestone\",\n          \"id\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\"\n        },\n        \"paidAt\": \"2026-10-08T09:11:06.000Z\",\n        \"sentAt\": \"2026-10-08T09:11:01.000Z\",\n        \"amount\": \"800.000000\",\n        \"token\": \"USDC\",\n        \"discount\": null,\n        \"simulated\": false,\n        \"shadow\": false,\n        \"payee\": {\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c02\",\n          \"name\": \"Lumen Dev\",\n          \"address\": \"0x3e7d9c1b5a2f4e6d8c0b1a2f3e4d5c6b7a8f9e01\",\n          \"bank\": null\n        },\n        \"bill\": {\n          \"kind\": \"milestone\",\n          \"id\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\",\n          \"title\": \"Checkout page redesign\",\n          \"amount\": \"800.000000\",\n          \"currency\": \"USDC\",\n          \"entry\": 5611\n        },\n        \"approval\": {\n          \"authorizedBy\": \"code\",\n          \"agent\": {\n            \"action\": \"milestone_release\",\n            \"decider\": \"Claude\",\n            \"guardrailRule\": null,\n            \"shadow\": false,\n            \"at\": \"2026-10-08T09:11:00.000Z\",\n            \"entry\": 5614\n          },\n          \"approvals\": [],\n          \"verdict\": null,\n          \"flags\": {\n            \"soleApprover\": false,\n            \"addressGiverApproved\": false,\n            \"firstPayment\": false,\n            \"fewApprovers\": false\n          },\n          \"address\": {\n            \"address\": \"0x3e7d9c1b5a2f4e6d8c0b1a2f3e4d5c6b7a8f9e01\",\n            \"mirror\": false,\n            \"givenBy\": {\n              \"kind\": \"member\",\n              \"userId\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n              \"email\": null,\n              \"roleNow\": \"owner\"\n            },\n            \"givenAt\": \"2026-10-01T08:30:00.000Z\",\n            \"confirmedBy\": {\n              \"kind\": \"member\",\n              \"userId\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n              \"email\": null,\n              \"roleNow\": \"approver\"\n            },\n            \"confirmedAt\": \"2026-10-01T09:05:00.000Z\",\n            \"confirmedWith\": \"confirm\",\n            \"secondPerson\": true,\n            \"entries\": [\n              5603,\n              5604\n            ]\n          }\n        },\n        \"checks\": {\n          \"guardrails\": {\n            \"kind\": \"checked\",\n            \"text\": \"Code checked it before it was sent.\",\n            \"notes\": [\n              \"✓ Counterparty screened clear\",\n              \"✓ 800.00 USDC within its 1,000.00 USDC limit\"\n            ],\n            \"at\": \"2026-10-08T09:11:00.000Z\",\n            \"entries\": [\n              5614\n            ],\n            \"warn\": false\n          },\n          \"screening\": {\n            \"kind\": \"verified\",\n            \"text\": \"Lumen Dev was screened clear by OpenSanctions.\",\n            \"notes\": [],\n            \"at\": \"2026-10-01T08:21:00.000Z\",\n            \"entries\": [],\n            \"warn\": false\n          },\n          \"walletList\": {\n            \"kind\": \"checked\",\n            \"text\": \"Its payout address was not on OFAC's SDN list when it was paid: every screening and payment checks it.\",\n            \"notes\": [],\n            \"at\": \"2026-10-08T09:11:00.000Z\",\n            \"entries\": [],\n            \"warn\": false\n          },\n          \"payeeLock\": {\n            \"kind\": \"checked\",\n            \"text\": \"The payee lock was on when the address was confirmed, with a 24-hour wait. It was sent 168 hours after the address was given.\",\n            \"notes\": [],\n            \"at\": \"2026-10-01T09:05:00.000Z\",\n            \"entries\": [\n              5603,\n              5604\n            ],\n            \"warn\": false\n          },\n          \"payTo\": {\n            \"kind\": \"not_applicable\",\n            \"text\": \"A milestone has no invoice document.\",\n            \"notes\": [],\n            \"at\": null,\n            \"entries\": [],\n            \"warn\": false\n          },\n          \"milestone\": {\n            \"kind\": \"verified\",\n            \"text\": \"GitHub reported pull request northstar-studio/site#48 merged.\",\n            \"notes\": [],\n            \"at\": \"2026-10-08T09:00:00.000Z\",\n            \"entries\": [\n              5613\n            ],\n            \"warn\": false\n          }\n        },\n        \"transaction\": {\n          \"route\": \"direct\",\n          \"txHash\": \"0xaa4864c775958bc6f6fd541460df2a351093dd600e37329351639dd191f2030c\",\n          \"chain\": \"ARC-TESTNET\",\n          \"chainLabel\": \"Arc testnet\",\n          \"explorerUrl\": \"https://explorer.testnet.arc.io/tx/0xaa4864c775958bc6f6fd541460df2a351093dd600e37329351639dd191f2030c\",\n          \"sourceTxHash\": null,\n          \"sourceExplorerUrl\": null,\n          \"simulatedRef\": null,\n          \"note\": null,\n          \"networkFeeUsd\": \"0.004100\",\n          \"networkFeeSource\": \"chain_reported\",\n          \"routeFeeUsdc\": null,\n          \"earlierAttempts\": 0\n        },\n        \"record\": {\n          \"seq\": 5614,\n          \"action\": \"milestone_release\",\n          \"ts\": \"2026-10-08T09:11:00.000Z\",\n          \"hash\": \"fb8324e5ec87a4b8073032fb05e1d44a2773a714e317a4e5909943d6cc5b1c61\",\n          \"signature\": \"fbf6d5a4cda2134e5d946f23774303f56c359b60b2006bacb1a37c74ef0c8c83ff3ac20bce50b29ec74756fa41fc8e06fc200b6894d7de8f642d3325dae5a703\",\n          \"signingKeyId\": \"36e3209ae2e6a600\",\n          \"check\": {\n            \"ok\": true\n          }\n        },\n        \"books\": {\n          \"markedPaid\": true,\n          \"mismatch\": null,\n          \"booked\": null\n        },\n        \"evidencePath\": \"/o/northstar-studio/evidence/milestone/7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\",\n        \"entries\": [\n          5603,\n          5604,\n          5611,\n          5613,\n          5614\n        ],\n        \"evidenceUrl\": \"https://www.vestiarion.xyz/o/northstar-studio/evidence/milestone/7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\"\n      }\n    ],\n    \"notSettled\": [\n      {\n        \"paymentId\": \"c5d6e7f8-0a1b-4c2d-8e3f-4a5b6c7d8e03\",\n        \"source\": {\n          \"kind\": \"invoice\",\n          \"id\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e52\"\n        },\n        \"payee\": {\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c03\",\n          \"name\": \"Quill Paper\"\n        },\n        \"amount\": \"310.000000\",\n        \"token\": \"USDC\",\n        \"simulated\": false,\n        \"state\": \"in_flight\",\n        \"sentAt\": \"2026-10-24T10:01:01.000Z\",\n        \"settledAt\": null,\n        \"reason\": \"SENT\",\n        \"txHash\": null,\n        \"explorerUrl\": null,\n        \"evidencePath\": \"/o/northstar-studio/evidence/invoice/7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e52\",\n        \"evidenceUrl\": \"https://www.vestiarion.xyz/o/northstar-studio/evidence/invoice/7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e52\"\n      }\n    ],\n    \"escrow\": [],\n    \"labels\": {\n      \"checked\": {\n        \"words\": \"Checked by code\",\n        \"meaning\": \"A rule Vestiarion runs computed it: the three-way match, the guardrails, a signature, the written policy.\"\n      },\n      \"verified\": {\n        \"words\": \"Verified outside\",\n        \"meaning\": \"Someone outside Vestiarion answered: the chain's record of the transaction, GitHub, the screening service.\"\n      },\n      \"stated\": {\n        \"words\": \"Stated by a person\",\n        \"meaning\": \"A member or the payee entered it. The page names who, and when.\"\n      },\n      \"inferred\": {\n        \"words\": \"Inferred\",\n        \"meaning\": \"Read, not recorded: the model's judgement, sample data, or a setting as it is today.\"\n      },\n      \"missing\": {\n        \"words\": \"Missing\",\n        \"meaning\": \"Nothing records it. Where it can still be added, the page says how.\"\n      },\n      \"unreachable\": {\n        \"words\": \"Could not open\",\n        \"meaning\": \"A check got no answer, or a link can't be opened (deleted, private, refused or expired): it never counts as verified.\"\n      },\n      \"contradicted\": {\n        \"words\": \"Does not match\",\n        \"meaning\": \"A check answered, and its answer contradicts the record.\"\n      },\n      \"not_applicable\": {\n        \"words\": \"Does not apply\",\n        \"meaning\": \"There is nothing of this kind to check for this payment: a bank payout pays no address on chain, and a bill has no milestone.\"\n      }\n    },\n    \"signedEntryProves\": \"A signed entry proves who recorded what, and when. It does not prove the goods were good or the work was done.\",\n    \"checkAnEntry\": [\n      \"body_hash = sha256(canonical JSON of { actor, domain, action, summary, detail }, keys sorted)\",\n      \"signature = Ed25519 over the 32 bytes of body_hash, by the key signing_key_id names\",\n      \"hash = sha256(prev_hash || body_hash || signature), the hex strings joined\"\n    ],\n    \"keys\": [\n      {\n        \"id\": \"36e3209ae2e6a600\",\n        \"status\": \"active\",\n        \"publicKeyPem\": \"-----BEGIN PUBLIC KEY-----\\nMCowBQYDK2VwAyEAhXbIpeLpKB5bbwxtRVDFBlWIDaY3sitQ9KiQ0xCR7No=\\n-----END PUBLIC KEY-----\\n\"\n      }\n    ],\n    \"entries\": [\n      {\n        \"seq\": 5603,\n        \"id\": \"b546c398-0533-46f3-bd08-f4616db95c2c\",\n        \"ts\": \"2026-10-01T08:30:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"create_counterparty\",\n        \"summary\": \"Added Lumen Dev as a contractor\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c02\",\n          \"name\": \"Lumen Dev\",\n          \"role\": \"contractor\",\n          \"address\": \"0x3e7d9c1b5a2f4e6d8c0b1a2f3e4d5c6b7a8f9e01\",\n          \"chain\": \"ARC-TESTNET\"\n        },\n        \"body_hash\": \"e2ccbd8cdd6456350288c1f13d3571f64f76645ff2838676d50a8a2e7c9c07d6\",\n        \"signature\": \"c91c53067e8c830328533a50e3953214eacd8275acab44914cd3afe94145495f4dfde94cee390caad3e8f0865ccb99fc316863af556363381a50c40d1838840f\",\n        \"prev_hash\": \"0a40c77a63ada232560e392c2e6b2a0ba790cd489c98dbf1e51856fc0c2e0af4\",\n        \"hash\": \"09c9fc837135aa8c1570b36ab1dc22a6cf727dccc9d3364978b6c293db7b8144\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5604,\n        \"id\": \"893c07ed-20c4-44c8-9af6-2c01c57d5188\",\n        \"ts\": \"2026-10-01T09:05:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"counterparty_address_confirmed\",\n        \"summary\": \"Confirmed Lumen Dev's payout address\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c02\",\n          \"address\": \"0x3e7d9c1b5a2f4e6d8c0b1a2f3e4d5c6b7a8f9e01\",\n          \"chain\": \"ARC-TESTNET\",\n          \"via\": \"confirm\",\n          \"payeeLock\": {\n            \"coolingHours\": 24\n          }\n        },\n        \"body_hash\": \"ce8d26688d5e5e11714bd759bdfce422f27e29eb30f5c81e0e8a3db1ba9868db\",\n        \"signature\": \"db01ada362a26c4d8dab8528cae2cb0961fc9fcb1d81fa5266504f2fa989b21ee43d3d4efcdfddf8f892a23e158ded92a601562d12b52fc5b4755fa63e9a9306\",\n        \"prev_hash\": \"09c9fc837135aa8c1570b36ab1dc22a6cf727dccc9d3364978b6c293db7b8144\",\n        \"hash\": \"7890fd259c2a528efe9e2a57ff9b2d79385a4e7a684bcd2b12a1f93de96853d9\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5605,\n        \"id\": \"2ebe4be1-9898-4a8a-a182-166563617e2c\",\n        \"ts\": \"2026-10-02T09:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"counterparty_address_changed\",\n        \"summary\": \"Changed Harbor Print Co.'s payout address\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"from\": \"0x5a1b2c3d4e5f60718293a4b5c6d7e8f901234567\",\n          \"to\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"chain\": \"ARC-TESTNET\"\n        },\n        \"body_hash\": \"32deece8f6598ac091688f95cc7650bf4b024509accc6c8bc08d02c24fbc7f8c\",\n        \"signature\": \"118fa4acab75d62884243ec3aa11a1069e3a3c8b7446d92b2b212515e89743e64bf7203888218494ca1576cf3f8346a2859853d060ce522881150f0f5b9dd505\",\n        \"prev_hash\": \"7890fd259c2a528efe9e2a57ff9b2d79385a4e7a684bcd2b12a1f93de96853d9\",\n        \"hash\": \"5a4e61f31d16b7c1c873867f7a2b4756deb63d9d2624a6892ef1340b3ed3ae89\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5606,\n        \"id\": \"386d19ec-b651-485a-9fcc-6dc7f3979a15\",\n        \"ts\": \"2026-10-02T09:40:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"compliance\",\n        \"action\": \"counterparty_address_confirmed\",\n        \"summary\": \"Confirmed Harbor Print Co.'s new payout address\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"address\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"chain\": \"ARC-TESTNET\",\n          \"via\": \"confirm\",\n          \"verification\": {\n            \"method\": \"call\",\n            \"contact\": \"Harbor Print's accounts line, from the vendor file\",\n            \"contactOnFileBefore\": true,\n            \"note\": \"Read back the new address on the call.\"\n          },\n          \"payeeLock\": {\n            \"coolingHours\": 24\n          }\n        },\n        \"body_hash\": \"7c040055d7b5699ea69746fd510b4a6870b8b62f40c989c82e070f5bee081482\",\n        \"signature\": \"9d4c736dcab1e695a202ca4d879346525d786ffb9937d4e4897c4ab212a8767240341e79e31028d15744b046fbfeff9666726576f1fac3df5ccbde06e9727301\",\n        \"prev_hash\": \"5a4e61f31d16b7c1c873867f7a2b4756deb63d9d2624a6892ef1340b3ed3ae89\",\n        \"hash\": \"ecedf7e736213c37131c6f2fdf3f5dae528f9d5b687b08122e9a6335dbcce355\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5607,\n        \"id\": \"5de39c47-b242-47eb-a130-2507bbed570c\",\n        \"ts\": \"2026-10-03T10:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"create_invoice\",\n        \"summary\": \"Added a bill from Harbor Print Co. for 1250 USDC\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"counterpartyName\": \"Harbor Print Co.\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"dueDate\": \"2026-10-20\",\n          \"poReference\": \"PO-1187\",\n          \"goodsReceived\": true,\n          \"invoiceNumber\": \"HP-2026-0412\",\n          \"document\": {\n            \"kind\": \"pdf\",\n            \"reader\": \"anthropic\",\n            \"sha256\": \"e32253322f3ee8aebb662b9ee42946b3d6b0141da8fc66cddf85ec61e12d0252\"\n          }\n        },\n        \"body_hash\": \"6c61a8524fad3add846231b1b10dd84aa9e9ab6294c2768f6d81bd3d0b8c5680\",\n        \"signature\": \"8d3e9041ed41b198745e104251cec68b6a498a35ac2ef01cd0a975c8cc9f9381bf2821fe83edd5f3f4802e07e8957574f85c5ee843a6e84f0eefa0169b90630c\",\n        \"prev_hash\": \"ecedf7e736213c37131c6f2fdf3f5dae528f9d5b687b08122e9a6335dbcce355\",\n        \"hash\": \"199d4e27b5e16792511e46cd55e8fee83ef76fc053e047b10c7de190fd8e740a\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5608,\n        \"id\": \"0ce02bf7-374c-4fb6-84c2-0166c9f1ff82\",\n        \"ts\": \"2026-10-03T10:01:00.000Z\",\n        \"actor\": \"agent\",\n        \"domain\": \"ap\",\n        \"action\": \"ap_hold\",\n        \"summary\": \"Held 1250 USDC to Harbor Print Co. for two approvals\",\n        \"detail\": {\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"decision\": {\n            \"action\": \"hold\"\n          },\n          \"decisionMode\": \"anthropic\",\n          \"agreedWithReference\": true,\n          \"guardrailBlocked\": true,\n          \"guardrailRule\": \"workspace.two_approvals\",\n          \"currency\": \"USDC\",\n          \"observed\": {\n            \"amount\": 1250,\n            \"paymentLimit\": 2000,\n            \"riskLevel\": \"clear\",\n            \"poReference\": \"PO-1187\",\n            \"goodsReceived\": true,\n            \"purchaseOrderRequired\": true,\n            \"twoApprovalsAbove\": 1000,\n            \"duplicateCheck\": {\n              \"matchesTotal\": 0\n            }\n          },\n          \"execution\": {\n            \"txRef\": null,\n            \"resultingStatus\": \"held\",\n            \"heldBecause\": \"workspace.two_approvals\"\n          }\n        },\n        \"body_hash\": \"c07c1ba045c308aeb910895f5a6bb782d263e15272d1d28339396ec008382f83\",\n        \"signature\": \"7aa3967f9c3f52719dfa8e16560f3d7dd1419ea15534de8b817cabb475ec1ea9904ec13920d755fb9040a7c8efc7b7e47389953fbcf83cfef675ae3ef7187d09\",\n        \"prev_hash\": \"199d4e27b5e16792511e46cd55e8fee83ef76fc053e047b10c7de190fd8e740a\",\n        \"hash\": \"c1748b31d24cd308c9d9d8a252fc03cfe972c95086235a3297a7d03e7834119d\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5609,\n        \"id\": \"b25a0a4d-2154-4a99-9bae-547345b3d082\",\n        \"ts\": \"2026-10-03T14:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"approval_given\",\n        \"summary\": \"Co-signed 1250 USDC to Harbor Print Co.; an owner, admin or approver's approval pays it (payments above 1000 USDC need two)\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b03\",\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"address\": \"0x8c4f2e1d0b9a87766554433221100ffeeddccbba\",\n          \"twoApprovalsAbove\": 1000,\n          \"cosign\": true\n        },\n        \"body_hash\": \"4bef2a60c1877a389424b70010085956e2cd5fcdb869a9da181df759e18d8236\",\n        \"signature\": \"2a5d35e580537d00a24bd0cfba8bdb931c355d2146a811105a11a4b6afe8f291dfad6b0516fd900a08f626470b26cbe045ef72d0cb090160c3c81fbfa531f501\",\n        \"prev_hash\": \"c1748b31d24cd308c9d9d8a252fc03cfe972c95086235a3297a7d03e7834119d\",\n        \"hash\": \"87750f493b785c931c8c69551ad76a1418b935eb8d2704a5c0fca19833cf959e\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5610,\n        \"id\": \"eab46f04-8b5a-44f1-803b-98e6b0a80f72\",\n        \"ts\": \"2026-10-03T15:20:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"ap\",\n        \"action\": \"approval_paid\",\n        \"summary\": \"Approved and paid 1250 USDC to Harbor Print Co.\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n          \"invoiceId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c01\",\n          \"amount\": 1250,\n          \"currency\": \"USDC\",\n          \"amountPaid\": 1250,\n          \"discountTaken\": 0,\n          \"overrode\": \"held\",\n          \"txRef\": \"0x51713792df8660fed8ab6328e9b5023d1d80dcc566e5512abdcd7ef4eb1b92be\",\n          \"status\": \"paid\",\n          \"attempt\": 1,\n          \"firstPayment\": true,\n          \"approvals\": [\n            {\n              \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b03\",\n              \"at\": \"2026-10-03T14:00:00.000Z\"\n            },\n            {\n              \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b02\",\n              \"at\": \"2026-10-03T15:20:00.000Z\"\n            }\n          ],\n          \"twoApprovalsAbove\": 1000\n        },\n        \"body_hash\": \"dae21d642023e245c099621bc1a8a1689b0f6d243b62803f464b4e35859c8400\",\n        \"signature\": \"035c519ac40e1dd2bbc7d70e08180b0e624cbc16df3b3a74c2a609c40c26cbe04f0d2a28bb01edbe1f0c0f5c9a52c76127f2c4affc71f7ae0fcdeac82f32b60b\",\n        \"prev_hash\": \"87750f493b785c931c8c69551ad76a1418b935eb8d2704a5c0fca19833cf959e\",\n        \"hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5611,\n        \"id\": \"a85a44cf-3b4c-46e0-a700-2f5f69baeb00\",\n        \"ts\": \"2026-10-03T16:00:00.000Z\",\n        \"actor\": \"human\",\n        \"domain\": \"contractor\",\n        \"action\": \"create_milestone\",\n        \"summary\": \"Added a milestone for Lumen Dev: Checkout page redesign, 800 USDC\",\n        \"detail\": {\n          \"by\": \"4b7e0c1a-2d3f-4e5a-8b6c-7d8e9f0a1b01\",\n          \"milestoneId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c02\",\n          \"counterpartyName\": \"Lumen Dev\",\n          \"amount\": 800,\n          \"verificationSource\": \"https://github.com/northstar-studio/site/pull/48\"\n        },\n        \"body_hash\": \"a6c87fb49341cf5cac1db041ef3b707aa1e6292ee79c759486bb48c8a561c984\",\n        \"signature\": \"bff59cdb1df88107c19201024c97d9eb21a78a2a10449f38377f24a4af3edc9abca146874511813b9d03360845656921afe09b14594fe7707f9fe24ecac1c903\",\n        \"prev_hash\": \"1bd91f4c85872fe824fc18dfb7409f1ce3bbe63728fe993d070a4e14ef03c070\",\n        \"hash\": \"655b287db5c7d17fdf9f87425bd3a434555a89ea8dbc71125b319d7569dfd785\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5613,\n        \"id\": \"78398ac1-68ee-49b5-bdd6-ac91c8efd46a\",\n        \"ts\": \"2026-10-08T09:10:00.000Z\",\n        \"actor\": \"system\",\n        \"domain\": \"contractor\",\n        \"action\": \"verify_milestone_github\",\n        \"summary\": \"GitHub reported northstar-studio/site#48 merged\",\n        \"detail\": {\n          \"milestoneId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\",\n          \"verificationSource\": \"https://github.com/northstar-studio/site/pull/48\",\n          \"verificationStatus\": \"verified\",\n          \"pullRequest\": \"https://github.com/northstar-studio/site/pull/48\",\n          \"mergedAt\": \"2026-10-08T09:00:00.000Z\"\n        },\n        \"body_hash\": \"02cda18d117ee8a85b545b2f763e98c76da513ae29cd6c5be13edddcb7e521e9\",\n        \"signature\": \"476786c4a530c5812390de35db83f990bea1da69a5da3830d38b46df99dbcba6de19c61901ec410c2c959292b6dd5731d65181403668b6ed9577cf87a8bf6a0c\",\n        \"prev_hash\": \"b2687ac1ce1ae6f949ccd43e446e22fe7b36dc6dda1eebaa66d40afdca2fba81\",\n        \"hash\": \"913a2752c8857418c9c9cfdf90c1066d64c2385b162b53f33daf2a6e9fb1ead8\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      },\n      {\n        \"seq\": 5614,\n        \"id\": \"b35a5cdd-fbc9-43eb-8fc4-88bdfcf580c1\",\n        \"ts\": \"2026-10-08T09:11:00.000Z\",\n        \"actor\": \"agent\",\n        \"domain\": \"contractor\",\n        \"action\": \"milestone_release\",\n        \"summary\": \"Released 800 USDC to Lumen Dev for Checkout page redesign\",\n        \"detail\": {\n          \"milestoneId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4f61\",\n          \"counterpartyId\": \"7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4c02\",\n          \"decision\": {\n            \"action\": \"release\"\n          },\n          \"decisionMode\": \"anthropic\",\n          \"agreedWithReference\": true,\n          \"guardrailBlocked\": false,\n          \"observed\": {\n            \"amount\": 800,\n            \"paymentLimit\": 1000,\n            \"riskLevel\": \"clear\",\n            \"verification\": {\n              \"verified\": true,\n              \"method\": \"github\",\n              \"source\": \"https://github.com/northstar-studio/site/pull/48\",\n              \"note\": null\n            }\n          },\n          \"execution\": {\n            \"txRef\": \"0xaa4864c775958bc6f6fd541460df2a351093dd600e37329351639dd191f2030c\",\n            \"resultingStatus\": \"paid\"\n          }\n        },\n        \"body_hash\": \"40a6a70c89faeecaea30c2e9375a532f7a4d1c0384cc158119f1219678dfeefb\",\n        \"signature\": \"fbf6d5a4cda2134e5d946f23774303f56c359b60b2006bacb1a37c74ef0c8c83ff3ac20bce50b29ec74756fa41fc8e06fc200b6894d7de8f642d3325dae5a703\",\n        \"prev_hash\": \"913a2752c8857418c9c9cfdf90c1066d64c2385b162b53f33daf2a6e9fb1ead8\",\n        \"hash\": \"fb8324e5ec87a4b8073032fb05e1d44a2773a714e317a4e5909943d6cc5b1c61\",\n        \"signing_key_id\": \"36e3209ae2e6a600\",\n        \"check\": {\n          \"ok\": true\n        }\n      }\n    ]\n  }\n}"
+            },
+            {
+              "name": "400 invalid_request",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/close-packs/:month",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "close-packs",
+                    ":month"
+                  ],
+                  "variable": [
+                    {
+                      "key": "month",
+                      "value": "2026-10",
+                      "description": "The month, as `YYYY-MM`: a calendar month in UTC."
+                    }
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"invalid_request\",\n    \"message\": \"month must be YYYY-MM, and not a month still to come\"\n  }\n}"
+            },
+            {
+              "name": "401 unauthorized",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/close-packs/:month",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "close-packs",
+                    ":month"
+                  ],
+                  "variable": [
+                    {
+                      "key": "month",
+                      "value": "2026-10",
+                      "description": "The month, as `YYYY-MM`: a calendar month in UTC."
+                    }
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"unauthorized\",\n    \"message\": \"A valid API key is required.\"\n  }\n}"
+            },
+            {
+              "name": "403 forbidden",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/close-packs/:month",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "close-packs",
+                    ":month"
+                  ],
+                  "variable": [
+                    {
+                      "key": "month",
+                      "value": "2026-10",
+                      "description": "The month, as `YYYY-MM`: a calendar month in UTC."
+                    }
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"forbidden\",\n    \"message\": \"This key cannot do that.\"\n  }\n}"
+            },
+            {
+              "name": "429 rate_limited",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/close-packs/:month",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "close-packs",
+                    ":month"
+                  ],
+                  "variable": [
+                    {
+                      "key": "month",
+                      "value": "2026-10",
+                      "description": "The month, as `YYYY-MM`: a calendar month in UTC."
+                    }
+                  ]
+                }
+              },
+              "status": "Too Many Requests",
+              "code": 429,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Retry-After",
+                  "value": "60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": {\n    \"code\": \"rate_limited\",\n    \"message\": \"Too many evidence reads from this key. Try again in a minute.\"\n  }\n}"
+            },
+            {
+              "name": "500 internal",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/close-packs/:month",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "close-packs",
+                    ":month"
+                  ],
+                  "variable": [
+                    {
+                      "key": "month",
+                      "value": "2026-10",
+                      "description": "The month, as `YYYY-MM`: a calendar month in UTC."
+                    }
                   ]
                 }
               },

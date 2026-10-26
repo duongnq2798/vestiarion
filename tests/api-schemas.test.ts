@@ -17,6 +17,12 @@ import type {
   TreasuryMoveTelemetry,
 } from "@/lib/insights";
 import type { VerificationResult } from "@/lib/ledger";
+import type { ClosePackDocument } from "@/lib/close-pack/export";
+import type { EvidenceDocument, EvidenceKey, SignedEntry } from "@/lib/evidence-export";
+import type { PayeeLockEvidence } from "@/lib/payee-lock-evidence";
+import type { ReceiptDocument } from "@/lib/receipts/document";
+import type { OnChainCheck } from "@/lib/receipts/onchain";
+import type { EntryCheck } from "@/lib/receipts/verify";
 import * as S from "@/lib/api/schemas";
 import { OPERATIONS } from "@/lib/api/openapi";
 
@@ -47,6 +53,17 @@ describe("schemas mirror the payload interfaces exactly", () => {
     expectTypeOf<z.output<typeof S.ScreeningTelemetrySchema>>().toEqualTypeOf<ScreeningTelemetry>();
     expectTypeOf<z.output<typeof S.ApiErrorSchema>>().toEqualTypeOf<ApiError>();
     expectTypeOf<z.output<typeof S.ApiPageSchema>>().toEqualTypeOf<ApiPage>();
+  });
+
+  it("covers the evidence documents, each the file its page downloads (evidence API EA10)", () => {
+    expectTypeOf<z.output<typeof S.EntryCheckSchema>>().toEqualTypeOf<EntryCheck>();
+    expectTypeOf<z.output<typeof S.OnChainCheckSchema>>().toEqualTypeOf<OnChainCheck>();
+    expectTypeOf<z.output<typeof S.EvidenceKeySchema>>().toEqualTypeOf<EvidenceKey>();
+    expectTypeOf<z.output<typeof S.SignedEntrySchema>>().toEqualTypeOf<SignedEntry>();
+    expectTypeOf<z.output<typeof S.PaymentEvidenceSchema>>().toEqualTypeOf<EvidenceDocument>();
+    expectTypeOf<z.output<typeof S.PaymentReceiptSchema>>().toEqualTypeOf<ReceiptDocument>();
+    expectTypeOf<z.output<typeof S.PayeeLockEvidenceSchema>>().toEqualTypeOf<PayeeLockEvidence>();
+    expectTypeOf<z.output<typeof S.ClosePackSchema>>().toEqualTypeOf<ClosePackDocument>();
   });
 });
 

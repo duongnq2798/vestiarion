@@ -31,7 +31,8 @@ describe("the docs sidebar", () => {
     // Every other section with more than one page is a closed disclosure with its count.
     const closed = [...markup.matchAll(/<details class="[^"]*"><summary[^>]*>([\s\S]*?)<\/summary>/g)].map((match) => text(match[1]));
     expect(closed).toContain("Get started 5 pages");
-    expect(closed).toContain("API reference 14 pages");
+    // The overview and one page per operation, the five evidence reads included.
+    expect(closed).toContain("API reference 19 pages");
     // The current page is marked in words for a screen reader, and its group heads its run.
     expect(markup).toMatch(/<a [^>]*aria-current="page"[^>]*href="\/docs\/guides\/bank-payouts"|<a [^>]*href="\/docs\/guides\/bank-payouts"[^>]*aria-current="page"/);
     for (const group of ["Pay", "Add bills", "Follow a payment", "For the people you pay"]) expect(markup).toContain(`>${group}</p>`);

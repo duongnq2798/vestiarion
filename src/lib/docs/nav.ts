@@ -141,7 +141,7 @@ export const DOCS_NAV: NavSection[] = [
       { slug: "get-started/pagination", group: "Conventions", title: "Pagination", description: "Page through collections with limit and an opaque cursor." },
       { slug: "get-started/limits", group: "Conventions", title: "Limits", description: "Page sizes, backing off on 429 and 503, and how fresh the data is." },
       { slug: "ai-integration", group: "AI agents", title: "AI integration", description: "Markdown views, llms.txt and the OpenAPI document, for coding agents." },
-      { slug: "ai-integration/mcp", group: "AI agents", title: "MCP server", description: "Connect an AI agent to your workspace's records through MCP tools: every API read, and with a read-and-write key, adding counterparties, invoices, milestones and payee links." },
+      { slug: "ai-integration/mcp", group: "AI agents", title: "MCP server", description: "Connect an AI agent to your workspace's records through MCP tools: every API read but the evidence reads, and with a read-and-write key, adding counterparties, invoices, milestones and payee links." },
     ],
   },
   {

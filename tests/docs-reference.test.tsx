@@ -151,7 +151,8 @@ describe("EndpointTable", () => {
     const markup = html(<EndpointTable />);
     for (const op of OPERATIONS) {
       expect(markup).toContain(`href="/docs/api/${op.id}"`);
-      expect(markup).toContain(`>${op.summary}</td>`);
+      // As React writes text: an apostrophe, as in "Get a payable's evidence", is &#x27;.
+      expect(markup).toContain(`>${op.summary.replaceAll("'", "&#x27;")}</td>`);
     }
     const tags = new Set(OPERATIONS.map((op) => op.tag));
     expect(markup.match(/<table /g)).toHaveLength(tags.size);
@@ -164,7 +165,8 @@ describe("EndpointTable", () => {
 describe("McpToolTable", () => {
   it("lists every MCP tool by name, with its arguments and what it answers, linked to its reference page", () => {
     const markup = html(<McpToolTable />);
-    expect(MCP_TOOLS.length).toBe(OPERATIONS.length);
+    // Every operation but the evidence reads, which have no tool yet (evidence API EA9).
+    expect(MCP_TOOLS.length).toBe(OPERATIONS.filter((op) => op.mcp !== false).length);
     for (const tool of MCP_TOOLS) {
       const op = operationById(tool.operationId)!;
       expect(markup).toContain(`>${tool.name}</code>`);

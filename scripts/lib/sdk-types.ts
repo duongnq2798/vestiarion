@@ -31,6 +31,11 @@ const NAMED: Array<{ name: string; at: string[]; same?: string[][] }> = [
   { name: "PayeeLink", at: ["CreatePayeeLinkResponse", "data"] },
   { name: "Treasury", at: ["GetTreasuryResponse", "data"] },
   { name: "Insights", at: ["GetInsightsResponse", "data"] },
+  // The evidence reads (evidence API EA12): one payment's evidence has one shape for a payable and a milestone.
+  { name: "PaymentEvidence", at: ["GetInvoiceEvidenceResponse", "data"], same: [["GetMilestoneEvidenceResponse", "data"]] },
+  { name: "PaymentReceipt", at: ["GetInvoiceReceiptResponse", "data"] },
+  { name: "PayeeLockEvidence", at: ["GetPayeeLockEvidenceResponse", "data"] },
+  { name: "ClosePack", at: ["GetClosePackResponse", "data"] },
   {
     name: "Page",
     at: ["ListInvoicesResponse", "page"],

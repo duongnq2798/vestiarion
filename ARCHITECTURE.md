@@ -356,7 +356,8 @@ record; it writes nothing and nothing that moves money imports it (`tests/settle
   page's Amounts list, adding "and the network fee" to what left the sender only where the network's wallets are EOAs
   that pay their own gas (`walletAccountType`), never for Gateway. **Save
   as PDF** is the browser's print: the page marks the site's chrome, the button and the disclosure `print:hidden`, and
-  prints the entry's seq and hash.
+  prints the entry's seq and hash. An API key reads what a receipt states, shared or not, as `vestiarion-receipt/1`
+  from `GET /api/v1/invoices/{id}/receipt` (`receiptDocument`, `src/lib/receipts/document.ts`), never its link.
 
 **Payments that do not settle** (`src/lib/payment-exceptions.ts`,
 `docs/superpowers/specs/2026-10-14-payment-exceptions-design.md`) are words over the read model and the payment intent,
@@ -573,7 +574,8 @@ adds two columns to `approval_policies`: `payee_lock` (off by default) and `paye
 - **Fails closed:** only the codes 42703 and PGRST204 read as "before 0135"; any other failure throws.
 - **Evidence pack** (`docs/superpowers/specs/2026-10-21-payee-lock-evidence-design.md`): `GET /api/evidence/payee-lock`
   answers any member with `vestiarion-payee-lock-evidence/1`, gated as the payment evidence is, six a minute per member
-  (`takeEvidencePackToken`). It writes no entry.
+  (`takeEvidencePackToken`). It writes no entry. An API key reads it from `GET /api/v1/payee-lock/evidence?from=&to=`,
+  each member as `{ kind: "member", userId, email: null }`; the download names both.
   - `readPayeeLockEvidence` reads, a page at a time and a hundred ids at a time:
     - the `counterparty_address_changed` and `payee_lock_changed` entries in the period;
     - every entry of the counterparties those changes name.
@@ -2052,7 +2054,8 @@ payable's and milestone's card footer links it (`Decision.chain`, set by `invoic
 - **Download.** `GET /api/evidence?org=&kind=&id=` answers `vestiarion-evidence/1` (`src/lib/evidence-export.ts`):
   every step and fact with its label, every entry in full with the server's check, and the workspace's public keys.
   The audit export's gate: a session (401), membership (404), cross-site refused (403), a bad kind or id 400. It writes
-  nothing, the ledger included.
+  nothing, the ledger included. An API key reads the same document, members named by user id, from
+  `GET /api/v1/invoices/{id}/evidence` and `GET /api/v1/milestones/{id}/evidence` (see "API").
 - **Who can see it** (`EvidenceAccess`) says the existing permissions in words: every member reads and downloads it;
   from the page, only a shared receipt leaves the workspace, shared by an owner or admin (`records.write`), and the
   panel names the workspace's other ways out for the same entries: webhooks and API keys (owner or admin, in
@@ -3981,9 +3984,14 @@ status/route.ts                  safe capability and configuration summary
 ledger/route.ts                  append-only, ascending audit stream
 ledger/verify/route.ts           guarded hash-chain verification
 invoices/route.ts                newest-first invoice collection; POST adds one
+invoices/[id]/evidence/route.ts  one payable's evidence, vestiarion-evidence/1
+invoices/[id]/receipt/route.ts   one payable's receipt, vestiarion-receipt/1
 counterparties/route.ts          newest-first counterparty collection; POST adds one
 counterparties/[id]/route.ts     counterparty plus screening history
 milestones/route.ts              newest-first milestone collection
+milestones/[id]/evidence/route.ts  one milestone's evidence, vestiarion-evidence/1
+payee-lock/evidence/route.ts     the payee lock's evidence for a period
+close-packs/[month]/route.ts     a calendar month's close pack, vestiarion-close-pack/1
 treasury/route.ts                balances, obligations, forecast, actions
 insights/route.ts                unchanged insights telemetry read model
 ```
@@ -4036,6 +4044,20 @@ still in flight answers `409 conflict`, and a `5xx` releases the claim so a
 retry runs again. A claim left without an outcome for 10 minutes
 (`IN_FLIGHT_TIMEOUT_MS`, longer than any function runs) is taken over by the
 next request with that key.
+
+The five evidence reads (docs/superpowers/specs/2026-10-25-sdk-0-4-evidence-receipts-close-pack-design.md)
+answer, in `{ data }`, the documents the session downloads build, by the same builders, with members named by user
+id (`people: "id"` in `readEvidence`, `readPayeeLockEvidence` and `readClosePack`), so a download and an API
+answer are checked by the same `verifyEvidence`. The receipt is `readReceiptDocument`
+(`src/lib/receipts/document-read.ts`), which never selects a receipt link's `token_hash`. Their shared helpers
+are in `src/lib/api/evidence.ts`: `documentAnswer` serializes once with `cache-control: no-store` and answers
+`400` for a close pack or payee lock period over 4 MB (`API_DOCUMENT_MAX_BYTES`), below Vercel's response limit;
+`workspaceInScope` reads the key's workspace's slug and name. A malformed id, month or period is refused before any
+read, then `takeApiEvidenceToken` (10 at once, then one every 6 seconds, per key, one bucket for the five) brakes
+them, since each checks every cited entry's signature and the evidence reads ask the chain's RPC and check the links
+people gave. They write nothing: no ledger entry, no row, no webhook. Their operations carry `mcp: false`, so they
+have no MCP tool until the tools are designed for them, and `NO_MCP_TOOL_YET` in `tests/access-gates.test.ts` names
+their routes.
 
 Collections intended for human browsing are newest first and use
 `created_at + id` as a stable cursor. The ledger is the exception: its `seq`
@@ -4187,13 +4209,19 @@ changes `/api/v1` or webhooks adds a changelog entry** to
 integrator.
 
 The TypeScript SDK lives in `sdk/` (`@vestiarion/sdk`). It has no dependencies, uses `fetch` and Web Crypto only, and
-is type-checked, linted and tested with the app. It is held to the code in three ways:
+is type-checked, linted and tested with the app. It is held to the code in four ways:
 
 - `sdk/src/types.ts` is rendered from the OpenAPI document by `npm run sdk:types` (`scripts/lib/sdk-types.ts`).
   `tests/sdk-types.test.ts` fails when the file is stale.
 - `tests/sdk-contract.test.ts` runs the SDK against the v1 routes in-process.
 - `tests/sdk-webhooks.test.ts` holds its checks to `src/lib/webhooks/sign.ts`, `src/lib/ledger.ts` and the receipt
   verifier.
+- `tests/sdk-evidence.test.ts` runs `verifyEvidence` (`sdk/src/evidence.ts`), which checks an evidence document,
+  a receipt, the payee lock's evidence or a close pack offline, over the five evidence examples, and holds each entry's
+  verdict to the server's `verifyEntry`. Those examples (`content/docs/examples/get-*-evidence.json`,
+  `get-invoice-receipt.json`, `get-close-pack.json`) are not recorded answers: `scripts/evidence-examples.ts` builds
+  them with the real builders from a made-up workspace, signed with a key made for the run and never written down, so
+  no real workspace's entries are published and every example still verifies.
 
 `npm run sdk:pack` compiles the package and packs it into `public/sdk/vestiarion-sdk-<version>.tgz`, the URL the docs
 install from. That file is committed, and a version already packed is never packed again, so a lockfile's integrity
@@ -4609,7 +4637,8 @@ find the entries the rows cite, then, after `verifyEntry` checks each of those a
   order: a cross-site request refused (403), the session (401), a bad format or month before the workspace is looked up
   (400), the membership read afresh (404, as for a workspace that does not exist). JSON by default, last month by
   default. Files are `vestiarion-close-pack-<slug>-<YYYY-MM>[-so-far].csv|json`. The JSON is not signed with the ledger
-  key, which signs entries only: its entries and its download's own entry make it checkable.
+  key, which signs entries only: its entries and its download's own entry make it checkable. An API key reads the
+  JSON from `GET /api/v1/close-packs/{month}` (CP18), members by user id, and records no entry.
 - **Each download is recorded** (CP13, CP15). `close_pack_exported` (actor `human`, domain `system`)
   `{ by, month, ended, format, payments, notSettled, sha256, headSeq }`, appended best effort after the file is built
   and before it is sent, with the SHA-256 of the exact bytes served, the CSV's byte-order mark included. It names no one
