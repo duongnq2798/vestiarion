@@ -1,10 +1,10 @@
 {
   "summary": {
     "decisions": 46,
-    "same": 44,
+    "same": 37,
     "nowStopped": 0,
     "nowLetThrough": 0,
-    "cannotRebuild": 2,
+    "cannotRebuild": 9,
     "wrongPayments": 0,
     "agreed": 18,
     "disagreed": 0,
@@ -25,13 +25,9 @@
         "rule": null,
         "money": "moves"
       },
-      "now": {
-        "action": "pay",
-        "rule": null,
-        "money": "moves"
-      },
-      "class": "same",
-      "reason": null,
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
       "wrongPayment": false
     },
     {
@@ -94,13 +90,9 @@
         "rule": null,
         "money": "moves"
       },
-      "now": {
-        "action": "pay",
-        "rule": null,
-        "money": "moves"
-      },
-      "class": "same",
-      "reason": null,
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
       "wrongPayment": false
     },
     {
@@ -117,13 +109,9 @@
         "rule": null,
         "money": "moves"
       },
-      "now": {
-        "action": "pay",
-        "rule": null,
-        "money": "moves"
-      },
-      "class": "same",
-      "reason": null,
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
       "wrongPayment": false
     },
     {
@@ -186,13 +174,9 @@
         "rule": null,
         "money": "moves"
       },
-      "now": {
-        "action": "pay",
-        "rule": null,
-        "money": "moves"
-      },
-      "class": "same",
-      "reason": null,
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
       "wrongPayment": false
     },
     {
@@ -232,13 +216,9 @@
         "rule": null,
         "money": "moves"
       },
-      "now": {
-        "action": "pay",
-        "rule": null,
-        "money": "moves"
-      },
-      "class": "same",
-      "reason": null,
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
       "wrongPayment": false
     },
     {
@@ -554,13 +534,9 @@
         "rule": null,
         "money": "moves"
       },
-      "now": {
-        "action": "schedule",
-        "rule": null,
-        "money": "moves"
-      },
-      "class": "same",
-      "reason": null,
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
       "wrongPayment": false
     },
     {
@@ -600,13 +576,9 @@
         "rule": null,
         "money": "moves"
       },
-      "now": {
-        "action": "schedule",
-        "rule": null,
-        "money": "moves"
-      },
-      "class": "same",
-      "reason": null,
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
       "wrongPayment": false
     },
     {

@@ -30,7 +30,7 @@ export interface ShadowAnswer {
 }
 
 /** A fact the record may not carry (SX10), run both ways when a payment or a schedule could reach it (SR4). */
-export type ShadowUnknownFact = "sanctions" | "spending_limits" | "address_change" | "pay_to" | "role" | "project";
+export type ShadowUnknownFact = "sanctions" | "spending_limits" | "address_change" | "pay_to" | "role" | "same_work" | "project";
 
 export interface ShadowUnknown {
   fact: ShadowUnknownFact;
@@ -169,8 +169,17 @@ export interface ShadowReplayWorld {
 const MONEY_ACTIONS: ReadonlySet<ShadowAction> = new Set(["pay", "schedule"]);
 /** Holds code made for cash before its checks: the record keeps the hold, not the model's own answer (SR3). */
 const CASH_HOLDS: ReadonlySet<string> = new Set(["cash.priority", "pay.cash_ahead"]);
-/** The order the unknown facts are listed, run and named in. */
-const UNKNOWN_ORDER: readonly ShadowUnknownFact[] = ["sanctions", "spending_limits", "address_change", "pay_to", "role", "project"];
+/** The order the unknown facts are listed, run and named in: code's own, the same work before the project's budget. */
+const UNKNOWN_ORDER: readonly ShadowUnknownFact[] = ["sanctions", "spending_limits", "address_change", "pay_to", "role", "same_work", "project"];
+/**
+ * From when an entry records the same-work check's answer (SX10.7). The check and its `sameWork` field arrived together
+ * (project budgets P9), merged at 07:31 UTC on Oct 13, 2026, and an entry names earlier work only when it found some. When
+ * that release reached production is not in the repository, so every decision through the end of that day counts as made
+ * before it: an entry from then names none whether there was earlier work or not.
+ */
+export const SAME_WORK_RECORDED_FROM = "2026-10-14T00:00:00.000Z";
+/** The earlier work a bill decided before the check could repeat: a milestone had no purchase order before 0111. */
+const EARLIER_MILESTONE: ShadowReplayWorld["sameWork"][number] = { otherKind: "milestone", otherStatus: "verified", signal: "deliverable" };
 /** Committed money a repeat is refused against (src/lib/agent/duplicates.ts `COMMITTED_STATUSES`). */
 const COMMITTED = new Set(["paid", "received", "matched", "scheduled", "processing"]);
 /** The confidence at which a repeat refuses (`DUPLICATE_BLOCK_CONFIDENCE`). */
@@ -276,6 +285,13 @@ function unknownsOf(decision: ShadowDecision, then: ShadowOutcome): ShadowUnknow
     unknowns.push({ fact: "pay_to", reason: "The payee's address changed after the decision, so whether the bill's document named the address on file then is not in the record." });
   }
   if (decision.payeeOnFile.role === null) unknowns.push({ fact: "role", reason: "The payee's role is not in the record." });
+  if (decision.observed.sameWork.length === 0 && decision.decidedAt < SAME_WORK_RECORDED_FROM) {
+    unknowns.push({
+      fact: "same_work",
+      reason:
+        "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record.",
+    });
+  }
   if (decision.observed.projectId !== null && decision.observed.project === null) {
     unknowns.push({ fact: "project", reason: "The decision did not reach its project's budget, so what the project had left is not in the record." });
   }
@@ -460,11 +476,15 @@ export function replayWorld(decision: ShadowDecision, variant: ShadowVariant = {
       ...limits,
     },
     earlierObligations: { total: earlier?.total ?? 0, count: earlier?.count ?? 0 },
-    sameWork: observed.sameWork.flatMap((match) =>
-      (match.otherKind === "bill" || match.otherKind === "milestone") && (match.signal === "purchase_order" || match.signal === "deliverable")
-        ? [{ otherKind: match.otherKind, otherStatus: match.otherStatus ?? "verified", signal: match.signal }]
-        : []
-    ),
+    // As recorded, or, for a decision made before the check, none one way and an earlier milestone the other (SX10.7).
+    sameWork:
+      variant.same_work === "stops"
+        ? [EARLIER_MILESTONE]
+        : observed.sameWork.flatMap((match) =>
+            (match.otherKind === "bill" || match.otherKind === "milestone") && (match.signal === "purchase_order" || match.signal === "deliverable")
+              ? [{ otherKind: match.otherKind, otherStatus: match.otherStatus ?? "verified", signal: match.signal }]
+              : []
+          ),
     project: projectOf(decision, variant.project),
   };
 }
@@ -598,14 +618,21 @@ export function replayResult(decision: ShadowDecision, plan: ShadowReplayPlan, r
   };
 }
 
+/**
+ * The file's summary (SR9), each decision counted once: a wrong payment as one only, whatever its class, and the classes
+ * count the rest, so the five add up to the decisions. A stop code recorded while money moved is never counted as
+ * stopped (SR7). Money that moves now where code stopped it then is always a wrong payment, so `nowLetThrough` counts
+ * only a decision that is not: none, as `judgeReplay` classes them today.
+ */
 export function summarizeReplay(results: ReadonlyArray<Pick<ShadowReplayResult, "class" | "verdict" | "wrongPayment">>): ShadowReplaySummary {
   const count = (test: (result: (typeof results)[number]) => boolean) => results.filter(test).length;
+  const right = (kind: ShadowReplayClass) => count((result) => !result.wrongPayment && result.class === kind);
   return {
     decisions: results.length,
-    same: count((result) => result.class === "same"),
-    nowStopped: count((result) => result.class === "now_stopped"),
-    nowLetThrough: count((result) => result.class === "now_let_through"),
-    cannotRebuild: count((result) => result.class === "cannot_rebuild"),
+    same: right("same"),
+    nowStopped: right("now_stopped"),
+    nowLetThrough: right("now_let_through"),
+    cannotRebuild: right("cannot_rebuild"),
     wrongPayments: count((result) => result.wrongPayment),
     agreed: count((result) => result.verdict === "agree"),
     disagreed: count((result) => result.verdict === "disagree"),

@@ -4984,7 +4984,9 @@ replayed through the same code (`docs/superpowers/specs/2026-10-26-quality-lab-s
   its timing on; of the payee's row it keeps only what still says what the decision saw, and of the workspace's signed
   ledger the payee lock each decision was made under, or null where a change went unrecorded. The spec lists the
   inputs to the guardrails and the project budget check that the file does not carry, which a replay counts as "cannot
-  rebuild". `assertShareable` refuses the
+  rebuild", among them the same-work check's answer for a decision made by Oct 13, 2026, before that check and its
+  `sameWork` field existed (SX10.7): an absent field there means it never looked, not that it found nothing.
+  `assertShareable` refuses the
   whole file when anything in it looks like an address, hash, email or id, with or without its `0x` or dashes. The
   script reads in one read-only transaction and is run by hand, never in CI.
 - **The replay** (SR1-SR13 in the same spec) is `tests/quality-lab-shadow.test.ts`, over the same harness and stand-ins.
@@ -5000,7 +5002,9 @@ replayed through the same code (`docs/superpowers/specs/2026-10-26-quality-lab-s
   `LabChain` (a schedule counts as moving). `judgeReplay` gives each decision one class: same, now stopped, now let
   through, or cannot rebuild. A fact the record does not carry (SX10) is never guessed: `planReplay` lists it, the
   runner replays every combination of its two ways, and a decision whose combinations end differently cannot be rebuilt,
-  with the reason; EURC, other chains, bank payouts and holds made for cash before the checks are refused up front.
+  with the reason; EURC, other chains, bank payouts and holds made for cash before the checks are refused up front. The
+  same work is one such fact for a payment or schedule decided before `SAME_WORK_RECORDED_FROM` with no match recorded:
+  its two ways are no earlier work and an earlier verified milestone for the same delivered work.
   Money that moves now where code stopped it then, or where the person disagreed, or in a run where code records a
   stop, or a transfer elsewhere, for another amount or twice, is a wrong payment and fails CI. A decision that cannot
   be rebuilt is one too when any run moves money where code stopped it then or the person disagreed, except a run
@@ -5011,7 +5015,9 @@ replayed through the same code (`docs/superpowers/specs/2026-10-26-quality-lab-s
   record the facts it was rebuilt from, and a decision rebuilt for each rule the record carries must come back stopped
   by it. The results (`src/lib/data/quality-lab-shadow.json`) are held to the run like the scenarios'; one line under
   the scenario score in `QualityLabResult` (`shadowReplayWords`) and the docs page's "Real decisions, replayed" show
-  them.
+  them. `summarizeReplay` counts each decision once, a wrong payment only as one, so a stop code recorded while money
+  moved is never counted or said as stopped (`replayClassWords` names it only as a wrong payment), and the write mode
+  refuses to write a file with a wrong payment.
 - Not covered: the model's judgement (scripted, or as recorded in the replay), live payments (proved on Arc testnet and Arc mainnet by transactions),
   milestones, whose checks are inline in `executeCycle`, EURC, payouts to other chains, bank payouts, and a person's
   approvals.

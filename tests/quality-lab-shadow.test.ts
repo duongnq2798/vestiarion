@@ -14,6 +14,7 @@ import {
   renderReplay,
   replayResult,
   replayWorld,
+  summarizeReplay,
   variantsOf,
   type ShadowOutcome,
   type ShadowReplayPlan,
@@ -325,10 +326,20 @@ describe("the team's shadow decisions, replayed through today's decision code (s
   }
 });
 
-/** A real decision, changed into one stopped then by `rule` (or let through), as a record of it would read. */
+/** Moves a copy to a day after the same-work check was added (SX10.7), so its entry records that check's answer. */
+function sinceSameWork(copy: ShadowDecision) {
+  copy.decidedAt = "2026-10-20T03:00:00.000Z";
+  copy.decidedOn = "2026-10-20";
+}
+
+/**
+ * A real decision, changed into one stopped then by `rule` (or let through), as a record of it would read: made after
+ * the same-work check was added, so that rule's is the only outcome it can have.
+ */
 function rebuiltFor(rule: string | null, change: (copy: ShadowDecision) => void): ShadowDecision {
   const copy = structuredClone(DECISIONS.find((one) => one.id === "shadow-01")!);
   copy.id = `shadow-${rule ?? "let-through"}`;
+  sinceSameWork(copy);
   copy.guardrailBlocked = rule !== null;
   copy.guardrailRule = rule;
   change(copy);
@@ -436,8 +447,20 @@ describe("the replay rebuilds each rule the record carries (SR2, SR8)", () => {
     expect(await replayDecision(letThrough)).toMatchObject({ class: "now_let_through", wrongPayment: true, now: { rule: null, money: "moves" } });
   });
 
+  it("cannot rebuild a payment let through before the same-work check existed: an earlier milestone for the same work would hold it now (SX10.7)", { timeout: 30_000 }, async () => {
+    const shadow01 = DECISIONS.find((one) => one.id === "shadow-01")!;
+    expect(shadow01.decidedAt < "2026-10-13T07:31:00.000Z").toBe(true);
+    const held = await replayOnce(shadow01, { same_work: "stops" });
+    expect(held.run.outcome).toEqual({ action: "pay", rule: "obligation.duplicate_reference", money: "stops" });
+    expect(held.sent).toBe(0);
+    const result = await replayDecision(shadow01);
+    expect(result).toMatchObject({ class: "cannot_rebuild", now: null, wrongPayment: false });
+    expect(result.reason).toMatch(/^It was decided on or before Oct 13, 2026, the day the check for an earlier milestone .* Money moves one way and not the other\.$/);
+  });
+
   it("cannot rebuild a schedule whose project's answer is not in the record, naming only that", { timeout: 30_000 }, async () => {
     const copy = structuredClone(DECISIONS.find((one) => one.id === "shadow-24")!);
+    sinceSameWork(copy);
     copy.observed.projectId = "pj1";
     const result = await replayDecision(copy);
     expect(result).toMatchObject({
@@ -451,11 +474,20 @@ describe("the replay rebuilds each rule the record carries (SR2, SR8)", () => {
 describe("the replay's committed results (SR9)", () => {
   it("are this run's, decision for decision", () => {
     expect([...results.keys()], "every decision ran").toEqual(DECISIONS.map((one) => one.id));
-    const rendered = renderReplay(DECISIONS.map((one) => results.get(one.id)!));
+    const run = DECISIONS.map((one) => results.get(one.id)!);
+    const rendered = renderReplay(run);
     if (process.env.QUALITY_LAB_WRITE === "1") {
+      // A wrong payment is a finding to fix, never a result to publish (SR7): the file is not written while there is one.
+      expect(summarizeReplay(run).wrongPayments, "a wrong payment in the replay: src/lib/data/quality-lab-shadow.json is not written").toBe(0);
       writeFileSync(RESULTS_FILE, rendered);
       return;
     }
     expect(readFileSync(RESULTS_FILE, "utf8").replace(/\r\n/g, "\n"), STALE).toBe(rendered);
+  });
+
+  it("publish no wrong payment, and count each decision once", () => {
+    const { summary } = JSON.parse(readFileSync(RESULTS_FILE, "utf8")) as { summary: ReturnType<typeof summarizeReplay> };
+    expect(summary.wrongPayments).toBe(0);
+    expect(summary.same + summary.nowStopped + summary.nowLetThrough + summary.cannotRebuild + summary.wrongPayments).toBe(summary.decisions);
   });
 });

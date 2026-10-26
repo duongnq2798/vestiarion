@@ -44,6 +44,18 @@ function run(outcome: ShadowOutcome, over: Partial<ShadowReplayRun> = {}): Shado
   return { variant: {}, outcome, transfersRight: true, ...over };
 }
 
+/**
+ * Moves a copy to a day after the same-work check was added (SX10.7), so its entry would record that check's answer: a
+ * test of another fact then has only that fact unknown.
+ */
+function sinceSameWork(copy: ShadowDecision) {
+  copy.decidedAt = "2026-10-20T03:00:00.000Z";
+  copy.decidedOn = "2026-10-20";
+}
+
+const SAME_WORK_REASON =
+  "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record.";
+
 describe("the model's answer, as the replay scripts it (SR2)", () => {
   it("is the decision as recorded when code moved nothing", () => {
     expect(scriptedAnswer(decision("shadow-24"))).toEqual({ action: "schedule", payOnInDays: 4, fundWithSwap: false });
@@ -100,15 +112,44 @@ describe("the facts a replay cannot rebuild (SR3, SR4)", () => {
     expect(planReplay(bare)).toMatchObject({ unsupported: null, unknowns: [] });
   });
 
-  it("knows everything of a payment now to an address: the spending limits were read, and none were set", () => {
-    expect(planReplay(decision("shadow-01"))).toMatchObject({ unsupported: null, unknowns: [] });
-    expect(planReplay(decision("shadow-27")).unknowns).toEqual([]);
+  it("knows everything of a payment now to an address since the same-work check: the spending limits were read, and none were set", () => {
+    expect(planReplay(decision("shadow-30"))).toMatchObject({ unsupported: null, unknowns: [] });
+    expect(planReplay(decision("shadow-31")).unknowns).toEqual([]);
+    expect(planReplay(decision("shadow-01", sinceSameWork))).toMatchObject({ unsupported: null, unknowns: [] });
   });
 
   it("runs both ways the spending limits of a schedule, or of a payment to no address, which never read them", () => {
-    for (const id of ["shadow-14", "shadow-24", "shadow-44"]) {
+    for (const id of ["shadow-33", "shadow-44"]) {
       expect(planReplay(decision(id)).unknowns.map((unknown) => unknown.fact), id).toEqual(["spending_limits"]);
     }
+    for (const id of ["shadow-14", "shadow-24"]) {
+      expect(planReplay(decision(id)).unknowns.map((unknown) => unknown.fact), id).toEqual(["spending_limits", "same_work"]);
+    }
+  });
+
+  it("runs both ways earlier work for the same purchase order or deliverable for a payment or schedule decided by the day that check was added (SX10.7)", () => {
+    // The check and its ledger field arrived together, and an entry records a match only when there is one: an entry
+    // from before it records none whether there was one or not.
+    for (const id of ["shadow-01", "shadow-04", "shadow-05", "shadow-08", "shadow-10", "shadow-27", "shadow-29"]) {
+      expect(planReplay(decision(id)).unknowns, id).toEqual([{ fact: "same_work", reason: SAME_WORK_REASON }]);
+    }
+    expect(planReplay(decision("shadow-26")).unknowns.map((unknown) => unknown.fact)).toEqual(["spending_limits", "same_work"]);
+    const lastMinute = decision("shadow-01", (copy) => {
+      copy.decidedAt = "2026-10-13T23:59:00.000Z";
+      copy.decidedOn = "2026-10-13";
+    });
+    expect(planReplay(lastMinute).unknowns.map((unknown) => unknown.fact)).toEqual(["same_work"]);
+    const nextDay = decision("shadow-01", (copy) => {
+      copy.decidedAt = "2026-10-14T00:00:00.000Z";
+      copy.decidedOn = "2026-10-14";
+    });
+    expect(planReplay(nextDay).unknowns).toEqual([]);
+    // A match recorded is known whenever it was made, and a hold or a request for information weighs none.
+    const matched = decision("shadow-01", (copy) => {
+      copy.observed.sameWork = [{ otherKind: "milestone", other: "m1", otherStatus: "verified", signal: "deliverable" }];
+    });
+    expect(planReplay(matched).unknowns).toEqual([]);
+    expect(planReplay(decision("shadow-02")).unknowns).toEqual([]);
   });
 
   it("runs both ways whether the address was in the payee lock's wait when it changed again since", () => {
@@ -135,6 +176,7 @@ describe("the facts a replay cannot rebuild (SR3, SR4)", () => {
       "The payee lock in force at the decision is not in the record, so the wait after the address changed cannot be weighed."
     );
     const neverChanged = decision("shadow-01", (copy) => {
+      sinceSameWork(copy);
       copy.payeeLock = null;
     });
     expect(planReplay(neverChanged).unknowns).toEqual([]);
@@ -142,6 +184,7 @@ describe("the facts a replay cannot rebuild (SR3, SR4)", () => {
 
   it("runs both ways the sanctions list only when a repeat of a paid bill stopped the decision first (SX10.1)", () => {
     const repeat = decision("shadow-01", (copy) => {
+      sinceSameWork(copy);
       copy.guardrailBlocked = true;
       copy.guardrailRule = "invoice.duplicate_of_settled";
     });
@@ -150,12 +193,14 @@ describe("the facts a replay cannot rebuild (SR3, SR4)", () => {
 
   it("runs both ways a document's pay-to it cannot tell, the payee's role and a project's answer", () => {
     const unknowns = decision("shadow-01", (copy) => {
+      sinceSameWork(copy);
       copy.observed.documentPayTo = { present: true, differs: null };
       copy.payeeOnFile.role = null;
       copy.observed.projectId = "pj1";
     });
     expect(planReplay(unknowns).unknowns.map((unknown) => unknown.fact)).toEqual(["pay_to", "role", "project"]);
     const known = decision("shadow-01", (copy) => {
+      sinceSameWork(copy);
       copy.observed.documentPayTo = { present: true, differs: false };
       copy.observed.projectId = "pj1";
       copy.observed.project = { state: "reserved", already: false, neededMinor: 4_500_000, budgetMinor: 10_000_000, bufferMinor: 0, reservedMinor: 0, paidMinor: 0, availableMinor: 10_000_000 };
@@ -233,6 +278,12 @@ describe("the world rebuilt from a decision (SR2)", () => {
     expect(inside.payee).toMatchObject({ addressChangedHoursAgo: 0.5, addressConfirmedHoursAgo: 0.25 });
     expect(past.payee).toMatchObject({ addressChangedHoursAgo: 4.5, addressConfirmedHoursAgo: 4.25 });
     expect(inside.workspace.payeeLock).toEqual({ on: true, hours: 4 });
+  });
+
+  it("hands in no earlier work for the same work one way, and an earlier milestone for the same delivered work the other (SX10.7)", () => {
+    expect(replayWorld(decision("shadow-01"), { same_work: "lets_through" }).sameWork).toEqual([]);
+    // Before migration 0111 a milestone had no purchase order, so the work it delivered is what a bill could repeat.
+    expect(replayWorld(decision("shadow-01"), { same_work: "stops" }).sameWork).toEqual([{ otherKind: "milestone", otherStatus: "verified", signal: "deliverable" }]);
   });
 
   it("rebuilds who stands behind a first payment's address", () => {
@@ -385,6 +436,20 @@ describe("the class each decision gets (SR6, SR7)", () => {
     });
   });
 
+  it("cannot rebuild a payment let through before the same-work check existed, which an earlier milestone for the same work would hold now (SX10.7)", () => {
+    const one = decision("shadow-01");
+    const runs = [
+      run(paid, { variant: { same_work: "lets_through" } }),
+      run({ action: "pay", rule: "obligation.duplicate_reference", money: "stops" }, { variant: { same_work: "stops" } }),
+    ];
+    expect(judgeReplay(one, plan(one), runs)).toEqual({
+      now: null,
+      class: "cannot_rebuild",
+      reason: `${SAME_WORK_REASON} Money moves one way and not the other.`,
+      wrongPayment: false,
+    });
+  });
+
   it("cannot be rebuilt, and is a wrong payment, when one way the record does not rule out moves money where code stopped it then (shadow-43)", () => {
     // Stopped then by the new payee check, which code weighs after the payee lock's wait: the way past the wait is the
     // record's own. Were the new payee check broken, that way would pay.
@@ -405,6 +470,7 @@ describe("the class each decision gets (SR6, SR7)", () => {
 
   it("is a wrong payment when a fact the rule then does not rest on is unknown, and one way moves money", () => {
     const limited = decision("shadow-01", (copy) => {
+      sinceSameWork(copy);
       copy.guardrailBlocked = true;
       copy.guardrailRule = "counterparty.payment_limit";
       copy.payeeOnFile.role = null;
@@ -545,6 +611,25 @@ describe("the committed results (SR9)", () => {
     });
   });
 
+  it("count a wrong payment as one only, never in a class, so a stop code recorded while money moved is never counted as stopped (SR7, SR9)", () => {
+    const ignored = replayResult(decision("shadow-01"), planReplay(decision("shadow-01")), [run({ action: "pay", rule: "counterparty.new_payee", money: "moves" })]);
+    expect(ignored).toMatchObject({ class: "now_stopped", wrongPayment: true });
+    const letThrough = replayResult(decision("shadow-14"), planReplay(decision("shadow-14")), [run(paid)]);
+    expect(letThrough).toMatchObject({ class: "now_let_through", wrongPayment: true });
+    const twice = replayResult(decision("shadow-01"), planReplay(decision("shadow-01")), [run(paid, { transfersRight: false })]);
+    expect(twice).toMatchObject({ class: "same", wrongPayment: true });
+    const all = [...results, ignored, letThrough, twice];
+    const summary = summarizeReplay(all);
+    expect(summary).toEqual({
+      decisions: 6, same: 3, nowStopped: 0, nowLetThrough: 0, cannotRebuild: 0, wrongPayments: 3, agreed: 6, disagreed: 0, noVerdict: 0,
+    });
+    // Each decision is counted once.
+    expect(summary.same + summary.nowStopped + summary.nowLetThrough + summary.cannotRebuild + summary.wrongPayments).toBe(summary.decisions);
+    expect(shadowReplayWords(summary)).toBe(
+      "6 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 3 reach the same outcome, 3 wrong payments."
+    );
+  });
+
   it("are written as two-space JSON with the summary first, LF and a final newline", () => {
     const text = renderReplay(results);
     expect(text.endsWith("}\n")).toBe(true);
@@ -563,8 +648,9 @@ describe("the replay in words (SR10, SR11)", () => {
     expect(shadowReplayWords(summary)).toBe(
       "46 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 44 reach the same outcome, 2 cannot be rebuilt from the record, 0 wrong payments."
     );
-    expect(shadowReplayWords({ ...summary, same: 43, cannotRebuild: 1, nowStopped: 1, nowLetThrough: 1, wrongPayments: 1 })).toBe(
-      "46 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 43 reach the same outcome, 1 is now stopped by a rule that did not stop it then, 1 is now let through where code stopped it then, 1 cannot be rebuilt from the record, 1 wrong payment."
+    // Each decision is counted once (SR9): a wrong payment only as one.
+    expect(shadowReplayWords({ ...summary, same: 42, cannotRebuild: 1, nowStopped: 1, nowLetThrough: 1, wrongPayments: 1 })).toBe(
+      "46 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 42 reach the same outcome, 1 is now stopped by a rule that did not stop it then, 1 is now let through where code stopped it then, 1 cannot be rebuilt from the record, 1 wrong payment."
     );
     expect(shadowReplayWords({ ...summary, decisions: 1, same: 1, cannotRebuild: 0 })).toBe(
       "1 real decision from the team's own shadow-mode workspaces, replayed through today's code: 1 reaches the same outcome, 0 wrong payments."
@@ -594,5 +680,9 @@ describe("the replay in words (SR10, SR11)", () => {
     expect(replayClassWords({ class: "now_let_through", reason: "Why.", wrongPayment: true })).toBe("Now let through, a wrong payment. Why.");
     expect(replayClassWords({ class: "now_stopped", reason: "Why.", wrongPayment: false })).toBe("Now stopped. Why.");
     expect(replayClassWords({ class: "same", reason: null, wrongPayment: true })).toBe("Same, a wrong payment");
+    // A stop code recorded while money moved is named as a wrong payment, never as stopped (SR6, SR7).
+    expect(
+      replayClassWords({ class: "now_stopped", reason: "Code recorded a stop because a first payment to a new address needs two people, but money moved.", wrongPayment: true })
+    ).toBe("A wrong payment. Code recorded a stop because a first payment to a new address needs two people, but money moved.");
   });
 });

@@ -211,8 +211,18 @@ SX3)".
      milestone for the same work held (`obligations.reserve` in `decideApPayable`). A replay that pays or schedules a
      bill in a project (`projectId` is not null) whose decision did not go ahead (it was not to pay or schedule, or a
      guardrail or the same work held it) has no `project`, and cannot rebuild `project.budget_exceeded`. A bill in no
-     project never meets it, and the same work (`sameWork`, P9) is recorded whether or not the bill went ahead, so
-     `obligation.duplicate_reference` can be rebuilt.
+     project never meets it. Since the same-work check (7), the same work (`sameWork`, P9) is recorded whether or not
+     the bill went ahead, so `obligation.duplicate_reference` can be rebuilt.
+  7. The same-work check (`obligation.duplicate_reference`, project budgets P9) and its ledger field arrived together,
+     merged at 07:31 UTC on Oct 13, 2026 (with migration 0111), and an entry carries `sameWork` only when the check found
+     earlier work: an absent field means "found none" after it, and "never looked" before it. When that release reached
+     production is not in the repository, so a decision through the end of that day (`decidedAt` before
+     `SAME_WORK_RECORDED_FROM`, 2026-10-14T00:00Z) counts as made before it. Its entry cannot say whether an earlier
+     milestone was for the same work, and a replay that pays or schedules it cannot rebuild
+     `obligation.duplicate_reference` unless the entry records a match. The export maps the absent field to `[]` either
+     way and does not change; the replay tells the two apart by the date. Before 0111 a milestone had no purchase order,
+     so the earlier work such a bill could repeat is a milestone that delivered the same work (a web address in the
+     bill's memo, which the export never carries, equal to the milestone's verification source).
 - Each counts only for a replayed payment or schedule that reaches the rule. A hold, a flag or a request for information
   meets no rule, and a rule ahead of it that stops the replayed decision settles the outcome whatever the unknown input.
 - If wrong: a replay would count as a regression, or as agreement, an outcome that rests on an input it never had.
@@ -266,7 +276,9 @@ replay SR4)".
   recorded float value when the bill had a discount, and is 0 otherwise.
 - The checks after the guardrails: the same work as recorded, and the project's recorded answer. These, the spending
   limit's room and the contract's verdict are handed in, not worked out (SR1), so the replay tests how today's code
-  weighs them, not how it reads them; the docs page says so.
+  weighs them, not how it reads them; the docs page says so. A decision made before the same-work check existed
+  records no answer to it (SX10.7), so for one that pays or schedules the same work is run both ways (SR4), never taken
+  as none.
 - The model answers exactly as recorded: the action, the pay-on day as days from `decidedOn`, the swap choice and its
   confidence. When code moved the date (`timingRule`), the answer is the model's own: `pay.no_gain` was a pay, and
   `payon.*` a schedule for the requested day.
@@ -292,8 +304,11 @@ replay SR4)".
 - `planReplay` lists, for an answer to pay or schedule, each fact SX10 says the record may not carry: whether the
   address was on OFAC's list (when a repeat of a paid bill stopped it first), the spending limit and the contract's
   figures (when the decision was not a payment now to an address), whether the address was in the payee lock's wait
-  (when it changed again since, or the lock is unknown), whether the document's pay-to differed, the payee's role, and
-  the project's answer.
+  (when it changed again since, or the lock is unknown), whether the document's pay-to differed, the payee's role,
+  earlier work for the same purchase order or delivered work (when the decision was made before that check existed and
+  its entry records no match, SX10.7), and the project's answer.
+- The same work's two ways are no earlier work, and one earlier milestone, verified, that delivered the same work (a
+  milestone had no purchase order then), which today's code holds as `obligation.duplicate_reference`.
 - Each is rebuilt both ways, the way that lets a payment through and the way that stops it, and the runner replays
   every combination. When every combination ends the same, that is the outcome. When they differ, the decision is
   "cannot rebuild", naming each fact whose two ways changed the outcome and saying whether money stops either way.
@@ -322,7 +337,9 @@ replay SR4)".
 - A replay in which code records a stop and money moves all the same keeps the class its rule and money give (now let
   through when money stopped then, now stopped otherwise), but its reason says "Code recorded a stop because ..., but
   money moved.", its Now column says "Recorded as stopped because ..., but money moved", and it is a wrong payment
-  (SR7), never a safe "Stopped now because ...".
+  (SR7), never a safe "Stopped now because ...". Its result is said "A wrong payment. Code recorded a stop because
+  ..., but money moved." (`replayClassWords`), never "Now stopped", and the summary counts it only as a wrong payment
+  (SR9).
 - If wrong: a class that hid a change of rule would report as the same outcome a decision code now treats differently.
 
 **SR7. A wrong payment fails CI.**
@@ -349,8 +366,9 @@ replay SR4)".
   because ..., but money moved."
 - `tests/quality-lab-shadow.test.ts` fails on any, naming the decision, and holds the rule to a case built from
   shadow-43 given facts the new payee check lets through: it must come back cannot rebuild and a wrong payment. A
-  decision the person agreed to pay that code now stops is a safe miss: shown as now stopped, never failed. Both
-  cannot-rebuild decisions in today's file stop money in every run, so neither is a wrong payment.
+  decision the person agreed to pay that code now stops is a safe miss: shown as now stopped, never failed. Of the
+  cannot-rebuild decisions in today's file, the two code stopped then stop money in every run, and the seven it let
+  through then had no disagreeing verdict, so none is a wrong payment.
 - A product guardrail is never changed to make the replay pass: a wrong payment is a finding, reported as one.
 - If wrong: a replay that passed on a wrong payment would publish a claim the code breaks; one that only went stale
   would be cleared by `npm run quality-lab`, which rewrites the file without failing.
@@ -365,7 +383,10 @@ replay SR4)".
 - A test replays a decision for each rule the record carries, built from a real one (high risk, an address on OFAC's
   list, unscreened, a client, no address, unconfirmed, the payee lock's wait, pay-to, the match, a new payee, the
   payment limit, two approvals, the spending limit, the contract, a repeat of a paid bill, the vendor's document, the
-  same work, the project's budget), and each must come back the same, with that rule.
+  same work, the project's budget), and each must come back the same, with that rule. Each is dated after the
+  same-work check was added, as a decision with a project or a match must be, so that rule's is its only outcome; a
+  test holds shadow-01 itself, from before it, to cannot rebuild, with the earlier milestone's way held as
+  `obligation.duplicate_reference` (SX10.7).
 - If wrong: a rebuild that drifted would report the drift as a change in the code.
 
 **SR9. The results are a committed file of stable fields.**
@@ -373,16 +394,22 @@ replay SR4)".
   (action, pay-on day in days, swap), the person's `verdict`, `then` and `now` (action, rule, money; `now` is null when
   it cannot be rebuilt), `class`, `reason` and `wrongPayment`; and a summary `{ decisions, same, nowStopped,
   nowLetThrough, cannotRebuild, wrongPayments, agreed, disagreed, noVerdict }`. No time, hash, sequence or UUID.
+- The summary counts each decision once (`summarizeReplay`): a wrong payment only in `wrongPayments`, whatever its
+  class, and the four classes count the rest, so `same + nowStopped + nowLetThrough + cannotRebuild + wrongPayments` is
+  `decisions`. A stop code recorded while money moved (SR6) is never counted as stopped. Money moving where code
+  stopped it then is always a wrong payment, so `nowLetThrough` stays 0 as decisions are classed today.
 - The test holds the committed file equal to the run, with the message "run npm run quality-lab and commit
-  src/lib/data/quality-lab-shadow.json", line endings normalised. With `QUALITY_LAB_WRITE=1` it writes the file instead,
-  and `npm run quality-lab` runs both lab files that way, so it writes both result files.
+  src/lib/data/quality-lab-shadow.json", line endings normalised, and holds the committed summary to no wrong payment
+  and to each decision counted once. With `QUALITY_LAB_WRITE=1` it writes the file instead, and `npm run quality-lab`
+  runs both lab files that way, so it writes both result files; it refuses to write one with a wrong payment, which
+  is a finding to fix (SR7), never a result to publish.
 - If wrong: a file that changed every run could never be held to it.
 
 **SR10. One line beside the scenarios.**
 - `QualityLabResult` on /open and /how-it-decides gains one line under the scenario score, from the committed file:
-  "46 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 44 reach the same
-  outcome, 2 cannot be rebuilt from the record, 0 wrong payments", with the real numbers, naming only the classes that
-  are not zero (`shadowReplayWords` in `src/lib/quality-lab/words.ts`).
+  "46 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 37 reach the same
+  outcome, 9 cannot be rebuilt from the record, 0 wrong payments", with the real numbers, naming only the classes that
+  are not zero (`shadowReplayWords` in `src/lib/quality-lab/words.ts`). Its parts add up to the decisions (SR9).
 - It names no network, as the block does not (QL7), and says "team" plainly: customers' decisions are never in it.
 - The block links the docs page's "Real decisions, replayed" (`#real-decisions-replayed`, "Every replayed decision"),
   where the classes and a wrong payment in the replay are defined, beside its link to the scenarios. /open's lede says
@@ -393,9 +420,12 @@ replay SR4)".
 **SR11. The docs page shows every decision.**
 - `content/docs/research/quality-lab.mdx` gains "Real decisions, replayed": what it is, the definitions, the data's
   limits (the team's own workspaces only, customers never exported; facts rebuilt from the exported record, which is
-  the signed entry and the few facts read beside it (SR2), and four answers handed in as recorded; the model's answers
-  as recorded, not asked again; an answer to pay or schedule a EURC, other-chain or bank-payout bill refused, a hold on
-  one replayed), how to refresh it, the summary (`<ShadowReplaySummary />`) and one row per decision
+  the signed entry and the few facts read beside it (SR2), and four answers handed in as recorded, set both ways where
+  the record lacks one; earlier work for a decision made by Oct 13, 2026, before that check existed, set both ways
+  (SX10.7); the model's answers as recorded, not asked again; an answer to pay or schedule a EURC, other-chain or
+  bank-payout bill refused, a hold on one replayed), that a decision that cannot be rebuilt is a wrong payment only
+  where money moves where code stopped it then or the person disagreed (or code records a stop and money moves), that
+  the line counts each decision once (SR9), how to refresh it, the summary (`<ShadowReplaySummary />`) and one row per decision
   (`<ShadowReplayTable />`), rendered from the committed file on the page and in its Markdown view (`MDX_TO_MARKDOWN`),
   never typed. The page's description in the docs navigation names both halves.
 - The table colours a result from its `wrongPayment` and `class` fields, never from its words: a wrong payment is
@@ -417,12 +447,18 @@ replay SR4)".
 - 46 decisions, 18 with a verdict of agree, none disagreed: 33 that code let through then (5 pays, 3 schedules, 12
   holds, 13 requests for information) and 13 it stopped (`counterparty.no_address` 3, `workspace.outflow_budget` 4,
   `counterparty.address_unconfirmed` 2, `counterparty.cooling_off` 2, `counterparty.new_payee` 2).
-- 44 reach the same outcome, 2 cannot be rebuilt, 0 wrong payments, none now stopped or now let through. The 2 are
-  shadow-42 (`counterparty.cooling_off` then) and shadow-43 (`counterparty.new_payee` then): the payee's address changed
-  again after them, so how long before each it had changed is not in the record, and the payee lock's 4-hour wait
-  cannot be weighed. Within the wait the cooling-off stops each, past it the new payee check does: money stops either
-  way, so neither is a wrong payment (SR7). shadow-41, held then because its changed address was unconfirmed, is the
-  same either way.
+- 37 reach the same outcome, 9 cannot be rebuilt, 0 wrong payments, none now stopped or now let through.
+- 7 of the 9 are the payments and schedules code let through before the same-work check existed (SX10.7): shadow-01,
+  04, 05, 08 and 10 (pays) and shadow-24 and 26 (schedules), all decided Oct 8-12, 2026. With no earlier work money
+  moves, as it would have then; with an earlier milestone for the same delivered work, today's code holds each as
+  `obligation.duplicate_reference`, which would be a safe miss, never a wrong payment. The record cannot say which, so
+  none is counted the same. The other pre-check decisions to pay are stopped by a guardrail before that check either
+  way (`counterparty.no_address`, `workspace.outflow_budget`), and are the same.
+- The other 2 are shadow-42 (`counterparty.cooling_off` then) and shadow-43 (`counterparty.new_payee` then): the payee's
+  address changed again after them, so how long before each it had changed is not in the record, and the payee lock's
+  4-hour wait cannot be weighed. Within the wait the cooling-off stops each, past it the new payee check does: money
+  stops either way, so neither is a wrong payment (SR7). shadow-41, held then because its changed address was
+  unconfirmed, is the same either way.
 - One decision reaches the same outcome by another action: shadow-15, a pay on a bill due in 8 days, is now made a
   schedule for its due day (`pay.no_gain`, since there was no discount and no shortfall), and the same rule,
   `counterparty.no_address`, stops it.

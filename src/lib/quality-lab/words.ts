@@ -57,9 +57,11 @@ export function wrongPaymentWords(count: number): string {
 // replay-design.md SR10, SR11), the same on the result block, the docs page and its Markdown view.
 
 /**
- * "46 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 44 reach the same
- * outcome, 2 cannot be rebuilt from the record, 0 wrong payments.", with the real numbers and only the classes that are
- * not zero. It names no network, as the block does not (QL7).
+ * "46 real decisions from the team's own shadow-mode workspaces, replayed through today's code: 37 reach the same
+ * outcome, 9 cannot be rebuilt from the record, 0 wrong payments.", with the real numbers and only the classes that are
+ * not zero. The summary counts each decision once, a wrong payment only as one (`summarizeReplay`), so the parts add up
+ * to the decisions and a stop code recorded while money moved is never said as stopped. It names no network, as the
+ * block does not (QL7).
  */
 export function shadowReplayWords(summary: ShadowReplaySummary): string {
   const one = (count: number, single: string, many: string) => `${count} ${count === 1 ? single : many}`;
@@ -122,8 +124,16 @@ const CLASS_WORDS: Record<ShadowReplayClass, string> = {
   cannot_rebuild: "Cannot rebuild",
 };
 
-/** A decision's class with its reason, a wrong payment named as one: "Cannot rebuild. The payee's address changed...". */
+/**
+ * A decision's class with its reason, a wrong payment named as one: "Cannot rebuild. The payee's address changed...". A
+ * wrong payment classed now stopped is a stop code recorded while money moved (shadow replay SR6, SR7): it is named only
+ * as a wrong payment, never as stopped.
+ */
 export function replayClassWords(result: Pick<ShadowReplayResult, "class" | "reason" | "wrongPayment">): string {
-  const head = result.wrongPayment ? `${CLASS_WORDS[result.class]}, a wrong payment` : CLASS_WORDS[result.class];
+  const head = !result.wrongPayment
+    ? CLASS_WORDS[result.class]
+    : result.class === "now_stopped"
+      ? "A wrong payment"
+      : `${CLASS_WORDS[result.class]}, a wrong payment`;
   return result.reason ? `${head}. ${result.reason}` : head;
 }

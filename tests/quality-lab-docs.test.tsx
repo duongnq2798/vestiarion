@@ -200,7 +200,14 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
       "four answers are handed in as recorded rather than worked out: the contract's, the room left under the agent's spending limit, earlier work for the same purchase order or deliverable, and the project's budget.",
       "Code let money move then when it let through a payment or a schedule: in shadow mode a payment that passed waited for the person's verdict instead of being sent",
       "money that moves although code records a stop",
-      "A decision that cannot be rebuilt is still a wrong payment when money moves in any way the record does not rule out.",
+      "A decision that cannot be rebuilt is still a wrong payment when, in any way the record does not rule out, money moves where code stopped it then or where the person disagreed.",
+      "The line above counts each decision once, and a wrong payment only as one, whatever else it is: a decision where code records a stop and money moves all the same is never counted as stopped.",
+      "Where the record lacks one, it is set both ways.",
+      "A payment or schedule decided on or before Oct 13, 2026, the day the check for earlier work was added, has no answer to that check in its record, so that answer is set both ways for it.",
+      "a decision made before the check for earlier work existed has no answer to it. The replay runs such a decision both ways.",
+      "**Earlier work before Oct 13, 2026.**",
+      "An entry records earlier work for the same purchase order or delivered work only when the check finds some, and the check was added on Oct 13, 2026.",
+      "with no earlier work, and with an earlier milestone for the same delivered work, which today's code holds for a person. Where that changes whether money moves, the decision cannot be rebuilt.",
       "An answer to pay or schedule a EURC bill, a payout to another chain or a bank payout is not rebuilt",
       "A hold, a flag or a request for information on one moves no money and meets no rule, so it is replayed",
       "The model answers exactly as it did: the same action, and the same day for a schedule. It is not asked again.",
@@ -228,6 +235,10 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
     expect(section).not.toContain("and nothing else");
     expect(section).not.toContain("Money moved then when");
     expect(section).not.toMatch(/^- \*\*USDC bills on Arc\.\*\* A EURC bill/m);
+  });
+
+  it("never states a wrong payment in a decision that cannot be rebuilt without its condition: code stopped it then, or the person disagreed", () => {
+    expect(section).not.toContain("is still a wrong payment when money moves in any way the record does not rule out");
   });
 
   it("renders the line and every decision's row from the committed file", () => {
@@ -259,12 +270,13 @@ describe("the replay of the team's shadow decisions, on the docs page (shadow re
       { ...base, id: "same-right", class: "same", reason: null, wrongPayment: false },
       { ...base, id: "cannot-wrong", class: "cannot_rebuild", now: null, reason: "Why.", wrongPayment: true },
       { ...base, id: "stopped", class: "now_stopped", reason: "Why.", wrongPayment: false },
+      { ...base, id: "stop-ignored", class: "now_stopped", reason: "Why.", wrongPayment: true },
     ];
     const markup = renderToStaticMarkup(<ShadowReplayTable results={{ summary: SHADOW.summary, decisions }} />);
     const cells = [...markup.matchAll(/<tr>(.*?)<\/tr>/g)].slice(1).map((row) => [...row[1].matchAll(/<td class="([^"]*)"[^>]*>(.*?)<\/td>/g)].at(-1)!);
-    expect(cells.map((cell) => text(cell[2]))).toEqual(["Same, a wrong payment", "Same", "Cannot rebuild, a wrong payment. Why.", "Now stopped. Why."]);
+    expect(cells.map((cell) => text(cell[2]))).toEqual(["Same, a wrong payment", "Same", "Cannot rebuild, a wrong payment. Why.", "Now stopped. Why.", "A wrong payment. Why."]);
     const classes = cells.map((cell) => cell[1].split(/\s+/));
-    expect(classes.map((names) => names.includes("text-refused"))).toEqual([true, false, true, false]);
+    expect(classes.map((names) => names.includes("text-refused"))).toEqual([true, false, true, false, true]);
     expect(classes[1]).toContain("text-ink-2");
     expect(classes[3]).toContain("text-held");
   });
