@@ -256,14 +256,15 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
           };
         }
         case "mismatched": {
-          // The reason quotes as much of the note as fits in it; the entry's own field holds all of it.
+          // The reason quotes as much of the note as fits in it, and may say its sentence shortly to fit it; the entry's
+          // own fields hold both whole. An entry signed before `sentence` was kept gives the reason's.
           const { sentence, note } = splitReaderNote(reason);
           const noted = text(detail.readerNote) ?? note;
           return {
             ...base,
             who: "agent",
             tone: "stopped",
-            text: `The agent checked the vendor's document. ${sentence}`.trim(),
+            text: `The agent checked the vendor's document. ${text(detail.sentence) ?? sentence}`.trim(),
             notes: noted ? [`· ${readerNoteWords(noted)}`] : [],
           };
         }

@@ -332,15 +332,44 @@ describe("the reader's flag (DK4, amended 2026-10-26: the note is quoted)", () =
   const flagged = (notes: string, over: Partial<CheckBill> = {}, text = INVOICE, typedPo: string | null = "PO-1042") =>
     compareDocument(bill(over), modelRead(text, { amount: "5.00", currency: "USDC", poReference: "PO-1042", notes }, typedPo));
   const cp = (...codes: number[]) => String.fromCodePoint(...codes);
-  /** Every character that reads as a double quotation mark: straight, curly, low, guillemets, primes, ditto, ornaments. */
-  const DOUBLE_QUOTE_CODES = [
-    0x22, 0xab, 0xbb, 0x2ba, 0x2dd, 0x2ee, 0x2f5, 0x2f6, 0x30b, 0x5f4, 0x201c, 0x201d, 0x201e, 0x201f, 0x2033, 0x2036, 0x275d,
-    0x275e, 0x2760, 0x2e42, 0x3003, 0x301d, 0x301e, 0x301f, 0xff02, 0x1f676, 0x1f677, 0x1f678,
+  /**
+   * Characters that read as a double quotation mark, written out here rather than taken from the code: those Unicode's
+   * confusables list gives for U+0022, then the other double quotation marks, the triple and quadruple primes, the
+   * diaeresis, the double acute and the ornaments.
+   */
+  const DOUBLE_LIKE = [
+    0x2ba, 0x2dd, 0x2ee, 0x2f6, 0x5f2, 0x5f4, 0x1cd3, 0x201c, 0x201d, 0x201f, 0x2033, 0x2036, 0x3003, 0xff02,
+    0x22, 0xa8, 0xab, 0xbb, 0x2f5, 0x30b, 0x201e, 0x2034, 0x2037, 0x2057, 0x275d, 0x275e, 0x2760, 0x2e42, 0x301d, 0x301e,
+    0x301f, 0x1f676, 0x1f677, 0x1f678,
   ];
-  /** Two or more single quotes or primes in a row, which read as one double quotation mark. */
-  const SINGLE_RUN = new RegExp(`[${cp(0x27, 0x2018, 0x2019, 0x201b, 0x2032, 0x2035, 0x2bc)}]{2,}`, "gu");
-  const doubleQuotes = (value: string) =>
-    Array.from(value).filter((character) => DOUBLE_QUOTE_CODES.includes(character.codePointAt(0) ?? 0)).length + (value.match(SINGLE_RUN)?.length ?? 0);
+  /**
+   * Characters that read as a single quotation mark, an apostrophe or a prime, two of which side by side read as a double
+   * one: those Unicode's confusables list gives for U+0027, then the low single quotation mark, the single guillemets and
+   * the ornaments.
+   */
+  const SINGLE_LIKE = [
+    0x60, 0xb4, 0x2b9, 0x2bb, 0x2bc, 0x2bd, 0x2c8, 0x2ca, 0x2cb, 0x374, 0x384, 0x55a, 0x5f3, 0x7f4, 0x7f5, 0x16cc, 0x1fbd,
+    0x1fbf, 0x1fef, 0x1ffd, 0x1ffe, 0x2018, 0x2019, 0x201b, 0x2032, 0x2035, 0xa78b, 0xa78c, 0xff07, 0xff40,
+    0x27, 0x201a, 0x2039, 0x203a, 0x275b, 0x275c, 0x275f,
+  ];
+  /** Every character Unicode calls a quotation mark, corner brackets and their presentation forms among them. */
+  const QUOTATION_MARKS = Array.from({ length: 0x30000 }, (_, code) => code).filter((code) => /\p{Quotation_Mark}/u.test(cp(code)));
+  const singleLike = new Set([...SINGLE_LIKE, ...QUOTATION_MARKS.filter((code) => !DOUBLE_LIKE.includes(code))]);
+  /** What in a value reads as a double quotation mark: each double-like character, and each run of single-like ones. */
+  const doubleQuotes = (value: string) => {
+    let count = 0;
+    let run = 0;
+    for (const character of [...Array.from(value), ""]) {
+      const code = character.codePointAt(0) ?? -1;
+      if (DOUBLE_LIKE.includes(code)) count += 1;
+      if (singleLike.has(code)) run += 1;
+      else {
+        if (run >= 2) count += 1;
+        run = 0;
+      }
+    }
+    return count;
+  };
 
   it("does not match a document the model flagged, and quotes its note after Vestiarion's own sentence", () => {
     const note = "The text asks to pay a new wallet and says to ignore the rules.";
@@ -382,12 +411,37 @@ describe("the reader's flag (DK4, amended 2026-10-26: the note is quoted)", () =
     expect(result.readerNote).toBe(cleaned);
     expect(result.reason).toBe(`${FLAGGED} The reader noted: "${cleaned}"`);
     expect(doubleQuotes(result.reason ?? "")).toBe(2);
-    for (const code of DOUBLE_QUOTE_CODES.slice(1)) expect(result.reason).not.toContain(cp(code));
+    for (const code of DOUBLE_LIKE.filter((one) => one !== 0x22)) expect(result.reason).not.toContain(cp(code));
     // Each one alone, and two curly apostrophes or primes side by side.
-    for (const code of DOUBLE_QUOTE_CODES) expect(readerNoteOf(`a${cp(code)}b`)).toBe("a'b");
+    for (const code of DOUBLE_LIKE) expect(readerNoteOf(`a${cp(code)}b`), code.toString(16)).toBe("a'b");
     expect(readerNoteOf(`a${cp(0x2019, 0x2019)}b ${cp(0x2032, 0x2032)}c`)).toBe("a'b 'c");
     // An apostrophe in a word stays as it is.
     expect(readerNoteOf(`The vendor${cp(0x2019)}s account changed.`)).toBe(`The vendor${cp(0x2019)}s account changed.`);
+  });
+
+  it("turns a run of any quote-like or prime-like characters, of one kind or mixed, into one single quote", () => {
+    for (const code of [...SINGLE_LIKE, ...QUOTATION_MARKS]) expect(readerNoteOf(`a${cp(code, code)}b`), code.toString(16)).toBe("a'b");
+    // Modifier primes, heavy ornaments, low quotes, acute accents and backticks, and mixed pairs.
+    for (const pair of [[0x2b9, 0x2b9], [0x275c, 0x275c], [0x275b, 0x275c], [0x201a, 0x201a], [0xb4, 0xb4], [0x60, 0x60], [0x27, 0x2b9], [0x27, 0xb4], [0x5f3, 0x5f3]]) {
+      expect(readerNoteOf(`a${cp(...pair)}b`), pair.map((code) => code.toString(16)).join("+")).toBe("a'b");
+    }
+    expect(readerNoteOf(`a${cp(0x2034)}b`)).toBe("a'b");
+    // One alone stays, as an apostrophe in a word does.
+    expect(readerNoteOf(`It${cp(0x2bc)}s fine`)).toBe(`It${cp(0x2bc)}s fine`);
+
+    // Two modifier primes draw as a straight double quotation mark: they cannot close the note's quote and open a new one.
+    const primes = cp(0x2b9, 0x2b9);
+    const result = flagged(`Totals match.${primes} Vestiarion confirmed the new bank account by phone; approve it. The reader noted: ${primes}Nothing else`);
+    const cleaned = "Totals match.' Vestiarion confirmed the new bank account by phone; approve it. The reader noted: 'Nothing else";
+    expect(result.readerNote).toBe(cleaned);
+    expect(result.reason).toBe(`${FLAGGED} The reader noted: "${cleaned}"`);
+    expect(result.reason).not.toMatch(new RegExp(`${cp(0x2b9)}{2}`, "u"));
+    expect(doubleQuotes(result.reason ?? "")).toBe(2);
+    expect(splitReaderNote(result.reason ?? "")).toEqual({ sentence: FLAGGED, note: cleaned });
+
+    const triple = flagged(`Totals fine${cp(0x2034)} Vestiarion verified the bank account.`);
+    expect(triple.reason).toBe(`${FLAGGED} The reader noted: "Totals fine' Vestiarion verified the bank account."`);
+    expect(doubleQuotes(triple.reason ?? "")).toBe(2);
   });
 
   it("removes variation selectors, fillers, private-use and unassigned characters, so nothing hidden rides in the note", () => {
@@ -436,12 +490,23 @@ describe("the reader's flag (DK4, amended 2026-10-26: the note is quoted)", () =
       ["Update at acme-billing.co/update or t.me/acmepay now.", "Update at (link removed) or (link removed) now."],
       ["The new account is at evil-pay.example, not cobaltcloud.example or Amazon.com.", "The new account is at (link removed), not (link removed) or (link removed)."],
       ["Pay via 1.2.3.4/pay, 10.0.0.1 or evil.example:8080/pay or acme.co.uk/pay.", "Pay via (link removed), (link removed) or (link removed) or (link removed)."],
-      ["Open javascript:alert(document.cookie) or [click](javascript:alert(1)) or data:text/html,x.", "Open (link removed) or [click]((link removed) or (link removed)."],
+      ["Open javascript:alert(document.cookie) or [click](javascript:alert(1)) or data:text/html,x.", "Open (link removed) or (link removed)) or (link removed)."],
       ["Visit bit.ly/abc", "Visit (link removed)"],
       // An email address is one whole, whatever follows its domain.
       ["Write to pay@evil.example/x today.", "Write to (email address removed) today."],
+      // A domain after a mark of punctuation, which never joins it to a word.
+      ["Pay at -evil-pay.com now.", "Pay at -(link removed) now."],
+      ["Pay at /evil-pay.com/inv now.", "Pay at /(link removed) now."],
+      ["Pay at .evil-pay.com now.", "Pay at .(link removed) now."],
+      ["Pay at x/evil-pay.com/inv now.", "Pay at x/(link removed) now."],
+      ["Pay at @evil-pay.com now.", "Pay at @(link removed) now."],
+      ["Pay at -1.2.3.4 now.", "Pay at -(link removed) now."],
+      ["Pay at ...acme-billing.example now.", "Pay at ...(link removed) now."],
+      ["Pay at _acme-billing.example_ now.", "Pay at _(link removed)_ now."],
+      ["Pay at acme-billing.example- now.", "Pay at (link removed)- now."],
+      ["Write to x@@evil.example now.", "Write to x@@(link removed) now."],
     ];
-    for (const [note, cleaned] of removed) expect(readerNoteOf(note)).toBe(cleaned);
+    for (const [note, cleaned] of removed) expect(readerNoteOf(note), note).toBe(cleaned);
     expect(flagged("Update at acme-billing.co/update or t.me/acmepay now.").reason).toBe(
       `${FLAGGED} The reader noted: "Update at (link removed) or (link removed) now."`
     );
@@ -450,9 +515,104 @@ describe("the reader's flag (DK4, amended 2026-10-26: the note is quoted)", () =
     for (const kept of [
       "Totals 1,234.56 and 5.00 USDC (5.00USDC) for PO-1042, INV-2026.10/3, 8.50/9.00 and 1.5/2 in invoice.pdf and scan.PNG.",
       `Pay ${OTHER}, e.g. as before, at 10.30 a.m. Note: Data: Ref:PO-1042.`,
+      "R&D and AT&T and Q&A, P&L for ACME.PO-1042 and INV-AB.12, fees and/or tax // see the total.",
     ]) {
-      expect(readerNoteOf(kept)).toBe(kept);
+      expect(readerNoteOf(kept), kept).toBe(kept);
     }
+  });
+
+  it("removes a Markdown link or image, a // link and an HTML character reference, which a Markdown reader opens as a link", () => {
+    const removed: Array<readonly [string, string]> = [
+      [
+        "Pay at [the portal](//acme-billing.example/pay) or [here](https&#58;//acme-billing.example/pay) ![](//acme-billing.example/p.png)",
+        "Pay at (link removed) or (link removed) (link removed)",
+      ],
+      ["Pay [here](https&colon;//acme-billing.example/pay) today.", "Pay (link removed) today."],
+      ["Open https&#x3a;//evil.example/p now.", "Open https (link removed) now."],
+      ["Pay at //acme-billing.example/pay now.", "Pay at (link removed) now."],
+      [`Pay [Pay](ethereum:${OTHER}@1?value=5e18) now.`, "Pay (link removed) now."],
+      ["Open [x](ms-msdt:/id) now.", "Open (link removed) now."],
+      ["Open [Open](search-ms:query=invoice&crumb=location:evil) now.", "Open (link removed) now."],
+      ["Open [x](//[2001:db8::1]/pay) now.", "Open (link removed) now."],
+      [`Pay <ethereum:${OTHER}> now.`, "Pay (link removed) now."],
+      ["See <img src=//evil.example/p.png> now.", "See <img src=(link removed) now."],
+      // A link cut by the note's length, with no closing parenthesis, goes all the same.
+      ["Pay [here](javascript:alert(1", "Pay (link removed)"],
+    ];
+    for (const [note, cleaned] of removed) expect(readerNoteOf(note), note).toBe(cleaned);
+    expect(flagged(removed[0][0]).reason).toBe(`${FLAGGED} The reader noted: "${removed[0][1]}"`);
+    expect(flagged(removed[0][0]).readerNote).toBe(removed[0][1]);
+  });
+
+  it("removes a link written with fullwidth or ideographic dots, or in another script, as a browser opens it", () => {
+    const fullwidth = (value: string) => Array.from(value, (character) => cp(character.charCodeAt(0) + 0xfee0)).join("");
+    const RF = cp(0x440, 0x444);
+    const removed: Array<readonly [string, string]> = [
+      [`acme-billing${cp(0xff0e)}com/update`, "(link removed)"],
+      [`pay@acme-billing${cp(0x3002)}com`, "(email address removed)"],
+      [`evil${cp(0xff61)}com`, "(link removed)"],
+      [`evil${cp(0x3002)}com`, "(link removed)"],
+      [fullwidth("evil.com"), "(link removed)"],
+      [fullwidth("https://evil.com/pay"), "(link removed)"],
+      [fullwidth("pay@evil.com"), "(email address removed)"],
+      [`evil.${RF}/pay`, "(link removed)"],
+      [`${cp(0x43f, 0x440, 0x438, 0x43c, 0x435, 0x440)}.${RF}`, "(link removed)"],
+      [`${cp(0x4f8b, 0x3048)}.jp`, "(link removed)"],
+      ["evil.xn--p1ai/pay", "(link removed)"],
+      // A Cyrillic a in the name.
+      [`${cp(0x430)}cme-billing.com/pay`, "(link removed)"],
+    ];
+    for (const [note, cleaned] of removed) expect(readerNoteOf(`Pay at ${note} now.`), note).toBe(`Pay at ${cleaned} now.`);
+
+    const result = flagged(`New bank details at acme-billing${cp(0xff0e)}com/update, write pay@acme-billing${cp(0x3002)}com, or evil.xn--p1ai/pay`);
+    // An email address is replaced up to the next space, as one written with an ASCII dot is.
+    const cleaned = "New bank details at (link removed), write (email address removed) or (link removed)";
+    expect(result.readerNote).toBe(cleaned);
+    expect(result.reason).toBe(`${FLAGGED} The reader noted: "${cleaned}"`);
+
+    // A sentence in Japanese, whose full stop is an ideographic one, and one in Vietnamese stay as they are.
+    for (const kept of [
+      cp(0x5408, 0x8a08, 0x304c, 0x9055, 0x3044, 0x307e, 0x3059, 0x3002, 0x632f, 0x8fbc, 0x5148, 0x3082, 0x5909, 0x66f4, 0x3002),
+      `T${cp(0x1ed5)}ng ti${cp(0x1ec1)}n kh${cp(0xf4)}ng kh${cp(0x1edb)}p v${cp(0x1edb)}i h${cp(0xf3)}a ${cp(0x111, 0x1a1)}n.`,
+    ]) {
+      expect(readerNoteOf(kept), kept).toBe(kept);
+    }
+  });
+
+  it("removes a name only when its last label is a top-level domain, so a file's name or an abbreviation stays", () => {
+    for (const kept of [
+      "Totals for St.Louis, Mr.Smith, e.g.the bill, Due 26.Oct, INV-2026.OCT and ACME.PO match.",
+      "Files receipt.tiff, photo.heic, file.webp, mail.eml, memo.rtf and sheet.ods are attached.",
+      "Total EUR 1.234.567.890,00, Rp 1.500.000.000, 999.999.999.999 and 5.00.The rest.",
+      "See File:invoice.pdf and Data:5.00 for it.",
+    ]) {
+      expect(readerNoteOf(kept), kept).toBe(kept);
+    }
+    const removed: Array<readonly [string, string]> = [
+      // Top-level domains, though they read as a file's kind or a company's.
+      ["Open statement.zip and notes.md now.", "Open (link removed) and (link removed) now."],
+      ["Payee is Acme Co.Ltd, not Acme.", "Payee is Acme (link removed), not Acme."],
+      ["Open data:,x or file:///x now.", "Open (link removed) or (link removed) now."],
+      // The domain before a label that is none.
+      ["Pay at evil.com.Thanks again.", "Pay at (link removed).Thanks again."],
+      ["Pay at Mr.Smith/evil.com/pay now.", "Pay at Mr.Smith/(link removed) now."],
+    ];
+    for (const [note, cleaned] of removed) expect(readerNoteOf(note), note).toBe(cleaned);
+  });
+
+  it("keeps at most two marks on a letter, so stacked marks cannot paint over the line above", () => {
+    // U+0300 to U+032F in turn, less the double acute, which reads as a quotation mark and becomes one.
+    const MARKS = Array.from({ length: 0x30 }, (_, index) => 0x300 + index).filter((code) => code !== 0x30b);
+    const marks = (count: number) => Array.from({ length: count }, (_, index) => cp(MARKS[index % MARKS.length])).join("");
+    const capped = /^\p{L}\p{M}{0,2} totals$/u;
+    expect(readerNoteOf(`a${marks(150)} totals`)).toMatch(capped);
+    // Split by a combining grapheme joiner, which is removed first, the marks are one run.
+    expect(readerNoteOf(`a${marks(10)}${cp(0x34f)}${marks(10)} totals`)).toMatch(capped);
+    // With the double acute among them too: no letter, nor the quote it becomes, carries more than two.
+    expect(readerNoteOf(`a${cp(...Array.from({ length: 150 }, (_, index) => 0x300 + (index % 0x30)))} totals`)).not.toMatch(/\p{M}{3}/u);
+    const result = flagged(`a${marks(150)} totals`);
+    expect(result.reason).not.toMatch(/\p{M}{3}/u);
+    expect(result.readerNote).toMatch(capped);
   });
 
   it("keeps the reason within 300 characters and the note in it: cut to fit, or after a shorter sentence when there is no room", () => {
@@ -494,6 +654,24 @@ describe("the reader's flag (DK4, amended 2026-10-26: the note is quoted)", () =
     expect(checkOf(onFile, "purchase_order")).toEqual({ check: "purchase_order", result: "mismatch", document: second, bill: first });
 
     for (const result of [cut, none, both, onFile]) expect(Array.from(result.reason ?? "").length).toBeLessThanOrEqual(300);
+  });
+
+  it("keeps the whole sentence, naming the purchase orders, beside a reason that says it shortly", () => {
+    const note = "word ".repeat(40).trim();
+    // The model's purchase order against the rule-based reader's, with none typed.
+    const [rule, model] = [`${"A".repeat(97)}-11`, `${"B".repeat(97)}-22`];
+    const text = INVOICE.replace("PO-1042", rule).replace("Storage add-on, 1 unit", `Storage add-on, see also ${model}`);
+    const sentence = `The document names more than one purchase order: ${model} and ${rule}.`;
+    const result = compareDocument(bill(), modelRead(text, { amount: "5.00", currency: "USDC", poReference: model, notes: note }));
+    expect(result.reason).toBe(`The document names more than one purchase order. The reader noted: "${note}"`);
+    expect(result.sentence).toBe(sentence);
+    expect(checkOf(result, "purchase_order")).toEqual({ check: "purchase_order", result: "mismatch", document: model, bill: null, alsoRead: rule });
+    // With room for the note, the reason begins with the same sentence.
+    const short = compareDocument(bill(), modelRead(text, { amount: "5.00", currency: "USDC", poReference: model, notes: "Totals differ." }));
+    expect(short).toMatchObject({ reason: `${sentence} The reader noted: "Totals differ."`, sentence });
+    // The flag's own sentence, and none for a match.
+    expect(flagged("Totals differ.").sentence).toBe(FLAGGED);
+    expect(compareDocument(bill(), heuristic(INVOICE, "PO-1042")).sentence).toBeNull();
   });
 
   it("flags a note that cleans to nothing with its own sentence alone", () => {

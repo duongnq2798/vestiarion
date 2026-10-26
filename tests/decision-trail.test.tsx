@@ -307,8 +307,11 @@ describe("a payable's card", () => {
     expect(markup).toContain("22 s later");
     expect(markup).toContain('href="/o/acme/audit#seq-972"');
     // Each check on its own line, read down a list (the partner's ask): never run together in one wrapped row.
-    expect(markup).toContain('<ul class="mt-1 space-y-0.5 text-xs text-ink-2"><li>✓ Purchase order PO-131 on file and the goods received</li><li>✓ Counterparty screened clear</li>');
-    expect(markup).not.toMatch(/<ul class="[^"]*flex-wrap[^"]*"><li>✓/);
+    // Each is clipped to its own box, so marks stacked on a letter in a quoted note never paint over the step's text.
+    expect(markup).toContain(
+      '<ul class="mt-1 space-y-0.5 text-xs text-ink-2"><li class="overflow-hidden">✓ Purchase order PO-131 on file and the goods received</li><li class="overflow-hidden">✓ Counterparty screened clear</li>'
+    );
+    expect(markup).not.toMatch(/<ul class="[^"]*flex-wrap[^"]*"><li[^>]*>✓/);
   });
 
   it("says a payable not yet decided is being decided while a cycle runs", () => {
@@ -452,6 +455,21 @@ describe("a vendor's document, checked against the bill (document checks DK13)",
       `· The reader noted: "${note}"`,
     ]);
     expect(checked({ outcome: "mismatched", reason: FLAGGED, readerFlagged: true })).toMatchObject({ text: `The agent checked the vendor's document. ${FLAGGED}`, notes: [] });
+  });
+
+  it("names what the reason says shortly from the entry's whole sentence, with the reader's note once", () => {
+    const note = "word ".repeat(40).trim();
+    const [first, second] = [`${"A".repeat(97)}-11`, `${"B".repeat(97)}-22`];
+    const sentence = `The document names more than one purchase order: ${second} and ${first}.`;
+    expect(
+      checked({
+        outcome: "mismatched",
+        reason: `The document names more than one purchase order. The reader noted: "${note}"`,
+        sentence,
+        readerFlagged: true,
+        readerNote: note,
+      })
+    ).toMatchObject({ tone: "stopped", text: `The agent checked the vendor's document. ${sentence}`, notes: [`· The reader noted: "${note}"`] });
   });
 
   it("joins the invoice's trail, in order", () => {

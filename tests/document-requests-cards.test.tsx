@@ -312,6 +312,11 @@ describe("what the check found, on Approvals and on Bills (document checks DK13)
     expect(noted?.textContent).toBe(`The reader noted: "${NOTE}"`);
     expect(noted?.querySelector("script, b, a")).toBeNull();
     expect(container.querySelector("script")).toBeNull();
+    // Marks stacked on a letter are clipped to their own line, never painted over Vestiarion's line above it; the
+    // vendor's own note is clipped the same way.
+    expect(noted?.classList.contains("overflow-hidden")).toBe(true);
+    const vendorNote = Array.from(container.querySelectorAll("dd")).find((dd) => dd.textContent === "Signed copy.");
+    expect(vendorNote?.classList.contains("overflow-hidden")).toBe(true);
 
     const markup = renderToStaticMarkup(
       <WaitingPayableAction

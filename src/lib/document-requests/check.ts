@@ -2,6 +2,7 @@ import { totalLineFigures } from "../invoice-document/extract";
 import { nameKey } from "../invoice-document/match";
 import { normalizeExtraction, rawExtractionSchema, type RawExtraction } from "../invoice-document/normalize";
 import { emailDomainOf, readerNoteWords } from "./rules";
+import { TOP_LEVEL_DOMAINS } from "./top-level-domains";
 
 /**
  * Comparing a vendor's document with its bill (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK4,
@@ -68,8 +69,14 @@ export interface DocumentCheck {
 
 export interface DocumentComparison {
   outcome: "matched" | "mismatched";
-  /** The first failing check's sentence; null when it matched. */
+  /** The first failing check's sentence, with the reader's note quoted after it, within 300 characters; null when it matched. */
   reason: string | null;
+  /**
+   * That sentence whole, before any note: as `reason` begins, but naming the purchase orders where `reason` says it
+   * shortly so the note fits in 300 characters (`Step.shortFailure`). For the ledger's summary and the decision trail,
+   * which show the note apart. Null when it matched.
+   */
+  sentence: string | null;
   checks: DocumentCheck[];
   /** The purchase order the document names, as it writes it; null when it names none. */
   poReference: string | null;
@@ -224,39 +231,117 @@ const anyOf = (codes: number[]) => codes.map((code) => String.fromCodePoint(code
 const NOTE_INVISIBLE = new RegExp(`[${/\p{Cf}\p{Cs}\p{Default_Ignorable_Code_Point}\p{Co}\p{Cn}/u.source}${anyOf([0x2800])}]`, "gu");
 /** A line or a tab in a reader's note: one space. */
 const NOTE_BREAK = /[\p{Cc}\p{Zl}\p{Zp}]/gu;
+/** More than two marks on one letter, which stack above or below its line and paint over the text around it: two kept. */
+const NOTE_MARKS = /(\p{M}{2})\p{M}+/gu;
+const LINK_REMOVED = "(link removed)";
 /**
- * A link a person might open from the card, or a chat tool a note is sent to would: one with a scheme (`https://`, or one
- * such as `javascript:` or `data:` written without slashes) or starting `www.`, up to the next space, less the punctuation
+ * An HTML character reference, which a Markdown or HTML reader turns into its character: `&#58;` and `&colon;` into ":",
+ * so `https&#58;//` opens as `https://`. A named one only with its ";", so R&D, AT&T and Q&A stay.
+ */
+const NOTE_ENTITY = /&(?:#\d+;?|#x[0-9a-f]+;?|[a-z][a-z0-9]*;)/gi;
+/**
+ * A Markdown link or image, whatever its destination (`//host`, `ethereum:`, `ms-msdt:`, an IPv6 address), and an
+ * autolink in angle brackets with any scheme. With no closing parenthesis too, so a link the note's length cut still goes.
+ */
+const NOTE_MARKDOWN_LINK = /!?\[[^\]]*\]\([^)]*\)?|<[a-z][a-z0-9+.-]{1,31}:[^\s<>]*>/gi;
+/**
+ * A link a person might open from the card, or a chat tool a note is sent to would: one with a scheme (`https://`, one
+ * such as `javascript:` or `ethereum:` written without slashes, `data:` before a media type and `file:` before a path),
+ * one starting `//`, as a Markdown reader opens it, or one starting `www.`, up to the next space, less the punctuation
  * that ends a sentence after it.
  */
-const NOTE_LINK = /(?:[a-z][a-z0-9+.-]*:\/\/|\b(?:javascript|vbscript|data|file|blob|mailto|tel|sms|intent):(?=\S)|www\.)(?:\S*[^\s.,;:!?'"])?/gi;
-const NOTE_EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
+const NOTE_LINK =
+  /(?:[a-z][a-z0-9+.-]*:\/\/|(?<![\w:\/])\/\/(?=[^\s\/])|\b(?:javascript|vbscript|blob|mailto|tel|sms|intent|ethereum|bitcoin):(?=\S)|\bdata:(?=[a-z]+\/[\w.+-]+[;,]|,)|\bfile:(?=\/)|www\.)(?:\S*[^\s.,;:!?'"])?/gi;
+/** A domain name's dot: ".", or an ideographic full stop (U+3002, U+FF61), which a browser reads as one. */
+const SEP = `[${anyOf([0x2e, 0x3002, 0xff61])}]`;
+const NOTE_EMAIL = new RegExp(`[^\\s@]+@[^\\s@]+${SEP}[^\\s@]+`, "gu");
+/** A domain name's label, in any script. */
+const LABEL = String.raw`[\p{L}\p{N}](?:[\p{L}\p{N}\p{M}_-]*[\p{L}\p{N}\p{M}])?`;
 /**
- * A link written without a scheme, which a chat tool links all the same: a domain name whose last label is letters, never
- * a file's name such as invoice.pdf, or an IPv4 address, with any port and path. Figures (5.00, 1,234.56, 8.50/9.00),
- * purchase orders, invoice numbers (INV-2026.10/3), abbreviations (e.g.) and 0x hex are none. After `NOTE_EMAIL`, so an
- * email address is replaced whole.
+ * A name's last label as a top-level domain might be written: in ASCII (xn--p1ai) or in letters of a script that spaces
+ * its words. Not in Han, kana, Thai, Lao, Khmer or Myanmar, written without spaces, where a full stop before a word
+ * would read every Japanese or Chinese sentence as a domain.
  */
-const NOTE_BARE_HOST =
-  /(?<![\w@.\/-])(?:(?:\w(?:[\w-]*\w)?\.)+(?!(?:pdf|png|jpe?g|gif|csv|xlsx?|docx?|txt|xml|json|html?)(?![\w-]))[a-z]{2,63}|\d{1,3}(?:\.\d{1,3}){3})(?![\w-]|\.\w)(?::\d{1,5})?(?:\/(?:\S*[^\s.,;:!?'"])?)?/gi;
+const TLD = String.raw`xn--[a-z0-9-]{1,59}|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\p{sc=Thai}\p{sc=Lao}\p{sc=Khmer}\p{sc=Myanmar}])[\p{L}\p{M}]){2,63}`;
+const OCTET = String.raw`(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)`;
+/**
+ * A link written without a scheme, which a chat tool or a browser links all the same: a name of two or more labels in
+ * any script, with fullwidth or ideographic dots too (NFKC, then `SEP`), or an IPv4 address, with any port and path.
+ * Found wherever it does not follow a letter, a digit or a mark, so a "-", "/", ".", "@" or "_" before it is no
+ * shelter, and ends before another label, a letter or a digit. A name is a link only when a label of it is a top-level
+ * domain (`withoutHost`), so St.Louis and receipt.tiff stay; an amount such as 1.234.567,00 or 999.999.999.999 is no
+ * address. After `NOTE_EMAIL`, so an email address is replaced whole.
+ */
+const NOTE_BARE_HOST = new RegExp(
+  String.raw`(?<![\p{L}\p{N}\p{M}])(?:(?<host>(?:${LABEL}${SEP})+(?:${TLD}))|${OCTET}(?:${SEP}${OCTET}){3}(?!,\d))(?![\p{L}\p{N}\p{M}]|[-_][\p{L}\p{N}]|${SEP}[\p{L}\p{N}])(?::\d{1,5})?(?:\/(?:\S*[^\s.,;:!?'"])?)?`,
+  "giu"
+);
+const LABEL_SEP = new RegExp(SEP, "u");
 /**
  * A token: 32 or more letters, digits, "_", "-", "+", "/" or "=" in a row, such as a link's token or an API key; never
  * 0x hex alone, an address or a transaction hash, which a note may name.
  */
 const NOTE_TOKEN = /(?<![\w+\/=-])(?!0[xX][0-9a-fA-F]+(?![\w+\/=-]))[\w+\/=-]{32,}(?![\w+\/=-])/g;
 /**
- * Every character a note could close its quote with: double quotation marks straight, curly, low, guillemets, primes and
- * modifier double primes, the ditto mark, gershayim, ornaments, fullwidth.
+ * Every character that reads as a double quotation mark, so a note could close its quote with it: straight, curly,
+ * low and angle quotation marks, double, triple and quadruple primes and modifier double primes, the diaeresis and the
+ * double acute, the ditto marks, gershayim, the Yiddish double yod, ornaments, fullwidth. Each becomes "'" on its own.
  */
-const NOTE_DOUBLE_QUOTE = new RegExp(
-  `[${anyOf([
-    0x22, 0xab, 0xbb, 0x2ba, 0x2dd, 0x2ee, 0x2f5, 0x2f6, 0x30b, 0x5f4, 0x201c, 0x201d, 0x201e, 0x201f, 0x2033, 0x2036, 0x275d,
-    0x275e, 0x2760, 0x2e42, 0x3003, 0x301d, 0x301e, 0x301f, 0xff02, 0x1f676, 0x1f677, 0x1f678,
-  ])}]`,
-  "gu"
-);
-/** Two or more single quotes or primes in a row, which read together as a double quotation mark: one "'". */
-const NOTE_SINGLE_RUN = new RegExp(`[${anyOf([0x27, 0x2018, 0x2019, 0x201b, 0x2032, 0x2035, 0x2bc])}]{2,}`, "gu");
+const NOTE_DOUBLE_LIKE = [
+  0x22, 0xa8, 0xab, 0xbb, 0x2ba, 0x2dd, 0x2ee, 0x2f5, 0x2f6, 0x30b, 0x5f2, 0x5f4, 0x1cd3, 0x201c, 0x201d, 0x201e, 0x201f,
+  0x2033, 0x2034, 0x2036, 0x2037, 0x2057, 0x275d, 0x275e, 0x2760, 0x2e42, 0x3003, 0x301d, 0x301e, 0x301f, 0xff02, 0x1f676,
+  0x1f677, 0x1f678,
+];
+/**
+ * Characters that read as a single quotation mark, an apostrophe or a prime, beside every quotation mark Unicode names:
+ * the backtick and the acute accent, modifier primes and apostrophes, the Greek, Armenian, NKo, runic and Hebrew ones
+ * (geresh), primes, heavy ornaments, the saltillo, fullwidth. One alone stays, as an apostrophe in a word does.
+ */
+const NOTE_SINGLE_LIKE = [
+  0x60, 0xb4, 0x2b9, 0x2bb, 0x2bc, 0x2bd, 0x2c8, 0x2ca, 0x2cb, 0x374, 0x384, 0x55a, 0x5f3, 0x7f4, 0x7f5, 0x16cc, 0x1fbd,
+  0x1fbf, 0x1fef, 0x1ffd, 0x1ffe, 0x2032, 0x2035, 0x275b, 0x275c, 0x275f, 0xa78b, 0xa78c, 0xff40,
+];
+const NOTE_DOUBLE_QUOTE = new RegExp(`[${anyOf(NOTE_DOUBLE_LIKE)}]`, "gu");
+/**
+ * Two or more quote-like or prime-like characters in a row, of any kind and mixed, which read together as a double
+ * quotation mark: one "'".
+ */
+const NOTE_SINGLE_RUN = new RegExp(`[\\p{Quotation_Mark}${anyOf([...NOTE_SINGLE_LIKE, ...NOTE_DOUBLE_LIKE])}]{2,}`, "gu");
+
+/** No character of a note that reads as a double quotation mark: each one, and each run of single ones, as "'". */
+const withoutDoubleQuotes = (value: string) => value.replace(NOTE_DOUBLE_QUOTE, "'").replace(NOTE_SINGLE_RUN, "'");
+
+/** Whether a label is a top-level domain of the root zone, written in ASCII or in its own script (as xn--p1ai is). */
+function isTopLevelDomain(label: string): boolean {
+  const lower = label.toLowerCase();
+  if (TOP_LEVEL_DOMAINS.has(lower)) return true;
+  if (/^[a-z0-9-]*$/.test(lower)) return false;
+  try {
+    // Its ASCII form, as a browser's address bar gives it.
+    return TOP_LEVEL_DOMAINS.has(new URL(`http://${lower}/`).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A name `NOTE_BARE_HOST` found, as the note keeps it: "(link removed)" when its last label is a top-level domain, or an
+ * IPv4 address. When its last label is none, as in evil.com.Thanks, the name up to its last label that is one is
+ * removed and the rest kept; with none, it is kept whole. What it keeps is looked at again, so Mr.Smith/evil.com loses
+ * evil.com.
+ */
+function withoutHost(found: string, ...rest: unknown[]): string {
+  const host = (rest[rest.length - 1] as { host?: string }).host;
+  if (host === undefined) return LINK_REMOVED;
+  const labels = host.split(LABEL_SEP);
+  if (isTopLevelDomain(labels[labels.length - 1])) return LINK_REMOVED;
+  const restOf = (end: number) => found.slice(end).replace(NOTE_BARE_HOST, withoutHost);
+  for (let index = labels.length - 2; index >= 1; index -= 1) {
+    // Each dot is one UTF-16 unit, so the labels and their dots give where the name ends.
+    if (isTopLevelDomain(labels[index])) return `${LINK_REMOVED}${restOf(labels.slice(0, index + 1).join(".").length)}`;
+  }
+  return `${host}${restOf(host.length)}`;
+}
 
 /** At most `max` characters, cut by whole characters with "..." when longer. */
 function capped(value: string, max: number): string {
@@ -267,24 +352,35 @@ function capped(value: string, max: number): string {
 /**
  * The model's note as the card, the ledger and 0144 keep it (DK4, amended 2026-10-26), stricter than **From a document**'s
  * `modelNote`: no format, default-ignorable, private-use or unassigned character (`NOTE_INVISIBLE`, first, so nothing
- * hidden splits a link or a token); control characters and line breaks as spaces, one line; a link (`NOTE_LINK`, then
- * `NOTE_BARE_HOST`: with a scheme, from www., a domain name or an IPv4 address), an email address and a token replaced; no
- * double quotation mark or character that looks like one, nor a run of single quotes (each becomes "'"); whitespace
- * collapsed; at most 200 characters. Null when nothing is left.
+ * hidden splits a link or a token); no double quotation mark or character that reads as one, nor a run of quote-like or
+ * prime-like characters (each becomes "'"); in NFKC, so fullwidth letters and dots read as a browser reads them; at most
+ * two marks on a letter; control characters and line breaks as spaces, one line; HTML character references as spaces; a
+ * link (`NOTE_MARKDOWN_LINK`, `NOTE_LINK`, then `NOTE_BARE_HOST`: in Markdown, with a scheme, from // or www., a domain
+ * name or an IPv4 address), an email address and a token replaced; whitespace collapsed; at most 200 characters. Null
+ * when nothing is left.
  */
 export function readerNoteOf(notes: string | null): string | null {
   if (notes === null) return null;
-  const visible = notes.replace(NOTE_INVISIBLE, "").replace(NOTE_BREAK, " ").replace(/\s+/g, " ").trim();
+  // The quotation marks before NFKC, which turns an acute accent or a diaeresis into a space and a mark.
+  const visible = withoutDoubleQuotes(notes.replace(NOTE_INVISIBLE, ""))
+    .normalize("NFKC")
+    .replace(NOTE_INVISIBLE, "")
+    .replace(NOTE_MARKS, "$1")
+    .replace(NOTE_BREAK, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   // Far more than is kept, and little enough that no pattern below takes long on a model's longest answer.
-  const clean = Array.from(visible)
-    .slice(0, 10 * MAX_READER_NOTE)
-    .join("")
-    .replace(NOTE_LINK, "(link removed)")
-    .replace(NOTE_EMAIL, "(email address removed)")
-    .replace(NOTE_BARE_HOST, "(link removed)")
-    .replace(NOTE_TOKEN, "(token removed)")
-    .replace(NOTE_DOUBLE_QUOTE, "'")
-    .replace(NOTE_SINGLE_RUN, "'")
+  const clean = withoutDoubleQuotes(
+    Array.from(visible)
+      .slice(0, 10 * MAX_READER_NOTE)
+      .join("")
+      .replace(NOTE_ENTITY, " ")
+      .replace(NOTE_MARKDOWN_LINK, LINK_REMOVED)
+      .replace(NOTE_LINK, LINK_REMOVED)
+      .replace(NOTE_EMAIL, "(email address removed)")
+      .replace(NOTE_BARE_HOST, withoutHost)
+      .replace(NOTE_TOKEN, "(token removed)")
+  )
     .replace(/\s+/g, " ")
     .trim();
   return clean ? capped(clean, MAX_READER_NOTE) : null;
@@ -494,6 +590,7 @@ export function compareDocument(bill: CheckBill, reading: DocumentReading): Docu
     outcome: failure === null ? "matched" : "mismatched",
     // Vestiarion's sentence, then what the reader noted, quoted as the reader's.
     reason: failure === null ? null : withReaderNote(checkReasonOf(failure), checkReasonOf(failed?.shortFailure ?? failure), readerNote),
+    sentence: failure === null ? null : checkReasonOf(failure),
     checks: [...steps.map((step) => step.record), invoiceNumberCheck(bill, reading.text)],
     poReference: po.poReference,
     poCompared: po.step !== null,

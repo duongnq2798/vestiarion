@@ -75,7 +75,7 @@ export function DecisionTrail({
               {step.notes.length > 0 && (
                 <ul className="mt-1 space-y-0.5 text-xs text-ink-2">
                   {step.notes.map((note) => (
-                    <li key={note}>{note}</li>
+                    <li key={note} className="overflow-hidden">{note}</li>
                   ))}
                 </ul>
               )}

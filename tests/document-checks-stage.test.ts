@@ -307,6 +307,7 @@ describe("a document that matches, in shadow (DK10)", () => {
       { p_org_id: ORG, p_id: REQUEST, p_file_sha256: PDF_SHA, p_outcome: "matched", p_reason: null, p_shadow: true, p_document_po: "PO-1042", p_write_po: false },
     ]);
     expect(signed()[0].detail).toMatchObject({ outcome: "matched", poWritten: false, shadow: true });
+    expect(signed()[0].detail).not.toHaveProperty("sentence");
     expect(signed()[0].summary).toBe("Checked Northwind Hosting's document for invoice INV-2207: it matches; vendor requests are in shadow, so the bill was left as it is");
     expect(lines).toEqual([{ domain: "ap", message: "Checked Northwind Hosting's document: it matches; vendor requests are in shadow, so the bill was left as it is" }]);
   });
@@ -317,7 +318,12 @@ describe("a document that does not match (DK9)", () => {
     const client = world({ bills: [bill({ amount: "205.000000" })] });
     const lines = await run(client);
     expect(checks(client)[0]).toMatchObject({ p_outcome: "mismatched", p_reason: "The document says 200.00 USDC; the bill says 205.00 USDC.", p_write_po: false });
-    expect(signed()[0].detail).toMatchObject({ outcome: "mismatched", reason: "The document says 200.00 USDC; the bill says 205.00 USDC.", poWritten: false });
+    expect(signed()[0].detail).toMatchObject({
+      outcome: "mismatched",
+      reason: "The document says 200.00 USDC; the bill says 205.00 USDC.",
+      sentence: "The document says 200.00 USDC; the bill says 205.00 USDC.",
+      poWritten: false,
+    });
     expect(signed()[0].summary).toBe("Checked Northwind Hosting's document for invoice INV-2207: The document says 200.00 USDC; the bill says 205.00 USDC");
     expect(lines).toEqual([{ domain: "ap", message: "Checked Northwind Hosting's document: The document says 200.00 USDC; the bill says 205.00 USDC" }]);
     // A reader that set no note: no flag, and no note.
@@ -380,6 +386,26 @@ describe("a document the reader flagged (DK4, amended 2026-10-26)", () => {
     expect(checks(client)[0]).toMatchObject({ p_outcome: "mismatched", p_reason: FLAGGED });
     expect(signed()[0].detail).toMatchObject({ reason: FLAGGED, readerFlagged: true });
     expect(signed()[0].detail).not.toHaveProperty("readerNote");
+  });
+
+  it("signs the whole sentence, naming both purchase orders, where the reason says it shortly to fit the note", async () => {
+    const [typed, other] = [`${"A".repeat(97)}-11`, `${"B".repeat(97)}-22`];
+    const text = ["Northwind Hosting", "Invoice INV-2207", `Purchase order: ${typed}`, `Managed hosting, see also ${other}`, "Total due 200.00 USDC", `Pay to ${ADDRESS}`].join("\n");
+    readSpy.mockImplementationOnce(async () => ({ kind: "pdf", text, sha256: PDF_SHA, truncated: false }));
+    const note = "word ".repeat(40).trim();
+    extractSpy.mockImplementationOnce(async (read: string) => {
+      const reading = ruleBasedExtraction(read);
+      return { raw: { ...reading, poReference: other, notes: note }, reference: reading, reader: "anthropic" };
+    });
+    const client = world({ waiting: [answered({ po_reference: typed })] });
+    const lines = await run(client);
+    const reason = `The document names more than one purchase order. The reader noted: "${note}"`;
+    const sentence = `The document names more than one purchase order: ${typed} and ${other}.`;
+    expect(checks(client)[0]).toMatchObject({ p_outcome: "mismatched", p_reason: reason });
+    const [entry] = signed();
+    expect(entry.detail).toMatchObject({ outcome: "mismatched", reason, sentence, readerFlagged: true, readerNote: note });
+    expect(entry.summary).toBe(`Checked Northwind Hosting's document for invoice INV-2207: ${sentence} The reader noted: "${note}"`);
+    expect(lines).toEqual([{ domain: "ap", message: `Checked Northwind Hosting's document: ${sentence} The reader noted: "${note}"` }]);
   });
 });
 

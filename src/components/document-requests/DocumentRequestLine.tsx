@@ -57,7 +57,7 @@ function CheckLine({ view, vendorName, goodsReceived }: { view: DocumentReceived
         {documentCheckLine(view.check, vendorName, goodsReceived)}
       </p>
       {noted && (
-        <p className="min-w-0 break-words italic text-ink-2" data-document-reader-note>
+        <p className="min-w-0 overflow-hidden break-words italic text-ink-2" data-document-reader-note>
           {noted}
         </p>
       )}
@@ -80,7 +80,7 @@ function Received({ orgSlug, view }: { orgSlug: string; view: DocumentReceivedVi
           {view.note && (
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-ink-3">Their note</dt>
-              <dd className="min-w-0 whitespace-pre-line break-words text-ink">{view.note}</dd>
+              <dd className="min-w-0 overflow-hidden whitespace-pre-line break-words text-ink">{view.note}</dd>
             </div>
           )}
         </dl>
