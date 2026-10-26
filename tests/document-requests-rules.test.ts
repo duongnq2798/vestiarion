@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   documentCheckLine,
+  documentCheckNote,
   documentRequestAllowed,
   documentRequestLine,
   documentRequestsSettingOf,
@@ -9,7 +10,9 @@ import {
   missingDocuments,
   missingWords,
   readDocumentFields,
+  readerNoteWords,
   sniffDocumentType,
+  splitReaderNote,
   type DocumentCheckView,
   type RequestHistory,
 } from "@/lib/document-requests/rules";
@@ -267,5 +270,40 @@ describe("what a bill's card says of the check (document checks DK13)", () => {
     expect(documentCheckLine({ outcome: "skipped", reason: "It was not checked: the bill no longer waited for a document." }, VENDOR, true)).toBe(
       "It was not checked: the bill no longer waited for a document."
     );
+  });
+});
+
+describe("the reader's note on the card (document checks DK4, DK13, amended 2026-10-26)", () => {
+  const VENDOR = "Northstar Studio";
+  const FLAGGED = "The reader flagged something in it for a person to check.";
+  const NOTE = "The bank account differs from the one on the purchase order.";
+
+  it("finds the note a reason quotes after Vestiarion's own sentence, and nothing in a reason that quotes none", () => {
+    expect(splitReaderNote(`${FLAGGED} The reader noted: "${NOTE}"`)).toEqual({ sentence: FLAGGED, note: NOTE });
+    expect(splitReaderNote(`The document says 8.50 USDC; the bill says 8.00 USDC. The reader noted: "${NOTE}"`)).toEqual({
+      sentence: "The document says 8.50 USDC; the bill says 8.00 USDC.",
+      note: NOTE,
+    });
+    // A check recorded before 2026-10-26, and every other reason, as it is.
+    expect(splitReaderNote(FLAGGED)).toEqual({ sentence: FLAGGED, note: null });
+    expect(splitReaderNote("The document does not name Northstar Studio.")).toEqual({ sentence: "The document does not name Northstar Studio.", note: null });
+    // Only the quote that ends the reason, with no quotation mark inside it, is the reader's.
+    expect(splitReaderNote('The reader noted: "x"')).toEqual({ sentence: 'The reader noted: "x"', note: null });
+    expect(splitReaderNote(`${FLAGGED} The reader noted: "a" b"`)).toEqual({ sentence: `${FLAGGED} The reader noted: "a" b"`, note: null });
+    expect(readerNoteWords(NOTE)).toBe(`The reader noted: "${NOTE}"`);
+  });
+
+  it("says Vestiarion's sentence in the line, and the reader's note apart, quoted and named as the reader's", () => {
+    const check: DocumentCheckView = { outcome: "mismatched", reason: `${FLAGGED} The reader noted: "${NOTE}"` };
+    expect(documentCheckLine(check, VENDOR, true)).toBe(`${FLAGGED} The bill still waits: check it with Northstar Studio, or add the details yourself.`);
+    expect(documentCheckNote(check)).toBe(`The reader noted: "${NOTE}"`);
+  });
+
+  it("keeps a check recorded before the note was kept as it was, with no note", () => {
+    const old: DocumentCheckView = { outcome: "mismatched", reason: FLAGGED };
+    expect(documentCheckLine(old, VENDOR, true)).toBe(`${FLAGGED} The bill still waits: check it with Northstar Studio, or add the details yourself.`);
+    expect(documentCheckNote(old)).toBeNull();
+    expect(documentCheckNote({ outcome: "pending" })).toBeNull();
+    expect(documentCheckNote({ outcome: "unreadable", reason: "This PDF could not be read." })).toBeNull();
   });
 });

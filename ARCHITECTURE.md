@@ -3251,8 +3251,24 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   and standing alone in the text, read by both readers alike, or on file and not contradicted; nothing compared for a
   counterparty that needs none); every `0x` address the text writes being the one on file; and the model's `notes`
   being unset. The first failure gives the reason, built only from the counterparty's name, a purchase order, decimal
-  figures and `0x` hex. Each check is signed as `document_checked` (`appendLedgerEntry`), with the file's SHA-256 and
-  the values compared, never the text, a note, an email address or a link, and with no `observed`.
+  figures and `0x` hex. A set `notes` is then quoted after that sentence as the reader's (` The reader noted: "…"`,
+  `readerNoteWords` in `rules.ts`), within 0144's 300 characters, once `readerNoteOf` has cleaned it: format,
+  default-ignorable (variation selectors, Hangul fillers), private-use and unassigned characters out; double quotation
+  marks, characters that look like one and runs of any quote-like or prime-like characters (single quotes, backticks,
+  acute accents, modifier primes, low single quotes, ornaments, gereshes) as `'` so it cannot close its quote, before
+  NFKC, which then turns fullwidth letters and dots into plain ones; at most two marks on a letter; control characters
+  as spaces, one line; HTML character references as spaces; links (a Markdown link or image, an autolink, one with a
+  scheme, `javascript:`, `ethereum:` and `data:` among them, from `//` or `www.`, a domain name in any script with or
+  without a path, an IPv4 address), email addresses and tokens replaced. A name is a link only when its last label, or
+  one before it, is a top-level domain (`top-level-domains.ts`, the root zone's), so `statement.zip` goes and
+  `receipt.tiff` or `St.Louis` stays; Han, kana and other scripts written without spaces are never read as a top-level
+  domain. At most 200 characters. When the note does not fit after a purchase order sentence naming long values, the
+  reason says that check's short sentence instead (`Step.shortFailure`), so the note is always quoted, and
+  `DocumentComparison.sentence` keeps the whole one for the ledger's summary and the decision trail. The card and the
+  decision trail split the note back out (`splitReaderNote`) and show it apart, in plain text, in boxes that clip
+  stacked marks. Each check is signed as `document_checked` (`appendLedgerEntry`), with the file's SHA-256 and
+  the values compared, the cleaned note as `readerNote` when the model flagged it, a mismatch's whole `sentence`, never
+  the text, the vendor's note, an email address or a link, and with no `observed`.
 - **The function** (`check_document_request`, service-role definer). It locks the request and records the check once
   (`already_checked` after), refusing a hash that is not the row's. With vendor requests on, a match for a bill that
   lacks its purchase order writes `invoices.po_reference`, spelled as the document writes it, compare-and-set on the

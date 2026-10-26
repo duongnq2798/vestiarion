@@ -67,6 +67,21 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **A vendor's document the reader flagged now says what it saw.** When the workspace's model noted something in a
+  document that needs a person, such as a changed bank account or text that gives it instructions, the bill's card on
+  Approvals and on Bills said only "The reader flagged something in it for a person to check.", even when its vendor,
+  amount and purchase order matched. Beneath that line, the card now quotes the note in italics, named as the reader's
+  and never as Vestiarion's words, such as The reader noted: "The bank account on this invoice differs from the one on
+  the purchase order." The note is cleaned first: no hidden or control characters (variation selectors and other
+  invisible ones included), no more than two marks stacked on a letter, no links (with https:// or without, such as
+  pay.example.com/invoice or a name written with fullwidth dots or in another script, a Markdown link, a // link or an
+  IP address; a name counts as one when its last part is a real top-level domain, even statement.zip, so receipt.tiff
+  and St.Louis stay), email addresses, long codes or characters that read as a double quotation mark (pairs of
+  backticks, acute accents or primes included), and at most 200 characters. When the line would name long purchase
+  orders, it says the same without them, such as "The document names more than one purchase order.", so the note
+  still fits beneath it; the decision trail and the ledger's summary still name them. `document_checked` records the
+  note as `readerNote` and the whole line as `sentence`, and its reason and the decision trail quote the note too, in
+  shadow as well. Documents checked before keep their sentence alone. No migration.
 - **A PDF built to expand when opened is refused before it is read.** From a document, invoices by email, the Chrome
   extension and chats now refuse a PDF whose contents would expand to more than 16 MB once decompressed, such as a file
   of under a megabyte that expands to gigabytes: "This PDF could not be read. Paste the invoice's text instead." Before,

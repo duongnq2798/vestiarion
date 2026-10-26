@@ -9,6 +9,7 @@ import { useActionForm } from "@/components/ui/useActionForm";
 import { cn } from "@/components/ui/cn";
 import {
   documentCheckLine,
+  documentCheckNote,
   documentFileHref,
   documentKindWord,
   documentRequestLine,
@@ -43,14 +44,24 @@ function RevokeForm({ orgSlug, requestId, vendorName }: { orgSlug: string; reque
 
 /**
  * What the cycle's check found in the document, under its headline (document checks DK13): nothing before migration
- * 0144, nor while vendor requests are off and the document waits.
+ * 0144, nor while vendor requests are off and the document waits. Beneath a mismatch, what the reader noted in it, apart
+ * from Vestiarion's line and in italics, as **From a document** shows the model's note: the model's words from the
+ * vendor's document, quoted and named as the reader's, in plain text (amended 2026-10-26).
  */
 function CheckLine({ view, vendorName, goodsReceived }: { view: DocumentReceivedView; vendorName: string; goodsReceived: boolean }) {
   if (!view.check) return null;
+  const noted = documentCheckNote(view.check);
   return (
-    <p className="text-ink-2" data-document-check={view.check.outcome}>
-      {documentCheckLine(view.check, vendorName, goodsReceived)}
-    </p>
+    <>
+      <p className="text-ink-2" data-document-check={view.check.outcome}>
+        {documentCheckLine(view.check, vendorName, goodsReceived)}
+      </p>
+      {noted && (
+        <p className="min-w-0 overflow-hidden break-words italic text-ink-2" data-document-reader-note>
+          {noted}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -69,7 +80,7 @@ function Received({ orgSlug, view }: { orgSlug: string; view: DocumentReceivedVi
           {view.note && (
             <div className="flex flex-wrap gap-x-2">
               <dt className="text-ink-3">Their note</dt>
-              <dd className="min-w-0 whitespace-pre-line break-words text-ink">{view.note}</dd>
+              <dd className="min-w-0 overflow-hidden whitespace-pre-line break-words text-ink">{view.note}</dd>
             </div>
           )}
         </dl>

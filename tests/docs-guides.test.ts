@@ -1762,6 +1762,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Its purchase order came from a vendor's document, which a person approves", "src/lib/rule-words.ts", "its purchase order came from a vendor's document, which a person approves"],
     ["The document says 8.50 USDC; the bill says 8.00 USDC.", "src/lib/document-requests/check.ts", "; the bill says "],
     ["The bill still waits: check it with Northstar Studio, or add the details yourself.", "src/lib/document-requests/rules.ts", " The bill still waits: check it with "],
+    // What the reader noted in a flagged document, quoted beneath the line (document checks DK4, amended 2026-10-26).
+    ["The reader flagged something in it for a person to check.", "src/lib/document-requests/check.ts"],
+    ['The reader noted: "', "src/lib/document-requests/rules.ts", 'The reader noted: "${note}"'],
+    ["(link removed)", "src/lib/document-requests/check.ts"],
+    ["(email address removed)", "src/lib/document-requests/check.ts"],
+    ["(token removed)", "src/lib/document-requests/check.ts"],
+    ["readerNote", "src/lib/agent/document-checks.ts"],
     [
       "Only your team can mark the goods received: do it in Add details once you have them, and a person then approves the payment.",
       "src/lib/document-requests/rules.ts",

@@ -5,6 +5,7 @@
  * hands it the entries it already read.
  */
 
+import { readerNoteWords, splitReaderNote } from "./document-requests/rules";
 import { networkProfile, type Network } from "./network";
 import { MIRROR } from "./new-payee";
 
@@ -227,7 +228,8 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
     }
     // A vendor's document, and the cycle's check of it against the bill
     // (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK13): only its reason, Vestiarion's own
-    // sentence, ever reaches a step; never the document's text.
+    // sentence, ever reaches a step, with what the reader noted apart beneath it, quoted as the reader's (amended
+    // 2026-10-26); never the document's text.
     case "document_received":
       return detail.via === "attached"
         ? { ...base, who: "person", tone: "neutral", text: "A person attached the vendor's document." }
@@ -253,8 +255,19 @@ export function trailStep(entry: TrailEntry, network: Network = "arc-testnet"): 
             text: detail.shadow === true ? "The agent checked the vendor's document: it matches. Vendor requests were in shadow, so nothing changed." : "The agent checked the vendor's document: it matches.",
           };
         }
-        case "mismatched":
-          return { ...base, who: "agent", tone: "stopped", text: `The agent checked the vendor's document. ${reason}`.trim() };
+        case "mismatched": {
+          // The reason quotes as much of the note as fits in it, and may say its sentence shortly to fit it; the entry's
+          // own fields hold both whole. An entry signed before `sentence` was kept gives the reason's.
+          const { sentence, note } = splitReaderNote(reason);
+          const noted = text(detail.readerNote) ?? note;
+          return {
+            ...base,
+            who: "agent",
+            tone: "stopped",
+            text: `The agent checked the vendor's document. ${text(detail.sentence) ?? sentence}`.trim(),
+            notes: noted ? [`· ${readerNoteWords(noted)}`] : [],
+          };
+        }
         case "unreadable":
           return { ...base, who: "agent", tone: "stopped", text: `The agent could not check the vendor's document. ${reason}`.trim() };
         default:
