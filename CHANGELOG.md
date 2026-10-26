@@ -64,6 +64,22 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   spreadsheet's id. Disconnecting revokes the access at Google and deletes the tokens; the spreadsheets stay in Drive.
   Needs `GOOGLE_SHEETS_CLIENT_ID`, `GOOGLE_SHEETS_CLIENT_SECRET` and migration 0145; until it runs, the Google Sheets
   card says it is not set up yet.
+- **The payee lock on the landing page, with a payment it held.** The safety section now names the payee lock and says
+  in one sentence what it does: a changed payment address is paid only after a person confirms it, recording how they
+  checked it with the vendor, and after any wait you set; beside it, why a wait helps. Under the refusal it already
+  showed, "What happens when a payment address changes?" follows a real payment in the team's own live workspace on
+  Arc testnet: a vendor's address changed to a new wallet, code held the agent's 3.00 USDC payment while no one had
+  confirmed it, the member who had entered the address could not confirm it and a second member did, code held it
+  again for the 4-hour wait, the address having changed less than an hour before, and only then did the agent pay.
+  Each step shows when the signed ledger recorded it and says only what happened in that workspace, never how the lock
+  works in general, and the transaction links to the explorer, its block time told apart from the ledger's. The page
+  says the lock is held by Vestiarion's code and by people, not by a contract. The first-payment guide's payee lock
+  section links the same transaction, and the controls guide now names the payee lock. The README's payee lock row no
+  longer calls the lock opt-in: it is off on Arc testnet until an owner turns it on, and a workspace created on Arc
+  mainnet starts with it on, with no wait, which an owner can change there too; a call or a message names the contact
+  used, which the person confirming says was on file before the change; where no one else can, the member who entered
+  an address confirms it alone and the record says so; and with the lock on, approving a payment no longer confirms its
+  address. No migration.
 
 ### Changed
 

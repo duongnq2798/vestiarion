@@ -896,9 +896,24 @@ mainnet plan).
   - Each call to action carries `data-cta`; Google Analytics, where it runs, sends `cta_click` with that name and the
     redacted path, nothing else. Activation itself is read from the database (`/admin/growth`).
   - Safety and control (`src/components/landing/Safety.tsx`): three principles, each saying what holds it (the team,
-    rules in code and Arc mainnet's spending-limit contract, the signed ledger), then one past refusal step by step
-    (`safety-example.ts`: historical ledger entry #3710 in a team workspace in shadow mode on Arc testnet, refused by
-    `workspace.outflow_budget`). A past decision's facts do not change, so they are written there rather than read.
+    rules in code and Arc mainnet's spending-limit contract, the signed ledger), then two past cases step by step, each
+    labelled with its network and its own mode in the team's workspace. A past decision's facts do not change, so they
+    are written there rather than read, and the page makes no read for either case:
+    - a refusal (`safety-example.ts`: historical ledger entry #3710 in a team workspace in shadow mode on Arc testnet,
+      refused by `workspace.outflow_budget`);
+    - the payee lock, named and explained apart from the steps, with how it is set and why a wait helps
+      (`payee-lock-example.ts`, spec `2026-10-26-landing-payee-lock-design.md`): in the team's live workspace on Arc
+      testnet on Oct 20, 2026, a vendor's address changed (#4839), the agent's payment was held as
+      `counterparty.address_unconfirmed` (#4843), the member who entered the address could not confirm it and a second
+      member did (#4863), it was held again as `counterparty.cooling_off` for the 4-hour wait (#4866), then paid
+      (#4919). Each step shows the time its entry was recorded and says only what happened in that workspace, never how
+      the lock works in general: what its ledger recorded, the refused confirmation (from the lock's rollout record,
+      not a ledger entry, as the page says) and the new wallet's balance on chain. On a wide screen the explanation
+      keeps its own height in the left column, the proof right under it, and the steps run down the right.
+      The proof links transaction `0x49787501…0551` and tells its block time (15:16:04 UTC, block 68200055)
+      from the ledger's (15:16:07 UTC). It says the lock is held by code and people, not by a contract: the transaction
+      shows only that the payment settled after both holds ended, to the confirmed address, for the bill's amount. Its
+      links open the committed source and `/docs/guides/first-payment#payee-lock`, unprefetched.
   - Integrations (`src/components/landing/Integrations.tsx`): Xero and QuickBooks Online first, each with what comes in
     and what goes back; Xero's loop in four steps, labelled as the supported workflow rather than one payment; the nine
     other tools in three rows of three, each linking to its guide; then Arc and Circle as what the payments run on. Each
