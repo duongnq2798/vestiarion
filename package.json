@@ -38,6 +38,7 @@
     "research:model-vs-policy": "tsx scripts/model-vs-policy.ts",
     "research:replay": "tsx scripts/replay-ap-decisions.ts",
     "quality-lab": "node scripts/quality-lab.mjs",
+    "quality-lab:shadow": "tsx scripts/quality-lab-shadow.ts",
     "telegram:setup": "tsx scripts/telegram-setup.ts",
     "sdk:types": "tsx scripts/sdk-types.ts",
     "sdk:pack": "tsx scripts/sdk-pack.ts",

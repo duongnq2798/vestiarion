@@ -4968,6 +4968,14 @@ Fixed scenarios run through the agent's real decision code in CI on every change
 - **The results** (`src/lib/data/quality-lab.json`) keep stable fields only, never a hash, sequence, time or id, since
   the signing key is made per run. `QualityLabResult` shows them on /open and /how-it-decides, and the research page
   `/docs/research/quality-lab` lists every scenario. /security's AI use says the lab runs in CI.
+- **The shadow decisions** (`docs/superpowers/specs/2026-10-26-quality-lab-shadow-replay-design.md`, export only so
+  far): `npm run quality-lab:shadow` exports every agent decision on a bill made in shadow mode in the team's own
+  workspaces on Arc testnet, with each person's verdict, to `src/lib/quality-lab/shadow-decisions.json`, for a replay
+  through the same runner. Customers' workspaces are never read into it. `exportShadowDecisions`
+  (`src/lib/quality-lab/shadow-export.ts`) passes only the fields it names, as numbers, booleans and rule names, with
+  pseudonyms local to the file for workspaces, bills and payees, and dates as days from the decision; `assertShareable`
+  refuses the whole file when anything in it looks like an address, hash, email or id. The script reads in one
+  read-only transaction and is run by hand, never in CI.
 - Not covered: the model's judgement (scripted), live payments (proved on Arc testnet and Arc mainnet by transactions),
   milestones, whose checks are inline in `executeCycle`, EURC, payouts to other chains, bank payouts, and a person's
   approvals.
