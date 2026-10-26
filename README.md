@@ -590,11 +590,14 @@ economics, guardrails and provider fallback, and runs every migration on an in-p
 database's half of the hash chain to the verifier.
 
 It also runs the Quality Lab (`tests/quality-lab.test.ts`): the scenarios in `src/lib/quality-lab/scenarios.ts`
-through the real AP stage, with the model's answers scripted. It fails on any wrong payment, and while
-`src/lib/data/quality-lab.json` is not what the run gives. After a change to the decision code or the scenarios:
+through the real AP stage, with the model's answers scripted. Beside them, `tests/quality-lab-shadow.test.ts` replays
+the team's own shadow-mode decisions (`src/lib/quality-lab/shadow-decisions.json`) through the same stage, with the
+model's answers as recorded. Each fails on any wrong payment, and while its committed result
+(`src/lib/data/quality-lab.json`, `src/lib/data/quality-lab-shadow.json`) is not what the run gives. After a change to
+the decision code, the scenarios or the exported decisions:
 
 ```bash
-npm run quality-lab   # runs the scenarios and writes src/lib/data/quality-lab.json; commit it
+npm run quality-lab   # runs the scenarios and the replay and writes both result files; commit them
 ```
 
 [docs/self-hosting.md](docs/self-hosting.md) covers the rest: environment variables, the founding workspace, every

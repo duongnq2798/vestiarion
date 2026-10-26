@@ -1,0 +1,1037 @@
+{
+  "summary": {
+    "decisions": 46,
+    "same": 37,
+    "nowStopped": 0,
+    "nowLetThrough": 0,
+    "cannotRebuild": 9,
+    "wrongPayments": 0,
+    "agreed": 18,
+    "disagreed": 0,
+    "noVerdict": 28
+  },
+  "decisions": [
+    {
+      "id": "shadow-01",
+      "day": "2026-10-08",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-02",
+      "day": "2026-10-08",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-03",
+      "day": "2026-10-08",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-04",
+      "day": "2026-10-08",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-05",
+      "day": "2026-10-08",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-06",
+      "day": "2026-10-08",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-07",
+      "day": "2026-10-08",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-08",
+      "day": "2026-10-08",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-09",
+      "day": "2026-10-10",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-10",
+      "day": "2026-10-10",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-11",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-12",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-13",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-14",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": "counterparty.no_address",
+        "money": "stops"
+      },
+      "now": {
+        "action": "pay",
+        "rule": "counterparty.no_address",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-15",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": "counterparty.no_address",
+        "money": "stops"
+      },
+      "now": {
+        "action": "schedule",
+        "rule": "counterparty.no_address",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": "Code now makes the answer a schedule rather than a payment now, and the same rule stops it.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-16",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-17",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-18",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-19",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-20",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-21",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-22",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-23",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-24",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "schedule",
+        "payOnInDays": 4,
+        "fundWithSwap": false
+      },
+      "verdict": null,
+      "then": {
+        "action": "schedule",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-25",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-26",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "schedule",
+        "payOnInDays": 2,
+        "fundWithSwap": false
+      },
+      "verdict": null,
+      "then": {
+        "action": "schedule",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "It was decided on or before Oct 13, 2026, the day the check for an earlier milestone for the same purchase order or delivered work was added, so whether there was one is not in the record. Money moves one way and not the other.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-27",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "now": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-28",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-29",
+      "day": "2026-10-12",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "now": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-30",
+      "day": "2026-10-14",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "now": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-31",
+      "day": "2026-10-16",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "now": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-32",
+      "day": "2026-10-17",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-33",
+      "day": "2026-10-17",
+      "answer": {
+        "action": "schedule",
+        "payOnInDays": 7,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "schedule",
+        "rule": "counterparty.no_address",
+        "money": "stops"
+      },
+      "now": {
+        "action": "schedule",
+        "rule": "counterparty.no_address",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-34",
+      "day": "2026-10-17",
+      "answer": {
+        "action": "schedule",
+        "payOnInDays": 7,
+        "fundWithSwap": false
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "schedule",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": {
+        "action": "schedule",
+        "rule": null,
+        "money": "moves"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-35",
+      "day": "2026-10-17",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-36",
+      "day": "2026-10-17",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-37",
+      "day": "2026-10-17",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-38",
+      "day": "2026-10-17",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-39",
+      "day": "2026-10-17",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-40",
+      "day": "2026-10-17",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-41",
+      "day": "2026-10-20",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "pay",
+        "rule": "counterparty.address_unconfirmed",
+        "money": "stops"
+      },
+      "now": {
+        "action": "pay",
+        "rule": "counterparty.address_unconfirmed",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-42",
+      "day": "2026-10-20",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "pay",
+        "rule": "counterparty.cooling_off",
+        "money": "stops"
+      },
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "The payee's address changed again after the decision, so how long before it the address had changed is not in the record, and the payee lock's wait cannot be weighed. Money stops either way.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-43",
+      "day": "2026-10-20",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "pay",
+        "rule": "counterparty.new_payee",
+        "money": "stops"
+      },
+      "now": null,
+      "class": "cannot_rebuild",
+      "reason": "The payee's address changed again after the decision, so how long before it the address had changed is not in the record, and the payee lock's wait cannot be weighed. Money stops either way.",
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-44",
+      "day": "2026-10-20",
+      "answer": {
+        "action": "schedule",
+        "payOnInDays": 1,
+        "fundWithSwap": false
+      },
+      "verdict": null,
+      "then": {
+        "action": "schedule",
+        "rule": "counterparty.address_unconfirmed",
+        "money": "stops"
+      },
+      "now": {
+        "action": "schedule",
+        "rule": "counterparty.address_unconfirmed",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-45",
+      "day": "2026-10-20",
+      "answer": {
+        "action": "schedule",
+        "payOnInDays": 1,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "schedule",
+        "rule": "counterparty.cooling_off",
+        "money": "stops"
+      },
+      "now": {
+        "action": "schedule",
+        "rule": "counterparty.cooling_off",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-46",
+      "day": "2026-10-20",
+      "answer": {
+        "action": "schedule",
+        "payOnInDays": 1,
+        "fundWithSwap": false
+      },
+      "verdict": null,
+      "then": {
+        "action": "schedule",
+        "rule": "counterparty.new_payee",
+        "money": "stops"
+      },
+      "now": {
+        "action": "schedule",
+        "rule": "counterparty.new_payee",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    }
+  ]
+}

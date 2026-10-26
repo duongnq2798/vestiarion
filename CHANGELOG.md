@@ -26,6 +26,26 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   is on Open numbers and How the agent decides, and every scenario with what was expected and what happened is in the
   docs (Trust and controls, "The Quality Lab"). `npm run quality-lab` runs the scenarios and writes the committed
   result, which the test holds to the run. It does not measure the model's own judgement. No migration.
+- **Quality Lab: the team's real shadow-mode decisions, replayed through today's code.** Every decision the agent made
+  on a bill in the team's own workspaces in shadow mode on Arc testnet is rebuilt from its exported record (the signed
+  ledger entry the agent wrote, with the payee lock in force, the payee's role and, while its address has not changed
+  since, the address's age and whether the bill's document named another address, read beside it) and run through
+  today's decision code in CI on every change, with the model answering exactly as it did then, and outside shadow
+  mode, so a payment that passes is sent to the payment provider's stand-in and counted. Each decision is compared with
+  what code did then: the same outcome, now stopped by a rule that did not stop it then, now let through, or cannot be
+  rebuilt when the outcome depends on a fact the record does not carry, which the replay runs both ways instead of
+  guessing. A decision made by Oct 13, 2026, when the check for an earlier milestone for the same purchase order or
+  delivered work was added, has no answer to that check in its record, so it is run both ways too. Money that moves now
+  where code stopped it then, or on a decision the person disagreed with, or although code records a stop, is a wrong
+  payment and fails CI, including on a decision that cannot be rebuilt when money moves in any way the record does not
+  rule out. Of the 46 decisions exported today, 37 reach the same outcome and 9 cannot be rebuilt, with 0 wrong
+  payments: 7 payments and schedules code let through before the same-work check existed (money moves with no earlier
+  work, and today's code would hold each for a person were there an earlier milestone for the same work), and 2 whose
+  payee's address changed again since, so the payee lock's wait cannot be weighed (money stops either way). One line
+  beside the scenarios' result on Open numbers and How the agent decides says so, counting each decision once and a
+  wrong payment only as one, with a link to every replayed decision in the docs page ("The Quality Lab", "Real
+  decisions, replayed"). Customers' workspaces are never exported. `npm run quality-lab` now writes both result files,
+  and refuses to write the replay's while it has a wrong payment. No migration.
 - **How often you agreed, by decision and by vendor.** In shadow mode, the report's **Before a live slice** now shows,
   under its steps, how often you agreed with the agent's decisions, split by what the agent decided (Pay, Schedule,
   Hold, Flag for review, Ask for details) and by vendor, each with the number of verdicts behind it. Under five

@@ -24,8 +24,9 @@ import OpenPage from "@/app/open/page";
 import { Claims } from "@/components/landing/Claims";
 import { QualityLabResult } from "@/components/open/QualityLabResult";
 import results from "@/lib/data/quality-lab.json";
+import shadow from "@/lib/data/quality-lab-shadow.json";
 import { QUALITY_LAB_GROUPS } from "@/lib/quality-lab/scenarios";
-import { scoreWords, wrongPaymentWords } from "@/lib/quality-lab/words";
+import { scoreWords, shadowReplayWords, wrongPaymentWords } from "@/lib/quality-lab/words";
 
 const text = (markup: string) =>
   markup
@@ -71,9 +72,22 @@ describe("the Quality Lab's result (QL7)", () => {
     expect(markup).not.toContain("<table");
   });
 
+  it("links the docs page's replayed decisions, where its replay line's classes are defined (shadow replay SR10)", () => {
+    expect(markup).toMatch(/<a href="\/docs\/research\/quality-lab#real-decisions-replayed" data-prefetch="off"[^>]*>Every replayed decision →<\/a>/);
+  });
+
   it("names no network, and says nothing the lab does not do", () => {
     expect(words).not.toMatch(/testnet|mainnet/i);
     expect(words).not.toMatch(/real money|fictional|simulated money|powered by/i);
+  });
+
+  it("says, under the score, how the team's real shadow decisions fare through today's code, from the replay's file (shadow replay SR10)", () => {
+    const line = shadowReplayWords(shadow.summary);
+    expect(line).toMatch(/^\d+ real decisions? from the team's own shadow-mode workspaces, replayed through today's code: /);
+    expect(line).toContain(wrongPaymentWords(shadow.summary.wrongPayments));
+    expect(words).toContain(line);
+    expect(words.indexOf(line)).toBeGreaterThan(words.indexOf("often to what an attacker would want."));
+    expect(words.indexOf(line)).toBeLessThan(words.indexOf("A scenario is right when"));
   });
 
   it("takes the heading level its page needs", () => {
@@ -100,6 +114,13 @@ describe("the Quality Lab on /open (QL7)", () => {
     const page = text(renderToStaticMarkup(await OpenPage({ searchParams: Promise.resolve({}) })));
     expect(page).toContain("The same definitions hold for every figure of both networks, for every period. The Quality Lab's result above states its own.");
     expect(page).not.toContain("every figure on this page");
+  });
+
+  it("says in its lede that the lab's result is not read at load, and comes from its scenarios and its replay of the team's decisions", async () => {
+    const page = text(renderToStaticMarkup(await OpenPage({ searchParams: Promise.resolve({}) })));
+    expect(page).toContain(
+      "The Quality Lab's result below is not read when the page loads: it comes from the tests that run its scenarios, and replay the team's own exported shadow-mode decisions, on every change."
+    );
   });
 });
 

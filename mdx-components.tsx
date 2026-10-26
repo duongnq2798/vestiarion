@@ -28,7 +28,7 @@ import { DocsHeading, textOf } from "@/components/docs/DocsHeading";
 import { EndpointTable } from "@/components/docs/EndpointTable";
 import { Flow, FlowStep } from "@/components/docs/Flow";
 import { McpToolTable } from "@/components/docs/McpToolTable";
-import { QualityLabScore, QualityLabTable } from "@/components/docs/QualityLab";
+import { QualityLabScore, QualityLabTable, ShadowReplaySummary, ShadowReplayTable } from "@/components/docs/QualityLab";
 import { Screenshot } from "@/components/docs/Screenshot";
 import { TopicIndex } from "@/components/docs/TopicIndex";
 import { Video } from "@/components/docs/Video";
@@ -185,6 +185,8 @@ const components: MDXComponents = {
   TopicIndex,
   QualityLabScore,
   QualityLabTable,
+  ShadowReplaySummary,
+  ShadowReplayTable,
 };
 
 export function useMDXComponents(): MDXComponents {

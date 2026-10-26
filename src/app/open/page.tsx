@@ -96,8 +96,8 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
             <Heading as="h1" size="section" className="mt-3 text-ink">Vestiarion, in production</Heading>
             <p className="mt-5 text-lede leading-relaxed text-ink-2">
               Who uses Vestiarion, what its agent decided, what stopped it, and what settled. Every figure is read from Vestiarion&apos;s production
-              database when this page loads, with nothing entered by hand. The Quality Lab&apos;s result below comes from the test that runs its
-              scenarios on every change.
+              database when this page loads, with nothing entered by hand. The Quality Lab&apos;s result below is not read when the page loads:
+              it comes from the tests that run its scenarios, and replay the team&apos;s own exported shadow-mode decisions, on every change.
             </p>
           </header>
 
@@ -149,7 +149,8 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
             </div>
           )}
 
-          {/* Not a figure of one network: the lab runs over a fake provider, on every change (Quality Lab QL7). */}
+          {/* Not a figure of one network: the lab runs over a fake provider, on every change (Quality Lab QL7). Its replay
+              line counts the team's own Arc testnet decisions from a committed export, and names no network (shadow replay SR10). */}
           <section aria-labelledby="quality-lab" className="mt-20 border-t border-line pt-12">
             <QualityLabResult id="quality-lab" />
           </section>
