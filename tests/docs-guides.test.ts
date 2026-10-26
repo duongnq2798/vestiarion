@@ -410,6 +410,10 @@ const RECEIPT_AMOUNTS = "src/lib/receipts/amounts.ts";
 const RECEIPT_PAGE = "src/app/receipt/[token]/page.tsx";
 const RECEIPT_BROWSER_CHECK = "src/components/receipt/BrowserCheck.tsx";
 const RECEIPT_PDF = "src/components/receipt/SavePdfButton.tsx";
+/** How often people agreed, by decision and by vendor (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md AL7, AL8). */
+const AGREEMENT_LADDER = "src/components/vx/AgreementLadder.tsx";
+const LADDER_LIBRARY = "src/lib/autonomy-ladder.ts";
+const LIVE_SLICE_START = "src/components/vx/LiveSliceStart.tsx";
 
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/collections": [
@@ -2916,6 +2920,23 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Leave no decision waiting for your verdict", REPORT],
     ["Have each supplier's own Arc address", REPORT],
     ["Open a workspace on", REPORT],
+    // How often you agreed, by decision and by vendor (autonomy ladder AL2, AL4, AL5, AL7).
+    ["How often you agreed, by decision and by vendor", AGREEMENT_LADDER],
+    ["By decision", AGREEMENT_LADDER],
+    ["By vendor", AGREEMENT_LADDER],
+    ["Most verdicts first", AGREEMENT_LADDER],
+    ["Verdicts", AGREEMENT_LADDER],
+    ["Agreed", AGREEMENT_LADDER],
+    ["Too few to tell yet", AGREEMENT_LADDER],
+    ["No verdict on a real bill yet.", AGREEMENT_LADDER],
+    ["Agent vs what really happened", AGREEMENT_LADDER],
+    ["Pay, Schedule, Hold, Flag for review and Ask for details", LADDER_LIBRARY, 'ap_flag_fraud: "Flag for review"'],
+    ["Ask for details", LADDER_LIBRARY],
+    // Each vendor's agreement in the live slice's list (autonomy ladder AL8).
+    ["83% agreed, from 6 verdicts", LIVE_SLICE_START, "% agreed, from ${row.given} verdicts"],
+    ["2 verdicts: too few to tell yet", LIVE_SLICE_START, ": too few to tell yet"],
+    ["No verdicts yet", LIVE_SLICE_START],
+    ["Beside each vendor: how often you agreed with the agent's decisions on its bills, from your verdicts in shadow mode.", LIVE_SLICE_START],
     // Start the live slice (live slice L1, L3, L5).
     ["Go live with", REPORT, "Go live with ${slice.name}"],
     ["Start the live slice", "src/components/vx/LiveSliceStart.tsx"],
@@ -3234,6 +3255,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["test_usdc_added", TEST_USDC_LIBRARY],
     ["Test USDC is for shadow mode. An owner turns it on in Settings.", TEST_USDC_LIBRARY],
     ["Go live on Arc testnet first: test USDC goes to the operating wallet.", TEST_USDC_LIBRARY],
+    // How often you agreed, by decision and by vendor, on the report (autonomy ladder AL4, AL7).
+    ["How often you agreed, by decision and by vendor", AGREEMENT_LADDER],
+    ["By decision", AGREEMENT_LADDER],
+    ["By vendor", AGREEMENT_LADDER],
+    ["Too few to tell yet", AGREEMENT_LADDER],
+    ["Flag for review", LADDER_LIBRARY],
     // Start the live slice, from the report (live slice L1, L4, L6).
     ["Start the live slice", "src/components/vx/LiveSliceStart.tsx"],
     ["live_slice_started", "src/lib/live-slice.ts"],

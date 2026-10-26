@@ -14,6 +14,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **How often you agreed, by decision and by vendor.** In shadow mode, the report's **Before a live slice** now shows,
+  under its steps, how often you agreed with the agent's decisions, split by what the agent decided (Pay, Schedule,
+  Hold, Flag for review, Ask for details) and by vendor, each with the number of verdicts behind it. Under five
+  verdicts a row says **Too few to tell yet** instead of a percentage. It counts your shadow-mode verdicts on real
+  bills only, the same ones **Your verdicts** counts, and says so: not what your business paid, and not how often the
+  agent followed its written policy. Under **Start the live slice**, each vendor shows the same figure beside its
+  checkbox, so you can tick the vendors where the agent already decides as you would. It only measures: nothing here
+  changes what the agent may do. No migration.
 - **Vendor documents checked against the bill.** While vendor requests are in shadow or on, each PDF a vendor sends for
   a bill's missing purchase order or goods receipt is read within a minute, and code checks its vendor, currency,
   amount, purchase order and any address it asks to be paid to against the bill. With vendor requests on, a document
