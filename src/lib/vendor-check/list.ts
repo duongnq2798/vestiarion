@@ -1,28 +1,59 @@
 import { checkAddress, sharedWords, type AddressCheck, type KnownAddress, type SpecialAddress } from "../address-check";
 import { headerKey } from "../bill-import/columns";
-import { readTable, type Table } from "../bill-import/table";
-import { addressKey, matchName, nameWords, nonLatinWords, type ListedAddress, type NameIndex, type NameMatch } from "./match";
+import { readTable, type Table, type TableRow } from "../bill-import/table";
+import { addressKey, matchName, nameCompared, nonLatinWords, type ListedAddress, type NameIndex, type NameMatch } from "./match";
 
 /**
  * A vendor list through the vendor check (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV6): its columns,
  * its rows, each row's name matched and its wallet checked with the address checker's rules, the counts, and the CSV of
  * the results. Pure, and run in the browser, so nothing pasted leaves the page. The list itself is read as the bill
- * import reads one (`readTable`, `decodeList`), except for a list of one column (`readVendorList`).
+ * import reads one (`readTable`, `decodeList`), past title lines, and with names that hold commas kept whole
+ * (`readVendorList`, `vendorTable`).
  */
 
+/** A vendor list as read (CV6): its rows from its column names on, and the title lines above them, left out. */
+export interface VendorList extends Table {
+  titles: string[];
+}
+
+/** At most this many title lines are read past above a list's column names (CV6). */
+const TITLE_LINES_MAX = 5;
+
 /**
- * A vendor list as rows of cells (CV6). A list whose first line has no tab, semicolon or comma has one column: the
- * cells a comma cut a line into are joined back, so a name copied as "Kadyrov, Ramzan" from one column of a
- * spreadsheet, which copies a cell without quotes, stays one name.
+ * A vendor list as rows of cells (CV6).
+ * - Title lines: a report exported from an accounting tool can start with its title and dates, one cell a line, above
+ *   its column names. When a row of more than one cell within the first lines names the columns
+ *   (`looksLikeVendorHeader`), and each line above it is one cell, those lines are left out and named in `titles`.
+ * - Names that hold commas: a spreadsheet copies one column without quoting a cell that holds a comma, so "Kadyrov,
+ *   Ramzan" arrives cut in two. A comma list is read as one column, each row's cells joined back with ", ", when no row
+ *   has more than two cells, no row of two names the columns, and either its first row is one cell or every comma in
+ *   it is followed by a space, as in a name written so and never between a CSV's columns.
  */
-export function readVendorList(text: string): Table {
+export function readVendorList(text: string): VendorList {
   const table = readTable(text);
-  if (table.rows[0].cells.length > 1) return table;
-  return { ...table, rows: table.rows.map((row) => (row.cells.length > 1 ? { ...row, cells: [joinName(row.cells)] } : row)) };
+  const header = table.rows.slice(0, TITLE_LINES_MAX + 1).findIndex((row) => row.cells.length > 1 && looksLikeVendorHeader(row.cells));
+  const titled = header > 0 && table.rows.slice(0, header).every((row) => filled(row.cells).length === 1);
+  const rows = titled ? table.rows.slice(header) : table.rows;
+  const titles = titled ? table.rows.slice(0, header).map((row) => filled(row.cells)[0]) : [];
+  if (!namesHoldCommas(text, table.delimiter, rows)) return { delimiter: table.delimiter, rows, titles };
+  return { delimiter: table.delimiter, rows: rows.map((row) => (row.cells.length > 1 ? { ...row, cells: [joinName(row.cells)] } : row)), titles };
+}
+
+const filled = (cells: readonly string[]) => cells.filter((cell) => cell !== "");
+
+/**
+ * Whether a comma list's rows are one column of names cut at their commas (`readVendorList`). A row of more than two
+ * cells keeps the columns: joined, its other cells would become words of its name, and a listed name with a phone
+ * number or a wallet joined to it can score below a possible match.
+ */
+function namesHoldCommas(text: string, delimiter: Table["delimiter"], rows: readonly TableRow[]): boolean {
+  if (delimiter !== ",") return false;
+  if (rows.some((row) => row.cells.length > 2 || (row.cells.length > 1 && looksLikeVendorHeader(row.cells)))) return false;
+  return rows[0].cells.length === 1 || !/,(?! )/.test(text);
 }
 
 /** Cells a comma cut one name into, joined back. */
-const joinName = (cells: readonly string[]) => cells.filter((cell) => cell !== "").join(", ");
+const joinName = (cells: readonly string[]) => filled(cells).join(", ");
 
 export const VENDOR_FIELDS = ["name", "country", "wallet"] as const;
 export type VendorField = (typeof VENDOR_FIELDS)[number];
@@ -89,18 +120,27 @@ export interface VendorRow {
 }
 
 /**
- * The list's rows with a name or a wallet, at most `VENDOR_ROWS_MAX`, and how many more there were (CV6). When the
- * names are the last of the columns named in a comma list, a row with more cells than there are column names has had
- * its name cut at its commas: the cells from the name on are joined back into it.
+ * The list as checked (CV6). When the names are the last of the columns named in a comma list, a row with more cells
+ * than there are column names has had its name cut at its commas: the cells from the name on are joined back into it.
+ * The page counts, shows and writes back this table, so the columns and what each reads are what is checked. The
+ * list itself when nothing is joined.
  */
+export function vendorTable<T extends Table>(table: T, hasHeader: boolean, columns: VendorColumns): T {
+  const width = hasHeader ? table.rows[0].cells.length : 0;
+  if (table.delimiter !== "," || columns.name === undefined || columns.name !== width - 1) return table;
+  if (table.rows.every((row) => row.cells.length <= width)) return table;
+  const join = (row: TableRow) => (row.cells.length > width ? { ...row, cells: [...row.cells.slice(0, width - 1), joinName(row.cells.slice(width - 1))] } : row);
+  return { ...table, rows: table.rows.map(join) };
+}
+
+/** The list's rows with a name or a wallet, at most `VENDOR_ROWS_MAX`, and how many more there were (CV6). */
 export function vendorRows(table: Table, hasHeader: boolean, columns: VendorColumns): { rows: VendorRow[]; more: number } {
   const cell = (cells: string[], column: number | undefined) => (column === undefined ? "" : (cells[column] ?? "").trim());
-  const width = hasHeader ? table.rows[0].cells.length : 0;
-  const nameLast = table.delimiter === "," && columns.name !== undefined && columns.name === width - 1;
+  const checked = vendorTable(table, hasHeader, columns);
   const rows: VendorRow[] = [];
   let more = 0;
-  for (const row of hasHeader ? table.rows.slice(1) : table.rows) {
-    const cells = nameLast && row.cells.length > width ? [...row.cells.slice(0, width - 1), joinName(row.cells.slice(width - 1))] : row.cells;
+  for (const row of hasHeader ? checked.rows.slice(1) : checked.rows) {
+    const { cells } = row;
     const vendor = { line: row.line, cells, name: cell(cells, columns.name), country: cell(cells, columns.country), wallet: cell(cells, columns.wallet) };
     if (vendor.name === "" && vendor.wallet === "") continue;
     if (rows.length < VENDOR_ROWS_MAX) rows.push(vendor);
@@ -122,6 +162,8 @@ export type VendorWallet =
       /** What was checked, when it is part of the cell: the address after a chain prefix or in a payment link. */
       read: string | null;
     }
+  /** A payment link that calls a contract, such as a token's `transfer`, and gives no address to pay. */
+  | { kind: "no_payee" }
   | { kind: "listed"; listed: ListedAddress }
   | { kind: "unlisted" };
 
@@ -137,23 +179,31 @@ export interface VendorResult {
 const EVM = /^0x[0-9a-fA-F]{40}$/;
 /**
  * A wallet with its chain before it, `eth:0x…` or `base:0x…` (EIP-3770), or a payment link, `ethereum:0x…@1` (EIP-681):
- * its address, and the link's parameters.
+ * its address, the contract function a link calls (`/transfer`), and the link's parameters.
  */
-const CHAIN_PREFIXED = /^[a-z][a-z0-9-]*:(?:pay-)?(0x[^@/?]*)(?:@[^/?]*)?(?:\/[^?]*)?(?:\?(.*))?$/i;
+const CHAIN_PREFIXED = /^[a-z][a-z0-9-]*:(?:pay-)?(0x[^@/?]*)(?:@[^/?]*)?(\/[^?]+)?(?:\?(.*))?$/i;
 /** `0x` starting a word. Inside a word, it is part of another currency's address, as bech32 ones can hold it. */
 const HEX_START = /(?<![0-9a-z])0x/i;
-/** Another currency's payment link, such as `bitcoin:<address>?amount=0.1` (BIP 21): its address. */
-const PAYMENT_LINK = /^[a-z][a-z0-9+.-]*:([^?]+)(?:\?.*)?$/i;
+/**
+ * What separates the words of another currency's wallet cell: as OFAC writes one (`XBT <address>`), with its currency
+ * after it (`<address> (BTC)`), or in a payment link (`bitcoin:<address>?amount=0.1`, BIP 21).
+ */
+const WALLET_WORDS = /[\s,;:()[\]{}<>?&="']+/;
 
 /**
  * The part of a wallet cell the address checker's rules read (CV6): the cell, when it starts with `0x` or is 40 hex
- * digits; the address after a chain prefix, or a payment link's pay-to `address=` when it has one; else the cell from a
- * `0x` that starts a word, so a cut or mistyped address gets the checker's reason. Null for another currency's address.
+ * digits; the address after a chain prefix; a payment link's own address, or, when the link calls a contract function
+ * (`/transfer`), its pay-to `address=` and nothing else, since the link's own address is then the token's contract:
+ * empty when it has none; else the cell from a `0x` that starts a word, so a cut or mistyped address gets the checker's
+ * reason. Null for another currency's address.
  */
 export function evmPart(wallet: string): string | null {
   if (/^0x/i.test(wallet) || /^[0-9a-fA-F]{40}$/.test(wallet)) return wallet;
   const prefixed = CHAIN_PREFIXED.exec(wallet);
-  if (prefixed) return /(?:^|&)address=(0x[^&]*)/i.exec(prefixed[2] ?? "")?.[1] ?? prefixed[1];
+  if (prefixed) {
+    const [, target, call, parameters = ""] = prefixed;
+    return call ? (/(?:^|&)address=([^&]*)/i.exec(parameters)?.[1] ?? "") : target;
+  }
   const at = wallet.search(HEX_START);
   return at >= 0 ? wallet.slice(at) : null;
 }
@@ -196,6 +246,7 @@ export function vendorRowChecker(index: NameIndex, rows: readonly VendorRow[]): 
   const wallet = (row: VendorRow): VendorWallet | null => {
     if (row.wallet === "") return null;
     const part = evmPart(row.wallet);
+    if (part === "") return { kind: "no_payee" };
     if (part !== null) {
       const own = part.toLowerCase();
       const known = new Map<string, KnownAddress>();
@@ -205,9 +256,12 @@ export function vendorRowChecker(index: NameIndex, rows: readonly VendorRow[]): 
       const same = (rowsOf.get(own) ?? []).filter((other) => other.line !== row.line).map(labelOf);
       return { kind: "evm", check: checkAddress(part, [...known.values()], index.evmWallets), same, read: part === row.wallet ? null : part };
     }
-    const linked = PAYMENT_LINK.exec(row.wallet)?.[1];
-    const listed = index.addresses.get(addressKey(row.wallet)) ?? (linked ? index.addresses.get(addressKey(linked)) : undefined);
-    return listed ? { kind: "listed", listed } : { kind: "unlisted" };
+    // The cell as written, then each of its words: a listed address with its currency or in a payment link stops too.
+    for (const key of [row.wallet, ...row.wallet.split(WALLET_WORDS)]) {
+      const listed = key === "" ? undefined : index.addresses.get(addressKey(key));
+      if (listed) return { kind: "listed", listed };
+    }
+    return { kind: "unlisted" };
   };
   return (row) => ({
     row,
@@ -217,9 +271,12 @@ export function vendorRowChecker(index: NameIndex, rows: readonly VendorRow[]): 
   });
 }
 
-/** Whether a row's name was not compared at all: it has no word in Latin letters (CV2). */
+/**
+ * Whether a row's name was not compared at all (CV2, `nameCompared`): it has no word in Latin letters, or none but
+ * legal forms and numbers beside words in another script.
+ */
 export function nameNotCompared(result: VendorResult): boolean {
-  return result.matches !== null && result.notLatin.length > 0 && nameWords(result.row.name).length === 0;
+  return result.matches !== null && !nameCompared(result.row.name);
 }
 
 /** Every row checked at once. */
@@ -247,6 +304,7 @@ function specialWords(special: SpecialAddress): string {
 export function walletWords(wallet: VendorWallet): { tone: "stop" | "note" | "fine"; text: string } {
   if (wallet.kind === "listed") return { tone: "stop", text: `Do not pay: on OFAC's SDN list, under ${wallet.listed.entry.name} (${wallet.listed.currency}).` };
   if (wallet.kind === "unlisted") return { tone: "fine", text: "Not among the addresses on OFAC's SDN list. It is not an EVM address, so nothing else was checked." };
+  if (wallet.kind === "no_payee") return { tone: "stop", text: "Not an address to pay: this payment link calls a contract and gives no pay-to address (address=)." };
   const words = evmWords(wallet);
   return wallet.read === null ? words : { ...words, text: `Read as ${wallet.read}. ${words.text}` };
 }

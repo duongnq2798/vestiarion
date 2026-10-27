@@ -146,12 +146,32 @@ function folded(text: string): string {
 const NON_LATIN = /(?!\p{Script=Latin})\p{L}/u;
 
 /**
+ * Apostrophes, dropped from a name (CV2): `'`, its curly form and the backtick, and the modifier letters some Latin
+ * spellings write one as, from U+02B9 to U+02BF and U+02C8: the Hawaiian okina (U+02BB), the modifier apostrophe
+ * (U+02BC) of names such as Hizb'allah, and the half rings (U+02BE, U+02BF) of Arabic transliterations. They are
+ * letters of no script, so kept, they would make a Latin word read as one in another script.
+ */
+const APOSTROPHES = /['\u2019`\u02b9-\u02bf\u02c8]/g;
+
+/**
  * The words of a name, as written, with a letter outside the Latin script: a word in Cyrillic or Chinese letters, or a
  * Latin-looking word with one Cyrillic letter in it. No name on the list is written so, so they are left out of the
  * comparison, and the page says which (CV2).
  */
 export function nonLatinWords(name: string): string[] {
-  return name.split(/[^\p{L}\p{M}\p{N}]+/u).filter((word) => NON_LATIN.test(folded(word)));
+  return name.split(/[^\p{L}\p{M}\p{N}]+/u).filter((word) => NON_LATIN.test(folded(word).replace(APOSTROPHES, "")));
+}
+
+/** A name's words in Latin letters, and of those the ones that are not legal forms (CV2). */
+function splitName(name: string): { all: string[]; kept: string[] } {
+  const all = folded(name)
+    .replace(APOSTROPHES, "")
+    .replace(/\./g, "")
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word !== "" && !NON_LATIN.test(word));
+  let text = ` ${all.join(" ")} `;
+  for (const phrase of LEGAL_PHRASES) text = text.replaceAll(` ${phrase} `, " ");
+  return { all, kept: text.split(" ").filter((word) => word !== "" && !LEGAL_WORDS.has(word)) };
 }
 
 /**
@@ -160,14 +180,18 @@ export function nonLatinWords(name: string): string[] {
  * name is nothing else.
  */
 export function nameWords(name: string): string[] {
-  const all = folded(name)
-    .replace(/[.'\u2019`]/g, "")
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word !== "" && !NON_LATIN.test(word));
-  let text = ` ${all.join(" ")} `;
-  for (const phrase of LEGAL_PHRASES) text = text.replaceAll(` ${phrase} `, " ");
-  const kept = text.split(" ").filter((word) => word !== "" && !LEGAL_WORDS.has(word));
+  const { all, kept } = splitName(name);
   return kept.length > 0 ? kept : all;
+}
+
+/**
+ * Whether a name is compared at all (CV2). A name all in Latin letters always is. One with words in another script is
+ * compared only when a word of it in Latin letters says who the vendor is: one that is not a legal form or a number.
+ * A Russian bank's name in Cyrillic followed by PJSC, or a Chinese company's in Chinese followed by Co., Ltd., would be
+ * compared on PJSC, or on Co and Ltd, which pair with nothing on the list, and get "No match" for a name never compared.
+ */
+export function nameCompared(name: string): boolean {
+  return nonLatinWords(name).length === 0 || splitName(name).kept.some((word) => !/^\p{N}+$/u.test(word));
 }
 
 /** Jaro-Winkler similarity, from 0 to 1, with the usual prefix scale of 0.1 over at most 4 letters. */
@@ -387,9 +411,10 @@ interface Scored {
 }
 
 /**
- * One name form's score against the typed words (CV4): the closest pairs first, each pair weighed by twice its listed
- * word's weight, each word with no pair by its own. When every typed word is a rare word on the list (`rare`) and this
- * name holds them all, it is a possible match at least, however many more words the name has.
+ * One name form's score against the typed words (CV4): the closest pairs paired first; then the sum over pairs of
+ * closeness times twice the listed word's weight, over the sum of each pair's full twice-the-weight and the weight of
+ * every word on either side with no pair. When every typed word is a rare word on the list (`rare`) and this name holds
+ * them all, it is a possible match at least, however many more words the name has.
  */
 function scoreForm(
   index: NameIndex,
@@ -456,11 +481,11 @@ function better(a: Scored, b: Scored): boolean {
  * The SDN entries a name may be (CV4, CV5): every name form sharing a close word with it, its letters, or all its rare
  * words, scored, each entry by its best; those at `POSSIBLE_MATCH` or more, at most `MATCHES_SHOWN`, highest first. On
  * a tie: the country agreeing, then the entry's own name, then the lower number. The country never changes a score.
- * Words not in Latin letters are left out (`nonLatinWords`): a name of nothing else finds nothing.
+ * Words not in Latin letters are left out (`nonLatinWords`): a name not compared (`nameCompared`) finds nothing.
  */
 export function matchName(index: NameIndex, name: string, country = ""): NameMatch[] {
   const typed = [...new Set(nameWords(name))];
-  if (typed.length === 0) return [];
+  if (typed.length === 0 || !nameCompared(name)) return [];
   const close = typed.map((word) => closeWords(index, word));
   // Each name form's weight that a typed word could pair with. A form's score is at most 2h / (h + its weight + the
   // weight of the typed words close to nothing), with every pair the same word: below POSSIBLE_MATCH, it is not scored.

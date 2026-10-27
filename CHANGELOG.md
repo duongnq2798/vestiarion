@@ -17,16 +17,19 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **A free OFAC check for vendors, one name or a whole list.** At
   [/check-vendor](https://www.vestiarion.xyz/check-vendor), type a vendor's name, with its country if you like, or
   paste or drop a vendor list: its name, country and wallet columns are found by their names, and you can change
-  them, as in the bill import; a one-column list keeps names written "Last, First" whole. Each name is compared with
-  every name and other name on OFAC's SDN list, word by word, legal forms such as LLC or GmbH aside, other spellings
-  and close spellings counted, each word weighed by how rare it is on the list, and a name made only of rare words of
-  a listed name, such as "Suex", is a possible match at least. OFAC writes every name in Latin letters, so a name in
-  another script is marked not compared rather than no match. Each row gets either "No match in OFAC's SDN list as of"
-  the list's date, or up to 3 possible matches, strong from a score of 0.85 (the same cut-off screening applies to its
-  provider's score, on this page's own score) and possible from 0.70: why it matched, whether the country agrees, the
-  entry's type, programs, other names and listed addresses, and a link to the entry on Treasury's own search. Wallets
-  get the address checker's rules, chain prefixes such as `eth:` and payment links read, against OFAC's addresses and
-  the rest of the list, so a wallet made to look like another vendor's stops. Counts, and a CSV of the results. It runs
+  them, as in the bill import. Title lines above the column names, as report exports have, are read past and named,
+  and a pasted column of names written "Last, First" stays one name, with or without a first row naming it, while a
+  row of more than two cells keeps its columns. Each name is compared with every name and other name on OFAC's SDN
+  list, word by word, legal forms such as LLC or GmbH aside, other spellings and close spellings counted, each word
+  weighed by how rare it is on the list, and a name made only of rare words of a listed name, such as "Suex", is a
+  possible match at least. OFAC writes every name in Latin letters, so a name in another script, even with a legal
+  form such as PJSC after it, is marked not compared rather than no match. Each row gets either "No match in OFAC's
+  SDN list as of" the list's date, or up to 3 possible matches, strong from a score of 0.85 (the same cut-off
+  screening applies to its provider's score, on this page's own score) and possible from 0.70: why it matched,
+  whether the country agrees, the entry's type, programs, other names and listed addresses, and a link to Treasury's
+  own search to look it up by its name. Wallets get the address checker's rules, chain prefixes such as `eth:`,
+  payment links and addresses written with their currency (`XBT <address>`) read, against OFAC's addresses and the
+  rest of the list, so a wallet made to look like another vendor's stops. Counts, and a CSV of the results. It runs
   in the browser, on a dated snapshot loaded and indexed in small steps when a check runs: nothing typed or pasted is
   sent anywhere. The page says it covers the SDN list only and is a first look, not a compliance decision.
   `scripts/ofac-sdn-wallets.mjs` now makes the new name snapshot (`src/lib/data/ofac-sdn-names.json`) and the wallet

@@ -9,6 +9,7 @@ import {
   jaroWinkler,
   MATCHES_SHOWN,
   matchName,
+  nameCompared,
   nameWords,
   nonLatinWords,
   POSSIBLE_MATCH,
@@ -21,7 +22,7 @@ import {
 
 /**
  * The vendor check's name matcher (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV2-CV5, CV7): names
- * as compared, two words as compared, a name's score against every SDN entry, the bands, the country, and the index
+ * as compared (or not compared at all), two words as compared, a name's score against every SDN entry, the bands, the country, and the index
  * built in steps. Run on the real snapshot, with real entries: their names, other names, other spellings, their rare
  * words alone, and ordinary business names that must not find a strong match.
  */
@@ -64,6 +65,28 @@ describe("nameWords (CV2)", () => {
     const lookalike = `B${String.fromCharCode(0x430)}nk`;
     expect(nonLatinWords(`${lookalike} Melli`)).toEqual([lookalike]);
     expect(nameWords(`${lookalike} Melli`)).toEqual(["melli"]);
+  });
+
+  it("drops the apostrophes some Latin spellings write as letters, as it drops ' and its curly form", () => {
+    // The Hawaiian okina, the modifier apostrophe, and the half rings of Arabic transliterations.
+    const [okina, apostrophe, ayn] = [0x2bb, 0x2bc, 0x2bf].map((code) => String.fromCharCode(code));
+    expect(nameWords(`Hizb${apostrophe}allah`)).toEqual(["hizballah"]);
+    expect(nonLatinWords(`Hizb${apostrophe}allah`)).toEqual([]);
+    expect(nameWords(`Hawai${okina}i Coffee Co`)).toEqual(["hawaii", "coffee"]);
+    expect(nameWords(`${ayn}Abd al-${ayn}Aziz`)).toEqual(["abd", "al", "aziz"]);
+    expect(nonLatinWords(`O${okina}zbekiston Temir Yo${okina}llari`)).toEqual([]);
+    expect(nameCompared(`Hizb${apostrophe}allah`)).toBe(true);
+  });
+
+  it("does not compare a name whose words in Latin letters, past those in another script, are only legal forms or numbers", () => {
+    expect(nameCompared("Сбербанк PJSC")).toBe(false);
+    expect(nameCompared("华为技术 Co., Ltd.")).toBe(false);
+    expect(nameCompared("Сбербанк 2")).toBe(false);
+    expect(nameCompared("Сбербанк России")).toBe(false);
+    // A word that says who the vendor is is compared; a name all in Latin letters always is, legal forms and all.
+    expect(nameCompared("Bank Melli Iran 中国银行")).toBe(true);
+    expect(nameCompared("Co., Ltd.")).toBe(true);
+    expect(nameCompared("Northwind Design")).toBe(true);
   });
 });
 
@@ -162,7 +185,12 @@ describe("a name against the list (CV4)", () => {
 
   it("finds nothing for a name with no word in Latin letters, rather than comparing it", () => {
     expect(matchName(index, "Сбербанк России")).toEqual([]);
+    expect(matchName(index, "Сбербанк PJSC")).toEqual([]);
     expect(numbers(matchName(index, "Bank Melli Iran 中国银行"))).toContain(25578);
+  });
+
+  it("finds a listed name written with a modifier apostrophe as it finds it written without one", () => {
+    expect(top(`Hizb${String.fromCharCode(0x2bc)}allah`)).toMatchObject({ band: "strong", score: 1, entry: { number: 4697 } });
   });
 
   it("finds nothing for ordinary business names, and at most a possible match on common words", () => {

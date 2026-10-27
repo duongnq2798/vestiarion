@@ -14,7 +14,7 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { columnLetter, columnNames, sampleValues } from "@/lib/bill-import/columns";
-import { decodeList, TableError, type Table } from "@/lib/bill-import/table";
+import { decodeList, TableError } from "@/lib/bill-import/table";
 import { plural } from "@/lib/copy";
 import {
   detectVendorColumns,
@@ -32,12 +32,14 @@ import {
   vendorRowChecker,
   vendorRows,
   vendorSummary,
+  vendorTable,
   walletWords,
   type VendorColumns,
   type VendorField,
+  type VendorList,
   type VendorResult,
 } from "@/lib/vendor-check/list";
-import { matchName, nameWords, nonLatinWords, type CountryAgreement, type NameMatch } from "@/lib/vendor-check/match";
+import { matchName, nameCompared, nonLatinWords, type CountryAgreement, type NameMatch } from "@/lib/vendor-check/match";
 import { loadNameIndex } from "./load-index";
 
 /**
@@ -47,7 +49,11 @@ import { loadNameIndex } from "./load-index";
  * absence of one, never more.
  */
 
-const TREASURY_ENTRY = "https://sanctionssearch.ofac.treas.gov/Details.aspx?id=";
+/**
+ * Treasury's search itself, not the entry's own page there: an address with the entry's number in it would reach the
+ * site's Google Analytics in an outbound-click event, and say which entry a name typed here resembles (CV7).
+ */
+const TREASURY_SEARCH = "https://sanctionssearch.ofac.treas.gov/";
 const LOAD_FAILED = "OFAC's list could not be loaded. Check your connection, then try again.";
 /** Rows checked between two paints, so a long list shows how far it has got. */
 const CHUNK = 250;
@@ -113,16 +119,19 @@ function MatchCard({ match }: { match: NameMatch }) {
       {entry.addresses.length > 0 && (
         <p className="break-all font-mono text-xs leading-relaxed text-ink-3">Digital-currency addresses: {firstOf(entry.addresses, ADDRESSES_SHOWN)}</p>
       )}
-      <a
-        href={`${TREASURY_ENTRY}${entry.number}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-sm font-medium text-agent underline-offset-4 hover:underline"
-      >
-        Check it on Treasury&apos;s search
-        <ExternalLink aria-hidden className="size-3.5" />
-        <span className="sr-only">(opens in a new tab)</span>
-      </a>
+      <p className="break-words text-sm text-ink-2">
+        <a
+          href={TREASURY_SEARCH}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 font-medium text-agent underline-offset-4 hover:underline"
+        >
+          Check it on Treasury&apos;s search
+          <ExternalLink aria-hidden className="size-3.5" />
+          <span className="sr-only">(opens in a new tab)</span>
+        </a>{" "}
+        by its name, {entry.name}.
+      </p>
     </div>
   );
 }
@@ -205,7 +214,7 @@ function download(text: string, file: string) {
 }
 
 interface ReadList {
-  table: Table;
+  table: VendorList;
   source: string;
   legacy: boolean;
 }
@@ -233,6 +242,8 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
   const [listProblem, setListProblem] = useState("");
   /** The list check under way: a newer list or check makes an older one stop. */
   const run = useRef(0);
+  /** The list as checked (`vendorTable`): its columns, what each reads and the CSV's columns are shown from it. */
+  const table = useMemo(() => (list ? vendorTable(list.table, hasHeader, columns) : null), [list, hasHeader, columns]);
 
   async function checkName() {
     const typed = name.trim();
@@ -241,8 +252,7 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
     setProblem("");
     try {
       const index = await loadNameIndex();
-      const notLatin = nonLatinWords(typed);
-      setOne({ typed, matches: matchName(index, typed, country), notLatin, compared: notLatin.length === 0 || nameWords(typed).length > 0 });
+      setOne({ typed, matches: matchName(index, typed, country), notLatin: nonLatinWords(typed), compared: nameCompared(typed) });
     } catch {
       setProblem(LOAD_FAILED);
     } finally {
@@ -287,11 +297,11 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
   }
 
   async function checkList() {
-    if (!list) return;
+    if (!table) return;
     const mine = (run.current += 1);
     setChecked(null);
     setListProblem("");
-    const { rows, more } = vendorRows(list.table, hasHeader, columns);
+    const { rows, more } = vendorRows(table, hasHeader, columns);
     setProgress({ done: 0, total: rows.length });
     try {
       const check = vendorRowChecker(await loadNameIndex(), rows);
@@ -303,7 +313,7 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
         if (at + CHUNK < rows.length) await new Promise((resolve) => setTimeout(resolve, 0));
       }
       if (run.current !== mine) return;
-      setChecked({ results, more, header: columnNames(list.table, hasHeader) });
+      setChecked({ results, more, header: columnNames(table, hasHeader) });
     } catch {
       setListProblem(LOAD_FAILED);
     } finally {
@@ -318,8 +328,8 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
     setListProblem("");
   }
 
-  const names = list ? columnNames(list.table, hasHeader) : [];
-  const rowCount = list ? list.table.rows.length - (hasHeader ? 1 : 0) : 0;
+  const names = table ? columnNames(table, hasHeader) : [];
+  const rowCount = table ? table.rows.length - (hasHeader ? 1 : 0) : 0;
   const choose = (field: VendorField, value: string) => {
     const next = { ...columns };
     if (value === NONE) delete next[field];
@@ -337,6 +347,8 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
     [checked]
   );
   const walletsToLook = summary ? summary.walletStops + summary.walletNotes : 0;
+  /** The counts' tone: a strong match or a wallet not to pay; else any row to look at, a name not compared among them. */
+  const summaryTone = summary && (summary.strong > 0 || summary.walletStops > 0) ? "refused" : toLook.length > 0 ? "held" : "neutral";
 
   return (
     <div className="space-y-12">
@@ -408,7 +420,7 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
         )}
         <FormMessage tone="error">{listProblem}</FormMessage>
 
-        {list && (
+        {list && table && (
           <div className="space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-ink-2">
@@ -419,6 +431,9 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
                 Choose another list
               </Button>
             </div>
+            {list.table.titles.length > 0 && (
+              <p className="break-words text-xs text-ink-3">Above its column names, not checked: {list.table.titles.join(" · ")}.</p>
+            )}
             {list.legacy && (
               <Callout tone="held">
                 This file is not saved as UTF-8. If names look wrong, save it from Excel as &ldquo;CSV UTF-8&rdquo;, or paste the rows instead.
@@ -441,7 +456,7 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
             <div className="grid gap-4 sm:grid-cols-3">
               {VENDOR_FIELDS.map((field) => {
                 const column = columns[field];
-                const samples = column === undefined ? [] : sampleValues(list.table, hasHeader, column);
+                const samples = column === undefined ? [] : sampleValues(table, hasHeader, column);
                 return (
                   <Field
                     key={field}
@@ -493,10 +508,7 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
         <section aria-label="What the check found in the list" className="space-y-4">
           <div aria-live="polite">
             {checked && summary && (
-              <Callout
-                tone={summary.strong > 0 || summary.walletStops > 0 ? "refused" : summary.possible > 0 || summary.walletNotes > 0 ? "held" : "neutral"}
-                title={`Checked against OFAC's SDN list as of ${listDate}`}
-              >
+              <Callout tone={summaryTone} title={`Checked against OFAC's SDN list as of ${listDate}`}>
                 {plural(summary.rows, "1 row", `${summary.rows} rows`)} checked: {summary.strong} strong {plural(summary.strong, "match", "matches")},{" "}
                 {summary.possible} possible {plural(summary.possible, "match", "matches")}, {summary.noMatch} with no match
                 {summary.notCompared > 0 && `, ${summary.notCompared} not compared (not in Latin letters)`}.
@@ -525,7 +537,7 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
                 <Disclosure summary={`${plural(nothing.length, "1 row", `${nothing.length} rows`)} with no match in OFAC's SDN list as of ${listDate}`}>
                   <ul className="space-y-2 pt-1">
                     {nothing.map((result) => (
-                      <li key={result.row.line} className="text-sm text-ink-2">
+                      <li key={result.row.line} className="break-words text-sm text-ink-2">
                         <span className="text-ink">{result.row.name || `Row ${result.row.line}`}</span>
                         {result.wallet && <span className="text-ink-3"> · {walletWords(result.wallet).text}</span>}
                       </li>

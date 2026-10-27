@@ -10,9 +10,9 @@ import { loadNameIndex } from "@/components/vendor-check/load-index";
 import { VendorChecker } from "@/components/vendor-check/VendorChecker";
 
 /**
- * /check-vendor (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV7-CV9): the free vendor check, rendered in
+ * /check-vendor (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV6-CV9): the free vendor check, rendered in
  * a DOM and typed into, and the page around it: static, public, with its coverage stated, and with nothing that could
- * send what is typed or pasted anywhere.
+ * send what is typed or pasted anywhere, nor a link that carries what a name matched.
  */
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/check-vendor", useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
@@ -104,10 +104,13 @@ describe("one name (CV7)", () => {
     expect(text()).toContain("Matched its name: bank, melli and iran are the same words.");
     expect(text()).toContain("The country agrees: Iran.");
     expect(text()).toContain("Other names: BANK MELLI, MELLI BANK, NATIONAL BANK OF IRAN");
-    const link = container.querySelector('a[href="https://sanctionssearch.ofac.treas.gov/Details.aspx?id=25578"]');
+    const link = container.querySelector('a[href="https://sanctionssearch.ofac.treas.gov/"]');
     expect(link?.textContent).toContain("Check it on Treasury's search");
     expect(link?.getAttribute("target")).toBe("_blank");
     expect(link?.getAttribute("rel")).toContain("noreferrer");
+    expect(link?.parentElement?.textContent).toContain("by its name, BANK MELLI IRAN.");
+    // A link to another site is within reach of analytics' outbound-click events: none carries what the name matched.
+    for (const each of container.querySelectorAll("a[href]")) expect(each.getAttribute("href")).not.toMatch(/\d/);
   });
 
   it("says plainly when a name finds nothing, with the list's date", async () => {
@@ -134,6 +137,11 @@ describe("one name (CV7)", () => {
     await click("Check this name");
     expect(live()?.textContent).toContain("No match in OFAC's SDN list as of Oct 28, 2026.");
     expect(text()).toContain("Left out, as they are not in Latin letters: 中国银行.");
+    // A legal form in Latin letters says nothing of who the vendor is: the name is still not compared.
+    type(field("Vendor name"), "Сбербанк PJSC");
+    await click("Check this name");
+    expect(live()?.textContent).toContain("Not compared: OFAC's SDN list writes every name in Latin letters");
+    expect(live()?.textContent).not.toContain("No match");
   });
 
   it("checks on Enter too", async () => {
@@ -177,6 +185,55 @@ describe("a list (CV6, CV7)", () => {
     expect(live("in the list")?.textContent).toContain("2 rows checked: 0 strong matches, 1 possible match, 0 with no match, 1 not compared (not in Latin letters).");
     expect(text()).toContain("KADYROV, Ramzan Akhmatovich");
     expect(text()).toContain("Not compared: OFAC's SDN list writes every name in Latin letters.");
+  });
+
+  it("gives the counts the look-at tone when the only rows to look at were not compared", async () => {
+    type(container.querySelector("textarea")!, "Vendor\nСбербанк России\nРоснефть LLC");
+    await click("Read the list");
+    await click("Check the list");
+    const counts = live("in the list")?.firstElementChild;
+    expect(counts?.textContent).toContain("2 not compared (not in Latin letters)");
+    expect(counts?.className).toContain("bg-held-soft");
+  });
+
+  it("reads past a title line above the column names, and says so", async () => {
+    type(container.querySelector("textarea")!, "Vendor Contact List\nVendor,Country,Wallet\nBank Melli Iran,IR,");
+    await click("Read the list");
+    expect(text()).toContain("1 row, 3 columns.");
+    expect(text()).toContain("Above its column names, not checked: Vendor Contact List.");
+    expect(text()).toContain("Reads: Bank Melli Iran");
+    await click("Check the list");
+    expect(live("in the list")?.textContent).toContain("1 strong match");
+  });
+
+  it("shows a name the list cut at its commas as it checks it, whole, in its columns and the CSV", async () => {
+    type(container.querySelector("textarea")!, "Country,Vendor\nRU,Kadyrov, Ramzan");
+    await click("Read the list");
+    expect(text()).toContain("1 row, 2 columns.");
+    expect(text()).toContain("Reads: Kadyrov, Ramzan");
+    expect(text()).not.toContain("Column C");
+    await click("Check the list");
+    let saved: Blob | null = null;
+    vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+      saved = blob as Blob;
+      return "blob:results";
+    });
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    await click("Download the results (CSV)");
+    const [header, row] = (await saved!.text()).slice(1).split("\r\n");
+    expect(header).toBe("Country,Vendor,OFAC SDN result,Possible matches,Wallet result,SDN list as of");
+    expect(row.startsWith('RU,"Kadyrov, Ramzan",')).toBe(true);
+  });
+
+  it("wraps a long address in the folded rows, so it stays inside the page on a phone", async () => {
+    type(container.querySelector("textarea")!, `Vendor,Wallet\nNorthwind Design,eth:0x${"12".repeat(20)}`);
+    await click("Read the list");
+    await click("Check the list");
+    const folded = [...container.querySelectorAll("details li")];
+    expect(folded).toHaveLength(1);
+    expect(folded[0].textContent).toContain(`Read as 0x${"12".repeat(20)}.`);
+    expect(folded[0].className).toContain("break-words");
   });
 
   it("says why a list cannot be read", async () => {

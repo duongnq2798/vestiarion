@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import names from "@/lib/data/ofac-sdn-names.json";
 import wallets from "@/lib/data/ofac-sdn-evm-wallets.json";
+import { columnNames, sampleValues } from "@/lib/bill-import/columns";
 import { readTable } from "@/lib/bill-import/table";
 import type { SdnNameSnapshot } from "@/lib/sanctioned-wallets";
 import {
@@ -8,6 +9,7 @@ import {
   detectVendorColumns,
   EXAMPLE_LIST,
   looksLikeVendorHeader,
+  nameNotCompared,
   needsALook,
   readVendorList,
   sdnResultWords,
@@ -15,6 +17,7 @@ import {
   vendorResultsCsv,
   vendorRows,
   vendorSummary,
+  vendorTable,
   walletWords,
   type VendorResult,
 } from "@/lib/vendor-check/list";
@@ -22,10 +25,10 @@ import { buildNameIndex, type NameIndex } from "@/lib/vendor-check/match";
 
 /**
  * A vendor list through the vendor check (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV2, CV6): read as
- * the bill import reads a list, a list of one column read whole, its columns found by their names, each row's name
- * matched (or not compared, without a word in Latin letters) and its wallet checked with the address checker's rules,
- * chain prefixes and payment links read, against OFAC's addresses and the other rows', then counted and written back as
- * a CSV.
+ * the bill import reads a list, past title lines above its column names, a list of one column read whole, its columns
+ * found by their names, each row's name matched (or not compared, without a word in Latin letters other than legal
+ * forms and numbers) and its wallet checked with the address checker's rules, chain prefixes, payment links and
+ * currency labels read, against OFAC's addresses and the other rows', then counted and written back as a CSV.
  */
 
 let index: NameIndex;
@@ -70,7 +73,7 @@ describe("reading a list (CV6)", () => {
     expect(vendorRows(semicolon, true, { name: 0, country: 1 }).rows[0]).toMatchObject({ name: "Acme GmbH", country: "DE", wallet: "" });
   });
 
-  it("reads a list whose first line has no delimiter as one column, so a name written 'Last, First' stays whole", () => {
+  it("reads a one-column list whole, so a name written 'Last, First' stays one name", () => {
     // Excel and Google Sheets copy one column without quoting a cell that holds a comma.
     const pasted = "Vendor\r\nNorthwind Design\r\nPrigozhin, Evgeny\r\nKadyrov, Ramzan";
     expect(readVendorList(pasted).rows.map((row) => row.cells)).toEqual([["Vendor"], ["Northwind Design"], ["Prigozhin, Evgeny"], ["Kadyrov, Ramzan"]]);
@@ -78,16 +81,62 @@ describe("reading a list (CV6)", () => {
     expect(prigozhin.row.name).toBe("Prigozhin, Evgeny");
     expect(prigozhin.matches?.[0]).toMatchObject({ band: "strong" });
     expect(kadyrov.matches?.map((match) => match.entry.number)).toContain(23343);
-    // Without column names too, when the first name has no comma; a list with columns keeps them.
-    expect(readVendorList("Northwind Design\nKadyrov, Ramzan").rows[1].cells).toEqual(["Kadyrov, Ramzan"]);
+    // A first row of one cell, and no row of more than two, written without a space too.
+    expect(readVendorList("Vendor\nShenzhen Harbor Technology Co.,Ltd.").rows[1].cells).toEqual(["Shenzhen Harbor Technology Co., Ltd."]);
+    // A list with columns keeps them.
     expect(readVendorList("Vendor,Country\nAcme GmbH,DE").rows[1].cells).toEqual(["Acme GmbH", "DE"]);
   });
 
-  it("puts a name in the last column back together when the list cut it at its commas", () => {
-    const { rows } = vendorRows(readVendorList("Country,Vendor\nRU,Kadyrov, Ramzan\nUS,Northwind Design"), true, { country: 0, name: 1 });
+  it("reads a list without column names whose every comma is followed by a space as one column", () => {
+    // A CSV never writes a space after the comma between two columns; a name written "Last, First" always has one.
+    const results = check("Kadyrov, Ramzan\nPrigozhin, Evgeny\nSmith, John");
+    expect(results.map((result) => result.row.name)).toEqual(["Kadyrov, Ramzan", "Prigozhin, Evgeny", "Smith, John"]);
+    expect(results[1].matches?.[0]).toMatchObject({ band: "strong" });
+    // A comma with no space after it is between two columns, and a row of more than two cells keeps its columns, so a
+    // name never takes in a wallet or a phone number.
+    expect(readVendorList("Northwind Design, US\nBank Melli Iran,IR").rows[0].cells).toEqual(["Northwind Design", "US"]);
+    expect(readVendorList(`Bank Melli Iran, IR, ${NORTHWIND}`).rows[0].cells).toEqual(["Bank Melli Iran", "IR", NORTHWIND]);
+    // Column names of more than one cell keep the columns, spaces or not.
+    expect(readVendorList("Vendor, Country\nAcme GmbH, DE").rows[1].cells).toEqual(["Acme GmbH", "DE"]);
+  });
+
+  it("reads past title lines above the column names, so a listed name and wallet are still checked", () => {
+    // Accounting tools put a report's title and dates above its column names, with no comma after them.
+    const lazarus = "0x098B716B8Aaf21512996dC57EB0615e2383E2f96";
+    const text = [
+      "Vendor Contact List",
+      "All Dates",
+      "",
+      "Vendor,Phone,Email,Wallet",
+      "Bank Melli Iran,+98 21 5555 1234,info@bmi.example,",
+      `Lazarus Group,,,${lazarus}`,
+    ].join("\n");
+    const list = readVendorList(text);
+    expect(list.titles).toEqual(["Vendor Contact List", "All Dates"]);
+    expect(list.rows[0]).toEqual({ line: 4, cells: ["Vendor", "Phone", "Email", "Wallet"] });
+    const [melli, group] = check(text);
+    expect(melli.row).toMatchObject({ line: 5, name: "Bank Melli Iran", wallet: "" });
+    expect(melli.matches?.[0]).toMatchObject({ band: "strong", entry: { number: 25578 } });
+    expect(group.matches?.[0]).toMatchObject({ band: "strong", entry: { number: 27307 } });
+    expect(walletWords(group.wallet!)).toEqual({ tone: "stop", text: "Do not pay: on OFAC's SDN list, under LAZARUS GROUP." });
+    const [titled] = check(`Vendor Contact List\nVendor,Country,Wallet\nBank Melli Iran,IR,${NORTHWIND}`);
+    expect(titled.matches?.[0]).toMatchObject({ band: "strong", country: { kind: "agrees" } });
+    expect(walletWords(titled.wallet!).tone).toBe("fine");
+    // Without column names to find, a title line does not make the list one column.
+    expect(readVendorList(`Report\nBank Melli Iran,IR,${NORTHWIND}`)).toMatchObject({ titles: [], rows: [{ cells: ["Report"] }, { cells: ["Bank Melli Iran", "IR", NORTHWIND] }] });
+  });
+
+  it("puts a name in the last column back together when the list cut it at its commas, for the page as for the check", () => {
+    const list = readVendorList("Country,Vendor\nRU,Kadyrov, Ramzan\nUS,Northwind Design");
+    const { rows } = vendorRows(list, true, { country: 0, name: 1 });
     expect(rows[0]).toMatchObject({ name: "Kadyrov, Ramzan", country: "RU", cells: ["RU", "Kadyrov, Ramzan"] });
     expect(rows[1]).toMatchObject({ name: "Northwind Design", cells: ["US", "Northwind Design"] });
+    // The columns, what each reads, and the CSV's columns are the list as checked.
+    const checked = vendorTable(list, true, { country: 0, name: 1 });
+    expect(columnNames(checked, true)).toEqual(["Country", "Vendor"]);
+    expect(sampleValues(checked, true, 1)).toEqual(["Kadyrov, Ramzan", "Northwind Design"]);
     // A name column with another after it is left as read.
+    expect(vendorTable(list, true, { country: 1, name: 0 })).toBe(list);
     expect(vendorRows(readVendorList("Vendor,Country\nKadyrov, Ramzan,RU"), true, { name: 0, country: 1 }).rows[0].name).toBe("Kadyrov");
   });
 
@@ -158,6 +207,34 @@ describe("checking a list (CV6)", () => {
     expect(walletWords(link.wallet!)).toEqual({ tone: "stop", text: "Do not pay: on OFAC's SDN list, under MESRI, Behzad (XBT)." });
   });
 
+  it("finds a listed address written with its currency, as OFAC writes them ('XBT <address>')", () => {
+    const grimm = "1LpYKb3SXZPve9hsH2QEJZFX279wJVGowi";
+    const results = check(`Vendor,Wallet\nA,XBT ${grimm}\nB,BTC ${grimm}\nC,${grimm} (BTC)\nD,TRX ${LISTED_TRON}\nE,USDT (TRC20): ${LISTED_TRON}`);
+    const [xbt, btc, after, trx, usdt] = results;
+    for (const result of [xbt, btc, after]) {
+      expect(walletWords(result.wallet!)).toEqual({ tone: "stop", text: "Do not pay: on OFAC's SDN list, under GRIMM, Matthew Simon (XBT)." });
+    }
+    for (const result of [trx, usdt]) {
+      expect(walletWords(result.wallet!)).toEqual({ tone: "stop", text: "Do not pay: on OFAC's SDN list, under BANK MARKAZI JOMHOURI ISLAMI IRAN (TRX)." });
+    }
+    expect(results.every(needsALook)).toBe(true);
+    expect(vendorSummary(results)).toMatchObject({ wallets: 5, walletStops: 5 });
+    const [other] = check("Vendor,Wallet\nA,BTC bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq");
+    expect(walletWords(other.wallet!).tone).toBe("fine");
+  });
+
+  it("reads a payment link that calls a token's transfer by its address= alone, never as its token contract", () => {
+    const usdt = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+    const [named, none, plain] = check(
+      `Vendor,Wallet\nA,ethereum:${usdt}@1/transfer?address=vendor.eth&uint256=1e6\nB,ethereum:${usdt}@10/transfer\nC,ethereum:${NORTHWIND}@1?value=1e18`
+    );
+    expect(walletWords(named.wallet!).tone).toBe("stop");
+    expect(walletWords(named.wallet!).text).toMatch(/^Read as vendor\.eth\. Not an address\. /);
+    expect(walletWords(none.wallet!)).toEqual({ tone: "stop", text: "Not an address to pay: this payment link calls a contract and gives no pay-to address (address=)." });
+    // A link with no call pays its own address.
+    expect(walletWords(plain.wallet!)).toEqual({ tone: "fine", text: `Read as ${NORTHWIND}. Nothing here says it is wrong.` });
+  });
+
   it("gives the address checker's other reasons: a checksum, a token contract, not an address yet, or nothing wrong", () => {
     const mixed = "0x7A2dc41e9b03f6a85d1c27e4b98f0a3c61d5e10d";
     const [checksum, token, short, fine] = check(`Vendor,Wallet\nA,${mixed}\nB,0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913\nC,0x7a2d\nD,0x${"12".repeat(20)}`);
@@ -185,6 +262,18 @@ describe("checking a list (CV6)", () => {
     expect(plain.notLatin).toEqual([]);
     expect(needsALook(plain)).toBe(false);
     expect(vendorSummary(results)).toMatchObject({ names: 3, strong: 1, possible: 0, noMatch: 1, notCompared: 1 });
+  });
+
+  it("does not compare a name in another script whose only words in Latin letters are legal forms or numbers", () => {
+    // "Co., Ltd." in a one-column list stays in its name.
+    const results = check("Vendor\nСбербанк PJSC\n华为技术 Co., Ltd.\nРоснефть LLC\nСбербанк 2");
+    for (const result of results) {
+      expect(result.matches, result.row.name).toEqual([]);
+      expect(nameNotCompared(result), result.row.name).toBe(true);
+      expect(sdnResultWords(result)).toBe("Not compared: not in Latin letters");
+    }
+    expect(results[1].row.name).toBe("华为技术 Co., Ltd.");
+    expect(vendorSummary(results)).toMatchObject({ names: 4, noMatch: 0, notCompared: 4 });
   });
 
   it("checks the example list: one name on OFAC's list and one wallet made to look like another row's", () => {
