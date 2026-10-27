@@ -37,7 +37,8 @@ without a key, so Vestiarion reads it directly.
 
 **SW3. The snapshot.**
 - `src/lib/data/ofac-sdn-evm-wallets.json` is bundled with the code and dated. `scripts/ofac-sdn-wallets.mjs` makes it
-  from the two downloaded files.
+  from the two downloaded files. (Since 2026-10-28 it also makes the vendor check's name snapshot from `ALT.CSV` and
+  `ADD.CSV` in the same run, `2026-10-28-check-vendor-design.md` CV1.)
 - A lookup that cannot wait on the network uses the last live read or this snapshot (`cachedSanctionedWallets`).
 
 **SW4. Screening.**

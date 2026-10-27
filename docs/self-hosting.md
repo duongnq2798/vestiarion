@@ -427,8 +427,9 @@ click at a time, up to the daily cap above.
 
 Each sweep also checks payout addresses against OFAC's SDN list. A production deployment (`VERCEL_ENV=production`)
 reads the Treasury's files every 12 hours, and anywhere else the snapshot in `src/lib/data/ofac-sdn-evm-wallets.json`
-answers. Set `SANCTIONED_WALLETS=live` to read them on your deployment. Refresh the snapshot with
-`node scripts/ofac-sdn-wallets.mjs <SDN.CSV> <SDN_COMMENTS.CSV>`.
+answers. Set `SANCTIONED_WALLETS=live` to read them on your deployment. Refresh the snapshot, and the name snapshot
+the free vendor check at `/check-vendor` loads (`src/lib/data/ofac-sdn-names.json`), from one download of OFAC's files
+with `npx tsx scripts/ofac-sdn-wallets.mjs <SDN.CSV> <SDN_COMMENTS.CSV> <ALT.CSV> <ADD.CSV>`.
 
 Seven jobs must run on time, which GitHub's schedules do not do: they started a 5-minute schedule
 only a few times a day, and the six-hourly tick 2 to 4 times a day at uneven hours. A daily
