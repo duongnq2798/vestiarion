@@ -1,0 +1,91 @@
+/*
+ * The README banner (/docs-shots/readme-banner): the landing hero's agent-blue band, its type and its product card
+ * (src/components/landing/Hero.module.css), set in pixels for one frame of exactly 1280 x 640 CSS px rather than the
+ * hero's viewport-relative sizes. Every colour, curve and shadow is a token from src/app/globals.css.
+ */
+.page { width: 1280px; height: 640px; background: var(--color-agent); }
+/* The root keeps a scrollbar's column for every page (globals.css), which a headless capture paints as a strip of
+   ground down the right edge of a frame as wide as the window: this page never scrolls, so it keeps none. */
+:global(html):has(.page) { scrollbar-gutter: auto; }
+.frame {
+  display: grid;
+  grid-template-columns: 560px 576px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  column-gap: 48px;
+  width: 1280px;
+  height: 640px;
+  overflow: hidden;
+  padding: 40px 48px 0;
+  background: var(--color-agent);
+  color: var(--color-on-agent);
+}
+
+/* The message: the wordmark, then the hero's eyebrow, headline and tagline. */
+.message { display: flex; flex-direction: column; justify-content: space-between; min-width: 0; padding-bottom: 14px; }
+/* The mark is drawn for light grounds only, so it sits unaltered on a surface chip, as the site header shows it. */
+.lockup {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 20px 9px 11px;
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+}
+.mark { flex-shrink: 0; width: 40px; height: 40px; color: var(--color-agent); filter: drop-shadow(var(--drop-shadow-logo)); }
+.eyebrow { display: block; font-size: 17px; }
+.headline { margin-top: 18px; font-size: 64px; }
+.tagline { margin-top: 24px; font-size: 52px; font-weight: 500; }
+.tagline > span { display: block; }
+
+/* The recorded team bill, in the hero's card. */
+.card {
+  align-self: start;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-agent-line);
+  border-radius: var(--radius-2xl);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-surface);
+  color: var(--color-ink);
+}
+.windowBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 22px; border-bottom: 1px solid var(--color-line); font-size: 17px; color: var(--color-ink-2); }
+.network { font-family: var(--font-mono); font-size: 16px; letter-spacing: .05em; text-transform: uppercase; }
+.payment { padding: 14px 22px 4px; }
+.paymentTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cardEyebrow { font-size: 16px; }
+.paid { display: inline-flex; align-items: center; gap: 5px; padding: 3px 11px; border: 1px solid var(--color-proof-line); border-radius: var(--radius-lg); background: var(--color-proof-soft); color: var(--color-proof); font-size: 17px; font-weight: 600; }
+.amount { margin-top: 2px; font-size: 50px; font-weight: 600; line-height: 1; letter-spacing: -.05em; }
+.amount > span { font-family: var(--font-mono); font-size: 18px; font-weight: 400; letter-spacing: 0; color: var(--color-ink-2); }
+.steps { margin-top: 12px; }
+.step { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding-block: 11px; border-top: 1px solid var(--color-line); }
+.stepNumber { padding-top: 3px; font-family: var(--font-mono); font-size: 16px; color: var(--color-ink-3); }
+.stepHeader { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.stepTitle { font-size: 20px; font-weight: 600; line-height: 1.3; }
+.entry { flex-shrink: 0; font-size: 17px; font-weight: 500; color: var(--color-agent); text-decoration: underline; text-underline-offset: 4px; }
+.stepBody { margin-top: 3px; font-size: 18px; line-height: 1.45; color: var(--color-ink-2); }
+.paidOn { display: flex; align-items: center; gap: 8px; margin-top: 3px; font-size: 18px; font-weight: 600; color: var(--color-proof); }
+.paidOn > svg { flex-shrink: 0; }
+.note { margin-top: 3px; font-size: 17px; line-height: 1.45; color: var(--color-ink-2); }
+
+/* Where it runs and what it works with, as the hero's closing line: names only. */
+.footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 32px;
+  margin-top: 20px;
+  padding: 17px 0 24px;
+  border-top: 1px solid var(--color-agent-line);
+  font-size: 19px;
+  font-weight: 600;
+}
+.label { margin-right: 12px; font-family: var(--font-mono); font-size: 16px; font-weight: 500; letter-spacing: .11em; text-transform: uppercase; color: var(--color-on-agent-muted); }

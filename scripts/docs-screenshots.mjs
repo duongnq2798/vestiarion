@@ -6,10 +6,18 @@
  *   npm run docs:screenshots                 build, serve, photograph every shot
  *   npm run docs:screenshots -- --skip-build reuse the build already in .next
  *   npm run docs:screenshots -- go-live-fund photograph only the shots named
+ *   npm run readme:banner                    the README banner and the GitHub
+ *                                            social preview, alone (--readme-banner)
  *
  * Run it by hand after changing a screen a guide shows: the Go live panel, the
  * counterparty or invoice form, a decision or approval card, the audit log.
  * Then look at each PNG before committing it.
+ *
+ * `--readme-banner` photographs /docs-shots/readme-banner instead, the landing
+ * hero's message and its recorded team bill in one 1280 x 640 frame: at twice
+ * that into docs/assets/readme-banner.png for the README, and at its own size
+ * into docs/assets/social-preview.png, the image GitHub shows where a link to
+ * the repository is shared (uploaded by hand in the repository's settings).
  *
  * What it does:
  * 1. `next build` with DOCS_SCREENSHOTS=1, then `next start` with the flag on
@@ -51,6 +59,20 @@ const VIEWPORT_WIDTH = 1200;
 const SCALE = 2;
 /** Room above and below the frame, so a dialog opened over it sits in the middle. */
 const MARGIN = 40;
+
+/**
+ * The README banner (src/app/docs-shots/readme-banner): one frame of exactly 1280 x 640 CSS px, photographed at twice
+ * that for the README and at its own size for GitHub's social preview, which must stay under 1 MB.
+ */
+const BANNER = {
+  route: "readme-banner",
+  width: 1280,
+  height: 640,
+  photos: [
+    { scale: 2, file: "docs/assets/readme-banner.png" },
+    { scale: 1, file: "docs/assets/social-preview.png", maxBytes: 1024 * 1024 },
+  ],
+};
 
 /**
  * Every shot src/app/docs-shots/shots.tsx renders, with what to do before the
@@ -420,6 +442,45 @@ async function photograph(page, base, name, prepare) {
 }
 
 /**
+ * The banner's frame at the page's top left, photographed whole at `scale` device pixels per CSS pixel into `file`.
+ * Refuses a frame that is not exactly where and as large as it should be, anything in it that spills past its edge,
+ * which the picture would cut off, and a root that keeps a scrollbar's column: headless Edge paints that column in the
+ * page's ground colour down the frame's right edge, though the layout gives it no width.
+ */
+async function photographBanner(page, base, { scale, file, maxBytes }) {
+  await page.send("Emulation.setDeviceMetricsOverride", { width: BANNER.width, height: BANNER.height, deviceScaleFactor: scale, mobile: false });
+  await page.send("Page.navigate", { url: `${base}/docs-shots/${BANNER.route}` });
+  await page.waitFor(`document.readyState === "complete" && document.querySelector("[data-docs-shot]")`, 30000);
+  await page.evaluate(`document.fonts.ready.then(() => true)`);
+  await sleep(300);
+  await page.settle();
+
+  const frame = await page.evaluate(`(() => {
+    const frame = document.querySelector("[data-docs-shot]");
+    const r = frame.getBoundingClientRect();
+    const spills = [...frame.querySelectorAll("*")].filter((el) => {
+      const e = el.getBoundingClientRect();
+      return e.width > 0 && (e.left < r.left || e.top < r.top || e.right > r.right + 0.5 || e.bottom > r.bottom + 0.5);
+    });
+    return {
+      at: [r.left, r.top, r.width, r.height].join(", "),
+      spills: spills.map((el) => el.textContent.trim().slice(0, 40) || el.tagName),
+      gutter: getComputedStyle(document.documentElement).scrollbarGutter,
+    };
+  })()`);
+  if (frame.at !== `0, 0, ${BANNER.width}, ${BANNER.height}`) throw new Error(`the banner's frame is at ${frame.at}, not 0, 0, ${BANNER.width}, ${BANNER.height}`);
+  if (frame.spills.length > 0) throw new Error(`the banner cuts off ${frame.spills.join("; ")}`);
+  if (frame.gutter !== "auto") throw new Error(`the banner's page keeps a scrollbar column (scrollbar-gutter: ${frame.gutter}), drawn as a strip down its right edge`);
+
+  const { data } = await page.send("Page.captureScreenshot", { format: "png", clip: { x: 0, y: 0, width: BANNER.width, height: BANNER.height, scale: 1 } });
+  const bytes = Buffer.from(data, "base64");
+  if (maxBytes && bytes.length >= maxBytes) throw new Error(`${file} is ${bytes.length} bytes, over its ${maxBytes}`);
+  mkdirSync(path.dirname(path.join(ROOT, file)), { recursive: true });
+  writeFileSync(path.join(ROOT, file), bytes);
+  return { file, bytes: bytes.length };
+}
+
+/**
  * What this run started, at module scope so a signal handler reaches it:
  * main records each process as it spawns it, and the Edge profile it made.
  */
@@ -448,9 +509,11 @@ async function main() {
   process.once("SIGTERM", interrupted);
   const args = process.argv.slice(2);
   const skipBuild = args.includes("--skip-build");
+  const banner = args.includes("--readme-banner");
   const names = args.filter((arg) => !arg.startsWith("--"));
+  if (banner && names.length > 0) throw new Error("--readme-banner photographs the banner alone: name no shots with it");
   for (const name of names) if (!Object.hasOwn(SHOTS, name)) throw new Error(`no shot named ${name}; the shots are ${Object.keys(SHOTS).join(", ")}`);
-  const wanted = names.length > 0 ? names : Object.keys(SHOTS);
+  const wanted = banner ? [] : names.length > 0 ? names : Object.keys(SHOTS);
   if (!existsSync(EDGE)) throw new Error(`Edge is not at ${EDGE}; set EDGE_PATH`);
 
   // The passkey card shows only where a mainnet client key is built in: a stand-in where none is, never called here.
@@ -475,7 +538,7 @@ async function main() {
       stdio: ["ignore", "inherit", "inherit"],
       detached: process.platform !== "win32",
     });
-    await waitForHttp(`${base}/docs-shots/${wanted[0]}`, (r) => r.status === 200, "next start (with DOCS_SCREENSHOTS=1)", 60000);
+    await waitForHttp(`${base}/docs-shots/${banner ? BANNER.route : wanted[0]}`, (r) => r.status === 200, "next start (with DOCS_SCREENSHOTS=1)", 60000);
 
     started.edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${cdpPort}`, `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "about:blank"], {
       stdio: "ignore",
@@ -497,10 +560,17 @@ async function main() {
     });
     await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }, { name: "prefers-color-scheme", value: "light" }] });
 
-    mkdirSync(OUT_DIR, { recursive: true });
-    for (const name of wanted) {
-      const { file, bytes } = await photograph(page, base, name, SHOTS[name]);
-      console.log(`  ${path.relative(ROOT, file)}  ${(bytes / 1024).toFixed(0)} KB`);
+    if (banner) {
+      for (const photo of BANNER.photos) {
+        const { file, bytes } = await photographBanner(page, base, photo);
+        console.log(`  ${file}  ${BANNER.width * photo.scale} x ${BANNER.height * photo.scale}  ${(bytes / 1024).toFixed(0)} KB`);
+      }
+    } else {
+      mkdirSync(OUT_DIR, { recursive: true });
+      for (const name of wanted) {
+        const { file, bytes } = await photograph(page, base, name, SHOTS[name]);
+        console.log(`  ${path.relative(ROOT, file)}  ${(bytes / 1024).toFixed(0)} KB`);
+      }
     }
   } finally {
     await page?.send("Browser.close").catch(() => {});
@@ -516,7 +586,9 @@ async function main() {
   console.log(
     [
       "",
-      `Wrote ${wanted.length} screenshot${wanted.length === 1 ? "" : "s"} to public/docs/guides/. Look at each before committing it.`,
+      banner
+        ? `Wrote the README banner and the social preview to docs/assets/. Look at both before committing them; upload social-preview.png in the repository's Settings, General, Social preview.`
+        : `Wrote ${wanted.length} screenshot${wanted.length === 1 ? "" : "s"} to public/docs/guides/. Look at each before committing it.`,
       "The build in .next does not serve them: /docs-shots reads DOCS_SCREENSHOTS per request, so `next start` without the flag",
       "answers 404 there. The next deploy is unaffected: Vercel builds and serves without the flag.",
     ].join("\n")
