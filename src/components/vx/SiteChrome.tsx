@@ -136,8 +136,9 @@ export interface FooterLink {
 
 /**
  * The full footer's columns (spec §2, F1). An address starting `#` is a
- * section of the landing page, the one page this footer is on; `http…` is
- * another site and opens in a new tab; anything else is a page of this app.
+ * section of the landing page, linked in place there and as `/#…` from any
+ * other page (`sectionHref`); `http…` is another site and opens in a new tab;
+ * anything else is a page of this app.
  */
 export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly FooterLink[] }> = [
   {
@@ -191,6 +192,9 @@ export const COMPACT_FOOTER_LINKS: readonly FooterLink[] = [
 
 const isExternal = (href: string) => /^https?:\/\//.test(href);
 
+/** A footer link's address on the page it is on: a landing section, `#safety`, is `/#safety` off the landing page. */
+const sectionHref = (href: string, landing: boolean) => (href.startsWith("#") && !landing ? `/${href}` : href);
+
 /** A footer link: another site in a new tab, a landing section as a plain anchor, a page through the router. */
 function FooterAnchor({ href, className, label, children }: { href: string; className: string; label?: string; children: ReactNode }) {
   if (isExternal(href)) {
@@ -241,15 +245,28 @@ const ICON_LINK = "-my-2 inline-flex size-9 shrink-0 items-center justify-center
 const COPYRIGHT = "© 2026 Vestiarion contributors";
 
 /**
- * The full footer is the landing page's: the wordmark, then four columns of
- * links, two across on a phone, four from `sm` and beside the wordmark from
- * `lg`. `compact` is one line and its links, for every other public page.
+ * The full footer is the landing page's, and the public pages' that lead to it
+ * (the free tools, /studios, /how-it-decides): the wordmark, then four columns
+ * of links, two across on a phone, four from `sm` and beside the wordmark from
+ * `lg`. `landing` says it is on the landing page, so its section links stay on
+ * the page; from any other page they go to the landing. `compact` is one line
+ * and its links, for every other public page.
  *
  * `loop` names a page a business sends its counterparties (counterparty loop C1, C2): above the line, it says what sent
  * the page, and links to the landing page in a new tab, tagged with that kind of page only. The page's own address holds
  * its token, so the link sends no referrer: the tags alone say where the visit came from.
  */
-export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { compact?: boolean; networkLabel?: string; loop?: LoopPage }) {
+export function SiteFooter({
+  compact = false,
+  landing = false,
+  networkLabel = "Arc",
+  loop,
+}: {
+  compact?: boolean;
+  landing?: boolean;
+  networkLabel?: string;
+  loop?: LoopPage;
+}) {
   if (compact) {
     return (
       <footer className={cn(styles.compactFooter, "border-t border-line bg-ground px-page py-6 font-mono text-caption text-ink-3 focus-default")}>
@@ -316,7 +333,7 @@ export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { co
               <ul className="mt-3 space-y-1">
                 {column.links.map((link) => (
                   <li key={link.label}>
-                    <FooterAnchor href={link.href} className={COLUMN_LINK}>
+                    <FooterAnchor href={sectionHref(link.href, landing)} className={COLUMN_LINK}>
                       {link.label}
                     </FooterAnchor>
                   </li>

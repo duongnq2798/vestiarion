@@ -7,8 +7,9 @@ import { GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_U
 
 /**
  * The site footer (spec §2, F1, F3): its columns, where each link goes, and
- * how it opens. The full footer is the landing page's; the compact one is
- * every other public page's.
+ * how it opens. The full footer is the landing page's and the public pages'
+ * that lead to it (the free tools, /studios, /how-it-decides); the compact one
+ * is every other public page's.
  */
 
 interface Anchor {
@@ -90,10 +91,22 @@ describe("the full footer, rendered", () => {
     for (const column of FOOTER_COLUMNS) expect(markup).toContain(`<nav aria-label="${column.title}"`);
   });
 
-  it("renders every column link with its label", () => {
+  it("renders every column link with its label, a landing section as the landing page's from any other page", () => {
     for (const link of FOOTER_COLUMNS.flatMap((column) => column.links)) {
-      expect(links.some((anchor) => anchor.href === link.href && anchor.text === link.label), `${link.label} → ${link.href}`).toBe(true);
+      const href = link.href.startsWith("#") ? `/${link.href}` : link.href;
+      expect(links.some((anchor) => anchor.href === href && anchor.text === link.label), `${link.label} → ${href}`).toBe(true);
     }
+    // A bare "#safety" would go nowhere on a page that is not the landing.
+    expect(links.filter((anchor) => anchor.href.startsWith("#"))).toEqual([]);
+  });
+
+  it("links the landing's sections in place on the landing page itself", () => {
+    const landing = anchors(renderToStaticMarkup(<SiteFooter landing />));
+    for (const section of LANDING_SECTIONS) {
+      expect(landing.some((anchor) => anchor.href === section.href && anchor.text === section.label), section.href).toBe(true);
+    }
+    expect(landing.filter((anchor) => anchor.href.startsWith("/#"))).toEqual([]);
+    expect(readFileSync(path.join(process.cwd(), "src/app/page.tsx"), "utf8")).toContain("<SiteFooter landing />");
   });
 
   it("opens every external link in a new tab, without an opener or a referrer", () => {
