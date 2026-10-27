@@ -3563,8 +3563,9 @@ packs out; see "Google Sheets: the close pack exported").
   and Remove Slack and the per-row Disconnect of `GitHubPanel` and `ChromeExtensionPanel`, pass their action through
   `withSuccessToast`, which raises the toast as the action answers, not `useActionForm`'s `toastOnSuccess`, whose
   effect would run in the button that is gone (DC1, DC2). A refusal answers before anything is revalidated and stays
-  beside the button (DC3). `tests/disconnect-confirmation.test.tsx` scans `src/components` so that no disconnect form
-  raises its toast from its own component (DC6).
+  beside the button (DC3). `tests/disconnect-confirmation.test.tsx` scans `src/components` so that no wrapped form
+  also passes `toastOnSuccess`, and a disconnect form passes it only where it is on a pinned list of forms held by a
+  component the page keeps mounted, `DiscordPanel`'s and `TelegramCard`'s (DC2, DC6).
 - **Consent versions** (`consent.ts`). A change to what a statement says is a new version in `CONSENT_VERSIONS`, added
   last to `CONSENT_HISTORY`; a connection keeps the version it agreed to until it connects again. The connect page
   (`ConnectorConsent`) posts the version it showed, and `startConnect` records it only while it is still the current

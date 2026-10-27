@@ -39,8 +39,9 @@ that the card says "… is disconnected", and nothing appeared there either.
   `withSuccessToast` suits the per-row forms too, where lifting one `useActionForm` into the list would share one form
   between the rows.
 - **DC2. One toast, never two.** A form whose action is wrapped in `withSuccessToast` never also passes
-  `toastOnSuccess`. A disconnect form that does pass `toastOnSuccess` holds its `useActionForm` in a component the page
-  keeps mounted and hands it down, as Discord and Telegram do; it never holds it in the component that draws the button.
+  `toastOnSuccess`. A disconnect form that does pass `toastOnSuccess` is held by a component the page keeps mounted
+  when the disconnect answers: Discord's panel holds its form and hands it to its Disconnect, and Telegram's card, which
+  stays on the page and swaps its connected view for Connect, holds and draws its own.
 - **DC3. A refusal stays beside the button.** A refusal of these actions answers before anything is revalidated (all
   but one race, below), so the button and its form are still there: the refusal shows in the form's message, as
   before, and raises no toast.
@@ -52,7 +53,11 @@ that the card says "… is disconnected", and nothing appeared there either.
   now says "Settings answers", as the Discord guide does: Pipedrive and Zoho CRM.
 - **DC6. A guard.** A source scan of `src/components` fails when a form wrapped in `withSuccessToast` also passes
   `toastOnSuccess` (DC2), or when a disconnect form (an action named `disconnect…Action`, or `removeSlackAction` and
-  `removeDiscordAction`, those integrations' disconnects) passes `toastOnSuccess` from the component that draws it.
+  `removeDiscordAction`, those integrations' disconnects) passes `toastOnSuccess`, however its `useActionForm` result
+  is named, and is not on the scan's pinned list of forms read and found to be held by a component the page keeps
+  mounted: Discord's and Telegram's (DC2). The scan reads source, not what the page mounts, so the list is kept by
+  hand: a form joins it only by an edit to the test, and the scan also fails when a listed form stops passing
+  `toastOnSuccess`.
 
 ## Considered and not done
 
@@ -60,7 +65,7 @@ that the card says "… is disconnected", and nothing appeared there either.
   swap, which Google Sheets needs for its warnings. These answers add nothing the card's new status does not already
   say, the per-row lists would share one form between rows, and it is more code for each card.
 - Making `toastOnSuccess` itself raise the toast from the action. It would fix every form at once, but it changes when
-  every success toast in the app appears (102 uses) and would toast twice wherever an action is also wrapped.
+  every success toast in the app appears (93 uses) and would toast twice wherever an action is also wrapped.
 - Sending the page to `?asana=disconnected` and showing a notice. It changes the action into a redirect for one card.
 - **Sync now** on a card whose sync finds the connection gone: the action revalidates and then refuses, the card turns
   to "needs you to reconnect" and the refusal goes with the button. The card's status and its **Reconnect** button say
@@ -75,7 +80,9 @@ that the card says "… is disconnected", and nothing appeared there either.
 
 - `tests/disconnect-confirmation.test.tsx` (happy-dom): for each form in DC1, the action answers only after the page
   has dropped its button: the toast is raised with the action's message and the button is gone. A refusal, with the
-  page unchanged, shows beside the button and raises no toast. The source scan of DC6.
+  page unchanged, shows beside the button and raises no toast. The source scan of DC6, with a check on sample source
+  that it finds a disconnect form raising its own toast whether or not the form's result is taken apart where it is
+  made, and passes over `toastOnSuccess: false`.
 - The existing static tests of each card (`slack-panel`, `github-panel`, `hubspot-panel`, `pipedrive-render`,
   `zohocrm-render`, `xero-panel`, `quickbooks-panel`, `integration-marks`, `captured-drafts-render`) and
   `tests/docs-guides.test.ts`, which keeps the quoted button names in the panels' files.
