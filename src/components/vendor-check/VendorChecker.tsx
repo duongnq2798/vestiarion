@@ -14,14 +14,16 @@ import { Input, Textarea } from "@/components/ui/Input";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { columnLetter, columnNames, sampleValues } from "@/lib/bill-import/columns";
-import { decodeList, readTable, TableError, type Table } from "@/lib/bill-import/table";
+import { decodeList, TableError, type Table } from "@/lib/bill-import/table";
 import { plural } from "@/lib/copy";
 import {
   detectVendorColumns,
   EXAMPLE_LIST,
   listWords,
   looksLikeVendorHeader,
+  nameNotCompared,
   needsALook,
+  readVendorList,
   VENDOR_FIELD_LABELS,
   VENDOR_FIELDS,
   VENDOR_FILE_MAX_BYTES,
@@ -35,7 +37,7 @@ import {
   type VendorField,
   type VendorResult,
 } from "@/lib/vendor-check/list";
-import { matchName, type CountryAgreement, type NameMatch } from "@/lib/vendor-check/match";
+import { matchName, nameWords, nonLatinWords, type CountryAgreement, type NameMatch } from "@/lib/vendor-check/match";
 import { loadNameIndex } from "./load-index";
 
 /**
@@ -65,7 +67,17 @@ export function reasonWords(match: NameMatch): string {
   for (const pair of match.pairs.filter((each) => each.how === "close")) parts.push(`${pair.typed} is close to ${pair.listed}`);
   const typedOnly = match.typedOnly.length > 0 ? ` Not in that name: ${match.typedOnly.join(", ")}.` : "";
   const listedOnly = match.listedOnly.length > 0 ? ` Only in that name: ${match.listedOnly.join(", ")}.` : "";
-  return `${lead}: ${parts.join("; ")}.${typedOnly}${listedOnly}`;
+  const rare = match.rare ? " Every word typed is rare on the list, so it is a possible match at least." : "";
+  return `${lead}: ${parts.join("; ")}.${typedOnly}${listedOnly}${rare}`;
+}
+
+/** What is said of a name with no word in Latin letters, which is not compared (CV2). */
+const NOT_COMPARED = "Not compared: OFAC's SDN list writes every name in Latin letters.";
+
+/** The words of a name left out for not being in Latin letters, when some of it was compared (CV2). */
+function LeftOut({ words }: { words: readonly string[] }) {
+  if (words.length === 0) return null;
+  return <p className="break-words text-sm text-ink-2">Left out, as they are not in Latin letters: {words.join(" ")}.</p>;
 }
 
 function countryWords(country: CountryAgreement): string | null {
@@ -115,8 +127,16 @@ function MatchCard({ match }: { match: NameMatch }) {
   );
 }
 
-/** The headline for one name: strong, possible, or none, and the list's date (CV7). */
-function NameHeadline({ typed, matches, listDate }: { typed: string; matches: NameMatch[]; listDate: string }) {
+/** The headline for one name: strong, possible, none, or not compared, and the list's date (CV7). */
+function NameHeadline({ typed, matches, compared, listDate }: { typed: string; matches: NameMatch[]; compared: boolean; listDate: string }) {
+  if (!compared) {
+    return (
+      <Callout tone="held" title={NOT_COMPARED}>
+        A name written in another script cannot match any of them. Write the vendor&apos;s name in Latin letters, as it is written in English, then
+        check it again.
+      </Callout>
+    );
+  }
   if (matches.length === 0) {
     return (
       <Callout title={`No match in OFAC's SDN list as of ${listDate}.`}>
@@ -143,7 +163,7 @@ function WalletLine({ result }: { result: VendorResult }) {
       <p className="break-all font-mono text-xs text-ink-3">{result.row.wallet}</p>
       <p className="flex gap-2 text-sm leading-relaxed text-ink-2">
         <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${color}`} />
-        <span>{text}</span>
+        <span className="min-w-0 break-words">{text}</span>
       </p>
     </div>
   );
@@ -151,6 +171,7 @@ function WalletLine({ result }: { result: VendorResult }) {
 
 function RowCard({ result, listDate }: { result: VendorResult; listDate: string }) {
   const { row, matches } = result;
+  const notCompared = nameNotCompared(result);
   return (
     <li className="space-y-3 rounded-2xl border border-line px-4 py-4">
       <p className="text-sm">
@@ -160,7 +181,9 @@ function RowCard({ result, listDate }: { result: VendorResult; listDate: string 
           {row.country ? ` · ${row.country}` : ""}
         </span>
       </p>
-      {matches && matches.length === 0 && <p className="text-sm text-ink-2">No match in OFAC&apos;s SDN list as of {listDate}.</p>}
+      {notCompared && <p className="text-sm text-ink-2">{NOT_COMPARED}</p>}
+      {matches && matches.length === 0 && !notCompared && <p className="text-sm text-ink-2">No match in OFAC&apos;s SDN list as of {listDate}.</p>}
+      {!notCompared && <LeftOut words={result.notLatin} />}
       {matches?.map((match) => (
         <MatchCard key={match.entry.number} match={match} />
       ))}
@@ -197,7 +220,7 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
   const id = useId();
   const [name, setName] = useState("");
   const [country, setCountry] = useState("");
-  const [one, setOne] = useState<{ typed: string; matches: NameMatch[] } | null>(null);
+  const [one, setOne] = useState<{ typed: string; matches: NameMatch[]; notLatin: string[]; compared: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [problem, setProblem] = useState("");
 
@@ -218,7 +241,8 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
     setProblem("");
     try {
       const index = await loadNameIndex();
-      setOne({ typed, matches: matchName(index, typed, country) });
+      const notLatin = nonLatinWords(typed);
+      setOne({ typed, matches: matchName(index, typed, country), notLatin, compared: notLatin.length === 0 || nameWords(typed).length > 0 });
     } catch {
       setProblem(LOAD_FAILED);
     } finally {
@@ -241,7 +265,7 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
     forget();
     setListProblem("");
     try {
-      const table = readTable(text);
+      const table = readVendorList(text);
       const header = looksLikeVendorHeader(table.rows[0].cells);
       setList({ table, source, legacy });
       setHasHeader(header);
@@ -335,7 +359,8 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
           <FormMessage tone="error">{problem}</FormMessage>
         </div>
         <section aria-label="What the check found for one name" className="space-y-3">
-          <div aria-live="polite">{one && <NameHeadline typed={one.typed} matches={one.matches} listDate={listDate} />}</div>
+          <div aria-live="polite">{one && <NameHeadline typed={one.typed} matches={one.matches} compared={one.compared} listDate={listDate} />}</div>
+          {one?.compared && <LeftOut words={one.notLatin} />}
           {one?.matches.map((match) => (
             <MatchCard key={match.entry.number} match={match} />
           ))}
@@ -473,7 +498,8 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
                 title={`Checked against OFAC's SDN list as of ${listDate}`}
               >
                 {plural(summary.rows, "1 row", `${summary.rows} rows`)} checked: {summary.strong} strong {plural(summary.strong, "match", "matches")},{" "}
-                {summary.possible} possible {plural(summary.possible, "match", "matches")}, {summary.noMatch} with no match.
+                {summary.possible} possible {plural(summary.possible, "match", "matches")}, {summary.noMatch} with no match
+                {summary.notCompared > 0 && `, ${summary.notCompared} not compared (not in Latin letters)`}.
                 {summary.wallets > 0 && ` ${plural(walletsToLook, "1 wallet", `${walletsToLook} wallets`)} to look at.`}
                 {checked.more > 0 && ` Only the first ${VENDOR_ROWS_MAX.toLocaleString("en-US")} rows were checked: ${checked.more.toLocaleString("en-US")} more were left out.`}
               </Callout>

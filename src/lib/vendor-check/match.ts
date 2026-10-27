@@ -8,15 +8,18 @@ import type { SdnEntryType, SdnNameSnapshot } from "../sanctioned-wallets";
  */
 
 /**
- * A strong match: the score from which the product's screening calls a sanctions match high risk
- * (`STRONG_SANCTIONS_MATCH_THRESHOLD`, `src/lib/screening/providers.ts`), kept here as a number so the browser does not
- * load the providers' code. The test holds the two to each other (CV4).
+ * A strong match: 0.85, the same cut-off the product's screening applies to its provider's score before it calls a
+ * sanctions match high risk (`STRONG_SANCTIONS_MATCH_THRESHOLD`, `src/lib/screening/providers.ts`). The two scores are
+ * not the same: this one is this matcher's, against the SDN snapshot. Kept here as a number so the browser does not
+ * load the providers' code; the test holds the two to each other (CV4).
  */
 export const STRONG_MATCH = 0.85;
 /** A possible match: yente's default cut-off. Below it a name is not shown (CV4). */
 export const POSSIBLE_MATCH = 0.7;
 /** The entries shown for one name (CV4). */
 export const MATCHES_SHOWN = 3;
+/** A word in at most this many of the list's names is rare there (CV4). */
+export const RARE_IN_NAMES = 10;
 
 /** One SDN entry as the check shows it. */
 export interface SdnEntry {
@@ -61,6 +64,8 @@ export interface NameMatch {
   listedOnly: string[];
   /** The same letters, spaced another way ("Alqaida" and "AL QA'IDA"). */
   spacing: boolean;
+  /** Every typed word is a rare word of the matched name, which makes it a possible match at least (CV4). */
+  rare: boolean;
   country: CountryAgreement;
 }
 
@@ -137,15 +142,28 @@ function folded(text: string): string {
   return text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/&/g, " and ");
 }
 
+/** A letter outside the Latin script. OFAC's list writes every name in Latin letters (CV2). */
+const NON_LATIN = /(?!\p{Script=Latin})\p{L}/u;
+
+/**
+ * The words of a name, as written, with a letter outside the Latin script: a word in Cyrillic or Chinese letters, or a
+ * Latin-looking word with one Cyrillic letter in it. No name on the list is written so, so they are left out of the
+ * comparison, and the page says which (CV2).
+ */
+export function nonLatinWords(name: string): string[] {
+  return name.split(/[^\p{L}\p{M}\p{N}]+/u).filter((word) => NON_LATIN.test(folded(word)));
+}
+
 /**
  * A name's words as compared (CV2): accents and case dropped, dots and apostrophes dropped (`S.A.` is `sa`), any other
- * punctuation a space, and legal forms dropped wherever they stand, unless the name is nothing else.
+ * punctuation a space, words not in Latin letters left out, and legal forms dropped wherever they stand, unless the
+ * name is nothing else.
  */
 export function nameWords(name: string): string[] {
   const all = folded(name)
     .replace(/[.'\u2019`]/g, "")
     .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word !== "");
+    .filter((word) => word !== "" && !NON_LATIN.test(word));
   let text = ` ${all.join(" ")} `;
   for (const phrase of LEGAL_PHRASES) text = text.replaceAll(` ${phrase} `, " ");
   const kept = text.split(" ").filter((word) => word !== "" && !LEGAL_WORDS.has(word));
@@ -233,8 +251,12 @@ function push<K, V>(map: Map<K, V[]>, key: K, value: V) {
   else map.set(key, [value]);
 }
 
-/** The index the check matches against, built once from the snapshot when the first check runs. */
-export function buildNameIndex(snapshot: SdnNameSnapshot): NameIndex {
+/** Entries, then listed words, read between two pauses when the index is built in steps (CV7). */
+const ENTRIES_PER_STEP = 1000;
+const WORDS_PER_STEP = 5000;
+
+/** The index's build, which stops (`yield`) every few thousand entries and words, so a caller can let the page draw. */
+function* indexSteps(snapshot: SdnNameSnapshot): Generator<undefined, NameIndex, undefined> {
   const entries: SdnEntry[] = snapshot.entries.map(([number, name, type, programs, otherNames, countries, addresses]) => ({
     number,
     name,
@@ -249,7 +271,9 @@ export function buildNameIndex(snapshot: SdnNameSnapshot): NameIndex {
   const joined = new Map<string, number[]>();
   const evmWallets: SanctionedEntry[] = [];
   const addresses = new Map<string, ListedAddress>();
-  entries.forEach((entry, at) => {
+  for (let at = 0; at < entries.length; at += 1) {
+    if (at > 0 && at % ENTRIES_PER_STEP === 0) yield;
+    const entry = entries[at];
     [entry.name, ...entry.otherNames].forEach((text, which) => {
       const words = [...new Set(nameWords(text))];
       if (words.length === 0) return;
@@ -265,11 +289,14 @@ export function buildNameIndex(snapshot: SdnNameSnapshot): NameIndex {
       if (!addresses.has(key)) addresses.set(key, { entry, currency, address });
       if (/^0x[0-9a-fA-F]{40}$/.test(address) && !evmWallets.some((wallet) => wallet.address === key)) evmWallets.push({ address: key, name: entry.name });
     }
-  });
+  }
   const byFirst = new Map<string, string[]>();
   const bySound = new Map<string, string[]>();
   const weights = new Map<string, number>();
+  let read = 0;
   for (const [word, names] of postings) {
+    read += 1;
+    if (read % WORDS_PER_STEP === 0) yield;
     weights.set(word, Math.log(1 + forms.length / names.length));
     if (word.length <= SHORT) continue;
     push(byFirst, letterGroup(word), word);
@@ -291,6 +318,28 @@ export function buildNameIndex(snapshot: SdnNameSnapshot): NameIndex {
     closeCache: new Map(),
     tally: new Float64Array(forms.length),
   };
+}
+
+/** The index the check matches against, built at once from the snapshot. */
+export function buildNameIndex(snapshot: SdnNameSnapshot): NameIndex {
+  const steps = indexSteps(snapshot);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
+}
+
+/**
+ * The same index, built in steps with `pause` awaited between them (CV7): the page builds it when the first check runs,
+ * and a build at once would hold the page still for most of a second on a laptop, longer on a phone.
+ */
+export async function buildNameIndexInSteps(snapshot: SdnNameSnapshot, pause: () => Promise<void>): Promise<NameIndex> {
+  const steps = indexSteps(snapshot);
+  for (;;) {
+    const step = steps.next();
+    if (step.done) return step.value;
+    await pause();
+  }
 }
 
 /** The listed words a typed word pairs with, and how closely (CV3). */
@@ -320,6 +369,12 @@ function weightOf(index: NameIndex, word: string): number {
   return index.weights.get(word) ?? Math.log(1 + index.forms.length);
 }
 
+/** Whether a word is rare on the list (CV4): longer than 3 letters, and in 1 to `RARE_IN_NAMES` of its names. */
+function rareWord(index: NameIndex, word: string): boolean {
+  const names = index.postings.get(word)?.length ?? 0;
+  return word.length > SHORT && names > 0 && names <= RARE_IN_NAMES;
+}
+
 interface Scored {
   form: NameForm;
   score: number;
@@ -327,11 +382,22 @@ interface Scored {
   typedOnly: string[];
   listedOnly: string[];
   spacing: boolean;
+  rare: boolean;
   sameOrder: boolean;
 }
 
-/** One name form's score against the typed words (CV4): the closest pairs first, each word weighed by its rarity. */
-function scoreForm(index: NameIndex, typed: string[], close: ReadonlyArray<ReadonlyMap<string, { closeness: number; how: Closeness }>>, form: NameForm): Scored {
+/**
+ * One name form's score against the typed words (CV4): the closest pairs first, each pair weighed by twice its listed
+ * word's weight, each word with no pair by its own. When every typed word is a rare word on the list (`rare`) and this
+ * name holds them all, it is a possible match at least, however many more words the name has.
+ */
+function scoreForm(
+  index: NameIndex,
+  typed: string[],
+  close: ReadonlyArray<ReadonlyMap<string, { closeness: number; how: Closeness }>>,
+  form: NameForm,
+  rare: boolean
+): Scored {
   const candidates: Array<{ t: number; l: number; closeness: number; how: Closeness }> = [];
   typed.forEach((_, t) => {
     form.words.forEach((listed, l) => {
@@ -363,6 +429,8 @@ function scoreForm(index: NameIndex, typed: string[], close: ReadonlyArray<Reado
     if (!listedPaired.has(l)) total += weightOf(index, word);
   });
   let score = total === 0 ? 0 : matched / total;
+  const held = rare && score < POSSIBLE_MATCH && typed.every((word) => form.words.includes(word));
+  if (held) score = POSSIBLE_MATCH;
   const spacing = score < 0.95 && typed.join("") === form.words.join("");
   if (spacing) score = 0.95;
   return {
@@ -372,6 +440,7 @@ function scoreForm(index: NameIndex, typed: string[], close: ReadonlyArray<Reado
     typedOnly: typed.filter((_, t) => !typedPaired.has(t)),
     listedOnly: form.words.filter((_, l) => !listedPaired.has(l)),
     spacing,
+    rare: held,
     sameOrder: typed.join(" ") === form.words.join(" "),
   };
 }
@@ -384,9 +453,10 @@ function better(a: Scored, b: Scored): boolean {
 }
 
 /**
- * The SDN entries a name may be (CV4, CV5): every name form sharing a close word with it, or its letters, scored, each
- * entry by its best; those at `POSSIBLE_MATCH` or more, at most `MATCHES_SHOWN`, highest first. On a tie: the country
- * agreeing, then the entry's own name, then the lower number. The country never changes a score.
+ * The SDN entries a name may be (CV4, CV5): every name form sharing a close word with it, its letters, or all its rare
+ * words, scored, each entry by its best; those at `POSSIBLE_MATCH` or more, at most `MATCHES_SHOWN`, highest first. On
+ * a tie: the country agreeing, then the entry's own name, then the lower number. The country never changes a score.
+ * Words not in Latin letters are left out (`nonLatinWords`): a name of nothing else finds nothing.
  */
 export function matchName(index: NameIndex, name: string, country = ""): NameMatch[] {
   const typed = [...new Set(nameWords(name))];
@@ -413,9 +483,14 @@ export function matchName(index: NameIndex, name: string, country = ""): NameMat
     tally[id] = 0;
     if ((2 * hit) / (hit + formWeights[id] + lonely) >= POSSIBLE_MATCH) candidates.add(id);
   }
+  // A name made only of rare words is a possible match to every name form holding them all, whatever the bound says.
+  const rare = typed.every((word) => rareWord(index, word));
+  if (rare) {
+    for (const id of index.postings.get(typed[0]) ?? []) if (typed.every((word) => index.forms[id].words.includes(word))) candidates.add(id);
+  }
   const best = new Map<number, Scored>();
   for (const id of candidates) {
-    const scored = scoreForm(index, typed, close, index.forms[id]);
+    const scored = scoreForm(index, typed, close, index.forms[id], rare);
     if (scored.score < POSSIBLE_MATCH) continue;
     const prior = best.get(scored.form.entry);
     if (!prior || better(scored, prior)) best.set(scored.form.entry, scored);
@@ -432,6 +507,7 @@ export function matchName(index: NameIndex, name: string, country = ""): NameMat
       typedOnly: scored.typedOnly,
       listedOnly: scored.listedOnly,
       spacing: scored.spacing,
+      rare: scored.rare,
       country: countryAgreement(country, entry.countries),
     };
   });

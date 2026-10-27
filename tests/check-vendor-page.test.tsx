@@ -117,6 +117,25 @@ describe("one name (CV7)", () => {
     expect(text()).not.toMatch(/\b(?:safe|cleared|verified|compliant)\b/i);
   });
 
+  it("says a name of rare words of a listed name is a possible match, and why", async () => {
+    type(field("Vendor name"), "Suex");
+    await click("Check this name");
+    expect(live()?.textContent).toContain("Possible match: review it");
+    expect(text()).toContain("SUEX OTC, S.R.O.");
+    expect(text()).toContain("Matched its name: suex is the same word. Only in that name: otc. Every word typed is rare on the list, so it is a possible match at least.");
+  });
+
+  it("does not compare a name with no word in Latin letters, and says so rather than no match", async () => {
+    type(field("Vendor name"), "Сбербанк России");
+    await click("Check this name");
+    expect(live()?.textContent).toContain("Not compared: OFAC's SDN list writes every name in Latin letters");
+    expect(live()?.textContent).not.toContain("No match");
+    type(field("Vendor name"), "Northwind Design 中国银行");
+    await click("Check this name");
+    expect(live()?.textContent).toContain("No match in OFAC's SDN list as of Oct 28, 2026.");
+    expect(text()).toContain("Left out, as they are not in Latin letters: 中国银行.");
+  });
+
   it("checks on Enter too", async () => {
     type(field("Vendor name"), "Hezbollah");
     await settle(() => field("Vendor name").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
@@ -150,6 +169,16 @@ describe("a list (CV6, CV7)", () => {
     expect(csv).toContain("Strong match");
   });
 
+  it("reads one pasted column whole, and counts a name not in Latin letters apart", async () => {
+    type(container.querySelector("textarea")!, "Vendor\nKadyrov, Ramzan\nСбербанк");
+    await click("Read the list");
+    expect(text()).toContain("2 rows, 1 column.");
+    await click("Check the list");
+    expect(live("in the list")?.textContent).toContain("2 rows checked: 0 strong matches, 1 possible match, 0 with no match, 1 not compared (not in Latin letters).");
+    expect(text()).toContain("KADYROV, Ramzan Akhmatovich");
+    expect(text()).toContain("Not compared: OFAC's SDN list writes every name in Latin letters.");
+  });
+
   it("says why a list cannot be read", async () => {
     type(container.querySelector("textarea")!, '"never closed');
     await click("Read the list");
@@ -178,6 +207,26 @@ describe("the page (CV8, CV9)", () => {
     expect(requiresSession("/check-vendor")).toBe(false);
   });
 
+  it("warns before each link opens a new tab, and reads the list's date without the names snapshot", async () => {
+    const { default: CheckVendorPage } = await import("@/app/check-vendor/page");
+    const markup = renderToStaticMarkup(<CheckVendorPage />);
+    // The page's own links, to Treasury's search and to the script that refreshes the list.
+    const newTab = (markup.match(/<a [^>]*target="_blank"[^>]*>[\s\S]*?<\/a>/g) ?? []).filter((link) => /sanctionssearch|ofac-sdn-wallets\.mjs/.test(link));
+    expect(newTab).toHaveLength(2);
+    for (const link of newTab) expect(link).toContain("(opens in a new tab)");
+    // The server page would otherwise carry the whole 2 MB snapshot for one date; the wallet snapshot has the same one.
+    expect(source("src/app/check-vendor/page.tsx")).not.toContain("ofac-sdn-names.json");
+    expect(markup).toContain("OFAC&#x27;s SDN list as of Oct 28, 2026.");
+  });
+
+  it("says how close spellings count, as the matcher counts them", async () => {
+    const { default: CheckVendorPage } = await import("@/app/check-vendor/page");
+    const markup = renderToStaticMarkup(<CheckVendorPage />).replace(/\s+/g, " ");
+    expect(markup).toContain("A word spelled another way, such as Hezbollah for Hizballah, counts for nine tenths of the same word.");
+    expect(markup).toContain("A word only close to one, such as Kadhafi for Qadhafi, counts for between half and nine tenths of it");
+    expect(markup).not.toContain("a little less");
+  });
+
   it("ends with the call to action, in one file a shared one can replace", async () => {
     const { default: CheckVendorPage } = await import("@/app/check-vendor/page");
     const markup = renderToStaticMarkup(<CheckVendorPage />);
@@ -186,6 +235,10 @@ describe("the page (CV8, CV9)", () => {
     expect(markup).toContain("Try it on your bills");
     expect(markup).toContain("In shadow mode it decides on your real bills while you keep paying them as you do now.");
     expect(source("src/components/vendor-check/VendorCheckCta.tsx")).toContain('data-cta="check-vendor-start"');
+    // What the product does, as its code does it: this page's score is not the product's screening score.
+    expect(markup).toContain("The agent pays no vendor until screening gives a verdict, and no one can pay a vendor screened high risk.");
+    expect(markup).not.toContain("never pays a vendor with a strong match");
+    expect(markup).not.toContain("the score from which");
   });
 
   it("sends nothing anywhere: the checker and its rules make no request and read no address bar or storage", () => {

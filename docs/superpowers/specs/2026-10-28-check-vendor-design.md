@@ -9,7 +9,7 @@ searched by people who pay vendors. Treasury's own search (https://sanctionssear
 but takes one name at a time and knows nothing of wallets. A business with a vendor list wants the whole list checked at
 once, names and pay-to wallets together, with a file back.
 
-Vestiarion already screens every counterparty and checks every payout address against OFAC's SDN list before it pays
+Vestiarion already screens every counterparty, and checks every payout address against OFAC's SDN list before it pays
 (screening providers SP1-SP3, sanctioned wallets SW1-SW4). A free page that does a first version of that for anyone,
 with nothing to sign up for and nothing sent anywhere, helps people who do not use Vestiarion yet and shows what the
 product checks. It sits beside the address lookalike checker (`2026-10-21-address-checker-design.md`).
@@ -19,7 +19,9 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
 **CV1. The name snapshot** (`parseSdnNames`, `src/lib/sanctioned-wallets.ts`).
 - Read from four of OFAC's SDN files, downloaded from the Treasury's Sanctions List Service:
   - `SDN.CSV`: each entry's number, name, type and programs, and its remarks;
-  - `SDN_COMMENTS.CSV`: remarks that overflow `SDN.CSV`, joined to them as `parseSdnWallets` joins them;
+  - `SDN_COMMENTS.CSV`: remarks that overflow `SDN.CSV`, joined to them as `parseSdnWallets` joins them, untrimmed:
+    OFAC cuts the remarks at a fixed length, and a cut right after a space ("Digital Currency Address - XBT ") keeps
+    it, so the address after it is read;
   - `ALT.CSV`: the entry's other names (a.k.a., f.k.a. and n.k.a.);
   - `ADD.CSV`: its addresses, of which only the country is kept.
 - Each entry, in number order:
@@ -52,6 +54,9 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
   Ltda and the like, and the long forms "limited liability company", "(public, open or closed) joint stock company" and
   their Russian transliterations.
 - A name made only of such words keeps them.
+- A word with a letter outside the Latin script (`nonLatinWords`), such as one in Cyrillic or Chinese letters or a
+  Latin-looking one with a Cyrillic letter in it, is left out: every name on OFAC's list is written in Latin letters, so
+  it could never pair. A name with no other word is not compared at all, and says so (CV6, CV7), rather than "No match".
 
 **CV3. Two words as compared** (`wordCloseness`).
 - The same word: 1.
@@ -67,14 +72,21 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
 **CV4. A name's score** (`matchName`).
 - A name is scored against every entry's name and each of its other names, and an entry takes its best.
 - Words are paired one to one, the closest pairs first.
-- Each word weighs by how rare it is among the list's names: `ln(1 + names / names with the word)`. A typed word that is
-  in no name on the list weighs as the rarest. So "trading", "group" or "al" count for little and "melli" for much.
-- Score: the sum, over the pairs, of their closeness times both words' weight, over the weight of every word on both
-  sides. A word on either side with no pair lowers it.
+- Each word weighs by how rare it is among the list's names: `ln(1 + names / names with the word)`. So "trading",
+  "group" or "al" count for little and "melli" for much.
+- Score: each pair counts its closeness times twice its listed word's weight; a typed word with no pair counts its own
+  weight (as the rarest when it is in no name on the list), and a listed word with no pair its own. The score is what
+  the pairs count over the sum of all of it, so a word on either side with no pair lowers it.
 - The same letters spaced another way ("Alqaida" and "AL QA'IDA") score at least 0.95.
+- A name made only of rare words, each longer than 3 letters and in at most 10 of the list's names (`RARE_IN_NAMES`),
+  scores at least 0.70 against a name that holds them all, however many more words that name has: "Suex" is a possible
+  match to SUEX OTC, S.R.O., and "Kadyrov" to KADYROV, Ramzan Akhmatovich. The rule never makes a match strong, and the
+  match says it applied.
 - Bands:
-  - **strong**: 0.85 or more, `STRONG_SANCTIONS_MATCH_THRESHOLD`, the score from which the product's screening calls a
-    sanctions match high risk, and never pays the counterparty;
+  - **strong**: 0.85 or more, the same cut-off as `STRONG_SANCTIONS_MATCH_THRESHOLD`, which the product's screening
+    applies to its provider's score to call a sanctions match high risk. The two scores are not the same: this one is
+    this matcher's, against the SDN snapshot, so a strong match here does not mean screening would call the vendor
+    high risk;
   - **possible**: from 0.70, yente's default cut-off, to 0.85;
   - below 0.70 is not shown.
 - At most 3 entries are shown, the highest first. On a tie, an entry whose country agrees comes first, then one
@@ -82,7 +94,11 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
   words in the order typed.
 - Only a name form that could reach 0.70 is scored: with every pair the same word, its score is at most
   `2h / (h + its weight + the weight of typed words close to nothing)`, `h` the weight of its words close to a typed
-  one. So 5,000 rows take about a second.
+  one. A name made only of rare words also scores every name form holding them all.
+- How long it takes, measured on a laptop: a typed word is compared with the listed words of its group the first time
+  the page meets it, about 1 to 4 ms, and remembered after, so a list's time grows with its distinct words more than its
+  rows. 5,000 rows with about 1,000 distinct words took about 2 seconds; a list with more distinct words takes longer.
+  The list is checked 250 rows at a time, the page showing how far it has got.
 - Each match says which name matched (the entry's, or one of its other names), the word pairs and how each paired
   (same, spelled another way, close), the typed words with no pair and the entry's words with no pair, and whether the
   country agrees.
@@ -98,6 +114,14 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
 **CV6. A vendor list** (`src/lib/vendor-check/list.ts`).
 - Read as the bill import reads a list (`readTable`, `decodeList`, import design B2): a CSV file, a semicolon CSV, or
   rows pasted from Excel or Google Sheets. A file of at most 2 MB.
+- Names written "Last, First" (`readVendorList`, `vendorRows`). A spreadsheet copies one column without quoting a cell
+  that holds a comma, and the bill import cuts a list whose first line has no delimiter at its commas. So:
+  - a list whose first line has no tab, semicolon or comma is one column: the cells a comma cut each line into are
+    joined back with ", ", and "Kadyrov, Ramzan" stays one name;
+  - in a comma list whose last named column holds the names, a row with more cells than there are column names has
+    them joined back into its name.
+  - A list without column names whose first line is itself such a name is still read as two columns; the page shows
+    each column and what it reads, and a first row naming the column ("Vendor") reads it as one.
 - The first row holds column names when one of its cells names a column the check knows (`looksLikeVendorHeader`);
   the person can say otherwise.
 - Three columns, found by their names (`detectVendorColumns`) and changeable as in the bill import (B3):
@@ -109,21 +133,29 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
 - Up to 5,000 rows (`VENDOR_ROWS_MAX`); the page says when more were left out. A row with neither a name nor a wallet is
   skipped. A row with a wallet and no name is checked for its wallet alone.
 - A wallet (`vendorRowChecker`, worded by `walletWords`):
-  - one that starts with `0x`, or is 40 hex digits, gets the address checker's rules (AC1-AC4, `checkAddress`): its
-    characters, its checksum, the EVM addresses in the name snapshot, addresses that are not a wallet, and the other
-    rows' addresses that share its first 3 and last 3, first 5 or last 5 hex digits, so one made to look like another
-    row's (AC3) stops, naming that row, on both rows;
+  - the part the address checker reads (`evmPart`): the cell, when it starts with `0x` or is 40 hex digits; the
+    address after a chain prefix, `eth:0x…` or `base:0x…` (EIP-3770); a payment link's, `ethereum:0x…@1`, or its pay-to
+    `address=` when it has one (EIP-681); or the cell from a `0x` that starts a word, so a cut or mistyped address gets
+    the checker's reason rather than a clean answer. A `0x` inside a word is part of another currency's address: a
+    bech32 one can hold it;
+  - that part gets the address checker's rules (AC1-AC4, `checkAddress`): its characters, its checksum, the EVM
+    addresses in the name snapshot, addresses that are not a wallet, and the other rows' addresses that share its
+    first 3 and last 3, first 5 or last 5 hex digits, so one made to look like another row's (AC3) stops, naming that
+    row, on both rows. When it is only part of the cell, the result starts "Read as <address>.";
   - the very same address under another row is a note to look at: "The same address as Northwind Design's. Check one
     wallet is meant for both.";
-  - any other is compared, as written (case ignored for hex and single-case forms such as bech32), with every
-    digital-currency address the snapshot lists, of any currency;
+  - any other is compared, as written or inside a payment link such as `bitcoin:<address>?amount=0.1` (BIP 21), case
+    ignored for hex and single-case forms such as bech32, with every digital-currency address the snapshot lists, of
+    any currency;
   - a row without a name is called by its row number.
-- Counts (`vendorSummary`): rows checked, rows with a name and of those strong matches, possible matches and no match,
-  wallets checked, and of those the ones that say do not pay and the ones to look at.
+- A name with no word in Latin letters (CV2) is not compared: "Not compared: OFAC's SDN list writes every name in Latin
+  letters." A name with some is compared on those, and names the words left out. Either way the row is one to look at.
+- Counts (`vendorSummary`): rows checked, rows with a name and of those strong matches, possible matches, no match and
+  not compared, wallets checked, and of those the ones that say do not pay and the ones to look at.
 - A CSV of the results (`vendorResultsCsv`): the list as read, with four columns added, "OFAC SDN result" (No match,
-  Possible match or Strong match), "Possible matches" (each entry's name, number, score and programs), "Wallet result"
-  and "SDN list as of". Built in the browser and saved from it (a `Blob`); a cell a spreadsheet would run as a formula
-  starts with an apostrophe.
+  Possible match, Strong match, or "Not compared: not in Latin letters", with any words left out named), "Possible
+  matches" (each entry's name, number, score and programs), "Wallet result" and "SDN list as of". Built in the browser
+  and saved from it (a `Blob`); a cell a spreadsheet would run as a formula starts with an apostrophe.
 
 **CV7. The checker** (`VendorChecker`, `src/components/vendor-check/VendorChecker.tsx`).
 - One name, with an optional country, checked on **Check this name** or Enter.
@@ -133,10 +165,19 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
   row's.
 - The snapshot loads only when a check runs, as a separate file the page's own code imports. What was typed or pasted
   is never in a request, a URL, the browser's storage, a cookie or analytics, and there is no form to submit.
-- Each name gets either "No match in OFAC's SDN list as of <date>." or up to 3 matches. Each match shows its band and
-  score, the entry's name, its type and programs, why it matched, its other names (the first 6, then how many more),
-  its countries, its digital-currency addresses, and **Check it on Treasury's search**, a link to the entry's page on
-  `sanctionssearch.ofac.treas.gov`, in a new tab, with no referrer.
+- The index is built once, in steps (`buildNameIndexInSteps`): 1,000 entries, then 5,000 listed words, at a time, the
+  page given back between them, so it keeps drawing and taking input. Built at once it takes about 0.7 seconds on a
+  laptop; in steps, none took more than about 60 ms.
+- Each name gets either "No match in OFAC's SDN list as of <date>.", up to 3 matches, or, with no word in Latin
+  letters, "Not compared: OFAC's SDN list writes every name in Latin letters." Words left out of a name for not being
+  in Latin letters are named under its result. Each match shows its band and score, the entry's name, its type and
+  programs, why it matched (and when the rare-word rule of CV4 applied), its other names (the first 6, then how many
+  more), its countries, its digital-currency addresses, and **Check it on Treasury's search**, a link to the entry's
+  page on `sanctionssearch.ofac.treas.gov`, in a new tab, with no referrer.
+- That link's address carries the entry's number. The site's Google Analytics code sends page views and `cta_click`
+  events; the Analytics stream's enhanced measurement of outbound clicks, a setting of the Analytics property rather
+  than of this code, would also send the address of a link clicked to another site, the entry's number with it, so it
+  is to stay off.
 - A list's results start with the counts, then the rows with a match or a wallet to look at, in list order, then the
   rows with nothing found, folded. **Download the results (CSV)** saves the CSV.
 - The headline of a result (one name's, or a list's counts) is announced politely as it changes, not each line.
@@ -157,7 +198,11 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
   - a match is a reason to look closer on Treasury's search, and no match does not prove a vendor is not on the list;
   - a first look, not a compliance decision;
   - the list's date, and how it is refreshed, linking the script.
-- "How names are compared": CV2-CV4 in a paragraph, with both thresholds.
+- Each link that opens a new tab says so to a screen reader, as the result cards' links do.
+- The list's date is read from the wallet snapshot, which the script writes from the same download on the same day, so
+  the server page does not carry the name snapshot for one date.
+- "How names are compared": CV2-CV4 in a paragraph: another spelling counts for nine tenths of the same word, a close
+  one for between half and nine tenths, the rare-word rule, words not in Latin letters, and both thresholds.
 - "What Vestiarion does before it pays": the call to action (CV9) and **How screening works**, to the first payment
   guide's counterparty step.
 - The sitemap, the footer's Resources ("OFAC vendor check"), and a link from the first payment guide's screening
@@ -165,8 +210,10 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
 
 **CV9. The call to action** (`VendorCheckCta`, `src/components/vendor-check/VendorCheckCta.tsx`): one small file, so a
 shared tool call to action can replace it in one line.
-- "Vestiarion screens every vendor and checks every pay-to wallet against OFAC's list before it pays, and never pays a
-  vendor with a strong match."
+- "Vestiarion screens every vendor and checks every pay-to wallet against OFAC's list. The agent pays no vendor until
+  screening gives a verdict, and no one can pay a vendor screened high risk." Each claim is what the product's code
+  does (the guardrails' `counterparty.unscreened` and `counterparty.high_risk`, the approval's `high_risk` refusal);
+  this page's own score plays no part in it.
 - **Try it on your bills**, to the landing's `TRY_HREF`, with `data-cta="check-vendor-start"`.
 - "In shadow mode it decides on your real bills while you keep paying them as you do now."
 
@@ -181,16 +228,20 @@ shared tool call to action can replace it in one line.
 ## Tests
 
 - `tests/sanctioned-names.test.ts`: `parseSdnNames` on small files (types, programs, other names, countries from
-  addresses and remarks, a vessel's flag left out, overflowing remarks, addresses of any currency, the files'
-  end-of-file character); the snapshot's shape, order, date and size, and real entries in it.
-- `tests/vendor-check-match.test.ts`: `nameWords` and legal forms, `jaroWinkler` on known pairs, `soundKey`,
-  `wordCloseness`; real SDN entries from the snapshot found by their name, another name, word order, accents and legal
-  forms, other spellings and spacing; the bands against `STRONG_SANCTIONS_MATCH_THRESHOLD`; at most 3 matches and
-  their order; ordinary business names that find no strong match; the country's agreement.
-- `tests/vendor-check-list.test.ts`: reading a list with and without column names, the columns found, the row limit,
-  wallets (OFAC's EVM and other addresses, a lookalike of another row's, the same address under two names, a wrong
-  checksum, not an address), the counts and the CSV.
-- `tests/check-vendor-page.test.tsx`, in a DOM: one name, the example list and its download, the live headline, 16 px
-  fields; the page's metadata, headings, coverage notice, call to action and that it is public; and no request,
+  addresses and remarks, a vessel's flag left out, overflowing remarks, remarks cut right after a space, addresses of
+  any currency, the files' end-of-file character); the snapshot's shape, order, date and size, and real entries in it,
+  the two addresses whose remarks were cut after a space among them.
+- `tests/vendor-check-match.test.ts`: `nameWords` and legal forms, words not in Latin letters, `jaroWinkler` on known
+  pairs, `soundKey`, `wordCloseness`; real SDN entries from the snapshot found by their name, another name, word order,
+  accents and legal forms, other spellings and spacing, and their rare words alone; the bands against
+  `STRONG_SANCTIONS_MATCH_THRESHOLD`; at most 3 matches and their order; ordinary business names that find no strong
+  match; the country's agreement; the index built in steps.
+- `tests/vendor-check-list.test.ts`: reading a list with and without column names, one column read whole, a name in
+  the last column joined back, the columns found, the row limit, wallets (OFAC's EVM and other addresses, chain
+  prefixes and payment links, a lookalike of another row's, the same address under two names, a wrong checksum, not an
+  address), names not compared, the counts and the CSV.
+- `tests/check-vendor-page.test.tsx`, in a DOM: one name, a name of rare words, a name not in Latin letters, the
+  example list and its download, one pasted column, the live headline, 16 px fields; the page's metadata, headings,
+  coverage notice, new-tab links, how names are compared, call to action and that it is public; and no request,
   storage, cookie, address-bar or history write, analytics call, form or named field in the checker's code.
 - `tests/site-footer.test.tsx` and `tests/docs-content.test.ts` cover the footer, the sitemap and the guide's link.

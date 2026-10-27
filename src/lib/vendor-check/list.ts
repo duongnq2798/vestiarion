@@ -1,14 +1,28 @@
 import { checkAddress, sharedWords, type AddressCheck, type KnownAddress, type SpecialAddress } from "../address-check";
 import { headerKey } from "../bill-import/columns";
-import type { Table } from "../bill-import/table";
-import { addressKey, matchName, type ListedAddress, type NameIndex, type NameMatch } from "./match";
+import { readTable, type Table } from "../bill-import/table";
+import { addressKey, matchName, nameWords, nonLatinWords, type ListedAddress, type NameIndex, type NameMatch } from "./match";
 
 /**
  * A vendor list through the vendor check (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV6): its columns,
  * its rows, each row's name matched and its wallet checked with the address checker's rules, the counts, and the CSV of
  * the results. Pure, and run in the browser, so nothing pasted leaves the page. The list itself is read as the bill
- * import reads one (`readTable`, `decodeList`).
+ * import reads one (`readTable`, `decodeList`), except for a list of one column (`readVendorList`).
  */
+
+/**
+ * A vendor list as rows of cells (CV6). A list whose first line has no tab, semicolon or comma has one column: the
+ * cells a comma cut a line into are joined back, so a name copied as "Kadyrov, Ramzan" from one column of a
+ * spreadsheet, which copies a cell without quotes, stays one name.
+ */
+export function readVendorList(text: string): Table {
+  const table = readTable(text);
+  if (table.rows[0].cells.length > 1) return table;
+  return { ...table, rows: table.rows.map((row) => (row.cells.length > 1 ? { ...row, cells: [joinName(row.cells)] } : row)) };
+}
+
+/** Cells a comma cut one name into, joined back. */
+const joinName = (cells: readonly string[]) => cells.filter((cell) => cell !== "").join(", ");
 
 export const VENDOR_FIELDS = ["name", "country", "wallet"] as const;
 export type VendorField = (typeof VENDOR_FIELDS)[number];
@@ -74,13 +88,20 @@ export interface VendorRow {
   wallet: string;
 }
 
-/** The list's rows with a name or a wallet, at most `VENDOR_ROWS_MAX`, and how many more there were (CV6). */
+/**
+ * The list's rows with a name or a wallet, at most `VENDOR_ROWS_MAX`, and how many more there were (CV6). When the
+ * names are the last of the columns named in a comma list, a row with more cells than there are column names has had
+ * its name cut at its commas: the cells from the name on are joined back into it.
+ */
 export function vendorRows(table: Table, hasHeader: boolean, columns: VendorColumns): { rows: VendorRow[]; more: number } {
   const cell = (cells: string[], column: number | undefined) => (column === undefined ? "" : (cells[column] ?? "").trim());
+  const width = hasHeader ? table.rows[0].cells.length : 0;
+  const nameLast = table.delimiter === "," && columns.name !== undefined && columns.name === width - 1;
   const rows: VendorRow[] = [];
   let more = 0;
   for (const row of hasHeader ? table.rows.slice(1) : table.rows) {
-    const vendor = { line: row.line, cells: row.cells, name: cell(row.cells, columns.name), country: cell(row.cells, columns.country), wallet: cell(row.cells, columns.wallet) };
+    const cells = nameLast && row.cells.length > width ? [...row.cells.slice(0, width - 1), joinName(row.cells.slice(width - 1))] : row.cells;
+    const vendor = { line: row.line, cells, name: cell(cells, columns.name), country: cell(cells, columns.country), wallet: cell(cells, columns.wallet) };
     if (vendor.name === "" && vendor.wallet === "") continue;
     if (rows.length < VENDOR_ROWS_MAX) rows.push(vendor);
     else more += 1;
@@ -98,6 +119,8 @@ export type VendorWallet =
       check: AddressCheck;
       /** The other rows with this very address, by their vendor's name or row number. */
       same: string[];
+      /** What was checked, when it is part of the cell: the address after a chain prefix or in a payment link. */
+      read: string | null;
     }
   | { kind: "listed"; listed: ListedAddress }
   | { kind: "unlisted" };
@@ -106,10 +129,34 @@ export interface VendorResult {
   row: VendorRow;
   /** Null when the row has no name. */
   matches: NameMatch[] | null;
+  /** The name's words not in Latin letters, left out of the comparison (CV2). */
+  notLatin: string[];
   wallet: VendorWallet | null;
 }
 
 const EVM = /^0x[0-9a-fA-F]{40}$/;
+/**
+ * A wallet with its chain before it, `eth:0x…` or `base:0x…` (EIP-3770), or a payment link, `ethereum:0x…@1` (EIP-681):
+ * its address, and the link's parameters.
+ */
+const CHAIN_PREFIXED = /^[a-z][a-z0-9-]*:(?:pay-)?(0x[^@/?]*)(?:@[^/?]*)?(?:\/[^?]*)?(?:\?(.*))?$/i;
+/** `0x` starting a word. Inside a word, it is part of another currency's address, as bech32 ones can hold it. */
+const HEX_START = /(?<![0-9a-z])0x/i;
+/** Another currency's payment link, such as `bitcoin:<address>?amount=0.1` (BIP 21): its address. */
+const PAYMENT_LINK = /^[a-z][a-z0-9+.-]*:([^?]+)(?:\?.*)?$/i;
+
+/**
+ * The part of a wallet cell the address checker's rules read (CV6): the cell, when it starts with `0x` or is 40 hex
+ * digits; the address after a chain prefix, or a payment link's pay-to `address=` when it has one; else the cell from a
+ * `0x` that starts a word, so a cut or mistyped address gets the checker's reason. Null for another currency's address.
+ */
+export function evmPart(wallet: string): string | null {
+  if (/^0x/i.test(wallet) || /^[0-9a-fA-F]{40}$/.test(wallet)) return wallet;
+  const prefixed = CHAIN_PREFIXED.exec(wallet);
+  if (prefixed) return /(?:^|&)address=(0x[^&]*)/i.exec(prefixed[2] ?? "")?.[1] ?? prefixed[1];
+  const at = wallet.search(HEX_START);
+  return at >= 0 ? wallet.slice(at) : null;
+}
 
 /** What a row's wallet is called in another row's result: its vendor's name, or its row number. */
 const labelOf = (row: VendorRow) => row.name || `row ${row.line}`;
@@ -131,8 +178,9 @@ export function vendorRowChecker(index: NameIndex, rows: readonly VendorRow[]): 
   const rowsOf = new Map<string, VendorRow[]>();
   const book = new Map<string, KnownAddress[]>();
   for (const row of rows) {
-    if (!EVM.test(row.wallet)) continue;
-    const address = row.wallet.toLowerCase();
+    const part = evmPart(row.wallet);
+    if (part === null || !EVM.test(part)) continue;
+    const address = part.toLowerCase();
     const holders = rowsOf.get(address);
     if (holders) {
       holders.push(row);
@@ -147,19 +195,31 @@ export function vendorRowChecker(index: NameIndex, rows: readonly VendorRow[]): 
   }
   const wallet = (row: VendorRow): VendorWallet | null => {
     if (row.wallet === "") return null;
-    if (/^0x/i.test(row.wallet) || /^[0-9a-fA-F]{40}$/.test(row.wallet)) {
-      const own = row.wallet.toLowerCase();
+    const part = evmPart(row.wallet);
+    if (part !== null) {
+      const own = part.toLowerCase();
       const known = new Map<string, KnownAddress>();
-      if (EVM.test(row.wallet)) {
+      if (EVM.test(part)) {
         for (const key of lookalikeKeys(own)) for (const other of book.get(key) ?? []) if (other.address !== own) known.set(other.address, other);
       }
       const same = (rowsOf.get(own) ?? []).filter((other) => other.line !== row.line).map(labelOf);
-      return { kind: "evm", check: checkAddress(row.wallet, [...known.values()], index.evmWallets), same };
+      return { kind: "evm", check: checkAddress(part, [...known.values()], index.evmWallets), same, read: part === row.wallet ? null : part };
     }
-    const listed = index.addresses.get(addressKey(row.wallet));
+    const linked = PAYMENT_LINK.exec(row.wallet)?.[1];
+    const listed = index.addresses.get(addressKey(row.wallet)) ?? (linked ? index.addresses.get(addressKey(linked)) : undefined);
     return listed ? { kind: "listed", listed } : { kind: "unlisted" };
   };
-  return (row) => ({ row, matches: row.name === "" ? null : matchName(index, row.name, row.country), wallet: wallet(row) });
+  return (row) => ({
+    row,
+    matches: row.name === "" ? null : matchName(index, row.name, row.country),
+    notLatin: row.name === "" ? [] : nonLatinWords(row.name),
+    wallet: wallet(row),
+  });
+}
+
+/** Whether a row's name was not compared at all: it has no word in Latin letters (CV2). */
+export function nameNotCompared(result: VendorResult): boolean {
+  return result.matches !== null && result.notLatin.length > 0 && nameWords(result.row.name).length === 0;
 }
 
 /** Every row checked at once. */
@@ -187,6 +247,11 @@ function specialWords(special: SpecialAddress): string {
 export function walletWords(wallet: VendorWallet): { tone: "stop" | "note" | "fine"; text: string } {
   if (wallet.kind === "listed") return { tone: "stop", text: `Do not pay: on OFAC's SDN list, under ${wallet.listed.entry.name} (${wallet.listed.currency}).` };
   if (wallet.kind === "unlisted") return { tone: "fine", text: "Not among the addresses on OFAC's SDN list. It is not an EVM address, so nothing else was checked." };
+  const words = evmWords(wallet);
+  return wallet.read === null ? words : { ...words, text: `Read as ${wallet.read}. ${words.text}` };
+}
+
+function evmWords(wallet: Extract<VendorWallet, { kind: "evm" }>): { tone: "stop" | "note" | "fine"; text: string } {
   const { check } = wallet;
   if (!check.format.ok) return { tone: "stop", text: `Not an address. ${check.format.message}` };
   if (check.sanctioned) return { tone: "stop", text: `Do not pay: on OFAC's SDN list, under ${check.sanctioned.name}.` };
@@ -212,11 +277,12 @@ function sameWords(labels: readonly string[]): string {
 
 export interface VendorSummary {
   rows: number;
-  /** Rows with a name, and of those, by their best match. */
+  /** Rows with a name, and of those, by their best match, or not compared for having no word in Latin letters. */
   names: number;
   strong: number;
   possible: number;
   noMatch: number;
+  notCompared: number;
   /** Rows with a wallet, and of those, the ones that say do not pay and the ones to look at. */
   wallets: number;
   walletStops: number;
@@ -225,13 +291,14 @@ export interface VendorSummary {
 
 /** The list's counts (CV6). */
 export function vendorSummary(results: readonly VendorResult[]): VendorSummary {
-  const summary: VendorSummary = { rows: results.length, names: 0, strong: 0, possible: 0, noMatch: 0, wallets: 0, walletStops: 0, walletNotes: 0 };
+  const summary: VendorSummary = { rows: results.length, names: 0, strong: 0, possible: 0, noMatch: 0, notCompared: 0, wallets: 0, walletStops: 0, walletNotes: 0 };
   for (const result of results) {
     if (result.matches) {
       summary.names += 1;
       const band = result.matches[0]?.band;
       if (band === "strong") summary.strong += 1;
       else if (band === "possible") summary.possible += 1;
+      else if (nameNotCompared(result)) summary.notCompared += 1;
       else summary.noMatch += 1;
     }
     if (result.wallet) {
@@ -244,16 +311,18 @@ export function vendorSummary(results: readonly VendorResult[]): VendorSummary {
   return summary;
 }
 
-/** Whether a row has something to look at: a match, or a wallet that is not fine. */
+/** Whether a row has something to look at: a match, words of its name not compared, or a wallet that is not fine. */
 export function needsALook(result: VendorResult): boolean {
-  return (result.matches?.length ?? 0) > 0 || (result.wallet !== null && walletWords(result.wallet).tone !== "fine");
+  return (result.matches?.length ?? 0) > 0 || result.notLatin.length > 0 || (result.wallet !== null && walletWords(result.wallet).tone !== "fine");
 }
 
-/** A row's name result, as the CSV says it. */
+/** A row's name result, as the CSV says it, with any words left out for not being in Latin letters. */
 export function sdnResultWords(result: VendorResult): string {
   if (!result.matches) return "";
+  if (nameNotCompared(result)) return "Not compared: not in Latin letters";
   const band = result.matches[0]?.band;
-  return band === "strong" ? "Strong match" : band === "possible" ? "Possible match" : "No match";
+  const words = band === "strong" ? "Strong match" : band === "possible" ? "Possible match" : "No match";
+  return result.notLatin.length > 0 ? `${words} (left out, not in Latin letters: ${result.notLatin.join(" ")})` : words;
 }
 
 /** One cell: quoted when it holds a comma, a quote or a line break, and with an apostrophe first when a spreadsheet would run it. */

@@ -7,7 +7,7 @@ import { VendorCheckCta } from "@/components/vendor-check/VendorCheckCta";
 import { VendorChecker } from "@/components/vendor-check/VendorChecker";
 import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
 import { utcDay } from "@/lib/copy";
-import snapshot from "@/lib/data/ofac-sdn-names.json";
+import wallets from "@/lib/data/ofac-sdn-evm-wallets.json";
 import { GITHUB_URL, X_HANDLE } from "@/lib/site-links";
 
 // The root layout adds " · Vestiarion" to the page's title; the social cards carry the name themselves.
@@ -24,9 +24,13 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", site: X_HANDLE, title: SOCIAL_TITLE, description: DESCRIPTION },
 };
 
-/** The SDN list's date as the page writes it: "Oct 28, 2026", and as the CSV writes it: "2026-10-28". */
-const listDate = utcDay(snapshot.readAt);
-const listDay = snapshot.readAt.slice(0, 10);
+/**
+ * The SDN list's date as the page writes it: "Oct 28, 2026", and as the CSV writes it: "2026-10-28". Read from the
+ * wallet snapshot, which the script writes from the same download on the same day (tests/sanctioned-names.test.ts
+ * holds the two dates to each other), so the server page does not carry the 2 MB name snapshot for one date.
+ */
+const listDate = utcDay(wallets.readAt);
+const listDay = wallets.readAt.slice(0, 10);
 
 const TREASURY_SEARCH = "https://sanctionssearch.ofac.treas.gov/";
 const REFRESH_SCRIPT = `${GITHUB_URL}/blob/main/scripts/ofac-sdn-wallets.mjs`;
@@ -77,6 +81,7 @@ export default function CheckVendorPage() {
                 A match is a reason to look closer: compare the entry&apos;s details with what you know of the vendor, and look it up on{" "}
                 <a href={TREASURY_SEARCH} target="_blank" rel="noopener noreferrer" className="font-medium text-agent underline-offset-4 hover:underline">
                   Treasury&apos;s own search
+                  <span className="sr-only"> (opens in a new tab)</span>
                 </a>
                 . No match does not prove a vendor is not on the list: a name can be written many ways.
               </li>
@@ -85,6 +90,7 @@ export default function CheckVendorPage() {
                 The list here is OFAC&apos;s of {listDate}. It is refreshed from OFAC&apos;s files by a{" "}
                 <a href={REFRESH_SCRIPT} target="_blank" rel="noopener noreferrer" className="font-medium text-agent underline-offset-4 hover:underline">
                   script in Vestiarion&apos;s open-source code
+                  <span className="sr-only"> (opens in a new tab)</span>
                 </a>
                 .
               </li>
@@ -98,9 +104,12 @@ export default function CheckVendorPage() {
             <p className="mt-3 text-sm leading-relaxed text-ink-2">
               Word by word, in any order, with accents, capitals, punctuation and legal forms such as LLC, Ltd or GmbH set aside. A word counts for
               more the rarer it is on the list, so a shared &ldquo;trading&rdquo; or &ldquo;group&rdquo; counts for little. A word spelled another
-              way, such as Hezbollah for Hizballah, or close to one, such as Kadhafi for Qadhafi, counts for a little less than the same word. A score
-              of 0.85 or more is a strong match, the score from which Vestiarion&apos;s own screening treats a sanctions match as high risk; from
-              0.70 it is a possible match to review.
+              way, such as Hezbollah for Hizballah, counts for nine tenths of the same word. A word only close to one, such as Kadhafi for Qadhafi,
+              counts for between half and nine tenths of it, so a name written another way may come out a possible match rather than a strong one. A
+              name made only of words that are rare on the list, such as Suex, is a possible match at least to a listed name holding them all. OFAC
+              writes every name in Latin letters, so words in another script are not compared. A score of 0.85 or more is a strong match, the same
+              cut-off Vestiarion&apos;s screening applies to its provider&apos;s score to call a sanctions match high risk; from 0.70 it is a possible
+              match to review.
             </p>
           </section>
 

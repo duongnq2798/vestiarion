@@ -4,11 +4,13 @@ import type { SdnNameSnapshot } from "@/lib/sanctioned-wallets";
 import { STRONG_SANCTIONS_MATCH_THRESHOLD } from "@/lib/screening/providers";
 import {
   buildNameIndex,
+  buildNameIndexInSteps,
   countryAgreement,
   jaroWinkler,
   MATCHES_SHOWN,
   matchName,
   nameWords,
+  nonLatinWords,
   POSSIBLE_MATCH,
   soundKey,
   STRONG_MATCH,
@@ -18,10 +20,10 @@ import {
 } from "@/lib/vendor-check/match";
 
 /**
- * The vendor check's name matcher (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV2-CV5): names as
- * compared, two words as compared, a name's score against every SDN entry, the bands, and the country. Run on the real
- * snapshot, with real entries: their names, other names, other spellings, and ordinary business names that must not
- * find a strong match.
+ * The vendor check's name matcher (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV2-CV5, CV7): names
+ * as compared, two words as compared, a name's score against every SDN entry, the bands, the country, and the index
+ * built in steps. Run on the real snapshot, with real entries: their names, other names, other spellings, their rare
+ * words alone, and ordinary business names that must not find a strong match.
  */
 
 let index: NameIndex;
@@ -50,6 +52,18 @@ describe("nameWords (CV2)", () => {
     expect(nameWords("Acme GmbH & Co. KG")).toEqual(["acme", "and"]);
     expect(nameWords("Co., Ltd.")).toEqual(["co", "ltd"]);
     expect(nameWords("  ")).toEqual([]);
+  });
+
+  it("leaves out words not written in Latin letters, since every name on the list is, and says which", () => {
+    expect(nameWords("Сбербанк России")).toEqual([]);
+    expect(nonLatinWords("Сбербанк России")).toEqual(["Сбербанк", "России"]);
+    expect(nameWords("Bank Melli Iran 中国银行")).toEqual(["bank", "melli", "iran"]);
+    expect(nonLatinWords("Bank Melli Iran 中国银行")).toEqual(["中国银行"]);
+    // Accented and other Latin letters are Latin; one Cyrillic letter that looks like a Latin one is not.
+    expect(nonLatinWords("Ørsted Müller Łódź")).toEqual([]);
+    const lookalike = `B${String.fromCharCode(0x430)}nk`;
+    expect(nonLatinWords(`${lookalike} Melli`)).toEqual([lookalike]);
+    expect(nameWords(`${lookalike} Melli`)).toEqual(["melli"]);
   });
 });
 
@@ -130,6 +144,27 @@ describe("a name against the list (CV4)", () => {
     expect(star.score).toBeLessThan(STRONG_MATCH);
   });
 
+  it("calls a name made only of rare words of a longer listed name a possible match, and says why", () => {
+    const suex = top("Suex");
+    expect(suex).toMatchObject({ band: "possible", score: POSSIBLE_MATCH, rare: true, entry: { number: 33151, name: "SUEX OTC, S.R.O." }, listedOnly: ["otc"] });
+    expect(top("Shahnawaz")).toMatchObject({ band: "possible", rare: true, entry: { number: 10606, name: "SHAHNAWAZ TRADERS" } });
+    expect(top("Shinrikyo")).toMatchObject({ band: "possible", rare: true, entry: { number: 4691 } });
+    expect(numbers(matchName(index, "Kadyrov"))).toContain(23343);
+    // A higher score stands, and the rule never makes a strong match.
+    const wagner = top("Wagner");
+    expect(wagner).toMatchObject({ band: "possible", rare: false, entry: { number: 22543 } });
+    expect(wagner.score).toBeGreaterThan(POSSIBLE_MATCH);
+    // A word on many names, a word of 3 letters or fewer, or a typed word on no listed name: no such match.
+    expect(matchName(index, "Logistics")).toEqual([]);
+    expect(matchName(index, "OTC")).toEqual([]);
+    expect(matchName(index, "Suex Logistics")).toEqual([]);
+  });
+
+  it("finds nothing for a name with no word in Latin letters, rather than comparing it", () => {
+    expect(matchName(index, "Сбербанк России")).toEqual([]);
+    expect(numbers(matchName(index, "Bank Melli Iran 中国银行"))).toContain(25578);
+  });
+
   it("finds nothing for ordinary business names, and at most a possible match on common words", () => {
     const ordinary = [
       "Northwind Design",
@@ -162,6 +197,18 @@ describe("a name against the list (CV4)", () => {
 
   it("finds nothing for a blank name", () => {
     expect(matchName(index, " ,. ")).toEqual([]);
+  });
+});
+
+describe("the index (CV7)", () => {
+  it("builds in steps that give the page back between them, to the same index", async () => {
+    let pauses = 0;
+    const stepped = await buildNameIndexInSteps(names as unknown as SdnNameSnapshot, async () => {
+      pauses += 1;
+    });
+    expect(pauses).toBeGreaterThan(5);
+    expect(stepped.forms.length).toBe(index.forms.length);
+    expect(matchName(stepped, "Bank Melli Iran")).toEqual(matchName(index, "Bank Melli Iran"));
   });
 });
 
