@@ -532,6 +532,10 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
 - **[Address lookalike checker](https://www.vestiarion.xyz/check-address)** — a free page that compares an address with
   ones you know, with a broader rule than the lookalike warning on Counterparties, and checks its characters, checksum
   and OFAC's list in the browser.
+- **[OFAC vendor check](https://www.vestiarion.xyz/check-vendor)** — a free page that checks one vendor, or a whole
+  vendor list with its wallets, against OFAC's SDN list in the browser: each possible match with why it matched and a
+  link to Treasury's search, and a CSV back. The dated SDN snapshot it uses, `src/lib/data/ofac-sdn-names.json`, and
+  the script that makes it, `scripts/ofac-sdn-wallets.mjs`, are in this repository for anyone to reuse.
 
 ### Contracts on Arc testnet
 

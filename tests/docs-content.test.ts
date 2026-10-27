@@ -41,7 +41,7 @@ const GENERATED_SLUGS = new Set(OPERATIONS.map((op) => `api/${op.id}`));
 const OTHER_TARGETS = new Set(["/api/v1/openapi.json", "/llms.txt", "/llms-full.txt", "/tools/verify-ledger-export.mjs", "/downloads/vestiarion-invoice-capture.zip"]);
 
 /** Real app pages outside /docs that a docs page may link to. */
-const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy", "/security", "/open", "/studios", "/how-it-decides", "/check-address"]);
+const APP_ROUTES = new Set(["/", "/login", "/signup", "/onboarding", "/terms", "/privacy", "/security", "/open", "/studios", "/how-it-decides", "/check-address", "/check-vendor"]);
 
 /** The source without code: fenced blocks and inline code spans, where a link is an example, not a link. */
 function withoutCode(source: string): string {
@@ -348,7 +348,7 @@ describe("the Errors page", () => {
 });
 
 describe("the sitemap", () => {
-  it("lists the landing page, the open numbers, the page for studios, how the agent decides, the address checker, every published docs page in nav order, then the terms, the privacy page and the security page, each as an absolute URL", () => {
+  it("lists the landing page, the open numbers, the page for studios, how the agent decides, the address checker, the vendor check, every published docs page in nav order, then the terms, the privacy page and the security page, each as an absolute URL", () => {
     const origin = publicOrigin();
     const urls = sitemap().map((entry) => entry.url);
     expect(urls).toEqual([
@@ -357,6 +357,7 @@ describe("the sitemap", () => {
       `${origin}/studios`,
       `${origin}/how-it-decides`,
       `${origin}/check-address`,
+      `${origin}/check-vendor`,
       ...publishedPages().map((page) => `${origin}${page.slug ? `/docs/${page.slug}` : "/docs"}`),
       `${origin}/terms`,
       `${origin}/privacy`,

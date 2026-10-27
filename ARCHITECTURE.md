@@ -1238,7 +1238,9 @@ would find.
   `SDN.CSV` and `SDN_COMMENTS.CSV` together, since remarks overflow into the second file.
   - `loadSanctionedWallets` reads them live when `compliance.sanctionedWalletsLive` (production, or
     `SANCTIONED_WALLETS=live`), keeping them 12 hours per instance. A failed or thin read keeps the last list, else the
-    dated snapshot `src/lib/data/ofac-sdn-evm-wallets.json` (`scripts/ofac-sdn-wallets.mjs`).
+    dated snapshot `src/lib/data/ofac-sdn-evm-wallets.json`. `npx tsx scripts/ofac-sdn-wallets.mjs` makes it, and the
+    vendor check's name snapshot, from one download of `SDN.CSV`, `SDN_COMMENTS.CSV`, `ALT.CSV` and `ADD.CSV`, with
+    this file's own parsers.
   - `runComplianceSweep` screens every counterparty whose address is on it and whose verdict does not name it yet
     (`walletVerdictDue`), due or not. `applyScreening` then takes `walletScreening`'s verdict (high, `ofac-sdn`,
     `ofac-sdn-<entry>`) over the name's, and ignores dismissals. The sweep entry records `sanctionedWallets`.
@@ -4518,6 +4520,33 @@ parameter.
 - It checks the OFAC snapshot the page carries, its date shown, and addresses that are not a wallet, from the network
   profiles: the zero and burn addresses, the USDC and EURC contracts, Arc's USDC system address.
 - `tests/check-address-page.test.tsx` holds the checker's code to making no request.
+
+**The OFAC vendor check.** `/check-vendor` (`src/app/check-vendor/page.tsx`,
+`docs/superpowers/specs/2026-10-28-check-vendor-design.md`) checks one vendor's name, or a whole vendor list with its
+countries and wallets, against OFAC's SDN list. A free public page, static and outside `/tools`; everything runs in the
+browser, with no form, request carrying input, URL parameter or storage.
+- The list is `src/lib/data/ofac-sdn-names.json`: every SDN entry as `[number, name, type, programs, other names,
+  countries, digital-currency addresses]`, one a line, dated. `parseSdnNames` (`src/lib/sanctioned-wallets.ts`) reads
+  it from `SDN.CSV` and its overflowing remarks, `ALT.CSV` and `ADD.CSV`; `scripts/ofac-sdn-wallets.mjs` writes it with
+  the wallet snapshot. There is no live read for this page: the page shows the snapshot's date.
+- `loadNameIndex` (`src/components/vendor-check/load-index.ts`) imports it as a separate chunk of the site's own bundle
+  when the first check runs, about 0.55 MB compressed, so the enforced CSP needs nothing new, and builds the index once.
+- `matchName` (`src/lib/vendor-check/match.ts`) drops accents, punctuation and legal forms (`nameWords`), pairs words
+  one to one (the same; spelled another way: one `soundKey` and a Jaro-Winkler of 0.80; close: a Jaro-Winkler of
+  0.88), weighs each word by its rarity among the list's names, and scores against each entry's name and other names.
+  Strong from `STRONG_MATCH`, 0.85 (`STRONG_SANCTIONS_MATCH_THRESHOLD`), possible from 0.70, at most 3. A typed word is
+  compared only with listed words of its first letter's group and length, and a name form is scored only when an upper
+  bound on its score reaches 0.70, so 5,000 rows take about a second. The country (`countryAgreement`) is shown, never
+  scored.
+- A list is read with the bill import's `readTable` and `decodeList`; `detectVendorColumns`
+  (`src/lib/vendor-check/list.ts`) finds the name, country and wallet columns, up to 5,000 rows. A wallet starting `0x`
+  gets `checkAddress` against the snapshot's EVM addresses and the other rows' addresses that share an end with it
+  (first 3 and last 3, first 5 or last 5 hex digits); any other is looked up among the listed addresses of every
+  currency. `vendorResultsCsv` writes the results.
+- `VendorCheckCta` is the page's one call to action (`data-cta="check-vendor-start"`), in its own file so a shared tool
+  call to action can replace it.
+- `tests/check-vendor-page.test.tsx` holds the checker's code to making no request, and its words to never calling a
+  result safe or cleared.
 
 ## Onboarding by role
 
