@@ -26,24 +26,33 @@ one-line description. The footer, the sitemap and the tool's start button read i
 - The path is the slug at the top level: public, never under `/tools` (which serves downloads).
 - Today the list holds the address checker: `check-address`, `/check-address`, "Address checker".
 
-**TA2. A tool's first touch** (`freeToolFirstTouch`). What the start button keeps:
+**TA2. A tool's first touch** (`freeToolFirstTouch`). What the tool's start links keep:
 - `utm_source` the tool's slug, `utm_medium` `free_tool` (`FREE_TOOL_MEDIUM`), `utm_campaign` `free_tools`
   (`FREE_TOOLS_CAMPAIGN`);
 - `landing_path` the tool's path;
-- the referring site's host, only when it is another site's, by `FirstTouch`'s own rule (`referrerHost`), so search can
-  be told from a post;
+- the host of the site that linked to the tool's page, so search can be told from a post: only when it is another
+  site's, by `FirstTouch`'s own rule (`referrerHost`), and only when the tool's page was the first page the tab loaded
+  (`toolReferrer`, against the browser's navigation entry). A move inside the site through the router loads no new
+  document, so the browser still gives the first page's referrer, which linked to that page, not to the tool: then no
+  host is kept;
 - the time.
 
-Every value goes through the cookie's own sanitizers, and it is written by `firstTouchCookie`: the same name, 90 days,
+The slug, the path, the medium and the campaign are constants already in the cookie's alphabet
+(`tests/free-tool-attribution.test.tsx` holds each slug and path unchanged by `sanitizeTag` and `sanitizePath`); the
+referrer's host goes through `referrerHost`, which sanitizes it with `sanitizeHost`; and the server sanitizes every
+value again when it reads the cookie (`parseFirstTouch`). It is written by `firstTouchCookie`: the same name, 90 days,
 `Path=/`, `SameSite=Lax`, `Secure` on https. Nothing the person typed or pasted can reach it: the function takes the
 tool, the referrer, the host and the time, nothing from the page's fields.
 
-**TA3. The start button** (`ToolCta`, `src/components/public/ToolCta.tsx`).
-- **Try it on your bills**, the primary button, to the landing's start (`TRY_HREF`, `/onboarding?shadow=1`), with
+**TA3. The start links** (`ToolStartLink` and `ToolCta`, `src/components/public/ToolCta.tsx`).
+- `ToolStartLink` goes to the landing's start (`TRY_HREF`, `/onboarding?shadow=1`). On a click, and on a middle click,
+  which opens a new tab, it writes the tool's first touch, only when the browser holds no `vx_ft` yet: an earlier
+  campaign keeps the credit, and nothing is ever overwritten.
+- `ToolCta` is the tool's **Try it on your bills**: the primary button, a `ToolStartLink` with
   `data-cta="<slug>-start"`.
-- On a click, and on a middle click, which opens a new tab, it writes the tool's first touch, only when the browser
-  holds no `vx_ft` yet: an earlier campaign keeps the credit, and nothing is ever overwritten.
-- Never on render, and it sends nothing. A browser that refuses cookies still follows the link.
+- Every start on a tool's page is a `ToolStartLink`: its button, and the full footer's **Get started** (TA5).
+- Never on render, and it sends nothing. A browser that refuses cookies keeps none, raises no error and still follows
+  the link.
 - It is its own component, apart from the tools' checkers, which still never touch a cookie
   (`tests/check-address-page.test.tsx`).
 
@@ -59,11 +68,14 @@ function. The Definitions section says where it comes from and what it cannot kn
 - The full footer has a **Free tools** group listing `FREE_TOOLS` by title. The address checker moves there from
   Resources.
 - The group sits above Legal in the fourth column, so the footer keeps four columns at every width.
+- A tool's page passes its slug to the footer (`<SiteFooter tool="<slug>" />`), so the Product group's **Get started**,
+  the page's other start, is a `ToolStartLink` and credits the tool too. It looks and reads as on every other page, and
+  takes no `data-cta`. A tool's page with the compact footer, which has no start link, needs none.
 - The sitemap lists every free tool where `/check-address` was, after how the agent decides.
 
 **TA6. /check-address.**
 - Its button is `ToolCta` for `check-address`. The `data-cta` stays `check-address-start`, so its click counts stay
-  comparable with those before.
+  comparable with those before. Its full footer is `<SiteFooter tool="check-address" />`.
 - Under the introduction, one line, true whether a measurement ID is set or not: "The check runs in this page, and
   nothing you paste is kept. This page may count the visit and a click on Try it on your bills, by its address. What
   you paste or type is never sent." The last two sentences are `FREE_TOOL_COUNT_LINE`, for every tool.
@@ -71,8 +83,9 @@ function. The Definitions section says where it comes from and what it cannot kn
   page's path. "by its address": the page is named by its path, never by what is on it.
 
 **TA7. What the privacy page and the docs say.**
-- The privacy page's cookie section says a free tool's **Try it on your bills** sets the cookie too, when the browser
-  holds none: the tool's name, `free_tool`, `free_tools`, the tool's page and the referring site. Its date is
+- The privacy page's cookie section says a free tool's **Try it on your bills**, or **Get started** at the foot of its
+  page, sets the cookie too, when the browser holds none: the tool's name, `free_tool`, `free_tools`, the tool's page,
+  the site that linked to the tool when the tool was the first page opened in that tab, and when. Its date is
   2026-10-28.
 - ARCHITECTURE.md's growth tracking section and the changelog say the same.
 
@@ -88,22 +101,28 @@ function. The Definitions section says where it comes from and what it cannot kn
 
 - As for every first touch, only a workspace opened in the same browser within 90 days is credited. A sign-in link
   opened in another browser loses it.
-- A person who used a tool and came back later another way, without choosing its button, is not credited to it.
-- Opening the button from the browser's context menu is no click, so it writes nothing.
+- A person who used a tool and came back later another way, without choosing one of its start links, is not credited
+  to it. A start link on another page, such as the landing's, credits nothing, even right after the tool.
+- Opening a start link from the browser's context menu is no click, so it writes nothing.
+- A visitor who reached the tool from another of the site's pages is credited to it without a referring site, and so
+  is one whose browser gives no navigation entry.
 - Anyone can put `utm_campaign=free_tools` in an address, so a hand-made link counts too. The counts are a guide.
 
 ## Tests
 
 `tests/free-tool-attribution.test.tsx`:
 - the list: slugs, top-level public paths, CTA ids that analytics accepts (TA1);
-- a tool's first touch: exactly the allowed values, the referrer rule, the cookie's attributes, a round trip through
-  `parseFirstTouch` (TA2);
+- each tool's page names the tool to its full footer (TA5);
+- a tool's first touch: exactly the allowed values, the referrer rules (another site's, and only when the tool's page
+  was the tab's first), the cookie's attributes, a round trip through `parseFirstTouch` (TA2);
 - the button in a DOM: nothing written on render, the cookie written on a click and a middle click, never over an
-  existing one, never on a right click, and no request in its code (TA3);
+  existing one, never on a right click, no referrer after a move inside the site, no error and the link still followed
+  when cookies are refused, and no request in its code (TA3);
+- the full footer's Get started in a DOM: it credits the tool on the tool's page, and nothing elsewhere (TA5);
 - the growth tile from made-up workspaces: by `utm_source`, with the activation definition, customers only, other
   campaigns left out; its definition (TA4);
 - the tile on the page and the line on `/check-address` (TA4, TA6).
 
-`tests/site-footer.test.tsx` and `tests/docs-content.test.ts` hold the footer group and the sitemap (TA5);
-`tests/check-address-page.test.tsx` the page's button and line, and still no cookie in the checker (TA6);
-`tests/legal-pages.test.tsx` the privacy page (TA7).
+`tests/site-footer.test.tsx` and `tests/docs-content.test.ts` hold the footer group, the same footer links on a tool's
+page, and the sitemap (TA5); `tests/check-address-page.test.tsx` the page's button, footer and line, and still no
+cookie in the checker (TA6); `tests/legal-pages.test.tsx` the privacy page (TA7).

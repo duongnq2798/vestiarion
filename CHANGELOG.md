@@ -14,16 +14,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
-- **Workspaces credited to the free tool they came from.** Choosing **Try it on your bills** on a free tool's page,
-  today the [address checker](https://www.vestiarion.xyz/check-address), keeps that tool as the browser's first touch
-  when it holds none yet. The first-party `vx_ft` cookie gets the tool's name as `utm_source`, `free_tool`,
-  `free_tools`, the tool's page and the referring site, never anything pasted or typed, so a workspace opened next in
-  that browser within 90 days is credited to the tool, sign-in included. An earlier campaign's first touch is never
-  replaced. /admin/growth shows **From free tools** beside From counterparty pages: customer workspaces from a tool, and
-  those with the agent's decision on a real bill, in all and per tool. The site footer has a **Free tools** group,
-  where the address checker moved from Resources, and the sitemap reads the same list. The address checker now says it
-  may count the visit and a click on its button, by the page's address, and that what you paste or type is never sent.
-  The privacy page says the button can set the cookie. No migration.
+- **Workspaces credited to the free tool they came from.** Choosing **Try it on your bills**, or the footer's **Get
+  started**, on a free tool's page, today the [address checker](https://www.vestiarion.xyz/check-address), keeps that
+  tool as the browser's first touch when it holds none yet. The first-party `vx_ft` cookie gets the tool's name as
+  `utm_source`, `free_tool`, `free_tools`, the tool's page, the referring site when the tool was the first page opened
+  in that tab, and the time, never anything pasted or typed, so a workspace opened next in that browser within 90 days
+  is credited to the tool, sign-in included. An earlier campaign's first touch is never replaced. /admin/growth shows
+  **From free tools** beside From counterparty pages: customer workspaces from a tool, and those with the agent's
+  decision on a real bill, in all and per tool. The site footer has a **Free tools** group, where the address checker
+  moved from Resources, and the sitemap reads the same list. The address checker now says it may count the visit and a
+  click on its button, by the page's address, and that what you paste or type is never sent. The privacy page says a
+  tool's start links can set the cookie. No migration.
 - **Bills waiting for approval in Slack, each with a Review button.** While deciding payments from Slack is off, the
   default, the channel's message after each cycle now ends with the bills the agent held or flagged for a person, or
   asked details for, that still wait: one each with the amount, payee, what code stopped it on or the agent's reason
