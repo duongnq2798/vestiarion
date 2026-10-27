@@ -53,6 +53,7 @@ Arc mainnet and the proof. The tour opens how the agent decided, line by line, o
 - [Verifiable activity](#verifiable-activity)
 - [Documentation](#documentation)
 - [Development](#development)
+- [Contributing](#contributing)
 - [License](#license)
 
 ## How to evaluate Vestiarion in 5 minutes
@@ -582,7 +583,7 @@ under JWT Keys). With no Circle or model keys, payments are simulated against Ar
 decisions come from the rule-based policy, so the app runs end to end with no credentials.
 
 ```bash
-npm run verify   # typecheck, lint and the full test suite: what CI runs
+npm run verify   # the lockfile check, typecheck, lint and the full test suite; CI runs these, then the build
 ```
 
 The suite needs no Supabase, Circle or model key: it covers the ledger's tamper cases, risk tiering, treasury
@@ -603,6 +604,14 @@ npm run quality-lab   # runs the scenarios and the replay and writes both result
 [docs/self-hosting.md](docs/self-hosting.md) covers the rest: environment variables, the founding workspace, every
 script, going live per path, the scheduled jobs (Supabase Cron), Circle notifications, GitHub, and what is live versus
 simulated.
+
+## Contributing
+
+Issues and focused pull requests are welcome; for anything large, open an issue first.
+[CONTRIBUTING.md](CONTRIBUTING.md) says how a change is decided, how to run the app and its tests, and what a pull
+request needs here. Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md). Report a vulnerability
+privately, as [SECURITY.md](SECURITY.md) says, never in an issue. [ACCESSIBILITY.md](ACCESSIBILITY.md) says what we aim
+for, what is in place and what is missing, and how to report a barrier.
 
 ## License
 
