@@ -1,38 +1,68 @@
 import type { ActivityItem } from "../agent-activity";
-import { orgHref } from "../auth/org-paths";
+import { approvalAnchor, orgHref } from "../auth/org-paths";
 import type { CommandOutcome } from "../commands/outcome";
 import { lateFeeLine, READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
+import type { WaitingNotice, WaitingNoticeEntry } from "../notifications/waiting-notice";
 import { txUrl } from "../payee-chains";
 import { SIMULATED_NETWORK, type PaymentReceipt } from "../payment-receipt";
 import { networkProfile, type Network } from "../network";
-import { shortenAddresses } from "../telegram/messages";
+import { shortenAddresses, type WaitingSection } from "../telegram/messages";
 import type { TodayFacts, WaitingFact } from "../telegram/today";
 import type { SlackMessage } from "./api";
 
 /**
- * What Slack shows (Slack design S6–S8, S10, S14), as Block Kit. Every value passes through `mrkdwn`, which escapes
- * Slack's three characters and shortens a wallet address to its first and last four; every link is absolute. A stopped
+ * What Slack shows (Slack design S6–S8, S10, S14), as Block Kit. Every value passes through `mrkdwn`, which removes
+ * invisible format characters, escapes Slack's three characters and shortens a wallet address to its first and last
+ * four; every mrkdwn text is `verbatim`, so Slack links nothing inside a value, and every link is absolute. A stopped
  * payable carries its buttons only when deciding from Slack is on (a card is given), Approve only when the payable
- * qualifies, and the two buttons that act are confirmed by Slack first. Pure: the callers read the facts and post.
+ * qualifies, and the two buttons that act are confirmed by Slack first. While it is off, the bills still waiting for
+ * approval end the message in their own section, each with a Review button to its card on Approvals
+ * (docs/superpowers/specs/2026-10-27-slack-review-links-design.md SR2). Pure: the callers read the facts and post.
  */
 
 /** Decisions told one by one in a message; the rest are counted, and left to the console. Keeps a message under 50 blocks. */
 export const ITEMS_SHOWN = 10;
 /** Slack takes 3,000 characters in a section; the rest is room to spare. */
 const TEXT_MAX = 2900;
+/** How long a payee's or a payment's name is shown in a line of what waits. */
+const NAME_MAX = 100;
+/** How long the reason a payment waits is shown. */
+const REASON_MAX = 300;
 
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 const COUNT = new Intl.NumberFormat("en-US");
 
-/** A value as Slack's mrkdwn shows it: `&`, `<` and `>` escaped, and a wallet address shortened (S14). */
+/**
+ * Invisible format characters (Unicode's Cf): bidi embeddings, overrides and isolates, the marks that set direction,
+ * zero-width spaces and joiners, the byte-order mark and the soft hyphen. An override in a payee's name would show the
+ * rest of its line reversed, so one bill could read as another.
+ */
+const FORMAT = /\p{Cf}/gu;
+/** Half of a surrogate pair standing alone: in a `u` pattern a whole pair is one character, and never matches. */
+const LONE_SURROGATE = /\p{Cs}/gu;
+
+/**
+ * A value as Slack's mrkdwn shows it (S14; SR4): invisible format characters and half of an emoji removed, as
+ * Telegram's and Discord's messages remove them, a wallet address shortened, and `&`, `<` and `>` escaped, so no value
+ * writes a link or a mention of its own.
+ */
 export function mrkdwn(value: string): string {
-  return shortenAddresses(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return shortenAddresses(value.replace(LONE_SURROGATE, "").replace(FORMAT, "")).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function clip(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
+}
+
+/**
+ * A value on a line of the bills waiting for approval or of `/vestiarion waiting` (SR4): as `mrkdwn` shows it, with
+ * every newline, control character and run of whitespace one space, so a value stays on its line, and clipped to `max`
+ * before it is escaped, so no cut falls inside an escape. Half of an emoji a cut leaves is removed with the rest.
+ */
+export function slackText(value: string, max: number): string {
+  return mrkdwn(clip(shortenAddresses(value.replace(FORMAT, "").replace(/[\s\p{Cc}]+/gu, " ").trim()), max));
 }
 
 /** A confirmation dialog's text: Slack refuses the whole message past 300 characters (payment exceptions review 4). */
@@ -59,13 +89,20 @@ function utcMinute(iso: string): string {
 }
 
 const plain = (text: string) => ({ type: "plain_text", text, emoji: false });
-const section = (text: string, blockId?: string) => ({ type: "section", ...(blockId ? { block_id: blockId } : {}), text: { type: "mrkdwn", text: clip(text, TEXT_MAX) } });
+/**
+ * Mrkdwn Slack shows as it is written (SR4): a web address, a channel's name or a mention inside a value is never made
+ * a link. Every link Vestiarion means is written out (`<url|label>`, `<@U…>`), which Slack still shows as one.
+ */
+const verbatim = (text: string) => ({ type: "mrkdwn", text, verbatim: true });
+const section = (text: string, blockId?: string) => ({ type: "section", ...(blockId ? { block_id: blockId } : {}), text: verbatim(clip(text, TEXT_MAX)) });
 const context = (text: string, blockId?: string) => ({
   type: "context",
   ...(blockId ? { block_id: blockId } : {}),
-  elements: [{ type: "mrkdwn", text: clip(text, TEXT_MAX) }],
+  elements: [verbatim(clip(text, TEXT_MAX))],
 });
 const urlButton = (actionId: string, label: string, url: string) => ({ type: "button", action_id: actionId, text: plain(label), url });
+/** What a message with links asks of Slack: no preview of any of them, as Telegram's and Discord's messages ask (SR4). */
+const NO_PREVIEWS = { unfurl_links: false, unfurl_media: false } as const;
 
 /** What a stopped payable's buttons carry and say, as the cycle's stage worked them out (S8, S9). */
 export interface CardView {
@@ -103,7 +140,7 @@ function itemBlocks(item: ActivityItem, workspace: { slug: string }, origin: str
       value: card.token,
       confirm: {
         title: plain(card.confirmTitle ?? "Approve and pay?"),
-        text: { type: "mrkdwn", text: clipMrkdwn(mrkdwn(card.confirmText), CONFIRM_TEXT_MAX) },
+        text: verbatim(clipMrkdwn(mrkdwn(card.confirmText), CONFIRM_TEXT_MAX)),
         confirm: plain(card.confirmLabel ?? "Approve and pay"),
         deny: plain("Cancel"),
       },
@@ -117,7 +154,7 @@ function itemBlocks(item: ActivityItem, workspace: { slug: string }, origin: str
     value: card.token,
     confirm: {
       title: plain("Reject this payable?"),
-      text: { type: "mrkdwn", text: "It will not be paid, and the agent does not look at it again." },
+      text: verbatim("It will not be paid, and the agent does not look at it again."),
       confirm: plain("Reject"),
       deny: plain("Cancel"),
     },
@@ -130,27 +167,67 @@ function itemBlocks(item: ActivityItem, workspace: { slug: string }, origin: str
 }
 
 /**
+ * Said once under the bills waiting for approval, and in `/vestiarion waiting`, as Telegram's and Discord's messages say
+ * it: a link opens a bill, and decides nothing.
+ */
+export const NEVER_APPROVES = "Opening a link never approves anything.";
+
+/** How a waiting bill's status reads, as Telegram's and Discord's messages say it. */
+const WAITING_STATUS: Record<string, string> = { held: "held", flagged: "flagged", awaiting_info: "waiting for details" };
+
+/**
+ * One bill waiting for approval (SR2): how much, to whom, why, and what it needs, with its card on Approvals as the
+ * section's own Review button. The link sits apart from the values, so no value can stand inside it and no cut can
+ * reach it. Its block id is never a card's (`payable-`, `why-`, `approved-`), which a decided card's rewrite matches.
+ */
+function billSection(entry: WaitingNoticeEntry, slug: string, origin: string): unknown {
+  const parts = [`*${slackText(entry.amountText, 60)}*`, slackText(entry.payee, NAME_MAX)];
+  parts.push(entry.reason ? `${WAITING_STATUS[entry.status]}: ${slackText(entry.reason, REASON_MAX)}` : WAITING_STATUS[entry.status]);
+  if (entry.twoApprovals) parts.push(entry.cosign ? "needs two approvals, an accountant can co-sign" : "needs two approvals");
+  return { ...section(parts.join(" · "), `waiting-${entry.invoiceId}`), accessory: urlButton("vx_review", "Review", orgUrl(origin, slug, entry.reviewPath)) };
+}
+
+/**
+ * The bills waiting for approval, as the end of the decisions message (SR2): how many wait, a section each for the
+ * listed ones, how many more wait in Approvals, and once that opening a link approves nothing. At most 3 + 10 blocks,
+ * so with `ITEMS_SHOWN` decisions of at most 3 blocks each the message stays at 45 of Slack's 50.
+ */
+function waitingBlocks(notice: WaitingNotice, slug: string, origin: string): unknown[] {
+  const blocks: unknown[] = [section(`${notice.total === 1 ? "1 bill waits" : `${notice.total} bills wait`} for approval:`, "waiting")];
+  for (const entry of notice.entries) blocks.push(billSection(entry, slug, origin));
+  if (notice.more > 0) blocks.push(section(`…and ${notice.more} more in ${link(orgUrl(origin, slug, "/approvals"), "Approvals")}.`, "waiting-more"));
+  blocks.push(context(NEVER_APPROVES, "waiting-never"));
+  return blocks;
+}
+
+/**
  * The agent's decisions since the channel was last told (S7): one block group each, with its reasons, its transaction
- * and its page; a stopped payable's card when `cards` names it. Decisions past `ITEMS_SHOWN` are counted and left to
- * the console. `cards` is null while deciding from Slack is off.
+ * and its page; a stopped payable's card when `cards` names it. `cards` is null while deciding from Slack is off; then
+ * the bills among the decisions still waiting for approval (`waiting`) are told once, in a section at the end with a
+ * Review button each, in place of their decisions' blocks (SR2). While deciding is on, each keeps its card, whose
+ * buttons act, and no section is drawn. Decisions past `ITEMS_SHOWN` are counted and left to the console.
  */
 export function decisionsMessage(
   workspace: { name: string; slug: string },
   items: ActivityItem[],
   origin: string,
-  cards: ReadonlyMap<string, CardView> | null
+  cards: ReadonlyMap<string, CardView> | null,
+  waiting: WaitingSection | null = null
 ): SlackMessage {
   const count = items.length === 1 ? "1 thing" : `${items.length} things`;
   const blocks: unknown[] = [section(`*${mrkdwn(workspace.name)}* · the agent decided ${count}`)];
-  const shown = items.slice(0, ITEMS_SHOWN);
+  const listed = cards === null && waiting && waiting.notice.total > 0 ? waiting : null;
+  const told = listed ? items.filter((item) => !(item.invoiceId && listed.invoiceIds.has(item.invoiceId))) : items;
+  const shown = told.slice(0, ITEMS_SHOWN);
   for (const item of shown) {
     const card = item.tone === "stopped" && item.invoiceId ? cards?.get(item.invoiceId) : undefined;
     blocks.push(...itemBlocks(item, workspace, origin, card));
   }
-  if (items.length > shown.length) {
-    blocks.push(section(`…and ${items.length - shown.length} more in ${link(orgUrl(origin, workspace.slug, "/console"), "the console")}.`));
+  if (told.length > shown.length) {
+    blocks.push(section(`…and ${told.length - shown.length} more in ${link(orgUrl(origin, workspace.slug, "/console"), "the console")}.`));
   }
-  return { text: `${mrkdwn(workspace.name)}: the agent decided ${count}`, blocks };
+  if (listed) blocks.push(...waitingBlocks(listed.notice, workspace.slug, origin));
+  return { text: `${mrkdwn(workspace.name)}: the agent decided ${count}`, blocks, ...NO_PREVIEWS };
 }
 
 /** A decided card: the payable's buttons, and the reason Approve was missing, become one line saying who did what (S10). */
@@ -158,7 +235,7 @@ export function withOutcome(blocks: unknown[], invoiceId: string, line: string):
   return blocks.flatMap((block) => {
     const id = (block as { block_id?: unknown }).block_id;
     if (id === `why-${invoiceId}`) return [];
-    if (id === `payable-${invoiceId}`) return [{ type: "context", block_id: id, elements: [{ type: "mrkdwn", text: line }] }];
+    if (id === `payable-${invoiceId}`) return [{ type: "context", block_id: id, elements: [verbatim(line)] }];
     return [block];
   });
 }
@@ -170,7 +247,7 @@ export function withOutcome(blocks: unknown[], invoiceId: string, line: string):
 export function withApprovalGiven(blocks: unknown[], invoiceId: string, line: string): unknown[] {
   const id = `approved-${invoiceId}`;
   const kept = blocks.filter((block) => (block as { block_id?: unknown }).block_id !== id);
-  const note = { type: "context", block_id: id, elements: [{ type: "mrkdwn", text: line }] };
+  const note = { type: "context", block_id: id, elements: [verbatim(line)] };
   const at = kept.findIndex((block) => (block as { block_id?: unknown }).block_id === `payable-${invoiceId}`);
   return at === -1 ? [...kept, note] : [...kept.slice(0, at), note, ...kept.slice(at)];
 }
@@ -234,23 +311,46 @@ export function todayAnswer(workspaceName: string, facts: TodayFacts, consoleUrl
   return textAnswer(lines.join("\n"));
 }
 
-const WAITING_STATUS: Record<string, string> = { held: "held", flagged: "flagged", awaiting_info: "waiting for information" };
+/** One payment a person must decide, for `/vestiarion waiting`: what, how much, why it waits, and where to decide it. */
+function waitingLine(fact: WaitingFact, origin: string, slug: string): string {
+  // A payable is reviewed on its card in Approvals, as the channel's bills are (SR3); one held for a person's verdict is
+  // settled by giving one, in Vestiarion (shadow mode S4).
+  const where =
+    fact.kind === "payable"
+      ? link(orgUrl(origin, slug, `/approvals#${approvalAnchor(fact.id)}`), fact.forVerdict ? "Give your verdict" : "Review")
+      : link(orgUrl(origin, slug, "/contractors"), "Contractors");
+  const why = fact.reason ? `: ${slackText(fact.reason, REASON_MAX)}` : "";
+  const state = fact.forVerdict ? "waits for your verdict" : (WAITING_STATUS[fact.status] ?? slackText(fact.status, 40));
+  return `• ${slackText(fact.name, NAME_MAX)} ${amountText(fact.amount, fact.currency)} · ${state}${why} ${where}`;
+}
 
-/** `/vestiarion waiting` (S6): each payment a person must decide, why the agent stopped it, and where to decide it. */
+/**
+ * `/vestiarion waiting` (S6, SR3): each payment a person must decide, why the agent stopped it, and where to decide it,
+ * then once that opening a link approves nothing, when a Review link is listed. A payment that would pass the section's
+ * 3,000 characters is counted, never cut, so no link is cut in two.
+ */
 export function waitingAnswer(workspaceName: string, facts: WaitingFact[], origin: string, slug: string): SlackMessage {
-  if (facts.length === 0) return textAnswer(`*${mrkdwn(workspaceName)}* · Nothing waits for a person.`);
-  const lines = [`*${mrkdwn(workspaceName)}* · ${facts.length === 1 ? "1 payment waits" : `${facts.length} payments wait`} for a person`];
+  if (facts.length === 0) return textAnswer(`*${slackText(workspaceName, NAME_MAX)}* · Nothing waits for a person.`);
+  const more = (n: number) => `…and ${n} more in ${link(orgUrl(origin, slug, "/console"), "the console")}.`;
+  // Room kept for the closing line, whatever is left out.
+  const closing = `\n${more(facts.length)}`.length;
+  let text = `*${slackText(workspaceName, NAME_MAX)}* · ${facts.length === 1 ? "1 payment waits" : `${facts.length} payments wait`} for a person`;
+  let shown = 0;
+  let reviewed = false;
   for (const fact of facts) {
-    // A payment held for a person's verdict is settled by giving one, in Vestiarion (shadow mode S4).
-    const where =
-      fact.kind === "payable"
-        ? link(orgUrl(origin, slug, `/approvals#payable-${fact.id}`), fact.forVerdict ? "Give your verdict" : "Decide in Approvals")
-        : link(orgUrl(origin, slug, "/contractors"), "Contractors");
-    const why = fact.reason ? `: ${mrkdwn(clip(fact.reason, 300))}` : "";
-    const state = fact.forVerdict ? "waits for your verdict" : (WAITING_STATUS[fact.status] ?? mrkdwn(fact.status));
-    lines.push(`• ${mrkdwn(fact.name)} ${amountText(fact.amount, fact.currency)} · ${state}${why} ${where}`);
+    const line = `\n${waitingLine(fact, origin, slug)}`;
+    if (text.length + line.length + closing > TEXT_MAX) break;
+    text += line;
+    shown += 1;
+    if (fact.kind === "payable" && !fact.forVerdict) reviewed = true;
   }
-  return textAnswer(lines.join("\n"));
+  if (shown < facts.length) text += `\n${more(facts.length - shown)}`;
+  return {
+    response_type: "ephemeral",
+    text,
+    blocks: [section(text), ...(reviewed ? [context(NEVER_APPROVES)] : [])],
+    ...NO_PREVIEWS,
+  };
 }
 
 /** `/vestiarion ledger` (S6): the console's Verify hash chain, in a sentence. */

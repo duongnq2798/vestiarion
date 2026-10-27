@@ -131,6 +131,22 @@ describe("handleInteraction", () => {
     expect(replies).toEqual([]);
   });
 
+  it("acknowledges a waiting bill's Review button, and decides nothing (docs/superpowers/specs/2026-10-27-slack-review-links-design.md SR5)", async () => {
+    const { fake, handle, replies } = world();
+    const response = await handle(signedClick("vx_review", undefined));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("");
+    expect(fake.requests).toEqual([]);
+    expect(replies).toEqual([]);
+    for (const mock of [mocks.approve, mocks.reject, mocks.return]) expect(mock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a Review click Slack did not sign", async () => {
+    const { fake, handle } = world();
+    expect((await handle(signedClick("vx_review", undefined, "another-secret"))).status).toBe(401);
+    expect(fake.requests).toEqual([]);
+  });
+
   it("approves as the connected member, through Slack, with the card it answers, and rewrites the message", async () => {
     mocks.approve.mockResolvedValue({ ok: true, message: "Paid.", status: "paid", txRef: TX });
     const { handle, replies } = world();

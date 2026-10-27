@@ -13,8 +13,9 @@ import { NOTICE_MAX_BILLS, type NoticePolicy, type WaitingBill } from "./waiting
  * (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG1): the payables the agent stopped among the
  * activity a stage read, re-read in one query and kept while they still wait, the rule code stopped each on
  * (docs/superpowers/specs/2026-10-24-chat-code-stop-reason-design.md CS3), the workspace's rules for what each needs,
- * and a EURC bill's USDC value where a figure makes it matter. Discord and Telegram read them here, the same bills the
- * same way, and each says them in its own markup from `buildWaitingNotice`. Runs inside the workspace's scope.
+ * and a EURC bill's USDC value where a figure makes it matter. Discord, Telegram and Slack (while deciding from Slack is
+ * off: docs/superpowers/specs/2026-10-27-slack-review-links-design.md SR1) read them here, the same bills the same way,
+ * and each says them in its own markup from `buildWaitingNotice`. Runs inside the workspace's scope.
  */
 
 /** As Slack's notifier posts them: held or flagged, or asked for details (a purchase order, a receipt) a person adds. */
@@ -85,7 +86,7 @@ async function withStopRules(bills: WaitingBill[]): Promise<WaitingBill[]> {
 /**
  * The figure for two approvals and whether accountants co-sign, for what the notice says each bill needs. A rule that
  * cannot be read leaves that out of the notice rather than stop it: the bills still wait, and Approvals says the rest.
- * `label` starts each log line with the chat that read it ("discord", "telegram").
+ * `label` starts each log line with the chat that read it ("discord", "telegram", "slack").
  */
 export async function noticePolicy(label: string): Promise<NoticePolicy> {
   let twoApprovalsAbove: number | null = null;

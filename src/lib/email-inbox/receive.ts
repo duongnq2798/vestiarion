@@ -143,7 +143,9 @@ function slackMessage(status: Status, from: string, read: InvoiceDraftRead | nul
   return {
     text: line,
     blocks: [
-      { type: "section", text: { type: "mrkdwn", text: line } },
+      // Verbatim, as every Slack message's text is: a sender's address or a web address in it is never made a link
+      // (docs/superpowers/specs/2026-10-27-slack-review-links-design.md SR4).
+      { type: "section", text: { type: "mrkdwn", text: line, verbatim: true } },
       { type: "actions", elements: [{ type: "button", action_id: "vx_open", text: { type: "plain_text", text: "Review in Bills & receivables", emoji: false }, url }] },
     ],
   };

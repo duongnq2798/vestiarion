@@ -5,9 +5,11 @@ import { siteOrigin } from "../auth/env";
 import { addressHash, approveRefusal } from "../commands/chat-decisions";
 import { currentOrgId } from "../context";
 import { db, platformDb, unwrap } from "../dal";
+import { noticePolicy, waitingBills, withUsdcValues } from "../notifications/waiting-bills";
+import { buildWaitingNotice, type WaitingBill } from "../notifications/waiting-notice";
 import type { NoticeLine } from "../payment-notices";
 import { masterKeysFromEnv, type MasterKey } from "../secrets";
-import { shortenAddresses } from "../telegram/messages";
+import { shortenAddresses, type WaitingSection } from "../telegram/messages";
 import { postToWebhook } from "./api";
 import { decisionsMessage, type CardView } from "./blocks";
 import { installFor, moveCursor, webhookUrlOf, type SlackInstall } from "./installs";
@@ -23,8 +25,11 @@ import { CHAT_CONFIRM_TITLE, CHECK_FIRST_LABEL, chatConfirmText, checksFirst, pa
  * The cycle's `slack` stage (Slack design S7, S8): the install's channel is told the agent's decisions after its
  * cursor, read the way the console's activity toasts and the Telegram stage read them, and the cursor then moves past
  * everything read, but only once Slack took the message; a failed post is posted again by the next cycle. While
- * deciding from Slack is on, each stopped payable that is still waiting gets its card. Runs inside the workspace's
- * scope; quietly does nothing when Slack is not configured or the workspace has no install.
+ * deciding from Slack is on, each stopped payable that is still waiting gets its card. While it is off, those bills,
+ * re-read in one query as Telegram's and Discord's stages read them, are told once, in a section of the same message,
+ * each with a Review button to its card on Approvals (docs/superpowers/specs/2026-10-27-slack-review-links-design.md
+ * SR1). Runs inside the workspace's scope; quietly does nothing when Slack is not configured or the workspace has no
+ * install.
  */
 
 export interface SlackNotifyDeps {
@@ -40,6 +45,27 @@ const WAITING = ["held", "flagged", "awaiting_info"];
 const NAME_MAX = 60;
 const shortName = (name: string) => (name.length <= NAME_MAX ? name : `${name.slice(0, NAME_MAX - 1).trimEnd()}…`);
 const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : "unknown error");
+
+/**
+ * The bills among the decisions read that still wait for approval, while deciding from Slack is off (SR1), read through
+ * the same `waitingBills` as Telegram's and Discord's stages. Bills that cannot be read leave the decisions as they
+ * are, each stopped bill with its own link, so the channel is still told; the rules are read only once a bill waits.
+ * The rules and a EURC bill's value are read best effort by their own readers, so only this read can fail.
+ */
+async function waitingAmong(items: ActivityItem[], orgId: string): Promise<WaitingSection | null> {
+  let bills: WaitingBill[];
+  try {
+    bills = await waitingBills(items);
+  } catch (error) {
+    console.error("slack: waiting bills not read, each told as a decision", orgId, messageOf(error));
+    return null;
+  }
+  if (bills.length === 0) return null;
+  const rules = await noticePolicy("slack");
+  return { notice: buildWaitingNotice(await withUsdcValues(bills, rules), rules), invoiceIds: new Set(bills.map((bill) => bill.id)) };
+}
 
 interface CardRow {
   id: string;
@@ -141,7 +167,9 @@ export async function sendSlackDecisions(deps: SlackNotifyDeps = {}): Promise<No
   const now = deps.now?.() ?? Date.now();
   const workspace = unwrap(await platformDb().from("orgs").select("slug, name").eq("id", orgId).single<{ slug: string; name: string }>());
   const cards = install.decisionsLimitUsdc === null ? null : await cardViews(read.items, install, keys, now);
-  const message = decisionsMessage(workspace, read.items, deps.origin ?? siteOrigin(), cards);
+  // While deciding is on, each bill still waiting is its card, whose buttons act; while off, they share a section (SR2).
+  const waiting = cards === null ? await waitingAmong(read.items, orgId) : null;
+  const message = decisionsMessage(workspace, read.items, deps.origin ?? siteOrigin(), cards, waiting);
 
   const posted = await postToWebhook(webhookUrlOf(install, keys), message, deps.fetchImpl);
   if (!posted.ok) {
