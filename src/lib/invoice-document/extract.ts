@@ -1,4 +1,5 @@
 import { decide, type DecisionMode } from "@/lib/agent/decide";
+import { readWrittenTerms } from "@/lib/payment-terms/read";
 import { rawExtractionSchema, type RawExtraction } from "./normalize";
 
 /**
@@ -106,18 +107,18 @@ export function ruleBasedExtraction(text: string): RawExtraction {
   const issueDate = issueLine?.match(ISO_DATE)?.[1] ?? null;
   let dueDate = dueLine?.match(ISO_DATE)?.[1] ?? null;
 
+  // "2/10 net 30" or "net 30", read as the payment terms calculator reads them (payment terms PT1).
   let earlyPayDiscountPct: string | null = null;
   let discountDeadline: string | null = null;
-  const terms = text.match(/(\d+(?:\.\d+)?)\s*\/\s*(\d+)\s*,?\s*net\s*(\d+)/i);
-  if (terms) {
-    earlyPayDiscountPct = terms[1];
+  const terms = readWrittenTerms(text);
+  if (terms?.discount) {
+    earlyPayDiscountPct = terms.discount.pct;
     if (issueDate) {
-      discountDeadline = addDays(issueDate, Number(terms[2]));
-      dueDate ??= addDays(issueDate, Number(terms[3]));
+      discountDeadline = addDays(issueDate, terms.discount.days);
+      dueDate ??= addDays(issueDate, terms.netDays);
     }
-  } else {
-    const net = text.match(/\bnet\s*(\d+)\b/i);
-    if (net && issueDate) dueDate ??= addDays(issueDate, Number(net[1]));
+  } else if (terms && issueDate) {
+    dueDate ??= addDays(issueDate, terms.netDays);
   }
 
   // A late fee (late fees LF2): "1.5% per month" or "2% monthly" on a line about paying late, or "a late fee of 25".
