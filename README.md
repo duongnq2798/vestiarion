@@ -432,7 +432,7 @@ run in production, with its ledger entries and transactions.
 
 | Surface | What it does |
 | --- | --- |
-| **[Slack](https://www.vestiarion.xyz/docs/guides/slack)** | Decisions in a channel; `/vestiarion today`, `waiting`, `ledger`; Approve and pay, Reject and Return buttons on Arc testnet within a limit; add an invoice from a message |
+| **[Slack](https://www.vestiarion.xyz/docs/guides/slack)** | Decisions in a channel, with bills waiting for approval and a Review button each; `/vestiarion today`, `waiting`, `ledger`; Approve and pay, Reject and Return buttons on Arc testnet within a limit; add an invoice from a message |
 | **[Telegram](https://www.vestiarion.xyz/docs/guides/telegram)** | Each member's own chat: decisions with reasons, bills waiting for approval with a Review link, `/today`, `/waiting`, `/ledger`, invoices read from a PDF. The bot never approves or pays |
 | **[Discord](https://www.vestiarion.xyz/docs/guides/discord)** | Bills the agent holds or flags for a person, posted to a channel through its webhook after each cycle, each with a link to review it in Approvals. A link never approves |
 | **[REST API](https://www.vestiarion.xyz/docs/api)** | `/api/v1` with per-member keys: read everything, each payment's evidence and receipt and the monthly close pack included, and with write access add counterparties, invoices, milestones and payee links. A key never approves or pays |

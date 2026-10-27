@@ -2874,7 +2874,32 @@ message carries Approve and pay, Reject and Return, each holding a signed card
 (`vx1.…`, seven days) naming the payable, when the agent decided it, and its
 payee's address hash; a click runs the payable command with that card, so the
 chat's rules and every check of the console's approval run, and rewrites the
-message to say who decided. Removing Slack from Settings uninstalls the app and
+message to say who decided. While no limit is set, the stopped payables among
+what was read that are still held, flagged or awaiting_info, read again in one
+query through the same `src/lib/notifications/waiting-bills.ts` as Telegram's
+and Discord's stages (the rules for two approvals and co-sign only once a bill
+waits; a failed read is logged and each bill told as a decision, as before), end
+the message in place of those bills' blocks
+(docs/superpowers/specs/2026-10-27-slack-review-links-design.md): "N bills wait
+for approval:", then a section each from `buildWaitingNotice` with its amount,
+payee, status, why it waits (what code stopped it on, else the reasoning's first
+sentence) and "needs two approvals" (and that an accountant can co-sign), whose
+accessory is a **Review** URL button (`vx_review`, which the interactions route
+acknowledges and acts on no further) to `/approvals#payable-<id>` with no token,
+kept apart from the bill's text so no cut reaches it; at most ten, then
+"…and N more in Approvals.", then "Opening a link never approves anything."
+once, in blocks whose ids are never a card's. With `ITEMS_SHOWN` decisions of
+at most three blocks each, a message stays within 45 of Slack's 50 blocks. While
+a limit is set, every such bill has its card and no section is drawn. Every
+value goes through `mrkdwn` (Unicode's Cf and half of an emoji removed,
+addresses shortened, `&`, `<` and `>` escaped; a bill's values also put on one
+line and clipped before they are escaped, by `slackText`), every mrkdwn text
+object is `verbatim`, so Slack makes no link or mention of anything in a value,
+and the message is posted with `unfurl_links` and `unfurl_media` off.
+`/vestiarion waiting` labels a payable's link Review (`approvalAnchor`), says
+"waiting for details" for awaiting_info, counts what would pass the section's
+room rather than cut a link, and adds the never-approves line when a Review
+link is listed. Removing Slack from Settings uninstalls the app and
 deletes the install with its links; Slack's `app_uninstalled` and
 `tokens_revoked` events do the same.
 
@@ -2920,7 +2945,7 @@ less than 8 of its 20 seconds have gone (`READ_BUDGET_MS`, so the post's own
 deadline still fits), keeps the stopped payables with an `invoiceId`
 (none for a shadow-mode verdict hold), reads them again in one query and keeps those still held, flagged or
 awaiting_info, as Slack's notifier does (`src/lib/notifications/waiting-bills.ts`, which Telegram's stage
-reads too),
+reads too, and Slack's while deciding from Slack is off),
 and posts one message (`src/lib/discord/messages.ts`) built from
 `buildWaitingNotice` (`src/lib/notifications/waiting-notice.ts`, structured
 entries each chat formats in its own markup, as Telegram's decisions message does): at most ten bills, as many as fit, each with its

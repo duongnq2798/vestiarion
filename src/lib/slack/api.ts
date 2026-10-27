@@ -108,6 +108,12 @@ export interface SlackMessage {
   blocks?: unknown[];
   response_type?: "ephemeral" | "in_channel";
   replace_original?: boolean;
+  /**
+   * Whether Slack shows a preview of the message's links and media; false on a message that links bills, as Telegram's
+   * and Discord's messages show none (docs/superpowers/specs/2026-10-27-slack-review-links-design.md SR4).
+   */
+  unfurl_links?: boolean;
+  unfurl_media?: boolean;
 }
 
 export interface PostResult {

@@ -2124,6 +2124,22 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Arc testnet transaction", SLACK_BLOCKS, "${networkProfile(item.network).label} transaction"],
     ["How it decided", AGENT_ACTIVITY],
     ["Decide in Approvals", AGENT_ACTIVITY],
+    // The bills waiting for approval, each with its Review button
+    // (docs/superpowers/specs/2026-10-27-slack-review-links-design.md SR2, SR3, SR6).
+    ["2 bills wait for approval:", SLACK_BLOCKS, "bills wait`} for approval:"],
+    ["Review", SLACK_BLOCKS, '"Review"'],
+    ["needs two approvals", SLACK_BLOCKS],
+    ["needs two approvals, an accountant can co-sign", SLACK_BLOCKS],
+    ["waiting for details", SLACK_BLOCKS],
+    ["Code stopped it:", "src/lib/next-step.ts", "`Code stopped it: ${brief}.`"],
+    ["it is above the counterparty's payment limit", "src/lib/next-step.ts"],
+    ["Opening a link never approves anything.", SLACK_BLOCKS],
+    ["…and 3 more in Approvals", SLACK_BLOCKS, '…and ${notice.more} more in ${link(orgUrl(origin, slug, "/approvals"), "Approvals")}'],
+    ["Approvals", APP_NAV],
+    ["Bills & receivables", APP_NAV],
+    ["Return to agent", APPROVAL_CARD],
+    ["Add details", AGENT_ACTIVITY],
+    ["Contractors", SLACK_BLOCKS, '"Contractors")'],
     ["/vestiarion today", SLACK_BLOCKS],
     ["/vestiarion waiting", SLACK_BLOCKS],
     ["/vestiarion ledger", SLACK_BLOCKS],
@@ -3779,6 +3795,30 @@ describe("the report guide on how often you agreed (docs/superpowers/specs/2026-
     expect(guide).not.toContain("splits them by decision and by vendor");
     expect(guide).toContain("[How often you agreed](#how-often-you-agreed) splits your verdicts on real bills by decision and by vendor.");
     expect(guide).toContain("Only verdicts on real bills count. Sample data is left out, even while the report and **Your verdicts** count it for want of a real bill.");
+  });
+});
+
+describe("the Slack guide on the bills waiting for approval (docs/superpowers/specs/2026-10-27-slack-review-links-design.md)", () => {
+  const raw = readSource("guides/slack");
+  const guide = raw.replace(/\s+/g, " ");
+  const entry = sourceFile("CHANGELOG.md").split("- **Bills waiting for approval in Slack")[1]?.split("\n- **")[0].replace(/\s+/g, " ") ?? "";
+
+  it("no longer says a busy cycle's message ends with the console count: the bills waiting for approval come after it (SR2)", () => {
+    expect(guide).not.toContain("message ends with how many more decisions");
+    expect(guide).toContain("A busy cycle's message says how many more decisions are in the console.");
+  });
+
+  it("says /vestiarion waiting ends with the never-approves line only when a Review link is listed (SR3)", () => {
+    const row = raw.split("\n").find((line) => line.startsWith("| `/vestiarion waiting` |")) ?? "";
+    expect(row).toContain('When a **Review** link is listed, the answer ends with "Opening a link never approves anything."');
+  });
+
+  it("never calls a value plain text, since Slack's own formatting marks still format in it (SR4)", () => {
+    expect(entry).not.toBe("");
+    for (const [name, text] of [["the guide", guide], ["the CHANGELOG entry", entry]] as const) {
+      expect(text, name).not.toMatch(/shown as plain text/);
+      expect(text, name).toMatch(/Slack's own formatting marks in a (?:value|name), such as `\*` or `_`, still format/);
+    }
   });
 });
 
