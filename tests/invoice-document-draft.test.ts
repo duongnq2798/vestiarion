@@ -3,9 +3,10 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { readInvoiceDraft } from "@/lib/invoice-document/draft";
+import { readInvoiceDocument, readInvoiceDraft } from "@/lib/invoice-document/draft";
 import { DocumentReadError } from "@/lib/invoice-document/read";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
+import { INVOICE_LINE, onePagePdf, streamObject } from "./support/pdf-files";
 
 /**
  * `readInvoiceDraft`, the one reading of an invoice document, shared by **From a document** and the Telegram bot
@@ -59,4 +60,30 @@ describe("readInvoiceDraft", () => {
   it("throws the reader's own error for a document it cannot read", async () => {
     await expect(inWorkspace(() => readInvoiceDraft({ text: "   " }, "2026-10-03")).run()).rejects.toBeInstanceOf(DocumentReadError);
   });
+
+  it("warns that only the first three PDFs attached to an email were read, when it had more (request PDF bound RB5)", async () => {
+    const LEFT_OUT = "Only the first three PDFs attached to the email were read.";
+    const page = onePagePdf(streamObject("", INVOICE_LINE));
+    for (const [count, warned] of [
+      [3, false],
+      [4, true],
+    ] as const) {
+      const input = { bytes: email("Invoices attached.", Array.from({ length: count }, () => page)), name: "invoices.eml", type: "message/rfc822" };
+      const read = await inWorkspace(() => readInvoiceDocument(input, "2026-10-03")).run();
+      expect(read.read.warnings.includes(LEFT_OUT), String(count)).toBe(warned);
+      expect(read.documentWarnings.includes(LEFT_OUT), String(count)).toBe(warned);
+      expect(read.read.document.truncated, String(count)).toBe(false);
+    }
+  });
 });
+
+/** An email of `text` with `pdfs` attached, as an `.eml` file. */
+function email(text: string, pdfs: Uint8Array[]): Uint8Array {
+  const lines = ["Subject: Invoices", 'Content-Type: multipart/mixed; boundary="b"', "", "--b", "Content-Type: text/plain", "", text];
+  pdfs.forEach((bytes, index) => {
+    const name = `part-${index + 1}.pdf`;
+    lines.push("--b", `Content-Type: application/pdf; name="${name}"`, "Content-Transfer-Encoding: base64", `Content-Disposition: attachment; filename="${name}"`, "", Buffer.from(bytes).toString("base64"));
+  });
+  lines.push("--b--", "");
+  return new TextEncoder().encode(lines.join("\r\n"));
+}

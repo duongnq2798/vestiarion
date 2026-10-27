@@ -1,7 +1,8 @@
 # Read unmeasurable PDFs in the bounded reader
 
 Date: 2026-10-27. Status: accepted. Updates docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md
-(DK3's paragraph on `readDocument`, its out-of-scope notes and its pre-scan tests).
+(DK3's paragraph on `readDocument`, its out-of-scope notes and its pre-scan tests) and
+docs/superpowers/specs/2026-10-01-invoice-from-document-design.md (D2's email bullet).
 
 ## Why
 
@@ -77,10 +78,12 @@ timeout with nothing else read meanwhile stays the file's, as before.
 
 **RB5. An email's PDFs, one at a time, at most three.** `emailText` reads the PDFs attached to an `.eml` one after
 another, not all at once, and only the first three (`MAX_EMAIL_PDFS`): each may start a worker, and workers share one
-process's memory budget. Later PDFs are left out, as the 20,000-character cap would mostly cut them anyway. A PDF that
-could not be read is left out as before and the message's own text still read; a read stopped for a reason that may not
-be the file's (RB3) fails the whole read, so the person tries again rather than getting a draft without its invoice.
-When an attachment's pages were left unread past 20,000 characters, the email reads as `truncated`.
+process's memory budget. Later PDFs are left out, and the read says so (`pdfsLeftOut`, apart from `truncated`, which is
+about characters): the draft warns "Only the first three PDFs attached to the email were read.", since the invoice may
+be among them, however short they are. A PDF that could not be read is left out as before and the message's own text
+still read; a read stopped for a reason that may not be the file's (RB3) fails the whole read, so the person tries
+again rather than getting a draft without its invoice. When an attachment's pages were left unread past 20,000
+characters, the email reads as `truncated`.
 
 **RB6. One pre-scan mode, in which a file past the budget is refused as that.** `prescanPdf(bytes, { limits? })` has no
 lenient mode left: nothing in `src` used it once `readDocument` scans strictly, and keeping it would let a later caller
@@ -95,8 +98,9 @@ is refused before any reader opens the file, wherever it sits in the file. Too m
 **RB7. Docs.** CHANGELOG [Unreleased]'s entry on PDFs built to expand (which named neither the payee link nor the
 files the pre-scan cannot measure) is amended in place; ARCHITECTURE.md's parse paragraph says where each sent PDF is
 read; first-payment.mdx's line on PDFs that are not read names 50 pages and 15 s for those the quick check cannot
-measure, and that an `.eml` is read with its first three PDFs; the part 2 spec's DK3 paragraph, out-of-scope notes and
-pre-scan tests are updated to point here.
+measure, and that an `.eml` is read with its first three PDFs, quoting the warning when it has more; the part 2 spec's
+DK3 paragraph, out-of-scope notes and pre-scan tests are updated to point here, and so is the invoice-from-document
+spec's D2, which said each PDF attached to an email is read.
 
 ## Out of scope
 
@@ -137,8 +141,12 @@ a test may answer for the worker):
 - RB3: `pages`, `timeout` alone, `memory` with and without `retry`, `parse` and `stopped` each read as "This PDF could
   not be read. Paste the invoice's text instead."; `timeout` with `retry` is a plain `Error`, neither a
   `DocumentReadError` nor a `PdfWorkerRefusal`; a reader that could not start is thrown as it is.
-- RB5: of five PDFs attached to an email, the first three are read, one at a time; one the worker refuses is left out
-  and the message's text still read; one stopped by a contended timeout fails the read with a plain `Error`.
+- RB5: of five PDFs attached to an email, the first three are read, one at a time, and the read says PDFs were left
+  out, not `truncated`; with three or fewer it says nothing. One the worker refuses is left out and the message's text
+  still read; one stopped by a contended timeout fails the read with a plain `Error`.
+
+**`tests/invoice-document-draft.test.ts`**, RB5: an email with four PDFs attached gives the draft, and the document's
+own warnings, "Only the first three PDFs attached to the email were read."; one with three does not.
 
 **`tests/invoice-document-read.test.ts`** (the real reader): an LZW-encoded page, and one with `/Encrypt` on its
 content stream's dictionary, read in the worker to the text the unencoded page reads to; an unmeasurable file of 51

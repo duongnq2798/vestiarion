@@ -3299,8 +3299,9 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   behind the cycle's (`oneParseAtATime`). A timeout while another PDF was read in the process is a plain error, which
   each caller answers with try again in a moment; any other stop, memory included, is the "could not be read" refusal;
   a reader that could not start is thrown as it is. An `.eml` file's attached PDFs are read one at a time, the first
-  three; one that could not be read is left out, and a stop that may not be the file's fails the read. A measured file
-  still has no time bound: forms nested inside forms hold the thread that asks.
+  three; the read says when it has more (`pdfsLeftOut`), and the draft warns "Only the first three PDFs attached to the
+  email were read." One that could not be read is left out, and a stop that may not be the file's fails the read. A
+  measured file still has no time bound: forms nested inside forms hold the thread that asks.
 - **The compare** (`compareDocument`, pure). Each value the model returns passes `normalizeExtraction` against the
   text. Code then checks, in order: the vendor (the counterparty's `nameKey` as whole words in the text's, or its billing
   domain or a subdomain, never a free email provider's, never the model's `vendorName`); the currency; the amount to its

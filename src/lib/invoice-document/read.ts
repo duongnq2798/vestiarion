@@ -45,6 +45,8 @@ export interface ReadDocument {
   sha256: string;
   /** True when the text was cut to MAX_DOCUMENT_CHARS. */
   truncated: boolean;
+  /** True when an email held more PDFs than the first three read (RB5), whose text it leaves out; absent otherwise. */
+  pdfsLeftOut?: true;
 }
 
 function sha256(bytes: Uint8Array): string {
@@ -71,16 +73,21 @@ function finish(kind: ReadDocument["kind"], text: string, hash: string): ReadDoc
   return { kind, text: truncated ? tidied.slice(0, MAX_DOCUMENT_CHARS) : tidied, sha256: hash, truncated };
 }
 
-/** Text read from a file, and whether pages of a PDF in it were left unread once the text passed MAX_DOCUMENT_CHARS. */
+/**
+ * Text read from a file, whether pages of a PDF in it were left unread once the text passed MAX_DOCUMENT_CHARS, and,
+ * for an email, whether PDFs attached past the first three were left out.
+ */
 interface TextRead {
   text: string;
   cut: boolean;
+  pdfsLeftOut?: boolean;
 }
 
-/** `finish`, and signed `truncated` too when pages were left unread, however short the text kept. */
-function finishRead(kind: ReadDocument["kind"], { text, cut }: TextRead, hash: string): ReadDocument {
-  const document = finish(kind, text, hash);
-  return cut && !document.truncated ? { ...document, truncated: true } : document;
+/** `finish`, signed `truncated` too when pages were left unread, however short the text kept, and `pdfsLeftOut`. */
+function finishRead(kind: ReadDocument["kind"], { text, cut, pdfsLeftOut }: TextRead, hash: string): ReadDocument {
+  const finished = finish(kind, text, hash);
+  const document = cut && !finished.truncated ? { ...finished, truncated: true } : finished;
+  return pdfsLeftOut ? { ...document, pdfsLeftOut: true } : document;
 }
 
 function isPdf(bytes: Uint8Array): boolean {
@@ -143,7 +150,8 @@ const MAX_EMAIL_PDFS = 3;
 /**
  * An email's subject, its text and the text of the PDFs attached, without
  * the MIME around them (review I6): the first three, one after another
- * (RB5). An attachment that cannot be read is left out; the message's own
+ * (RB5), saying when there were more (`pdfsLeftOut`), for the draft to warn
+ * of. An attachment that cannot be read is left out; the message's own
  * text still is. A reader stopped for a reason that may not be the file's
  * fails the read, to be tried again, rather than drop the invoice.
  */
@@ -162,7 +170,8 @@ async function emailText(bytes: Uint8Array): Promise<TextRead> {
   }
   const read = [parts.subject ? `Subject: ${parts.subject}` : "", ...parts.text, ...attachments].filter((text) => text.trim()).join("\n\n");
   // A file named .eml that holds no message structure at all is read as the text it is.
-  return read.trim() ? { text: read, cut } : { text: new TextDecoder("utf-8").decode(bytes), cut: false };
+  if (!read.trim()) return { text: new TextDecoder("utf-8").decode(bytes), cut: false };
+  return { text: read, cut, pdfsLeftOut: parts.pdfs.length > MAX_EMAIL_PDFS };
 }
 
 export async function readDocument(input: DocumentInput): Promise<ReadDocument> {

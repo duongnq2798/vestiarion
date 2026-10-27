@@ -82,6 +82,7 @@ const INVOICE_FORM = "src/components/intake/InvoiceIntake.tsx";
 const INVOICES_PAGE = "src/app/o/[slug]/invoices/page.tsx";
 const DOCUMENT_TAB = "src/components/intake/InvoiceDocumentIntake.tsx";
 const DOCUMENT_READ = "src/lib/invoice-document/read.ts";
+const DOCUMENT_DRAFT = "src/lib/invoice-document/draft.ts";
 const DOCUMENT_ACTION = "src/app/actions/invoice-document.ts";
 const DOCUMENT_NORMALIZE = "src/lib/invoice-document/normalize.ts";
 const GATEWAY_PANEL = "src/components/GatewayPanel.tsx";
@@ -1558,6 +1559,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["check this amount before you add it.", INVOICE_FORM],
     ["This PDF has no text to read; it may be a scan. Paste the invoice's text instead.", DOCUMENT_READ],
     ["This PDF could not be read. Paste the invoice's text instead.", DOCUMENT_READ],
+    ["Only the first three PDFs attached to the email were read.", DOCUMENT_DRAFT],
     ["The invoice could not be read. Try again in a moment.", DOCUMENT_ACTION],
     ["Gateway balance", GATEWAY_PANEL],
     ["Amount to move from the operating wallet (USDC)", GATEWAY_PANEL],

@@ -213,6 +213,17 @@ describe("an email's PDFs (RB5)", () => {
     expect(read.text).toContain("Five invoices attached.");
     for (const n of [1, 2, 3]) expect(read.text).toContain(`Attachment ${n} of five`);
     expect(read.text).not.toContain("Attachment 4 of five");
+    // The ones left out are said, for the draft to warn of; not as a cut, which is about characters.
+    expect(read).toMatchObject({ kind: "email", pdfsLeftOut: true, truncated: false });
+  });
+
+  it("says nothing was left out of an email with three PDFs or fewer", async () => {
+    workerSpy.mockImplementation(() => answer(READ_LINE));
+    for (const count of [0, 1, 3]) {
+      const read = await readDocument(eml(email("Total due 200.00 USDC", Array.from({ length: count }, () => LZW_PAGE))));
+      expect(read.pdfsLeftOut, String(count)).toBeUndefined();
+    }
+    expect((await readDocument(pdf(LZW_PAGE))).pdfsLeftOut).toBeUndefined();
   });
 
   it("leaves out a PDF that could not be read, and fails the read when its reader may be stopped for no fault of the file", async () => {
