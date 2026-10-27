@@ -106,7 +106,7 @@ export default function PaymentTermsPage() {
           <PaymentTermsCta />
         </div>
       </PublicMain>
-      <SiteFooter />
+      <SiteFooter tool="payment-terms" />
     </div>
   );
 }

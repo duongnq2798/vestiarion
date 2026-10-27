@@ -8,6 +8,7 @@ import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS } from "@/components/vx/SiteChrome
 import { OPERATIONS, operationById } from "@/lib/api/openapi";
 import { TERM_PAGES } from "@/lib/payment-terms/pages";
 import sitemap from "@/app/sitemap";
+import { FREE_TOOLS } from "@/lib/free-tools";
 import { CONTENT_DIR, hasSource, NOTES_LOADERS, PAGE_LOADERS, publishedPages, readSource } from "@/lib/docs/content";
 import { slugifyHeadings, splitCodeSpans, stripFences } from "@/lib/docs/headings";
 import { DOCS_NAV, flatPages, neighbours, slugOfPathname } from "@/lib/docs/nav";
@@ -53,8 +54,7 @@ const APP_ROUTES = new Set([
   "/open",
   "/studios",
   "/how-it-decides",
-  "/check-address",
-  "/payment-terms",
+  ...FREE_TOOLS.map((tool) => tool.path),
   ...TERM_PAGES.map((page) => `/payment-terms/${page.slug}`),
 ]);
 
@@ -363,9 +363,12 @@ describe("the Errors page", () => {
 });
 
 describe("the sitemap", () => {
-  it("lists the landing page, the open numbers, the page for studios, how the agent decides, the address checker, the payment terms calculator and its term pages, every published docs page in nav order, then the terms, the privacy page and the security page, each as an absolute URL", () => {
+  it("lists the landing page, the open numbers, the page for studios, how the agent decides, the free tools, each followed by its own pages, every published docs page in nav order, then the terms, the privacy page and the security page, each as an absolute URL", () => {
     const origin = publicOrigin();
     const urls = sitemap().map((entry) => entry.url);
+    // The free tools come from their one list (free tool attribution TA5): the address checker, then the payment terms
+    // calculator, followed by its term pages.
+    expect(FREE_TOOLS.map((tool) => tool.path)).toEqual(["/check-address", "/payment-terms"]);
     expect(urls).toEqual([
       `${origin}/`,
       `${origin}/open`,

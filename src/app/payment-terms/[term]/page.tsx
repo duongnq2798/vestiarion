@@ -162,7 +162,7 @@ export default async function PaymentTermPage({ params }: Props) {
           <PaymentTermsCta />
         </div>
       </PublicMain>
-      <SiteFooter />
+      <SiteFooter tool="payment-terms" />
     </div>
   );
 }

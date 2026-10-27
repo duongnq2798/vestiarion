@@ -101,7 +101,9 @@ The verdict:
     on, another person, a contact from before the change for a call or message, and a wait of up to 72 hours; its
     lookalike warning (first 6 and last 4 characters); OFAC's list.
   - **Try it on your bills** (`data-cta="check-address-start"`) and a link to the payee lock guide.
-- It is in the sitemap and the footer's Resources. The payee lock guide links to it.
+- It is in the sitemap and the footer's Resources. The payee lock guide links to it. (Since 2026-10-28 the footer
+  lists it under Free tools, and its button credits a workspace to it:
+  `2026-10-28-free-tool-attribution-design.md`.)
 
 ## Not in this change
 
