@@ -4,7 +4,9 @@ import { Worker } from "node:worker_threads";
  * A PDF's text read in a worker thread (document checks DK3), for a file the cycle reads: one a vendor sent through
  * its link, or a member attached. pdf.js parses on the thread that calls it and sets itself no limit, and the scheduled
  * tick runs every live workspace's cycle in one process, so a PDF built to keep pdf.js busy (forms drawn inside forms,
- * say) or to fill its memory would hold or end every workspace's cycle, payments included.
+ * say) or to fill its memory would hold or end every workspace's cycle, payments included. `readDocument` reads here
+ * too, under `REQUEST_PDF_LIMITS`, a file someone sends in that the pre-scan cannot measure
+ * (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB2).
  *
  * Here the parse runs in its own thread, under three limits:
  * - its own heap (`maxOldGenerationSizeMb`, `maxYoungGenerationSizeMb`). It bounds pdf.js's JavaScript objects only:
@@ -17,10 +19,11 @@ import { Worker } from "node:worker_threads";
  * `maxChars`; neither stops forms nested inside one page, so the time limit is the bound that holds there.
  *
  * Who is at fault decides what the cycle does (`PdfWorkerRefusal.retry`). Too many pages, a parse error pdf.js
- * reports, a full heap of the worker's own, a worker that stopped once running, or a timeout while nothing else parsed a
- * PDF on this thread, are the file's doing: unreadable for good. The process's memory counts every thread's, and a
- * timeout while a PDF was parsed on this thread may be that parse's, so those stops are tried again, and counted
- * (0144's start_document_parse). A worker that never came online never touched the file: a plain Error.
+ * reports, a full heap of the worker's own, a worker that stopped once running, or a timeout while no other PDF was read
+ * in this process, are the file's doing: unreadable for good. The process's memory counts every thread's, and a timeout
+ * while another PDF was read, parsed on this thread or in another worker, may be that read's (RB4), so those stops are
+ * tried again, and counted (0144's start_document_parse). A worker that never came online never touched the file: a
+ * plain Error.
  *
  * The cycle parses one PDF at a time per process (`oneParseAtATime`), so a run that dies mid-parse has one suspect.
  *
@@ -49,13 +52,22 @@ export const PDF_LIMITS: Readonly<PdfLimits> = {
   maxRssGrowthMb: 512,
 };
 
+/**
+ * The limits a file someone sends in is read with when the pre-scan cannot measure it (RB2): the cycle's, with half its
+ * memory budget. Where a request's worker and the cycle's share a process, the request's usually stops first, so a
+ * stranger's file rarely costs a vendor's document one of its two tries. Not always: each budget counts from its own
+ * worker's start, so a cycle's worker that had already grown the process past 256 MB, or a jump in memory between two
+ * checks, can stop the cycle's too.
+ */
+export const REQUEST_PDF_LIMITS: Readonly<PdfLimits> = { ...PDF_LIMITS, maxRssGrowthMb: 256 };
+
 /** How often the parent reads the process's memory while a worker runs. */
 const MEMORY_CHECK_MS = 25;
 
 /**
  * The worker stopped, or refused the file: too slow, out of memory, too many pages, unparsable, or stopped otherwise.
  * `retry` is true when the stop may not be the file's doing (the process's memory, or a timeout while another PDF was
- * parsed on this thread): the cycle tries it again, and counts it. Otherwise the file is unreadable for good.
+ * read in this process): the cycle tries it again, and counts it. Otherwise the file is unreadable for good.
  */
 export class PdfWorkerRefusal extends Error {
   readonly retry: boolean;
@@ -69,21 +81,26 @@ export class PdfWorkerRefusal extends Error {
   }
 }
 
-/** PDFs being parsed on this thread, outside any worker (readDocument's), and how many such parses have begun. */
-let parsesHere = 0;
-let parsesBegun = 0;
+/**
+ * PDF reads running in this process, and how many have begun: parses on this thread, outside any worker (readDocument's,
+ * through `countedParse`), and workers (`pdfPagesInWorker`: the cycle's, and readDocument's for a file the pre-scan
+ * cannot measure). A worker that times out while another ran may have been kept waiting by it (RB4).
+ */
+let readsRunning = 0;
+let readsBegun = 0;
 
 /**
  * Runs `parse`, a PDF parsed on the calling thread, counted: a worker that times out while one ran may have been kept
- * waiting by it, so its timeout is tried again rather than blamed on its file.
+ * waiting by it, so its timeout is tried again rather than blamed on its file. Never around a worker's read, which holds
+ * no thread here: its own timeout would then look like another read's.
  */
 export async function countedParse<T>(parse: () => Promise<T>): Promise<T> {
-  parsesHere++;
-  parsesBegun++;
+  readsRunning++;
+  readsBegun++;
   try {
     return await parse();
   } finally {
-    parsesHere--;
+    readsRunning--;
   }
 }
 
@@ -176,23 +193,28 @@ export function pdfPagesInWorker(bytes: Uint8Array, limits: PdfLimits & { maxCha
       return;
     }
     const rssAtStart = process.memoryUsage.rss();
-    const busyAtStart = parsesHere > 0;
-    const begunAtStart = parsesBegun;
+    const busyAtStart = readsRunning > 0;
+    const begunAtStart = readsBegun;
+    // This worker's read is counted from here until it settles, for the other reads in this process (RB4).
+    readsRunning++;
+    readsBegun++;
     let online = false;
     let settled = false;
     const settle = (finish: () => void) => {
       if (settled) return;
       settled = true;
+      readsRunning--;
       clearTimeout(timer);
       clearInterval(memory);
       void worker.terminate();
       finish();
     };
-    // A timeout is the file's own only when nothing else parsed a PDF on this thread meanwhile.
-    const timer = setTimeout(
-      () => settle(() => reject(new PdfWorkerRefusal("timeout", { retry: busyAtStart || parsesHere > 0 || parsesBegun !== begunAtStart }))),
-      limits.timeoutMs
-    );
+    // A timeout is the file's own only when no other PDF was read in this process meanwhile, on this thread or in
+    // another worker. Its own read is still counted here, and is left out.
+    const timer = setTimeout(() => {
+      const othersRead = busyAtStart || readsRunning > 1 || readsBegun > begunAtStart + 1;
+      settle(() => reject(new PdfWorkerRefusal("timeout", { retry: othersRead })));
+    }, limits.timeoutMs);
     // The buffers pdf.js decodes into are outside the worker's heap: the process's memory is what bounds them. It counts
     // every thread's, so a stop here is tried again.
     const memory = setInterval(() => {

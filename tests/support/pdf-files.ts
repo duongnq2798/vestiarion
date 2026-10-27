@@ -89,6 +89,41 @@ export function onePagePdf(
   );
 }
 
+/**
+ * `data` as an LZWDecode stream that pdf.js decodes back to it: each byte a 9-bit code of its own, with a clear-table
+ * code every 250, so the codes never widen. No compression: a filter the pre-scan cannot measure, on readable text.
+ */
+export function lzwLiterals(data: string): Buffer {
+  const codes = [256];
+  [...Buffer.from(data, "latin1")].forEach((byte, index) => {
+    if (index > 0 && index % 250 === 0) codes.push(256);
+    codes.push(byte);
+  });
+  codes.push(257);
+  const out: number[] = [];
+  let bits = 0;
+  let held = 0;
+  for (const code of codes) {
+    held = (held << 9) | code;
+    bits += 9;
+    while (bits >= 8) {
+      out.push((held >> (bits - 8)) & 0xff);
+      bits -= 8;
+    }
+    held &= (1 << bits) - 1;
+  }
+  if (bits > 0) out.push((held << (8 - bits)) & 0xff);
+  return Buffer.from(out);
+}
+
+/**
+ * `pdf` with one more object after its end: a stream no page draws, under a filter the pre-scan cannot measure (LZW).
+ * pdf.js never decodes it, and reads the file as before; the pre-scan refuses the file for it.
+ */
+export function withUnmeasuredStream(pdf: Uint8Array): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(Buffer.concat([pdf, Buffer.from(`99 0 obj\n${streamObject("/Filter /LZWDecode", lzwLiterals("q Q"))}\nendobj\n`, "latin1")]));
+}
+
 const MB = 2 ** 20;
 const ADLER = BigInt(65521);
 
@@ -124,6 +159,21 @@ export function inflateBombPdf(decodedMb: number, { twice = false }: { twice?: b
   const once = deflatedWithSpaces(INVOICE_LINE, decodedMb);
   const data = twice ? zlib.deflateSync(once) : once;
   return onePagePdf(stream(twice ? "/Filter [/FlateDecode /FlateDecode]" : "/Filter /FlateDecode", data));
+}
+
+/**
+ * One page whose contents are two streams, in this order: its line of invoice text LZW-encoded, which the pre-scan
+ * cannot measure, and then `decodedMb` MB of spaces, deflated. A valid PDF that pdf.js reads to that line.
+ */
+export function lzwBeforeBombPdf(decodedMb: number): Uint8Array<ArrayBuffer> {
+  return buildPdf([
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents [5 0 R 6 0 R] >>",
+    FONT,
+    stream("/Filter /LZWDecode", lzwLiterals(INVOICE_LINE)),
+    stream("/Filter /FlateDecode", deflatedWithSpaces("", decodedMb)),
+  ]);
 }
 
 /** Bits written into bytes as deflate packs them: header fields from their lowest bit, Huffman codes from their highest. */

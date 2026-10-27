@@ -164,9 +164,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   note as `readerNote` and the whole line as `sentence`, and its reason and the decision trail quote the note too, in
   shadow as well. Documents checked before keep their sentence alone. No migration.
 - **A PDF built to expand when opened is refused before it is read.** From a document, invoices by email, the Chrome
-  extension and chats now refuse a PDF whose contents would expand to more than 16 MB once decompressed, such as a file
-  of under a megabyte that expands to gigabytes: "This PDF could not be read. Paste the invoice's text instead." Before,
-  reading one could use up the server's memory. Ordinary invoices read as before.
+  extension, Telegram, Slack and the payee link now refuse a PDF whose contents would expand to more than 16 MB once
+  decompressed, such as a file of under a megabyte that expands to gigabytes: "This PDF could not be read. Paste the
+  invoice's text instead." A PDF whose contents cannot be measured before it is opened, such as an encrypted one or one
+  compressed with LZW, is read on its own, apart from the rest of the server's work, within 15 seconds, 50 pages and a
+  memory limit, as vendors' documents are: one past them could not be read, and one that ran out of time while other
+  PDFs were being read asks you to try again in a moment. The PDFs attached to an `.eml` file are read one after
+  another, the first three, and the draft says when it has more: "PDFs attached to the email after the first three
+  were not read." An `.eml` with PDFs attached is no longer read as its raw message, headers and base64, when nothing
+  in it has text: it has no text to read, and says so, naming the PDFs after the third when it has them. Before,
+  reading such a file could use up the server's memory, and one that could not be measured was read with no limit at
+  all. Ordinary invoices read as before. No migration.
 
 ## [0.1.0-beta.13] - 2026-10-25
 

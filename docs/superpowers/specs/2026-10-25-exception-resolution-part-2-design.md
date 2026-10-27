@@ -115,7 +115,7 @@ included. pdf.js decodes each stream into an ArrayBuffer, outside any JavaScript
 content stream is deflated spaces took a process from 107 MB to 1.25 GB, and one of 1 MB to 2.3 GB, enough to end a
 2 GB function. `readPdfBounded` (`src/lib/invoice-document/read.ts`) reads it to the text `readDocument` gives, in
 three steps:
-1. **The pre-scan** (`src/lib/invoice-document/pdf-prescan.ts`, strict). Before pdf.js sees the file, every stream it
+1. **The pre-scan** (`src/lib/invoice-document/pdf-prescan.ts`). Before pdf.js sees the file, every stream it
    would decode to read text is decoded as pdf.js decodes it, counting the bytes, against one budget for the whole
    file: 16 MB decoded. It ports pdf.js's lexer, parser and FlateDecode, ASCIIHexDecode and ASCII85Decode decoders,
    since zlib refuses streams pdf.js decodes (a copy from before the stream's start, an incomplete code table), and
@@ -139,12 +139,14 @@ three steps:
 
 Who is at fault decides what follows:
 - **The file's, for good.** The pre-scan's refusals, more than 50 pages, a parse error pdf.js reports, the worker's
-  own heap filled, a worker that stopped once running, and a timeout while no other PDF was parsed on the cycle's
-  thread: unreadable ("This PDF could not be read."), recorded like any other, and the request leaves the queue.
+  own heap filled, a worker that stopped once running, and a timeout while no other PDF was read in the process (on
+  the cycle's thread or, since 2026-10-27, in another worker): unreadable ("This PDF could not be read."), recorded
+  like any other, and the request leaves the queue.
 - **Maybe the file's.** A stop at the process's memory budget, which counts every thread's memory, and a timeout while
-  `readDocument` parsed a PDF on the cycle's thread (`countedParse`): nothing is recorded or signed, the cycle's log says
-  "Stopped reading Northwind Hosting's document before it finished; the next cycle reads it again", the stage goes on to
-  the next document, and the read stays counted (below).
+  another PDF was read in the process: `readDocument` parsing on the cycle's thread (`countedParse`) or, since
+  2026-10-27, another worker, a request's (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB4). Nothing
+  is recorded or signed, the cycle's log says "Stopped reading Northwind Hosting's document before it finished; the
+  next cycle reads it again", the stage goes on to the next document, and the read stays counted (below).
 - **Not the file's.** A worker that never came online (Node reports a thread it could not make,
   `ERR_WORKER_INIT_FAILED`, through the worker's `error` event, not by throwing) or could not load unpdf: the stage
   fails, the journal says so, the count is cleared, and the next cycle tries again. The worker's script is given as text
@@ -157,9 +159,12 @@ that ended mid-parse. Once a file's count reaches 2, it is recorded unreadable w
 sent or attached again. With one parse at a time per process, a run that ends mid-parse leaves one read unfinished: the
 one that was running. Before those functions, the stage parses with nothing counted.
 
-`readDocument` (From a document, invoices by email, the Chrome extension, chats) runs the same pre-scan, lenient: it
-refuses only a file it measures past 16 MB decoded ("This PDF could not be read. Paste the invoice's text instead."),
-and leaves what it cannot measure to pdf.js, as before. Every existing PDF fixture and test still reads.
+`readDocument` (From a document, invoices by email, the Chrome extension, chats, the payee link) runs the same
+pre-scan: it refuses a file it measures past 16 MB decoded ("This PDF could not be read. Paste the invoice's text
+instead.") and parses a measured file on the thread that asks. Every existing PDF fixture and test still reads that
+way. Until 2026-10-27 it scanned in a lenient mode and left what it could not measure to pdf.js on that thread; since
+then such a file is read in the worker, under `REQUEST_PDF_LIMITS`, and the pre-scan has one mode
+(docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1-RB6).
 
 If this is wrong: a legitimate PDF of more than 50 pages, one that takes longer than 15 s, one whose streams decode past
 16 MB, an encrypted one, or one whose text uses LZW is not checked, and a person adds the details. So is one stopped
@@ -761,8 +766,9 @@ order {PO} is on the bill, from the vendor's document, which the agent checked a
   the entry's `vendorDocument`, and `policy-replay-read.ts` gives it words.
 - Parsing a document once at intake rather than in the cycle: the cycle's parse is bounded instead (DK3).
 - Bounding pdf.js's time on the paths that parse on the thread that asks (`readDocument`: From a document, invoices by
-  email, the Chrome extension, chats). They get the lenient pre-scan only: a nested-forms PDF still holds that thread,
-  and an encrypted or LZW file is not measured there, as before this change.
+  email, the Chrome extension, chats, the payee link). A nested-forms PDF the pre-scan measures still holds that
+  thread. An encrypted or LZW file, which it cannot measure, is read in the worker since 2026-10-27
+  (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md).
 - Decrypting a PDF, or measuring LZW, run-length or Brotli: the cycle refuses such files.
 - A record of unfinished reads per workspace, whatever the file: a file changed by one byte starts its count again.
   The pre-scan, the memory budget and one parse at a time per process are what keep such a file from ending the run.
@@ -873,13 +879,14 @@ PO-1042, 200.00 and an address; no model key, so the heuristic reader):
 - `PDF_LIMITS` carries `maxRssGrowthMb: 512`. A 600 MB inflate bomb of under 1 MB is refused before any worker
   starts, in under 5 s, with the process growing less than 128 MB. A 300 MB one read in the worker directly, with a
   128 MB budget, stops as `memory` with `retry`, the process's peak under 384 MB above its start. A timeout while
-  `readDocument` parsed on the calling thread has `retry`, and `readPdfBounded` passes it on; one alone, and a full heap
-  of the worker's own, have none. A page that draws a 48 MB image reads its text.
+  `readDocument` parsed on the calling thread has `retry` (and, since 2026-10-27, one while another worker ran: RB4 of
+  the request PDF bound spec), and `readPdfBounded` passes it on; one alone, and a full heap of the worker's own, have
+  none. A page that draws a 48 MB image reads its text.
 
 **`tests/invoice-document-prescan.test.ts`** (`prescanPdf`, pure):
 - Every PDF the tests read passes, each decoding to under 1 MB; a deflated content stream counts to the byte, and each
   step of an ASCII85 or ASCIIHex chain counts.
-- A 600 MB bomb, once or twice deflated, is refused in strict and lenient mode, having decoded under 17 MB, in under
+- A 600 MB bomb, once or twice deflated, is refused, having decoded under 17 MB, in under
   3 s. A stream zlib refuses as "too far back" and pdf.js decodes to 64 MB is refused; the port decodes every stream
   zlib can to the same bytes.
 - A filter is found abbreviated, escaped, as `/F`, in another object or after a comment; a `stream` no object led to
@@ -887,8 +894,8 @@ PO-1042, 200.00 and an address; no model key, so the heuristic reader):
 - An image a page draws is left out; the same stream as the page's content, in a contents array kept in another
   object, or named by a page inside an object stream, is counted.
 - An image's DCT passes; LZW, run-length, Brotli and the image codecs on a stream read for text, and a filter in an
-  object it cannot find, are refused in strict mode and left to pdf.js in lenient mode; so is an encrypted file, and a
-  file over the stream or work limits.
+  object it cannot find, are refused; so is an encrypted file, and a file over the stream or work limits. (Until
+  2026-10-27 a lenient mode left these to pdf.js; it is gone, RB6 of the request PDF bound spec.)
 
 **`tests/invoice-document-worker-start.test.ts`** (a stand-in for node's Worker): an `error` before `online`,
 `ERR_WORKER_INIT_FAILED` or any other, and an exit before it, are a plain Error, through `readPdfBounded` too; an error
