@@ -51,9 +51,9 @@ Opening a link never approves anything.
 - A stopped bill that is not listed there keeps its own place among the decisions, as the agent decided it, with **Decide in Approvals**, which opens its card, or **Add details** for one it asked details for. That is a bill a person approved, rejected or returned before the message went out, or every stopped bill when Vestiarion could not check which still wait. While deciding from Slack is on, no bill is listed there: each stopped bill keeps its own place, with its buttons (section 5).
 - In shadow mode, a payment held for your verdict keeps its own place among the decisions, with **Give your verdict**.
 - When the wallet will run short, the channel is told how much, by when and what the agent is doing about it, and told again only when that changes. See [When the cash will run short](/docs/guides/payment-plan#when-the-cash-will-run-short).
-- The channel is told only about decisions made after Slack was connected. A busy cycle's message ends with how many more decisions are in the console.
+- The channel is told only about decisions made after Slack was connected. A busy cycle's message says how many more decisions are in the console.
 
-In these messages and in `/vestiarion waiting`, every value that comes from a bill or from the agent, such as a payee's name or the agent's reason, is shown as plain text. Hidden direction and zero-width characters are removed, so no name can make a line read as another bill's, and Slack makes no link or mention of a web address, a channel or an @name inside one. The only links are the ones Vestiarion adds, and Slack shows no preview of them. A wallet address is shortened to its first and last four characters.
+In these messages and in `/vestiarion waiting`, hidden direction and zero-width characters are removed from every value that comes from a bill or from the agent, such as a payee's name or the agent's reason, so no name can make a line read as another bill's, and Slack makes no link or mention of a web address, a channel or an @name inside one. Slack's own formatting marks in a value, such as `*` or `_`, still format, but make no link or mention. The only links are the ones Vestiarion adds, and Slack shows no preview of them. A wallet address is shortened to its first and last four characters.
 
 ### Review a bill
 
@@ -64,7 +64,7 @@ In these messages and in `/vestiarion waiting`, every value that comes from a bi
 | Type | What you get, seen by you alone |
 |---|---|
 | `/vestiarion today` | Safe to spend today, what is due in the next 30 days, how many payments wait for a person, and what the agent pays next |
-| `/vestiarion waiting` | Each payable or milestone waiting for a person, why it waits, and a link: **Review** for a payable, **Contractors** for a milestone, then "Opening a link never approves anything." A payable a check in code stopped says what stopped it; the rest give the first sentence of why the agent stopped them. A bill asked for details says it is waiting for details. In shadow mode, a payment held for your verdict says it waits for your verdict, with **Give your verdict** |
+| `/vestiarion waiting` | Each payable or milestone waiting for a person, why it waits, and a link: **Review** for a payable, **Contractors** for a milestone. When a **Review** link is listed, the answer ends with "Opening a link never approves anything." A payable a check in code stopped says what stopped it; the rest give the first sentence of why the agent stopped them. A bill asked for details says it is waiting for details. In shadow mode, a payment held for your verdict says it waits for your verdict, with **Give your verdict** |
 | `/vestiarion ledger` | Whether the signed ledger is intact, checked the way **Verify hash chain** checks it |
 | `/vestiarion pause [reason]` | Stops the agent, for an owner, admin or approver. The channel where you typed it sees that you paused it. Resuming stays in Vestiarion |
 | `/vestiarion disconnect` | Disconnects your Slack account |

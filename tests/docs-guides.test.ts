@@ -3798,6 +3798,30 @@ describe("the report guide on how often you agreed (docs/superpowers/specs/2026-
   });
 });
 
+describe("the Slack guide on the bills waiting for approval (docs/superpowers/specs/2026-10-27-slack-review-links-design.md)", () => {
+  const raw = readSource("guides/slack");
+  const guide = raw.replace(/\s+/g, " ");
+  const entry = sourceFile("CHANGELOG.md").split("- **Bills waiting for approval in Slack")[1]?.split("\n- **")[0].replace(/\s+/g, " ") ?? "";
+
+  it("no longer says a busy cycle's message ends with the console count: the bills waiting for approval come after it (SR2)", () => {
+    expect(guide).not.toContain("message ends with how many more decisions");
+    expect(guide).toContain("A busy cycle's message says how many more decisions are in the console.");
+  });
+
+  it("says /vestiarion waiting ends with the never-approves line only when a Review link is listed (SR3)", () => {
+    const row = raw.split("\n").find((line) => line.startsWith("| `/vestiarion waiting` |")) ?? "";
+    expect(row).toContain('When a **Review** link is listed, the answer ends with "Opening a link never approves anything."');
+  });
+
+  it("never calls a value plain text, since Slack's own formatting marks still format in it (SR4)", () => {
+    expect(entry).not.toBe("");
+    for (const [name, text] of [["the guide", guide], ["the CHANGELOG entry", entry]] as const) {
+      expect(text, name).not.toMatch(/shown as plain text/);
+      expect(text, name).toMatch(/Slack's own formatting marks in a (?:value|name), such as `\*` or `_`, still format/);
+    }
+  });
+});
+
 describe("the way into the guides", () => {
   it("is linked from the docs Overview and from the API Quickstart", () => {
     expect(readSource("")).toContain('href="/docs/guides/go-live"');

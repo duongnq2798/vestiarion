@@ -57,6 +57,10 @@ describe("mrkdwn", () => {
     // A whole emoji is one character, and stays.
     expect(mrkdwn("Jiren 🎉")).toBe("Jiren 🎉");
   });
+
+  it("leaves Slack's own formatting marks as they are: they still format, and make no link or mention (SR4)", () => {
+    expect(mrkdwn("*URGENT* _Acme_ ~Ltd~ `x`")).toBe("*URGENT* _Acme_ ~Ltd~ `x`");
+  });
 });
 
 describe("slackText (SR4)", () => {
@@ -245,7 +249,7 @@ describe("the bills waiting for approval, while deciding from Slack is off (SR2)
     expect(withOutcome(blocksOf(message), BILL(1), "Rejected by <@U0LINH>.")).toEqual(blocksOf(message));
   });
 
-  it("shows a payee's name and the reason as plain text, on one line, with nothing Slack would link or mention", () => {
+  it("shows a payee's name and the reason on one line, with nothing Slack would link or mention", () => {
     const message = decisionsMessage(
       WORKSPACE,
       [stopped(1), stopped(2)],
@@ -418,7 +422,7 @@ describe("answers to /vestiarion", () => {
     expect(blocksOf(verdict)).toHaveLength(1);
   });
 
-  it("shows names and reasons as plain text, and counts what would pass Slack's 3,000 characters, never cutting a link", () => {
+  it("removes hidden characters from names and reasons, and counts what would pass Slack's 3,000 characters, never cutting a link", () => {
     const facts = Array.from({ length: 10 }, (_, index) => ({
       kind: "payable" as const, id: BILL(index + 1), name: `Vendor ${index + 1}${RLO} ${"&".repeat(150)}`, amount: 1, currency: "USDC", status: "flagged", reason: `${"<".repeat(400)}\nwhy.`,
     }));

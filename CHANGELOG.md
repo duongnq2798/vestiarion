@@ -23,10 +23,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   repeated among the decisions; a payment held for your verdict in shadow mode keeps **Give your verdict**, and while
   deciding from Slack is on, each stopped bill keeps its buttons as before. `/vestiarion waiting` labels a payable's
   link **Review** too, says "waiting for details" for a bill asked for details, and counts what does not fit instead
-  of cutting the answer short. In the channel's messages and the answers to `/vestiarion`, names and reasons are shown
-  as plain text: hidden direction and zero-width characters are removed, and Slack makes no link or mention of a web
-  address, a channel or an @name inside one. The channel's message and the waiting answer show no link previews. No
-  migration.
+  of cutting the answer short. In the channel's messages and the answers to `/vestiarion`, hidden direction and
+  zero-width characters are removed from names and reasons, and Slack makes no link or mention of a web address, a
+  channel or an @name inside one; Slack's own formatting marks in a name, such as `*` or `_`, still format. The
+  channel's message and the waiting answer show no link previews. No migration.
 - **Quality Lab: fixed scenarios through the real decision code on every change.** 39 scenarios run in CI through the
   agent's real decision code, with the model's answers scripted, often to what an attacker would want: prompt
   injection in an invoice's memo or purchase order, a payee whose address just changed or is still inside the payee

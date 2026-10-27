@@ -89,10 +89,14 @@ No API, ledger or migration change.
   blocks, each with its Review button; a bill decided since and a verdict hold keeping their blocks; two approvals with
   and without co-sign; a reason and none; no section while deciding is on, or when none waits; block ids unique and
   apart from the card ids; the worst case within 50 blocks and 3,000 characters a text; `NEVER_APPROVES` said once,
-  equal to Discord's and Telegram's; `verbatim` on every mrkdwn text object; hidden characters removed and a value on
-  one line; previews off; `/vestiarion waiting`'s Review, wording, never-approves line and count.
+  equal to Discord's and Telegram's; `verbatim` on every mrkdwn text object; hidden characters removed, Slack's
+  formatting marks left as they are, and a value on one line; previews off; `/vestiarion waiting`'s Review, wording,
+  never-approves line (only when a Review link is listed) and count.
 - `tests/slack-notify.test.ts`: one waiting-bill read while deciding is off, no card read; the section in the post;
   the rules read once a bill waits; the fallback when the bills cannot be read; no section and no rules read while
   deciding is on.
 - `tests/slack-interactions.test.ts`: a `vx_review` click is acknowledged, and nothing is read or answered.
-- `tests/docs-guides.test.ts`: the guide's new quoted strings.
+- `tests/docs-guides.test.ts`: the guide's new quoted strings; that the guide no longer says a busy cycle's message
+  ends with the console count (SR2), gives the waiting answer's never-approves line only when a Review link is listed
+  (SR3), and, with the CHANGELOG entry, never calls a value plain text, since Slack's formatting marks still format
+  (SR4).
