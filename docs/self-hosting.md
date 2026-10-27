@@ -128,7 +128,7 @@ Two independent upgrades from there, in either order:
 
 | Command | Does |
 | --- | --- |
-| `npm run verify` | Typecheck, lint, and the full test suite — what CI runs |
+| `npm run verify` | The lockfile check, typecheck, lint, and the full test suite; CI runs these, then `npm run build` |
 | `npm run test` / `test:watch` | Vitest, once or on change |
 | `npm run quality-lab` | Runs the Quality Lab's scenarios through the real decision code and replays the exported shadow decisions (`src/lib/quality-lab/shadow-decisions.json`) through it, and writes `src/lib/data/quality-lab.json` and `src/lib/data/quality-lab-shadow.json`, which the tests hold equal to the run. Run it after changing the decision code, the scenarios or the exported decisions, and commit both files. Needs no database, key or network |
 | `npm run quality-lab:shadow` | Exports every agent decision on a bill made in shadow mode in the team's own workspaces (the founding workspace and those a `platform_team` member created) on Arc testnet, with each person's verdict, to `src/lib/quality-lab/shadow-decisions.json` for the Quality Lab to replay. Customers' workspaces, and any other whose creator deleted their account, are never read into it. Keeps numbers, booleans and rule names only, with pseudonyms for workspaces, bills and payees, and refuses to write anything that looks like an address, hash, email or id. Reads the database in one read-only transaction and writes nothing to it |
@@ -664,7 +664,7 @@ transaction, `/open`, or the research note.
 ## Tests
 
 ```bash
-npm run verify        # typecheck + lint + tests — what CI runs on every push
+npm run verify        # lockfile check + typecheck + lint + tests; CI runs these, then the build, on pull requests and main
 npm run test:watch    # while working
 ```
 

@@ -1,0 +1,77 @@
+name: Bug report
+description: Something in Vestiarion does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting it. Issues are public.
+
+        **Never paste an API key, a Circle API key or entity secret, a wallet's private key or recovery phrase, a sign-in or payee link, or anyone's personal data.** Put `<redacted>` in its place.
+
+        A security vulnerability does not go here: report it privately, as [SECURITY.md](https://github.com/duongnq2798/vestiarion/blob/main/SECURITY.md) says.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where did it happen?
+      options:
+        - The hosted app at www.vestiarion.xyz
+        - A deployment I run myself from this repository
+        - The API, the SDK, the CLI or the MCP server
+        - The Chrome extension
+        - The docs
+        - Somewhere else (say where in the steps)
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Which network was the workspace on?
+      options:
+        - Arc testnet
+        - Arc mainnet
+        - Not about a workspace, or I do not know
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you did, one step per line, starting from the page you opened first.
+      placeholder: |
+        1. Open Bills & receivables
+        2. Choose ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: The exact message you saw, if there was one.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: "For anything at www.vestiarion.xyz (the app, the API, the MCP server or the docs), the date and time it happened, with your time zone. For a deployment you run, the release tag or commit. For the SDK or the CLI, its version (`vestiarion --version` for the CLI). For the Chrome extension, the version on its Details page in chrome://extensions."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Optional. Check them for keys, links and personal data before you paste them.
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Before you send it
+      options:
+        - label: This report contains no API key, secret, private key, recovery phrase, sign-in or payee link, or personal data.
+          required: true

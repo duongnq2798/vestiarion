@@ -1,0 +1,52 @@
+name: Feature request
+description: Something Vestiarion should do that it does not do today.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For anything larger than a small fix, this issue is where the approach is agreed before anyone builds it. The maintainers decide what is built and may not take every request; [CONTRIBUTING.md](https://github.com/duongnq2798/vestiarion/blob/main/CONTRIBUTING.md) says how a change is decided.
+
+        Issues are public: leave out keys, links and personal data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today. A real example helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How Vestiarion could handle it. If it changes how a payment is decided, approved or sent, say what a person still controls.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Bills and payments
+        - Approvals and controls
+        - Contractors and milestones
+        - Getting paid (receivables, deals, statements)
+        - Treasury and cash
+        - Integrations
+        - The API, the SDK, the CLI, the MCP server or webhooks
+        - The docs
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: Optional. A workaround, or another tool you use for it.
+  - type: dropdown
+    id: build
+    attributes:
+      label: Would you like to build it yourself?
+      options:
+        - Yes, once we agree on the approach here
+        - No

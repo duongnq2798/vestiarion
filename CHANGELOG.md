@@ -134,6 +134,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   used, which the person confirming says was on file before the change; where no one else can, the member who entered
   an address confirms it alone and the record says so; and with the lock on, approving a payment no longer confirms its
   address. No migration.
+- **How to contribute, the code of conduct and an accessibility statement, in the repository.** `CONTRIBUTING.md` says
+  how a change is proposed and decided (an issue first for anything large; the maintainers decide), how to run the app
+  and its tests, and what a pull request needs here, from tests and docs to migrations, which a maintainer applies.
+  `CODE_OF_CONDUCT.md` is the Contributor Covenant 2.1, with reports going to the project's account on X.
+  `ACCESSIBILITY.md` names WCAG 2.2 AA as the target, not a claim, and says what is built and tested today, what has
+  not been done (no audit, no recorded screen-reader test), the barriers already known, and how to report one. New
+  issues use a form, for a bug, a feature or an accessibility barrier; the issue chooser sends security reports to a
+  private advisory and questions to the docs, and pull requests open on a template. The README links the three documents
+  and `SECURITY.md` from a new Contributing section; it and the self-hosting guide now say that `npm run verify` also
+  checks the lockfile and that CI then builds the app. No migration.
 
 ### Changed
 
