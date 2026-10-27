@@ -211,6 +211,22 @@ describe("the calculator (PT6)", () => {
   });
 });
 
+/** What the pages say about counting, true whether analytics is set up or not (free tool attribution TA6). */
+const COUNT_LINE =
+  "Everything is worked out in this page, and nothing you type is kept. This page may count the visit and a click on Try it on your bills, by its address. What you paste or type is never sent.";
+
+/**
+ * The page's two starts (PT9; free tool attribution TA3, TA5): the shared **Try it on your bills**, named
+ * payment-terms-start for the analytics click, and the full footer's **Get started**, both to the landing's start.
+ */
+function expectToolStarts(markup: string) {
+  expect(source("src/components/payment-terms/PaymentTermsCta.tsx")).toContain('<ToolCta tool="payment-terms" />');
+  const start = markup.match(/<a [^>]*data-cta="payment-terms-start"[^>]*>[^<]*<\/a>/)?.[0] ?? "";
+  expect(start).toContain('href="/onboarding?shadow=1"');
+  expect(start).toContain(">Try it on your bills</a>");
+  expect(markup).toMatch(/<a [^>]*href="\/onboarding\?shadow=1"[^>]*>Get started<\/a>/);
+}
+
 describe("the page (PT7, PT9)", () => {
   it("is static and public, with its title, canonical address, heading and call to action, and not under /tools", async () => {
     expect(source("src/app/payment-terms/page.tsx")).not.toMatch(/force-dynamic|searchParams|cookies\(|headers\(/);
@@ -219,7 +235,8 @@ describe("the page (PT7, PT9)", () => {
     const markup = renderToStaticMarkup(<PaymentTermsPage />);
     expect(markup).toContain("<h1");
     expect(markup).toContain("Payment terms calculator</h1>");
-    expect(markup).toContain("Nothing you type is sent anywhere or kept.");
+    expect(markup).toContain(COUNT_LINE);
+    expect(source("src/app/payment-terms/page.tsx")).toContain("{FREE_TOOL_COUNT_LINE}");
     expect(markup).toContain("What it does not do");
     expect(markup).toContain('href="/payment-terms/2-10-net-30"');
     expect(markup).toContain('href="/payment-terms/net-30-eom"');
@@ -237,8 +254,8 @@ describe("the page (PT7, PT9)", () => {
     // Every link to a section goes to one that is there: the footer's links to the landing's sections go to the landing.
     expect(missingSections(markup)).toEqual([]);
     expect(markup).toContain('href="/#how-it-works"');
-    expect(markup).toContain('data-cta="payment-terms-start"');
-    expect(markup).toContain('href="/onboarding?shadow=1"');
+    expectToolStarts(markup);
+    expect(source("src/app/payment-terms/page.tsx")).toContain('<SiteFooter tool="payment-terms" />');
     expect(markup).toContain("In shadow mode it decides on your real bills while you keep paying them as you do now.");
     expect(markup).not.toMatch(/\bsafe\b|cleared|verified|compliant/i);
     const { requiresSession } = await import("@/lib/auth/routes");
@@ -290,7 +307,10 @@ describe("the term pages (PT8)", () => {
     expect(plain).toContain("1,000.00 USD by Dec 2, 2026");
     expect(plain).toContain("2 ÷ 98 × 365 ÷ 20 = 37.2%");
     expect(markup).toContain('value="2/10 net 30"');
-    expect(markup).toContain('data-cta="payment-terms-start"');
+    expect(markup).toContain(COUNT_LINE);
+    expectToolStarts(markup);
+    expect(source("src/app/payment-terms/[term]/page.tsx")).toContain("{FREE_TOOL_COUNT_LINE}");
+    expect(source("src/app/payment-terms/[term]/page.tsx")).toContain('<SiteFooter tool="payment-terms" />');
     expect(markup).toContain('href="/payment-terms"');
 
     const net = renderToStaticMarkup(await TermPage({ params: Promise.resolve({ term: "net-30-eom" }) })).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");

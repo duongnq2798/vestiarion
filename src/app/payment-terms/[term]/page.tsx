@@ -8,6 +8,7 @@ import { PublicMain } from "@/components/public/PublicMain";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
 import { utcDay } from "@/lib/copy";
+import { FREE_TOOL_COUNT_LINE } from "@/lib/free-tools";
 import { breakEvenRate } from "@/lib/payment-terms/cost";
 import { EXAMPLE_AMOUNT, EXAMPLE_CURRENCY, EXAMPLE_INVOICE_DATE, EXAMPLE_LATE_FEE, TERM_PAGES, termPage, workedExample, type TermPage } from "@/lib/payment-terms/pages";
 import { money, percentWords } from "@/lib/payment-terms/terms";
@@ -107,7 +108,9 @@ function Example({ page }: { page: TermPage }) {
 
 /**
  * /payment-terms/<term> (docs/superpowers/specs/2026-10-28-payment-terms-design.md PT8): what one common term means, its
- * formula, a worked example, and the calculator with the term filled in. Static, like /payment-terms.
+ * formula, a worked example, and the calculator with the term filled in. Static, like /payment-terms, and part of the
+ * same free tool: its start button and its footer credit a workspace opened after them to `payment-terms`
+ * (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA3, TA5).
  */
 export default async function PaymentTermPage({ params }: Props) {
   const page = termPage((await params).term);
@@ -139,7 +142,8 @@ export default async function PaymentTermPage({ params }: Props) {
             <h2 id="calculator" className={H2}>
               {`Work out your own ${page.words} invoice`}
             </h2>
-            <p className="mt-2 text-sm leading-relaxed text-ink-3">Everything is worked out in this page. Nothing you type is sent anywhere or kept.</p>
+            {/* True whether analytics is set up or not (free tool attribution TA6). */}
+            <p className="mt-2 text-sm leading-relaxed text-ink-3">Everything is worked out in this page, and nothing you type is kept. {FREE_TOOL_COUNT_LINE}</p>
             <div className="mt-6">
               <PaymentTermsCalculator initialTerms={page.words} />
             </div>

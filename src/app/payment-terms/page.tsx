@@ -5,6 +5,7 @@ import { TermLinks } from "@/components/payment-terms/TermLinks";
 import { PublicMain } from "@/components/public/PublicMain";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
+import { FREE_TOOL_COUNT_LINE } from "@/lib/free-tools";
 import { X_HANDLE } from "@/lib/site-links";
 
 // The root layout adds " · Vestiarion" to the page's title; the social cards carry the name themselves.
@@ -26,7 +27,9 @@ const BODY = "mt-3 text-sm leading-relaxed text-ink-2";
 /**
  * /payment-terms (docs/superpowers/specs/2026-10-28-payment-terms-design.md PT7): a free page anyone can use to work out
  * an invoice's dates, what its discount is worth and the day to pay it. Static: everything is worked out in the
- * browser, so nothing typed reaches the server. Not under /tools, which serves downloads.
+ * browser, so nothing typed reaches the server. Not under /tools, which serves downloads. Its start button
+ * (`PaymentTermsCta`, the shared `ToolCta`) and its footer name the tool, so both starts on the page credit a workspace
+ * opened after them to this tool (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA3, TA5).
  */
 export default function PaymentTermsPage() {
   return (
@@ -43,7 +46,8 @@ export default function PaymentTermsPage() {
             Enter an invoice&apos;s date, amount and terms. It works out the due date and the discount deadline, what skipping the discount costs a
             year, what a late fee comes to, and the day to pay, with the reason.
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-ink-3">Everything is worked out in this page. Nothing you type is sent anywhere or kept.</p>
+          {/* True whether analytics is set up or not (free tool attribution TA6). */}
+          <p className="mt-2 text-sm leading-relaxed text-ink-3">Everything is worked out in this page, and nothing you type is kept. {FREE_TOOL_COUNT_LINE}</p>
 
           {/* A heading of its own, so the calculator's late-fee heading (an h3) follows an h2, as on the term pages. */}
           <section aria-labelledby="calculator" className="mt-8">

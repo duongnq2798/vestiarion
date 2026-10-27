@@ -4457,8 +4457,9 @@ tool's **Try it on your bills** goes to `/onboarding?shadow=1`, and `loginRedire
 `/login?next=…`. A tag on that link is lost at that redirect unless the sign-in link brings the visitor back to it in
 the same browser, and even then the landing path `FirstTouch` records is `/onboarding`, not the tool. The tool's start
 links write the first touch themselves instead. `FREE_TOOLS` (`src/lib/free-tools.ts`) is the one list of tools, each a
-slug, a top-level path, a title and a one-line description; the full footer's **Free tools** group (above Legal, so the
-footer keeps four columns) and the sitemap read it. `ToolStartLink` (`src/components/public/ToolCta.tsx`) is every start
+slug, a top-level path, a title and a one-line description: today the address checker and the payment terms
+calculator. The full footer's **Free tools** group (above Legal, so the footer keeps four columns) and the sitemap read
+it; the sitemap lists a tool's own pages, such as the payment terms calculator's term pages, right after it. `ToolStartLink` (`src/components/public/ToolCta.tsx`) is every start
 on a tool's page: `ToolCta`, its **Try it on your bills** button, named `<slug>-start` for the analytics click, and the
 full footer's **Get started** when the page passes `SiteFooter` its `tool`. On a click or a middle click, and only when
 the browser holds no `vx_ft` yet, it writes `freeToolFirstTouch` through `firstTouchCookie`: `utm_source` the tool's
@@ -4568,8 +4569,12 @@ browser, with no form, request, URL parameter or storage. Its rules are pure mod
   rate as `reserveApy` applied to the discounted amount (so it turns at the break-even rate), and the late fee, and
   shows its sentence with amounts to 2 decimals, or more (`sentenceDecimals`, up to 6) where 2 would show a discount
   and a yield that differ as equal.
-- The pages end with `PaymentTermsCta` (`data-cta="payment-terms-start"`). `tests/payment-terms-page.test.tsx` holds
-  the calculator, its rules and the pages to making no request and reading no address bar or storage.
+- It is `payment-terms` in `FREE_TOOLS` (above), after the address checker: the footer's **Free tools** lists it, and
+  the sitemap lists `/payment-terms` followed by its term pages. The pages end with `PaymentTermsCta`, whose **Try it on
+  your bills** is `ToolCta` (above), `payment-terms-start` for the analytics click; their full footer's **Get
+  started** credits the tool too (`<SiteFooter tool="payment-terms" />`, on the term pages as well); and they say
+  `FREE_TOOL_COUNT_LINE`. `tests/payment-terms-page.test.tsx` holds the calculator, its rules and the pages to making
+  no request and reading no address bar or storage; the cookie a start link writes is `ToolCta`'s.
 - They carry the full footer. `SiteFooter`'s links to the landing's sections are `/#…` on every page but the landing
   (`SiteFooter landing`, which keeps them in place), so they reach the landing from these pages, /check-address,
   /studios and /how-it-decides.

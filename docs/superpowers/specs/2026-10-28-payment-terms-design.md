@@ -114,7 +114,11 @@ why, from the agent's own written policy, `planPaymentTiming` (`src/lib/agent/pa
   due date off a weekend or holiday or roll a late-month invoice into the next month, convert currencies), links to the
   term pages, and the call to action.
 - How it works says the decision's sentence is the policy's own, with the rate applied to the discounted amount (PT5).
-- Both pages carry the full footer (`SiteFooter`). Its links to the landing page's sections (How it works, Who it's
+- Under the introduction: "Everything is worked out in this page, and nothing you type is kept." and
+  `FREE_TOOL_COUNT_LINE`, as every free tool says it (free tool attribution TA6); a term page says the same above its
+  calculator.
+- Both pages carry the full footer, naming the tool (`<SiteFooter tool="payment-terms" />`), so its **Get started**
+  credits the tool too (free tool attribution TA5). Its links to the landing page's sections (How it works, Who it's
   for, Safety, Proof) were bare `#…` addresses, which go nowhere off the landing page, as on /check-address, /studios
   and /how-it-decides before this change; they are now `/#…` on every page but the landing, which passes `landing` and
   keeps them in place. Every same-page link on both pages has its section on the page.
@@ -133,17 +137,16 @@ and net-30-eom, from `generateStaticParams`; any other term is a 404 (`dynamicPa
 - `PaymentTermsCta` (`src/components/payment-terms/PaymentTermsCta.tsx`), one small component on both pages:
   "Vestiarion's agent checks every bill before it is paid, weighs an early-payment discount against holding the cash to
   the due date, and pays in USDC within the limits you set." (it claims no reading of terms: the invoice reader does
-  not read EOM), **Try it on your bills** to the
-  landing's own address (`TRY_HREF`) with `data-cta="payment-terms-start"`, and "In shadow mode it decides on your real
-  bills while you keep paying them as you do now." The first-touch credit for free tools is a separate change; it will
-  swap this link for its shared component.
-- The sitemap lists `/payment-terms` and the term pages after `/check-address`; the footer's Resources lists the
-  calculator after the address checker; the first payment guide links to it from "When the agent pays" and "A late
-  fee".
+  not read EOM), **Try it on your bills**, and "In shadow mode it decides on your real bills while you keep paying them
+  as you do now." Its button is the free tools' shared `ToolCta` for `payment-terms`
+  (`src/components/public/ToolCta.tsx`, free tool attribution TA3): to the landing's own address (`TRY_HREF`), with
+  `data-cta="payment-terms-start"`, crediting a workspace opened next to the tool.
+- The tool is in `FREE_TOOLS` (`src/lib/free-tools.ts`), after the address checker, as "Payment terms calculator": the
+  footer's Free tools group lists it from there, and the sitemap lists `/payment-terms` from there, followed by its
+  term pages; the first payment guide links to it from "When the agent pays" and "A late fee".
 
 ## Not in this change
 
-- Crediting a workspace to the tool it started from (the shared tool call to action and its first-touch cookie).
 - EOM terms in the invoice reader, "n/30" or "2% 10" in the invoice reader, and the rule that invoices dated late in a
   month roll to the next one under EOM terms.
 - Reading a discount written after the net days ("net 30, 2/10"), as "2-10", as a fraction of a percent ("1/2%"), or
@@ -173,11 +176,14 @@ and net-30-eom, from `generateStaticParams`; any other term is a 404 (`dynamicPa
   with a late fee in them), "1 day" not "1 days", no form;
 - the page and a term page: static, public, title and canonical, heading, the calculator under an h2, every same-page
   link's section on the page and the footer's landing links to the landing, two header links on a term page, the call
-  to action, the worked example, the term filled in, 404 for an unknown term;
-- nothing sent: the calculator, its rules and the pages hold no request, address-bar read, storage or cookie.
+  to action (`ToolCta` named `payment-terms-start`, and the footer's Get started, both to the landing's start), the
+  line about counting, the footer naming the tool, the worked example, the term filled in, 404 for an unknown term;
+- nothing sent: the calculator, its rules and the pages hold no request, address-bar read, storage or cookie (the
+  cookie a start link writes is `ToolCta`'s, outside them).
 
 `tests/invoice-document-extract.test.ts` keeps passing unchanged. `tests/docs-content.test.ts` pins the sitemap's order
-and the app pages a guide may link to; `tests/site-footer.test.tsx` the footer's Resources, and its landing section
-links in place on the landing and as `/#…` elsewhere.
+and the app pages a guide may link to; `tests/site-footer.test.tsx` the footer's Free tools group, and its landing
+section links in place on the landing and as `/#…` elsewhere; `tests/free-tool-attribution.test.tsx` the tool in
+`FREE_TOOLS` and its page naming it to the footer.
 
 No migration.
