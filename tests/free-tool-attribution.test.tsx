@@ -38,9 +38,10 @@ const NOW = new Date("2026-10-28T09:15:00.000Z");
 const CHECK_ADDRESS = freeTool("check-address");
 
 describe("the list of free tools (TA1)", () => {
-  it("holds the address checker and the OFAC vendor check, each with a slug, a path, a title and a one-line description", () => {
+  it("holds the address checker, the payment terms calculator and the OFAC vendor check, each with a slug, a path, a title and a one-line description", () => {
     expect(FREE_TOOLS.map(({ slug, path: at, title }) => ({ slug, path: at, title }))).toEqual([
       { slug: "check-address", path: "/check-address", title: "Address checker" },
+      { slug: "payment-terms", path: "/payment-terms", title: "Payment terms calculator" },
       { slug: "check-vendor", path: "/check-vendor", title: "OFAC vendor check" },
     ]);
     for (const tool of FREE_TOOLS) {

@@ -4463,8 +4463,9 @@ tool's **Try it on your bills** goes to `/onboarding?shadow=1`, and `loginRedire
 `/login?next=…`. A tag on that link is lost at that redirect unless the sign-in link brings the visitor back to it in
 the same browser, and even then the landing path `FirstTouch` records is `/onboarding`, not the tool. The tool's start
 links write the first touch themselves instead. `FREE_TOOLS` (`src/lib/free-tools.ts`) is the one list of tools, each a
-slug, a top-level path, a title and a one-line description; the full footer's **Free tools** group (above Legal, so the
-footer keeps four columns) and the sitemap read it. `ToolStartLink` (`src/components/public/ToolCta.tsx`) is every start
+slug, a top-level path, a title and a one-line description: today the address checker and the payment terms
+calculator. The full footer's **Free tools** group (above Legal, so the footer keeps four columns) and the sitemap read
+it; the sitemap lists a tool's own pages, such as the payment terms calculator's term pages, right after it. `ToolStartLink` (`src/components/public/ToolCta.tsx`) is every start
 on a tool's page: `ToolCta`, its **Try it on your bills** button, named `<slug>-start` for the analytics click, and the
 full footer's **Get started** when the page passes `SiteFooter` its `tool`. On a click or a middle click, and only when
 the browser holds no `vx_ft` yet, it writes `freeToolFirstTouch` through `firstTouchCookie`: `utm_source` the tool's
@@ -4550,6 +4551,39 @@ parameter.
   says, whether analytics is set up or not, that it may count the visit and that click by its address, and that what
   is pasted or typed is never sent (`FREE_TOOL_COUNT_LINE`).
 - `tests/check-address-page.test.tsx` holds the checker's code to making no request.
+
+**The payment terms calculator.** `/payment-terms` (`src/app/payment-terms/page.tsx`,
+`docs/superpowers/specs/2026-10-28-payment-terms-design.md`) and seven term pages, `/payment-terms/[term]`
+(`generateStaticParams` from `TERM_PAGES`, `dynamicParams = false`), are free public pages, static and outside
+`/tools`. The calculator (`src/components/payment-terms/PaymentTermsCalculator.tsx`) works everything out in the
+browser, with no form, request, URL parameter or storage. Its rules are pure modules under `src/lib/payment-terms/`:
+- `readWrittenTerms` (`read.ts`) reads "d/D net N" or "net N"; the invoice reader without a model
+  (`ruleBasedExtraction`) uses it too. `parseTerms` (`terms.ts`) adds "n/30", "2% 10" and EOM ("E.O.M.", "end of
+  month") anywhere in the terms, counted from the last day of the invoice's month, and says what is wrong instead of
+  guessing: terms it can read only in part are refused, never read with a part dropped. Once it has read the terms
+  (`findWrittenTerms` says where they are), any figure, percent or word left beside them but a few filler words
+  ("Payment terms:") refuses them: "net 30, 2/10", two discounts or net terms, "2-10", "1/2% 10", a late fee, a date,
+  "ROG". `termDates` gives the discount deadline and due date.
+- `costOfSkipping` (`cost.ts`) gives the yearly cost of skipping a discount simple on 365 days, simple on 360 and
+  compounded, each with its formula; the break-even rate is the simple 365-day one. Never `annualPct`
+  (`src/lib/early-pay/offers-words.ts`), which divides by the full amount.
+- `lateFeeAfter` (`late-fee.ts`) gives a late fee N days after the due date: a percent a month for each month or part
+  of one (30 days) or by the day (× 12 ÷ 365), or a fixed amount, after days of grace, on the amount alone. Its limits
+  are a bill's: a percent a month at most `LATE_FEE_MAX_PERCENT` with at most 2 decimal places, a fixed amount at most
+  the invoice's amount; a fixed amount is also at least 0.01 (`MIN_FIXED_FEE`), so no fee shows as 0.00.
+- `payDecision` (`decision.ts`) runs the agent's written policy, `planPaymentTiming`, with unlimited cash, the person's
+  rate as `reserveApy` applied to the discounted amount (so it turns at the break-even rate), and the late fee, and
+  shows its sentence with amounts to 2 decimals, or more (`sentenceDecimals`, up to 6) where 2 would show a discount
+  and a yield that differ as equal.
+- It is `payment-terms` in `FREE_TOOLS` (above), after the address checker: the footer's **Free tools** lists it, and
+  the sitemap lists `/payment-terms` followed by its term pages. The pages end with `PaymentTermsCta`, whose **Try it on
+  your bills** is `ToolCta` (above), `payment-terms-start` for the analytics click; their full footer's **Get
+  started** credits the tool too (`<SiteFooter tool="payment-terms" />`, on the term pages as well); and they say
+  `FREE_TOOL_COUNT_LINE`. `tests/payment-terms-page.test.tsx` holds the calculator, its rules and the pages to making
+  no request and reading no address bar or storage; the cookie a start link writes is `ToolCta`'s.
+- They carry the full footer. `SiteFooter`'s links to the landing's sections are `/#…` on every page but the landing
+  (`SiteFooter landing`, which keeps them in place), so they reach the landing from these pages, /check-address,
+  /studios and /how-it-decides.
 
 **The OFAC vendor check.** `/check-vendor` (`src/app/check-vendor/page.tsx`,
 `docs/superpowers/specs/2026-10-28-check-vendor-design.md`) checks one vendor's name, or a whole vendor list with its
