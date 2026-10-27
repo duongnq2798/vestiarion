@@ -28,8 +28,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   what each is worth, when the list gives their terms, and say so when their bill may repeat another. The list comes
   back as a CSV with a "Bill check" column, a sample list of made-up vendors shows every kind of finding, and up to
   5,000 bills are read, the button showing it is busy meanwhile. It all runs in the browser: nothing pasted is sent
-  anywhere or kept. In a workspace, the agent's duplicate explanations are unchanged, reading an imported list's memos
-  is faster, and the bill import's column questions are the same controls the check uses. No migration.
+  anywhere or kept. Like the address checker, it is listed under the footer's **Free tools**, and its **Try it on your
+  bills** and footer's **Get started** credit a workspace opened next to it, as below. In a workspace, the agent's
+  duplicate explanations are unchanged, reading an imported list's memos is faster, and the bill import's column
+  questions are the same controls the check uses. No migration.
 
 - **Workspaces credited to the free tool they came from.** Choosing **Try it on your bills**, or the footer's **Get
   started**, on a free tool's page, today the [address checker](https://www.vestiarion.xyz/check-address), keeps that

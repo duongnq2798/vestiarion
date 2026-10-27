@@ -38,8 +38,11 @@ const NOW = new Date("2026-10-28T09:15:00.000Z");
 const CHECK_ADDRESS = freeTool("check-address");
 
 describe("the list of free tools (TA1)", () => {
-  it("holds the address checker, with a slug, a path, a title and a one-line description", () => {
-    expect(FREE_TOOLS.map(({ slug, path: at, title }) => ({ slug, path: at, title }))).toEqual([{ slug: "check-address", path: "/check-address", title: "Address checker" }]);
+  it("holds the address checker and the bill list check, with a slug, a path, a title and a one-line description", () => {
+    expect(FREE_TOOLS.map(({ slug, path: at, title }) => ({ slug, path: at, title }))).toEqual([
+      { slug: "check-address", path: "/check-address", title: "Address checker" },
+      { slug: "check-bills", path: "/check-bills", title: "Bill list check" },
+    ]);
     for (const tool of FREE_TOOLS) {
       expect(tool.description, tool.slug).toMatch(/^[A-Z][^\n]{20,160}\.$/);
       expect(tool.description.split(". ")).toHaveLength(1);
@@ -67,8 +70,17 @@ describe("the list of free tools (TA1)", () => {
     }
   });
 
+  it("has each tool's page start with the shared button and say the line about counting (TA3, TA6)", () => {
+    for (const tool of FREE_TOOLS) {
+      const page = source(`src/app${tool.path}/page.tsx`);
+      expect(page, tool.path).toContain(`<ToolCta tool="${tool.slug}" />`);
+      expect(page, tool.path).toContain("{FREE_TOOL_COUNT_LINE}");
+    }
+  });
+
   it("names each start button <slug>-start, an id analytics accepts", () => {
     expect(freeToolCtaId("check-address")).toBe("check-address-start");
+    expect(freeToolCtaId("check-bills")).toBe("check-bills-start");
     for (const tool of FREE_TOOLS) expect(CTA_ID.test(freeToolCtaId(tool.slug)), tool.slug).toBe(true);
   });
 });

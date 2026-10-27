@@ -73,9 +73,12 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put every free tool, by its title, under Free tools: the address checker for now", () => {
+  it("put every free tool, by its title, under Free tools: the address checker and the bill list check", () => {
     expect(FOOTER_COLUMNS[3].links).toEqual(FREE_TOOLS.map((tool) => ({ href: tool.path, label: tool.title })));
-    expect(FOOTER_COLUMNS[3].links).toEqual([{ href: "/check-address", label: "Address checker" }]);
+    expect(FOOTER_COLUMNS[3].links).toEqual([
+      { href: "/check-address", label: "Address checker" },
+      { href: "/check-bills", label: "Bill list check" },
+    ]);
   });
 
   it("put Terms, Privacy, Security and Contact (GitHub Issues) under Legal", () => {

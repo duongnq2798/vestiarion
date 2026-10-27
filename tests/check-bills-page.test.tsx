@@ -6,13 +6,14 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BillListChecker } from "@/components/bill-check/BillListChecker";
-import { CheckBillsCta } from "@/components/bill-check/CheckBillsCta";
 import { TRY_HREF } from "@/components/landing/cta";
 
 /**
  * /check-bills (docs/superpowers/specs/2026-10-28-check-bills-design.md CB1–CB3, CB9–CB11): the free bill list check,
  * rendered in a DOM and driven through its steps with the sample list and with pasted rows, and the page around it:
- * static, public, and with nothing that could send what is pasted anywhere.
+ * static, public, and with nothing that could send what is pasted anywhere. Its start button is the shared one that
+ * credits a workspace to the tool, apart from the checker's code (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md
+ * TA3, TA5, TA6).
  */
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/check-bills", useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
@@ -206,7 +207,10 @@ describe("the page (CB1, CB11)", () => {
     expect(String(metadata.description)).not.toMatch(/\b(?:safe|cleared|verified|compliant)\b/i);
     const markup = renderToStaticMarkup(<CheckBillsPage />).replaceAll("&#x27;", "'");
     expect(markup).toMatch(/<h1[^>]*>Check your bill list for duplicates and deadlines<\/h1>/);
-    expect(markup).toContain("Nothing you paste is sent anywhere or kept.");
+    expect(markup).toContain(
+      "The check runs in this page, and nothing you paste is kept. This page may count the visit and a click on Try it on your bills, by its address. What you paste or type is never sent."
+    );
+    expect(page).toContain("{FREE_TOOL_COUNT_LINE}");
     expect(markup).toContain("How it works");
     expect(markup).toContain("What it does not do");
     expect(markup).toContain('href="/check-address"');
@@ -216,8 +220,10 @@ describe("the page (CB1, CB11)", () => {
     expect(requiresSession("/check-bills")).toBe(false);
   });
 
-  it("ends with the call to action: Try it on your bills, where the landing's goes, with the shadow-mode line and the import's limit", () => {
-    const markup = renderToStaticMarkup(<CheckBillsCta />).replaceAll("&#x27;", "'");
+  it("ends with the call to action: the shared Try it on your bills, where the landing's goes, with the shadow-mode line and the import's limit", async () => {
+    const page = source("src/app/check-bills/page.tsx");
+    const { default: CheckBillsPage } = await import("@/app/check-bills/page");
+    const markup = renderToStaticMarkup(<CheckBillsPage />).replaceAll("&#x27;", "'");
     expect(markup).toContain(
       "Vestiarion runs its duplicate check, purchase-order match, sanctions screening and a payee lock on every new bill, and weighs early-payment discounts and late fees, before it pays. Start a shadow workspace and drop this same file into its bill import."
     );
@@ -226,7 +232,13 @@ describe("the page (CB1, CB11)", () => {
     expect(link?.[1]).toBe("Try it on your bills");
     expect(markup).toContain("In shadow mode it decides on your real bills while you keep paying them as you do now.");
     expect(markup).toContain("The import takes up to 200 bills at a time");
-    expect("check-bills-start").toMatch(/^[a-z][a-z-]{0,39}$/);
+    expect(markup).toContain('href="/docs/guides/import-bills"');
+    // The shared start button (free tool attribution TA3), named check-bills-start for the analytics click.
+    expect(page).toContain('<ToolCta tool="check-bills" />');
+    expect(markup.match(/data-cta="check-bills-start"/g)).toHaveLength(1);
+    // The full footer's Get started, the page's other start, credits the tool too (TA5).
+    expect(page).toContain('<SiteFooter tool="check-bills" />');
+    expect(markup).toMatch(/<a [^>]*href="\/onboarding\?shadow=1"[^>]*>Get started<\/a>/);
   });
 
   it("sends nothing anywhere: the checker, its rules and the page make no request, and read or write no address bar, storage or cookie", () => {
@@ -248,9 +260,9 @@ describe("the page (CB1, CB11)", () => {
       );
       expect(code, file).not.toMatch(/\bVND\b|\b(?:safe|cleared|verified|compliant)\b/);
     }
-    // The call to action is the one place that may later record where a workspace came from (CB9).
+    // Recording where a workspace came from is the shared start button's, outside these files (CB9, CB11).
     expect(source("src/app/check-bills/page.tsx")).not.toContain("data-cta");
-    expect(source("src/components/bill-check/CheckBillsCta.tsx")).toContain('data-cta="check-bills-start"');
+    for (const file of files.filter((each) => !each.startsWith("src/app/"))) expect(source(file), file).not.toMatch(/ToolCta|ToolStartLink|free-tools/);
   });
 });
 

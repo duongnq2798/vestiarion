@@ -20,7 +20,7 @@ they check is the list its bill import reads, so the step after the check is sho
 - Its title is "Duplicate invoice check for your bill list, free" (the root layout adds the name), with a description,
   a canonical address and social cards. Its heading says what it does in plain words.
 - Under the checker: how it works, and what it does not do.
-- It is in the sitemap. The import guide links to it.
+- It is in the sitemap and the footer's Free tools, both read from `FREE_TOOLS` (CB11). The import guide links to it.
 
 **CB2. The list** (`BillListChecker`, `src/components/bill-check/BillListChecker.tsx`).
 - A CSV, TSV or text file chosen or dropped (at most 5 MB), or rows pasted from Excel or Google Sheets: an export from
@@ -138,8 +138,8 @@ they check is the list its bill import reads, so the step after the check is sho
   nothing goes in a URL, storage or a cookie. The file is read in the page.
 - `tests/check-bills-page.test.tsx` fails if the checker's code, its rules or the page gain a request, a URL read or
   write, storage, a cookie, analytics, a form or a named field.
-- The call to action (CB11) is kept in its own file, outside that test, so a later change that records where a
-  workspace came from does not touch the checker.
+- The call to action's start button (CB11) records where a workspace came from, from its own file outside the
+  checker's code (`src/components/public/ToolCta.tsx`), so the checker never touches a cookie.
 
 **CB10. The sample list** (`sampleBillList`, `src/lib/bill-check/sample.ts`).
 - Made-up vendors and amounts in USD, its dates counted from today so its deadlines always fall in the next 7 days. It
@@ -147,7 +147,7 @@ they check is the list its bill import reads, so the step after the check is sho
 - It holds a bill sent twice, the same invoice keyed with its number written another way, a monthly charge, a
   discount ending soon, a late fee starting soon and a row whose due date is not a real day.
 
-**CB11. The call to action** (`CheckBillsCta`, `src/components/bill-check/CheckBillsCta.tsx`).
+**CB11. The call to action** (on the page, after what it does not do).
 - "Vestiarion runs its duplicate check, purchase-order match, sanctions screening and a payee lock on every new bill,
   and weighs early-payment discounts and late fees, before it pays. Start a shadow workspace and drop this same file
   into its bill import." It names only what the agent does: the invoice-number comparison and the month-apart runs are
@@ -155,6 +155,10 @@ they check is the list its bill import reads, so the step after the check is sho
 - **Try it on your bills** (`data-cta="check-bills-start"`) goes where the landing's does (`TRY_HREF`), with the
   shadow-mode line under it, and a note that the import takes up to 200 bills at a time, for vendors already in
   Counterparties.
+- That button is the shared `ToolCta` for `check-bills`, and the page's full footer is `<SiteFooter tool="check-bills" />`,
+  so both start links credit a workspace opened after them to this tool; the tool is `check-bills` in `FREE_TOOLS`,
+  "Bill list check" in the footer's Free tools, and the page says `FREE_TOOL_COUNT_LINE` under its introduction
+  (`2026-10-28-free-tool-attribution-design.md` TA1, TA3, TA5, TA6).
 
 ## Changes to shared code
 
@@ -171,12 +175,10 @@ they check is the list its bill import reads, so the step after the check is sho
 
 ## Not in this change
 
-- Recording that a workspace came from this page: a shared call-to-action component will do it for every free tool.
 - Columns the import does not read, such as a bill's own date or its status: two lists of the same bill paid and
   unpaid look alike here.
 - Bills of different vendors with the same invoice number: two vendors can number alike.
 - Leading zeros and lookalike characters in invoice numbers ("INV-042" and "INV-42").
-- A "Free tools" group in the footer.
 
 ## Tests
 
@@ -203,10 +205,14 @@ included.
 
 `tests/check-bills-page.test.tsx`, in a DOM: the sample list read, its columns, the check busy then what it found, with
 the summary live; the focus moved to each new step; a deadline that names the row its bill may repeat; the page's
-metadata, heading, call to action and that it is public; and nothing in the checker's code, or what it shares with the
-import, that could send what is pasted anywhere.
+metadata, heading, the line about counting, call to action with the shared start button, the footer naming the tool,
+and that it is public; and nothing in the checker's code, or what it shares with the import, that could send what is
+pasted anywhere or reach the start button's cookie.
+
+`tests/free-tool-attribution.test.tsx` holds the tool in `FREE_TOOLS`, with the shared button, the line about counting
+and its footer on its page; `tests/site-footer.test.tsx` its place under Free tools.
 
 `tests/bill-import-ui.test.tsx` and `tests/docs-guides.test.ts` hold the import's screens, now built from the shared
 controls, to what they were.
 
-`tests/docs-content.test.ts` covers the sitemap and the import guide's link.
+`tests/docs-content.test.ts` covers the sitemap, which lists the tool from `FREE_TOOLS`, and the import guide's link.

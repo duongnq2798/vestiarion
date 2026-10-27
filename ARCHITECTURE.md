@@ -4573,8 +4573,10 @@ address checker. A bill list is read and checked in the browser (`BillListChecke
   late fees starting (`lastDayWithoutFee`) in the 7 days from the person's own today, only from the terms the list
   gives, each naming the row its bill may repeat.
 - `checkedCsv` gives the list back with a "Bill check" column, as the import gives back the rows it could not add.
-- The call to action is `CheckBillsCta`, in a file of its own, so recording where a workspace came from can be added
-  there without touching the checker. `tests/check-bills-page.test.tsx` holds the checker's code to making no request.
+- It is `check-bills` in `FREE_TOOLS`. Its **Try it on your bills** is `ToolCta` (above), `check-bills-start` for the
+  analytics click, its full footer's **Get started** credits the tool too (`<SiteFooter tool="check-bills" />`), and the
+  page says `FREE_TOOL_COUNT_LINE` under its introduction, as the address checker does. Both start links live outside
+  the checker's code, which `tests/check-bills-page.test.tsx` holds to making no request and touching no cookie.
 
 ## Onboarding by role
 

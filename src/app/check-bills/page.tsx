@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BillListChecker } from "@/components/bill-check/BillListChecker";
-import { CheckBillsCta } from "@/components/bill-check/CheckBillsCta";
 import { PublicMain } from "@/components/public/PublicMain";
+import { ToolCta } from "@/components/public/ToolCta";
+import { Button } from "@/components/ui/Button";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
+import { FREE_TOOL_COUNT_LINE } from "@/lib/free-tools";
 import { X_HANDLE } from "@/lib/site-links";
 
 // The root layout adds " · Vestiarion" to the page's title; the social cards carry the name themselves.
@@ -24,7 +26,9 @@ export const metadata: Metadata = {
 /**
  * /check-bills (docs/superpowers/specs/2026-10-28-check-bills-design.md CB1): a free page anyone can run on a bill list
  * before paying it. Static: the list is read and checked in the browser, so no bill reaches the server. Not under
- * /tools, which serves downloads.
+ * /tools, which serves downloads. Its start button is the shared `ToolCta`, and its footer names the tool, so both starts
+ * on the page credit a workspace opened after them to this tool, from outside the checker's code (CB11;
+ * docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA3, TA5, TA6).
  */
 export default function CheckBillsPage() {
   return (
@@ -41,7 +45,8 @@ export default function CheckBillsPage() {
             Paste your bills, or drop the CSV your accounting software exports. It finds bills you may be about to pay twice, bills of the same
             amount about a month apart, and early-payment discounts and late fees in the next 7 days, with what each is worth.
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-ink-3">The check runs in this page. Nothing you paste is sent anywhere or kept.</p>
+          {/* True whether analytics is set up or not (free tool attribution TA6). */}
+          <p className="mt-2 text-sm leading-relaxed text-ink-3">The check runs in this page, and nothing you paste is kept. {FREE_TOOL_COUNT_LINE}</p>
 
           <div className="mt-8">
             <BillListChecker />
@@ -96,10 +101,29 @@ export default function CheckBillsPage() {
             </ul>
           </section>
 
-          <CheckBillsCta />
+          <section aria-labelledby="check-bills-in-vestiarion" className="mt-10 rounded-2xl border border-line bg-surface px-5 py-6 sm:px-6">
+            <h2 id="check-bills-in-vestiarion" className="text-lg font-semibold tracking-[-0.01em] text-ink">
+              What Vestiarion does with your bills
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-ink-2">
+              Vestiarion runs its duplicate check, purchase-order match, sanctions screening and a payee lock on every new bill, and weighs
+              early-payment discounts and late fees, before it pays. Start a shadow workspace and drop this same file into its bill import.
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-ink-3">
+              The import takes up to 200 bills at a time, for vendors you have added in Counterparties, and shows what happens to every row before
+              anything is added.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <ToolCta tool="check-bills" />
+              <Button asChild variant="secondary">
+                <Link href="/docs/guides/import-bills">How the bill import works</Link>
+              </Button>
+            </div>
+            <p className="mt-3 text-sm text-ink-3">In shadow mode it decides on your real bills while you keep paying them as you do now.</p>
+          </section>
         </div>
       </PublicMain>
-      <SiteFooter />
+      <SiteFooter tool="check-bills" />
     </div>
   );
 }
