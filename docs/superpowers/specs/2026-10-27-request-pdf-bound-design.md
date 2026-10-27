@@ -21,7 +21,9 @@ What it could not measure was easy to reach:
   file;
 - more than 10,000 streams, or more than 64 MB of scan work.
 
-Each of these stopped the lenient scan, and the file reached pdf.js on the request thread. pdf.js decodes each stream
+The lenient scan skipped a stream whose filter it could not measure and measured the others, but stopped at an
+`/Encrypt` key before measuring anything, and at too many streams or too much work wherever it was. Unless another of
+its streams measured past the budget, each such file reached pdf.js on the request thread. pdf.js decodes each stream
 into an ArrayBuffer outside any heap limit (a 0.5 MB deflated PDF took a process from 107 MB to 1.25 GB), and a request
 function may also be running a cycle it started after its answer (`runCycleSoon`), so one such file could end the
 instance with payments in flight. The cycle's own path (`readPdfBounded`) already refuses or bounds all of these.
@@ -31,7 +33,7 @@ instance with payments in flight. The cycle's own path (`readPdfBounded`) alread
 **RB1. The strict pre-scan decides where a sent PDF is read.** `pdfText` runs `prescanPdf` (now one mode, RB6) and
 branches on why it refused:
 - `decoded_limit`: refused as before, "This PDF could not be read. Paste the invoice's text instead.", before pdf.js or
-  any worker sees it;
+  any worker sees it, whatever else in the file the pre-scan cannot measure (RB6);
 - nothing (every stream measured, under budget): parsed on the thread that asks, as before (`countedParse` around
   unpdf's `extractText`). Every PDF fixture and caller test reads this way, unchanged, and read.ts keeps its static
   unpdf import, which is what carries unpdf into each function that reads PDFs (`serverExternalPackages`);
@@ -80,10 +82,15 @@ could not be read is left out as before and the message's own text still read; a
 be the file's (RB3) fails the whole read, so the person tries again rather than getting a draft without its invoice.
 When an attachment's pages were left unread past 20,000 characters, the email reads as `truncated`.
 
-**RB6. One pre-scan mode.** `prescanPdf(bytes, { limits? })` has no lenient mode left: nothing in `src` used it once
-`readDocument` scans strictly, and keeping it would let a later caller reopen the gap. Its tests that pinned lenient
-results go with it. A fake trailer's `/Encrypt` in a comment now refuses as `encrypted`, so such a file goes to the
-worker (RB2), where the process's memory budget stops what it decodes.
+**RB6. One pre-scan mode, in which a file past the budget is refused as that.** `prescanPdf(bytes, { limits? })` has no
+lenient mode left: nothing in `src` used it once `readDocument` scans strictly, and keeping it would let a later caller
+reopen the gap. Its tests that pinned lenient results go with it. A stream whose filter it cannot measure is skipped and
+the others are still measured, as the lenient mode did; an encrypted file's streams are measured too, as written, though
+pdf.js would decrypt them first, which can only find a bomb, never let a file through. Only once every other stream is
+measured under the budget is the file refused as `unbounded_filter` or `encrypted`. So `decoded_limit` comes first: an
+LZW stream before a bomb, an `/Encrypt` key on a stream's dictionary or in a fake trailer inside a comment beside one,
+is refused before any reader opens the file, wherever it sits in the file. Too many streams or too much work
+(`too_complex`) still stops the scan at once. The cycle refuses every reason, so what it does is unchanged.
 
 **RB7. Docs.** CHANGELOG [Unreleased]'s entry on PDFs built to expand (which named neither the payee link nor the
 files the pre-scan cannot measure) is amended in place; ARCHITECTURE.md's parse paragraph says where each sent PDF is
@@ -111,18 +118,22 @@ pre-scan tests are updated to point here.
   through From a document.
 - A request's worker and the cycle's share the process's memory budget, measured from each worker's start. The lower
   request budget makes the request's stop first in the usual case, not in every case.
+- A bomb the pre-scan cannot measure still reaches the request's worker: one behind a FlateDecode stage chained to LZW,
+  or among more than 10,000 streams. The worker decodes it until its 256 MB budget stops it, and the person is told
+  the PDF could not be read. Before, such a file was read on the thread that asked, with no bound.
 
 ## Tests (write first)
 
 **`tests/invoice-document-request-pdf.test.ts`** (`readDocument` with the worker and pdf.js on this thread watched;
 a test may answer for the worker):
-- RB1: Northwind's invoice is parsed on this thread with no worker. A 600 MB bomb is refused with neither.
+- RB1, RB6: Northwind's invoice is parsed on this thread with no worker. A 600 MB bomb is refused with neither, alone,
+  after an LZW stream, or beside a fake trailer in a comment.
 - RB2: a page whose text is LZW-encoded goes to the worker with `REQUEST_PDF_LIMITS` (256 MB of memory, the rest
   `PDF_LIMITS`) and 20,000 characters, never to pdf.js on this thread, and reads to the text of the same page
   unencoded (the real worker). So does each other file the pre-scan cannot measure: run-length, Brotli, Flate before
-  LZW, an LZW stream no page draws, an encrypted file, `/Encrypt` on a stream's dictionary, a fake trailer in a comment
-  beside a 600 MB bomb, and more than 10,000 streams. A read does not wait for a turn of the cycle's queue, and the
-  real worker's own timeout through it is the file's, so it was not counted as a parse on this thread.
+  LZW, an LZW stream no page draws, an LZW stream before one measured under the budget, an encrypted file, `/Encrypt`
+  on a stream's dictionary, and more than 10,000 streams. A read does not wait for a turn of the cycle's queue, and
+  the real worker's own timeout through it is the file's, so it was not counted as a parse on this thread.
 - RB3: `pages`, `timeout` alone, `memory` with and without `retry`, `parse` and `stopped` each read as "This PDF could
   not be read. Paste the invoice's text instead."; `timeout` with `retry` is a plain `Error`, neither a
   `DocumentReadError` nor a `PdfWorkerRefusal`; a reader that could not start is thrown as it is.
@@ -139,4 +150,6 @@ one while another worker answered, begun after it, or while two ran at once, has
 on this thread ran.
 
 **`tests/invoice-document-prescan.test.ts`**, RB6: the lenient assertions go; the strict refusals stay, under the one
-mode, and a fake trailer's `/Encrypt` in a comment beside a bomb refuses as `encrypted`.
+mode. A 600 MB bomb with an LZW stream before or after it, or with an `/Encrypt` key on a stream's dictionary or in a
+fake trailer inside a comment, refuses as `decoded_limit`, having decoded under 17 MB; an LZW stream before 1 MB of
+measured spaces refuses as `unbounded_filter`, having measured that megabyte; too many streams stop the scan at once.

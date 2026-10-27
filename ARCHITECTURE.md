@@ -3289,8 +3289,10 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   with nothing counted.
 - **A PDF someone sends in** (`readDocument`: From a document, invoices by email, the Chrome extension, Telegram, Slack
   and the payee link; docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md). The same pre-scan decides where it
-  is read. A file measured past 16 MB is refused ("This PDF could not be read. Paste the invoice's text instead."). A
-  measured file is parsed on the thread that asks, counted (`countedParse`). A file it cannot measure (encrypted; LZW,
+  is read. A file measured past 16 MB is refused ("This PDF could not be read. Paste the invoice's text instead."),
+  whatever else in it cannot be measured: the pre-scan skips a stream it cannot measure, measures the rest, and refuses
+  the file for that stream, or for encryption, only once they are under the budget. A measured file is parsed on the
+  thread that asks, counted (`countedParse`). A file it cannot measure (encrypted; LZW,
   run-length, Brotli or an image codec where text is read; more streams or work than it takes on) is read in the same
   worker under `REQUEST_PDF_LIMITS`: the cycle's limits with a 256 MB memory budget, so where a request's worker and the
   cycle's share a process the request's stops first. That read is neither counted as an on-thread parse nor queued

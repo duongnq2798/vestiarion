@@ -3,13 +3,13 @@ import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Where a PDF someone sends in is read (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1-RB5), with
+ * Where a PDF someone sends in is read (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1-RB6), with
  * the worker and pdf.js on this thread watched. The strict pre-scan decides: a file it measures past 16 MB decoded is
- * refused; one it measured is parsed on this thread, as before; one it cannot measure (LZW, run-length or Brotli where
- * text is read, encryption, more streams than it takes on) is read in the worker under the request's limits, never by
- * pdf.js on this thread, never behind the cycle's queue. A stop that is the file's reads as one that could not be read;
- * a timeout beside other reads says to try again; a reader that could not start is thrown as it is. An email's PDFs are
- * read one at a time, the first three.
+ * refused, whatever else in it cannot be measured (RB6); one it measured is parsed on this thread, as before; one it
+ * cannot measure (LZW, run-length or Brotli where text is read, encryption, more streams than it takes on) is read in
+ * the worker under the request's limits, never by pdf.js on this thread, never behind the cycle's queue. A stop that is
+ * the file's reads as one that could not be read; a timeout beside other reads says to try again; a reader that could
+ * not start is thrown as it is. An email's PDFs are read one at a time, the first three.
  */
 
 const { workerSpy, proxySpy, actualWorker } = vi.hoisted(() => ({
@@ -42,7 +42,7 @@ vi.mock("unpdf", async (importOriginal) => {
 import { prescanPdf } from "@/lib/invoice-document/pdf-prescan";
 import { oneParseAtATime, PDF_LIMITS, PdfWorkerRefusal, REQUEST_PDF_LIMITS } from "@/lib/invoice-document/pdf-worker";
 import { DocumentReadError, MAX_DOCUMENT_CHARS, readDocument } from "@/lib/invoice-document/read";
-import { inflateBombPdf, INVOICE_LINE, lzwLiterals, nestedFormsPdf, onePagePdf, streamObject, withUnmeasuredStream } from "./support/pdf-files";
+import { inflateBombPdf, INVOICE_LINE, lzwBeforeBombPdf, lzwLiterals, nestedFormsPdf, onePagePdf, streamObject, withUnmeasuredStream } from "./support/pdf-files";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(path.join(process.cwd(), "tests", "fixtures", "invoice-document", name)));
 const pdf = (bytes: Uint8Array) => ({ bytes, name: "invoice.pdf", type: "application/pdf" });
@@ -96,15 +96,14 @@ describe("where a PDF someone sends in is read (RB1, RB2)", () => {
 
   it("sends every other file the pre-scan cannot measure to the worker, never to pdf.js on this thread", async () => {
     const page = streamObject("", INVOICE_LINE);
-    const bombBesideFakeTrailer = new Uint8Array(Buffer.concat([inflateBombPdf(600), latin1("% trailer << /Encrypt 1 0 R >>\n")]));
     for (const [label, bytes, why] of [
       ["run-length", onePagePdf(streamObject("/Filter /RunLengthDecode", "anything")), "unbounded_filter"],
       ["Brotli", onePagePdf(streamObject("/Filter /BrotliDecode", "anything")), "unbounded_filter"],
       ["Flate before LZW", onePagePdf(streamObject("/Filter [/FlateDecode /LZWDecode]", "anything")), "unbounded_filter"],
       ["an LZW stream no page draws", withUnmeasuredStream(onePagePdf(page)), "unbounded_filter"],
+      ["an LZW stream before one measured under the budget", lzwBeforeBombPdf(1), "unbounded_filter"],
       ["encrypted", onePagePdf(page, { more: ["<< /Filter /Standard /V 1 /R 2 /O <00> /U <00> /P -4 >>"], trailer: "/Encrypt 6 0 R " }), "encrypted"],
       ["/Encrypt on a stream's dictionary", onePagePdf(streamObject("/Encrypt 1", INVOICE_LINE)), "encrypted"],
-      ["a fake trailer in a comment beside a 600 MB bomb", bombBesideFakeTrailer, "encrypted"],
       ["more than 10,000 streams", onePagePdf(page, { more: Array.from({ length: 10_001 }, () => streamObject("", "q Q")) }), "too_complex"],
     ] as const) {
       expect(prescanPdf(bytes).refused, label).toBe(why);
@@ -117,12 +116,20 @@ describe("where a PDF someone sends in is read (RB1, RB2)", () => {
     }
   });
 
-  it("still refuses a file it measures past 16 MB decoded, with neither the worker nor pdf.js", async () => {
-    const error = await readDocument(pdf(inflateBombPdf(600))).catch((caught: unknown) => caught);
-    expect(error).toBeInstanceOf(DocumentReadError);
-    expect(error).toMatchObject({ code: "unsupported", message: UNREADABLE });
-    expect(workerSpy).not.toHaveBeenCalled();
-    expect(proxySpy).not.toHaveBeenCalled();
+  it("still refuses a file it measures past 16 MB decoded, with neither the worker nor pdf.js, whatever else in it cannot be measured", async () => {
+    const bomb = inflateBombPdf(600);
+    for (const [label, bytes] of [
+      ["a 600 MB bomb", bomb],
+      ["an LZW stream before a 600 MB bomb", lzwBeforeBombPdf(600)],
+      ["a fake trailer in a comment beside a 600 MB bomb", new Uint8Array(Buffer.concat([bomb, latin1("% trailer << /Encrypt 1 0 R >>\n")]))],
+    ] as const) {
+      expect(prescanPdf(bytes).refused, label).toBe("decoded_limit");
+      const error = await readDocument(pdf(bytes)).catch((caught: unknown) => caught);
+      expect(error, label).toBeInstanceOf(DocumentReadError);
+      expect(error, label).toMatchObject({ code: "unsupported", message: UNREADABLE });
+      expect(workerSpy, label).not.toHaveBeenCalled();
+      expect(proxySpy, label).not.toHaveBeenCalled();
+    }
   });
 
   it("signs the read truncated when the worker left pages unread past 20,000 characters", async () => {

@@ -20,8 +20,10 @@
  *   counted all the same when a page's contents, a font or a character map name it, from any object read, including
  *   the ones inside object streams, which are decoded first.
  * - A stream read for text whose filter cannot be measured (LZW, run-length, Brotli, an image codec, or a filter kept
- *   in an object not found), an encrypted file, or one of more streams or work than the limits is refused too, and
- *   says why: the cycle reads none of them, and `readDocument` reads them in a worker, under its limits
+ *   in an object not found) is skipped, and an encrypted file's streams are measured as written; each such file is
+ *   refused too, and says why, once every other stream is measured under the budget. So a file past the budget is
+ *   refused as that, wherever those streams sit. One of more streams or work than the limits is refused at once. The
+ *   cycle reads no refused file, and `readDocument` reads all but the one past the budget in a worker, under its limits
  *   (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1, RB6). There is no mode that lets them through.
  *
  * What it does not bound: how often pdf.js decodes one stream (a form drawn by many forms), predictors, which never
@@ -759,6 +761,8 @@ class Scan {
   /** Objects a text key names that may be an array or dictionary of more: a page's contents, a font's glyphs. */
   private readonly containers = new Set<number>();
   private encrypted = false;
+  /** A stream read for text was skipped, its filter one the scan cannot measure. */
+  private skipped = false;
 
   constructor(
     private readonly bytes: Uint8Array,
@@ -767,21 +771,30 @@ class Scan {
     this.text = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString("latin1");
   }
 
-  /** A file the scan cannot measure is refused, and says why. */
-  private unmeasured(why: Exclude<PrescanRefusal, "decoded_limit">): never {
-    throw new Refused(why);
+  /** A file of more streams, or more work, than the limits is refused at once. */
+  private tooComplex(): never {
+    throw new Refused("too_complex");
+  }
+
+  /**
+   * A stream whose filter the scan cannot measure is skipped, and the rest are still measured: the file is refused for
+   * it only once they are, under the budget, so a bomb beside it is refused as that, before any reader opens the file
+   * (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB6).
+   */
+  private unmeasured(): true {
+    this.skipped = true;
+    return true;
   }
 
   private spend(amount: number) {
     this.work += amount;
-    if (this.work > this.limits.maxWorkBytes) this.unmeasured("too_complex");
+    if (this.work > this.limits.maxWorkBytes) this.tooComplex();
   }
 
   run(): void {
     this.readObjects();
-    if (this.encrypted) return this.unmeasured("encrypted");
     const strays = this.strayStreams();
-    if (this.streams.length + strays.length > this.limits.maxStreams) return this.unmeasured("too_complex");
+    if (this.streams.length + strays.length > this.limits.maxStreams) return this.tooComplex();
     // Object streams first: the objects inside them may name the filters, and the contents, of the rest.
     const ordered = [...this.streams].sort((a, b) => Number(isObjectStream(b.start.dict)) - Number(isObjectStream(a.start.dict)));
     const later: Found[] = [];
@@ -794,6 +807,10 @@ class Scan {
       this.measure(found, true);
     }
     for (const at of strays) this.count(inflateLikePdfjs(this.bytes.subarray(at), this.left, this.workLeft, false));
+    // Every stream it could measure is under the budget. An encrypted file's streams were measured as written, not as
+    // pdf.js decrypts them, so it is refused all the same; and so is one with a stream skipped.
+    if (this.encrypted) throw new Refused("encrypted");
+    if (this.skipped) throw new Refused("unbounded_filter");
   }
 
   private get left(): number {
@@ -828,7 +845,7 @@ class Scan {
     let names: string[];
     if (filter === UNRESOLVED) {
       if (!final) return false;
-      return this.unmeasured("unbounded_filter");
+      return this.unmeasured();
     }
     if (filter instanceof Name) names = [filter.name];
     else if (Array.isArray(filter)) {
@@ -837,14 +854,14 @@ class Scan {
         const name = this.resolve(each);
         if (name === UNRESOLVED) {
           if (!final) return false;
-          return this.unmeasured("unbounded_filter");
+          return this.unmeasured();
         }
         // pdf.js refuses a filter that is not a name, and decodes nothing of the stream.
         if (!(name instanceof Name)) return true;
         names.push(name.name);
       }
     } else names = [];
-    if (names.some((name) => UNMEASURED.has(name))) return this.unmeasured("unbounded_filter");
+    if (names.some((name) => UNMEASURED.has(name))) return this.unmeasured();
     const objectStream = isObjectStream(dict);
     let data: Uint8Array = this.bytes.subarray(dataStart);
     for (let i = 0; i < names.length; i++) {
@@ -875,7 +892,7 @@ class Scan {
       if (value instanceof StreamStart) {
         this.streams.push({ start: value, num });
         if (value.dict.map.has("Encrypt")) this.encrypted = true;
-        if (this.streams.length > this.limits.maxStreams) this.unmeasured("too_complex");
+        if (this.streams.length > this.limits.maxStreams) this.tooComplex();
       }
       if (num !== null) this.objects.set(num, value);
       this.walk(value);
@@ -1036,7 +1053,8 @@ function objectNumberBefore(bytes: Uint8Array, at: number): number | null {
 
 /**
  * Whether `bytes`, a PDF, may go to pdf.js, and if not, why: see the module comment. The cycle refuses every refusal;
- * `readDocument` refuses a file measured over the budget and reads the rest in a worker (RB1).
+ * `readDocument` refuses a file measured over the budget, which takes precedence over the other reasons, and reads the
+ * rest in a worker (RB1, RB6).
  */
 export function prescanPdf(bytes: Uint8Array, options: { limits?: Partial<PrescanLimits> } = {}): Prescan {
   const scan = new Scan(bytes, { ...PRESCAN_LIMITS, ...options.limits });

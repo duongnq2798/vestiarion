@@ -161,6 +161,21 @@ export function inflateBombPdf(decodedMb: number, { twice = false }: { twice?: b
   return onePagePdf(stream(twice ? "/Filter [/FlateDecode /FlateDecode]" : "/Filter /FlateDecode", data));
 }
 
+/**
+ * One page whose contents are two streams, in this order: its line of invoice text LZW-encoded, which the pre-scan
+ * cannot measure, and then `decodedMb` MB of spaces, deflated. A valid PDF that pdf.js reads to that line.
+ */
+export function lzwBeforeBombPdf(decodedMb: number): Uint8Array<ArrayBuffer> {
+  return buildPdf([
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents [5 0 R 6 0 R] >>",
+    FONT,
+    stream("/Filter /LZWDecode", lzwLiterals(INVOICE_LINE)),
+    stream("/Filter /FlateDecode", deflatedWithSpaces("", decodedMb)),
+  ]);
+}
+
 /** Bits written into bytes as deflate packs them: header fields from their lowest bit, Huffman codes from their highest. */
 class DeflateBits {
   private readonly bytes: number[] = [];

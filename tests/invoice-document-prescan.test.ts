@@ -12,19 +12,23 @@ import {
   FONT,
   inflateBombPdf,
   INVOICE_LINE,
+  lzwBeforeBombPdf,
   nestedFormsPdf,
   onePagePdf,
   pagesPdf,
   streamObject,
+  withUnmeasuredStream,
 } from "./support/pdf-files";
 
 /**
  * The PDF pre-scan (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK3): before pdf.js sees a
  * file, every stream it would decode to read text is decoded as pdf.js decodes it, counting the bytes, against one
  * budget for the whole file. A file of a few hundred kilobytes that would decode to gigabytes is refused there, in a
- * fraction of a second, having decoded no more than the budget. A stream it cannot measure is refused too, as are an
- * encrypted file and one of more streams or work than it takes on: the cycle reads none of them, and readDocument reads
- * them in the worker (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1, RB6, its one mode).
+ * fraction of a second, having decoded no more than the budget. A stream it cannot measure is refused too, and so is
+ * an encrypted file, once every other stream is measured under the budget, so a file past the budget is refused as that
+ * wherever they sit; one of more streams or work than it takes on is refused at once. The cycle reads no refused file;
+ * readDocument refuses one past the budget and reads the rest in the worker
+ * (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1, RB6, its one mode).
  */
 
 const MB = 2 ** 20;
@@ -182,10 +186,28 @@ describe("prescanPdf (DK3)", () => {
   it("refuses an encrypted PDF, whose streams it cannot see into, however the /Encrypt key reaches it", () => {
     const pdf = onePagePdf(streamObject("", INVOICE_LINE), { more: ["<< /Filter /Standard /V 1 /R 2 /O <00> /U <00> /P -4 >>"], trailer: "/Encrypt 6 0 R " });
     expect(prescan(pdf).refused).toBe("encrypted");
-    // On a stream's dictionary, which pdf.js ignores, and in a trailer written in a comment beside a bomb: refused
-    // before any stream is measured, so readDocument reads such a file in the worker.
+    // On a stream's dictionary, which pdf.js ignores, too.
     expect(prescan(onePagePdf(streamObject("/Encrypt 1", INVOICE_LINE))).refused).toBe("encrypted");
-    expect(prescan(Buffer.concat([inflateBombPdf(600), latin1("% trailer << /Encrypt 1 0 R >>\n")])).refused).toBe("encrypted");
+  });
+
+  it("refuses a file measured past the budget as that, wherever in it a stream it cannot measure sits (RB6)", () => {
+    // An LZW stream before a bomb or after it, or an /Encrypt key beside one: the streams it can measure are measured
+    // all the same, so readDocument refuses each file with no worker.
+    const bomb = inflateBombPdf(600);
+    for (const [label, bytes] of [
+      ["an LZW stream before a bomb", lzwBeforeBombPdf(600)],
+      ["an LZW stream after a bomb", withUnmeasuredStream(bomb)],
+      ["a fake trailer in a comment beside a bomb", Buffer.concat([bomb, latin1("% trailer << /Encrypt 1 0 R >>\n")])],
+      ["/Encrypt on a stream's dictionary beside a bomb", Buffer.concat([bomb, latin1(`99 0 obj\n${streamObject("/Encrypt 1", "q Q")}\nendobj\n`)])],
+    ] as const) {
+      const scan = prescan(bytes);
+      expect(scan.refused, label).toBe("decoded_limit");
+      expect(scan.decodedBytes, label).toBeLessThan(17 * MB);
+    }
+    // Under the budget, the streams after one it cannot measure are measured too, and the file is refused for that one.
+    expect(prescan(lzwBeforeBombPdf(1))).toEqual({ refused: "unbounded_filter", decodedBytes: MB });
+    // More streams than it takes on still stops it at once.
+    expect(prescanPdf(lzwBeforeBombPdf(600), { limits: { maxStreams: 1 } })).toEqual({ refused: "too_complex", decodedBytes: 0 });
   });
 
   it("refuses a file of more streams, or more work, than it takes on", () => {
