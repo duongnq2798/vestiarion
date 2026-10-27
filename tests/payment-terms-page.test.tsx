@@ -53,6 +53,12 @@ function text(): string {
 }
 const live = () => container.querySelector('[aria-live="polite"]')?.textContent?.replace(/\s+/g, " ") ?? "";
 
+/** The links in a page's markup to a section of the same page, `href="#…"`, whose section is not on it. */
+function missingSections(markup: string): string[] {
+  const ids = new Set([...markup.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]));
+  return [...markup.matchAll(/\bhref="#([^"]*)"/g)].map((match) => match[1]).filter((id) => !ids.has(id));
+}
+
 /** The control a label names, by its `for`. */
 function control(label: string): HTMLInputElement {
   const found = [...container.querySelectorAll("label")].find((each) => each.textContent?.replace(/\(optional\)/, "").trim() === label);
@@ -145,24 +151,35 @@ describe("the calculator (PT6)", () => {
     type("Amount", "a lot");
     expect(text()).toContain("Enter the invoice's amount, such as 1,250.00.");
     expect(live()).toBe("");
-    // Less than a cent cannot be shown with the page's 2 decimals.
+    // Less than a cent cannot be shown with the page's 2 decimals: an amount out of range says its range.
     type("Amount", "0.009");
-    expect(text()).toContain("Enter the invoice's amount, such as 1,250.00.");
+    expect(text()).toContain("An amount is at least 0.01 and at most 1,000,000,000,000.");
+    expect(text()).not.toContain("Enter the invoice's amount");
     expect(live()).toBe("");
+    type("Amount", "1000000000000.01");
+    expect(text()).toContain("An amount is at least 0.01 and at most 1,000,000,000,000.");
     type("Amount", "0.01");
     expect(live()).toContain("Pay on Nov 27, 2026");
     type("Amount", "1,000");
     type("Late fee", "12");
-    expect(text()).toContain("A late fee as a percent a month is more than 0 and at most 10.");
+    expect(text()).toContain("A late fee as a percent a month is more than 0 and at most 10, with at most 2 decimal places.");
+    expect(live()).toBe("");
+    // Terms with a late fee in them say where it goes.
+    type("Late fee", "");
+    type("Terms", "net 30, 1.5% late fee");
+    expect(text()).toContain("a late fee and the invoice date have their own fields.");
     expect(live()).toBe("");
   });
 
-  it("refuses a fixed late fee above the invoice's amount, as a bill does", () => {
+  it("refuses a fixed late fee above the invoice's amount, as a bill does, or under 0.01, which would show as 0.00", () => {
     mount("net 30");
     const fixed = [...container.querySelectorAll("label")].find((label) => label.textContent === "A fixed amount");
     act(() => (container.querySelector(`[id="${fixed!.htmlFor}"]`) as HTMLButtonElement).click());
     type("Late fee", "1000.01");
-    expect(text()).toContain("A fixed late fee is more than 0 and at most the invoice's amount.");
+    expect(text()).toContain("A fixed late fee is at least 0.01 and at most the invoice's amount.");
+    expect(live()).toBe("");
+    type("Late fee", "0.004");
+    expect(text()).toContain("A fixed late fee is at least 0.01 and at most the invoice's amount.");
     expect(live()).toBe("");
     type("Late fee", "1000");
     expect(text()).toContain("7 days late 1,000.00 USD");
@@ -216,9 +233,10 @@ describe("the page (PT7, PT9)", () => {
     const calculatorHeading = markup.indexOf('<h2 id="calculator" class="sr-only">Work out an invoice</h2>');
     expect(calculatorHeading).toBeGreaterThan(h1);
     expect(markup.indexOf("Invoice date")).toBeGreaterThan(calculatorHeading);
-    // The landing's section ids belong to the footer's links: this page's own section takes another.
-    expect(markup).not.toContain('id="how-it-works"');
     expect(markup).toContain('id="how-the-calculator-works"');
+    // Every link to a section goes to one that is there: the footer's links to the landing's sections go to the landing.
+    expect(missingSections(markup)).toEqual([]);
+    expect(markup).toContain('href="/#how-it-works"');
     expect(markup).toContain('data-cta="payment-terms-start"');
     expect(markup).toContain('href="/onboarding?shadow=1"');
     expect(markup).toContain("In shadow mode it decides on your real bills while you keep paying them as you do now.");
@@ -257,6 +275,7 @@ describe("the term pages (PT8)", () => {
       // Two header links, as on the other public pages, so the header fits a 375 px phone; the wordmark goes home.
       expect(markup, slug).not.toMatch(/>Home<\/a>/);
       expect(markup, slug).toMatch(/<a [^>]*href="\/payment-terms"[^>]*>Calculator<\/a>/);
+      expect(missingSections(markup), slug).toEqual([]);
     }
   });
 

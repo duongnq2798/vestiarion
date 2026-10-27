@@ -4525,21 +4525,28 @@ parameter.
 `/tools`. The calculator (`src/components/payment-terms/PaymentTermsCalculator.tsx`) works everything out in the
 browser, with no form, request, URL parameter or storage. Its rules are pure modules under `src/lib/payment-terms/`:
 - `readWrittenTerms` (`read.ts`) reads "d/D net N" or "net N"; the invoice reader without a model
-  (`ruleBasedExtraction`) uses it too. `parseTerms` (`terms.ts`) adds "n/30", "2% 10" and EOM anywhere in the terms,
-  counted from the last day of the invoice's month, and says what is wrong instead of guessing: a discount it cannot
-  read in full ("net 30, 2/10", or two) is refused, never dropped. `termDates` gives the discount deadline and due date.
+  (`ruleBasedExtraction`) uses it too. `parseTerms` (`terms.ts`) adds "n/30", "2% 10" and EOM ("E.O.M.", "end of
+  month") anywhere in the terms, counted from the last day of the invoice's month, and says what is wrong instead of
+  guessing: terms it can read only in part are refused, never read with a part dropped. Once it has read the terms
+  (`findWrittenTerms` says where they are), any figure, percent or word left beside them but a few filler words
+  ("Payment terms:") refuses them: "net 30, 2/10", two discounts or net terms, "2-10", "1/2% 10", a late fee, a date,
+  "ROG". `termDates` gives the discount deadline and due date.
 - `costOfSkipping` (`cost.ts`) gives the yearly cost of skipping a discount simple on 365 days, simple on 360 and
   compounded, each with its formula; the break-even rate is the simple 365-day one. Never `annualPct`
   (`src/lib/early-pay/offers-words.ts`), which divides by the full amount.
 - `lateFeeAfter` (`late-fee.ts`) gives a late fee N days after the due date: a percent a month for each month or part
   of one (30 days) or by the day (× 12 ÷ 365), or a fixed amount, after days of grace, on the amount alone. Its limits
-  are a bill's: a percent a month at most `LATE_FEE_MAX_PERCENT`, a fixed amount at most the invoice's amount.
+  are a bill's: a percent a month at most `LATE_FEE_MAX_PERCENT` with at most 2 decimal places, a fixed amount at most
+  the invoice's amount; a fixed amount is also at least 0.01 (`MIN_FIXED_FEE`), so no fee shows as 0.00.
 - `payDecision` (`decision.ts`) runs the agent's written policy, `planPaymentTiming`, with unlimited cash, the person's
   rate as `reserveApy` applied to the discounted amount (so it turns at the break-even rate), and the late fee, and
   shows its sentence with amounts to 2 decimals, or more (`sentenceDecimals`, up to 6) where 2 would show a discount
   and a yield that differ as equal.
 - The pages end with `PaymentTermsCta` (`data-cta="payment-terms-start"`). `tests/payment-terms-page.test.tsx` holds
   the calculator, its rules and the pages to making no request and reading no address bar or storage.
+- They carry the full footer. `SiteFooter`'s links to the landing's sections are `/#…` on every page but the landing
+  (`SiteFooter landing`, which keeps them in place), so they reach the landing from these pages, /check-address,
+  /studios and /how-it-decides.
 
 ## Onboarding by role
 

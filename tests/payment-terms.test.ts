@@ -53,6 +53,19 @@ describe("the calculator's terms (PT1)", () => {
     expect(terms("net 0")).toEqual({ discount: null, netDays: 0, endOfMonth: false });
   });
 
+  it("reads EOM written with dots or hyphens", () => {
+    expect(terms("net 30 E.O.M.")).toEqual({ discount: null, netDays: 30, endOfMonth: true });
+    expect(terms("2/10 net 30 E.O.M")).toEqual({ discount: { pct: 2, days: 10 }, netDays: 30, endOfMonth: true });
+    expect(terms("net 30 end-of-month")).toEqual({ discount: null, netDays: 30, endOfMonth: true });
+    expect(terms("2/10 net 30 end-of-the-month")).toEqual({ discount: { pct: 2, days: 10 }, netDays: 30, endOfMonth: true });
+  });
+
+  it("reads terms with the words an invoice puts around them", () => {
+    expect(terms("Payment terms: net 30 from the invoice date")).toEqual({ discount: null, netDays: 30, endOfMonth: false });
+    expect(terms("Terms: 2% 10 days, net 30 days after date of invoice")).toEqual({ discount: { pct: 2, days: 10 }, netDays: 30, endOfMonth: false });
+    expect(terms("Net 30 calendar days.")).toEqual({ discount: null, netDays: 30, endOfMonth: false });
+  });
+
   it("reads a discount written with a percent sign, with days, or before EOM", () => {
     const twoTen = { discount: { pct: 2, days: 10 }, netDays: 30 };
     expect(terms("2/10 EOM, n/30")).toEqual({ ...twoTen, endOfMonth: true });
@@ -64,22 +77,50 @@ describe("the calculator's terms (PT1)", () => {
     expect(terms("2/10 days net 30")).toEqual({ ...twoTen, endOfMonth: false });
   });
 
-  it("refuses a discount it cannot read rather than dropping it", () => {
-    const unread = { ok: false, message: 'A discount in these terms could not be read. Write it as "2/10 net 30" or "2% 10 net 30", with one discount at most.' };
+  it("refuses terms it can read only in part, rather than dropping or guessing the rest", () => {
+    const unread = {
+      ok: false,
+      message:
+        'Part of these terms could not be read. Write them as "2/10 net 30", "2% 10 net 30" or "net 30 EOM", with one discount at most; a late fee and the invoice date have their own fields.',
+    };
+    // A discount written after the net days, without its days, or in a form it does not read.
     expect(parseTerms("net 30, 2/10")).toEqual(unread);
     expect(parseTerms("net 30 2/10")).toEqual(unread);
     expect(parseTerms("2% net 30")).toEqual(unread);
     expect(parseTerms("2% within 10 days, net 30")).toEqual(unread);
+    expect(parseTerms("2-10 net 30")).toEqual(unread);
+    expect(parseTerms("2 10 net 30")).toEqual(unread);
     // Two discounts, as in "2/10, 1/20, net 30": the reader would keep the second alone.
     expect(parseTerms("2/10, 1/20, net 30")).toEqual(unread);
+    // A fraction of a percent is never read as its last figure: "1/2% 10" is not 2/10.
+    for (const half of ["1/2% 10 net 30", "1 1/2% 10 net 30", "1-1/2% 10 net 30", "1/2 % 10 net 30", "1/2%/10 net 30", "1/2% 10, net 30", "½% 10 net 30", ".5/10 net 30"]) {
+      expect(parseTerms(half), half).toEqual(unread);
+    }
+    // A second net term.
+    expect(parseTerms("net 15 net 30")).toEqual(unread);
+    expect(parseTerms("2/10 net 30, net 45")).toEqual(unread);
+    expect(parseTerms("Net 7, 2/10 net 30")).toEqual(unread);
+    // A late fee or a date, which have fields of their own.
+    expect(parseTerms("net 30, 1.5% late fee")).toEqual(unread);
+    expect(parseTerms("Net 30. 1.5% per month on overdue balances")).toEqual(unread);
+    expect(parseTerms("net 30 from 10/15/2026")).toEqual(unread);
+    // Words that change the day the days count from: receipt of goods, the month after.
+    expect(parseTerms("2/10 net 30 ROG")).toEqual(unread);
+    expect(parseTerms("net 30 upon receipt")).toEqual(unread);
+    expect(parseTerms("2/10 prox net 30")).toEqual(unread);
     expect(parseTerms("2/10 EOM")).toEqual({ ok: false, message: 'These terms could not be read. Write them as "2/10 net 30", "net 45" or "net 30 EOM".' });
   });
 
   it("says what is wrong instead of guessing", () => {
     expect(parseTerms("  ")).toEqual({ ok: false, message: 'Enter the terms as the invoice writes them, such as "2/10 net 30", "net 45" or "net 30 EOM".' });
     expect(parseTerms("pay soon")).toEqual({ ok: false, message: 'These terms could not be read. Write them as "2/10 net 30", "net 45" or "net 30 EOM".' });
-    expect(parseTerms("0/10 net 30")).toEqual({ ok: false, message: "A discount is more than 0% and less than 100%." });
-    expect(parseTerms("100/10 net 30")).toEqual({ ok: false, message: "A discount is more than 0% and less than 100%." });
+    const percent = { ok: false, message: "A discount is more than 0% and less than 100%, with at most 2 decimal places." };
+    expect(parseTerms("0/10 net 30")).toEqual(percent);
+    expect(parseTerms("100/10 net 30")).toEqual(percent);
+    // As a bill's discount: at most 2 decimal places, so a percent never reads as "1e-7".
+    expect(parseTerms("0.0000001/10 net 30")).toEqual(percent);
+    expect(parseTerms("2.555/10 net 30")).toEqual(percent);
+    expect(terms("2.25/10 net 30").discount).toEqual({ pct: 2.25, days: 10 });
     expect(parseTerms("net 400")).toEqual({ ok: false, message: "Net days are at most 365." });
     expect(parseTerms("2/30 net 30")).toEqual({
       ok: false,
@@ -107,6 +148,7 @@ describe("the dates (PT2)", () => {
     expect(termDates("2026-11-02", terms("net 30 EOM"))).toEqual({ countFrom: "2026-11-30", discountDeadline: null, dueOn: "2026-12-30" });
     expect(termDates("2026-12-15", terms("2/10 net 30 EOM"))).toEqual({ countFrom: "2026-12-31", discountDeadline: "2027-01-10", dueOn: "2027-01-30" });
     expect(termDates("2028-02-03", terms("net 30 EOM"))).toEqual({ countFrom: "2028-02-29", discountDeadline: null, dueOn: "2028-03-30" });
+    expect(termDates("2026-11-02", terms("2/10 net 30 E.O.M."))).toEqual({ countFrom: "2026-11-30", discountDeadline: "2026-12-10", dueOn: "2026-12-30" });
     expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
   });
 
@@ -182,19 +224,23 @@ describe("the late fee after a number of days (PT4)", () => {
     expect(lateFeeStartsOn("2026-11-27", 10)).toBe("2026-12-08");
   });
 
-  it("reads the fee's fields, refusing what a bill's late fee would refuse", () => {
+  it("reads the fee's fields, refusing what a bill's late fee would refuse and a fixed fee under 0.01", () => {
     expect(readLateFee({ value: "", kind: "percent_month", charge: "month", grace: "", amount: 1000 })).toEqual({ ok: true, fee: null });
     expect(readLateFee({ value: "1.5%", kind: "percent_month", charge: "day", grace: "5", amount: 1000 })).toEqual({
       ok: true,
       fee: { kind: "percent_month", value: 1.5, charge: "day", graceDays: 5 },
     });
-    expect(readLateFee({ value: "12", kind: "percent_month", charge: "month", grace: "", amount: 1000 })).toEqual({
-      ok: false,
-      field: "value",
-      message: "A late fee as a percent a month is more than 0 and at most 10.",
-    });
-    const fixedProblem = { ok: false, field: "value", message: "A fixed late fee is more than 0 and at most the invoice's amount." };
+    const percentProblem = { ok: false, field: "value", message: "A late fee as a percent a month is more than 0 and at most 10, with at most 2 decimal places." };
+    expect(readLateFee({ value: "12", kind: "percent_month", charge: "month", grace: "", amount: 1000 })).toEqual(percentProblem);
+    // As a bill's (src/lib/intake-validation.ts): at most 2 decimal places, so a percent never reads as "1e-7".
+    expect(readLateFee({ value: "1.555", kind: "percent_month", charge: "month", grace: "", amount: 1000 })).toEqual(percentProblem);
+    expect(readLateFee({ value: "0.0000001", kind: "percent_month", charge: "month", grace: "", amount: 1000 })).toEqual(percentProblem);
+    expect(readLateFee({ value: "1.55", kind: "percent_month", charge: "month", grace: "", amount: 1000 })).toMatchObject({ ok: true, fee: { value: 1.55 } });
+    const fixedProblem = { ok: false, field: "value", message: "A fixed late fee is at least 0.01 and at most the invoice's amount." };
     expect(readLateFee({ value: "0", kind: "fixed", charge: "month", grace: "", amount: 1000 })).toEqual(fixedProblem);
+    // Under a cent, the fee would show as 0.00 USD: the page's figures have 2 decimals.
+    expect(readLateFee({ value: "0.004", kind: "fixed", charge: "month", grace: "", amount: 1000 })).toEqual(fixedProblem);
+    expect(readLateFee({ value: "0.01", kind: "fixed", charge: "month", grace: "", amount: 1000 })).toMatchObject({ ok: true, fee: { value: 0.01 } });
     // As a bill's: a fixed fee is at most the invoice's amount (src/lib/intake-validation.ts).
     expect(readLateFee({ value: "1000.01", kind: "fixed", charge: "month", grace: "", amount: 1000 })).toEqual(fixedProblem);
     expect(readLateFee({ value: "1000", kind: "fixed", charge: "month", grace: "", amount: 1000 })).toEqual({

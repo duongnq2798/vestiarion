@@ -18,16 +18,28 @@ the discount against your own rate and a late fee.
 - `readWrittenTerms` is the one reader of terms written as text: "d/D net N" (a percent off within D days, the full
   amount in N), else "net N". The invoice reader without a model (`ruleBasedExtraction`,
   `src/lib/invoice-document/extract.ts`) now uses it, with the same results as before: the first "d/D net N" anywhere
-  in the text, else the first "net N", and the percent kept as written.
+  in the text, else the first "net N", and the percent kept as written. `findWrittenTerms` also says where in the text
+  those terms are written.
 - `parseTerms` reads what someone types into the calculator with the same reader, and also:
   - "n/30" written for "net 30", as in "2/10 n/30";
-  - a percent sign, "2% 10" or "2%/10" for "2/10", as in "1% 10 net 30"; the word "days" ("2/10 days, net 30 days");
-  - "EOM" or "end of month" anywhere in the terms, "2/10 EOM, n/30" as well as "2/10 net 30 EOM": the days count from
-    the last day of the invoice's month, not the invoice date, for the discount and the due date alike.
-- It says what is wrong instead of guessing: no terms it can read; a discount it cannot read in full, never dropped
-  (one written after the net days, "net 30, 2/10"; a percent without its days, "2% net 30"; more than one, "2/10, 1/20,
-  net 30"); a discount not above 0% and below 100%; net days above 365; discount days not fewer than the net days. The
-  invoice reader is unchanged: it does not count EOM terms from the month's end, nor read "n/30" or "2% 10".
+  - a percent sign, "2% 10" or "2%/10" for "2/10", as in "1% 10 net 30", but never the end of a fraction ("1/2% 10" is
+    not 2/10); the word "days" ("2/10 days, net 30 days");
+  - "EOM", "E.O.M.", "end of month" or "end-of-month" anywhere in the terms, "2/10 EOM, n/30" as well as "2/10 net 30
+    EOM": the days count from the last day of the invoice's month, not the invoice date, for the discount and the due
+    date alike;
+  - a few words around the terms that change nothing: "terms", "payment", "invoice", "date", "from", "of", "the",
+    "after", "due", "calendar" ("Payment terms: net 30 from the invoice date").
+- It says what is wrong instead of guessing:
+  - no terms it can read;
+  - terms it can read only in part, never read with a part dropped: a figure, a percent or a word outside that list
+    beside the terms it read. Such as a discount written after the net days ("net 30, 2/10"), without its days ("2%
+    net 30") or another way ("2-10 net 30", "1/2% 10 net 30", ".5/10 net 30"); more than one discount ("2/10, 1/20,
+    net 30") or net term ("net 15 net 30"); a late fee or a date ("net 30, 1.5% late fee", "net 30 from 10/15/2026");
+    a word that moves the day the days count from ("2/10 net 30 ROG", "net 30 upon receipt"). One message covers them,
+    and says a late fee and the invoice date have fields of their own;
+  - a discount not above 0% and below 100%, or with more than 2 decimal places, as a bill's;
+  - net days above 365; discount days not fewer than the net days.
+- The invoice reader is unchanged: it does not count EOM terms from the month's end, nor read "n/30" or "2% 10".
 - `termsWords` writes terms back the usual way ("2/10 net 30", "net 30 EOM"), and `termSlug` gives a term page's path
   ("2-10-net-30").
 
@@ -48,10 +60,11 @@ holding the cash does. The page never shows `annualPct` (`src/lib/early-pay/offe
 full amount, not the discounted one (36.5% for 2/10 net 30) and matches no textbook figure.
 
 **PT4. The late fee after N days** (`src/lib/payment-terms/late-fee.ts`). As the contract says it:
-- a percent a month, more than 0 and at most 10 (`LATE_FEE_MAX_PERCENT`, as a bill's late fee), charged either for
-  each month or part of one, a month counted as 30 days, or by the day, at the monthly percent × 12 ÷ 365 for each day;
-- or a fixed amount, charged once: more than 0 and at most the invoice's amount, as a bill's late fee
-  (`src/lib/intake-validation.ts`).
+- a percent a month, more than 0 and at most 10 (`LATE_FEE_MAX_PERCENT`) with at most 2 decimal places, as a bill's
+  late fee (`src/lib/intake-validation.ts`), charged either for each month or part of one, a month counted as 30 days,
+  or by the day, at the monthly percent × 12 ÷ 365 for each day;
+- or a fixed amount, charged once: at most the invoice's amount, as a bill's late fee, and at least 0.01
+  (`MIN_FIXED_FEE`), which a bill's need not be: a fee under a cent would show as 0.00 in the page's 2-decimal figures.
 - Days of grace, 0 by default: the fee applies from the day after the due date plus those days.
 - On the amount alone: no fee on a fee, nothing compounded.
 - `lateFeeAfter` gives the fee N days after the due date, with its formula; the page shows 7, 30 and 60 days, and a
@@ -74,16 +87,18 @@ why, from the agent's own written policy, `planPaymentTiming` (`src/lib/agent/pa
 - The currency is a label only: USD, EUR, GBP, CAD, AUD, USDC or EURC. Nothing is converted.
 
 **PT6. The calculator** (`PaymentTermsCalculator`, `src/components/payment-terms/PaymentTermsCalculator.tsx`).
-- Fields: invoice date (today by default, once the page has loaded in the browser), amount (at least 0.01: every
-  amount on the page has 2 decimals), currency, terms with
+- Fields: invoice date (today by default, once the page has loaded in the browser), amount (at least 0.01, the
+  smallest amount the page's 2-decimal figures can show, though the decision's sentence may show more decimals (PT5);
+  and at most 1,000,000,000,000), currency, terms with
   presets (2/10 net 30, 1/10 net 30, net 30, net 60, net 30 EOM), the yearly rate (optional) and the late fee
   (optional: its value, a percent a month or a fixed amount, for each month or part of one or by the day, days of
   grace), and a number of days late (optional).
 - Results as someone types: the decision, the due date and discount deadline, what paying by the deadline saves (or
   that the discount ended), the three costs of skipping it with their formulas, the break-even rate, and the late fee
   at 7, 30 and 60 days and the chosen number of days.
-- Only the decision is announced to screen readers as it changes. Each field's problem is shown under it. Counts of
-  days read "1 day", never "1 days".
+- Only the decision is announced to screen readers as it changes. Each field's problem is shown under it, and says
+  what is wrong: an amount that is not a figure asks for one, and one out of range gives the range. Counts of days read
+  "1 day", never "1 days".
 - Its one heading, the late fee's "If it is paid late", is an h3: each page puts the calculator under an h2.
 - There is no form, so nothing typed can be submitted or land in the address bar. Nothing is sent, put in a URL or
   kept in storage or a cookie; `tests/payment-terms-page.test.tsx` fails if the calculator or its rules gain a request,
@@ -94,11 +109,15 @@ why, from the agent's own written policy, `planPaymentTiming` (`src/lib/agent/pa
 - Public and static, outside `/tools` (which serves downloads); `requiresSession` is false for it.
 - Title "Payment terms calculator: due date, 2/10 net 30 and late fees", its own description and canonical address,
   and the heading "Payment terms calculator".
-- The calculator sits under a visually hidden h2, "Work out an invoice". Below it: how it works (the section's id is
-  `how-the-calculator-works`, not one of the landing's section ids the footer links to), what it does not do (read an
-  invoice or contract, know local rules on late fees, move a due date off a weekend or holiday or roll a late-month
-  invoice into the next month, convert currencies), links to the term pages, and the call to action.
+- The calculator sits under a visually hidden h2, "Work out an invoice". Below it: how it works
+  (`how-the-calculator-works`), what it does not do (read an invoice or contract, know local rules on late fees, move a
+  due date off a weekend or holiday or roll a late-month invoice into the next month, convert currencies), links to the
+  term pages, and the call to action.
 - How it works says the decision's sentence is the policy's own, with the rate applied to the discounted amount (PT5).
+- Both pages carry the full footer (`SiteFooter`). Its links to the landing page's sections (How it works, Who it's
+  for, Safety, Proof) were bare `#…` addresses, which go nowhere off the landing page, as on /check-address, /studios
+  and /how-it-decides before this change; they are now `/#…` on every page but the landing, which passes `landing` and
+  keeps them in place. Every same-page link on both pages has its section on the page.
 
 **PT8. The term pages** (`/payment-terms/[term]`): 2-10-net-30, 1-10-net-30, 2-10-net-60, 3-10-net-30, net-30, net-60
 and net-30-eom, from `generateStaticParams`; any other term is a 404 (`dynamicParams = false`).
@@ -127,19 +146,22 @@ and net-30-eom, from `generateStaticParams`; any other term is a 404 (`dynamicPa
 - Crediting a workspace to the tool it started from (the shared tool call to action and its first-touch cookie).
 - EOM terms in the invoice reader, "n/30" or "2% 10" in the invoice reader, and the rule that invoices dated late in a
   month roll to the next one under EOM terms.
-- Reading a discount written after the net days ("net 30, 2/10") or more than one: the calculator refuses them.
+- Reading a discount written after the net days ("net 30, 2/10"), as "2-10", as a fraction of a percent ("1/2%"), or
+  more than one; terms counted from receipt of goods (ROG) or from the next month (prox): the calculator refuses them.
 - Late fees charged on fees, or compounded; legal caps on late fees by place.
 
 ## Tests
 
 `tests/payment-terms.test.ts`:
 - `readWrittenTerms` on each form, and what the invoice reader read before;
-- `parseTerms`: each form, EOM before or after the net days, "n/30", "2% 10", "days", every refusal, a discount it
-  cannot read refused rather than dropped; `termsWords` and `termSlug`;
+- `parseTerms`: each form, EOM before or after the net days and written with dots or hyphens, "n/30", "2% 10",
+  "days", filler words, every refusal, terms read only in part refused (a discount after the net days, "2-10", a
+  fraction of a percent, a second discount or net term, a late fee, a date, ROG), a discount percent with more than 2
+  decimal places; `termsWords` and `termSlug`;
 - `termDates` with and without EOM, across a month and a year;
 - the costs on three bases for the four discount terms, the formulas, and the break-even rate;
-- the late fee: per month or part of one, by the day, fixed, grace, at 7, 30 and 60 days; a fixed fee above the
-  invoice's amount refused;
+- the late fee: per month or part of one, by the day, fixed, grace, at 7, 30 and 60 days; a percent with more than 2
+  decimal places, and a fixed fee above the invoice's amount or under 0.01, refused;
 - the decision: the discount deadline below the break-even rate, the due date above it, today when overdue, the
   discount ended, the late fee named, amounts with 2 decimals, and more either side of the break-even rate (37.24% and
   37.25% on 2/10 net 30);
@@ -147,13 +169,15 @@ and net-30-eom, from `generateStaticParams`; any other term is a 404 (`dynamicPa
 
 `tests/payment-terms-page.test.tsx`:
 - the calculator in a DOM: results as someone types, the decision in the live region, presets, field problems (an
-  amount under 0.01, a fixed fee above the amount), "1 day" not "1 days", no form;
-- the page and a term page: static, public, title and canonical, heading, the calculator under an h2, no landing section
-  id, two header links on a term page, the call to action, the worked example, the term filled in, 404 for an unknown
-  term;
+  amount that is not a figure, one under 0.01 or above the largest, a fixed fee above the amount or under 0.01, terms
+  with a late fee in them), "1 day" not "1 days", no form;
+- the page and a term page: static, public, title and canonical, heading, the calculator under an h2, every same-page
+  link's section on the page and the footer's landing links to the landing, two header links on a term page, the call
+  to action, the worked example, the term filled in, 404 for an unknown term;
 - nothing sent: the calculator, its rules and the pages hold no request, address-bar read, storage or cookie.
 
 `tests/invoice-document-extract.test.ts` keeps passing unchanged. `tests/docs-content.test.ts` pins the sitemap's order
-and the app pages a guide may link to; `tests/site-footer.test.tsx` the footer's Resources.
+and the app pages a guide may link to; `tests/site-footer.test.tsx` the footer's Resources, and its landing section
+links in place on the landing and as `/#…` elsewhere.
 
 No migration.

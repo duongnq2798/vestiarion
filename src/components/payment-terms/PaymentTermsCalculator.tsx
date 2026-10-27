@@ -34,7 +34,10 @@ const day = (value: string) => utcDay(`${value}T00:00:00.000Z`);
 /** "1 day", "30 days". */
 const days = (count: number) => `${count} ${plural(count, "day", "days")}`;
 
+/** The largest amount the calculator takes. */
+const MAX_AMOUNT = 1e12;
 const AMOUNT_PROBLEM = "Enter the invoice's amount, such as 1,250.00.";
+const AMOUNT_RANGE_PROBLEM = `An amount is at least 0.01 and at most ${MAX_AMOUNT.toLocaleString("en-US")}.`;
 const RATE_PROBLEM = "A yearly rate is a percent from 0 to 100, such as 5.";
 const DAYS_LATE_PROBLEM = `Days late are a whole number from 1 to ${MAX_DAYS_LATE.toLocaleString("en-US")}.`;
 
@@ -165,8 +168,9 @@ export function PaymentTermsCalculator({ initialTerms = TERM_PRESETS[0] }: { ini
   const dateValue = invoiceDate ?? today ?? "";
   const dateProblem = today !== null && !isCalendarDay(dateValue) ? "Enter the invoice's date." : null;
   const amount = readFigure(amountText);
-  // Under a cent cannot be shown: every amount on the page has 2 decimals.
-  const amountProblem = amount === null || amount < 0.01 || amount > 1e12 ? AMOUNT_PROBLEM : null;
+  // At least 0.01, the smallest amount the page's 2-decimal figures can show; the decision's sentence may show more
+  // decimals (PT5).
+  const amountProblem = amount === null ? AMOUNT_PROBLEM : amount < 0.01 || amount > MAX_AMOUNT ? AMOUNT_RANGE_PROBLEM : null;
   const terms = parseTerms(termsText);
   const rate = rateText.trim() === "" ? null : readFigure(rateText);
   const rateProblem = rateText.trim() !== "" && (rate === null || rate > 100) ? RATE_PROBLEM : null;

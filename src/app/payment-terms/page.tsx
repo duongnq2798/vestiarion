@@ -53,7 +53,6 @@ export default function PaymentTermsPage() {
             <PaymentTermsCalculator />
           </section>
 
-          {/* Not "how-it-works": the footer's landing links use the landing's section ids. */}
           <section aria-labelledby="how-the-calculator-works" className="mt-14 border-t border-line pt-8">
             <h2 id="how-the-calculator-works" className={H2}>
               How it works

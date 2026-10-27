@@ -2,14 +2,15 @@
  * What a late fee comes to a number of days after the due date (docs/superpowers/specs/2026-10-28-payment-terms-design.md
  * PT4), as the contract says it is charged: a percent a month for each month or part of one, a percent a month by the
  * day, or a fixed amount once, after any days of grace. Always on the amount alone: no fee on a fee, nothing compounded.
- * The limits are a bill's late fee's (late fees LF1): a percent a month more than 0 and at most `LATE_FEE_MAX_PERCENT`
- * (src/lib/agent/late-fee.ts), a fixed amount more than 0 and at most the invoice's amount (src/lib/intake-validation.ts).
- * Pure and browser-safe.
+ * The limits are a bill's late fee's (late fees LF1, src/lib/intake-validation.ts): a percent a month more than 0 and at
+ * most `LATE_FEE_MAX_PERCENT` (src/lib/agent/late-fee.ts) with at most 2 decimal places, a fixed amount at most the
+ * invoice's amount; a fixed amount is also at least 0.01, which a bill's need not be, so the page never shows a fee of
+ * 0.00. Pure and browser-safe.
  */
 
 import { plural } from "@/lib/copy";
 import { LATE_FEE_MAX_PERCENT, type LateFee, type LateFeeKind } from "@/lib/agent/late-fee";
-import { addDays, MAX_NET_DAYS, money, readFigure, readWholeNumber } from "./terms";
+import { addDays, hasAtMostDecimals, MAX_NET_DAYS, money, readFigure, readWholeNumber } from "./terms";
 
 /** How a percent a month is charged: for each month or part of one, or by the day. */
 export type LateFeeCharge = "month" | "day";
@@ -39,6 +40,9 @@ export const DAYS_A_MONTH = 30;
 
 /** The most days late the calculator takes. */
 export const MAX_DAYS_LATE = 3650;
+
+/** The smallest fixed fee: one under a cent would show as 0.00, the page's figures having 2 decimals. */
+export const MIN_FIXED_FEE = 0.01;
 
 function round6(value: number): number {
   return Number(value.toFixed(6));
@@ -80,11 +84,12 @@ export type LateFeeRead = { ok: true; fee: CalculatorLateFee | null } | { ok: fa
 export function readLateFee(input: { value: string; kind: LateFeeKind; charge: LateFeeCharge; grace: string; amount: number | null }): LateFeeRead {
   if (input.value.trim() === "") return { ok: true, fee: null };
   const value = readFigure(input.value);
-  if (input.kind === "percent_month" && (value === null || value <= 0 || value > LATE_FEE_MAX_PERCENT)) {
-    return { ok: false, field: "value", message: `A late fee as a percent a month is more than 0 and at most ${LATE_FEE_MAX_PERCENT}.` };
-  }
-  if (value === null || value <= 0 || (input.kind === "fixed" && input.amount !== null && value > input.amount)) {
-    return { ok: false, field: "value", message: "A fixed late fee is more than 0 and at most the invoice's amount." };
+  if (input.kind === "percent_month") {
+    if (value === null || value <= 0 || value > LATE_FEE_MAX_PERCENT || !hasAtMostDecimals(value, 2)) {
+      return { ok: false, field: "value", message: `A late fee as a percent a month is more than 0 and at most ${LATE_FEE_MAX_PERCENT}, with at most 2 decimal places.` };
+    }
+  } else if (value === null || value < MIN_FIXED_FEE || (input.amount !== null && value > input.amount)) {
+    return { ok: false, field: "value", message: `A fixed late fee is at least ${MIN_FIXED_FEE} and at most the invoice's amount.` };
   }
   const graceDays = input.grace.trim() === "" ? 0 : readWholeNumber(input.grace);
   if (graceDays === null || graceDays > MAX_NET_DAYS) {

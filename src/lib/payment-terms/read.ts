@@ -18,8 +18,18 @@ const NET_TERMS = /\bnet\s*(\d+)\b/i;
 
 /** The first "d/D net N" anywhere in the text, else the first "net N"; null when it has neither. */
 export function readWrittenTerms(text: string): WrittenTerms | null {
+  return findWrittenTerms(text)?.terms ?? null;
+}
+
+/** `readWrittenTerms`'s terms, and where in the text they are written: from `start` up to `end`. */
+export function findWrittenTerms(text: string): { terms: WrittenTerms; start: number; end: number } | null {
   const discount = text.match(DISCOUNT_TERMS);
-  if (discount) return { discount: { pct: discount[1], days: Number(discount[2]) }, netDays: Number(discount[3]) };
+  if (discount) {
+    const start = discount.index ?? 0;
+    return { terms: { discount: { pct: discount[1], days: Number(discount[2]) }, netDays: Number(discount[3]) }, start, end: start + discount[0].length };
+  }
   const net = text.match(NET_TERMS);
-  return net ? { discount: null, netDays: Number(net[1]) } : null;
+  if (!net) return null;
+  const start = net.index ?? 0;
+  return { terms: { discount: null, netDays: Number(net[1]) }, start, end: start + net[0].length };
 }
