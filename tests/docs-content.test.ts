@@ -377,6 +377,7 @@ describe("the sitemap", () => {
       `${origin}/check-address`,
       `${origin}/payment-terms`,
       ...["2-10-net-30", "1-10-net-30", "2-10-net-60", "3-10-net-30", "net-30", "net-60", "net-30-eom"].map((term) => `${origin}/payment-terms/${term}`),
+      `${origin}/check-vendor`,
       ...publishedPages().map((page) => `${origin}${page.slug ? `/docs/${page.slug}` : "/docs"}`),
       `${origin}/terms`,
       `${origin}/privacy`,
