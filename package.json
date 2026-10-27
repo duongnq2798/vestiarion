@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "check:lock": "node scripts/check-lockfile.mjs",
     "docs:screenshots": "node scripts/docs-screenshots.mjs",
+    "readme:banner": "node scripts/docs-screenshots.mjs --readme-banner",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
