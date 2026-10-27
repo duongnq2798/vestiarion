@@ -4441,7 +4441,8 @@ tag with an `@` is dropped), the landing path without its query, the referring s
 `SameSite=Lax`, `Secure` on https, under 1 KB (`src/lib/growth/attribution.ts`). `createWorkspaceAction` reads it once
 the workspace exists and calls `record_org_attribution`, which keeps the first touch in `org_attribution` and never
 replaces it. Recording never fails or holds up onboarding: no cookie, a database error, or an answer slower than 1.5
-seconds is logged at most (`src/lib/growth/record.ts`). The privacy page describes the cookie.
+seconds is logged at most (`src/lib/growth/record.ts`). A free tool's start button writes the same cookie, under the
+same rule (below). The privacy page describes the cookie.
 
 **Counterparty pages say who sent them** (`docs/superpowers/specs/2026-10-19-counterparty-loop-design.md`).
 `src/lib/growth/loop.ts` names the nine public pages and seven emails a business sends its counterparties. `SiteFooter`'s
@@ -4450,6 +4451,20 @@ seconds is logged at most (`src/lib/growth/record.ts`). The privacy page describ
 `utm_medium` (`counterparty_page` or `counterparty_email`) and `utm_campaign=counterparty_loop`, nothing of the page
 itself; the landing page's first-touch cookie keeps them, and /admin/growth counts customer workspaces whose first touch
 came from the loop (`growthMetrics().fromLoop`). Member emails carry no link.
+
+**Workspaces from the free tools** (`docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md`). A free
+tool's **Try it on your bills** goes to `/onboarding?shadow=1`, and `loginRedirectFor` sends a signed-out visitor on to
+`/login?next=…`, so a tag on that link would never reach the address `FirstTouch` reads, and the path it recorded would
+be `/onboarding`. The button writes the first touch itself instead. `FREE_TOOLS` (`src/lib/free-tools.ts`) is the one list
+of tools, each a slug, a top-level path, a title and a one-line description; the full footer's **Free tools** group
+(above Legal, so the footer keeps four columns) and the sitemap read it. `ToolCta` (`src/components/public/ToolCta.tsx`)
+is each tool's start button, named `<slug>-start` for the analytics click. On a click or a middle click, and only when
+the browser holds no `vx_ft` yet, it writes `freeToolFirstTouch` through `firstTouchCookie`: `utm_source` the tool's
+slug, `utm_medium=free_tool`, `utm_campaign=free_tools`, the tool's path as the landing path, the referring site's host
+by `FirstTouch`'s own rule (`referrerHost`), and the time. Nothing from the page's fields reaches it, and it lives apart
+from the tools' checkers, whose code still touches no cookie. /admin/growth's **From free tools** tile counts customer
+workspaces whose first touch carries that campaign, and those with the agent's decision on a real bill, in all and per
+`utm_source` (`growthMetrics().fromFreeTools`), from what `growth_workspaces` already returns: no migration.
 
 **Workspaces from accountants** (accountant client links AC5). When an accountant's client link is claimed, migration
 `0143`'s `claim_client_link` writes the new workspace's `org_attribution` in the same transaction, `utm_source=accountant`,
@@ -4517,6 +4532,9 @@ parameter.
   a broader rule than the payee lock's first 6 and last 4, which it includes.
 - It checks the OFAC snapshot the page carries, its date shown, and addresses that are not a wallet, from the network
   profiles: the zero and burn addresses, the USDC and EURC contracts, Arc's USDC system address.
+- Its **Try it on your bills** is `ToolCta` (above), still `check-address-start` for the analytics click, and the page
+  says, whether analytics is set up or not, that it may count the visit and that click by its address, and that what
+  is pasted or typed is never sent (`FREE_TOOL_COUNT_LINE`).
 - `tests/check-address-page.test.tsx` holds the checker's code to making no request.
 
 ## Onboarding by role
