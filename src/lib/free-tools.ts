@@ -48,14 +48,20 @@ export function freeToolCtaId(slug: string): string {
   return `${slug}-start`;
 }
 
+/** What `toolReferrer` reads of the browser's navigation entry for this document: the address it loaded, and how. */
+export type PageLoad = Pick<PerformanceNavigationTiming, "name" | "type">;
+
 /**
- * The referrer a tool's first touch may take (TA2): the page's referrer when `firstPage`, the address this tab first
- * loaded, is the tool's page, else none. A move inside the site through the router loads no new document, so the browser
- * still gives the first page's referrer, which linked to that page and not to the tool.
+ * The referrer a tool's first touch may take (TA2): the page's referrer when `load`, this document's navigation entry,
+ * is a fresh load (`navigate`) of the tool's page, the one that site linked to, else none. A move inside the site
+ * through the router loads no new document, so the entry and the referrer stay the first page's, which linked to that
+ * page and not to the tool. A reload, or a Back or Forward the browser did not keep, loads the tool's page again with
+ * the referrer of the history entry it returns to, which a move through the router shares with the first page: so
+ * neither keeps one, even when the tool's page was the one that site linked to.
  */
-export function toolReferrer(tool: FreeTool, referrer: string, firstPage: string | undefined): string {
+export function toolReferrer(tool: FreeTool, referrer: string, load: PageLoad | undefined): string {
   try {
-    return firstPage && new URL(firstPage).pathname === tool.path ? referrer : "";
+    return load?.type === "navigate" && new URL(load.name).pathname === tool.path ? referrer : "";
   } catch {
     return "";
   }

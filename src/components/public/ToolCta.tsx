@@ -4,12 +4,15 @@ import Link from "next/link";
 import type { ComponentProps, MouseEvent } from "react";
 import { TRY_HREF, TRY_LABEL } from "@/components/landing/cta";
 import { Button } from "@/components/ui/Button";
-import { freeTool, freeToolCtaId, freeToolFirstTouch, toolReferrer, type FreeTool, type FreeToolSlug } from "@/lib/free-tools";
+import { freeTool, freeToolCtaId, freeToolFirstTouch, toolReferrer, type FreeTool, type FreeToolSlug, type PageLoad } from "@/lib/free-tools";
 import { firstTouchCookie, hasFirstTouch } from "@/lib/growth/attribution";
 
-/** The address this tab first loaded, from the browser's navigation entry, which a move through the router keeps. */
-function firstPage(): string | undefined {
-  return performance.getEntriesByType("navigation")[0]?.name;
+/**
+ * How the browser loaded this document, from its navigation entry: the address and whether it was a fresh load, a
+ * reload or a Back or Forward. A move through the router loads no document, so it leaves the entry as it was.
+ */
+function pageLoad(): PageLoad | undefined {
+  return performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
 }
 
 /**
@@ -19,7 +22,7 @@ function firstPage(): string | undefined {
 function keepToolFirstTouch(tool: FreeTool) {
   try {
     if (hasFirstTouch(document.cookie)) return;
-    const referrer = toolReferrer(tool, document.referrer, firstPage());
+    const referrer = toolReferrer(tool, document.referrer, pageLoad());
     document.cookie = firstTouchCookie(freeToolFirstTouch(tool, referrer, window.location.host, new Date()), window.location.protocol === "https:");
   } catch {
     // A browser that refuses cookies keeps no first touch; the link goes on all the same.

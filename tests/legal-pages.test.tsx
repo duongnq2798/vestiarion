@@ -213,13 +213,14 @@ describe("the privacy page", () => {
       "Choosing Try it on your bills , or Get started at the foot of the page, on one of Vestiarion's free tools, such as the address checker , sets it too. It is set only then, and only when the browser does not hold one already, and setting it sends nothing anywhere."
     );
     expect(section).toContain(
-      `A free tool's page gives it the tool's name as utm_source , ${FREE_TOOL_MEDIUM} as utm_medium , ${FREE_TOOLS_CAMPAIGN} as utm_campaign and the tool's page as the page you landed on, the host of the site that linked to the tool when the tool was the first page you opened in that tab, and when: never anything you pasted or typed into the tool.`
+      `A free tool's page gives it the tool's name as utm_source , ${FREE_TOOL_MEDIUM} as utm_medium , ${FREE_TOOLS_CAMPAIGN} as utm_campaign and the tool's page as the page you landed on, the host of the site that linked to the tool when you opened the tool straight from that link, and when: never anything you pasted or typed into the tool.`
     );
     // As the links do it: the tool's slug, the medium and the campaign, its path, the referrer only when the tool's page
-    // was the tab's first, and only when no first touch is kept; the footer's Get started on the tool's page included.
+    // was a fresh load, and only when no first touch is kept; the footer's Get started on the tool's page included.
     const button = source("src/components/public/ToolCta.tsx");
     expect(button).toContain("if (hasFirstTouch(document.cookie)) return;");
-    expect(button).toContain("toolReferrer(tool, document.referrer, firstPage())");
+    expect(button).toContain("toolReferrer(tool, document.referrer, pageLoad())");
+    expect(source("src/lib/free-tools.ts")).toContain('load?.type === "navigate"');
     expect(source("src/lib/free-tools.ts")).toContain("utm_source: tool.slug, utm_medium: FREE_TOOL_MEDIUM, utm_campaign: FREE_TOOLS_CAMPAIGN, landing_path: tool.path");
     expect(source("src/components/vx/SiteChrome.tsx")).toContain("tool && link.href === TRY_HREF ? (");
   });

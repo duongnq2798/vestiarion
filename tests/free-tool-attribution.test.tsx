@@ -93,13 +93,20 @@ describe("a tool's first touch (TA2)", () => {
     }
   });
 
-  it("takes the referrer only when the tool's page was the first page the tab loaded, the one that site linked to", () => {
+  it("takes the referrer only when the tool's page was opened straight from that site's link, a fresh load of it", () => {
     const google = "https://www.google.com/search?q=address+poisoning";
-    expect(toolReferrer(CHECK_ADDRESS, google, "https://www.vestiarion.xyz/check-address")).toBe(google);
-    expect(toolReferrer(CHECK_ADDRESS, google, "https://www.vestiarion.xyz/check-address?utm_source=x#top")).toBe(google);
+    const fresh = (name: string) => ({ name, type: "navigate" as const });
+    expect(toolReferrer(CHECK_ADDRESS, google, fresh("https://www.vestiarion.xyz/check-address"))).toBe(google);
+    expect(toolReferrer(CHECK_ADDRESS, google, fresh("https://www.vestiarion.xyz/check-address?utm_source=x#top"))).toBe(google);
     // After a move inside the site the browser still gives the first page's referrer, which linked to that page instead.
-    for (const first of ["https://www.vestiarion.xyz/", "https://www.vestiarion.xyz/check-address/more", "https://www.vestiarion.xyz/docs/check-address", "", "not an address", undefined]) {
-      expect(toolReferrer(CHECK_ADDRESS, google, first), String(first)).toBe("");
+    for (const first of ["https://www.vestiarion.xyz/", "https://www.vestiarion.xyz/check-address/more", "https://www.vestiarion.xyz/docs/check-address", "", "not an address"]) {
+      expect(toolReferrer(CHECK_ADDRESS, google, fresh(first)), first).toBe("");
+    }
+    expect(toolReferrer(CHECK_ADDRESS, google, undefined)).toBe("");
+    // A reload, or a Back or Forward the browser did not keep, loads the tool's page again with the referrer of the
+    // history entry it returns to, which a move through the router shares with the first page.
+    for (const type of ["reload", "back_forward"] as const) {
+      expect(toolReferrer(CHECK_ADDRESS, google, { name: "https://www.vestiarion.xyz/check-address", type }), type).toBe("");
     }
   });
 
@@ -125,8 +132,9 @@ describe("the start button, in a DOM (TA3)", () => {
   let jar: string;
   let writes: string[];
   let refuse: boolean;
-  // The address this tab first loaded, as the browser's navigation entry gives it; none when undefined.
-  let firstPage: string | undefined;
+  // The address this document loaded, and how, as the browser's navigation entry gives them; no entry when undefined.
+  let loadedPage: string | undefined;
+  let loadType: NavigationTimingType;
   // For each click that reached the document: whether it was still free to follow the link.
   let followed: boolean[];
   const stopNavigation = (event: Event) => {
@@ -140,9 +148,10 @@ describe("the start button, in a DOM (TA3)", () => {
     writes = [];
     refuse = false;
     followed = [];
-    firstPage = new URL(CHECK_ADDRESS.path, window.location.origin).href;
+    loadedPage = new URL(CHECK_ADDRESS.path, window.location.origin).href;
+    loadType = "navigate";
     vi.spyOn(performance, "getEntriesByType").mockImplementation((type: string) =>
-      type === "navigation" && firstPage !== undefined ? ([{ name: firstPage, entryType: "navigation" }] as PerformanceEntryList) : []
+      type === "navigation" && loadedPage !== undefined ? [{ name: loadedPage, entryType: "navigation", type: loadType } as PerformanceNavigationTiming] : []
     );
     Object.defineProperty(document, "cookie", {
       configurable: true,
@@ -217,7 +226,7 @@ describe("the start button, in a DOM (TA3)", () => {
   });
 
   it("keeps no referrer when the visit began on another of the site's pages, whose referrer the browser still gives", () => {
-    firstPage = new URL("/", window.location.origin).href;
+    loadedPage = new URL("/", window.location.origin).href;
     act(() => link().click());
     expect(kept()).toEqual({
       utm_source: "check-address",
@@ -228,8 +237,24 @@ describe("the start button, in a DOM (TA3)", () => {
     });
   });
 
+  it("keeps no referrer after the tool's page is reloaded, or brought back by Back or Forward, whose referrer can be the first page's", () => {
+    for (const type of ["reload", "back_forward"] as const) {
+      loadType = type;
+      jar = "";
+      writes = [];
+      act(() => link().click());
+      expect(kept(), type).toEqual({
+        utm_source: "check-address",
+        utm_medium: "free_tool",
+        utm_campaign: "free_tools",
+        landing_path: "/check-address",
+        first_seen_at: NOW.toISOString(),
+      });
+    }
+  });
+
   it("keeps no referrer where the browser gives no navigation entry", () => {
-    firstPage = undefined;
+    loadedPage = undefined;
     act(() => link().click());
     expect(kept()?.utm_source).toBe("check-address");
     expect(kept()).not.toHaveProperty("referrer_host");
@@ -384,6 +409,10 @@ describe("From free tools on /admin/growth (TA4)", () => {
     expect(page.slice(loop + 1).match(/label="([^"]+)"/)?.[1]).toBe("From free tools");
     expect(page).toContain("metrics.fromFreeTools.workspaces");
     expect(page).toContain("bySourceWords(metrics.fromFreeTools.bySource)");
+    // Its sentence, a space after the semicolon as on the tiles beside it.
+    expect(page).toContain(
+      "detail={`Customer workspaces first reached from a free tool's Try it on your bills, or its footer's Get started; ${metrics.fromFreeTools.activated} had a decision on a real bill."
+    );
   });
 });
 

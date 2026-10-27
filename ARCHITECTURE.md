@@ -4463,13 +4463,15 @@ on a tool's page: `ToolCta`, its **Try it on your bills** button, named `<slug>-
 full footer's **Get started** when the page passes `SiteFooter` its `tool`. On a click or a middle click, and only when
 the browser holds no `vx_ft` yet, it writes `freeToolFirstTouch` through `firstTouchCookie`: `utm_source` the tool's
 slug, `utm_medium=free_tool`, `utm_campaign=free_tools`, the tool's path as the landing path, the referring site's host
-by `FirstTouch`'s own rule (`referrerHost`), and the time. The host is kept only when the tool's page was the first page
-the tab loaded (`toolReferrer`, against the navigation entry): a move through the router keeps `document.referrer`,
-which then names the site that linked to the first page, not to the tool. Nothing from the page's fields reaches it,
-and it lives apart from the tools' checkers, whose code still touches no cookie. /admin/growth's **From free tools**
-tile counts customer workspaces whose first touch carries that campaign, and those with the agent's decision on a real
-bill, in all and per `utm_source` (`growthMetrics().fromFreeTools`), from what `growth_workspaces` already returns: no
-migration.
+by `FirstTouch`'s own rule (`referrerHost`), and the time. The host is kept only when the tool's page was opened
+straight from that site's link (`toolReferrer`): the navigation entry names the tool's page and is a fresh load
+(`navigate`). A move through the router keeps the first page's entry and `document.referrer`, and that site linked to
+the first page, not to the tool; a reload, or a Back or Forward the browser did not keep, loads the tool's page again
+with the referrer of the history entry it returns to, which a router move shares with the first page. Neither keeps a
+host. Nothing from the page's fields reaches it, and it lives apart from the tools' checkers, whose code still touches
+no cookie. /admin/growth's **From free tools** tile counts customer workspaces whose first touch carries that campaign,
+and those with the agent's decision on a real bill, in all and per `utm_source` (`growthMetrics().fromFreeTools`), from
+what `growth_workspaces` already returns: no migration.
 
 **Workspaces from accountants** (accountant client links AC5). When an accountant's client link is claimed, migration
 `0143`'s `claim_client_link` writes the new workspace's `org_attribution` in the same transaction, `utm_source=accountant`,

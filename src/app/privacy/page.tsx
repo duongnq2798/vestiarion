@@ -542,7 +542,7 @@ export default function PrivacyPage() {
           <li>
             A free tool&apos;s page gives it the tool&apos;s name as <code>utm_source</code>, <code>free_tool</code> as <code>utm_medium</code>,{" "}
             <code>free_tools</code> as <code>utm_campaign</code> and the tool&apos;s page as the page you landed on, the host of the site that linked to
-            the tool when the tool was the first page you opened in that tab, and when: never anything you pasted or typed into the tool.
+            the tool when you opened the tool straight from that link, and when: never anything you pasted or typed into the tool.
           </li>
           <li>
             When you create a workspace, Vestiarion reads it once and keeps those tags with the workspace, never replaced, so the team can see which
