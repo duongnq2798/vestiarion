@@ -459,6 +459,12 @@ describe("a row's fields", () => {
     expect(memoWithInvoiceNumber("INV-7", null)).toBe("Invoice INV-7");
     expect(memoWithInvoiceNumber("INV-7", "Hosting for INV-7")).toBe("Hosting for INV-7");
     expect(memoWithInvoiceNumber(null, "Hosting")).toBe("Hosting");
+    // A number counts only standing alone, case aside, wherever it starts (the free bill list check reads 5,000 such memos, CB5).
+    expect(memoWithInvoiceNumber("inv-7", "Paid INV-7.")).toBe("Paid INV-7.");
+    expect(memoWithInvoiceNumber("INV-7", "INV-77 and xINV-7")).toBe("Invoice INV-7: INV-77 and xINV-7");
+    expect(memoWithInvoiceNumber("1-1", "Ref x1-1-1")).toBe("Ref x1-1-1");
+    expect(memoWithInvoiceNumber("A.1", "AB1 (A.1)")).toBe("AB1 (A.1)");
+    expect(memoWithInvoiceNumber("A.1", "AB1")).toBe("Invoice A.1: AB1");
     const [long] = plainFates(`Vendor,Amount,Due,Invoice no,Memo\nKanto Paper,1,2026-10-15,INV-1,${"x".repeat(270)}\n`);
     expect(reason(long)).toBe("The memo, with the invoice number, is longer than 280 characters.");
   });

@@ -8,6 +8,7 @@ import { SHADOW_CURRENCIES } from "../shadow-currency";
 import { decimalKey, decimalMarkOf, isCurrencyCode, readAmount, splitCurrency, symbolFits, type DecimalMark } from "./amounts";
 import { billRows, columnNames, columnCount, detectMapping, FIELD_LABELS, IMPORT_FIELDS, looksLikeHeader, REQUIRED_FIELDS, type ColumnMapping, type ImportField } from "./columns";
 import { dateOrderOf, orderWords, readDate, type DateOrder, type DateOrderQuestion } from "./dates";
+import { hasWord, memoWithInvoiceNumber } from "./memo";
 import type { Table, TableRow } from "./table";
 
 /**
@@ -220,18 +221,7 @@ const YES = new Set(["true", "yes", "y", "1", "received", "x", "✓", "✔"]);
 const NO = new Set(["false", "no", "n", "0", "notreceived", "pending", "notyet"]);
 const word = (text: string) => text.toLowerCase().replace(/[\s_-]+/g, "");
 
-/** A memo that starts with the bill's invoice number, unless it holds it already (B9). */
-export function memoWithInvoiceNumber(invoiceNumber: string | null, memo: string | null): string | null {
-  if (!invoiceNumber) return memo || null;
-  if (memo && hasWord(memo, invoiceNumber)) return memo;
-  return memo ? `Invoice ${invoiceNumber}: ${memo}` : `Invoice ${invoiceNumber}`;
-}
-
-/** Whether `text` holds `word` whole, without regard to case: "INV-7" is in "Invoice INV-7: Hosting", not in "INV-77". */
-function hasWord(text: string, needle: string): boolean {
-  const escaped = needle.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return escaped !== "" && new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:$|[^\\p{L}\\p{N}])`, "iu").test(text);
-}
+export { memoWithInvoiceNumber };
 
 export function readRows(table: Table, settings: ImportSettings, workspace: ImportWorkspace): ReadRow[] {
   const questions = questionsFor(table, settings, workspace);
