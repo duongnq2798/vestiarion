@@ -532,6 +532,14 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
 - **[Address lookalike checker](https://www.vestiarion.xyz/check-address)** — a free page that compares an address with
   ones you know, with a broader rule than the lookalike warning on Counterparties, and checks its characters, checksum
   and OFAC's list in the browser.
+- **[Payment terms calculator](https://www.vestiarion.xyz/payment-terms)** — a free page that turns an invoice's terms
+  (2/10 net 30, net 30 EOM) into its due date and discount deadline, what skipping the discount costs a year on three
+  bases, a late fee after any number of days, and the day to pay by the agent's own written policy, with your rate
+  applied to the discounted amount, in the browser.
+- **[OFAC vendor check](https://www.vestiarion.xyz/check-vendor)** — a free page that checks one vendor, or a whole
+  vendor list with its wallets, against OFAC's SDN list in the browser: each possible match with why it matched and a
+  link to Treasury's search, and a CSV back. The dated SDN snapshot it uses, `src/lib/data/ofac-sdn-names.json`, and
+  the script that makes it, `scripts/ofac-sdn-wallets.mjs`, are in this repository for anyone to reuse.
 - **[Bill list check](https://www.vestiarion.xyz/check-bills)** — a free page that reads a bill list exported from
   QuickBooks, Xero, Zoho Books or a sheet, in the browser, and lists the bills that may repeat each other by vendor,
   scored by the agent's own duplicate rule or by a matching invoice number, the bills of the same amount about a month

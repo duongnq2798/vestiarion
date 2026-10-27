@@ -38,9 +38,11 @@ const NOW = new Date("2026-10-28T09:15:00.000Z");
 const CHECK_ADDRESS = freeTool("check-address");
 
 describe("the list of free tools (TA1)", () => {
-  it("holds the address checker and the bill list check, with a slug, a path, a title and a one-line description", () => {
+  it("holds the address checker, the payment terms calculator, the OFAC vendor check and the bill list check, each with a slug, a path, a title and a one-line description", () => {
     expect(FREE_TOOLS.map(({ slug, path: at, title }) => ({ slug, path: at, title }))).toEqual([
       { slug: "check-address", path: "/check-address", title: "Address checker" },
+      { slug: "payment-terms", path: "/payment-terms", title: "Payment terms calculator" },
+      { slug: "check-vendor", path: "/check-vendor", title: "OFAC vendor check" },
       { slug: "check-bills", path: "/check-bills", title: "Bill list check" },
     ]);
     for (const tool of FREE_TOOLS) {
@@ -73,13 +75,16 @@ describe("the list of free tools (TA1)", () => {
   it("has each tool's page start with the shared button and say the line about counting (TA3, TA6)", () => {
     for (const tool of FREE_TOOLS) {
       const page = source(`src/app${tool.path}/page.tsx`);
-      expect(page, tool.path).toContain(`<ToolCta tool="${tool.slug}" />`);
+      // The button is on the page itself or in the tool's own call-to-action component that the page imports.
+      const ctaFiles = [...page.matchAll(/from "@\/(components\/[\w/-]+Cta)"/g)].map((match) => source(`src/${match[1]}.tsx`));
+      expect([page, ...ctaFiles].join("\n"), tool.path).toContain(`<ToolCta tool="${tool.slug}" />`);
       expect(page, tool.path).toContain("{FREE_TOOL_COUNT_LINE}");
     }
   });
 
   it("names each start button <slug>-start, an id analytics accepts", () => {
     expect(freeToolCtaId("check-address")).toBe("check-address-start");
+    expect(freeToolCtaId("check-vendor")).toBe("check-vendor-start");
     expect(freeToolCtaId("check-bills")).toBe("check-bills-start");
     for (const tool of FREE_TOOLS) expect(CTA_ID.test(freeToolCtaId(tool.slug)), tool.slug).toBe(true);
   });

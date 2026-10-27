@@ -900,6 +900,10 @@ mainnet plan).
     with shadow mode ticked; the sign-in page says what follows the link when that is where it leads.
   - Each call to action carries `data-cta`; Google Analytics, where it runs, sends `cta_click` with that name and the
     redacted path, nothing else. Activation itself is read from the database (`/admin/growth`).
+  - The code turns on nothing else in Google Analytics. GA4's enhanced measurement, on by default and a setting of the
+    Analytics property rather than of the code, also sends the full address of each link clicked to another site. So
+    a link a free tool draws carries nothing of what was typed or found: the vendor check links to Treasury's search
+    page, not to the matched entry's page there.
   - Safety and control (`src/components/landing/Safety.tsx`): three principles, each saying what holds it (the team,
     rules in code and Arc mainnet's spending-limit contract, the signed ledger), then two past cases step by step, each
     labelled with its network and its own mode in the team's workspace. A past decision's facts do not change, so they
@@ -1238,7 +1242,9 @@ would find.
   `SDN.CSV` and `SDN_COMMENTS.CSV` together, since remarks overflow into the second file.
   - `loadSanctionedWallets` reads them live when `compliance.sanctionedWalletsLive` (production, or
     `SANCTIONED_WALLETS=live`), keeping them 12 hours per instance. A failed or thin read keeps the last list, else the
-    dated snapshot `src/lib/data/ofac-sdn-evm-wallets.json` (`scripts/ofac-sdn-wallets.mjs`).
+    dated snapshot `src/lib/data/ofac-sdn-evm-wallets.json`. `npx tsx scripts/ofac-sdn-wallets.mjs` makes it, and the
+    vendor check's name snapshot, from one download of `SDN.CSV`, `SDN_COMMENTS.CSV`, `ALT.CSV` and `ADD.CSV`, with
+    this file's own parsers.
   - `runComplianceSweep` screens every counterparty whose address is on it and whose verdict does not name it yet
     (`walletVerdictDue`), due or not. `applyScreening` then takes `walletScreening`'s verdict (high, `ofac-sdn`,
     `ofac-sdn-<entry>`) over the name's, and ignores dismissals. The sweep entry records `sanctionedWallets`.
@@ -4458,8 +4464,9 @@ tool's **Try it on your bills** goes to `/onboarding?shadow=1`, and `loginRedire
 `/login?next=…`. A tag on that link is lost at that redirect unless the sign-in link brings the visitor back to it in
 the same browser, and even then the landing path `FirstTouch` records is `/onboarding`, not the tool. The tool's start
 links write the first touch themselves instead. `FREE_TOOLS` (`src/lib/free-tools.ts`) is the one list of tools, each a
-slug, a top-level path, a title and a one-line description; the full footer's **Free tools** group (above Legal, so the
-footer keeps four columns) and the sitemap read it. `ToolStartLink` (`src/components/public/ToolCta.tsx`) is every start
+slug, a top-level path, a title and a one-line description: today the address checker and the payment terms
+calculator. The full footer's **Free tools** group (above Legal, so the footer keeps four columns) and the sitemap read
+it; the sitemap lists a tool's own pages, such as the payment terms calculator's term pages, right after it. `ToolStartLink` (`src/components/public/ToolCta.tsx`) is every start
 on a tool's page: `ToolCta`, its **Try it on your bills** button, named `<slug>-start` for the analytics click, and the
 full footer's **Get started** when the page passes `SiteFooter` its `tool`. On a click or a middle click, and only when
 the browser holds no `vx_ft` yet, it writes `freeToolFirstTouch` through `firstTouchCookie`: `utm_source` the tool's
@@ -4545,6 +4552,86 @@ parameter.
   says, whether analytics is set up or not, that it may count the visit and that click by its address, and that what
   is pasted or typed is never sent (`FREE_TOOL_COUNT_LINE`).
 - `tests/check-address-page.test.tsx` holds the checker's code to making no request.
+
+**The payment terms calculator.** `/payment-terms` (`src/app/payment-terms/page.tsx`,
+`docs/superpowers/specs/2026-10-28-payment-terms-design.md`) and seven term pages, `/payment-terms/[term]`
+(`generateStaticParams` from `TERM_PAGES`, `dynamicParams = false`), are free public pages, static and outside
+`/tools`. The calculator (`src/components/payment-terms/PaymentTermsCalculator.tsx`) works everything out in the
+browser, with no form, request, URL parameter or storage. Its rules are pure modules under `src/lib/payment-terms/`:
+- `readWrittenTerms` (`read.ts`) reads "d/D net N" or "net N"; the invoice reader without a model
+  (`ruleBasedExtraction`) uses it too. `parseTerms` (`terms.ts`) adds "n/30", "2% 10" and EOM ("E.O.M.", "end of
+  month") anywhere in the terms, counted from the last day of the invoice's month, and says what is wrong instead of
+  guessing: terms it can read only in part are refused, never read with a part dropped. Once it has read the terms
+  (`findWrittenTerms` says where they are), any figure, percent or word left beside them but a few filler words
+  ("Payment terms:") refuses them: "net 30, 2/10", two discounts or net terms, "2-10", "1/2% 10", a late fee, a date,
+  "ROG". `termDates` gives the discount deadline and due date.
+- `costOfSkipping` (`cost.ts`) gives the yearly cost of skipping a discount simple on 365 days, simple on 360 and
+  compounded, each with its formula; the break-even rate is the simple 365-day one. Never `annualPct`
+  (`src/lib/early-pay/offers-words.ts`), which divides by the full amount.
+- `lateFeeAfter` (`late-fee.ts`) gives a late fee N days after the due date: a percent a month for each month or part
+  of one (30 days) or by the day (× 12 ÷ 365), or a fixed amount, after days of grace, on the amount alone. Its limits
+  are a bill's: a percent a month at most `LATE_FEE_MAX_PERCENT` with at most 2 decimal places, a fixed amount at most
+  the invoice's amount; a fixed amount is also at least 0.01 (`MIN_FIXED_FEE`), so no fee shows as 0.00.
+- `payDecision` (`decision.ts`) runs the agent's written policy, `planPaymentTiming`, with unlimited cash, the person's
+  rate as `reserveApy` applied to the discounted amount (so it turns at the break-even rate), and the late fee, and
+  shows its sentence with amounts to 2 decimals, or more (`sentenceDecimals`, up to 6) where 2 would show a discount
+  and a yield that differ as equal.
+- It is `payment-terms` in `FREE_TOOLS` (above), after the address checker: the footer's **Free tools** lists it, and
+  the sitemap lists `/payment-terms` followed by its term pages. The pages end with `PaymentTermsCta`, whose **Try it on
+  your bills** is `ToolCta` (above), `payment-terms-start` for the analytics click; their full footer's **Get
+  started** credits the tool too (`<SiteFooter tool="payment-terms" />`, on the term pages as well); and they say
+  `FREE_TOOL_COUNT_LINE`. `tests/payment-terms-page.test.tsx` holds the calculator, its rules and the pages to making
+  no request and reading no address bar or storage; the cookie a start link writes is `ToolCta`'s.
+- They carry the full footer. `SiteFooter`'s links to the landing's sections are `/#…` on every page but the landing
+  (`SiteFooter landing`, which keeps them in place), so they reach the landing from these pages, /check-address,
+  /studios and /how-it-decides.
+
+**The OFAC vendor check.** `/check-vendor` (`src/app/check-vendor/page.tsx`,
+`docs/superpowers/specs/2026-10-28-check-vendor-design.md`) checks one vendor's name, or a whole vendor list with its
+countries and wallets, against OFAC's SDN list. A free public page, static and outside `/tools`; everything runs in the
+browser, with no form, request carrying input, URL parameter or storage.
+- The list is `src/lib/data/ofac-sdn-names.json`: every SDN entry as `[number, name, type, programs, other names,
+  countries, digital-currency addresses]`, one a line, dated. `parseSdnNames` (`src/lib/sanctioned-wallets.ts`) reads
+  it from `SDN.CSV` and its overflowing remarks, `ALT.CSV` and `ADD.CSV`; `scripts/ofac-sdn-wallets.mjs` writes it with
+  the wallet snapshot. There is no live read for this page: the page shows the snapshot's date, read from the wallet
+  snapshot of the same run so the server page does not carry the names.
+- `loadNameIndex` (`src/components/vendor-check/load-index.ts`) imports it as a separate chunk of the site's own bundle
+  when the first check runs, about 0.55 MB compressed, so the enforced CSP needs nothing new, and builds the index once
+  with `buildNameIndexInSteps`, giving the page back every 1,000 entries and 5,000 words: about 0.7 s on a laptop in
+  all, no step longer than about 60 ms.
+- `matchName` (`src/lib/vendor-check/match.ts`) drops accents, punctuation (apostrophes written as modifier letters
+  among them), legal forms and words not in Latin letters (`nameWords`, `nonLatinWords`), pairs words one to one (the
+  same; spelled another way: one `soundKey` and a Jaro-Winkler of 0.80; close: a Jaro-Winkler of 0.88), weighs each
+  word by its rarity among the list's names (`w`), and scores against each entry's name and other names: the sum over
+  pairs of closeness x 2w of the listed word, over the sum of each pair's full 2w and the `w` of every word on either
+  side with no pair. A name in another script whose words in Latin letters are only legal forms and numbers
+  (`nameCompared`) is not compared. A name made only of rare words (in at most `RARE_IN_NAMES`, 10, of the
+  list's names) is a possible match at least to a name holding them all. Strong from `STRONG_MATCH`, 0.85, the same
+  cut-off as screening's `STRONG_SANCTIONS_MATCH_THRESHOLD` but on this matcher's own score, possible from 0.70, at
+  most 3. A typed word is compared with the listed words of its first letter's group and length, and with those of its
+  sound key, once per page, and a name form is scored only when an upper bound on its score reaches 0.70 or it holds
+  all of a name's rare words. A list's time grows with its distinct words: 5,000 rows with about 1,000 took about 2 s
+  on a laptop. The country (`countryAgreement`) is shown, never scored.
+- A list is read with the bill import's `readTable` and `decodeList`, then by `readVendorList`
+  (`src/lib/vendor-check/list.ts`): title lines of one cell above column names it knows, within the first 6 rows, are
+  left out and named; a comma list with no row of more than two cells and no row of two naming the columns is one
+  column when its first row is one cell or every comma is followed by a space, so "Last, First" names copied from a
+  spreadsheet stay whole. `vendorTable` joins back a name in the last named column that the commas cut, and the page
+  counts, shows and writes back that table. `detectVendorColumns` finds the name, country and wallet columns, up to
+  5,000 rows. A wallet's EVM part (`evmPart`: the cell, the address after a chain prefix such as `eth:`, a payment
+  link's own address, or for a link calling a contract its `address=` alone, or the cell from a `0x` that starts a
+  word) gets `checkAddress` against the snapshot's EVM addresses and the other rows' addresses that share an end with
+  it (first 3 and last 3, first 5 or last 5 hex digits); any other is looked up, as written and word by word (`XBT
+  <address>`, a payment link), among the listed addresses of every currency. A name not compared is counted apart.
+  `vendorResultsCsv` writes the results. A match links to Treasury's search page, never to the entry's own page, so
+  no outbound-click event carries what a name matched.
+- `VendorCheckCta` is the page's one call to action: what the product does before it pays, which is what the guardrails
+  and approvals do, not this page's score, around `ToolCta` for `check-vendor` (above), named `check-vendor-start` for
+  the analytics click. The page's full footer is `<SiteFooter tool="check-vendor" />`, so its **Get started** credits
+  the tool too, the tool is in `FREE_TOOLS`, so the footer's Free tools group and the sitemap list it, and the page says
+  `FREE_TOOL_COUNT_LINE` under its introduction.
+- `tests/check-vendor-page.test.tsx` holds the checker's code to making no request, and no cookie, and its words to
+  never calling a result safe or cleared.
 
 **The bill list check.** `/check-bills` (`src/app/check-bills/page.tsx`,
 `docs/superpowers/specs/2026-10-28-check-bills-design.md`) is a free public page, static and outside `/tools`, like the

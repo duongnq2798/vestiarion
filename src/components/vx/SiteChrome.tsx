@@ -138,9 +138,10 @@ export interface FooterLink {
 
 /**
  * The full footer's groups of links, in reading order (spec §2, F1). An address
- * starting `#` is a section of the landing page, the one page this footer is
- * on; `http…` is another site and opens in a new tab; anything else is a page
- * of this app. Free tools lists every free tool from their one list
+ * starting `#` is a section of the landing page, linked in place there and as
+ * `/#…` from any other page (`sectionHref`); `http…` is another site and opens
+ * in a new tab; anything else is a page of this app. Free tools lists every
+ * free tool from their one list
  * (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA5).
  */
 export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly FooterLink[] }> = [
@@ -204,6 +205,9 @@ export const COMPACT_FOOTER_LINKS: readonly FooterLink[] = [
 
 const isExternal = (href: string) => /^https?:\/\//.test(href);
 
+/** A footer link's address on the page it is on: a landing section, `#safety`, is `/#safety` off the landing page. */
+const sectionHref = (href: string, landing: boolean) => (href.startsWith("#") && !landing ? `/${href}` : href);
+
 /** A footer link: another site in a new tab, a landing section as a plain anchor, a page through the router. */
 function FooterAnchor({ href, className, label, children }: { href: string; className: string; label?: string; children: ReactNode }) {
   if (isExternal(href)) {
@@ -254,9 +258,12 @@ const ICON_LINK = "-my-2 inline-flex size-9 shrink-0 items-center justify-center
 const COPYRIGHT = "© 2026 Vestiarion contributors";
 
 /**
- * The full footer is the landing page's: the wordmark, then four columns of
- * links, two across on a phone, four from `sm` and beside the wordmark from
- * `lg`. `compact` is one line and its links, for every other public page.
+ * The full footer is the landing page's, and the public pages' that lead to it
+ * (the free tools, /studios, /how-it-decides): the wordmark, then four columns
+ * of links, two across on a phone, four from `sm` and beside the wordmark from
+ * `lg`. `landing` says it is on the landing page, so its section links stay on
+ * the page; from any other page they go to the landing. `compact` is one line
+ * and its links, for every other public page.
  *
  * `loop` names a page a business sends its counterparties (counterparty loop C1, C2): above the line, it says what sent
  * the page, and links to the landing page in a new tab, tagged with that kind of page only. The page's own address holds
@@ -266,7 +273,19 @@ const COPYRIGHT = "© 2026 Vestiarion contributors";
  * TA5): the full footer's Get started is then a `ToolStartLink`, so it credits a workspace to the tool as the page's
  * own button does. The compact footer has no start link.
  */
-export function SiteFooter({ compact = false, networkLabel = "Arc", loop, tool }: { compact?: boolean; networkLabel?: string; loop?: LoopPage; tool?: FreeToolSlug }) {
+export function SiteFooter({
+  compact = false,
+  landing = false,
+  networkLabel = "Arc",
+  loop,
+  tool,
+}: {
+  compact?: boolean;
+  landing?: boolean;
+  networkLabel?: string;
+  loop?: LoopPage;
+  tool?: FreeToolSlug;
+}) {
   if (compact) {
     return (
       <footer className={cn(styles.compactFooter, "border-t border-line bg-ground px-page py-6 font-mono text-caption text-ink-3 focus-default")}>
@@ -340,7 +359,7 @@ export function SiteFooter({ compact = false, networkLabel = "Arc", loop, tool }
                             {link.label}
                           </ToolStartLink>
                         ) : (
-                          <FooterAnchor href={link.href} className={COLUMN_LINK}>
+                          <FooterAnchor href={sectionHref(link.href, landing)} className={COLUMN_LINK}>
                             {link.label}
                           </FooterAnchor>
                         )}

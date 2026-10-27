@@ -115,6 +115,8 @@ Then choose **Add and screen**. The counterparty is screened as soon as it is sa
 
 Every cycle also checks each counterparty's payout address against the addresses on the US Treasury's sanctions list (OFAC's SDN list). An address on it makes the counterparty high risk at the next cycle, whatever its name screens as, with a note naming the address and the listed entry. Dismissing the match, or screening again, does not clear it while the address is listed. The agent never pays such an address, and **Approve and pay** refuses it: "This payee's address is on OFAC's sanctions list, so nothing is paid to it." **Pay now** on a contractor's milestone refuses it the same way.
 
+To check vendors before they are in Vestiarion, use the free [OFAC vendor check](/check-vendor). It checks one name, or a whole vendor list with its wallet addresses, against OFAC's SDN list in your browser, and says why each possible match matched.
+
 If screening cannot run, for example because the screening service does not answer, the counterparty is still saved, and the message says it "was added, but screening is incomplete". Its row then reads **Not screened yet**, and the agent pays it nothing: a payable to it is held with the rule `counterparty.unscreened`, and so is a contractor's milestone. Screening runs again at every cycle. Once it gives a verdict, the agent decides what it held again, within a minute. A person can still pay it from **Approvals**.
 
 Under **Counterparty book**, each counterparty is one row: its role and chain, its risk, what it may be paid now (**Allowed now**), its address, and what it needs before the agent can pay it. The rows that need someone come first: **Review match**, **Confirm address**, **Address needed** and **Not screened yet**, then **Ready to pay**. Open a row for its screening, limits, history and address.
@@ -444,6 +446,8 @@ A scheduled invoice's decision card reads "Scheduled for *date*", with the agent
 
 An invoice with an early-payment discount shows its terms on its card as "*pct*% off if paid by *date*", and a late fee beside it. Until the agent has decided a payable, its card reads "Not yet decided", and while its transfer is in flight, "Payment in flight". The console's **Scheduled payments** section lists what the agent will pay next, soonest first: the date, the counterparty, the amount it will actually transfer — discounted, when the discount will still apply that day — and why.
 
+To see what an invoice's terms come to before it is in Vestiarion, use the free [payment terms calculator](/payment-terms). It works out the due date and the discount deadline from terms such as 2/10 net 30 or net 30 EOM, what skipping the discount costs as a yearly rate, and the day to pay by this same written policy, with your rate applied to the discounted amount, all in your browser.
+
 ### A late fee
 
 Many invoices charge for paying late: "1.5% per month on overdue balances", or a flat fee. Give a payable its late fee in the invoice form, as **Late fee**, with whether the **Late fee is** "% a month" or "A fixed amount", and **Starting on**, the first day it applies. As the form says, "As the invoice states it. Shown when you approve; never added to what is paid." A percent a month can be more than 0 and at most 10; a fixed amount, more than 0 and at most the invoice's amount; and it starts on or after the due date: "The late fee cannot start before the due date." An invoice you are owed takes none. In shadow mode, a bill in your own currency takes a late fee as a percent a month only: "A fixed late fee is taken only on a bill in USDC or EURC: give it as a percent a month." When a supplier agrees to more time, the fee's start moves with the due date.
@@ -455,6 +459,8 @@ A late fee is never added to a transfer. A bill paid late is paid at its amount,
 - **Its decide-by day.** A late fee never moves the day a bill is to be decided by, nor its priority. Past its due date, a bill with a fee names it beside that day: "Decide by Oct 20, 2026; a late fee of 1.5% a month starts Oct 30, 2026", and "applies since" once it has. Approvals, the bill's row, the accountant console and the escalation emails say so. The escalation email comes once the day has passed, as for any bill, and once more on the eve of the fee, while paying still avoids it: "A late fee starts tomorrow on 1 payment". When the eve comes before the usual email has gone out, as on the first day past the due date, the usual email goes out that day instead, naming the day the fee starts, and no second one follows.
 - **Short cash.** When the cash cannot cover every bill due soon, the written policy pays first, among the bills due or overdue, the one whose late fee costs most in the coming month. See [Which bill first when cash is short](/docs/guides/payment-plan).
 - **The agent's reasoning.** The agent is told the fee, and names the one a payment avoids, as its written policy does: "before a 1.5% monthly late fee (1.50 USDC) starts Oct 30, 2026".
+
+The [payment terms calculator](/payment-terms) shows what a late fee comes to 7, 30 or 60 days after the due date, or any number of days, charged for each month or part of one, by the day, or as a fixed amount.
 
 ### Pay something every period
 

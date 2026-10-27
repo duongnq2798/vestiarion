@@ -33,9 +33,49 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   duplicate explanations are unchanged, reading an imported list's memos is faster, and the bill import's column
   questions are the same controls the check uses. No migration.
 
+- **A free OFAC check for vendors, one name or a whole list.** At
+  [/check-vendor](https://www.vestiarion.xyz/check-vendor), type a vendor's name, with its country if you like, or
+  paste or drop a vendor list: its name, country and wallet columns are found by their names, and you can change
+  them, as in the bill import. Title lines above the column names, as report exports have, are read past and named,
+  and a pasted column of names written "Last, First" stays one name, with or without a first row naming it, while a
+  row of more than two cells keeps its columns. Each name is compared with every name and other name on OFAC's SDN
+  list, word by word, legal forms such as LLC or GmbH aside, other spellings and close spellings counted, each word
+  weighed by how rare it is on the list, and a name made only of rare words of a listed name, such as "Suex", is a
+  possible match at least. OFAC writes every name in Latin letters, so a name in another script, even with a legal
+  form such as PJSC after it, is marked not compared rather than no match. Each row gets either "No match in OFAC's
+  SDN list as of" the list's date, or up to 3 possible matches, strong from a score of 0.85 (the same cut-off
+  screening applies to its provider's score, on this page's own score) and possible from 0.70: why it matched,
+  whether the country agrees, the entry's type, programs, other names and listed addresses, and a link to Treasury's
+  own search to look it up by its name. Wallets get the address checker's rules, chain prefixes such as `eth:`,
+  payment links and addresses written with their currency (`XBT <address>`) read, against OFAC's addresses and the
+  rest of the list, so a wallet made to look like another vendor's stops. Counts, and a CSV of the results. It runs
+  in the browser, on a dated snapshot loaded and indexed in small steps when a check runs: nothing typed or pasted is
+  sent anywhere. The page says it covers the SDN list only and is a first look, not a compliance decision. It is the
+  third free tool in the footer's **Free tools** group and the sitemap, and its **Try it on your bills** and footer
+  **Get started** credit a workspace opened after them to it, as on the address checker.
+  `scripts/ofac-sdn-wallets.mjs` now makes the new name snapshot (`src/lib/data/ofac-sdn-names.json`) and the wallet
+  snapshot from one download of OFAC's files, both dated 2026-10-28. No migration.
+- **A free payment terms calculator** at [/payment-terms](https://www.vestiarion.xyz/payment-terms). Enter an invoice's
+  date, amount and terms, such as 2/10 net 30, 1% 10 net 30, net 45, net 30 E.O.M. or 2/10 EOM, n/30. Terms it can read
+  only in part are refused, never guessed: anything beside the discount and the net days but a few words such as
+  "Payment terms:" (a second net term, 2-10 net 30, a half-percent discount written 1/2% 10 net 30, a late fee or a
+  date), and a percent with more than 2 decimal places, as on a bill. It gives the due date and the discount deadline,
+  what paying by the deadline saves, what skipping the discount costs a year (simple on 365 days, simple on 360, and
+  compounded, each with its formula: 37.2%, 36.7% and 44.6% for 2/10 net 30), and the break-even rate. With an optional
+  late fee, a percent a month for each month or part of one or by the day, or a fixed amount, after any days of grace,
+  it shows the fee 7, 30 and 60 days late or after any number of days. It ends with one decision, "Pay on" a day, and
+  the reason, from the same written policy the agent's own decisions are checked against, weighing the discount against
+  a yearly rate your cash earns or your borrowing costs, applied to the discounted amount so the day changes at the
+  break-even rate. Seven pages explain common terms (2/10 net 30, 1/10 net 30, 2/10 net 60, 3/10 net 30, net 30, net 60
+  and net 30 EOM) with the formula and a worked example. Everything runs in the browser: nothing typed is sent anywhere
+  or kept, and the pages say they may count the visit and a click on Try it on your bills, by their address. It is
+  listed under the footer's **Free tools**, and its **Try it on your bills** and the footer's **Get started**, on the
+  calculator and on each term page, credit a workspace opened next to it, as the address checker's do. The invoice
+  reader without a model now reads terms with the calculator's reader, with the same results as before. No migration.
 - **Workspaces credited to the free tool they came from.** Choosing **Try it on your bills**, or the footer's **Get
-  started**, on a free tool's page, today the [address checker](https://www.vestiarion.xyz/check-address), keeps that
-  tool as the browser's first touch when it holds none yet. The first-party `vx_ft` cookie gets the tool's name as
+  started**, on a free tool's page, the [address checker](https://www.vestiarion.xyz/check-address) or the payment
+  terms calculator, keeps that tool as the browser's first touch when it holds none yet. The first-party `vx_ft` cookie
+  gets the tool's name as
   `utm_source`, `free_tool`, `free_tools`, the tool's page, the referring site when the tool's page was opened straight
   from its link (not after a move through the site, a reload or Back), and the time, never anything pasted or typed, so
   a workspace opened next in that browser within 90 days is credited to the tool, sign-in included. An earlier
@@ -189,6 +229,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **The footer's links to the landing page's sections work from every page.** On /check-address, /studios and
+  /how-it-decides, How it works, Who it's for, Safety and Proof in the footer's Product column went nowhere, since they
+  pointed at sections of the page they were on. They now open those sections of the landing page, as they do on the
+  landing page itself and on the new payment terms pages. No migration.
 - **A vendor's document the reader flagged now says what it saw.** When the workspace's model noted something in a
   document that needs a person, such as a changed bank account or text that gives it instructions, the bill's card on
   Approvals and on Bills said only "The reader flagged something in it for a person to check.", even when its vendor,
