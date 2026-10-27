@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * How the bounded PDF reader tells a worker that never started from one the file stopped (document checks DK3), over a
  * stand-in for node's Worker. A worker that fails before it comes online never touched the file: Node reports a thread
  * it could not create (ERR_WORKER_INIT_FAILED) through the worker's `error` event, not by throwing. That is a plain
- * Error, which the cycle tries again; only what happens once the worker runs is the file's doing.
+ * Error, which the cycle tries again; only what happens once the worker runs is the file's doing. And a worker's timeout
+ * is the file's own only when no other PDF was read in this process meanwhile, on this thread or in another worker, its
+ * own read never counted (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB4).
  */
 
 const { plan, made } = vi.hoisted(() => ({
@@ -31,7 +33,7 @@ vi.mock("node:worker_threads", async () => {
   return { Worker: FakeWorker, default: { Worker: FakeWorker } };
 });
 
-import { PDF_LIMITS, pdfPagesInWorker, PdfWorkerRefusal } from "@/lib/invoice-document/pdf-worker";
+import { countedParse, PDF_LIMITS, pdfPagesInWorker, PdfWorkerRefusal } from "@/lib/invoice-document/pdf-worker";
 import { DocumentReadError, MAX_DOCUMENT_CHARS, readPdfBounded } from "@/lib/invoice-document/read";
 import { pagesPdf } from "./support/pdf-files";
 
@@ -98,5 +100,47 @@ describe("a PDF worker that started", () => {
       worker.emit("message", { pages: ["Northwind Hosting invoice INV-2207"], cut: false });
     });
     expect(await read()).toEqual({ pages: ["Northwind Hosting invoice INV-2207"], cut: false });
+  });
+});
+
+describe("a PDF worker's timeout beside other reads (RB4)", () => {
+  const short = { ...limits, timeoutMs: 100 };
+  /** A worker that comes online and never answers. */
+  const silent = () => plan.push((worker) => worker.emit("online"));
+  /** A worker that answers with a page at once. */
+  const answering = () =>
+    plan.push((worker) => {
+      worker.emit("online");
+      worker.emit("message", { pages: ["Northwind Hosting invoice INV-2207"], cut: false });
+    });
+  const slow = (timeoutMs = 100) => pdfPagesInWorker(pagesPdf(1), { ...limits, timeoutMs }).catch((error: unknown) => error);
+
+  it("is the file's own when nothing else read a PDF meanwhile: its own read is not counted", async () => {
+    silent();
+    expect(await slow()).toMatchObject({ why: "timeout", retry: false });
+  });
+
+  it("is tried again when another worker read a PDF meanwhile, begun after it or running when it began", async () => {
+    silent();
+    answering();
+    const first = slow();
+    await pdfPagesInWorker(pagesPdf(1), short);
+    expect(await first).toMatchObject({ why: "timeout", retry: true });
+    silent();
+    silent();
+    const longer = slow(300);
+    const later = slow(100);
+    expect(await later).toMatchObject({ why: "timeout", retry: true });
+    expect(await longer).toMatchObject({ why: "timeout", retry: true });
+    // Once both are done, a worker alone is the file's again.
+    silent();
+    expect(await slow()).toMatchObject({ why: "timeout", retry: false });
+  });
+
+  it("is tried again after a PDF was parsed on this thread meanwhile", async () => {
+    silent();
+    const waiting = slow();
+    await countedParse(async () => "parsed");
+    expect(await waiting).toMatchObject({ why: "timeout", retry: true });
   });
 });

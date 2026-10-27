@@ -6,10 +6,10 @@ import { needsTwoApprovals } from "../two-approvals";
 
 /**
  * The bills a chat is told wait for approval (docs/superpowers/specs/2026-10-22-discord-design.md DC3), as structured
- * entries a channel formats in its own markup: Discord's notice, and the section of Telegram's decisions message.
- * Each says how much, to whom, why it stopped (the rule, when code stopped it, as its row on Bills says it, else the
- * agent's first plain sentence), whether it needs two approvals and an accountant may give one, and the Approvals path
- * that opens it. The path carries no token: opening it approves nothing. Pure.
+ * entries a channel formats in its own markup: Discord's notice, and the section of Telegram's and Slack's decisions
+ * messages. Each says how much, to whom, why it stopped (the rule, when code stopped it, as its row on Bills says it,
+ * else the agent's first plain sentence), whether it needs two approvals and an accountant may give one, and the
+ * Approvals path that opens it. The path carries no token: opening it approves nothing. Pure.
  */
 
 /** At most this many bills are listed one by one; the rest are counted. */

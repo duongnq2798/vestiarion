@@ -12,8 +12,9 @@ import { deflatedWithSpaces, inflateBombPdf, INVOICE_LINE, nestedFormsPdf, onePa
  * budget for the whole process's memory and a time limit, after a pre-scan that refuses a file whose streams would
  * decode to more than 16 MB. So a PDF built to make pdf.js work forever, or to fill its memory, stops in its own thread
  * and is unreadable, while the thread that asked keeps running. A stop that may not be the file's doing (the process's
- * memory, or a timeout while another PDF was parsed on this thread) says to try again; a reader that cannot start
- * throws a plain Error: neither is the file's doing for certain.
+ * memory, or a timeout while another PDF was read in this process, on this thread or in another worker: request PDF
+ * bound RB4) says to try again; a reader that cannot start throws a plain Error: neither is the file's doing for
+ * certain.
  */
 
 const MB = 2 ** 20;

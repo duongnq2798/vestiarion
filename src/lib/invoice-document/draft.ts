@@ -29,7 +29,10 @@ export interface InvoiceDocumentRead {
   text: string;
   /** The invoice's own date, as read, when it is a real one; null otherwise. */
   issueDate: string | null;
-  /** The total line against the model's total, the reader's notes and the cut: never a counterparty's name or address. */
+  /**
+   * The total line against the model's total, the reader's notes, an email's PDFs left out and the cut: never a
+   * counterparty's name or address.
+   */
   documentWarnings: string[];
 }
 
@@ -55,13 +58,16 @@ export async function readInvoiceDocument(input: DocumentInput, today: string): 
       : [];
   const match = matchCounterparty(fields, counterparties);
   const matched = counterparties.find((counterparty) => counterparty.id === match.counterpartyId);
+  // An email's PDFs past the third are never read (request PDF bound RB5), and the invoice may be among them. Said by
+  // what was left out: one of the first three may not have been read either.
+  const leftOut = document.pdfsLeftOut ? ["PDFs attached to the email after the first three were not read."] : [];
   const cut = document.truncated ? ["Only the first 20,000 characters were read."] : [];
 
   return {
     read: {
       draft: { ...fields, counterpartyId: match.counterpartyId },
       counterpartyName: matched?.name ?? null,
-      warnings: [...totals, ...match.warnings, ...notes, ...cut],
+      warnings: [...totals, ...match.warnings, ...notes, ...leftOut, ...cut],
       notFound,
       modelNote,
       reader,
@@ -69,7 +75,7 @@ export async function readInvoiceDocument(input: DocumentInput, today: string): 
     },
     text: document.text,
     issueDate: isRealDate(raw.issueDate) ? raw.issueDate : null,
-    documentWarnings: [...totals, ...notes, ...cut],
+    documentWarnings: [...totals, ...notes, ...leftOut, ...cut],
   };
 }
 

@@ -71,7 +71,9 @@ A Slack app any workspace's owner or admin connects from Settings. Then:
   buttons (S8).
 - **S8. Deciding from Slack is off until an owner sets a limit.** Settings has a limit, "Limit (USDC)" under "Deciding
   payments from Slack" (`org.administer`), recorded as `slack_decisions_limit_changed`. When off, a stopped payable links to
-  Approvals and nothing else. When on, it gets **Approve and pay** (only when it is in USDC, paid on Arc, within the
+  Approvals and nothing else; since 2026-10-27 the bills among them that still wait end the message as one section,
+  each with a Review button to its card on Approvals (docs/superpowers/specs/2026-10-27-slack-review-links-design.md).
+  When on, it gets **Approve and pay** (only when it is in USDC, paid on Arc, within the
   limit, and its counterparty's address is confirmed), **Reject**, **Return to the agent**, and the link. Approve and
   Reject ask Slack to confirm first; the confirmation names the amount, the payee and the address shortened.
 - **S9. A button carries a signed card.** Its value is `vxa1.<payload>.<HMAC>`: `{ org, invoice, decidedAt, address

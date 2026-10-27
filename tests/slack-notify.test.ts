@@ -8,18 +8,21 @@ import { withOrg } from "@/lib/dal/scope";
 import { encryptSecret, parseMasterKeys } from "@/lib/secrets";
 import { sendSlackDecisions } from "@/lib/slack/notify";
 import { addressHash, readCard } from "@/lib/slack/state";
-import { fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
+import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 
 /**
  * The cycle's `slack` stage (Slack design S7, S8): the install's channel is told the agent's decisions after its
  * cursor, through the incoming webhook, and the cursor moves only when Slack took the message. A stopped payable gets
  * its card when deciding from Slack is on: a signed token on each button, Approve only when the payable qualifies.
+ * While it is off, the bills still waiting are read as Telegram's and Discord's stages read them, and told in their own
+ * section, each with a Review button (docs/superpowers/specs/2026-10-27-slack-review-links-design.md SR1, SR2).
  */
 
-const { readActivityMock } = vi.hoisted(() => ({ readActivityMock: vi.fn() }));
+const { readActivityMock, usdcValueMock } = vi.hoisted(() => ({ readActivityMock: vi.fn(), usdcValueMock: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/agent-activity-read", () => ({ readAgentActivity: readActivityMock }));
+vi.mock("@/lib/agent/second-approval", async (importOriginal) => ({ ...(await importOriginal<object>()), usdcValueOfLatestDecision: usdcValueMock }));
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c51";
 const INVOICE = "1b6c1c9e-4a4f-4a7e-9b1e-000000000c52";
@@ -43,7 +46,9 @@ const activity = (items: ActivityItem[], through: number): AgentActivity => ({ r
 
 let install: Record<string, unknown> | null;
 let invoices: Array<Record<string, unknown>>;
+let invoicesReply: FakeReply | null;
 let intents: Array<Record<string, unknown>>;
+let policy: Array<Record<string, unknown>>;
 /** The database before migration 0141: a read naming the late-fee columns is refused (late fees LF4). */
 let before0141: boolean;
 
@@ -65,9 +70,12 @@ const heldInvoice = (fields: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   install = null;
   invoices = [];
+  invoicesReply = null;
   intents = [];
+  policy = [];
   before0141 = false;
   readActivityMock.mockReset();
+  usdcValueMock.mockReset();
 });
 
 function stage(reply: (body: string) => Response = () => new Response("ok")) {
@@ -82,8 +90,9 @@ function stage(reply: (body: string) => Response = () => new Response("ok")) {
     if (sent.path === "/rest/v1/invoices" && before0141 && (sent.params.get("select") ?? "").includes("late_fee_")) {
       return { status: 400, body: { code: "42703", message: "column invoices.late_fee_kind does not exist" } };
     }
-    if (sent.path === "/rest/v1/invoices") return { body: invoices };
+    if (sent.path === "/rest/v1/invoices") return invoicesReply ?? { body: invoices };
     if (sent.path === "/rest/v1/payment_intents") return { body: intents };
+    if (sent.path === "/rest/v1/approval_policies") return { body: policy };
     if (sent.path === "/rest/v1/rpc/append_ledger_entry") return { body: APPENDED_LEDGER_ROW };
     return { body: [] };
   });
@@ -140,12 +149,15 @@ describe("sendSlackDecisions", () => {
     expect(cursor()).toEqual([60]);
   });
 
-  it("draws no card while deciding from Slack is off, and reads nothing for one", async () => {
+  it("draws no card while deciding from Slack is off, and reads only whether its bill still waits (SR1)", async () => {
     install = installRow();
     readActivityMock.mockResolvedValue(activity([HELD], 57));
     const { fake, run, posts } = stage();
     await run();
-    expect(fake.requests.some((sent) => sent.path === "/rest/v1/invoices")).toBe(false);
+    const reads = fake.requests.filter((sent) => sent.path === "/rest/v1/invoices");
+    expect(reads.map((sent) => sent.params.get("select"))).toEqual(["id,amount,currency,status,direction,agent_reasoning,counterparties(name)"]);
+    expect(reads[0].params.get("id")).toBe(`in.(${INVOICE})`);
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/payment_intents")).toBe(false);
     expect(JSON.stringify(posts[0].body)).not.toContain("vx_approve");
   });
 
@@ -282,6 +294,125 @@ describe("sendSlackDecisions", () => {
     expect(body).not.toContain("vx_approve");
     expect(body).toContain("vx_reject");
     expect(body).toContain("Approve it in Vestiarion: It is above the 1 USDC this workspace allows from Slack.");
+  });
+});
+
+const ORIGIN = "https://www.vestiarion.xyz";
+const BILL = (n: number) => `1b6c1c9e-4a4f-4a7e-9b1e-${String(n).padStart(12, "0")}`;
+const stopped = (seq: number, n: number): ActivityItem => ({
+  seq, text: `Held Vendor ${n} 120.00 USDC for you.`, detail: "The model's own words on it.", tone: "stopped", path: `/approvals#payable-${BILL(n)}`,
+  pathLabel: "Decide in Approvals", txHash: null, txUrl: null, network: "arc-testnet", invoiceId: BILL(n),
+});
+/** Held in shadow mode for a person's verdict: the activity gives it no `invoiceId`. */
+const VERDICT: ActivityItem = {
+  seq: 58, text: "Decided to pay Vendor 9 120.00 USDC; it waits for your verdict in shadow mode.", detail: null, tone: "stopped", path: `/approvals#payable-${BILL(9)}`,
+  pathLabel: "Give your verdict", txHash: null, txUrl: null, network: "arc-testnet",
+};
+const bill = (n: number, fields: Record<string, unknown> = {}) => ({
+  id: BILL(n), amount: "120.00", currency: "USDC", status: "held", direction: "payable", agent_reasoning: "The invoice has no purchase order. It waits for a person.",
+  counterparties: { name: `Vendor ${n}` }, ...fields,
+});
+type Posted = { type: string; text?: { text: string }; accessory?: { action_id: string; url: string } };
+const blocksOf = (body: Record<string, unknown>) => (body.blocks ?? []) as Posted[];
+/** Each bill's section in the post, as its text and its Review button's address. */
+const billsOf = (body: Record<string, unknown>) =>
+  blocksOf(body).filter((block) => block.accessory?.action_id === "vx_review").map((block) => [block.text?.text, block.accessory?.url]);
+
+describe("the bills waiting for approval (docs/superpowers/specs/2026-10-27-slack-review-links-design.md SR1, SR2)", () => {
+  it("tells the bills still held, flagged or waiting for details in one section of the post, each with a Review button", async () => {
+    install = installRow();
+    readActivityMock.mockResolvedValue(activity([PAID, stopped(53, 1), stopped(54, 2), stopped(55, 3), stopped(56, 4), VERDICT], 60));
+    invoices = [
+      bill(1),
+      bill(2, { status: "flagged", amount: "75.5", currency: "EURC" }),
+      bill(3, { status: "awaiting_info" }),
+      // Decided since the agent held it: no longer waiting.
+      bill(4, { status: "paid" }),
+    ];
+    const { run, posts, cursor } = stage();
+
+    expect(await run()).toEqual([{ domain: "system", message: "Told the workspace's Slack channel what the agent decided" }]);
+    expect(posts).toHaveLength(1);
+    const body = posts[0].body;
+    expect(billsOf(body)).toEqual([
+      ["*120.00 USDC* · Vendor 1 · held: The invoice has no purchase order.", `${ORIGIN}/o/acme/approvals#payable-${BILL(1)}`],
+      ["*75.50 EURC* · Vendor 2 · flagged: The invoice has no purchase order.", `${ORIGIN}/o/acme/approvals#payable-${BILL(2)}`],
+      ["*120.00 USDC* · Vendor 3 · waiting for details: The invoice has no purchase order.", `${ORIGIN}/o/acme/approvals#payable-${BILL(3)}`],
+    ]);
+    const text = JSON.stringify(body);
+    expect(text).toContain("3 bills wait for approval:");
+    expect(text.split("Opening a link never approves anything.")).toHaveLength(2);
+    expect(text).toContain("Paid Centronex 0.35 USDC.");
+    // The bill paid since is told as the decision it was; the verdict hold keeps its own block.
+    expect(text).toContain("Held Vendor 4 120.00 USDC for you.");
+    expect(text).toContain("Give your verdict");
+    for (const n of [1, 2, 3]) expect(text).not.toContain(`Held Vendor ${n}`);
+    expect(body).toMatchObject({ unfurl_links: false, unfurl_media: false });
+    expect(cursor()).toEqual([60]);
+  });
+
+  it("says a bill above the figure needs two approvals, weighing a EURC bill by its USDC value, and that an accountant can co-sign", async () => {
+    install = installRow();
+    readActivityMock.mockResolvedValue(activity([stopped(53, 1), stopped(54, 2), stopped(55, 3)], 60));
+    invoices = [bill(1, { amount: "900" }), bill(2, { currency: "EURC", amount: "450" }), bill(3, { amount: "20" })];
+    policy = [{ two_approvals_above: "500", accountant_cosigns: true }];
+    usdcValueMock.mockResolvedValue(520);
+    const { fake, run, posts } = stage();
+
+    await run();
+
+    expect(usdcValueMock).toHaveBeenCalledWith(BILL(2));
+    // The figure, then the co-sign switch.
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/approval_policies")).toHaveLength(2);
+    expect(billsOf(posts[0].body).map(([text]) => text)).toEqual([
+      "*900.00 USDC* · Vendor 1 · held: The invoice has no purchase order. · needs two approvals, an accountant can co-sign",
+      "*450.00 EURC* · Vendor 2 · held: The invoice has no purchase order. · needs two approvals, an accountant can co-sign",
+      "*20.00 USDC* · Vendor 3 · held: The invoice has no purchase order.",
+    ]);
+  });
+
+  it("reads neither bills nor rules when the agent stopped none", async () => {
+    install = installRow();
+    readActivityMock.mockResolvedValue(activity([PAID, VERDICT], 60));
+    const { fake, run, posts } = stage();
+
+    await run();
+
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/invoices" || sent.path === "/rest/v1/approval_policies")).toEqual([]);
+    expect(JSON.stringify(posts[0].body)).not.toContain("Opening a link never approves anything.");
+  });
+
+  it("still tells the decisions, each stopped bill with its own link, when the bills cannot be read", async () => {
+    install = installRow();
+    readActivityMock.mockResolvedValue(activity([stopped(53, 1)], 60));
+    invoicesReply = { status: 500, body: { code: "XX000", message: "boom" } };
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { run, posts, cursor } = stage();
+
+    expect(await run()).toHaveLength(1);
+
+    const text = JSON.stringify(posts[0].body);
+    expect(text).toContain("Held Vendor 1 120.00 USDC for you.");
+    expect(text).toContain(`"action_id":"vx_open","text":{"type":"plain_text","text":"Decide in Approvals","emoji":false},"url":"${ORIGIN}/o/acme/approvals#payable-${BILL(1)}"`);
+    expect(text).not.toContain("wait for approval");
+    expect(cursor()).toEqual([60]);
+    expect(String(error.mock.calls[0])).toContain("slack: waiting bills not read, each told as a decision");
+    error.mockRestore();
+  });
+
+  it("reads no rules and draws no section while deciding from Slack is on: each waiting bill keeps its card", async () => {
+    install = installRow({ decisions_limit_usdc: "1" });
+    invoices = [heldInvoice()];
+    readActivityMock.mockResolvedValue(activity([HELD], 57));
+    const { fake, run, posts } = stage();
+
+    await run();
+
+    expect(fake.requests.some((sent) => sent.path === "/rest/v1/approval_policies")).toBe(false);
+    const text = JSON.stringify(posts[0].body);
+    expect(text).toContain("vx_approve");
+    expect(text).not.toContain("vx_review");
+    expect(text).not.toContain("wait for approval");
   });
 });
 

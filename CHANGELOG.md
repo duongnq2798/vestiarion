@@ -14,6 +14,19 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Bills waiting for approval in Slack, each with a Review button.** While deciding payments from Slack is off, the
+  default, the channel's message after each cycle now ends with the bills the agent held or flagged for a person, or
+  asked details for, that still wait: one each with the amount, payee, what code stopped it on or the agent's reason
+  as the approval card says it, whether it needs two approvals (and that an accountant can co-sign, when co-signing is
+  on), and **Review**, a button that opens the bill's card on Approvals. At most ten are listed, then how many more
+  wait in Approvals. Opening a link never approves anything, and the message says so once. Those bills are no longer
+  repeated among the decisions; a payment held for your verdict in shadow mode keeps **Give your verdict**, and while
+  deciding from Slack is on, each stopped bill keeps its buttons as before. `/vestiarion waiting` labels a payable's
+  link **Review** too, says "waiting for details" for a bill asked for details, and counts what does not fit instead
+  of cutting the answer short. In the channel's messages and the answers to `/vestiarion`, hidden direction and
+  zero-width characters are removed from names and reasons, and Slack makes no link or mention of a web address, a
+  channel or an @name inside one; Slack's own formatting marks in a name, such as `*` or `_`, still format. The
+  channel's message and the waiting answer show no link previews. No migration.
 - **Quality Lab: fixed scenarios through the real decision code on every change.** 39 scenarios run in CI through the
   agent's real decision code, with the model's answers scripted, often to what an attacker would want: prompt
   injection in an invoice's memo or purchase order, a payee whose address just changed or is still inside the payee
@@ -151,9 +164,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   note as `readerNote` and the whole line as `sentence`, and its reason and the decision trail quote the note too, in
   shadow as well. Documents checked before keep their sentence alone. No migration.
 - **A PDF built to expand when opened is refused before it is read.** From a document, invoices by email, the Chrome
-  extension and chats now refuse a PDF whose contents would expand to more than 16 MB once decompressed, such as a file
-  of under a megabyte that expands to gigabytes: "This PDF could not be read. Paste the invoice's text instead." Before,
-  reading one could use up the server's memory. Ordinary invoices read as before.
+  extension, Telegram, Slack and the payee link now refuse a PDF whose contents would expand to more than 16 MB once
+  decompressed, such as a file of under a megabyte that expands to gigabytes: "This PDF could not be read. Paste the
+  invoice's text instead." A PDF whose contents cannot be measured before it is opened, such as an encrypted one or one
+  compressed with LZW, is read on its own, apart from the rest of the server's work, within 15 seconds, 50 pages and a
+  memory limit, as vendors' documents are: one past them could not be read, and one that ran out of time while other
+  PDFs were being read asks you to try again in a moment. The PDFs attached to an `.eml` file are read one after
+  another, the first three, and the draft says when it has more: "PDFs attached to the email after the first three
+  were not read." An `.eml` with PDFs attached is no longer read as its raw message, headers and base64, when nothing
+  in it has text: it has no text to read, and says so, naming the PDFs after the third when it has them. Before,
+  reading such a file could use up the server's memory, and one that could not be measured was read with no limit at
+  all. Ordinary invoices read as before. No migration.
 - **Disconnecting an integration says it worked.** Disconnecting Asana, Xero, QuickBooks, Zoho Books, HubSpot,
   Pipedrive or Zoho CRM in Settings, choosing **Disconnect my account** or **Remove Slack** on the Slack card, or
   **Disconnect** on a GitHub account's or a Chrome extension's row disconnected it without a word: the card changed,

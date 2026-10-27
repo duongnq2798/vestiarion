@@ -34,9 +34,9 @@ import { agentPaused } from "./pause";
  * read, is unreadable, and no model reads it (DK3). So is a PDF the pre-scan refuses (its streams would decode past
  * 16 MB, or cannot be measured), one the worker stops by the file's own doing, and one whose reads, on any request of
  * the workspace with that file, began twice and never finished. A stop that may not be the file's doing (the process's
- * memory, a timeout while another PDF was parsed) records nothing: the next cycle reads it again, and the read stays
- * counted. The rest is read through `readPdfBounded` and, one read token each, `extractInvoice`, which shows the model
- * the document alone; code compares (`compareDocument`, DK4, DK5).
+ * memory, a timeout while another PDF was read in this process) records nothing: the next cycle reads it again, and the
+ * read stays counted. The rest is read through `readPdfBounded` and, one read token each, `extractInvoice`, which shows
+ * the model the document alone; code compares (`compareDocument`, DK4, DK5).
  *
  * 0144's check_document_request records each check once (DK12). With vendor requests on, a match for a bill that lacks
  * its purchase order adds it, compare-and-set on the bill still waiting with none and no payment, and the follow-up and
