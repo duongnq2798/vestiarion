@@ -4529,18 +4529,23 @@ address checker. A bill list is read and checked in the browser (`BillListChecke
   focus, and **Check N bills** shows it is busy for a frame before the check holds the page.
 - `src/lib/bill-check/read.ts` reads the bills from that table with the import's `detectMapping`, `readAmount`,
   `readDate` and `dateOrderOf`, without `rows.ts`'s workspace parts, and reads up to 5,000 bills (`MAX_CHECK_BILLS`)
-  where an import takes 200. Vendors are grouped by `vendorKeyOf`: `nameKey`, keeping letters outside a to z.
+  where an import takes 200. Vendors are grouped by `vendorKeyOf`: `nameKey`, keeping letters outside a to z with
+  their marks, so names that differ by a vowel sign or a voicing mark stay two vendors.
 - `likelyDuplicates` (`src/lib/bill-check/findings.ts`) scores each bill against the closest bills of its vendor due
   before it that share its amount, purchase order or invoice number, with the agent's own `scoreDuplicate`. Each bill
   carries the memo the import would add it with (`memoWithInvoiceNumber`, now in `src/lib/bill-import/memo.ts`) and no
   status, so the explanation names none and the confidence stays at most 0.85. A bill that follows one of the same
   amount and description a month before it is compared by amount only with the bills since, so a monthly charge is not
-  its own duplicate. Invoice numbers are compared as `sameNumber` reads them, a placeholder with no digit but 0 left
-  out; that comparison is the page's own, not the agent's, and the page says so.
+  its own duplicate. Invoice numbers are compared as `sameNumber` reads them; that comparison is the page's own, not
+  the agent's, and the page says so. An invoice number or purchase order with no digit but 0 is a placeholder and
+  counts as none, in the memo too, where the import would write "Invoice N/A".
 - `monthApart` lists, as runs, the pairs the recurring rule (`RECURRING_MIN_DAYS` to `RECURRING_MAX_DAYS`) keeps out of
-  the duplicates: each bill follows the closest bill of its amount a month before it, so a bill between two months
-  breaks no run. `deadlinesOf` lists the discounts ending and the late fees starting (`lastDayWithoutFee`) in the 7 days
-  from the person's own today, only from the terms the list gives, each naming the row its bill may repeat.
+  the duplicates. Each bill follows the bill of its amount a month before it that fits best, the links that fit best
+  made first: the same description, then due nearest the same day of the month before. So a bill between two months
+  breaks no run, and two charges of one price are two runs. A bill whose month-before bills are all taken is listed
+  with the best as a pair, unless it is a likely duplicate already. `deadlinesOf` lists the discounts ending and the
+  late fees starting (`lastDayWithoutFee`) in the 7 days from the person's own today, only from the terms the list
+  gives, each naming the row its bill may repeat.
 - `checkedCsv` gives the list back with a "Bill check" column, as the import gives back the rows it could not add.
 - The call to action is `CheckBillsCta`, in a file of its own, so recording where a workspace came from can be added
   there without touching the checker. `tests/check-bills-page.test.tsx` holds the checker's code to making no request.

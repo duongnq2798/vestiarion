@@ -19,10 +19,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   it asks only what the list cannot say, such as whether 03/04 is day or month first. It lists the bills that may
   repeat each other, by vendor, scored by the agent's own duplicate rule, with its explanation, a confidence and the
   amount at stake. The page also compares invoice numbers, which the agent's rule does not, counting one written
-  another way (BP-1042 and bp 1042) as the same number and a placeholder such as N/A as none. Bills of the same amount
-  about a month apart, which that rule takes for a monthly charge, are listed apart to look at, a bill of the same
-  amount between two months breaking no run, and the later months of a charge with one description are not called
-  repeats of the earlier ones. Early-payment discounts ending and late fees starting in the next 7 days are listed with
+  another way (BP-1042 and bp 1042) as the same number, and a placeholder such as N/A in place of an invoice number or
+  a purchase order as none. Bills of the same amount about a month apart, which that rule takes for a monthly charge,
+  are listed apart to look at, unless one is already a likely duplicate: each follows the bill of its description due
+  nearest the same day of the month before, so a bill of the same amount between two months breaks no run and two
+  charges of one price are two runs. A charge with one description whose month before is in the list is not called a
+  repeat of the months before it. Early-payment discounts ending and late fees starting in the next 7 days are listed with
   what each is worth, when the list gives their terms, and say so when their bill may repeat another. The list comes
   back as a CSV with a "Bill check" column, a sample list of made-up vendors shows every kind of finding, and up to
   5,000 bills are read, the button showing it is busy meanwhile. It all runs in the browser: nothing pasted is sent

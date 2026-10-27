@@ -191,17 +191,22 @@ function percentOf(cell: string): number {
 
 const dayAfter = (day: string) => new Date(Date.parse(`${day}T00:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
 
-const latinWord = (word: string) => /^[a-z0-9]+$/.test(word);
+/** A word of a to z and 0 to 9 once its accents are left out, as `nameKey` reads it. */
+const latinWord = (word: string) => /^[a-z0-9]+$/.test(word.replace(/\p{M}/gu, ""));
 
 /**
  * The name a vendor's bills are grouped by (CB4): `nameKey`, without case, punctuation or a legal suffix. `nameKey` keeps
- * a to z and 0 to 9 only, so a name with other letters keeps every word, a Latin legal suffix still left out: "東京 Design"
- * and "大阪 Design" stay two vendors, as "東京 Design Ltd." and "東京 Design" are one.
+ * a to z and 0 to 9 only, so a name with other letters keeps every word, each of those with its marks, and only a Latin
+ * word read by `nameKey`, a legal suffix left out: "東京 Design" and "大阪 Design" stay two vendors, and so do "राम Traders"
+ * and "रमा Traders", whose vowel signs differ, as "東京 Design Ltd." and "東京 Design" are one.
  */
 export function vendorKeyOf(vendor: string): string {
-  const words = vendor.toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const words = vendor.toLowerCase().normalize("NFKD").split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
   if (words.every(latinWord)) return nameKey(vendor) || vendor.toLowerCase();
-  return words.filter((word) => !latinWord(word) || nameKey(word) !== "").join(" ");
+  return words
+    .map((word) => (latinWord(word) ? nameKey(word) : word))
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function readBills(table: Table, answers: CheckAnswers): ListBill[] {

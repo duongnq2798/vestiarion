@@ -53,8 +53,9 @@ they check is the list its bill import reads, so the step after the check is sho
 **CB4. Each bill as read** (`readBills`). A read-only reader: it takes nothing from a workspace and adds nothing.
 - The counterparty as written, and its key for grouping (`vendorKeyOf`): `nameKey` (`src/lib/invoice-document/match.ts`),
   so "Bluebell Print Co." and "Bluebell Print Co" are one vendor. `nameKey` keeps a to z and 0 to 9 only, so a name with
-  other letters keeps every word, case and marks aside and a Latin legal suffix left out: "東京 Design" and "大阪 Design"
-  are two vendors, "東京 Design Ltd." and "東京 Design" one.
+  other letters keeps every word, case aside: each word of other letters keeps its marks, and only a Latin word loses
+  its accents, or is left out as a legal suffix. "東京 Design" and "大阪 Design" are two vendors, and so are "राम Traders"
+  and "रमा Traders", whose vowel signs differ, or "バス商事" and "パス商事"; "東京 Design Ltd." and "東京 Design" are one.
 - The amount, read in the list's format to an exact decimal (`splitCurrency`, `readAmount`), and its currency: the
   currency column's code or symbol, the amount's own symbol, or the list's currency.
 - The due date, the invoice number, the purchase order and the memo.
@@ -71,22 +72,29 @@ they check is the list its bill import reads, so the step after the check is sho
   5,000 bills of one vendor for one amount take a second or two.
 - Each comparison is the agent's own `scoreDuplicate` (`src/lib/agent/duplicates.ts`), with its explanation as written.
   The bill's memo is the one the import would add it with: its invoice number in front (`memoWithInvoiceNumber`, B9), so
-  two bills compare as they would once imported. A list does not say which bills are paid, so each bill is given no
-  status: the explanation then names none, and confidence stays at most 0.85, the most `scoreDuplicate` gives a bill
-  whose money has not left.
+  two bills compare as they would once imported. Only placeholders (below) are read otherwise: a placeholder invoice
+  number is left out of the memo, where the import would write "Invoice N/A", so bills with no description of their
+  own do not share one through it, and a placeholder purchase order is none. A list does not say which bills are paid,
+  so each bill is given no status: the explanation then names none, and confidence stays at most 0.85, the most
+  `scoreDuplicate` gives a bill whose money has not left.
 - Its recurring-charge rule stands: two bills due 24 to 32 days apart without the same purchase order are not a likely
-  duplicate. They are listed in CB6 instead.
+  duplicate. They are listed in CB6 instead, unless the later one is a likely duplicate of another bill.
 - A monthly charge is not its own duplicate either. A bill that follows one of the same amount and description 24 to 32
   days before it, with no purchase order or invoice number in common (`monthApartPair`), is the next month of that
   charge: it is compared by amount only with the bills since that one, not with the months before it, which the
   agent's rule, scoring same amount and same description 59 days apart at 0.75, would take for repeats. Its purchase
-  order and invoice number are still compared with every bill. A month sent twice is still found, against its copy.
+  order and invoice number are still compared as for any bill (the closest 50 of each). A month sent twice is still
+  found, against its copy. With no bill of it 24 to 32 days before, the agent's rule stands: a month missing from the
+  list makes the next one a likely repeat of the last one there.
 - The invoice numbers are compared too, as `sameNumber` (`src/lib/vendor-statement/match.ts`) reads them: case, spaces
   and punctuation ignored, so "BP-1042" and "bp 1042" are one number. The same number for the same amount is 0.85; for
   a different amount, 0.55, as a purchase order billed twice is. The sentence names the earlier row, and both numbers
   when they are written differently. A number counts only with a digit other than 0 in it, so a placeholder a sheet
   fills an empty cell with ("N/A", "none", "TBD", "0") is no number. This comparison is the page's own: the agent's
   rule sees an invoice number only as part of the memo, so the page says so.
+- A purchase order is read as `normalisePo` reads it, and counts by the same rule: one with no digit other than 0 is
+  a placeholder and no purchase order, so a sheet that writes N/A in every empty cell does not make each bill of a
+  vendor bill the same order.
 - Each bill is shown with its strongest match only, so a bill sent three times is two findings, not three.
 - Grouped by vendor, strongest first. Each finding shows both rows, the confidence, the explanation, and the amount at
   stake: the later bill's amount, which paying both would pay twice. Each vendor's and the list's amounts at stake are
@@ -95,10 +103,16 @@ they check is the list its bill import reads, so the step after the check is sho
 **CB6. Same amount, about a month apart** (`monthApart`).
 - Bills of one vendor in one currency for the same amount, each due 24 to 32 days after the one before it in the run
   (`RECURRING_MIN_DAYS`, `RECURRING_MAX_DAYS`), are listed as a run.
-- Each bill follows the closest bill of its amount 24 to 32 days before it that no other bill follows yet, one already
-  in a run first (at most 50 looked at). So a bill of the same amount due between two months breaks no run, a month
-  sent twice leaves the run going on from the month it had reached, and two charges of one price billed on different
-  days of the month are two runs.
+- Each bill follows one bill of its amount 24 to 32 days before it that no other bill follows yet (at most 50 looked
+  at). The links that fit best are made first: the same description, or none on both, then the bill due nearest the
+  same day of the month before (the month's last day when that month is shorter). Between links that fit alike, bills
+  go in order of due date, each following one already in a run first, then the closest, then the first row.
+- So a bill of the same amount due between two months breaks no run, even a few days after the earlier month; a month
+  sent twice leaves the run going on from the month it had reached; and two charges of one price billed on different
+  days of the month are two runs, even a few days apart.
+- A bill whose bills a month before all have their next month already is listed with the one that fits it best, as a
+  run of two of its own, unless it is a likely duplicate (CB5), which the page shows already. So no bill the recurring
+  rule spares is left out of both lists.
 - Most are a monthly charge; the page says to check each is a new month's bill, not the same bill sent again.
 - Two bills with the same purchase order or invoice number are a likely duplicate, not a link in a run.
 
@@ -168,14 +182,16 @@ they check is the list its bill import reads, so the step after the check is sho
 
 `tests/bill-check-read.test.ts`: the starting answers and mapping, the fields left out, the questions (dates, amounts,
 currency), what is still unanswered, each bill as read (currency from a column, a symbol or the list; a discount; a late
-fee with and without its first day), the vendor key with letters outside a to z, the reasons a row is not checked, and
-the 5,000-bill cap.
+fee with and without its first day), the vendor key with letters outside a to z and their marks, the reasons a row is
+not checked, and the 5,000-bill cap.
 
 `tests/bill-check-findings.test.ts`: a bill sent twice, the same purchase order, an invoice number written another way,
-the same number for a different amount, placeholder numbers, the strongest match only, vendors grouped by name and kept
-apart by letters outside a to z, different currencies apart, the amount at stake, a monthly charge with one description
-and no numbers that is not its own duplicate, and a month of it sent twice that is; a monthly run kept out of the
-duplicates, past a bill of the same amount between two months, and two charges of one price as two runs; the deadlines
+the same number for a different amount, placeholder invoice numbers (kept out of the memo too) and purchase orders, the
+strongest match only, vendors grouped by name and kept apart by letters outside a to z or a mark, different currencies
+apart, the amount at stake, a monthly charge with one description and no numbers that is not its own duplicate, and a
+month of it sent twice that is; a monthly run kept out of the duplicates, past a bill of the same amount between two
+months, a few days after the earlier month too, two charges of one price as two runs, a few days apart too, and a bill
+whose month before is taken listed as a pair unless it is a likely duplicate; the deadlines
 in and out of the 7 days with what each is worth, and one of a bill that may repeat another; the list with no such
 columns; the CSV with its flag column, semicolon and tab-separated; and the sample list.
 

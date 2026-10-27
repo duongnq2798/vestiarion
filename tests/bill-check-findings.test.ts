@@ -90,6 +90,18 @@ describe("likely duplicates (CB5)", () => {
     expect(result.vendors).toBe(4);
   });
 
+  it("keeps vendors apart whose names differ only in a vowel sign or a voicing mark", () => {
+    const { result } = check([
+      "राम Traders,,Stock,,2026-11-10,50.00,USD",
+      "रमा Traders,,Stock,,2026-11-11,50.00,USD",
+      "バス商事,,Stock,,2026-11-10,60.00,USD",
+      "パス商事,,Stock,,2026-11-11,60.00,USD",
+      "ハス商事,,Stock,,2026-11-12,60.00,USD",
+    ]);
+    expect(result.duplicates).toEqual([]);
+    expect(result.vendors).toBe(5);
+  });
+
   it("never pairs two vendors, nor the same figure in two currencies, nor different invoice numbers a week apart", () => {
     const { result } = check([
       "Harbor Studio Ltd,HS-1,Design,,2026-11-03,100.00,USD",
@@ -137,7 +149,7 @@ describe("likely duplicates (CB5)", () => {
     expect(apart.duplicates[0].findings.map((finding) => [finding.bill.line, finding.other.line, finding.confidence])).toEqual([[3, 2, 0.75]]);
   });
 
-  it("takes no invoice number from a placeholder such as N/A, none, TBD or 0", () => {
+  it("takes no invoice number from a placeholder such as N/A, none, TBD or 0, nor puts one in the memo", () => {
     const { result } = check([
       "Landlord LLC,N/A,Rent,,2026-09-01,2000.00,USD",
       "Landlord LLC,N/A,Rent,,2026-10-01,2000.00,USD",
@@ -147,10 +159,31 @@ describe("likely duplicates (CB5)", () => {
       "Juniper Office Supply,TBD,Paper,,2026-07-01,80.00,USD",
       "Juniper Office Supply,tbd,Toner,,2026-10-15,95.00,USD",
       "Harbor Studio,0,Design,,2026-07-01,300.00,USD",
-      "Harbor Studio,000,Photos,,2026-10-15,310.00,USD",
+      "Harbor Studio,0,Photos,,2026-10-15,310.00,USD",
+      // A weekly charge with no description: "Invoice N/A" in the memo would be the same description on every bill.
+      "Sparkle Cleaning,N/A,,,2026-11-02,150.00,USD",
+      "Sparkle Cleaning,N/A,,,2026-11-09,150.00,USD",
+      "Sparkle Cleaning,N/A,,,2026-11-16,150.00,USD",
     ]);
     expect(result.duplicates).toEqual([]);
     expect(result.monthApart.map((run) => run.bills.map((bill) => bill.line))).toEqual([[2, 3, 4]]);
+  });
+
+  it("takes no purchase order from a placeholder such as N/A, none, TBD or 0", () => {
+    const { result } = check([
+      "Landlord LLC,,Rent,N/A,2026-09-01,2000.00,USD",
+      "Landlord LLC,,Water,N/A,2026-09-20,35.00,USD",
+      "Landlord LLC,,Rent,N/A,2026-10-01,2000.00,USD",
+      "Orchard Signs,,Decals,TBD,2026-08-01,120.00,USD",
+      "Orchard Signs,,Banner,TBD,2026-09-14,145.00,USD",
+      "Juniper Office Supply,,Paper,none,2026-07-01,80.00,USD",
+      "Juniper Office Supply,,Toner,none,2026-10-15,95.00,USD",
+      "Harbor Studio,,Design,0,2026-07-01,300.00,USD",
+      "Harbor Studio,,Photos,0,2026-10-15,310.00,USD",
+    ]);
+    expect(result.duplicates).toEqual([]);
+    // The monthly rent stays a run: a placeholder in common does not make it a likely duplicate.
+    expect(result.monthApart.map((run) => run.bills.map((bill) => bill.line))).toEqual([[2, 4]]);
   });
 
   it(`compares each bill with at most ${COMPARED_PER_BUCKET} bills of its amount before it, the ones due closest`, () => {
@@ -210,14 +243,64 @@ describe("same amount, about a month apart (CB6)", () => {
     ]);
   });
 
-  it("keeps two charges of one price billed on different days of the month as two runs", () => {
-    const days = ["2026-08-04", "2026-08-20", "2026-09-04", "2026-09-20", "2026-10-04", "2026-10-20"];
-    const { result } = check(days.map((day, index) => `Northwind Hosting,NS-${index + 1},Seat,,${day},40.00,USD`));
+  it("links a bill to the one a month before it with its description, past a bill of the same amount a few days after it", () => {
+    const { result } = check([
+      "Acme,,Hosting,,2027-01-01,100.00,USD",
+      "Acme,,Setup fee,,2027-01-05,100.00,USD",
+      "Acme,,Hosting,,2027-02-01,100.00,USD",
+      "Acme,,Setup fee,,2027-02-05,100.00,USD",
+      "Northwind Hosting,,Hosting,,2026-09-01,100.00,USD",
+      "Northwind Hosting,,Setup fee,,2026-09-05,100.00,USD",
+      "Northwind Hosting,,Hosting,,2026-10-01,100.00,USD",
+      "Birch Cloud,,Hosting,,2027-01-01,100.00,USD",
+      "Birch Cloud,,Setup fee,,2027-01-06,100.00,USD",
+      "Birch Cloud,,Hosting,,2027-01-31,100.00,USD",
+    ]);
     expect(result.duplicates).toEqual([]);
-    expect(result.monthApart.map((run) => run.bills.map((bill) => bill.line))).toEqual([
+    expect(result.monthApart.map((run) => [run.bills.map((bill) => bill.line), run.gaps])).toEqual([
+      [[2, 4], [31]],
+      [[3, 5], [31]],
+      [[6, 8], [30]],
+      [[9, 11], [30]],
+    ]);
+  });
+
+  it("keeps two charges of one price billed on different days of the month as two runs", () => {
+    const seats = (days: string[]) => check(days.map((day, index) => `Northwind Hosting,NS-${index + 1},Seat,,${day},40.00,USD`)).result;
+    const lines = (result: ReturnType<typeof seats>) => result.monthApart.map((run) => run.bills.map((bill) => bill.line));
+    const apart = seats(["2026-08-04", "2026-08-20", "2026-09-04", "2026-09-20", "2026-10-04", "2026-10-20"]);
+    expect(apart.duplicates).toEqual([]);
+    expect(lines(apart)).toEqual([
       [2, 4, 6],
       [3, 5, 7],
     ]);
+    // A few days apart, each bill is also 24 to 32 days after the other charge: it follows the one due on its day.
+    const close = seats(["2027-01-01", "2027-01-05", "2027-02-01", "2027-02-05", "2027-03-01", "2027-03-05"]);
+    expect(close.duplicates).toEqual([]);
+    expect(lines(close)).toEqual([
+      [2, 4, 6],
+      [3, 5, 7],
+    ]);
+    expect(lines(seats(["2026-08-01", "2026-08-06", "2026-08-31", "2026-09-05"]))).toEqual([
+      [2, 4],
+      [3, 5],
+    ]);
+  });
+
+  it("lists a bill whose month before already has its next month as a pair of its own, unless it is a likely duplicate", () => {
+    const seats = check(["Northwind Hosting,NS-1,Seat,,2027-01-01,40.00,USD", "Northwind Hosting,NS-2,Seat,,2027-01-28,40.00,USD", "Northwind Hosting,NS-3,Seat,,2027-02-01,40.00,USD"]).result;
+    expect(seats.duplicates).toEqual([]);
+    expect(seats.monthApart.map((run) => [run.bills.map((bill) => bill.line), run.gaps])).toEqual([
+      [[2, 3], [27]],
+      [[2, 4], [31]],
+    ]);
+    // A month sent twice is a likely duplicate of its copy, and listed there only.
+    const sentTwice = check(
+      ["01", "02", "03", "03"].map((month) => `Landlord LLC,Rent,2026-${month}-01,2000.00,USD`),
+      "Vendor,Description,Due date,Amount,Currency"
+    ).result;
+    expect(sentTwice.duplicates[0].findings.map((finding) => finding.bill.line)).toEqual([5]);
+    expect(sentTwice.monthApart.map((run) => run.bills.map((bill) => bill.line))).toEqual([[2, 3, 4]]);
   });
 });
 

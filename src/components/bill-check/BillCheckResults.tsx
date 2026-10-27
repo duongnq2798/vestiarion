@@ -136,7 +136,7 @@ export function BillCheckResults({ result, onBack, onRestart, onDownload }: { re
         ) : (
           <ul className="space-y-2">
             {result.monthApart.map((run) => (
-              <li key={run.bills[0].line} className={CARD}>
+              <li key={run.bills.map((bill) => bill.line).join("-")} className={CARD}>
                 <p className="text-sm font-semibold text-ink">{`${run.vendor}: ${moneyWords(run.amount, run.currency)}, ${plural(run.bills.length, "bill", "bills")}`}</p>
                 <ul className="mt-2 space-y-0.5">
                   {run.bills.map((bill) => (

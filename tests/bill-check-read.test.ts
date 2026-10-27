@@ -7,6 +7,7 @@ import {
   readBills,
   startingAnswers,
   unansweredOf,
+  vendorKeyOf,
   type CheckAnswers,
 } from "@/lib/bill-check/read";
 import { readTable } from "@/lib/bill-import/table";
@@ -119,6 +120,16 @@ describe("each bill as read (CB4)", () => {
       ["Vendor,Due,Amount", "Bluebell Print Co.,2026-11-02,10.00", "東京 Design Ltd.,2026-11-02,10.00", "大阪 Design,2026-11-02,10.00", "Магазин 1,2026-11-02,10.00", "Straße GmbH,2026-11-02,10.00", "東京,2026-11-02,10.00"].join("\n")
     );
     expect(readBills(table, answers).map((bill) => bill.vendorKey)).toEqual(["bluebell print", "東京 design", "大阪 design", "магазин 1", "straße", "東京"]);
+  });
+
+  it("keeps the marks of letters outside a to z in the vendor key, and leaves out only Latin accents", () => {
+    const names = ["राम Traders", "रमा Traders", "バス商事", "パス商事", "ハス商事", "สมศรี", "สมศร", "Май", "Маи"];
+    expect(new Set(names.map(vendorKeyOf)).size).toBe(names.length);
+    // One name written another way is one key: in parts, in half-width letters, with a Latin accent or a legal suffix.
+    expect(vendorKeyOf("バス商事".normalize("NFD"))).toBe(vendorKeyOf("バス商事"));
+    expect(vendorKeyOf("ﾊﾞｽ商事 Ltd.")).toBe(vendorKeyOf("バス商事"));
+    expect(vendorKeyOf("Café Nord")).toBe("cafe nord");
+    expect(vendorKeyOf("東京 Café")).toBe("東京 cafe");
   });
 
   it("takes the list's currency for a row that does not say, and starts a late fee without a first day the day after the due date (LF1)", () => {

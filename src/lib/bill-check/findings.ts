@@ -145,15 +145,19 @@ function groupBy<T>(items: readonly T[], key: (item: T) => string): T[][] {
   return [...groups.values()];
 }
 
-/** A checked bill as the agent's duplicate check reads an invoice: its memo as the import would write it (B9), no status. */
-function invoiceLike(bill: ListBill): InvoiceLike {
+/**
+ * A checked bill as the agent's duplicate check reads an invoice: its memo as the import would write it (B9), no status.
+ * A placeholder invoice number or purchase order (`numberOf`, `poOf`) is none, so it is not in the memo either: the
+ * import would write "Invoice N/A", the same description on every such bill of a vendor (CB5).
+ */
+function invoiceLike(bill: ListBill, number: string, po: string | null): InvoiceLike {
   return {
     id: `row-${bill.line}`,
     counterpartyId: bill.vendorKey,
     amount: Number(bill.amount),
     currency: bill.currency!,
-    memo: memoWithInvoiceNumber(bill.invoiceNumber, bill.memo),
-    poReference: bill.poReference,
+    memo: memoWithInvoiceNumber(number ? bill.invoiceNumber : null, bill.memo),
+    poReference: po ? bill.poReference : null,
     dueDate: bill.dueDate!,
     status: "",
   };
@@ -161,13 +165,26 @@ function invoiceLike(bill: ListBill): InvoiceLike {
 
 const amountKey = (bill: ListBill) => `${bill.currency} ${decimalKey(bill.amount!)}`;
 
-/**
- * A bill's invoice number as compared (CB5): its letters and digits as `sameNumber` reads them, and only when they hold
- * a digit other than 0, so a placeholder a sheet fills an empty cell with ("N/A", "none", "TBD", "0") is no number.
- */
+/** A number with a digit other than 0 in it: what a sheet fills an empty cell with ("N/A", "none", "TBD", "0") has none. */
+const realNumber = (number: string) => /[1-9]/.test(number);
+
+/** A bill's invoice number as compared (CB5): its letters and digits as `sameNumber` reads them; a placeholder is none. */
 function numberOf(bill: ListBill): string {
   const number = sameNumber(bill.invoiceNumber);
-  return /[1-9]/.test(number) ? number : "";
+  return realNumber(number) ? number : "";
+}
+
+/** A bill's purchase order as compared (CB5): as `normalisePo` reads it; a placeholder is none, as for invoice numbers. */
+function poOf(bill: ListBill): string | null {
+  const po = normalisePo(bill.poReference);
+  return po !== null && realNumber(po) ? po : null;
+}
+
+/** The same day of the month before `due` (`YYYY-MM-DD`), or that month's last day when it has fewer, as a count of days. */
+function sameDayMonthBefore(due: string): number {
+  const [year, month, day] = due.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, month - 1, 0)).getUTCDate();
+  return Math.round(Date.UTC(year, month - 2, Math.min(day, lastDay)) / DAY_MS);
 }
 
 function numberWordsOf(bill: ListBill, other: ListBill, sameAmount: boolean): string {
@@ -186,19 +203,24 @@ interface Compared {
   number: string;
   /** Its description as `scoreDuplicate` compares it: the memo the import would write, case and spaces aside. */
   memo: string | null;
+  /** Its description as the list writes it, case and spaces aside: a run follows it before a bill of another (CB6). */
+  description: string | null;
   /** Its due date as a count of days, to find the bills a month before it. */
   day: number;
 }
 
 function compared(bill: ListBill): Compared {
-  const like = invoiceLike(bill);
+  const number = numberOf(bill);
+  const po = poOf(bill);
+  const like = invoiceLike(bill, number, po);
   return {
     bill,
     like,
     amount: amountKey(bill),
-    po: normalisePo(bill.poReference),
-    number: numberOf(bill),
+    po,
+    number,
     memo: normaliseText(like.memo),
+    description: normaliseText(bill.memo),
     day: Math.round(Date.parse(`${bill.dueDate}T00:00:00.000Z`) / DAY_MS),
   };
 }
@@ -299,44 +321,82 @@ export function likelyDuplicates(bills: readonly ListBill[]): VendorDuplicates[]
   return vendors.sort((a, b) => top(b) - top(a) || staked(b) - staked(a) || a.vendor.localeCompare(b.vendor));
 }
 
+/** A bill a month before another that the later bill may follow in a run, and how well it fits it (CB6). */
+interface MonthLink {
+  earlier: number;
+  later: number;
+  /** 0 when the two have the same description, or neither has one; 1 when they differ. */
+  otherDescription: number;
+  /** The days between the earlier bill and the same day of the month before the later one. */
+  offMonth: number;
+}
+
+/** The better fit first: the same description, then due nearer the same day of the month before. */
+const fitOf = (a: MonthLink, b: MonthLink) => a.otherDescription - b.otherDescription || a.offMonth - b.offMonth;
+
 /**
  * Runs of the same amount about a month apart (CB6): bills of one vendor, in one currency, for one amount, each due
  * `RECURRING_MIN_DAYS` to `RECURRING_MAX_DAYS` after the one before it in the run, with no purchase order or invoice
- * number in common (`monthApartPair`). Each bill follows the closest such bill before it that no other bill follows yet,
- * one already in a run first, so a bill of the same amount between two months, or a month sent twice, breaks no run.
+ * number in common (`monthApartPair`). Each bill follows one such bill before it that no other bill follows yet, the
+ * links that fit best made first: the same description, then the bill due nearest the same day of the month before.
+ * Between links that fit alike, bills go in order of due date, each following one already in a run first, then the
+ * closest. So a bill of the same amount due between two months breaks no run, a month sent twice leaves the run going on
+ * from the month it had reached, and two charges of one price billed on different days of the month are two runs. A
+ * bill whose month-before bills all have their next month already is listed with the one that fits it best, as a run of
+ * two of its own, unless it is a likely duplicate, which the page shows already: no such bill is left out of both lists.
  */
-export function monthApart(bills: readonly ListBill[]): MonthApartRun[] {
+export function monthApart(bills: readonly ListBill[], duplicates: readonly VendorDuplicates[]): MonthApartRun[] {
+  const repeats = new Set(duplicates.flatMap((vendor) => vendor.findings.map((finding) => finding.bill.line)));
   const runs: MonthApartRun[] = [];
   for (const group of groupBy(bills.filter((bill) => bill.checked), (bill) => `${bill.vendorKey}\n${amountKey(bill)}`)) {
     const sorted = [...group].sort(byDue).map(compared);
     const all = sorted.map((_, index) => index);
+    const links: MonthLink[] = [];
+    sorted.forEach((bill, later) => {
+      const from = firstDueFrom(all, sorted, bill.day - RECURRING_MAX_DAYS);
+      const monthBefore = sameDayMonthBefore(bill.bill.dueDate!);
+      let found = 0;
+      for (let earlier = firstDueFrom(all, sorted, bill.day - RECURRING_MIN_DAYS + 1) - 1; earlier >= from && found < COMPARED_PER_BUCKET; earlier--) {
+        const before = sorted[earlier];
+        if (!monthApartPair(bill, before)) continue;
+        links.push({ earlier, later, otherDescription: before.description === bill.description ? 0 : 1, offMonth: Math.abs(before.day - monthBefore) });
+        found++;
+      }
+    });
+    // The first link of each bill is then the one that fits it best; between two as good, the closer, then the first row.
+    links.sort((a, b) => fitOf(a, b) || a.later - b.later || sorted[b.earlier].day - sorted[a.earlier].day || a.earlier - b.earlier);
     const follows = new Map<number, number>();
     const followed = new Map<number, number>();
-    sorted.forEach((bill, index) => {
-      const open: number[] = [];
-      const from = firstDueFrom(all, sorted, bill.day - RECURRING_MAX_DAYS);
-      for (let at = firstDueFrom(all, sorted, bill.day - RECURRING_MIN_DAYS + 1) - 1; at >= from && open.length < COMPARED_PER_BUCKET; at--) {
-        if (!followed.has(at) && monthApartPair(bill, sorted[at])) open.push(at);
-      }
-      const earlier = open.find((at) => follows.has(at)) ?? open[0];
-      if (earlier === undefined) return;
-      follows.set(index, earlier);
-      followed.set(earlier, index);
-    });
-    sorted.forEach((first, index) => {
-      if (follows.has(index) || !followed.has(index)) return;
-      const run = [index];
-      for (let at = followed.get(index); at !== undefined; at = followed.get(at)) run.push(at);
+    for (let start = 0, end = 0; start < links.length; start = end) {
+      // The links of one bill that fit it alike.
+      const { later } = links[start];
+      end = start + 1;
+      while (end < links.length && links[end].later === later && fitOf(links[end], links[start]) === 0) end++;
+      const open = follows.has(later) ? [] : links.slice(start, end).filter((link) => !followed.has(link.earlier));
+      const link = open.find((each) => follows.has(each.earlier)) ?? open[0];
+      if (!link) continue;
+      follows.set(later, link.earlier);
+      followed.set(link.earlier, later);
+    }
+    // A bill left with nothing to follow, every bill a month before it taken: a pair with the one that fits it best.
+    const pairs = new Map<number, number>();
+    for (const link of links) {
+      if (!follows.has(link.later) && !pairs.has(link.later) && !repeats.has(sorted[link.later].bill.line)) pairs.set(link.later, link.earlier);
+    }
+    const starts = all.filter((index) => followed.has(index) && !follows.has(index) && !pairs.has(index)).map((index) => [index]);
+    for (const run of [...starts, ...[...pairs].map(([later, earlier]) => [earlier, later])]) {
+      for (let at = followed.get(run.at(-1)!); at !== undefined; at = followed.get(at)) run.push(at);
+      const first = sorted[run[0]].bill;
       runs.push({
-        vendor: first.bill.vendor,
-        amount: decimalKey(first.bill.amount!),
-        currency: first.bill.currency!,
+        vendor: first.vendor,
+        amount: decimalKey(first.amount!),
+        currency: first.currency!,
         bills: run.map((at) => sorted[at].bill),
         gaps: run.slice(1).map((at, step) => sorted[at].day - sorted[run[step]].day),
       });
-    });
+    }
   }
-  return runs.sort((a, b) => a.bills[0].line - b.bills[0].line);
+  return runs.sort((a, b) => a.bills[0].line - b.bills[0].line || a.bills[1].line - b.bills[1].line);
 }
 
 /**
@@ -408,7 +468,7 @@ export function checkBills(table: Table, answers: CheckAnswers, today: string): 
     vendors: new Set(checked.map((bill) => bill.vendorKey)).size,
     duplicates,
     atStake,
-    monthApart: monthApart(bills),
+    monthApart: monthApart(bills, duplicates),
     deadlines: deadlinesOf(bills, today, duplicates),
     terms: {
       discount: answers.mapping.discountPct !== undefined,
