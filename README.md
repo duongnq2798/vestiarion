@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/readme-banner.png" alt="Vestiarion, for small businesses with work to do: Your AI agent for bills and payments. Every bill. A clear way through. Beside it, a recorded team bill from the Vestiarion team workspace on Arc mainnet: 1 USDC, Paid. The agent decided to schedule it for Oct 22, with a 0.055 USDC CCTP fee to Base (entry #4641); code held it, as a first payment to a new address needs a second look (entry #4641); a person approved it (entry #4643): Paid on Base, payment confirmation recorded 19 Oct 2026, 10:31:44 UTC. Built on Arc and Circle; works with Xero, QuickBooks Online, HubSpot, Pipedrive, Slack and Telegram." width="100%">
+<img src="docs/assets/readme-banner.png" alt="Vestiarion, for small businesses with work to do: Your AI agent for bills and payments. Every bill. A clear way through. Beside it, a recorded team bill from the Vestiarion team workspace on Arc mainnet: 1 USDC, Paid. The agent decided to schedule it for Oct 22, with a 0.055 USDC CCTP fee to Base (entry #4641); code held it, as a first payment to a new address needs a second look (entry #4641); a person approved it (entry #4643): Paid on Base, payment confirmation recorded 19 Oct 2026, 10:31:44 UTC. Built on Arc and Circle; works with Xero, Zoho Books, HubSpot, Pipedrive, Slack and Telegram." width="100%">
 
 # Vestiarion
 

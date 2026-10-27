@@ -37,5 +37,9 @@ export const README_BANNER_BILL = {
   },
 } as const;
 
-/** The README's own "Works with" list (README.md), cut to the six the banner has room for: names, never marks. */
-export const README_BANNER_WORKS_WITH = ["Xero", "QuickBooks Online", "HubSpot", "Pipedrive", "Slack", "Telegram"] as const;
+/**
+ * The README's own "Works with" list (README.md), cut to the six the banner has room for: names, never marks. QuickBooks
+ * Online is left out: the hosted service connects to QuickBooks sandbox companies only until Intuit's assessment (the
+ * landing's "Sandbox companies for now"), and a picture shown out of context has no room for that caveat.
+ */
+export const README_BANNER_WORKS_WITH = ["Xero", "Zoho Books", "HubSpot", "Pipedrive", "Slack", "Telegram"] as const;

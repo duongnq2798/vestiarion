@@ -65,13 +65,14 @@ describe("/docs-shots/readme-banner", () => {
         "Paid on Base",
         "Payment confirmation recorded 19 Oct 2026, 10:31:44 UTC",
         "Built on Arc and Circle",
-        "Works with Xero, QuickBooks Online, HubSpot, Pipedrive, Slack, Telegram",
+        "Works with Xero, Zoho Books, HubSpot, Pipedrive, Slack, Telegram",
       ].join(" ")
     );
     expect(markup).not.toContain("href=");
     expect(markup).not.toContain("/o/");
     expect(markup).not.toMatch(/0x[0-9a-f]{8}/i);
     expect(markup).not.toMatch(/<img\b/);
+    expect(markup).not.toContain("QuickBooks");
     // One frame, exactly the size the script photographs, and the one h1.
     expect(markup.match(/data-docs-shot="readme-banner"/g)).toHaveLength(1);
     expect(markup.match(/<h1\b/g)).toHaveLength(1);
@@ -152,10 +153,12 @@ describe("the README's banner", () => {
       "Paid on Base",
       "19 Oct 2026, 10:31:44 UTC",
       "Built on Arc and Circle",
-      "Xero, QuickBooks Online, HubSpot, Pipedrive, Slack and Telegram",
+      "Xero, Zoho Books, HubSpot, Pipedrive, Slack and Telegram",
     ]) {
       expect(alt).toContain(phrase);
     }
+    // QuickBooks connects sandbox companies only for now, a caveat neither the picture nor its alt text has room for.
+    expect(alt).not.toContain("QuickBooks");
   });
 
   it("is 2560 x 1280, and the social preview 1280 x 640 and under GitHub's 1 MB", () => {
