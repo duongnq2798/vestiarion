@@ -31,6 +31,12 @@ export const FREE_TOOLS = [
     title: "Payment terms calculator",
     description: "Work out an invoice's due date and discount deadline, what skipping a discount such as 2/10 net 30 costs a year, a late fee, and the day to pay.",
   },
+  {
+    slug: "check-vendor",
+    path: "/check-vendor",
+    title: "OFAC vendor check",
+    description: "Check a vendor's name, or your whole vendor list with its wallet addresses, against OFAC's SDN list.",
+  },
 ] as const satisfies readonly FreeTool[];
 
 export type FreeToolSlug = (typeof FREE_TOOLS)[number]["slug"];

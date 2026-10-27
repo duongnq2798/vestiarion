@@ -900,6 +900,10 @@ mainnet plan).
     with shadow mode ticked; the sign-in page says what follows the link when that is where it leads.
   - Each call to action carries `data-cta`; Google Analytics, where it runs, sends `cta_click` with that name and the
     redacted path, nothing else. Activation itself is read from the database (`/admin/growth`).
+  - The code turns on nothing else in Google Analytics. GA4's enhanced measurement, on by default and a setting of the
+    Analytics property rather than of the code, also sends the full address of each link clicked to another site. So
+    a link a free tool draws carries nothing of what was typed or found: the vendor check links to Treasury's search
+    page, not to the matched entry's page there.
   - Safety and control (`src/components/landing/Safety.tsx`): three principles, each saying what holds it (the team,
     rules in code and Arc mainnet's spending-limit contract, the signed ledger), then two past cases step by step, each
     labelled with its network and its own mode in the team's workspace. A past decision's facts do not change, so they
@@ -1238,7 +1242,9 @@ would find.
   `SDN.CSV` and `SDN_COMMENTS.CSV` together, since remarks overflow into the second file.
   - `loadSanctionedWallets` reads them live when `compliance.sanctionedWalletsLive` (production, or
     `SANCTIONED_WALLETS=live`), keeping them 12 hours per instance. A failed or thin read keeps the last list, else the
-    dated snapshot `src/lib/data/ofac-sdn-evm-wallets.json` (`scripts/ofac-sdn-wallets.mjs`).
+    dated snapshot `src/lib/data/ofac-sdn-evm-wallets.json`. `npx tsx scripts/ofac-sdn-wallets.mjs` makes it, and the
+    vendor check's name snapshot, from one download of `SDN.CSV`, `SDN_COMMENTS.CSV`, `ALT.CSV` and `ADD.CSV`, with
+    this file's own parsers.
   - `runComplianceSweep` screens every counterparty whose address is on it and whose verdict does not name it yet
     (`walletVerdictDue`), due or not. `applyScreening` then takes `walletScreening`'s verdict (high, `ofac-sdn`,
     `ofac-sdn-<entry>`) over the name's, and ignores dismissals. The sweep entry records `sanctionedWallets`.
@@ -4578,6 +4584,53 @@ browser, with no form, request, URL parameter or storage. Its rules are pure mod
 - They carry the full footer. `SiteFooter`'s links to the landing's sections are `/#…` on every page but the landing
   (`SiteFooter landing`, which keeps them in place), so they reach the landing from these pages, /check-address,
   /studios and /how-it-decides.
+
+**The OFAC vendor check.** `/check-vendor` (`src/app/check-vendor/page.tsx`,
+`docs/superpowers/specs/2026-10-28-check-vendor-design.md`) checks one vendor's name, or a whole vendor list with its
+countries and wallets, against OFAC's SDN list. A free public page, static and outside `/tools`; everything runs in the
+browser, with no form, request carrying input, URL parameter or storage.
+- The list is `src/lib/data/ofac-sdn-names.json`: every SDN entry as `[number, name, type, programs, other names,
+  countries, digital-currency addresses]`, one a line, dated. `parseSdnNames` (`src/lib/sanctioned-wallets.ts`) reads
+  it from `SDN.CSV` and its overflowing remarks, `ALT.CSV` and `ADD.CSV`; `scripts/ofac-sdn-wallets.mjs` writes it with
+  the wallet snapshot. There is no live read for this page: the page shows the snapshot's date, read from the wallet
+  snapshot of the same run so the server page does not carry the names.
+- `loadNameIndex` (`src/components/vendor-check/load-index.ts`) imports it as a separate chunk of the site's own bundle
+  when the first check runs, about 0.55 MB compressed, so the enforced CSP needs nothing new, and builds the index once
+  with `buildNameIndexInSteps`, giving the page back every 1,000 entries and 5,000 words: about 0.7 s on a laptop in
+  all, no step longer than about 60 ms.
+- `matchName` (`src/lib/vendor-check/match.ts`) drops accents, punctuation (apostrophes written as modifier letters
+  among them), legal forms and words not in Latin letters (`nameWords`, `nonLatinWords`), pairs words one to one (the
+  same; spelled another way: one `soundKey` and a Jaro-Winkler of 0.80; close: a Jaro-Winkler of 0.88), weighs each
+  word by its rarity among the list's names (`w`), and scores against each entry's name and other names: the sum over
+  pairs of closeness x 2w of the listed word, over the sum of each pair's full 2w and the `w` of every word on either
+  side with no pair. A name in another script whose words in Latin letters are only legal forms and numbers
+  (`nameCompared`) is not compared. A name made only of rare words (in at most `RARE_IN_NAMES`, 10, of the
+  list's names) is a possible match at least to a name holding them all. Strong from `STRONG_MATCH`, 0.85, the same
+  cut-off as screening's `STRONG_SANCTIONS_MATCH_THRESHOLD` but on this matcher's own score, possible from 0.70, at
+  most 3. A typed word is compared with the listed words of its first letter's group and length, and with those of its
+  sound key, once per page, and a name form is scored only when an upper bound on its score reaches 0.70 or it holds
+  all of a name's rare words. A list's time grows with its distinct words: 5,000 rows with about 1,000 took about 2 s
+  on a laptop. The country (`countryAgreement`) is shown, never scored.
+- A list is read with the bill import's `readTable` and `decodeList`, then by `readVendorList`
+  (`src/lib/vendor-check/list.ts`): title lines of one cell above column names it knows, within the first 6 rows, are
+  left out and named; a comma list with no row of more than two cells and no row of two naming the columns is one
+  column when its first row is one cell or every comma is followed by a space, so "Last, First" names copied from a
+  spreadsheet stay whole. `vendorTable` joins back a name in the last named column that the commas cut, and the page
+  counts, shows and writes back that table. `detectVendorColumns` finds the name, country and wallet columns, up to
+  5,000 rows. A wallet's EVM part (`evmPart`: the cell, the address after a chain prefix such as `eth:`, a payment
+  link's own address, or for a link calling a contract its `address=` alone, or the cell from a `0x` that starts a
+  word) gets `checkAddress` against the snapshot's EVM addresses and the other rows' addresses that share an end with
+  it (first 3 and last 3, first 5 or last 5 hex digits); any other is looked up, as written and word by word (`XBT
+  <address>`, a payment link), among the listed addresses of every currency. A name not compared is counted apart.
+  `vendorResultsCsv` writes the results. A match links to Treasury's search page, never to the entry's own page, so
+  no outbound-click event carries what a name matched.
+- `VendorCheckCta` is the page's one call to action: what the product does before it pays, which is what the guardrails
+  and approvals do, not this page's score, around `ToolCta` for `check-vendor` (above), named `check-vendor-start` for
+  the analytics click. The page's full footer is `<SiteFooter tool="check-vendor" />`, so its **Get started** credits
+  the tool too, the tool is in `FREE_TOOLS`, so the footer's Free tools group and the sitemap list it, and the page says
+  `FREE_TOOL_COUNT_LINE` under its introduction.
+- `tests/check-vendor-page.test.tsx` holds the checker's code to making no request, and no cookie, and its words to
+  never calling a result safe or cleared.
 
 ## Onboarding by role
 

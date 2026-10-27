@@ -47,14 +47,20 @@ export interface SanctionedWalletList {
 
 const ADDRESS = /Digital Currency Address - ([A-Z0-9]+) (0x[0-9a-fA-F]{40})(?![0-9a-fA-F])/g;
 
-/** The EVM addresses in OFAC's two SDN files, each once, with the entry and every currency it is listed under (SW1). */
-export function parseSdnWallets(sdnCsv: string, commentsCsv: string): Map<string, SanctionedWallet> {
+/** The remarks that overflow `SDN.CSV`, by entry number, as `SDN_COMMENTS.CSV` continues them. */
+function overflowingRemarks(commentsCsv: string): Map<string, string> {
   const overflow = new Map<string, string>();
   for (const row of rowsFromCsv(commentsCsv)) {
     const [number, text] = row;
     if (!number || text === undefined) continue;
     overflow.set(number.trim(), (overflow.get(number.trim()) ?? "") + text);
   }
+  return overflow;
+}
+
+/** The EVM addresses in OFAC's two SDN files, each once, with the entry and every currency it is listed under (SW1). */
+export function parseSdnWallets(sdnCsv: string, commentsCsv: string): Map<string, SanctionedWallet> {
+  const overflow = overflowingRemarks(commentsCsv);
   const wallets = new Map<string, SanctionedWallet>();
   for (const row of rowsFromCsv(sdnCsv)) {
     const number = row[0]?.trim();
@@ -71,6 +77,92 @@ export function parseSdnWallets(sdnCsv: string, commentsCsv: string): Map<string
     }
   }
   return wallets;
+}
+
+/** The kinds of SDN entry; `SDN.CSV` writes `-0-` for an entity. */
+export type SdnEntryType = "entity" | "individual" | "vessel" | "aircraft";
+
+/**
+ * One SDN entry as the name snapshot keeps it (check vendor CV1): its number, name, type, programs, other names, the
+ * countries its addresses and remarks give, and its digital-currency addresses as `<currency> <address>`.
+ */
+export type SdnNameEntry = [
+  number: number,
+  name: string,
+  type: SdnEntryType,
+  programs: string[],
+  otherNames: string[],
+  countries: string[],
+  addresses: string[],
+];
+
+/** The name snapshot (`src/lib/data/ofac-sdn-names.json`), dated by the day its files were read. */
+export interface SdnNameSnapshot {
+  source: string;
+  readAt: string;
+  entries: SdnNameEntry[];
+}
+
+/** A cell as the SDN files write it: `-0-` is empty. */
+const sdnCell = (cell: string | undefined) => {
+  const value = (cell ?? "").trim();
+  return value === "-0-" ? "" : value;
+};
+
+const ENTRY_TYPES: Record<string, SdnEntryType> = { "": "entity", individual: "individual", vessel: "vessel", aircraft: "aircraft" };
+const ANY_ADDRESS = /Digital Currency Address - ([A-Z0-9]+) ([A-Za-z0-9]+)/g;
+/** A nationality or citizenship in an entry's remarks; "Nationality of Registration" is a vessel's flag, not one. */
+const NATIONALITY = /(?:^|;)\s*(?:alt\.\s+)?(?:nationality|citizen)\s+(?!of registration)([^;]+)/gi;
+/** A place the list names as a region rather than a country, such as "Region: Crimea": kept without the word. */
+const REGION = /^Region:\s*/i;
+
+/**
+ * Every entry of OFAC's SDN list with what the vendor check shows of it (check vendor CV1): `SDN.CSV` and its
+ * overflowing remarks for the name, type, programs, nationalities and digital-currency addresses, `ALT.CSV` for its
+ * other names (a.k.a., f.k.a., n.k.a.) and `ADD.CSV` for its addresses' countries. The weak a.k.a.s OFAC writes only in
+ * the remarks are not read. Entries come in number order, and no list in one repeats itself.
+ */
+export function parseSdnNames(files: { sdn: string; comments: string; alt: string; add: string }): SdnNameEntry[] {
+  const overflow = overflowingRemarks(files.comments);
+  const entries = new Map<number, { entry: SdnNameEntry; countries: Set<string> }>();
+  for (const row of rowsFromCsv(files.sdn)) {
+    const number = row[0]?.trim() ?? "";
+    if (!/^\d+$/.test(number) || row.length < 12) continue;
+    // Joined untrimmed, as `parseSdnWallets` joins them: OFAC cuts the remarks at a fixed length, and a cut right after a
+    // space ("Digital Currency Address - XBT ") must keep that space for the rest to read.
+    const cell = row[11] ?? "";
+    const remarks = (cell.trim() === "-0-" ? "" : cell) + (overflow.get(number) ?? "");
+    const countries = new Set<string>();
+    for (const match of remarks.matchAll(NATIONALITY)) countries.add(match[1].trim().replace(/\.$/, "").replace(REGION, ""));
+    const addresses: string[] = [];
+    for (const match of remarks.matchAll(ANY_ADDRESS)) {
+      const address = `${match[1]} ${match[2]}`;
+      if (!addresses.includes(address)) addresses.push(address);
+    }
+    const programs = sdnCell(row[3])
+      .split("] [")
+      .map((program) => program.replace(/[[\]]/g, "").trim())
+      .filter((program) => program !== "");
+    const type = ENTRY_TYPES[sdnCell(row[2]).toLowerCase()] ?? "entity";
+    entries.set(Number(number), { entry: [Number(number), sdnCell(row[1]), type, programs, [], [], addresses], countries });
+  }
+  for (const row of rowsFromCsv(files.alt)) {
+    const found = entries.get(Number(row[0]?.trim()));
+    const other = sdnCell(row[3]);
+    if (!found || other === "" || other === found.entry[1] || found.entry[4].includes(other)) continue;
+    found.entry[4].push(other);
+  }
+  for (const row of rowsFromCsv(files.add)) {
+    const found = entries.get(Number(row[0]?.trim()));
+    const country = sdnCell(row[4]).replace(REGION, "");
+    if (found && country !== "") found.countries.add(country);
+  }
+  return [...entries.values()]
+    .map(({ entry, countries }) => {
+      entry[5] = [...countries].sort();
+      return entry;
+    })
+    .sort((a, b) => a[0] - b[0]);
 }
 
 const SNAPSHOT: SanctionedWalletList = {

@@ -74,11 +74,12 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put every free tool, by its title, under Free tools: the address checker and the payment terms calculator", () => {
+  it("put every free tool, by its title, under Free tools: the address checker, the payment terms calculator and the OFAC vendor check", () => {
     expect(FOOTER_COLUMNS[3].links).toEqual(FREE_TOOLS.map((tool) => ({ href: tool.path, label: tool.title })));
     expect(FOOTER_COLUMNS[3].links).toEqual([
       { href: "/check-address", label: "Address checker" },
       { href: "/payment-terms", label: "Payment terms calculator" },
+      { href: "/check-vendor", label: "OFAC vendor check" },
     ]);
   });
 
@@ -119,9 +120,11 @@ describe("the full footer, rendered", () => {
   });
 
   it("renders the same links on a free tool's page, where its Get started credits the tool (free tool attribution TA5)", () => {
-    const onTool = renderToStaticMarkup(<SiteFooter tool="check-address" />);
-    expect(anchors(onTool)).toEqual(links);
-    expect(onTool).toMatch(/<a [^>]*class="inline-flex py-1\.5 [^"]*"[^>]*>Get started<\/a>/);
+    for (const tool of FREE_TOOLS) {
+      const onTool = renderToStaticMarkup(<SiteFooter tool={tool.slug} />);
+      expect(anchors(onTool), tool.slug).toEqual(links);
+      expect(onTool, tool.slug).toMatch(/<a [^>]*class="inline-flex py-1\.5 [^"]*"[^>]*>Get started<\/a>/);
+    }
   });
 
   it("opens every external link in a new tab, without an opener or a referrer", () => {

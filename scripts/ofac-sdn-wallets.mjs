@@ -1,69 +1,34 @@
-// Makes the bundled snapshot of OFAC's sanctioned EVM addresses (src/lib/data/ofac-sdn-evm-wallets.json) from the two
-// SDN files, downloaded first from the Treasury's Sanctions List Service:
+// Makes the two bundled snapshots of OFAC's SDN list from one download, so both carry the same date:
+//   src/lib/data/ofac-sdn-evm-wallets.json, the EVM payout addresses (sanctioned wallets SW3), and
+//   src/lib/data/ofac-sdn-names.json, every entry's names, programs, countries and addresses (check vendor CV1).
+// Download the four files first from the Treasury's Sanctions List Service:
 //   https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN.CSV
 //   https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/SDN_COMMENTS.CSV
-// Usage: node scripts/ofac-sdn-wallets.mjs <SDN.CSV> <SDN_COMMENTS.CSV> [YYYY-MM-DD]
-// It parses as src/lib/sanctioned-wallets.ts's parseSdnWallets does, except that it does not refuse an unclosed quote.
-// tests/sanctioned-wallets.test.ts checks the snapshot's shape: lowercase, unique, sorted addresses with their entries.
+//   https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/ALT.CSV
+//   https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/ADD.CSV
+// Usage: npx tsx scripts/ofac-sdn-wallets.mjs <SDN.CSV> <SDN_COMMENTS.CSV> <ALT.CSV> <ADD.CSV> [YYYY-MM-DD]
+// It reads them with src/lib/sanctioned-wallets.ts's own parsers, which tsx loads. tests/sanctioned-wallets.test.ts and
+// tests/sanctioned-names.test.ts check the snapshots' shape.
 import { readFileSync, writeFileSync } from "node:fs";
+import { parseSdnNames, parseSdnWallets } from "../src/lib/sanctioned-wallets.ts";
 
-const [sdnPath, commentsPath, day] = process.argv.slice(2);
-if (!sdnPath || !commentsPath) {
-  console.error("Usage: node scripts/ofac-sdn-wallets.mjs <SDN.CSV> <SDN_COMMENTS.CSV> [YYYY-MM-DD]");
+const [sdnPath, commentsPath, altPath, addPath, day] = process.argv.slice(2);
+if (!sdnPath || !commentsPath || !altPath || !addPath) {
+  console.error("Usage: npx tsx scripts/ofac-sdn-wallets.mjs <SDN.CSV> <SDN_COMMENTS.CSV> <ALT.CSV> <ADD.CSV> [YYYY-MM-DD]");
   process.exit(1);
 }
 
-function rowsFromCsv(csv) {
-  const rows = [];
-  let row = [];
-  let field = "";
-  let quoted = false;
-  for (let index = 0; index < csv.length; index += 1) {
-    const character = csv[index];
-    if (character === '"') {
-      if (quoted && csv[index + 1] === '"') {
-        field += '"';
-        index += 1;
-      } else quoted = !quoted;
-    } else if (character === "," && !quoted) {
-      row.push(field);
-      field = "";
-    } else if ((character === "\n" || character === "\r") && !quoted) {
-      if (character === "\r" && csv[index + 1] === "\n") index += 1;
-      row.push(field);
-      if (row.some((value) => value.trim() !== "")) rows.push(row);
-      row = [];
-      field = "";
-    } else field += character;
-  }
-  row.push(field);
-  if (row.some((value) => value.trim() !== "")) rows.push(row);
-  return rows;
-}
-
-const ADDRESS = /Digital Currency Address - ([A-Z0-9]+) (0x[0-9a-fA-F]{40})(?![0-9a-fA-F])/g;
-const overflow = new Map();
-for (const [number, text] of rowsFromCsv(readFileSync(commentsPath, "utf8"))) {
-  if (!number || text === undefined) continue;
-  overflow.set(number.trim(), (overflow.get(number.trim()) ?? "") + text);
-}
-const wallets = new Map();
-for (const row of rowsFromCsv(readFileSync(sdnPath, "utf8"))) {
-  const number = row[0]?.trim();
-  if (!number) continue;
-  const remarks = (row[11] ?? "") + (overflow.get(number) ?? "");
-  for (const match of remarks.matchAll(ADDRESS)) {
-    const address = match[2].toLowerCase();
-    const found = wallets.get(address);
-    if (found) {
-      if (!found.currencies.includes(match[1])) found.currencies.push(match[1]);
-      continue;
-    }
-    wallets.set(address, { address, entityNumber: number, name: (row[1] ?? "").trim(), currencies: [match[1]] });
-  }
-}
-
-const list = [...wallets.values()].sort((a, b) => a.address.localeCompare(b.address));
+const read = (file) => readFileSync(file, "utf8");
+const sdn = read(sdnPath);
+const comments = read(commentsPath);
 const readAt = `${day ?? new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
-writeFileSync("src/lib/data/ofac-sdn-evm-wallets.json", `${JSON.stringify({ source: "OFAC SDN list", readAt, wallets: list }, null, 2)}\n`);
-console.log(`${list.length} addresses, read ${readAt}`);
+
+const wallets = [...parseSdnWallets(sdn, comments).values()].sort((a, b) => a.address.localeCompare(b.address));
+writeFileSync("src/lib/data/ofac-sdn-evm-wallets.json", `${JSON.stringify({ source: "OFAC SDN list", readAt, wallets }, null, 2)}\n`);
+
+// One entry a line, so a refresh shows in review as the entries that changed.
+const entries = parseSdnNames({ sdn, comments, alt: read(altPath), add: read(addPath) });
+const lines = entries.map((entry) => `    ${JSON.stringify(entry)}`).join(",\n");
+writeFileSync("src/lib/data/ofac-sdn-names.json", `{\n  "source": "OFAC SDN list",\n  "readAt": "${readAt}",\n  "entries": [\n${lines}\n  ]\n}\n`);
+
+console.log(`${wallets.length} EVM addresses and ${entries.length} entries, read ${readAt}`);
