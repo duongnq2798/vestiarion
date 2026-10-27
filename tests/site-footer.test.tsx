@@ -102,6 +102,12 @@ describe("the full footer, rendered", () => {
     }
   });
 
+  it("renders the same links on a free tool's page, where its Get started credits the tool (free tool attribution TA5)", () => {
+    const onTool = renderToStaticMarkup(<SiteFooter tool="check-address" />);
+    expect(anchors(onTool)).toEqual(links);
+    expect(onTool).toMatch(/<a [^>]*class="inline-flex py-1\.5 [^"]*"[^>]*>Get started<\/a>/);
+  });
+
   it("opens every external link in a new tab, without an opener or a referrer", () => {
     const external = links.filter((anchor) => isExternal(anchor.href));
     expect(external.length).toBeGreaterThanOrEqual(5);

@@ -4,8 +4,8 @@
  * workspace is created and records it once (record_org_attribution, migration 0099).
  *
  * The cookie `vx_ft` is first-party, set only when the address carries a campaign tag (utm_source, utm_medium,
- * utm_campaign, utm_content, utm_term or ref), or when a free tool's start button is chosen (src/components/public/
- * ToolCta.tsx, free tool attribution TA3), and no first touch is kept yet, for 90 days. It holds those tags, each
+ * utm_campaign, utm_content, utm_term or ref), or when a start link on a free tool's page is chosen (src/components/
+ * public/ToolCta.tsx, free tool attribution TA3), and no first touch is kept yet, for 90 days. It holds those tags, each
  * cut to 100 characters of `[A-Za-z0-9._~-]` (a space becomes a hyphen, anything else is dropped), the path the visit
  * landed on without its query, the host of the site that linked to it, and when. Never an email, a name or free text:
  * nothing outside that alphabet survives, and a tag with an `@` in it is dropped whole. A utm_campaign of

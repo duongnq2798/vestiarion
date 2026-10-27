@@ -5,7 +5,8 @@ import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { START_LABEL, TRY_HREF } from "@/components/landing/cta";
 import { landingPrefetch } from "@/components/landing/prefetch";
-import { FREE_TOOLS } from "@/lib/free-tools";
+import { ToolStartLink } from "@/components/public/ToolCta";
+import { FREE_TOOLS, type FreeToolSlug } from "@/lib/free-tools";
 import { LOOP_PAGE_LINE, LOOP_PAGE_LINK, loopCtaId, loopPageHref, type LoopPage } from "@/lib/growth/loop";
 import { ARC_URL, CIRCLE_URL, GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
@@ -260,8 +261,12 @@ const COPYRIGHT = "© 2026 Vestiarion contributors";
  * `loop` names a page a business sends its counterparties (counterparty loop C1, C2): above the line, it says what sent
  * the page, and links to the landing page in a new tab, tagged with that kind of page only. The page's own address holds
  * its token, so the link sends no referrer: the tags alone say where the visit came from.
+ *
+ * `tool` names the free tool whose page this is (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md
+ * TA5): the full footer's Get started is then a `ToolStartLink`, so it credits a workspace to the tool as the page's
+ * own button does. The compact footer has no start link.
  */
-export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { compact?: boolean; networkLabel?: string; loop?: LoopPage }) {
+export function SiteFooter({ compact = false, networkLabel = "Arc", loop, tool }: { compact?: boolean; networkLabel?: string; loop?: LoopPage; tool?: FreeToolSlug }) {
   if (compact) {
     return (
       <footer className={cn(styles.compactFooter, "border-t border-line bg-ground px-page py-6 font-mono text-caption text-ink-3 focus-default")}>
@@ -330,9 +335,15 @@ export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { co
                   <ul className="mt-3 space-y-1">
                     {column.links.map((link) => (
                       <li key={link.label}>
-                        <FooterAnchor href={link.href} className={COLUMN_LINK}>
-                          {link.label}
-                        </FooterAnchor>
+                        {tool && link.href === TRY_HREF ? (
+                          <ToolStartLink tool={tool} className={COLUMN_LINK}>
+                            {link.label}
+                          </ToolStartLink>
+                        ) : (
+                          <FooterAnchor href={link.href} className={COLUMN_LINK}>
+                            {link.label}
+                          </FooterAnchor>
+                        )}
                       </li>
                     ))}
                   </ul>

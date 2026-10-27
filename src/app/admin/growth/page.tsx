@@ -148,7 +148,7 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
           <Tile
             label="From free tools"
             value={metrics.fromFreeTools.workspaces}
-            detail={`Customer workspaces first reached from a free tool's Try it on your bills; ${metrics.fromFreeTools.activated} had a decision on a real bill.${metrics.fromFreeTools.bySource.length > 0 ? ` By tool: ${bySourceWords(metrics.fromFreeTools.bySource)}.` : ""}`}
+            detail={`Customer workspaces first reached from a free tool's Try it on your bills, or its footer's Get started;${metrics.fromFreeTools.activated} had a decision on a real bill.${metrics.fromFreeTools.bySource.length > 0 ? ` By tool: ${bySourceWords(metrics.fromFreeTools.bySource)}.` : ""}`}
           />
           <Tile
             label="From accountants"

@@ -229,8 +229,8 @@ export interface GrowthMetrics {
   /** Customer workspaces whose first touch was a page or email a business sent a counterparty (counterparty loop C4). */
   fromLoop: { workspaces: number; activated: number };
   /**
-   * Customer workspaces whose first touch was a free tool's start button, and those activated, in all and per tool by
-   * utm_source, most workspaces first (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA4).
+   * Customer workspaces whose first touch was a start link on a free tool's page, and those activated, in all and per
+   * tool by utm_source, most workspaces first (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA4).
    */
   fromFreeTools: { workspaces: number; activated: number; bySource: SourceCount[] };
   /** Customer workspaces an accountant's client link opened (accountant client links AC5), and those activated. */

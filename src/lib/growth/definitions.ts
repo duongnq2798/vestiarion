@@ -65,10 +65,10 @@ export const DEFINITIONS: readonly Definition[] = [
   {
     metric: "From free tools",
     source: "growth_workspaces (migration 0099): each workspace's first touch.",
-    calculation: `Customer workspaces whose first touch carries utm_campaign free_tools: the person chose Try it on your bills on a free tool's page (${FREE_TOOLS.map((tool) => tool.path).join(", ")}) while their browser held no first touch yet (free tool attribution TA3). Of those, the ones with the agent's decision on a real bill; both again per utm_source, the tool's name.`,
+    calculation: `Customer workspaces whose first touch carries utm_campaign free_tools: the person chose Try it on your bills, or the footer's Get started, on a free tool's page (${FREE_TOOLS.map((tool) => tool.path).join(", ")}) while their browser held no first touch yet (free tool attribution TA3, TA5). Of those, the ones with the agent's decision on a real bill; both again per utm_source, the tool's name.`,
     window: WORKSPACES_WINDOW,
     dedupe: `${CUSTOMERS} Each workspace once.`,
-    limits: "Only a person who chose the button and opened a workspace in the same browser within 90 days is counted. Someone who reached a tool from a tagged link keeps that link's tags and is counted under it instead; someone who used a tool and came back another way, without choosing its button, is not counted. Anyone can put utm_campaign free_tools in an address, so a hand-made link counts too.",
+    limits: "Only a person who chose one of the tool page's start links and opened a workspace in the same browser within 90 days is counted. Someone who reached a tool from a tagged link keeps that link's tags and is counted under it instead; someone who used a tool and came back another way, or started from another page such as the landing page, is not counted. Anyone can put utm_campaign free_tools in an address, so a hand-made link counts too.",
   },
   {
     metric: "From accountants",
@@ -137,7 +137,7 @@ export const DEFINITIONS: readonly Definition[] = [
   {
     metric: "Workspace source",
     source: "org_attribution (the first-touch cookie), else the lead linked to the workspace.",
-    calculation: "utm_source, utm_campaign and ref of the visit that first carried a campaign tag in that browser, or of a free tool's start button chosen before any; else the linked lead's source.",
+    calculation: "utm_source, utm_campaign and ref of the visit that first carried a campaign tag in that browser, or of a start link on a free tool's page chosen before any; else the linked lead's source.",
     window: "The cookie lasts 90 days from that visit.",
     dedupe: "First touch only: recorded once per workspace, never replaced.",
     limits: "Unknown when the person arrived without a tag, refused cookies, or used another browser.",

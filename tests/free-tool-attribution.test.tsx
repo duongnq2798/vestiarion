@@ -6,29 +6,30 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CTA_ID } from "@/components/analytics/GoogleAnalytics";
-import { TRY_HREF, TRY_LABEL } from "@/components/landing/cta";
+import { START_LABEL, TRY_HREF, TRY_LABEL } from "@/components/landing/cta";
 import { requiresSession } from "@/lib/auth/routes";
 import { DEFINITIONS } from "@/lib/growth/definitions";
 import { FIRST_TOUCH_COOKIE, FIRST_TOUCH_MAX_AGE_SECONDS, firstTouchCookie, parseFirstTouch, sanitizePath, sanitizeTag } from "@/lib/growth/attribution";
 import { LOOP_CAMPAIGN } from "@/lib/growth/loop";
 import { bySourceWords, growthMetrics, type WorkspaceRow } from "@/lib/growth/metrics";
-import { FREE_TOOL_COUNT_LINE, FREE_TOOL_MEDIUM, FREE_TOOLS, FREE_TOOLS_CAMPAIGN, freeTool, freeToolCtaId, freeToolFirstTouch } from "@/lib/free-tools";
+import { FREE_TOOL_COUNT_LINE, FREE_TOOL_MEDIUM, FREE_TOOLS, FREE_TOOLS_CAMPAIGN, freeTool, freeToolCtaId, freeToolFirstTouch, toolReferrer } from "@/lib/free-tools";
 
 /**
  * Crediting a workspace to the free tool it came from (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md
- * TA1-TA4, TA6): the one list of tools, the first touch a tool's start button keeps, the button itself in a DOM, and the
- * From free tools tile on /admin/growth, worked out from made-up workspaces.
+ * TA1-TA6): the one list of tools, the first touch a tool's start links keep, the button and the full footer's Get
+ * started on a tool's page in a DOM, and the From free tools tile on /admin/growth, worked out from made-up workspaces.
  */
 
 vi.mock("next/link", () => ({
-  default: ({ href, children, ...props }: { href: string; children?: ReactNode }) => (
-    <a href={href} {...props}>
+  default: ({ href, prefetch, children, ...props }: { href: string; prefetch?: boolean | null; children?: ReactNode }) => (
+    <a href={href} data-prefetch={prefetch === false ? "off" : undefined} {...props}>
       {children}
     </a>
   ),
 }));
 
 const { ToolCta } = await import("@/components/public/ToolCta");
+const { SiteFooter } = await import("@/components/vx/SiteChrome");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -58,6 +59,14 @@ describe("the list of free tools (TA1)", () => {
     expect(new Set(FREE_TOOLS.map((tool) => tool.slug)).size).toBe(FREE_TOOLS.length);
   });
 
+  it("has each tool's page name the tool to its full footer, so the footer's Get started credits it too (TA5)", () => {
+    for (const tool of FREE_TOOLS) {
+      const page = source(`src/app${tool.path}/page.tsx`);
+      // Or the compact footer, which has no start link.
+      expect(page, tool.path).toMatch(new RegExp(`<SiteFooter tool="${tool.slug}" />|<SiteFooter compact`));
+    }
+  });
+
   it("names each start button <slug>-start, an id analytics accepts", () => {
     expect(freeToolCtaId("check-address")).toBe("check-address-start");
     for (const tool of FREE_TOOLS) expect(CTA_ID.test(freeToolCtaId(tool.slug)), tool.slug).toBe(true);
@@ -84,6 +93,16 @@ describe("a tool's first touch (TA2)", () => {
     }
   });
 
+  it("takes the referrer only when the tool's page was the first page the tab loaded, the one that site linked to", () => {
+    const google = "https://www.google.com/search?q=address+poisoning";
+    expect(toolReferrer(CHECK_ADDRESS, google, "https://www.vestiarion.xyz/check-address")).toBe(google);
+    expect(toolReferrer(CHECK_ADDRESS, google, "https://www.vestiarion.xyz/check-address?utm_source=x#top")).toBe(google);
+    // After a move inside the site the browser still gives the first page's referrer, which linked to that page instead.
+    for (const first of ["https://www.vestiarion.xyz/", "https://www.vestiarion.xyz/check-address/more", "https://www.vestiarion.xyz/docs/check-address", "", "not an address", undefined]) {
+      expect(toolReferrer(CHECK_ADDRESS, google, first), String(first)).toBe("");
+    }
+  });
+
   it("is written as the first-touch cookie, and reads back the same on the server", () => {
     const touch = freeToolFirstTouch(CHECK_ADDRESS, "https://x.com/", "www.vestiarion.xyz", NOW);
     const cookie = firstTouchCookie(touch, true);
@@ -106,13 +125,25 @@ describe("the start button, in a DOM (TA3)", () => {
   let jar: string;
   let writes: string[];
   let refuse: boolean;
-  const stopNavigation = (event: Event) => event.preventDefault();
+  // The address this tab first loaded, as the browser's navigation entry gives it; none when undefined.
+  let firstPage: string | undefined;
+  // For each click that reached the document: whether it was still free to follow the link.
+  let followed: boolean[];
+  const stopNavigation = (event: Event) => {
+    followed.push(!event.defaultPrevented);
+    event.preventDefault();
+  };
 
   beforeEach(() => {
     vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
     jar = "";
     writes = [];
     refuse = false;
+    followed = [];
+    firstPage = new URL(CHECK_ADDRESS.path, window.location.origin).href;
+    vi.spyOn(performance, "getEntriesByType").mockImplementation((type: string) =>
+      type === "navigation" && firstPage !== undefined ? ([{ name: firstPage, entryType: "navigation" }] as PerformanceEntryList) : []
+    );
     Object.defineProperty(document, "cookie", {
       configurable: true,
       get: () => jar,
@@ -134,6 +165,7 @@ describe("the start button, in a DOM (TA3)", () => {
     act(() => root.unmount());
     container.remove();
     document.removeEventListener("click", stopNavigation);
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -144,6 +176,8 @@ describe("the start button, in a DOM (TA3)", () => {
     expect(link().getAttribute("href")).toBe(TRY_HREF);
     expect(link().getAttribute("data-cta")).toBe("check-address-start");
     expect(link().textContent).toBe(TRY_LABEL);
+    // The primary button's look, carried onto the link.
+    expect(link().className).toContain("bg-agent");
     expect(writes).toEqual([]);
   });
 
@@ -182,10 +216,67 @@ describe("the start button, in a DOM (TA3)", () => {
     expect(writes).toHaveLength(1);
   });
 
-  it("still follows the link when the browser refuses cookies", () => {
+  it("keeps no referrer when the visit began on another of the site's pages, whose referrer the browser still gives", () => {
+    firstPage = new URL("/", window.location.origin).href;
+    act(() => link().click());
+    expect(kept()).toEqual({
+      utm_source: "check-address",
+      utm_medium: "free_tool",
+      utm_campaign: "free_tools",
+      landing_path: "/check-address",
+      first_seen_at: NOW.toISOString(),
+    });
+  });
+
+  it("keeps no referrer where the browser gives no navigation entry", () => {
+    firstPage = undefined;
+    act(() => link().click());
+    expect(kept()?.utm_source).toBe("check-address");
+    expect(kept()).not.toHaveProperty("referrer_host");
+  });
+
+  it("writes nothing, raises no error and leaves the link to be followed when the browser refuses cookies", () => {
     refuse = true;
-    expect(() => act(() => link().click())).not.toThrow();
+    // React reports an error thrown in a click handler to the window instead of throwing it from click().
+    const errors: unknown[] = [];
+    const onError = (event: ErrorEvent) => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener("error", onError);
+    try {
+      act(() => link().click());
+    } finally {
+      window.removeEventListener("error", onError);
+    }
+    expect(errors).toEqual([]);
     expect(writes).toEqual([]);
+    expect(followed).toEqual([true]);
+  });
+
+  it("leaves the link to be followed after keeping the tool", () => {
+    act(() => link().click());
+    expect(writes).toHaveLength(1);
+    expect(followed).toEqual([true]);
+  });
+
+  it("keeps it from the full footer's Get started on the tool's page too, and not from the footer on other pages (TA5)", () => {
+    const footerStart = () => [...container.querySelectorAll("a")].find((anchor) => anchor.textContent === START_LABEL) as HTMLAnchorElement;
+    act(() => root.render(<SiteFooter />));
+    act(() => footerStart().click());
+    expect(writes).toEqual([]);
+    act(() => root.render(<SiteFooter tool="check-address" />));
+    expect(footerStart().getAttribute("href")).toBe(TRY_HREF);
+    // Its click count stays the footer's: it takes no button's analytics name.
+    expect(footerStart().hasAttribute("data-cta")).toBe(false);
+    act(() => {
+      footerStart().dispatchEvent(new MouseEvent("auxclick", { bubbles: true, button: 2 }));
+    });
+    expect(writes).toEqual([]);
+    act(() => footerStart().click());
+    expect(writes).toHaveLength(1);
+    expect(kept()).toMatchObject({ utm_source: "check-address", utm_campaign: "free_tools", landing_path: "/check-address", referrer_host: "www.google.com" });
+    expect(followed).toEqual([true, true]);
   });
 
   it("sends nothing and reads no field: its code makes no request and holds no analytics call", () => {

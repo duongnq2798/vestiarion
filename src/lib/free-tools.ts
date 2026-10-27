@@ -3,7 +3,7 @@ import { referrerHost, type FirstTouch } from "@/lib/growth/attribution";
 /**
  * Vestiarion's free public tools (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA1, TA2): one list
  * that the footer's Free tools group, the sitemap and each tool's start button read, so a new tool is one entry, and the
- * first touch that button keeps, so a workspace opened after a tool is credited to it. Pure data, safe in client
+ * first touch the tool's start links keep, so a workspace opened after a tool is credited to it. Pure, safe in client
  * components.
  */
 
@@ -49,10 +49,23 @@ export function freeToolCtaId(slug: string): string {
 }
 
 /**
- * The first touch a tool's start button keeps (TA2): the tool's slug, `free_tool` and `free_tools` as its tags, the
- * tool's path as the landing path, the referring site's host by `FirstTouch`'s own rule, and the time. Every value is
- * already in the cookie's alphabet, and nothing comes from the page's fields: it takes the tool, the page's referrer,
- * this site's host and the time only.
+ * The referrer a tool's first touch may take (TA2): the page's referrer when `firstPage`, the address this tab first
+ * loaded, is the tool's page, else none. A move inside the site through the router loads no new document, so the browser
+ * still gives the first page's referrer, which linked to that page and not to the tool.
+ */
+export function toolReferrer(tool: FreeTool, referrer: string, firstPage: string | undefined): string {
+  try {
+    return firstPage && new URL(firstPage).pathname === tool.path ? referrer : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The first touch a tool's start links keep (TA2): the tool's slug, `free_tool` and `free_tools` as its tags, the
+ * tool's path as the landing path, the referring site's host by `FirstTouch`'s own rule, and the time. The tags and the
+ * path are constants already in the cookie's alphabet (the tests hold them there), and nothing comes from the page's
+ * fields: it takes the tool, the referrer (`toolReferrer`), this site's host and the time only.
  */
 export function freeToolFirstTouch(tool: FreeTool, referrer: string, host: string, now: Date): FirstTouch {
   const touch: FirstTouch = { utm_source: tool.slug, utm_medium: FREE_TOOL_MEDIUM, utm_campaign: FREE_TOOLS_CAMPAIGN, landing_path: tool.path };

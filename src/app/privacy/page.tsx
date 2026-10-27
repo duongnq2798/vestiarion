@@ -529,9 +529,9 @@ export default function PrivacyPage() {
         <p>
           When you arrive from a link that carries campaign tags (<code>utm_source</code>, <code>utm_medium</code>, <code>utm_campaign</code>,{" "}
           <code>utm_content</code>, <code>utm_term</code> or <code>ref</code>), Vestiarion sets one first-party cookie, <code>vx_ft</code>, for 90 days.
-          Choosing <strong>Try it on your bills</strong> on one of Vestiarion&apos;s free tools, such as the{" "}
-          <LegalLink href="/check-address">address checker</LegalLink>, sets it too. It is set only then, and only when the browser does not hold one
-          already, and setting it sends nothing anywhere.
+          Choosing <strong>Try it on your bills</strong>, or <strong>Get started</strong> at the foot of the page, on one of Vestiarion&apos;s free
+          tools, such as the <LegalLink href="/check-address">address checker</LegalLink>, sets it too. It is set only then, and only when the browser
+          does not hold one already, and setting it sends nothing anywhere.
         </p>
         <ul>
           <li>
@@ -540,9 +540,9 @@ export default function PrivacyPage() {
           </li>
           <li>It never holds your email address, your name or anything you type; a tag with an @ in it is dropped.</li>
           <li>
-            A free tool&apos;s button gives it the tool&apos;s name as <code>utm_source</code>, <code>free_tool</code> as <code>utm_medium</code>,{" "}
-            <code>free_tools</code> as <code>utm_campaign</code> and the tool&apos;s page as the page you landed on, with the host of the site that linked
-            to the tool and when: never anything you pasted or typed into the tool.
+            A free tool&apos;s page gives it the tool&apos;s name as <code>utm_source</code>, <code>free_tool</code> as <code>utm_medium</code>,{" "}
+            <code>free_tools</code> as <code>utm_campaign</code> and the tool&apos;s page as the page you landed on, the host of the site that linked to
+            the tool when the tool was the first page you opened in that tab, and when: never anything you pasted or typed into the tool.
           </li>
           <li>
             When you create a workspace, Vestiarion reads it once and keeps those tags with the workspace, never replaced, so the team can see which

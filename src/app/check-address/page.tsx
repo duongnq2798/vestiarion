@@ -31,8 +31,8 @@ const listDate = new Date(snapshot.readAt).toLocaleDateString("en-US", { month: 
  * /check-address (docs/superpowers/specs/2026-10-21-address-checker-design.md AC6, AC7): a free page anyone can use
  * before paying an address. Static: the check runs in the browser against the dated OFAC snapshot the page carries, so
  * no address reaches the server. Not under /tools, which serves downloads. Its start button is the shared `ToolCta`,
- * which credits a workspace opened after it to this tool
- * (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA3, TA6).
+ * and its footer names the tool, so both starts on the page credit a workspace opened after them to this tool
+ * (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA3, TA5, TA6).
  */
 export default function CheckAddressPage() {
   const sanctioned = snapshot.wallets.map(({ address, name }) => ({ address, name }));
@@ -93,7 +93,7 @@ export default function CheckAddressPage() {
           </section>
         </div>
       </PublicMain>
-      <SiteFooter />
+      <SiteFooter tool="check-address" />
     </div>
   );
 }

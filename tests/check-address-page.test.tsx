@@ -152,6 +152,9 @@ describe("the page (AC7)", () => {
     const start = markup.match(/<a [^>]*data-cta="check-address-start"[^>]*>[^<]*<\/a>/)?.[0] ?? "";
     expect(start).toContain('href="/onboarding?shadow=1"');
     expect(start).toContain(">Try it on your bills</a>");
+    // The full footer's Get started, the page's other start, credits the tool too (TA5).
+    expect(page).toContain('<SiteFooter tool="check-address" />');
+    expect(markup).toMatch(/<a [^>]*href="\/onboarding\?shadow=1"[^>]*>Get started<\/a>/);
     expect(markup).toContain('href="/docs/guides/first-payment#payee-lock"');
     const { requiresSession } = await import("@/lib/auth/routes");
     expect(requiresSession("/check-address")).toBe(false);
