@@ -50,6 +50,20 @@ function click(label: string) {
   act(() => button(label).click());
 }
 
+/** Lets the check run: it waits for the page to show it is checking first (CB2). */
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+}
+
+/** A day counted from the person's own today, `YYYY-MM-DD`. */
+function fromToday(days: number): string {
+  const day = new Date();
+  day.setDate(day.getDate() + days);
+  return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+}
+
 function type(control: HTMLTextAreaElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(control), "value")?.set;
   act(() => {
@@ -70,7 +84,7 @@ describe("the checker (CB2, CB3, CB10)", () => {
     expect(container.querySelector("textarea")?.className).toContain("text-base sm:text-xs");
   });
 
-  it("reads the sample list, shows its columns, and finds what it holds, with the summary announced", () => {
+  it("reads the sample list, shows its columns, and finds what it holds, with the summary announced", async () => {
     click("Try the sample list");
     expect(text()).toContain("Sample list (made-up vendors): 13 bills, 10 columns.");
     expect(text()).toContain("Sample data: made-up vendors and amounts, dated from today.");
@@ -79,6 +93,11 @@ describe("the checker (CB2, CB3, CB10)", () => {
     expect(live()).toBe("");
 
     click("Check 13 bills");
+    // Busy for a frame, so a long list shows it is being checked before the page is held.
+    expect(button("Check 13 bills").getAttribute("aria-busy")).toBe("true");
+    expect(button("Check 13 bills").disabled).toBe(true);
+    expect(live()).toBe("");
+    await settle();
     expect(text()).toContain("3. What it found");
     expect(live()).toContain("2 likely duplicates");
     expect(live()).toContain("Checked 12 of 13 bills, from 7 vendors.");
@@ -110,6 +129,7 @@ describe("the checker (CB2, CB3, CB10)", () => {
     const saved = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     click("Try the sample list");
     click("Check 13 bills");
+    await settle();
     click("Download the list with a flag column");
     expect(saved).toHaveBeenCalledTimes(1);
     expect((saved.mock.contexts[0] as HTMLAnchorElement).download).toBe("Sample-list-made-up-vendors-checked.csv");
@@ -118,7 +138,7 @@ describe("the checker (CB2, CB3, CB10)", () => {
     expect(csv).toContain("Likely duplicate of row 4 (confidence 0.85)");
   });
 
-  it("asks for a column the list lacks, and for the order of its dates, before it checks", () => {
+  it("asks for a column the list lacks, and for the order of its dates, before it checks", async () => {
     type(container.querySelector("textarea")!, "Vendor\tAmount\nNorthwind\t240.00");
     click("Read the pasted rows");
     expect(text()).toContain("Pasted rows: 1 bill, 2 columns.");
@@ -134,8 +154,40 @@ describe("the checker (CB2, CB3, CB10)", () => {
     act(() => dayFirst.click());
     expect(button("Check 1 bill").disabled).toBe(false);
     click("Check 1 bill");
+    await settle();
     expect(live()).toContain("No likely duplicates");
     expect(text()).toContain("Your list has no early-payment discount or late fee columns, so there are no deadlines to check.");
+  });
+
+  it("moves the focus to each new step, where the pressed button was, so a keyboard carries on from there", async () => {
+    const focused = () => document.activeElement?.textContent;
+    expect(document.activeElement).toBe(document.body);
+    click("Try the sample list");
+    expect(focused()).toBe("2. Columns");
+    click("Check 13 bills");
+    await settle();
+    expect(focused()).toBe("3. What it found");
+    click("Change columns");
+    expect(focused()).toBe("2. Columns");
+    click("Choose another list");
+    expect(focused()).toBe("1. Your list");
+    type(container.querySelector("textarea")!, "Vendor\tAmount\tDue date\nNorthwind\t240.00\t2026-11-02");
+    click("Read the pasted rows");
+    expect(focused()).toBe("2. Columns");
+    click("Check 1 bill");
+    await settle();
+    click("Check another list");
+    expect(focused()).toBe("1. Your list");
+  });
+
+  it("says on a deadline when its bill may repeat another", async () => {
+    const row = `Lakeside Freight\tLF-3310\t${fromToday(9)}\t980.00\tUSD\t2\t${fromToday(2)}`;
+    type(container.querySelector("textarea")!, ["Vendor\tInvoice\tDue date\tAmount\tCurrency\tDiscount %\tDiscount deadline", row, row].join("\n"));
+    click("Read the pasted rows");
+    click("Check 2 bills");
+    await settle();
+    expect(text()).toContain("Lakeside Freight, row 3");
+    expect(text()).toContain("This bill may repeat row 2: check it before you pay.");
   });
 
   it("says when what was pasted cannot be read", () => {
@@ -158,6 +210,8 @@ describe("the page (CB1, CB11)", () => {
     expect(markup).toContain("How it works");
     expect(markup).toContain("What it does not do");
     expect(markup).toContain('href="/check-address"');
+    // The agent's duplicate rule is told apart from what this page adds to it.
+    expect(markup).toContain("This page also compares their invoice numbers, which the agent's rule does not");
     const { requiresSession } = await import("@/lib/auth/routes");
     expect(requiresSession("/check-bills")).toBe(false);
   });
@@ -165,7 +219,7 @@ describe("the page (CB1, CB11)", () => {
   it("ends with the call to action: Try it on your bills, where the landing's goes, with the shadow-mode line and the import's limit", () => {
     const markup = renderToStaticMarkup(<CheckBillsCta />).replaceAll("&#x27;", "'");
     expect(markup).toContain(
-      "Vestiarion runs these checks, plus purchase-order match, sanctions screening and a payee lock, on every new bill before it pays. Start a shadow workspace and drop this same file into its bill import."
+      "Vestiarion runs its duplicate check, purchase-order match, sanctions screening and a payee lock on every new bill, and weighs early-payment discounts and late fees, before it pays. Start a shadow workspace and drop this same file into its bill import."
     );
     const link = /<a[^>]*data-cta="check-bills-start"[^>]*>([^<]*)<\/a>/.exec(markup);
     expect(link?.[0]).toContain(`href="${TRY_HREF}"`);
@@ -179,6 +233,8 @@ describe("the page (CB1, CB11)", () => {
     const files = [
       "src/components/bill-check/BillListChecker.tsx",
       "src/components/bill-check/BillCheckResults.tsx",
+      // What the checker shares with the bill import is held to the same.
+      "src/components/intake/list-steps.tsx",
       "src/lib/bill-check/read.ts",
       "src/lib/bill-check/findings.ts",
       "src/lib/bill-check/csv.ts",

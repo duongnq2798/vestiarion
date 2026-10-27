@@ -4,6 +4,7 @@ import { ArrowLeft, Download, FileSearch, RotateCcw, Upload } from "lucide-react
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { checkBillListAction, importBillListAction, type BillCheckResult, type BillImportResult } from "@/app/actions/bill-import";
 import { DocsLink } from "@/components/DocsLink";
+import { AmountsQuestion, ColumnField, DatesQuestion, download, StepTrail } from "@/components/intake/list-steps";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -19,9 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { toast } from "@/components/ui/Toaster";
 import { AGENT_EXPECTED_EVENT } from "@/lib/agent-activity";
-import { currencyDigits, splitCurrency } from "@/lib/bill-import/amounts";
-import { billRows, columnLetter, columnNames, detectMapping, FIELD_LABELS, IMPORT_FIELDS, REQUIRED_FIELDS, sampleValues, type ImportField } from "@/lib/bill-import/columns";
-import { DATE_ORDERS, readDate, type DateOrder } from "@/lib/bill-import/dates";
+import { currencyDigits } from "@/lib/bill-import/amounts";
+import { columnNames, detectMapping, FIELD_LABELS, IMPORT_FIELDS, REQUIRED_FIELDS, type ImportField } from "@/lib/bill-import/columns";
 import {
   acceptedCurrencies,
   failedRowsCsv,
@@ -33,7 +33,7 @@ import {
   type ImportWorkspace,
   type RowFate,
 } from "@/lib/bill-import/rows";
-import { decodeList, readTable, TableError, type Table as ListTable } from "@/lib/bill-import/table";
+import { decodeList, readTable, savedListName, TableError, type Table as ListTable } from "@/lib/bill-import/table";
 import { INVOICE_CSV_TEMPLATE } from "@/lib/bill-import/template";
 
 /**
@@ -82,35 +82,9 @@ export function grouped(amount: string, currency: string): string {
   return decimals ? `${withCommas}.${decimals}` : withCommas;
 }
 
-/** Saves text as a file in the browser. */
-function download(text: string, name: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 /** The name the failed rows are saved under: the list's own name, said to be the rows that could not be added. */
 export function failedRowsFileName(source: string): string {
-  const base = source.replace(/\.(csv|tsv|txt)$/i, "").replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "") || "bills";
-  return `${base}-not-added.csv`;
-}
-
-function StepTrail({ step }: { step: Step }) {
-  const at = STEPS.findIndex(([key]) => key === step);
-  return (
-    <ol aria-label="Import steps" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
-      {STEPS.map(([key, label], index) => (
-        <li key={key} aria-current={index === at ? "step" : undefined} className={index === at ? "font-semibold text-ink" : undefined}>
-          {index + 1}. {label}
-        </li>
-      ))}
-    </ol>
-  );
+  return savedListName(source, "not-added");
 }
 
 export function ListStep({ onList, error }: { onList: (text: string, source: string, legacy: boolean) => void; error: string }) {
@@ -155,37 +129,6 @@ export function ListStep({ onList, error }: { onList: (text: string, source: str
   );
 }
 
-const NONE = "none";
-
-/** Each way a list can write its dates, offered when the list's dates can be in it. */
-const DATE_ORDER_OPTIONS: ReadonlyArray<{ value: DateOrder; label: string }> = [
-  { value: "dmy", label: "Day first (15/10/2026)" },
-  { value: "mdy", label: "Month first (10/15/2026)" },
-  { value: "ymd", label: "Year first (26/10/15)" },
-];
-
-/** The first value of a column that reads two ways, to ask about in the list's own words. */
-function twoWayDate(list: ImportList, settings: ImportSettings): string | null {
-  const column = settings.mapping.dueDate;
-  if (column === undefined) return null;
-  for (const row of billRows(list.table, settings.hasHeader)) {
-    const cell = row.cells[column] ?? "";
-    const read = readDate(cell, null);
-    if (!read.ok && read.reason.startsWith("could be read")) return cell;
-  }
-  return null;
-}
-
-function twoWayAmount(list: ImportList, settings: ImportSettings): string | null {
-  const column = settings.mapping.amount;
-  if (column === undefined) return null;
-  for (const row of billRows(list.table, settings.hasHeader)) {
-    const number = splitCurrency(row.cells[column] ?? "").number;
-    if (/^\d{1,3}[.,]\d{3}$/.test(number)) return row.cells[column];
-  }
-  return null;
-}
-
 export function ColumnsStep({
   list,
   settings,
@@ -211,44 +154,27 @@ export function ColumnsStep({
   const bills = questions.bills;
   const currencies = acceptedCurrencies(workspace);
   const set = (change: Partial<ImportSettings>) => onChange({ ...settings, ...change });
-  const choose = (field: ImportField, value: string) => {
+  const choose = (field: ImportField, column: number | undefined) => {
     const mapping = { ...settings.mapping };
-    if (value === NONE) delete mapping[field];
-    else mapping[field] = Number(value);
+    if (column === undefined) delete mapping[field];
+    else mapping[field] = column;
     set({ mapping });
   };
   // The fields the list has, and the ones a row needs, are shown; the rest wait folded, each one choice away.
   const shownFields = IMPORT_FIELDS.filter((field) => REQUIRED_FIELDS.includes(field) || settings.mapping[field] !== undefined);
   const foldedFields = IMPORT_FIELDS.filter((field) => !shownFields.includes(field));
-  const fieldControl = (field: ImportField) => {
-    const column = settings.mapping[field];
-    const samples = column === undefined ? [] : sampleValues(list.table, settings.hasHeader, column);
-    return (
-      <Field
-        key={field}
-        id={`bill-column-${field}`}
-        label={FIELD_LABELS[field]}
-        optional={!REQUIRED_FIELDS.includes(field)}
-        description={column === undefined ? "Not in the list." : samples.length > 0 ? `Reads: ${samples.join(" · ")}` : "This column is empty."}
-      >
-        <Select value={column === undefined ? NONE : String(column)} onValueChange={(value) => choose(field, value)}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>Not in the list</SelectItem>
-            {names.map((name, index) => (
-              <SelectItem key={index} value={String(index)}>
-                {columnLetter(index)} · {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-    );
-  };
-  const dateSample = questions.dateOrder.ask ? twoWayDate(list, settings) : null;
-  const amountSample = questions.decimalMark.ask ? twoWayAmount(list, settings) : null;
+  const fieldControl = (field: ImportField) => (
+    <ColumnField
+      key={field}
+      id={`bill-column-${field}`}
+      field={field}
+      table={list.table}
+      hasHeader={settings.hasHeader}
+      names={names}
+      column={settings.mapping[field]}
+      onChoose={(column) => choose(field, column)}
+    />
+  );
 
   return (
     <div className="space-y-5">
@@ -295,29 +221,22 @@ export function ColumnsStep({
           ]}
         />
       )}
-      {questions.dateOrder.ask && (
-        <RadioGroup
-          legend={
-            questions.dateOrder.mixed
-              ? `The list writes dates ${questions.dateOrder.orders.length > 2 ? "more than one way" : "both ways"}. Which way is right?`
-              : `Dates like ${dateSample ?? "03/04/2026"} are written`
-          }
-          value={settings.dateOrder !== null && questions.dateOrder.orders.includes(settings.dateOrder) ? settings.dateOrder : ""}
-          onValueChange={(value) => set({ dateOrder: DATE_ORDERS.find((order) => order === value) ?? null })}
-          options={DATE_ORDER_OPTIONS.filter((option) => questions.dateOrder.orders.includes(option.value))}
-        />
-      )}
-      {questions.decimalMark.ask && (
-        <RadioGroup
-          legend={questions.decimalMark.mixed ? "The list writes amounts both ways. Which way is right?" : `Amounts like ${amountSample ?? "1,234"} are written`}
-          value={settings.decimalMark ?? ""}
-          onValueChange={(value) => set({ decimalMark: value === "," ? "," : "." })}
-          options={[
-            { value: ".", label: "1,234.50", description: "A dot before the cents." },
-            { value: ",", label: "1.234,50", description: "A comma before the cents." },
-          ]}
-        />
-      )}
+      <DatesQuestion
+        question={questions.dateOrder}
+        table={list.table}
+        hasHeader={settings.hasHeader}
+        dueColumn={settings.mapping.dueDate}
+        value={settings.dateOrder}
+        onChange={(dateOrder) => set({ dateOrder })}
+      />
+      <AmountsQuestion
+        question={questions.decimalMark}
+        table={list.table}
+        hasHeader={settings.hasHeader}
+        amountColumn={settings.mapping.amount}
+        value={settings.decimalMark}
+        onChange={(decimalMark) => set({ decimalMark })}
+      />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           id="bill-list-currency"
@@ -576,7 +495,7 @@ export default function BillImport({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <StepTrail step={step} />
+        <StepTrail steps={STEPS} step={step} label="Import steps" />
         <DocsLink href="/docs/guides/import-bills" topic="importing a bill list" />
       </div>
       {step === "list" && <ListStep onList={read} error={error} />}

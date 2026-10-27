@@ -1,8 +1,9 @@
 "use client";
 
 import { Download, FileSearch, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BillCheckResults, BillCheckSummary } from "@/components/bill-check/BillCheckResults";
+import { AmountsQuestion, ColumnField, DatesQuestion, download, StepTrail } from "@/components/intake/list-steps";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -11,21 +12,19 @@ import { Field } from "@/components/ui/Field";
 import { FileInput } from "@/components/ui/FileInput";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Textarea } from "@/components/ui/Input";
-import { RadioGroup } from "@/components/ui/RadioGroup";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { checkedCsv, checkedFileName } from "@/lib/bill-check/csv";
 import { checkBills, type BillCheck } from "@/lib/bill-check/findings";
 import { CHECK_FIELDS, checkMapping, LIST_CURRENCIES, MAX_CHECK_BILLS, questionsOf, startingAnswers, unansweredOf, type CheckAnswers } from "@/lib/bill-check/read";
 import { SAMPLE_SOURCE, sampleBillList } from "@/lib/bill-check/sample";
-import { splitCurrency } from "@/lib/bill-import/amounts";
-import { billRows, columnLetter, columnNames, FIELD_LABELS, REQUIRED_FIELDS, sampleValues, type ImportField } from "@/lib/bill-import/columns";
-import { DATE_ORDERS, readDate, type DateOrder } from "@/lib/bill-import/dates";
+import { columnNames, FIELD_LABELS, REQUIRED_FIELDS, type ImportField } from "@/lib/bill-import/columns";
 import { decodeList, readTable, TableError, type Table } from "@/lib/bill-import/table";
 
 /**
  * The free bill list check (docs/superpowers/specs/2026-10-28-check-bills-design.md CB2, CB3, CB9): a list, as a file or
  * pasted rows; its columns, matched as the bill import matches them and confirmed; and what the check found. Everything
- * is read and checked in this page: there is no form, and nothing the person gives it is sent anywhere or kept.
+ * is read and checked in this page: there is no form, and nothing the person gives it is sent anywhere or kept. Each new
+ * step takes the focus the pressed button had, and the check shows it is working before a long list holds the page.
  */
 
 /** The largest file read, in bytes: 5,000 bills of a wide export fit (CB2). */
@@ -54,32 +53,12 @@ function localToday(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-/** Saves text as a file, made in the browser. */
-function download(text: string, file: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = file;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+/** Runs `work` once the page has painted what changed before it: the browser draws a frame, then the work holds it. */
+function afterPaint(work: () => void) {
+  requestAnimationFrame(() => setTimeout(work, 0));
 }
 
 const plural = (count: number, one: string, many: string) => `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
-
-function StepTrail({ step }: { step: Step }) {
-  const at = STEPS.findIndex(([key]) => key === step);
-  return (
-    <ol aria-label="Check steps" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
-      {STEPS.map(([key, label], index) => (
-        <li key={key} aria-current={index === at ? "step" : undefined} className={index === at ? "font-semibold text-ink" : undefined}>
-          {index + 1}. {label}
-        </li>
-      ))}
-    </ol>
-  );
-}
 
 function ListStep({ onList, error }: { onList: (text: string, source: string, legacy: boolean, sample: boolean) => void; error: string }) {
   const [pasted, setPasted] = useState("");
@@ -137,92 +116,49 @@ function ListStep({ onList, error }: { onList: (text: string, source: string, le
   );
 }
 
-const NONE = "none";
-
-/** Each way a list can write its dates, offered when the list's dates can be in it. */
-const DATE_ORDER_OPTIONS: ReadonlyArray<{ value: DateOrder; label: string }> = [
-  { value: "dmy", label: "Day first (15/10/2026)" },
-  { value: "mdy", label: "Month first (10/15/2026)" },
-  { value: "ymd", label: "Year first (26/10/15)" },
-];
-
-/** The first due date that reads two ways, to ask about in the list's own words. */
-function twoWayDate(table: Table, answers: CheckAnswers): string | null {
-  const column = answers.mapping.dueDate;
-  if (column === undefined) return null;
-  for (const row of billRows(table, answers.hasHeader)) {
-    const cell = row.cells[column] ?? "";
-    const read = readDate(cell, null);
-    if (!read.ok && read.reason.startsWith("could be read")) return cell;
-  }
-  return null;
-}
-
-function twoWayAmount(table: Table, answers: CheckAnswers): string | null {
-  const column = answers.mapping.amount;
-  if (column === undefined) return null;
-  for (const row of billRows(table, answers.hasHeader)) {
-    if (/^\d{1,3}[.,]\d{3}$/.test(splitCurrency(row.cells[column] ?? "").number)) return row.cells[column];
-  }
-  return null;
-}
-
 function ColumnsStep({
   list,
   answers,
   onChange,
   onCheck,
   onRestart,
+  checking,
 }: {
   list: GivenList;
   answers: CheckAnswers;
   onChange: (answers: CheckAnswers) => void;
   onCheck: () => void;
   onRestart: () => void;
+  /** The check is running: a long list takes a second or two. */
+  checking: boolean;
 }) {
   const names = columnNames(list.table, answers.hasHeader);
-  const questions = questionsOf(list.table, answers);
+  // Each reads every row, up to 5,000: once for each answer, not again for a render that changes none.
+  const questions = useMemo(() => questionsOf(list.table, answers), [list.table, answers]);
   const waiting = unansweredOf(questions, answers);
   const set = (change: Partial<CheckAnswers>) => onChange({ ...answers, ...change });
-  const choose = (field: ImportField, value: string) => {
+  const choose = (field: ImportField, column: number | undefined) => {
     const mapping = { ...answers.mapping };
-    if (value === NONE) delete mapping[field];
-    else mapping[field] = Number(value);
+    if (column === undefined) delete mapping[field];
+    else mapping[field] = column;
     set({ mapping });
   };
   // The fields the list has, and the ones a bill needs, are shown; the rest wait folded, each one choice away.
   const shownFields = CHECK_FIELDS.filter((field) => REQUIRED_FIELDS.includes(field) || answers.mapping[field] !== undefined);
   const foldedFields = CHECK_FIELDS.filter((field) => !shownFields.includes(field));
-  const fieldControl = (field: ImportField) => {
-    const column = answers.mapping[field];
-    const samples = column === undefined ? [] : sampleValues(list.table, answers.hasHeader, column);
-    return (
-      <Field
-        key={field}
-        id={`check-bills-column-${field}`}
-        label={FIELD_LABELS[field]}
-        optional={!REQUIRED_FIELDS.includes(field)}
-        description={column === undefined ? "Not in the list." : samples.length > 0 ? `Reads: ${samples.join(" · ")}` : "This column is empty."}
-      >
-        <Select value={column === undefined ? NONE : String(column)} onValueChange={(value) => choose(field, value)}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>Not in the list</SelectItem>
-            {names.map((heading, index) => (
-              <SelectItem key={index} value={String(index)}>
-                {columnLetter(index)} · {heading}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-    );
-  };
+  const fieldControl = (field: ImportField) => (
+    <ColumnField
+      key={field}
+      id={`check-bills-column-${field}`}
+      field={field}
+      table={list.table}
+      hasHeader={answers.hasHeader}
+      names={names}
+      column={answers.mapping[field]}
+      onChoose={(column) => choose(field, column)}
+    />
+  );
   const bills = questions.bills;
-  const dateSample = questions.dateOrder.ask ? twoWayDate(list.table, answers) : null;
-  const amountSample = questions.decimalMark.ask ? twoWayAmount(list.table, answers) : null;
 
   return (
     <div className="space-y-5">
@@ -230,7 +166,7 @@ function ColumnsStep({
         <p className="text-sm text-ink-2">
           <span className="font-semibold text-ink">{list.source}</span>: {plural(bills + questions.leftOut, "bill", "bills")}, {plural(names.length, "column", "columns")}.
         </p>
-        <Button type="button" variant="link" icon={<RotateCcw />} onClick={onRestart}>
+        <Button type="button" variant="link" icon={<RotateCcw />} disabled={checking} onClick={onRestart}>
           Choose another list
         </Button>
       </div>
@@ -264,29 +200,22 @@ function ColumnsStep({
           <div className="grid gap-4 pt-1 sm:grid-cols-2">{foldedFields.map(fieldControl)}</div>
         </Disclosure>
       )}
-      {questions.dateOrder.ask && (
-        <RadioGroup
-          legend={
-            questions.dateOrder.mixed
-              ? `The list writes dates ${questions.dateOrder.orders.length > 2 ? "more than one way" : "both ways"}. Which way is right?`
-              : `Dates like ${dateSample ?? "03/04/2026"} are written`
-          }
-          value={answers.dateOrder !== null && questions.dateOrder.orders.includes(answers.dateOrder) ? answers.dateOrder : ""}
-          onValueChange={(value) => set({ dateOrder: DATE_ORDERS.find((order) => order === value) ?? null })}
-          options={DATE_ORDER_OPTIONS.filter((option) => questions.dateOrder.orders.includes(option.value))}
-        />
-      )}
-      {questions.decimalMark.ask && (
-        <RadioGroup
-          legend={questions.decimalMark.mixed ? "The list writes amounts both ways. Which way is right?" : `Amounts like ${amountSample ?? "1,234"} are written`}
-          value={answers.decimalMark ?? ""}
-          onValueChange={(value) => set({ decimalMark: value === "," ? "," : "." })}
-          options={[
-            { value: ".", label: "1,234.50", description: "A dot before the cents." },
-            { value: ",", label: "1.234,50", description: "A comma before the cents." },
-          ]}
-        />
-      )}
+      <DatesQuestion
+        question={questions.dateOrder}
+        table={list.table}
+        hasHeader={answers.hasHeader}
+        dueColumn={answers.mapping.dueDate}
+        value={answers.dateOrder}
+        onChange={(dateOrder) => set({ dateOrder })}
+      />
+      <AmountsQuestion
+        question={questions.decimalMark}
+        table={list.table}
+        hasHeader={answers.hasHeader}
+        amountColumn={answers.mapping.amount}
+        value={answers.decimalMark}
+        onChange={(decimalMark) => set({ decimalMark })}
+      />
       {questions.currency && (
         <div className="grid gap-4 sm:grid-cols-2">
           <Field id="check-bills-currency" label="Currency for rows that do not say" description="It labels amounts. Nothing is converted.">
@@ -307,7 +236,7 @@ function ColumnsStep({
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <FormMessage>{waiting}</FormMessage>
-        <Button type="button" icon={<FileSearch />} disabled={waiting !== null} onClick={onCheck} className="shrink-0">
+        <Button type="button" icon={<FileSearch />} loading={checking} disabled={waiting !== null} onClick={onCheck} className="shrink-0">
           {`Check ${plural(bills, "bill", "bills")}`}
         </Button>
       </div>
@@ -321,9 +250,24 @@ export function BillListChecker() {
   const [answers, setAnswers] = useState<CheckAnswers | null>(null);
   const [result, setResult] = useState<BillCheck | null>(null);
   const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
+  const checker = useRef<HTMLDivElement>(null);
+  const moved = useRef(false);
+
+  // The button pressed goes with its step: the new step's place in the trail takes the focus, not the page (CB2).
+  useEffect(() => {
+    if (!moved.current) return;
+    moved.current = false;
+    checker.current?.querySelector<HTMLElement>('[aria-current="step"]')?.focus();
+  }, [step]);
+
+  function go(next: Step) {
+    moved.current = true;
+    setStep(next);
+  }
 
   function restart() {
-    setStep("list");
+    go("list");
     setList(null);
     setAnswers(null);
     setResult(null);
@@ -336,7 +280,7 @@ export function BillListChecker() {
       const table = readTable(text);
       setList({ source, table, legacy, sample });
       setAnswers(startingAnswers(table));
-      setStep("columns");
+      go("columns");
     } catch (problem) {
       setError(problem instanceof TableError ? problem.message : "The list could not be read.");
     }
@@ -344,15 +288,22 @@ export function BillListChecker() {
 
   function check() {
     if (!list || !answers) return;
-    setResult(checkBills(list.table, answers, localToday()));
-    setStep("results");
+    setChecking(true);
+    // A long list holds the page for a second or two: the button shows it is checking first (CB2).
+    afterPaint(() => {
+      setResult(checkBills(list.table, answers, localToday()));
+      setChecking(false);
+      go("results");
+    });
   }
 
   return (
-    <div className="space-y-5">
-      <StepTrail step={step} />
+    <div ref={checker} className="space-y-5">
+      <StepTrail steps={STEPS} step={step} label="Check steps" />
       {step === "list" && <ListStep onList={read} error={error} />}
-      {step === "columns" && list && answers && <ColumnsStep list={list} answers={answers} onChange={setAnswers} onCheck={check} onRestart={restart} />}
+      {step === "columns" && list && answers && (
+        <ColumnsStep list={list} answers={answers} onChange={setAnswers} onCheck={check} onRestart={restart} checking={checking} />
+      )}
       {/* Only the summary is announced when the check runs, not every finding under it. */}
       <div aria-live="polite" data-results>
         {step === "results" && result && <BillCheckSummary result={result} />}
@@ -360,7 +311,7 @@ export function BillListChecker() {
       {step === "results" && list && answers && result && (
         <BillCheckResults
           result={result}
-          onBack={() => setStep("columns")}
+          onBack={() => go("columns")}
           onRestart={restart}
           onDownload={() => download(checkedCsv(list.table, answers, result), checkedFileName(list.source))}
         />

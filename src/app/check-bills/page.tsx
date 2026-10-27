@@ -57,12 +57,14 @@ export default function CheckBillsPage() {
                 the 3rd of April or March 4.
               </li>
               <li>
-                Bills of one vendor are compared by amount, purchase order, invoice number, description and due date, with the rule Vestiarion&apos;s
-                agent uses before it pays. An invoice number written another way, such as BP-1042 and bp 1042, counts as the same number.
+                Bills of one vendor are compared by amount, purchase order, description and due date, with the rule Vestiarion&apos;s agent uses
+                before it pays. This page also compares their invoice numbers, which the agent&apos;s rule does not: one written another way, such
+                as BP-1042 and bp 1042, counts as the same number, and a placeholder such as N/A counts as none.
               </li>
               <li>
-                Two bills for the same amount 24 to 32 days apart are usually a monthly charge, so the rule does not call them duplicates. They are
-                listed apart, for you to check each is a new month&apos;s bill.
+                Two bills for the same amount 24 to 32 days apart are usually a monthly charge, so the rule does not call them duplicates, and this
+                page does not call a later month of a charge with one description a repeat of an earlier month. They are listed apart, for you to
+                check each is a new month&apos;s bill.
               </li>
               <li>
                 A discount or a late fee is counted only when your list gives its terms. A late fee with no start date starts the day after the

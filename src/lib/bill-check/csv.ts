@@ -1,5 +1,5 @@
 import { billRows, columnCount, columnNames } from "../bill-import/columns";
-import type { Table } from "../bill-import/table";
+import { savedListName, type Table } from "../bill-import/table";
 import { dayWords, moneyWords, type BillCheck } from "./findings";
 import { MAX_CHECK_BILLS, type CheckAnswers } from "./read";
 
@@ -45,8 +45,9 @@ function csvCell(value: string, delimiter: string): string {
 }
 
 /**
- * The list as a CSV in its own delimiter (a pasted list becomes a comma one), its column names first when it has them,
- * with `FLAG_COLUMN` last and a byte-order mark so a spreadsheet reads its names right.
+ * The list as a CSV, its column names first when it has them, with `FLAG_COLUMN` last and a byte-order mark so a
+ * spreadsheet reads its names right. A semicolon list keeps its semicolons; any other, pasted or tab-separated, comes
+ * back with commas.
  */
 export function checkedCsv(table: Table, answers: Pick<CheckAnswers, "hasHeader">, check: BillCheck): string {
   const flags = flagsOf(check);
@@ -62,8 +63,7 @@ export function checkedCsv(table: Table, answers: Pick<CheckAnswers, "hasHeader"
   return `${String.fromCharCode(0xfeff)}${lines.map((cells) => cells.map((cell) => csvCell(cell, delimiter)).join(delimiter)).join("\r\n")}\r\n`;
 }
 
-/** The name the list is saved under: its own, said to be checked. */
+/** The name the list is saved under: its own, said to be checked, as the import names its failed rows. */
 export function checkedFileName(source: string): string {
-  const base = source.replace(/\.(csv|tsv|txt)$/i, "").replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "") || "bills";
-  return `${base}-checked.csv`;
+  return savedListName(source, "checked");
 }

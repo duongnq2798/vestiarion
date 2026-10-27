@@ -14,8 +14,8 @@ export function CheckBillsCta() {
         What Vestiarion does with your bills
       </h2>
       <p className="mt-3 text-sm leading-relaxed text-ink-2">
-        Vestiarion runs these checks, plus purchase-order match, sanctions screening and a payee lock, on every new bill before it pays. Start a
-        shadow workspace and drop this same file into its bill import.
+        Vestiarion runs its duplicate check, purchase-order match, sanctions screening and a payee lock on every new bill, and weighs
+        early-payment discounts and late fees, before it pays. Start a shadow workspace and drop this same file into its bill import.
       </p>
       <p className="mt-2 text-xs leading-relaxed text-ink-3">
         The import takes up to 200 bills at a time, for vendors you have added in Counterparties, and shows what happens to every row before

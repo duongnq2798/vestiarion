@@ -9,7 +9,8 @@ import { MAX_CHECK_BILLS, type ListBill } from "@/lib/bill-check/read";
 /**
  * What the free bill list check found (docs/superpowers/specs/2026-10-28-check-bills-design.md CB5–CB8): the summary the
  * page announces, then the likely duplicates by vendor, the runs of the same amount about a month apart, the deadlines of
- * the next 7 days and the rows that could not be read, each with the rows of the list it is about.
+ * the next 7 days, each saying when its bill may repeat another, and the rows that could not be read, each with the rows
+ * of the list it is about.
  */
 
 const plural = (count: number, one: string, many: string) => `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
@@ -102,7 +103,7 @@ export function BillCheckResults({ result, onBack, onRestart, onDownload }: { re
       <Section
         id="check-bills-duplicates"
         title="Likely duplicates"
-        intro="Bills of one vendor compared by amount, purchase order, invoice number, description and due date, with the rule Vestiarion's agent uses before it pays."
+        intro="Bills of one vendor compared by amount, purchase order, description and due date, with the rule Vestiarion's agent uses before it pays, and by invoice number, which this page adds to it."
       >
         {result.duplicates.length === 0 ? (
           <p className="text-sm text-ink-2">None in this list.</p>
@@ -162,6 +163,9 @@ export function BillCheckResults({ result, onBack, onRestart, onDownload }: { re
                   </Badge>
                 </div>
                 <p className="mt-1 text-sm leading-relaxed text-ink-2">{deadline.words}</p>
+                {deadline.repeats !== null && (
+                  <p className="mt-1 text-sm font-medium leading-relaxed text-ink">{`This bill may repeat row ${deadline.repeats}: check it before you pay.`}</p>
+                )}
               </li>
             ))}
           </ul>
