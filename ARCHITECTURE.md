@@ -3276,17 +3276,29 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   resident memory that the parent reads every 25 ms, and 15 s. It refuses more than 50 pages before reading one, and
   stops reading pages once the text passes 20,000 characters (`truncated`). One parse runs at a time per process
   (`oneParseAtATime`, around the count, the parse and the clear). The file's own doing (the pre-scan, the pages, a parse
-  error, its own heap full, a timeout while no other PDF was parsed on the thread) is unreadable, recorded like any
-  other. A stop at the memory budget, which counts every thread's memory, or a timeout while `readDocument` parsed on the
-  thread (`countedParse`), records nothing and is read again next cycle, still counted. A worker that never came online,
-  or could not load unpdf, fails the stage, which is not the file's doing. The worker's script is plain text that
-  imports unpdf from `node_modules`, so `next.config.ts` lists unpdf in `serverExternalPackages` and each function that
-  reads PDFs carries it. Each parse is counted first (`parse_attempts`, `start_document_parse`, which answers the
-  unfinished reads of that file's SHA-256 across the workspace's requests) and cleared once it ends
-  (`finish_document_parse`, best effort, on every request with that file): a file whose count is already 2 is unreadable
-  with no third parse, however often it is sent or attached. Before those functions, it parses with nothing counted.
-  `readDocument` (From a document, email, the extension, chats) runs the same pre-scan, lenient: it refuses only a file
-  measured past 16 MB, and still parses on the thread that asks.
+  error, its own heap full, a timeout while no other PDF was read in the process) is unreadable, recorded like any
+  other. A stop at the memory budget, which counts every thread's memory, or a timeout while another PDF was read in the
+  process (`readDocument` parsing on the thread, `countedParse`, or another worker; its own read never counts), records
+  nothing and is read again next cycle, still counted. A worker that never came online, or could not load unpdf, fails
+  the stage, which is not the file's doing. The worker's script is plain text that imports unpdf from `node_modules`, so
+  `next.config.ts` lists unpdf in `serverExternalPackages` and each function that reads PDFs carries it (read.ts's
+  static import of unpdf is what puts it in each function's trace). Each parse is counted first (`parse_attempts`,
+  `start_document_parse`, which answers the unfinished reads of that file's SHA-256 across the workspace's requests) and
+  cleared once it ends (`finish_document_parse`, best effort, on every request with that file): a file whose count is
+  already 2 is unreadable with no third parse, however often it is sent or attached. Before those functions, it parses
+  with nothing counted.
+- **A PDF someone sends in** (`readDocument`: From a document, invoices by email, the Chrome extension, Telegram, Slack
+  and the payee link; docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md). The same pre-scan decides where it
+  is read. A file measured past 16 MB is refused ("This PDF could not be read. Paste the invoice's text instead."). A
+  measured file is parsed on the thread that asks, counted (`countedParse`). A file it cannot measure (encrypted; LZW,
+  run-length, Brotli or an image codec where text is read; more streams or work than it takes on) is read in the same
+  worker under `REQUEST_PDF_LIMITS`: the cycle's limits with a 256 MB memory budget, so where a request's worker and the
+  cycle's share a process the request's stops first. That read is neither counted as an on-thread parse nor queued
+  behind the cycle's (`oneParseAtATime`). A timeout while another PDF was read in the process is a plain error, which
+  each caller answers with try again in a moment; any other stop, memory included, is the "could not be read" refusal;
+  a reader that could not start is thrown as it is. An `.eml` file's attached PDFs are read one at a time, the first
+  three; one that could not be read is left out, and a stop that may not be the file's fails the read. A measured file
+  still has no time bound: forms nested inside forms hold the thread that asks.
 - **The compare** (`compareDocument`, pure). Each value the model returns passes `normalizeExtraction` against the
   text. Code then checks, in order: the vendor (the counterparty's `nameKey` as whole words in the text's, or its billing
   domain or a subdomain, never a free email provider's, never the model's `vendorName`); the currency; the amount to its
