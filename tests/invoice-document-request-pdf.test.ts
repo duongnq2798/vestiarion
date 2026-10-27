@@ -5,11 +5,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Where a PDF someone sends in is read (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1-RB6), with
  * the worker and pdf.js on this thread watched. The strict pre-scan decides: a file it measures past 16 MB decoded is
- * refused, whatever else in it cannot be measured (RB6); one it measured is parsed on this thread, as before; one it
- * cannot measure (LZW, run-length or Brotli where text is read, encryption, more streams than it takes on) is read in
- * the worker under the request's limits, never by pdf.js on this thread, never behind the cycle's queue. A stop that is
- * the file's reads as one that could not be read; a timeout beside other reads says to try again; a reader that could
- * not start is thrown as it is. An email's PDFs are read one at a time, the first three.
+ * refused, even beside streams it skips (RB6); one it measured is parsed on this thread, as before; one it cannot
+ * measure (LZW, run-length or Brotli where text is read, encryption, more streams than it takes on) is read in the
+ * worker under the request's limits, never by pdf.js on this thread, never behind the cycle's queue. A stop that is the
+ * file's reads as one that could not be read; a timeout beside other reads says to try again; a reader that could not
+ * start is thrown as it is. An email's PDFs are read one at a time, the first three, and an email with PDFs attached is
+ * never read as its MIME, even when nothing in it has text (RB5).
  */
 
 const { workerSpy, proxySpy, actualWorker } = vi.hoisted(() => ({
@@ -49,6 +50,8 @@ const pdf = (bytes: Uint8Array) => ({ bytes, name: "invoice.pdf", type: "applica
 const answer = (...pages: string[]) => Promise.resolve({ pages, cut: false });
 const latin1 = (text: string) => Buffer.from(text, "latin1");
 const UNREADABLE = "This PDF could not be read. Paste the invoice's text instead.";
+const EMAIL_PDFS_UNREAD =
+  "There is no text to read in the email or the first three PDFs attached to it, and the PDFs after those were not read. Choose the invoice's PDF on its own, or paste its text.";
 /** The invoice's line of text, as pdf.js reads it. */
 const READ_LINE = "Northwind Hosting invoice INV-2207, total due 200.00 USDC, purchase order PO-1042";
 /** One page whose text is LZW-encoded: the pre-scan cannot measure it, pdf.js reads it. */
@@ -65,7 +68,25 @@ function email(text: string, pdfs: Uint8Array[]): Uint8Array {
   return new TextEncoder().encode(lines.join("\r\n"));
 }
 
+/**
+ * An email with only `pdfs` attached, as a scanner sends one: no text of its own, and no subject, or (`subject: ""`) an
+ * empty one.
+ */
+function bareEmail(pdfs: Uint8Array[], { subject }: { subject?: string } = {}): Uint8Array {
+  const lines = [...(subject === undefined ? [] : [`Subject: ${subject}`]), 'Content-Type: multipart/mixed; boundary="b"', ""];
+  pdfs.forEach((bytes, index) => {
+    const name = `scan-${index + 1}.pdf`;
+    lines.push("--b", `Content-Type: application/pdf; name="${name}"`, "Content-Transfer-Encoding: base64", `Content-Disposition: attachment; filename="${name}"`, "", Buffer.from(bytes).toString("base64"));
+  });
+  lines.push("--b--", "");
+  return new TextEncoder().encode(lines.join("\r\n"));
+}
+
 const eml = (bytes: Uint8Array) => ({ bytes, name: "invoice.eml", type: "message/rfc822" });
+/** A page with no text: a scan, as pdf.js reads one on this thread. */
+const BLANK_PAGE = onePagePdf(streamObject("", "q Q\n"));
+/** The invoice's page, measured, so pdf.js reads it on this thread. */
+const INVOICE_PAGE = onePagePdf(streamObject("", INVOICE_LINE));
 
 beforeEach(() => {
   workerSpy.mockReset();
@@ -116,7 +137,7 @@ describe("where a PDF someone sends in is read (RB1, RB2)", () => {
     }
   });
 
-  it("still refuses a file it measures past 16 MB decoded, with neither the worker nor pdf.js, whatever else in it cannot be measured", async () => {
+  it("still refuses a file it measures past 16 MB decoded, with neither the worker nor pdf.js, beside streams it cannot measure", async () => {
     const bomb = inflateBombPdf(600);
     for (const [label, bytes] of [
       ["a 600 MB bomb", bomb],
@@ -239,5 +260,25 @@ describe("an email's PDFs (RB5)", () => {
   it("signs the email truncated when an attachment's pages were left unread", async () => {
     workerSpy.mockReturnValueOnce(Promise.resolve({ pages: [READ_LINE], cut: true }));
     expect(await readDocument(eml(email("Total due 200.00 USDC", [LZW_PAGE])))).toMatchObject({ kind: "email", truncated: true });
+  });
+
+  it("never reads an email with PDFs attached as its MIME, and says the PDFs after the third were not read when nothing before them had text", async () => {
+    // A scanner's email: no subject, no text, three scans and then the invoice, which is never read.
+    for (const subject of [undefined, ""]) {
+      proxySpy.mockReset();
+      const error = await readDocument(eml(bareEmail([BLANK_PAGE, BLANK_PAGE, BLANK_PAGE, INVOICE_PAGE], { subject }))).catch((caught: unknown) => caught);
+      expect(error, String(subject)).toBeInstanceOf(DocumentReadError);
+      expect(error, String(subject)).toMatchObject({ code: "empty", message: EMAIL_PDFS_UNREAD });
+      expect(proxySpy, String(subject)).toHaveBeenCalledTimes(3);
+    }
+    // With no PDF left out, it has no text to read, as any document with none; never its headers and base64.
+    const error = await readDocument(eml(bareEmail([BLANK_PAGE]))).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(DocumentReadError);
+    expect(error).toMatchObject({ code: "empty", message: "There is no text to read. Choose a file or paste the invoice's text." });
+  });
+
+  it("still says the PDFs after the third were left out when a subject is all the email's own text", async () => {
+    const read = await readDocument(eml(bareEmail([BLANK_PAGE, BLANK_PAGE, BLANK_PAGE, INVOICE_PAGE], { subject: "Scan" })));
+    expect(read).toMatchObject({ kind: "email", text: "Subject: Scan", pdfsLeftOut: true });
   });
 });

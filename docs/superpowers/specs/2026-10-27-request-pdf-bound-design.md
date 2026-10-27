@@ -34,7 +34,7 @@ instance with payments in flight. The cycle's own path (`readPdfBounded`) alread
 **RB1. The strict pre-scan decides where a sent PDF is read.** `pdfText` runs `prescanPdf` (now one mode, RB6) and
 branches on why it refused:
 - `decoded_limit`: refused as before, "This PDF could not be read. Paste the invoice's text instead.", before pdf.js or
-  any worker sees it, whatever else in the file the pre-scan cannot measure (RB6);
+  any worker sees it, even beside streams the pre-scan skips (RB6);
 - nothing (every stream measured, under budget): parsed on the thread that asks, as before (`countedParse` around
   unpdf's `extractText`). Every PDF fixture and caller test reads this way, unchanged, and read.ts keeps its static
   unpdf import, which is what carries unpdf into each function that reads PDFs (`serverExternalPackages`);
@@ -79,28 +79,41 @@ timeout with nothing else read meanwhile stays the file's, as before.
 **RB5. An email's PDFs, one at a time, at most three.** `emailText` reads the PDFs attached to an `.eml` one after
 another, not all at once, and only the first three (`MAX_EMAIL_PDFS`): each may start a worker, and workers share one
 process's memory budget. Later PDFs are left out, and the read says so (`pdfsLeftOut`, apart from `truncated`, which is
-about characters): the draft warns "Only the first three PDFs attached to the email were read.", since the invoice may
-be among them, however short they are. A PDF that could not be read is left out as before and the message's own text
+about characters): the draft warns "PDFs attached to the email after the first three were not read.", since the
+invoice may be among them, however short they are. The warning names what was left out, not what was read, since one
+of the first three may not have been. A PDF that could not be read is left out as before and the message's own text
 still read; a read stopped for a reason that may not be the file's (RB3) fails the whole read, so the person tries
 again rather than getting a draft without its invoice. When an attachment's pages were left unread past 20,000
 characters, the email reads as `truncated`.
+
+An email with PDFs attached is never read as its MIME (review I6), even when it has no subject, no text, and nothing
+in the PDFs read, such as a scanner's email of three scans and then the invoice. Only a file with no text and no PDF
+in it, which may hold no message structure at all, is still read as the text it is. Such an email has no text to read
+(`DocumentReadError("empty")`, "There is no text to read. Choose a file or paste the invoice's text."); with PDFs left
+out, it says so: "There is no text to read in the email or the first three PDFs attached to it, and the PDFs after
+those were not read. Choose the invoice's PDF on its own, or paste its text." The inbox and the payee link word it as
+they word any file with no text. Before, it was read as the raw message, headers and base64, and with PDFs left out
+said nothing of them.
 
 **RB6. One pre-scan mode, in which a file past the budget is refused as that.** `prescanPdf(bytes, { limits? })` has no
 lenient mode left: nothing in `src` used it once `readDocument` scans strictly, and keeping it would let a later caller
 reopen the gap. Its tests that pinned lenient results go with it. A stream whose filter it cannot measure is skipped and
 the others are still measured, as the lenient mode did; an encrypted file's streams are measured too, as written, though
 pdf.js would decrypt them first, which can only find a bomb, never let a file through. Only once every other stream is
-measured under the budget is the file refused as `unbounded_filter` or `encrypted`. So `decoded_limit` comes first: an
-LZW stream before a bomb, an `/Encrypt` key on a stream's dictionary or in a fake trailer inside a comment beside one,
-is refused before any reader opens the file, wherever it sits in the file. Too many streams or too much work
-(`too_complex`) still stops the scan at once. The cycle refuses every reason, so what it does is unchanged.
+measured under the budget is the file refused as `unbounded_filter` or `encrypted`. So a bomb in a stream the scan
+measures is refused as `decoded_limit` before any reader opens the file, wherever the streams it skips sit: beside an
+LZW stream before or after it, an `/Encrypt` key on a stream's dictionary, or a fake trailer inside a comment. A bomb
+the scan never measures is not refused as that (Risks): one in a stream it skips, one that a page names, or whose
+filter is kept, only inside an object stream it cannot decode, or one in an encrypted file's streams, which pdf.js
+decrypts first. Too many streams or too much work (`too_complex`) still stops the scan at once, before any bomb in the
+file is measured. The cycle refuses every reason, so what it does is unchanged.
 
 **RB7. Docs.** CHANGELOG [Unreleased]'s entry on PDFs built to expand (which named neither the payee link nor the
 files the pre-scan cannot measure) is amended in place; ARCHITECTURE.md's parse paragraph says where each sent PDF is
 read; first-payment.mdx's line on PDFs that are not read names 50 pages and 15 s for those the quick check cannot
-measure, and that an `.eml` is read with its first three PDFs, quoting the warning when it has more; the part 2 spec's
-DK3 paragraph, out-of-scope notes and pre-scan tests are updated to point here, and so is the invoice-from-document
-spec's D2, which said each PDF attached to an email is read.
+measure, and that an `.eml` is read with its first three PDFs, quoting the warning when it has more and what one with
+nothing else to read says; the part 2 spec's DK3 paragraph, out-of-scope notes and pre-scan tests are updated to point
+here, and so is the invoice-from-document spec's D2, which said each PDF attached to an email is read.
 
 ## Out of scope
 
@@ -125,9 +138,13 @@ spec's D2, which said each PDF attached to an email is read.
   grown the process by more than 256 MB when the request's started reaches its 512 MB first, and growth between two
   25 ms checks, or while the event loop is held, can pass both budgets at once. The cycle's stop is then a retry, which
   spends one of that vendor document's two tries.
-- A bomb the pre-scan cannot measure still reaches the request's worker: one behind a FlateDecode stage chained to LZW,
-  or among more than 10,000 streams. The worker decodes it until its 256 MB budget stops it, and the person is told
-  the PDF could not be read. Before, such a file was read on the thread that asked, with no bound.
+- Any bomb the pre-scan does not measure still reaches the request's worker. For example: one in an encrypted file,
+  whose streams pdf.js decrypts before it inflates them; one in an LZW or run-length stream, which can expand on its
+  own; one behind a FlateDecode stage chained to LZW; one that a page names as its contents, or whose filter is kept,
+  only inside an object stream the scan cannot decode, so it looks unread; and one in a file of more than 10,000
+  streams or 64 MB of scan work, which stops the scan before the bomb is measured (a small stream of deflate code
+  tables measured before the bomb can spend that work). The worker decodes it until its 256 MB budget stops it, and the
+  person is told the PDF could not be read. Before, such a file was read on the thread that asked, with no bound.
 
 ## Tests (write first)
 
@@ -146,10 +163,14 @@ a test may answer for the worker):
   `DocumentReadError` nor a `PdfWorkerRefusal`; a reader that could not start is thrown as it is.
 - RB5: of five PDFs attached to an email, the first three are read, one at a time, and the read says PDFs were left
   out, not `truncated`; with three or fewer it says nothing. One the worker refuses is left out and the message's text
-  still read; one stopped by a contended timeout fails the read with a plain `Error`.
+  still read; one stopped by a contended timeout fails the read with a plain `Error`. An email with no subject (or an
+  empty one) and no text, of three scans and then the invoice, is never read as its MIME: it says there is no text to
+  read in it or its first three PDFs and the PDFs after those were not read, and pdf.js reads only three; one of a
+  single scan has no text to read; one whose subject is all its text says PDFs were left out.
 
-**`tests/invoice-document-draft.test.ts`**, RB5: an email with four PDFs attached gives the draft, and the document's
-own warnings, "Only the first three PDFs attached to the email were read."; one with three does not.
+**`tests/invoice-document-draft.test.ts`**, RB5: an email with four PDFs attached, and one of four whose first is a
+bomb refused, give the draft, and the document's own warnings, "PDFs attached to the email after the first three were
+not read."; one with three does not.
 
 **`tests/invoice-document-read.test.ts`** (the real reader): an LZW-encoded page, and one with `/Encrypt` on its
 content stream's dictionary, read in the worker to the text the unencoded page reads to; an unmeasurable file of 51
@@ -163,4 +184,6 @@ on this thread ran.
 **`tests/invoice-document-prescan.test.ts`**, RB6: the lenient assertions go; the strict refusals stay, under the one
 mode. A 600 MB bomb with an LZW stream before or after it, or with an `/Encrypt` key on a stream's dictionary or in a
 fake trailer inside a comment, refuses as `decoded_limit`, having decoded under 17 MB; an LZW stream before 1 MB of
-measured spaces refuses as `unbounded_filter`, having measured that megabyte; too many streams stop the scan at once.
+measured spaces refuses as `unbounded_filter`, having measured that megabyte; too many streams stop the scan at once,
+having decoded nothing; an image a page names as its contents only inside an LZW object stream is never measured
+(`unbounded_filter`, nothing decoded), though inside a FlateDecode one it is refused as `decoded_limit`.

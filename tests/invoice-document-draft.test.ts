@@ -6,7 +6,7 @@ import { runWith } from "@/lib/context";
 import { readInvoiceDocument, readInvoiceDraft } from "@/lib/invoice-document/draft";
 import { DocumentReadError } from "@/lib/invoice-document/read";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
-import { INVOICE_LINE, onePagePdf, streamObject } from "./support/pdf-files";
+import { inflateBombPdf, INVOICE_LINE, onePagePdf, streamObject } from "./support/pdf-files";
 
 /**
  * `readInvoiceDraft`, the one reading of an invoice document, shared by **From a document** and the Telegram bot
@@ -61,18 +61,20 @@ describe("readInvoiceDraft", () => {
     await expect(inWorkspace(() => readInvoiceDraft({ text: "   " }, "2026-10-03")).run()).rejects.toBeInstanceOf(DocumentReadError);
   });
 
-  it("warns that only the first three PDFs attached to an email were read, when it had more (request PDF bound RB5)", async () => {
-    const LEFT_OUT = "Only the first three PDFs attached to the email were read.";
+  it("warns that the PDFs attached to an email after the first three were not read, when it had more (request PDF bound RB5)", async () => {
+    const LEFT_OUT = "PDFs attached to the email after the first three were not read.";
     const page = onePagePdf(streamObject("", INVOICE_LINE));
-    for (const [count, warned] of [
-      [3, false],
-      [4, true],
+    // The warning says what was left out, never that the first three were read: one of them may not have been.
+    for (const [label, pdfs, warned] of [
+      ["three", [page, page, page], false],
+      ["four", [page, page, page, page], true],
+      ["four, the first of them refused", [inflateBombPdf(20), page, page, page], true],
     ] as const) {
-      const input = { bytes: email("Invoices attached.", Array.from({ length: count }, () => page)), name: "invoices.eml", type: "message/rfc822" };
+      const input = { bytes: email("Invoices attached.", [...pdfs]), name: "invoices.eml", type: "message/rfc822" };
       const read = await inWorkspace(() => readInvoiceDocument(input, "2026-10-03")).run();
-      expect(read.read.warnings.includes(LEFT_OUT), String(count)).toBe(warned);
-      expect(read.documentWarnings.includes(LEFT_OUT), String(count)).toBe(warned);
-      expect(read.read.document.truncated, String(count)).toBe(false);
+      expect(read.read.warnings.includes(LEFT_OUT), label).toBe(warned);
+      expect(read.documentWarnings.includes(LEFT_OUT), label).toBe(warned);
+      expect(read.read.document.truncated, label).toBe(false);
     }
   });
 });

@@ -1559,7 +1559,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["check this amount before you add it.", INVOICE_FORM],
     ["This PDF has no text to read; it may be a scan. Paste the invoice's text instead.", DOCUMENT_READ],
     ["This PDF could not be read. Paste the invoice's text instead.", DOCUMENT_READ],
-    ["Only the first three PDFs attached to the email were read.", DOCUMENT_DRAFT],
+    ["PDFs attached to the email after the first three were not read.", DOCUMENT_DRAFT],
+    [
+      "There is no text to read in the email or the first three PDFs attached to it, and the PDFs after those were not read. Choose the invoice's PDF on its own, or paste its text.",
+      DOCUMENT_READ,
+    ],
     ["The invoice could not be read. Try again in a moment.", DOCUMENT_ACTION],
     ["Gateway balance", GATEWAY_PANEL],
     ["Amount to move from the operating wallet (USDC)", GATEWAY_PANEL],

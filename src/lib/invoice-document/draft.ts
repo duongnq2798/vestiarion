@@ -58,8 +58,9 @@ export async function readInvoiceDocument(input: DocumentInput, today: string): 
       : [];
   const match = matchCounterparty(fields, counterparties);
   const matched = counterparties.find((counterparty) => counterparty.id === match.counterpartyId);
-  // An email's PDFs past the third are never read (request PDF bound RB5), and the invoice may be among them.
-  const leftOut = document.pdfsLeftOut ? ["Only the first three PDFs attached to the email were read."] : [];
+  // An email's PDFs past the third are never read (request PDF bound RB5), and the invoice may be among them. Said by
+  // what was left out: one of the first three may not have been read either.
+  const leftOut = document.pdfsLeftOut ? ["PDFs attached to the email after the first three were not read."] : [];
   const cut = document.truncated ? ["Only the first 20,000 characters were read."] : [];
 
   return {

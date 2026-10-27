@@ -45,7 +45,7 @@ export interface ReadDocument {
   sha256: string;
   /** True when the text was cut to MAX_DOCUMENT_CHARS. */
   truncated: boolean;
-  /** True when an email held more PDFs than the first three read (RB5), whose text it leaves out; absent otherwise. */
+  /** True when an email had PDFs attached after the first three (RB5), which are not read; absent otherwise. */
   pdfsLeftOut?: true;
 }
 
@@ -147,16 +147,23 @@ async function unmeasuredPdfText(bytes: Uint8Array): Promise<TextRead> {
 /** The most PDFs read from one email (RB5): each may need a worker, and workers share the process's memory. */
 const MAX_EMAIL_PDFS = 3;
 
+/** What an email with PDFs left out says when nothing read from it had text (RB5): the invoice may be among the rest. */
+const EMAIL_PDFS_UNREAD =
+  "There is no text to read in the email or the first three PDFs attached to it, and the PDFs after those were not read. Choose the invoice's PDF on its own, or paste its text.";
+
 /**
  * An email's subject, its text and the text of the PDFs attached, without
  * the MIME around them (review I6): the first three, one after another
  * (RB5), saying when there were more (`pdfsLeftOut`), for the draft to warn
  * of. An attachment that cannot be read is left out; the message's own
  * text still is. A reader stopped for a reason that may not be the file's
- * fails the read, to be tried again, rather than drop the invoice.
+ * fails the read, to be tried again, rather than drop the invoice. An
+ * email with PDFs attached is never read as its MIME, even when nothing in
+ * it has text: it has none to read, and says so, naming the PDFs left out.
  */
 async function emailText(bytes: Uint8Array): Promise<TextRead> {
   const parts = emailParts(bytes);
+  const pdfsLeftOut = parts.pdfs.length > MAX_EMAIL_PDFS;
   const attachments: string[] = [];
   let cut = false;
   for (const pdf of parts.pdfs.slice(0, MAX_EMAIL_PDFS)) {
@@ -169,9 +176,12 @@ async function emailText(bytes: Uint8Array): Promise<TextRead> {
     }
   }
   const read = [parts.subject ? `Subject: ${parts.subject}` : "", ...parts.text, ...attachments].filter((text) => text.trim()).join("\n\n");
-  // A file named .eml that holds no message structure at all is read as the text it is.
-  if (!read.trim()) return { text: new TextDecoder("utf-8").decode(bytes), cut: false };
-  return { text: read, cut, pdfsLeftOut: parts.pdfs.length > MAX_EMAIL_PDFS };
+  if (!read.trim()) {
+    // A file named .eml with no text and no PDF in it may hold no message structure at all: it is read as the text it is.
+    if (parts.pdfs.length === 0) return { text: new TextDecoder("utf-8").decode(bytes), cut: false };
+    if (pdfsLeftOut) throw new DocumentReadError("empty", EMAIL_PDFS_UNREAD);
+  }
+  return { text: read, cut, pdfsLeftOut };
 }
 
 export async function readDocument(input: DocumentInput): Promise<ReadDocument> {

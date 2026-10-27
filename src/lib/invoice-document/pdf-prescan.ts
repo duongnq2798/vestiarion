@@ -21,10 +21,13 @@
  *   the ones inside object streams, which are decoded first.
  * - A stream read for text whose filter cannot be measured (LZW, run-length, Brotli, an image codec, or a filter kept
  *   in an object not found) is skipped, and an encrypted file's streams are measured as written; each such file is
- *   refused too, and says why, once every other stream is measured under the budget. So a file past the budget is
- *   refused as that, wherever those streams sit. One of more streams or work than the limits is refused at once. The
- *   cycle reads no refused file, and `readDocument` reads all but the one past the budget in a worker, under its limits
- *   (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1, RB6). There is no mode that lets them through.
+ *   refused too, and says why, once every other stream is measured under the budget. So a bomb in a stream it measures
+ *   is refused as that, wherever the streams it skips sit. A bomb it never measures is not: one in a stream it skips,
+ *   one that a page names, or whose filter is kept, only inside an object stream it cannot decode, or one in an
+ *   encrypted file's streams, which pdf.js decrypts first. One of more streams or work than the limits is refused at
+ *   once, before any bomb in it is measured. The cycle reads no refused file, and `readDocument` reads all but the one
+ *   past the budget in a worker, under its limits (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1,
+ *   RB6). There is no mode that lets them through.
  *
  * What it does not bound: how often pdf.js decodes one stream (a form drawn by many forms), predictors, which never
  * make a stream larger, or a stream it could not find. The worker's process memory budget bounds the rest
@@ -778,8 +781,8 @@ class Scan {
 
   /**
    * A stream whose filter the scan cannot measure is skipped, and the rest are still measured: the file is refused for
-   * it only once they are, under the budget, so a bomb beside it is refused as that, before any reader opens the file
-   * (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB6).
+   * it only once they are, under the budget, so a bomb in a stream measured beside it is refused as that, before any
+   * reader opens the file (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB6).
    */
   private unmeasured(): true {
     this.skipped = true;
@@ -1053,8 +1056,8 @@ function objectNumberBefore(bytes: Uint8Array, at: number): number | null {
 
 /**
  * Whether `bytes`, a PDF, may go to pdf.js, and if not, why: see the module comment. The cycle refuses every refusal;
- * `readDocument` refuses a file measured over the budget, which takes precedence over the other reasons, and reads the
- * rest in a worker (RB1, RB6).
+ * `readDocument` refuses a file measured over the budget, which comes before an unmeasurable stream or encryption,
+ * though not before too many streams or too much work, and reads the rest in a worker (RB1, RB6).
  */
 export function prescanPdf(bytes: Uint8Array, options: { limits?: Partial<PrescanLimits> } = {}): Prescan {
   const scan = new Scan(bytes, { ...PRESCAN_LIMITS, ...options.limits });

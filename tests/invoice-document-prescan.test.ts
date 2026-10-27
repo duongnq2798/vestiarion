@@ -13,6 +13,7 @@ import {
   inflateBombPdf,
   INVOICE_LINE,
   lzwBeforeBombPdf,
+  lzwLiterals,
   nestedFormsPdf,
   onePagePdf,
   pagesPdf,
@@ -25,10 +26,11 @@ import {
  * file, every stream it would decode to read text is decoded as pdf.js decodes it, counting the bytes, against one
  * budget for the whole file. A file of a few hundred kilobytes that would decode to gigabytes is refused there, in a
  * fraction of a second, having decoded no more than the budget. A stream it cannot measure is refused too, and so is
- * an encrypted file, once every other stream is measured under the budget, so a file past the budget is refused as that
- * wherever they sit; one of more streams or work than it takes on is refused at once. The cycle reads no refused file;
- * readDocument refuses one past the budget and reads the rest in the worker
- * (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1, RB6, its one mode).
+ * an encrypted file, once every other stream is measured under the budget, so a bomb in a stream it measures is refused
+ * as that wherever the streams it skips sit. A bomb it never measures is not: one in a stream it skips, or named only
+ * from an object stream it cannot decode. One of more streams or work than it takes on is refused at once, before any
+ * bomb in it is measured. The cycle reads no refused file; readDocument refuses one past the budget and reads the rest
+ * in the worker (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB1, RB6, its one mode).
  */
 
 const MB = 2 ** 20;
@@ -206,8 +208,16 @@ describe("prescanPdf (DK3)", () => {
     }
     // Under the budget, the streams after one it cannot measure are measured too, and the file is refused for that one.
     expect(prescan(lzwBeforeBombPdf(1))).toEqual({ refused: "unbounded_filter", decodedBytes: MB });
-    // More streams than it takes on still stops it at once.
+    // More streams than it takes on still stops it at once, before the bomb is measured.
     expect(prescanPdf(lzwBeforeBombPdf(600), { limits: { maxStreams: 1 } })).toEqual({ refused: "too_complex", decodedBytes: 0 });
+    // A bomb it never measures is not refused as that: here an image that a page names as its contents only inside an
+    // object stream the scan cannot decode, so it looks unread. readDocument reads such a file in the worker (RB2).
+    const header = "3 0 ";
+    const page = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>";
+    const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "null", FONT, IMAGE];
+    const packed = (filter: string, data: Uint8Array) => buildPdf([...objects, streamObject(`/Type /ObjStm /N 1 /First ${header.length} /Filter ${filter}`, data)]);
+    expect(prescan(packed("/FlateDecode", zlib.deflateSync(latin1(header + page)))).refused).toBe("decoded_limit");
+    expect(prescan(packed("/LZWDecode", lzwLiterals(header + page)))).toEqual({ refused: "unbounded_filter", decodedBytes: 0 });
   });
 
   it("refuses a file of more streams, or more work, than it takes on", () => {
