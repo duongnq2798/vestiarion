@@ -14,10 +14,17 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { BrandMark } from "@/components/vx/BrandMarks";
+import { withSuccessToast } from "@/components/withSuccessToast";
 import type { SlackPanelView } from "@/lib/slack/panel";
 import { DocsLink } from "@/components/DocsLink";
 
 const INITIAL: SlackActionResult = { ok: false, message: "" };
+/**
+ * Disconnect my account's and Remove Slack's answers are toasts the actions raise themselves: the revalidated page drops
+ * each button in the same render (docs/superpowers/specs/2026-10-27-disconnect-confirmation-design.md DC1).
+ */
+const disconnectMine = withSuccessToast(disconnectSlackAccountAction);
+const remove = withSuccessToast(removeSlackAction);
 
 /** What Slack's way back from connecting says, by the code it carries in `?slack=` (Slack design S3). */
 export const SLACK_NOTICES: Record<string, { tone: "success" | "error"; text: string }> = {
@@ -73,7 +80,7 @@ function LimitForm({ orgSlug, limit }: { orgSlug: string; limit: number | null }
 }
 
 function DisconnectMine({ orgSlug }: { orgSlug: string }) {
-  const { state, formProps } = useActionForm(disconnectSlackAccountAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps } = useActionForm(disconnectMine, INITIAL);
   return (
     <form {...formProps} className="flex flex-wrap items-center gap-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />
@@ -86,7 +93,7 @@ function DisconnectMine({ orgSlug }: { orgSlug: string }) {
 }
 
 function RemoveSlack({ orgSlug }: { orgSlug: string }) {
-  const { state, formProps } = useActionForm(removeSlackAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps } = useActionForm(remove, INITIAL);
   return (
     <form {...formProps} className="flex flex-wrap items-center gap-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />

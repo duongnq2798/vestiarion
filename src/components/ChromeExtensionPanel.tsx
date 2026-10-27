@@ -6,8 +6,14 @@ import { disconnectExtensionAction, type ExtensionActionResult } from "@/app/act
 import { FormMessage } from "@/components/ui/FormMessage";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { withSuccessToast } from "@/components/withSuccessToast";
 
 const INITIAL: ExtensionActionResult = { ok: false, message: "" };
+/**
+ * A row's Disconnect answers with a toast the action raises itself: the revalidated page drops the row in the same
+ * render (docs/superpowers/specs/2026-10-27-disconnect-confirmation-design.md DC1).
+ */
+const disconnect = withSuccessToast(disconnectExtensionAction);
 
 export interface ConnectionView {
   id: string;
@@ -25,7 +31,7 @@ function onDay(iso: string): string {
 }
 
 function Disconnect({ orgSlug, connectionId }: { orgSlug: string; connectionId: string }) {
-  const { state, formProps } = useActionForm(disconnectExtensionAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps } = useActionForm(disconnect, INITIAL);
   return (
     <form {...formProps} className="space-y-1">
       <input type="hidden" name="orgSlug" value={orgSlug} />

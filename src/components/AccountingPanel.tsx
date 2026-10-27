@@ -12,12 +12,18 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { BrandName, PROVIDER_MARKS } from "@/components/vx/BrandMarks";
+import { withSuccessToast } from "@/components/withSuccessToast";
 import { accountName, PICKS_PAYMENT_ACCOUNT } from "@/lib/connectors/booking";
 import { billsHref } from "@/lib/bills-view";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
 import { PROVIDER_LABELS, PROVIDER_WORDS, type AccountingProviderId, type ProviderId } from "@/lib/connectors/provider";
 
 const INITIAL: AccountingActionResult = { ok: false, message: "" };
+/**
+ * Disconnect's answer is a toast the action raises itself: the revalidated page drops the button in the same render
+ * (docs/superpowers/specs/2026-10-27-disconnect-confirmation-design.md DC1).
+ */
+const disconnect = withSuccessToast(disconnectAccountingAction);
 
 type Notice = { tone: "success" | "error"; text: string };
 
@@ -65,7 +71,7 @@ function SyncNow({ provider, orgSlug }: { provider: ProviderId; orgSlug: string 
 }
 
 function Disconnect({ provider, orgSlug }: { provider: ProviderId; orgSlug: string }) {
-  const { state, formProps } = useActionForm(disconnectAccountingAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps } = useActionForm(disconnect, INITIAL);
   return (
     <form {...formProps} className="flex flex-wrap items-center gap-3">
       <Hidden provider={provider} orgSlug={orgSlug} />

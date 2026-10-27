@@ -11,10 +11,16 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { BrandName, PROVIDER_MARKS } from "@/components/vx/BrandMarks";
+import { withSuccessToast } from "@/components/withSuccessToast";
 import type { CrmPanelView } from "@/lib/connectors/crm-review";
 import { billsHref } from "@/lib/bills-view";
 
 const INITIAL: ZohoCrmActionResult = { ok: false, message: "" };
+/**
+ * Disconnect's answer is a toast the action raises itself: the revalidated page drops the button in the same render
+ * (docs/superpowers/specs/2026-10-27-disconnect-confirmation-design.md DC1).
+ */
+const disconnect = withSuccessToast(disconnectZohoCrmAction);
 
 /** What Zoho CRM's way back from connecting says, by the code it carries in `?zohocrm=` (Zoho CRM connector C4). */
 export const ZOHO_CRM_NOTICES: Record<string, { tone: "success" | "error"; text: string }> = {
@@ -43,7 +49,7 @@ function SyncNow({ orgSlug }: { orgSlug: string }) {
 }
 
 function Disconnect({ orgSlug }: { orgSlug: string }) {
-  const { state, formProps } = useActionForm(disconnectZohoCrmAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps } = useActionForm(disconnect, INITIAL);
   return (
     <form {...formProps} className="flex flex-wrap items-center gap-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />
