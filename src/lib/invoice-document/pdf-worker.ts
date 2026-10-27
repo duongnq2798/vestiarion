@@ -54,8 +54,10 @@ export const PDF_LIMITS: Readonly<PdfLimits> = {
 
 /**
  * The limits a file someone sends in is read with when the pre-scan cannot measure it (RB2): the cycle's, with half its
- * memory budget. Where a request's worker and the cycle's share a process, the request's stops first, so a stranger's
- * file does not cost a vendor's document one of its two tries.
+ * memory budget. Where a request's worker and the cycle's share a process, the request's usually stops first, so a
+ * stranger's file rarely costs a vendor's document one of its two tries. Not always: each budget counts from its own
+ * worker's start, so a cycle's worker that had already grown the process past 256 MB, or a jump in memory between two
+ * checks, can stop the cycle's too.
  */
 export const REQUEST_PDF_LIMITS: Readonly<PdfLimits> = { ...PDF_LIMITS, maxRssGrowthMb: 256 };
 

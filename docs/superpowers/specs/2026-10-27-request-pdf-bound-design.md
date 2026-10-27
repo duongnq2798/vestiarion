@@ -43,10 +43,10 @@ branches on why it refused:
 **RB2. A file the pre-scan cannot measure is read in the worker.** `pdfPagesInWorker` with `REQUEST_PDF_LIMITS`
 (`src/lib/invoice-document/pdf-worker.ts`): the cycle's `PDF_LIMITS` (15 s, 50 pages, a heap of 256 MB old and 32 MB
 young) with half its memory budget, 256 MB of the process's resident memory rather than 512. Where a request's worker
-and a cycle's share a process, the request's stops first, so a stranger's file does not spend one of a vendor
-document's two tries (DK3's `UNFINISHED_PARSES`). Its pages are merged and cut as `readPdfBounded` merges them
-(`mergedPages`, `truncated` when pages were left unread past 20,000 characters), so the text is the one pdf.js gives on
-the thread. The call is:
+and a cycle's share a process, the request's usually stops first, so a stranger's file rarely spends one of a vendor
+document's two tries (DK3's `UNFINISHED_PARSES`); not in every case (Risks). Its pages are merged and cut as
+`readPdfBounded` merges them (`mergedPages`, `truncated` when pages were left unread past 20,000 characters), so the
+text is the one pdf.js gives on the thread. The call is:
 - not wrapped in `countedParse`, which counts a parse that holds this thread: a worker never holds it, and counting it
   would make the worker's own timeout look like another read's (RB4);
 - not queued behind the cycle's parses (`oneParseAtATime`): a person never waits behind up to five 15 s cycle reads;
@@ -121,7 +121,10 @@ spec's D2, which said each PDF attached to an email is read.
   "try again" error, not a crash. To check on a preview deployment before release: read an LZW or encrypted PDF
   through From a document.
 - A request's worker and the cycle's share the process's memory budget, measured from each worker's start. The lower
-  request budget makes the request's stop first in the usual case, not in every case.
+  request budget makes the request's stop first in the usual case, not in every case: a cycle's worker that had already
+  grown the process by more than 256 MB when the request's started reaches its 512 MB first, and growth between two
+  25 ms checks, or while the event loop is held, can pass both budgets at once. The cycle's stop is then a retry, which
+  spends one of that vendor document's two tries.
 - A bomb the pre-scan cannot measure still reaches the request's worker: one behind a FlateDecode stage chained to LZW,
   or among more than 10,000 streams. The worker decodes it until its 256 MB budget stops it, and the person is told
   the PDF could not be read. Before, such a file was read on the thread that asked, with no bound.

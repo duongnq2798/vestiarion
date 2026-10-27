@@ -139,8 +139,9 @@ three steps:
 
 Who is at fault decides what follows:
 - **The file's, for good.** The pre-scan's refusals, more than 50 pages, a parse error pdf.js reports, the worker's
-  own heap filled, a worker that stopped once running, and a timeout while no other PDF was parsed on the cycle's
-  thread: unreadable ("This PDF could not be read."), recorded like any other, and the request leaves the queue.
+  own heap filled, a worker that stopped once running, and a timeout while no other PDF was read in the process (on
+  the cycle's thread or, since 2026-10-27, in another worker): unreadable ("This PDF could not be read."), recorded
+  like any other, and the request leaves the queue.
 - **Maybe the file's.** A stop at the process's memory budget, which counts every thread's memory, and a timeout while
   another PDF was read in the process: `readDocument` parsing on the cycle's thread (`countedParse`) or, since
   2026-10-27, another worker, a request's (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB4). Nothing

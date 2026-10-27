@@ -3292,11 +3292,13 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   is read. A file measured past 16 MB is refused ("This PDF could not be read. Paste the invoice's text instead."),
   whatever else in it cannot be measured: the pre-scan skips a stream it cannot measure, measures the rest, and refuses
   the file for that stream, or for encryption, only once they are under the budget. A measured file is parsed on the
-  thread that asks, counted (`countedParse`). A file it cannot measure (encrypted; LZW,
-  run-length, Brotli or an image codec where text is read; more streams or work than it takes on) is read in the same
-  worker under `REQUEST_PDF_LIMITS`: the cycle's limits with a 256 MB memory budget, so where a request's worker and the
-  cycle's share a process the request's stops first. That read is neither counted as an on-thread parse nor queued
-  behind the cycle's (`oneParseAtATime`). A timeout while another PDF was read in the process is a plain error, which
+  thread that asks, counted (`countedParse`). A file it cannot measure (encrypted; LZW, run-length, Brotli or an image
+  codec where text is read; more streams or work than it takes on) is read in the same worker under
+  `REQUEST_PDF_LIMITS`: the cycle's limits with a 256 MB memory budget, so where a request's worker and the cycle's
+  share a process the request's usually stops first. Not always: each budget counts from its own worker's start, so a
+  cycle's worker that had already grown the process past 256 MB, or a jump between two checks, can stop the cycle's
+  too, a retry that spends one of that document's two tries. That read is neither counted as an on-thread parse nor
+  queued behind the cycle's (`oneParseAtATime`). A timeout while another PDF was read in the process is a plain error, which
   each caller answers with try again in a moment; any other stop, memory included, is the "could not be read" refusal;
   a reader that could not start is thrown as it is. An `.eml` file's attached PDFs are read one at a time, the first
   three; the read says when it has more (`pdfsLeftOut`), and the draft warns "Only the first three PDFs attached to the

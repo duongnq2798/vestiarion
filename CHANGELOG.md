@@ -155,11 +155,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   decompressed, such as a file of under a megabyte that expands to gigabytes: "This PDF could not be read. Paste the
   invoice's text instead." A PDF whose contents cannot be measured before it is opened, such as an encrypted one or one
   compressed with LZW, is read on its own, apart from the rest of the server's work, within 15 seconds, 50 pages and a
-  memory limit, as vendors' documents are: one past them could not be read, and one stopped while other PDFs were being
-  read asks you to try again in a moment. The PDFs attached to an `.eml` file are read one after another, the first
-  three, and the draft says when it has more: "Only the first three PDFs attached to the email were read." Before,
-  reading such a file could use up the server's memory, and one that could not be measured was read with no limit at
-  all. Ordinary invoices read as before. No migration.
+  memory limit, as vendors' documents are: one past them could not be read, and one that ran out of time while other
+  PDFs were being read asks you to try again in a moment. The PDFs attached to an `.eml` file are read one after
+  another, the first three, and the draft says when it has more: "Only the first three PDFs attached to the email were
+  read." Before, reading such a file could use up the server's memory, and one that could not be measured was read
+  with no limit at all. Ordinary invoices read as before. No migration.
 
 ## [0.1.0-beta.13] - 2026-10-25
 
