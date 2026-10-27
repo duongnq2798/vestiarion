@@ -1,4 +1,4 @@
-Connect your workspace to Slack, and a channel your team picks gets what the agent decided, a minute after it decides. Each member connects their own Slack account to ask what is safe to spend or what waits, and to pause the agent. An owner or admin can add an invoice from a message in Slack. When an owner allows it, a payment the agent stopped can be approved and paid, rejected, or returned to the agent from its message in Slack, under every check Vestiarion makes in the console.
+Connect your workspace to Slack, and a channel your team picks gets what the agent decided, a minute after it decides, with each bill still waiting for approval and a button to review it in Vestiarion. Each member connects their own Slack account to ask what is safe to spend or what waits, and to pause the agent. An owner or admin can add an invoice from a message in Slack. When an owner allows it, a payment the agent stopped can be approved and paid, rejected, or returned to the agent from its message in Slack, under every check Vestiarion makes in the console.
 
 ## 1. Connect Slack
 
@@ -28,31 +28,43 @@ A Slack account acts as you only after you confirm it on that page, signed in. C
 
 ## 3. What the channel receives
 
-After each cycle, the channel gets one message listing what the agent decided since the last one: what it paid, scheduled, released or received, what it stopped, and the early payment it negotiated (its offers, a supplier's answer or counter, its answer, an offer it withdrew), each with why, and links. A payment that has not confirmed 15 minutes after it was submitted to Circle is posted within minutes, without waiting for a cycle.
+After each cycle, the channel gets one message listing what the agent decided since the last one: what it paid, scheduled, released or received, what it stopped, and the early payment it negotiated (its offers, a supplier's answer or counter, its answer, an offer it withdrew), each with why, and links. While deciding from Slack is off, the default, the bills it held or flagged for a person, or asked details for, and that still wait, end the message, each with a button to review it. A payment that has not confirmed 15 minutes after it was submitted to Circle is posted within minutes, without waiting for a cycle.
 
 ```text
-Acme · the agent decided 2 things
+Acme · the agent decided 3 things
 
 Paid Centronex 0.35 USDC · 26 s after it was added; Circle confirmed it on Arc testnet.
 DeepSeek decided, as the written policy would. Checks passed: purchase order and goods, the 2.00 USDC limit, screening.
 [Arc testnet transaction] [How it decided]
 
-Held Jiren 3.00 USDC for you.
-The invoice is above Jiren's 2 USDC payment limit.
-[Decide in Approvals]
+2 bills wait for approval:
+3.00 USDC · Jiren · held: Code stopped it: it is above the counterparty's payment limit.   [Review]
+1,250.00 USDC · Northwind Hosting · flagged: The bank details on the invoice differ from the ones on file. · needs two approvals, an accountant can co-sign   [Review]
+Opening a link never approves anything.
 ```
 
 - **Arc testnet transaction** opens the payment on the explorer. For a workspace on Arc mainnet, it reads **Arc mainnet transaction**.
-- **Decide in Approvals** opens the stopped payable in Vestiarion. While deciding from Slack is off, the default, that is where it is decided.
+- The bills that still wait for approval come last, under how many wait, one each: the amount and its currency, the payee, whether the agent held or flagged it or it is waiting for details, why, and **Review**, a button that opens the bill's own card in Vestiarion.
+- When a check in code stopped a bill, such as its payment limit, the payee lock or the cash a payment needs, the line says what stopped it, as its row on **Bills & receivables** does: "Code stopped it: it is above the counterparty's payment limit." A bill the agent held itself gives the first sentence of the agent's reason. When Vestiarion cannot read what stopped a bill, the line gives the agent's sentence too; the bill's card on Approvals says the rest.
+- A bill above the workspace's figure for two approvals says "needs two approvals". While an owner lets accountants co-sign, it says "needs two approvals, an accountant can co-sign".
+- Only bills that still wait are listed there. A message lists at most ten bills, then "…and 3 more in Approvals", with a link to Approvals, for the rest.
+- A stopped bill that is not listed there keeps its own place among the decisions, as the agent decided it, with **Decide in Approvals**, which opens its card, or **Add details** for one it asked details for. That is a bill a person approved, rejected or returned before the message went out, or every stopped bill when Vestiarion could not check which still wait. While deciding from Slack is on, no bill is listed there: each stopped bill keeps its own place, with its buttons (section 5).
+- In shadow mode, a payment held for your verdict keeps its own place among the decisions, with **Give your verdict**.
 - When the wallet will run short, the channel is told how much, by when and what the agent is doing about it, and told again only when that changes. See [When the cash will run short](/docs/guides/payment-plan#when-the-cash-will-run-short).
 - The channel is told only about decisions made after Slack was connected. A busy cycle's message ends with how many more decisions are in the console.
+
+In these messages and in `/vestiarion waiting`, every value that comes from a bill or from the agent, such as a payee's name or the agent's reason, is shown as plain text. Hidden direction and zero-width characters are removed, so no name can make a line read as another bill's, and Slack makes no link or mention of a web address, a channel or an @name inside one. The only links are the ones Vestiarion adds, and Slack shows no preview of them. A wallet address is shortened to its first and last four characters.
+
+### Review a bill
+
+**Review** opens the bill's card on **Approvals** in Vestiarion. The link carries no token: you sign in as usual, and the card shows what you can do with your role. Opening a link never approves anything, and pressing **Review** decides nothing in Slack. You decide the bill there, with **Approve and pay**, **Reject** or **Return to agent**, under every check Vestiarion makes. A bill waiting for details opens on Approvals too, where an owner or admin adds them with **Add details**.
 
 ## 4. Ask it
 
 | Type | What you get, seen by you alone |
 |---|---|
 | `/vestiarion today` | Safe to spend today, what is due in the next 30 days, how many payments wait for a person, and what the agent pays next |
-| `/vestiarion waiting` | Each payable or milestone waiting for a person, why the agent stopped it, and where to decide it. In shadow mode, a payment held for your verdict says it waits for your verdict, with **Give your verdict** |
+| `/vestiarion waiting` | Each payable or milestone waiting for a person, why it waits, and a link: **Review** for a payable, **Contractors** for a milestone, then "Opening a link never approves anything." A payable a check in code stopped says what stopped it; the rest give the first sentence of why the agent stopped them. A bill asked for details says it is waiting for details. In shadow mode, a payment held for your verdict says it waits for your verdict, with **Give your verdict** |
 | `/vestiarion ledger` | Whether the signed ledger is intact, checked the way **Verify hash chain** checks it |
 | `/vestiarion pause [reason]` | Stops the agent, for an owner, admin or approver. The channel where you typed it sees that you paused it. Resuming stays in Vestiarion |
 | `/vestiarion disconnect` | Disconnects your Slack account |
@@ -62,7 +74,7 @@ Every answer is read from your workspace and written by code.
 
 ## 5. Decide a payment from Slack
 
-Deciding payments from Slack is off until an owner allows it. In the **Slack** section, under **Deciding payments from Slack**, an owner fills in **Limit (USDC)**, the most a payment approved from Slack may be, and saves. Leaving it empty turns it off again; while it is off, the section says "Deciding payments from Slack is off" and a stopped payable's message only links to Approvals. Each change is recorded as `slack_decisions_limit_changed`.
+Deciding payments from Slack is off until an owner allows it. In the **Slack** section, under **Deciding payments from Slack**, an owner fills in **Limit (USDC)**, the most a payment approved from Slack may be, and saves. Leaving it empty turns it off again; while it is off, the section says "Deciding payments from Slack is off" and the channel's message lists the bills still waiting for approval, each with **Review**, which only opens it in Vestiarion. Each change is recorded as `slack_decisions_limit_changed`.
 
 Once it is on, a payable the agent stopped gets buttons under its message:
 
@@ -71,6 +83,8 @@ Held Jiren 3.00 USDC for you.
 The invoice is above Jiren's 2 USDC payment limit.
 [Approve and pay] [Reject] [Return to the agent] [Decide in Approvals]
 ```
+
+The bills still waiting are then no longer listed apart at the end of the message: each keeps its own place among the decisions, with these buttons.
 
 - **Approve and pay**, in a workspace on Arc testnet, when the payable is in USDC, its payee is paid on Arc testnet rather than on another chain, its amount is within the limit, its payee's address is confirmed, and its invoice did not ask to be paid to another address than the one on file. Slack asks you first, in a box titled **Approve and pay?** that names the amount, the payee and the address, shortened to its first and last four characters. It names an early-payment discount, which comes off if still due, and a late fee, "A late fee of 1.5% a month starts Oct 30, 2026; it is never added to what is paid."
 - **Reject**, after Slack asks you to confirm it.
