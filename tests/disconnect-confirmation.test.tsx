@@ -16,8 +16,8 @@ import type { SlackPanelView } from "@/lib/slack/panel";
  * Each of these actions revalidates the page before it answers, so its answer and the page without its button land in
  * one render. The toast is raised by the action itself (DC1): here the page drops the button while the action still
  * runs, and the answer raises the toast all the same. A refusal revalidates nothing: it stays beside the button and
- * raises no toast (DC3). The source scan keeps every disconnect form wrapped, or on a pinned list of forms held by a
- * component the page keeps mounted (DC2, DC6).
+ * raises no toast (DC3). The source scan keeps every disconnect form wrapped, or held by a component on a pinned list of
+ * components the page keeps mounted (DC2, DC6).
  */
 
 const { toastMock, actions } = vi.hoisted(() => ({
@@ -273,10 +273,22 @@ function tsxFiles(dir: string): string[] {
 
 interface FormCall {
   file: string;
+  /** The component or hook that holds the form: the one declared nearest above the call, at the top of the file. */
+  holder: string;
   /** The first argument: the action, or the name it was wrapped under. */
   action: string;
   /** The arguments after it, options included. */
   rest: string;
+}
+
+/** A declaration at the top of a file: `function Name`, `export default function Name`, `const Name =` and the like. */
+const DECLARATION = /^(?:export\s+(?:default\s+)?)?(?:async\s+)?(?:function\s+(\w+)|const\s+(\w+)\s*=)/gm;
+
+/** The name declared nearest above `index` at the top of the file, which is the component or hook a call there is in. */
+function holderAt(text: string, index: number): string {
+  let name = "";
+  for (const match of text.slice(0, index).matchAll(DECLARATION)) name = match[1] ?? match[2];
+  return name;
 }
 
 /** Every `useActionForm(…)` call in a source, read up to its closing parenthesis. */
@@ -294,6 +306,7 @@ function formCalls(file: string, text: string): FormCall[] {
     const comma = args.indexOf(",");
     return {
       file: path.relative(process.cwd(), file).split(path.sep).join("/"),
+      holder: holderAt(text, match.index ?? 0),
       action: (comma < 0 ? args : args.slice(0, comma)).trim(),
       rest: comma < 0 ? "" : args.slice(comma + 1),
     };
@@ -303,22 +316,32 @@ function formCalls(file: string, text: string): FormCall[] {
 /** An integration's disconnect: `disconnect…Action`, and Remove Slack and Remove Discord, those integrations' own. */
 const DISCONNECT = /^(?:disconnect\w+|removeSlack|removeDiscord)Action$/;
 const TOAST_ON_SUCCESS = /\btoastOnSuccess\s*(?::(?!\s*false\b)|[,}])/;
+/** `toast.success` called in the form's own `onSuccess` or `onResult`, which run in the same effect as `toastOnSuccess`. */
+const TOAST_SUCCESS_CALL = /\btoast\.success\(/;
 
-/** The disconnect forms that raise their own success toast (`toastOnSuccess`), as `file: action`, however the form's result is named. */
+/** Whether a form's options raise a success toast from the component that holds it. */
+const raisesOwnToast = (call: FormCall) => TOAST_ON_SUCCESS.test(call.rest) || TOAST_SUCCESS_CALL.test(call.rest);
+
+/**
+ * The disconnect forms that raise their own success toast (`toastOnSuccess`, or `toast.success` in their callbacks), as
+ * `file holder: action`, however the form's result is named.
+ */
 function ownToasts(calls: FormCall[]): string[] {
-  return calls.filter((call) => DISCONNECT.test(call.action) && TOAST_ON_SUCCESS.test(call.rest)).map((call) => `${call.file}: ${call.action}`);
+  return calls.filter((call) => DISCONNECT.test(call.action) && raisesOwnToast(call)).map((call) => `${call.file} ${call.holder}: ${call.action}`);
 }
 
 /**
- * The disconnect forms that may raise their own toast (DC2, DC6): each was read and found to be held by a component the
- * page keeps mounted when the disconnect answers, so the effect that raises the toast still runs. The list is pinned: a
- * form joins it only by an edit here, once its holder is known to stay mounted, and leaves it when it stops passing
- * `toastOnSuccess`. Anything else uses `withSuccessToast` (DC1).
+ * The disconnect forms that may raise their own success toast (DC2, DC6), each keyed by the component that holds it:
+ * that component was read and found to be one the page keeps mounted when the disconnect answers, so the effect that
+ * raises the toast still runs. The list is pinned: a form joins it only by an edit here, once its holder is known to
+ * stay mounted. Moving a listed form into another component, such as a child drawn only while connected, changes its
+ * key and fails the scan, and so does a listed form that stops raising its own toast. Anything else uses
+ * `withSuccessToast` (DC1).
  */
 const KEPT_MOUNTED: Record<string, string> = {
-  "src/components/DiscordPanel.tsx: removeDiscordAction":
+  "src/components/DiscordPanel.tsx DiscordPanel: removeDiscordAction":
     "DiscordPanel holds the form and hands it to its Disconnect; Settings draws the panel whether or not Discord is connected.",
-  "src/components/TelegramCard.tsx: disconnectTelegramAction":
+  "src/components/TelegramCard.tsx TelegramCard: disconnectTelegramAction":
     "TelegramCard holds and draws the form; Notifications draws the card whether or not a chat is linked, and the card only swaps its connected view for Connect.",
 };
 
@@ -333,6 +356,8 @@ describe("disconnect forms in src/components (disconnect confirmation DC2, DC6)"
     expect(calls.filter((call) => DISCONNECT.test(call.action)).map((call) => call.file)).toEqual(
       expect.arrayContaining(["src/components/DiscordPanel.tsx", "src/components/TelegramCard.tsx", "src/components/GoogleSheetsPanel.tsx"])
     );
+    // Every form is put down to the component or hook that holds it, so the pinned list names a holder, not a file.
+    expect(calls.filter((call) => !/^(?:[A-Z]\w*|use[A-Z]\w*)$/.test(call.holder)).map((call) => `${call.file}: ${call.action}`)).toEqual([]);
   });
 
   it("wraps each disconnect whose card drops its button in withSuccessToast (DC1)", () => {
@@ -351,30 +376,51 @@ describe("disconnect forms in src/components (disconnect confirmation DC2, DC6)"
     );
   });
 
-  it("never raises a success toast twice: a form wrapped in withSuccessToast passes no toastOnSuccess (DC2)", () => {
+  it("never raises a success toast twice: a form wrapped in withSuccessToast raises none of its own (DC2)", () => {
     const twice = sources.flatMap(({ file, text }) => {
       const names = new Set([...text.matchAll(/const\s+(\w+)\s*=\s*withSuccessToast\(/g)].map((match) => match[1]));
       return formCalls(file, text)
-        .filter((call) => (names.has(call.action) || call.action.startsWith("withSuccessToast(")) && TOAST_ON_SUCCESS.test(call.rest))
+        .filter((call) => (names.has(call.action) || call.action.startsWith("withSuccessToast(")) && raisesOwnToast(call))
         .map((call) => `${call.file}: ${call.action}`);
     });
     expect(twice).toEqual([]);
   });
 
-  it("finds a disconnect form that raises its own toast, however the form's result is named (DC6)", () => {
+  it("finds a disconnect form that raises its own success toast, however the form's result is named and whichever component holds it (DC6)", () => {
     const source = [
-      "const form = useActionForm(disconnectExampleAction, INITIAL, { toastOnSuccess: true });",
-      "const { state, formProps } = useActionForm(removeSlackAction, INITIAL, { resetOnSuccess: true, toastOnSuccess });",
-      "const quiet = useActionForm(disconnectQuietAction, INITIAL, { toastOnSuccess: false });",
-      "const wrapped = useActionForm(disconnect, INITIAL);",
+      "const disconnect = withSuccessToast(disconnectWrappedAction);",
+      "",
+      "export default function ExamplePanel() {",
+      "  const form = useActionForm(disconnectExampleAction, INITIAL, { toastOnSuccess: true });",
+      "  const { state, formProps } = useActionForm(removeSlackAction, INITIAL, { resetOnSuccess: true, toastOnSuccess });",
+      "  const quiet = useActionForm(disconnectQuietAction, INITIAL, { toastOnSuccess: false });",
+      "  const wrapped = useActionForm(disconnect, INITIAL);",
+      "  const told = useActionForm(disconnectToldAction, INITIAL, { onSuccess: (result) => toast.success(result.message) });",
+      "  const refused = useActionForm(disconnectRefusedAction, INITIAL, { onResult: (result) => { if (!result.ok) toast.error(result.message); } });",
+      "}",
+      "",
+      // The bug this guards against: the form moved into the part of the card the page drops once it is disconnected.
+      "function Disconnect({ orgSlug }: { orgSlug: string }) {",
+      "  const { state, pending, formProps } = useActionForm(removeDiscordAction, INITIAL, { toastOnSuccess: true });",
+      "}",
+      "",
+      "export const Connected = ({ orgSlug }: { orgSlug: string }) => {",
+      "  const leave = useActionForm(disconnectTelegramAction, INITIAL, { toastOnSuccess: true });",
+      "};",
     ].join("\n");
-    expect(ownToasts(formCalls(path.join(COMPONENTS, "Example.tsx"), source))).toEqual([
-      "src/components/Example.tsx: disconnectExampleAction",
-      "src/components/Example.tsx: removeSlackAction",
+    const found = ownToasts(formCalls(path.join(COMPONENTS, "Example.tsx"), source));
+    expect(found).toEqual([
+      "src/components/Example.tsx ExamplePanel: disconnectExampleAction",
+      "src/components/Example.tsx ExamplePanel: removeSlackAction",
+      "src/components/Example.tsx ExamplePanel: disconnectToldAction",
+      "src/components/Example.tsx Disconnect: removeDiscordAction",
+      "src/components/Example.tsx Connected: disconnectTelegramAction",
     ]);
+    // Moved into a child, a listed action is reported under the child's name, which the pinned list does not hold.
+    expect(found.filter((key) => key in KEPT_MOUNTED)).toEqual([]);
   });
 
-  it("lets a disconnect form raise its own toast only where it is listed as held by a component the page keeps mounted (DC2, DC6)", () => {
+  it("lets a disconnect form raise its own success toast only where its holding component is listed as one the page keeps mounted (DC2, DC6)", () => {
     expect(ownToasts(calls).sort()).toEqual(Object.keys(KEPT_MOUNTED).sort());
   });
 });

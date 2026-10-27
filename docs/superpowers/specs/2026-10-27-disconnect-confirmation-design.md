@@ -38,10 +38,11 @@ that the card says "… is disconnected", and nothing appeared there either.
 
   `withSuccessToast` suits the per-row forms too, where lifting one `useActionForm` into the list would share one form
   between the rows.
-- **DC2. One toast, never two.** A form whose action is wrapped in `withSuccessToast` never also passes
-  `toastOnSuccess`. A disconnect form that does pass `toastOnSuccess` is held by a component the page keeps mounted
-  when the disconnect answers: Discord's panel holds its form and hands it to its Disconnect, and Telegram's card, which
-  stays on the page and swaps its connected view for Connect, holds and draws its own.
+- **DC2. One toast, never two.** A form whose action is wrapped in `withSuccessToast` never also raises a success
+  toast of its own, with `toastOnSuccess` or with `toast.success` in its `onSuccess` or `onResult`. A disconnect form
+  that does raise its own is held by a component the page keeps mounted when the disconnect answers: Discord's panel
+  holds its form and hands it to its Disconnect, and Telegram's card, which stays on the page and swaps its connected
+  view for Connect, holds and draws its own.
 - **DC3. A refusal stays beside the button.** A refusal of these actions answers before anything is revalidated (all
   but one race, below), so the button and its form are still there: the refusal shows in the form's message, as
   before, and raises no toast.
@@ -51,13 +52,16 @@ that the card says "… is disconnected", and nothing appeared there either.
   and **Check linked tasks now** stay mounted when they succeed, so their toasts already show.
 - **DC5. The guides say where the answer appears.** Where a guide quoted the answer to a disconnect as the card's, it
   now says "Settings answers", as the Discord guide does: Pipedrive and Zoho CRM.
-- **DC6. A guard.** A source scan of `src/components` fails when a form wrapped in `withSuccessToast` also passes
-  `toastOnSuccess` (DC2), or when a disconnect form (an action named `disconnect…Action`, or `removeSlackAction` and
-  `removeDiscordAction`, those integrations' disconnects) passes `toastOnSuccess`, however its `useActionForm` result
-  is named, and is not on the scan's pinned list of forms read and found to be held by a component the page keeps
-  mounted: Discord's and Telegram's (DC2). The scan reads source, not what the page mounts, so the list is kept by
-  hand: a form joins it only by an edit to the test, and the scan also fails when a listed form stops passing
-  `toastOnSuccess`.
+- **DC6. A guard.** A source scan of `src/components` fails when a form wrapped in `withSuccessToast` also raises a
+  success toast of its own (DC2), or when a disconnect form (an action named `disconnect…Action`, or
+  `removeSlackAction` and `removeDiscordAction`, those integrations' disconnects) raises its own, however its
+  `useActionForm` result is named, and the component that holds it is not on the scan's pinned list. The list keys each
+  form by its file, the component holding it (the one declared nearest above the call at the top of the file) and its
+  action, and holds the two read and found to be kept mounted: `DiscordPanel`'s and `TelegramCard`'s (DC2). The scan
+  reads source, not what the page mounts, so the list is kept by hand: a form joins it only by an edit to the test.
+  Moving a listed form into another component in the same file, such as Discord's `Disconnect`, drawn only while
+  connected, changes its key and fails the scan, and so does a listed form that stops raising its own toast. A toast
+  raised through a helper the form's options call, rather than `toast.success` itself, is beyond what the scan reads.
 
 ## Considered and not done
 
@@ -81,8 +85,10 @@ that the card says "… is disconnected", and nothing appeared there either.
 - `tests/disconnect-confirmation.test.tsx` (happy-dom): for each form in DC1, the action answers only after the page
   has dropped its button: the toast is raised with the action's message and the button is gone. A refusal, with the
   page unchanged, shows beside the button and raises no toast. The source scan of DC6, with a check on sample source
-  that it finds a disconnect form raising its own toast whether or not the form's result is taken apart where it is
-  made, and passes over `toastOnSuccess: false`.
+  that it finds a disconnect form raising its own success toast whether or not the form's result is taken apart where
+  it is made, through `toastOnSuccess` or `toast.success` in `onSuccess`, and reports it under the component that holds
+  it, a child function or an arrow component included; it passes over `toastOnSuccess: false` and a `toast.error`
+  raised on a refusal.
 - The existing static tests of each card (`slack-panel`, `github-panel`, `hubspot-panel`, `pipedrive-render`,
   `zohocrm-render`, `xero-panel`, `quickbooks-panel`, `integration-marks`, `captured-drafts-render`) and
   `tests/docs-guides.test.ts`, which keeps the quoted button names in the panels' files.
