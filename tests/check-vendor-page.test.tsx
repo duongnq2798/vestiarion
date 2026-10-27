@@ -5,7 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { TRY_HREF } from "@/components/landing/cta";
+import { TRY_HREF, TRY_LABEL } from "@/components/landing/cta";
 import { loadNameIndex } from "@/components/vendor-check/load-index";
 import { VendorChecker } from "@/components/vendor-check/VendorChecker";
 
@@ -255,7 +255,11 @@ describe("the page (CV8, CV9)", () => {
     });
     const markup = renderToStaticMarkup(<CheckVendorPage />);
     expect(markup).toContain("Check your vendors against OFAC&#x27;s sanctions list");
-    expect(markup).toContain("Nothing you type or paste is sent anywhere or kept.");
+    // The line every free tool's page says under its introduction (free tool attribution TA6).
+    expect(markup).toContain(
+      "The check runs in this page, and nothing you type or paste is kept. This page may count the visit and a click on Try it on your bills, by its address. What you paste or type is never sent. OFAC&#x27;s SDN list as of"
+    );
+    expect(page).toContain("{FREE_TOOL_COUNT_LINE}");
     expect(markup).toContain("What this check covers, and what it does not");
     expect(markup).toContain("OFAC&#x27;s SDN list only");
     expect(markup).toContain("not a compliance decision");
@@ -284,14 +288,18 @@ describe("the page (CV8, CV9)", () => {
     expect(markup).not.toContain("a little less");
   });
 
-  it("ends with the call to action, in one file a shared one can replace", async () => {
+  it("ends with the call to action, the free tools' shared start button, and names the tool to its footer", async () => {
     const { default: CheckVendorPage } = await import("@/app/check-vendor/page");
     const markup = renderToStaticMarkup(<CheckVendorPage />);
-    expect(markup).toContain(`href="${TRY_HREF.replace("&", "&amp;")}"`);
-    expect(markup).toContain('data-cta="check-vendor-start"');
-    expect(markup).toContain("Try it on your bills");
     expect(markup).toContain("In shadow mode it decides on your real bills while you keep paying them as you do now.");
-    expect(source("src/components/vendor-check/VendorCheckCta.tsx")).toContain('data-cta="check-vendor-start"');
+    // The shared start button (free tool attribution TA3), named check-vendor-start for the analytics click.
+    expect(source("src/components/vendor-check/VendorCheckCta.tsx")).toContain('<ToolCta tool="check-vendor" />');
+    const start = markup.match(/<a [^>]*data-cta="check-vendor-start"[^>]*>[^<]*<\/a>/)?.[0] ?? "";
+    expect(start).toContain(`href="${TRY_HREF}"`);
+    expect(start).toContain(`>${TRY_LABEL}</a>`);
+    // The full footer's Get started, the page's other start, credits the tool too (TA5).
+    expect(source("src/app/check-vendor/page.tsx")).toContain('<SiteFooter tool="check-vendor" />');
+    expect(markup).toMatch(/<a [^>]*href="\/onboarding\?shadow=1"[^>]*>Get started<\/a>/);
     // What the product does, as its code does it: this page's score is not the product's screening score.
     expect(markup).toContain("The agent pays no vendor until screening gives a verdict, and no one can pay a vendor screened high risk.");
     expect(markup).not.toContain("never pays a vendor with a strong match");

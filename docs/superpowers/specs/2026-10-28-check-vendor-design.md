@@ -225,8 +225,8 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
   Content Security Policy needs nothing new: the snapshot is a script file from the same site.
 - Title "OFAC check for vendors: one name or a whole list, free", a description, a canonical address, and the social
   cards.
-- Heading "Check your vendors against OFAC's sanctions list", what it checks, and "The check runs in this page. Nothing
-  you type or paste is sent anywhere or kept."
+- Heading "Check your vendors against OFAC's sanctions list", what it checks, and "The check runs in this page, and
+  nothing you type or paste is kept.", then `FREE_TOOL_COUNT_LINE` (free tool attribution TA6) and the list's date.
 - Below the checker, "What this check covers, and what it does not":
   - it covers OFAC's SDN list only: not OFAC's other (non-SDN) lists, gathered in its Consolidated Sanctions List, nor
     the EU's, the UN's or the UK's;
@@ -241,16 +241,18 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
   one for between half and nine tenths, the rare-word rule, words not in Latin letters, and both thresholds.
 - "What Vestiarion does before it pays": the call to action (CV9) and **How screening works**, to the first payment
   guide's counterparty step.
-- The sitemap, the footer's Resources ("OFAC vendor check"), and a link from the first payment guide's screening
-  section.
+- An entry in `FREE_TOOLS` (`check-vendor`, titled "OFAC vendor check"), from which the sitemap and the footer's Free
+  tools group list it, the full footer as `<SiteFooter tool="check-vendor" />`, and a link from the first payment
+  guide's screening section.
 
-**CV9. The call to action** (`VendorCheckCta`, `src/components/vendor-check/VendorCheckCta.tsx`): one small file, so a
-shared tool call to action can replace it in one line.
+**CV9. The call to action** (`VendorCheckCta`, `src/components/vendor-check/VendorCheckCta.tsx`). Its button is the free
+tools' shared `ToolCta` for `check-vendor` (`docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md` TA3).
 - "Vestiarion screens every vendor and checks every pay-to wallet against OFAC's list. The agent pays no vendor until
   screening gives a verdict, and no one can pay a vendor screened high risk." Each claim is what the product's code
   does (the guardrails' `counterparty.unscreened` and `counterparty.high_risk`, the approval's `high_risk` refusal);
   this page's own score plays no part in it.
-- **Try it on your bills**, to the landing's `TRY_HREF`, with `data-cta="check-vendor-start"`.
+- **Try it on your bills**, to the landing's `TRY_HREF`, with `data-cta="check-vendor-start"`: `ToolCta`, which credits
+  a workspace opened after it to this tool.
 - "In shadow mode it decides on your real bills while you keep paying them as you do now."
 
 ## Not in this change
@@ -259,7 +261,6 @@ shared tool call to action can replace it in one line.
   script.
 - OFAC's non-SDN lists, and the EU, UN and UK lists.
 - Weak a.k.a.s, dates of birth and identifiers as match signals.
-- Attribution of a workspace to this page: a separate change adds a shared tool call to action.
 
 ## Tests
 
@@ -284,6 +285,8 @@ shared tool call to action can replace it in one line.
   legal form too), the example list and its download, one pasted column, a title line, a name joined back in the
   columns and the CSV, the counts' tone for names not compared, a folded row that wraps, the live headline, 16 px
   fields, a link to Treasury's search with no digit in its address; the page's metadata, headings, coverage notice,
-  new-tab links, how names are compared, call to action and that it is public; and no request, storage, cookie,
-  address-bar or history write, analytics call, form or named field in the checker's code.
-- `tests/site-footer.test.tsx` and `tests/docs-content.test.ts` cover the footer, the sitemap and the guide's link.
+  new-tab links, how names are compared, the counting line, call to action (`ToolCta`) and footer start, and that it
+  is public; and no request, storage, cookie, address-bar or history write, analytics call, form or named field in the
+  checker's code.
+- `tests/free-tool-attribution.test.tsx`, `tests/site-footer.test.tsx` and `tests/docs-content.test.ts` cover the
+  entry in `FREE_TOOLS`, the footer, the sitemap and the guide's link.

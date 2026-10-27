@@ -16,7 +16,7 @@ import { utcMinute } from "@/lib/copy";
 import { DEFINITIONS } from "@/lib/growth/definitions";
 import { ALL_STAGES, REVENUE_WORDS, REVIEW_STATUSES, REVIEW_WORDS, STAGE_WORDS, words } from "@/lib/growth/fields";
 import { growthTeamUser } from "@/lib/growth/gate";
-import { breakdown, furthestStages, growthMetrics, NOT_ENOUGH_DATA } from "@/lib/growth/metrics";
+import { breakdown, bySourceWords, furthestStages, growthMetrics, NOT_ENOUGH_DATA } from "@/lib/growth/metrics";
 import { readGrowth, readGrowthReasons } from "@/lib/growth/read";
 import { retentionCohorts } from "@/lib/growth/retention";
 import { readRetentionActivity } from "@/lib/growth/retention-read";
@@ -143,6 +143,12 @@ export default async function GrowthPage({ searchParams }: GrowthPageProps) {
             label="From counterparty pages"
             value={metrics.fromLoop.workspaces}
             detail={`Customer workspaces first reached from a page or email a business sent its supplier, payee or customer; ${metrics.fromLoop.activated} had a decision on a real bill.`}
+          />
+          {/* Per tool by utm_source (free tool attribution TA4). */}
+          <Tile
+            label="From free tools"
+            value={metrics.fromFreeTools.workspaces}
+            detail={`Customer workspaces first reached from a free tool's Try it on your bills, or its footer's Get started; ${metrics.fromFreeTools.activated} had a decision on a real bill.${metrics.fromFreeTools.bySource.length > 0 ? ` By tool: ${bySourceWords(metrics.fromFreeTools.bySource)}.` : ""}`}
           />
           <Tile
             label="From accountants"

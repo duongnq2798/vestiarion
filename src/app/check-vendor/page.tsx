@@ -8,6 +8,7 @@ import { VendorChecker } from "@/components/vendor-check/VendorChecker";
 import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
 import { utcDay } from "@/lib/copy";
 import wallets from "@/lib/data/ofac-sdn-evm-wallets.json";
+import { FREE_TOOL_COUNT_LINE } from "@/lib/free-tools";
 import { GITHUB_URL, X_HANDLE } from "@/lib/site-links";
 
 // The root layout adds " · Vestiarion" to the page's title; the social cards carry the name themselves.
@@ -38,7 +39,10 @@ const REFRESH_SCRIPT = `${GITHUB_URL}/blob/main/scripts/ofac-sdn-wallets.mjs`;
 /**
  * /check-vendor (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV8): a free page that checks a vendor, or a
  * whole vendor list, against OFAC's SDN list. Static: the check runs in the browser against the dated snapshot it loads
- * when a check runs, so no name or address reaches the server. Not under /tools, which serves downloads.
+ * when a check runs, so no name or address reaches the server. Not under /tools, which serves downloads. Its start
+ * button is the shared `ToolCta` (in `VendorCheckCta`), and its footer names the tool, so both starts on the page credit
+ * a workspace opened after them to this tool (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA3, TA5,
+ * TA6).
  */
 export default function CheckVendorPage() {
   return (
@@ -56,8 +60,9 @@ export default function CheckVendorPage() {
             Treasury&apos;s list of sanctioned people and companies, other names included, and each wallet address with the addresses the list
             gives and with the rest of your list. You see each possible match and why it matched, and you can download the results as a CSV.
           </p>
+          {/* True whether analytics is set up or not (free tool attribution TA6). */}
           <p className="mt-2 text-sm leading-relaxed text-ink-3">
-            The check runs in this page. Nothing you type or paste is sent anywhere or kept. OFAC&apos;s SDN list as of {listDate}.
+            The check runs in this page, and nothing you type or paste is kept. {FREE_TOOL_COUNT_LINE} OFAC&apos;s SDN list as of {listDate}.
           </p>
 
           <div className="mt-10">
@@ -128,7 +133,7 @@ export default function CheckVendorPage() {
           </section>
         </div>
       </PublicMain>
-      <SiteFooter />
+      <SiteFooter tool="check-vendor" />
     </div>
   );
 }
