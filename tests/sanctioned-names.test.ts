@@ -68,6 +68,32 @@ describe("parseSdnNames (CV1)", () => {
     expect(parsed[3][6]).toEqual(["ETH 0x098B716B8Aaf21512996dC57EB0615e2383E2f96", "XBT 1BoatSLRHtKNngkdXEeobR76b53LETtpyT"]);
     expect(parsed[0][6]).toEqual([]);
   });
+
+  it("joins the remarks as parseSdnWallets does, so a cut right after a space loses no address or nationality", () => {
+    // OFAC cuts SDN.CSV's remarks at a fixed length: here right after "XBT ", after "Address - ", and after "nationality ".
+    const cut = parseSdnNames({
+      sdn: [
+        sdnRow(39593, "GRIMM, Matthew Simon", "individual", "ILLICIT-DRUGS-EO14059", "DOB 1990; Digital Currency Address - XBT "),
+        sdnRow(57978, "RASHEVSKYI, Dmytro", "individual", "CYBER4", "DOB 1985; Digital Currency Address - "),
+        sdnRow(60001, "EXAMPLE, Person", "individual", "SDGT", "DOB 1970; nationality "),
+        END,
+      ].join("\r\n"),
+      comments: [
+        `39593,"194xmrZA53UBsZau2PnJLdmVVW9m5feeS; alt. Digital Currency Address - XBT 361NP7YcBPQ4KkLT3Y2QZeDEV4M3yi65Ar."`,
+        `57978,"SOL Fc1EwQUZyTEagaDvA1utHXCcZNyG1x2PLt2DfNu1cJdH; Passport FG819665 (Ukraine)."`,
+        `60001,"Iran."`,
+        END,
+      ].join("\r\n"),
+      alt: END,
+      add: END,
+    });
+    expect(cut.map((each) => each[6])).toEqual([
+      ["XBT 194xmrZA53UBsZau2PnJLdmVVW9m5feeS", "XBT 361NP7YcBPQ4KkLT3Y2QZeDEV4M3yi65Ar"],
+      ["SOL Fc1EwQUZyTEagaDvA1utHXCcZNyG1x2PLt2DfNu1cJdH"],
+      [],
+    ]);
+    expect(cut[2][5]).toEqual(["Iran"]);
+  });
 });
 
 describe("the snapshot (CV1)", () => {
@@ -108,6 +134,9 @@ describe("the snapshot (CV1)", () => {
     expect(entry(306)).toEqual([306, "BANCO NACIONAL DE CUBA", "entity", ["CUBA"], ["NATIONAL BANK OF CUBA"], ["Japan", "Panama", "Spain", "Switzerland"], []]);
     expect(entry(25578)?.slice(0, 5)).toEqual([25578, "BANK MELLI IRAN", "entity", ["IRAN", "SDGT", "IFSR"], ["BANK MELLI", "MELLI BANK", "NATIONAL BANK OF IRAN"]]);
     expect(entry(27307)?.[6].length).toBeGreaterThan(0);
+    // Addresses whose SDN.CSV remarks were cut right after a space, and continue in SDN_COMMENTS.CSV.
+    expect(entry(39593)?.[6]).toContain("XBT 194xmrZA53UBsZau2PnJLdmVVW9m5feeS");
+    expect(entry(57978)?.[6]).toContain("SOL Fc1EwQUZyTEagaDvA1utHXCcZNyG1x2PLt2DfNu1cJdH");
   });
 
   it("stays well under 3 MB, since the browser loads it to check a name", async () => {

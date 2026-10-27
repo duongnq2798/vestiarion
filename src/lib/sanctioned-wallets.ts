@@ -128,7 +128,10 @@ export function parseSdnNames(files: { sdn: string; comments: string; alt: strin
   for (const row of rowsFromCsv(files.sdn)) {
     const number = row[0]?.trim() ?? "";
     if (!/^\d+$/.test(number) || row.length < 12) continue;
-    const remarks = sdnCell(row[11]) + (overflow.get(number) ?? "");
+    // Joined untrimmed, as `parseSdnWallets` joins them: OFAC cuts the remarks at a fixed length, and a cut right after a
+    // space ("Digital Currency Address - XBT ") must keep that space for the rest to read.
+    const cell = row[11] ?? "";
+    const remarks = (cell.trim() === "-0-" ? "" : cell) + (overflow.get(number) ?? "");
     const countries = new Set<string>();
     for (const match of remarks.matchAll(NATIONALITY)) countries.add(match[1].trim().replace(/\.$/, "").replace(REGION, ""));
     const addresses: string[] = [];
