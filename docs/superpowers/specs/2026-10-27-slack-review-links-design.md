@@ -91,7 +91,8 @@ No API, ledger or migration change.
   apart from the card ids; the worst case within 50 blocks and 3,000 characters a text; `NEVER_APPROVES` said once,
   equal to Discord's and Telegram's; `verbatim` on every mrkdwn text object; hidden characters removed, Slack's
   formatting marks left as they are, and a value on one line; previews off; `/vestiarion waiting`'s Review, wording,
-  never-approves line (only when a Review link is listed) and count.
+  never-approves line (only when a Review link is listed: none for a verdict hold, for milestones alone, or for a
+  payable only counted because it does not fit) and count.
 - `tests/slack-notify.test.ts`: one waiting-bill read while deciding is off, no card read; the section in the post;
   the rules read once a bill waits; the fallback when the bills cannot be read; no section and no rules read while
   deciding is on.

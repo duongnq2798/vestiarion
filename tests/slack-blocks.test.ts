@@ -420,6 +420,28 @@ describe("answers to /vestiarion", () => {
     const verdict = waitingAnswer("Northstar", [{ kind: "payable", id: INVOICE, name: "Jiren", amount: 0.5, currency: "USDC", status: "held", reason: null, forVerdict: true }], ORIGIN, "northstar");
     expect(allText(verdict)).not.toContain(NEVER_APPROVES);
     expect(blocksOf(verdict)).toHaveLength(1);
+
+    // A milestone is decided on Contractors, so a list of milestones alone has no Review link.
+    const milestone = waitingAnswer("Northstar", [{ kind: "milestone", id: "m-1", name: "Puka: Design", amount: 40, currency: "USDC", status: "held", reason: null }], ORIGIN, "northstar");
+    expect(allText(milestone)).toContain(`<${ORIGIN}/o/northstar/contractors|Contractors>`);
+    expect(allText(milestone)).not.toContain(NEVER_APPROVES);
+    expect(blocksOf(milestone)).toHaveLength(1);
+
+    // A payable that does not fit is only counted, so its Review link is never listed either.
+    const milestones = Array.from({ length: 10 }, (_, index) => ({
+      kind: "milestone" as const, id: `m-${index + 1}`, name: `Puka: Phase ${index + 1} ${"x".repeat(100)}`, amount: 40, currency: "USDC", status: "held", reason: "y".repeat(300),
+    }));
+    const counted = waitingAnswer(
+      "Northstar",
+      [...milestones, { kind: "payable", id: INVOICE, name: "Jiren", amount: 0.5, currency: "USDC", status: "held", reason: null }],
+      ORIGIN,
+      "northstar"
+    );
+    const text = blocksOf(counted)[0].text?.text ?? "";
+    expect(text).toMatch(/…and \d+ more in </);
+    expect(text).not.toContain("|Review>");
+    expect(allText(counted)).not.toContain(NEVER_APPROVES);
+    expect(blocksOf(counted)).toHaveLength(1);
   });
 
   it("removes hidden characters from names and reasons, and counts what would pass Slack's 3,000 characters, never cutting a link", () => {
