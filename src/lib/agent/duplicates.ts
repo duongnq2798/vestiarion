@@ -101,9 +101,11 @@ export const DUPLICATE_MATCHES_IN_CONTEXT = 5;
  * A monthly charge falls somewhere near here. Two invoices this far apart are
  * evidence *against* duplication, however alike they otherwise look — which is
  * the check that keeps every subscription in the book from being flagged.
+ * Exported so the free bill list check can list such pairs apart instead
+ * (docs/superpowers/specs/2026-10-28-check-bills-design.md CB6).
  */
-const RECURRING_MIN_DAYS = 24;
-const RECURRING_MAX_DAYS = 32;
+export const RECURRING_MIN_DAYS = 24;
+export const RECURRING_MAX_DAYS = 32;
 
 const DAY_MS = 86_400_000;
 
@@ -113,8 +115,8 @@ function normaliseText(value: string | null): string | null {
   return trimmed.length === 0 ? null : trimmed;
 }
 
-/** Purchase orders are quoted inconsistently: "PO-1042", "po 1042", "1042". */
-function normalisePo(value: string | null): string | null {
+/** Purchase orders are quoted inconsistently: "PO-1042", "po 1042", "1042". The free bill list check groups by it too (CB5). */
+export function normalisePo(value: string | null): string | null {
   if (!value) return null;
   const compact = value.toLowerCase().replace(/[^a-z0-9]/g, "");
   const stripped = compact.replace(/^po/, "");
@@ -140,7 +142,9 @@ function describe(
   gapDays: number | null
 ): string {
   const when = candidate.dueDate.slice(0, 10);
-  const state = committedState(candidate.status) ?? `status ${candidate.status}`;
+  // A bill whose status is not known, a row of a bill list read in the browser (free bill list check CB5), names none.
+  const state = committedState(candidate.status) ?? (candidate.status ? `status ${candidate.status}` : null);
+  const which = state ? ` (${state})` : "";
   const gap =
     gapDays == null
       ? ""
@@ -149,15 +153,15 @@ function describe(
         : ` ${gapDays.toFixed(0)} day(s) apart`;
 
   if (signals.includes("same_purchase_order") && signals.includes("same_amount")) {
-    return `Bills the same purchase order for the same ${candidate.amount} ${candidate.currency ?? "USDC"} as invoice due ${when} (${state})${gap}. Paying both would pay one obligation twice.`;
+    return `Bills the same purchase order for the same ${candidate.amount} ${candidate.currency ?? "USDC"} as invoice due ${when}${which}${gap}. Paying both would pay one obligation twice.`;
   }
   if (signals.includes("purchase_order_rebilled")) {
-    return `Cites the same purchase order as invoice due ${when} (${state}) but for a different amount (${candidate.amount} ${candidate.currency ?? "USDC"}). Either an amendment or the order being billed twice; the difference needs confirming before payment.`;
+    return `Cites the same purchase order as invoice due ${when}${which} but for a different amount (${candidate.amount} ${candidate.currency ?? "USDC"}). Either an amendment or the order being billed twice; the difference needs confirming before payment.`;
   }
   if (signals.includes("same_amount") && signals.includes("same_memo")) {
-    return `Same counterparty, same ${candidate.amount} ${candidate.currency ?? "USDC"}, same description as invoice due ${when} (${state})${gap}, and no purchase order distinguishes them.`;
+    return `Same counterparty, same ${candidate.amount} ${candidate.currency ?? "USDC"}, same description as invoice due ${when}${which}${gap}, and no purchase order distinguishes them.`;
   }
-  return `Resembles invoice due ${when} (${state}): ${signals.join(", ")}. Confidence ${confidence.toFixed(2)}.`;
+  return `Resembles invoice due ${when}${which}: ${signals.join(", ")}. Confidence ${confidence.toFixed(2)}.`;
 }
 
 /**
