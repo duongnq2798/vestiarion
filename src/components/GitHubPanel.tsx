@@ -11,8 +11,14 @@ import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import type { GitHubInstallation } from "@/lib/github/installs";
 import { DocsLink } from "@/components/DocsLink";
+import { withSuccessToast } from "@/components/withSuccessToast";
 
 const INITIAL: GitHubActionResult = { ok: false, message: "" };
+/**
+ * A row's Disconnect answers with a toast the action raises itself: the revalidated page drops the row in the same
+ * render (docs/superpowers/specs/2026-10-27-disconnect-confirmation-design.md DC1).
+ */
+const disconnect = withSuccessToast(disconnectGitHubAction);
 
 /** What GitHub's way back from connecting says, by the code it carries in `?github=` (GitHub App design G2). */
 export const GITHUB_NOTICES: Record<string, { tone: "success" | "error"; text: string }> = {
@@ -30,7 +36,7 @@ function connectedOn(iso: string): string {
 }
 
 function Disconnect({ orgSlug, installationId }: { orgSlug: string; installationId: number }) {
-  const { state, formProps } = useActionForm(disconnectGitHubAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps } = useActionForm(disconnect, INITIAL);
   return (
     <form {...formProps} className="flex flex-wrap items-center gap-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />

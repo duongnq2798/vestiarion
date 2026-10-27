@@ -11,12 +11,18 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import { BrandMark } from "@/components/vx/BrandMarks";
+import { withSuccessToast } from "@/components/withSuccessToast";
 import type { CrmPanelView } from "@/lib/connectors/crm-review";
 import type { CrmReceiptsPanel } from "@/lib/connectors/crm-receipts-view";
 import { billsHref } from "@/lib/bills-view";
 import { HUBSPOT_WRITE_STEPS } from "@/lib/hubspot/write-steps";
 
 const INITIAL: HubSpotActionResult = { ok: false, message: "" };
+/**
+ * Disconnect's answer is a toast the action raises itself: the revalidated page drops the button in the same render
+ * (docs/superpowers/specs/2026-10-27-disconnect-confirmation-design.md DC1).
+ */
+const disconnect = withSuccessToast(disconnectHubSpotAction);
 
 /** What HubSpot's way back from connecting says, by the code it carries in `?hubspot=` (HubSpot connector H4). */
 export const HUBSPOT_NOTICES: Record<string, { tone: "success" | "error"; text: string }> = {
@@ -53,7 +59,7 @@ function SyncNow({ orgSlug }: { orgSlug: string }) {
 }
 
 function Disconnect({ orgSlug }: { orgSlug: string }) {
-  const { state, formProps } = useActionForm(disconnectHubSpotAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps } = useActionForm(disconnect, INITIAL);
   return (
     <form {...formProps} className="flex flex-wrap items-center gap-3">
       <input type="hidden" name="orgSlug" value={orgSlug} />

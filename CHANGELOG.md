@@ -175,6 +175,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   in it has text: it has no text to read, and says so, naming the PDFs after the third when it has them. Before,
   reading such a file could use up the server's memory, and one that could not be measured was read with no limit at
   all. Ordinary invoices read as before. No migration.
+- **Disconnecting an integration says it worked.** Disconnecting Asana, Xero, QuickBooks, Zoho Books, HubSpot,
+  Pipedrive or Zoho CRM in Settings, choosing **Disconnect my account** or **Remove Slack** on the Slack card, or
+  **Disconnect** on a GitHub account's or a Chrome extension's row disconnected it without a word: the card changed,
+  but its confirmation, such as "Asana is disconnected. Acceptances already recorded stay in Vestiarion.", went with the
+  button the refreshed page no longer shows. The confirmation now appears as a toast. A refusal still shows beside the
+  button. No migration.
 
 ## [0.1.0-beta.13] - 2026-10-25
 
