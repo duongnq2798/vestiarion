@@ -14,6 +14,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A free bill list check** at [/check-bills](https://www.vestiarion.xyz/check-bills). Paste rows, or drop a CSV
+  exported from QuickBooks, Xero, Zoho Books or a sheet: its columns are matched as the bill import matches them, and
+  it asks only what the list cannot say, such as whether 03/04 is day or month first. It lists the bills that may
+  repeat each other, by vendor, scored by the agent's own duplicate rule, with its explanation, a confidence and the
+  amount at stake, and counts an invoice number written another way (BP-1042 and bp 1042) as the same number. Bills of
+  the same amount about a month apart, which that rule takes for a monthly charge, are listed apart to look at.
+  Early-payment discounts ending and late fees starting in the next 7 days are listed with what each is worth, when
+  the list gives their terms. The list comes back as a CSV with a "Bill check" column, a sample list of made-up vendors
+  shows every kind of finding, and up to 5,000 bills are read. It all runs in the browser: nothing pasted is sent
+  anywhere or kept. In a workspace, the agent's duplicate explanations are unchanged, and reading an imported list's
+  memos is faster. No migration.
+
 - **Bills waiting for approval in Slack, each with a Review button.** While deciding payments from Slack is off, the
   default, the channel's message after each cycle now ends with the bills the agent held or flagged for a person, or
   asked details for, that still wait: one each with the amount, payee, what code stopped it on or the agent's reason

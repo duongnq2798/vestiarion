@@ -4519,6 +4519,25 @@ parameter.
   profiles: the zero and burn addresses, the USDC and EURC contracts, Arc's USDC system address.
 - `tests/check-address-page.test.tsx` holds the checker's code to making no request.
 
+**The bill list check.** `/check-bills` (`src/app/check-bills/page.tsx`,
+`docs/superpowers/specs/2026-10-28-check-bills-design.md`) is a free public page, static and outside `/tools`, like the
+address checker. A bill list is read and checked in the browser (`BillListChecker`,
+`src/components/bill-check/`): there is no form, request, URL parameter or storage.
+- `src/lib/bill-check/read.ts` reads the list with the bill import's own readers (`readTable`, `detectMapping`,
+  `readAmount`, `readDate`, `dateOrderOf`), without `rows.ts`'s workspace parts, and reads up to 5,000 bills
+  (`MAX_CHECK_BILLS`) where an import takes 200.
+- `likelyDuplicates` (`src/lib/bill-check/findings.ts`) groups the bills by `nameKey` and scores each against the closest
+  bills due before it that share its amount, purchase order or invoice number, with the agent's own `scoreDuplicate`. Each
+  bill carries the memo the import would add it with (`memoWithInvoiceNumber`, now in `src/lib/bill-import/memo.ts`) and
+  no status, so the explanation names none and the confidence stays at most 0.85. Invoice numbers are compared as
+  `sameNumber` reads them.
+- `monthApart` lists the pairs the recurring rule (`RECURRING_MIN_DAYS` to `RECURRING_MAX_DAYS`) keeps out of the
+  duplicates. `deadlinesOf` lists the discounts ending and the late fees starting (`lastDayWithoutFee`) in the 7 days from
+  the person's own today, only from the terms the list gives.
+- `checkedCsv` gives the list back with a "Bill check" column, as the import gives back the rows it could not add.
+- The call to action is `CheckBillsCta`, in a file of its own, so recording where a workspace came from can be added
+  there without touching the checker. `tests/check-bills-page.test.tsx` holds the checker's code to making no request.
+
 ## Onboarding by role
 
 `docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md` (R1 to R6). Each member's first real task

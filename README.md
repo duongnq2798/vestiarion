@@ -532,6 +532,10 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
 - **[Address lookalike checker](https://www.vestiarion.xyz/check-address)** — a free page that compares an address with
   ones you know, with a broader rule than the lookalike warning on Counterparties, and checks its characters, checksum
   and OFAC's list in the browser.
+- **[Bill list check](https://www.vestiarion.xyz/check-bills)** — a free page that reads a bill list exported from
+  QuickBooks, Xero, Zoho Books or a sheet, in the browser, and lists the bills that may repeat each other by vendor,
+  scored by the agent's own duplicate rule, the bills of the same amount about a month apart, and the early-payment
+  discounts and late fees of the next 7 days; the list comes back as a CSV with a flag column.
 
 ### Contracts on Arc testnet
 
