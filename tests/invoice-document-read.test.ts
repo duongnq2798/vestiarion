@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DocumentReadError, MAX_DOCUMENT_BYTES, MAX_DOCUMENT_CHARS, readDocument } from "@/lib/invoice-document/read";
-import { inflateBombPdf } from "./support/pdf-files";
+import { inflateBombPdf, INVOICE_LINE, lzwLiterals, nestedFormsPdf, onePagePdf, pagesPdf, streamObject, withUnmeasuredStream } from "./support/pdf-files";
+
+/**
+ * Reading an invoice document (invoice from a document D1, D2), with the real reader: a PDF's text layer, a scan, a
+ * text file, an email, pasted text and the limits. A PDF the pre-scan measures past 16 MB decoded is refused before
+ * pdf.js reads it (document checks DK3); one it cannot measure is read in the worker, within its limits
+ * (docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md RB2).
+ */
 
 const fixture = (name: string) => new Uint8Array(readFileSync(path.join(__dirname, "fixtures", "invoice-document", name)));
 const utf8 = (text: string) => new TextEncoder().encode(text);
@@ -97,4 +104,35 @@ describe("reading an invoice document", () => {
     const read = await readDocument({ bytes: utf8(email), name: "invoice.eml", type: "message/rfc822" });
     expect(read.text).toContain("Total due 200.00 USDC");
   });
+
+  it("reads a PDF the pre-scan cannot measure in the worker, to the text of the same page unencoded (RB2)", async () => {
+    const plain = await readDocument({ bytes: onePagePdf(streamObject("", INVOICE_LINE)), name: "invoice.pdf", type: "application/pdf" });
+    // LZW, which the pre-scan cannot measure; and an /Encrypt key on a stream's dictionary, which pdf.js ignores.
+    for (const contents of [streamObject("/Filter /LZWDecode", lzwLiterals(INVOICE_LINE)), streamObject("/Encrypt 1", INVOICE_LINE)]) {
+      const read = await readDocument({ bytes: onePagePdf(contents), name: "invoice.pdf", type: "application/pdf" });
+      expect(read).toMatchObject({ kind: "pdf", text: plain.text, truncated: false });
+    }
+  }, 30_000);
+
+  it("refuses a PDF the pre-scan cannot measure of more than 50 pages (RB2)", async () => {
+    const error = await failure(readDocument({ bytes: withUnmeasuredStream(pagesPdf(51)), name: "invoice.pdf", type: "application/pdf" }));
+    expect(error.code).toBe("unsupported");
+    expect(error.message).toBe("This PDF could not be read. Paste the invoice's text instead.");
+  }, 30_000);
+
+  it("stops a PDF the pre-scan cannot measure at 15 s when it keeps pdf.js busy, and the thread that asked keeps running (RB2)", async () => {
+    // About 95 s on the thread that parses it, with unpdf 1.8.1.
+    const bytes = withUnmeasuredStream(nestedFormsPdf({ fanOut: 10, depth: 6 }));
+    let ticks = 0;
+    const timer = setInterval(() => ticks++, 25);
+    const started = Date.now();
+    try {
+      const error = await failure(readDocument({ bytes, name: "invoice.pdf", type: "application/pdf" }));
+      expect(error.code).toBe("unsupported");
+    } finally {
+      clearInterval(timer);
+    }
+    expect(Date.now() - started).toBeLessThan(40_000);
+    expect(ticks).toBeGreaterThan(100);
+  }, 60_000);
 });
