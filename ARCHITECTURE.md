@@ -4519,6 +4519,26 @@ parameter.
   profiles: the zero and burn addresses, the USDC and EURC contracts, Arc's USDC system address.
 - `tests/check-address-page.test.tsx` holds the checker's code to making no request.
 
+**The payment terms calculator.** `/payment-terms` (`src/app/payment-terms/page.tsx`,
+`docs/superpowers/specs/2026-10-28-payment-terms-design.md`) and seven term pages, `/payment-terms/[term]`
+(`generateStaticParams` from `TERM_PAGES`, `dynamicParams = false`), are free public pages, static and outside
+`/tools`. The calculator (`src/components/payment-terms/PaymentTermsCalculator.tsx`) works everything out in the
+browser, with no form, request, URL parameter or storage. Its rules are pure modules under `src/lib/payment-terms/`:
+- `readWrittenTerms` (`read.ts`) reads "d/D net N" or "net N"; the invoice reader without a model
+  (`ruleBasedExtraction`) uses it too. `parseTerms` (`terms.ts`) adds "n/30" and EOM, counted from the last day of the
+  invoice's month, and says what is wrong instead of guessing. `termDates` gives the discount deadline and due date.
+- `costOfSkipping` (`cost.ts`) gives the yearly cost of skipping a discount simple on 365 days, simple on 360 and
+  compounded, each with its formula; the break-even rate is the simple 365-day one. Never `annualPct`
+  (`src/lib/early-pay/offers-words.ts`), which divides by the full amount.
+- `lateFeeAfter` (`late-fee.ts`) gives a late fee N days after the due date: a percent a month for each month or part
+  of one (30 days) or by the day (× 12 ÷ 365), or a fixed amount, after days of grace, on the amount alone. Its limits
+  are a bill's (`LATE_FEE_MAX_PERCENT`).
+- `payDecision` (`decision.ts`) runs the agent's written policy, `planPaymentTiming`, with unlimited cash, the person's
+  rate as `reserveApy` applied to the discounted amount (so it turns at the break-even rate), and the late fee, and
+  shows its sentence with amounts to 2 decimals.
+- The pages end with `PaymentTermsCta` (`data-cta="payment-terms-start"`). `tests/payment-terms-page.test.tsx` holds
+  the calculator, its rules and the pages to making no request and reading no address bar or storage.
+
 ## Onboarding by role
 
 `docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md` (R1 to R6). Each member's first real task
