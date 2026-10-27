@@ -3556,6 +3556,15 @@ packs out; see "Google Sheets: the close pack exported").
   (`saveConnection`, then the tokens, then the first sync in `after()`); several are kept as a pending grant for ten
   minutes and picked on the connect page (`POST /api/integrations/xero/choose`). A workspace connected to another
   organisation is refused; the same one reconnects its row. `accounting_connected` records the consent.
+- **Disconnecting from Settings** (docs/superpowers/specs/2026-10-27-disconnect-confirmation-design.md). A disconnect
+  action revalidates the page before it answers, and the card it leaves no longer draws the Disconnect button, so the
+  answer and the page without the button land in one render. The Disconnect forms of `AccountingPanel`,
+  `HubSpotPanel`, `PipedrivePanel`, `ZohoCrmPanel` and `AsanaPanel`, and likewise `SlackPanel`'s Disconnect my account
+  and Remove Slack and the per-row Disconnect of `GitHubPanel` and `ChromeExtensionPanel`, pass their action through
+  `withSuccessToast`, which raises the toast as the action answers, not `useActionForm`'s `toastOnSuccess`, whose
+  effect would run in the button that is gone (DC1, DC2). A refusal answers before anything is revalidated and stays
+  beside the button (DC3). `tests/disconnect-confirmation.test.tsx` scans `src/components` so that no disconnect form
+  raises its toast from its own component (DC6).
 - **Consent versions** (`consent.ts`). A change to what a statement says is a new version in `CONSENT_VERSIONS`, added
   last to `CONSENT_HISTORY`; a connection keeps the version it agreed to until it connects again. The connect page
   (`ConnectorConsent`) posts the version it showed, and `startConnect` records it only while it is still the current
