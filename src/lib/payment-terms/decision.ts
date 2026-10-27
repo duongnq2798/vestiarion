@@ -29,7 +29,7 @@ export interface PayDecisionInput {
 export interface PayDecision {
   /** "Pay on Nov 7, 2026", or "Pay today, Oct 28, 2026". */
   headline: string;
-  /** The policy's sentence, its amounts with 2 decimals. */
+  /** The policy's sentence, its amounts with 2 decimals, or more where 2 would show a discount and a yield that differ as equal. */
   reason: string;
   payOn: string;
   payNow: boolean;
@@ -73,7 +73,7 @@ export function payDecision(input: PayDecisionInput): PayDecision {
   const byDeadline = discount ? amountToPay(input.amount, discount, new Date(discount.deadline)) : null;
   return {
     headline: payNow ? `Pay today, ${utcDay(noon(payOn))}` : `Pay on ${utcDay(noon(payOn))}`,
-    reason: moneyInSentence(timing.reason, input.currency),
+    reason: moneyInSentence(timing.reason, input.currency, sentenceDecimals(timing.discountValue, timing.floatValueToDue)),
     payOn,
     payNow,
     countFrom,
@@ -83,11 +83,27 @@ export function payDecision(input: PayDecisionInput): PayDecision {
   };
 }
 
+/** The most decimals the policy keeps: USDC's 6. */
+const POLICY_DECIMALS = 6;
+
 /**
- * Every amount in `currency` in a sentence with 2 decimals, as the page shows amounts: the policy keeps USDC's 6
- * ("2.684932 USD" is "2.68 USD"). `currency` is one of `CURRENCIES`, letters only.
+ * The decimals the sentence's amounts take (PT5): 2, as the page shows amounts, unless the discount and the yield
+ * differ but look equal with 2, as either side of the break-even rate ("20.00 USD" against "20.00 USD"). Then as many,
+ * up to the policy's 6, as tell them apart, so "worth more than" never sits between two figures that read the same.
+ * On an exact tie the policy says "worth at least as much as", and 2 decimals are true to it.
  */
-export function moneyInSentence(sentence: string, currency: string): string {
+export function sentenceDecimals(discountValue: number | null, yieldToDue: number): number {
+  if (discountValue === null || discountValue === yieldToDue) return 2;
+  let decimals = 2;
+  while (decimals < POLICY_DECIMALS && money(discountValue, decimals) === money(yieldToDue, decimals)) decimals += 1;
+  return decimals;
+}
+
+/**
+ * Every amount in `currency` in a sentence with `decimals` decimals, 2 as the page shows amounts: the policy keeps
+ * USDC's 6 ("2.684932 USD" is "2.68 USD"). `currency` is one of `CURRENCIES`, letters only.
+ */
+export function moneyInSentence(sentence: string, currency: string, decimals = 2): string {
   const amount = new RegExp(String.raw`(\d[\d,]*(?:\.\d+)?) ${currency}\b`, "g");
-  return sentence.replace(amount, (_, figure: string) => `${money(Number(figure.replaceAll(",", "")))} ${currency}`);
+  return sentence.replace(amount, (_, figure: string) => `${money(Number(figure.replaceAll(",", "")), decimals)} ${currency}`);
 }

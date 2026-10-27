@@ -145,10 +145,45 @@ describe("the calculator (PT6)", () => {
     type("Amount", "a lot");
     expect(text()).toContain("Enter the invoice's amount, such as 1,250.00.");
     expect(live()).toBe("");
+    // Less than a cent cannot be shown with the page's 2 decimals.
+    type("Amount", "0.009");
+    expect(text()).toContain("Enter the invoice's amount, such as 1,250.00.");
+    expect(live()).toBe("");
+    type("Amount", "0.01");
+    expect(live()).toContain("Pay on Nov 27, 2026");
     type("Amount", "1,000");
     type("Late fee", "12");
     expect(text()).toContain("A late fee as a percent a month is more than 0 and at most 10.");
     expect(live()).toBe("");
+  });
+
+  it("refuses a fixed late fee above the invoice's amount, as a bill does", () => {
+    mount("net 30");
+    const fixed = [...container.querySelectorAll("label")].find((label) => label.textContent === "A fixed amount");
+    act(() => (container.querySelector(`[id="${fixed!.htmlFor}"]`) as HTMLButtonElement).click());
+    type("Late fee", "1000.01");
+    expect(text()).toContain("A fixed late fee is more than 0 and at most the invoice's amount.");
+    expect(live()).toBe("");
+    type("Late fee", "1000");
+    expect(text()).toContain("7 days late 1,000.00 USD");
+  });
+
+  it("says 1 day, not 1 days", () => {
+    mount("net 30");
+    type("Late fee", "1.5");
+    type("Days late", "1");
+    expect(text()).toContain("1 day late 15.00 USD");
+    // Due Oct 27: a day late today.
+    type("Invoice date", "2026-09-27");
+    expect(text()).toContain("1 day late, today 15.00 USD");
+    type("Terms", "net 1");
+    expect(text()).toContain("1 day after the invoice date, every calendar day counted.");
+    type("Invoice date", "2026-10-28");
+    type("Terms", "2/1 net 30");
+    expect(text()).toContain("1 day after the invoice date, the last day 2% comes off.");
+    type("Terms", "2/29 net 30");
+    expect(text()).toContain("for 1 day and paying");
+    expect(text()).not.toMatch(/\b1 days\b/);
   });
 
   it("pays today when the bill is overdue", () => {
@@ -171,7 +206,19 @@ describe("the page (PT7, PT9)", () => {
     expect(markup).toContain("What it does not do");
     expect(markup).toContain('href="/payment-terms/2-10-net-30"');
     expect(markup).toContain('href="/payment-terms/net-30-eom"');
-    expect(markup).toContain("Vestiarion reads the terms on every bill and pays on the right day, within limits you set.");
+    expect(markup).toContain(
+      "agent checks every bill before it is paid, weighs an early-payment discount against holding the cash to the due date, and pays in USDC within the limits you set."
+    );
+    // The decision's sentence is the policy's, with the rate applied as the page's break-even rate is.
+    expect(markup).toContain("with your rate applied to the discounted amount");
+    // The calculator sits under a heading of its own, so its late-fee heading (an h3) skips no level after the h1.
+    const h1 = markup.indexOf("Payment terms calculator</h1>");
+    const calculatorHeading = markup.indexOf('<h2 id="calculator" class="sr-only">Work out an invoice</h2>');
+    expect(calculatorHeading).toBeGreaterThan(h1);
+    expect(markup.indexOf("Invoice date")).toBeGreaterThan(calculatorHeading);
+    // The landing's section ids belong to the footer's links: this page's own section takes another.
+    expect(markup).not.toContain('id="how-it-works"');
+    expect(markup).toContain('id="how-the-calculator-works"');
     expect(markup).toContain('data-cta="payment-terms-start"');
     expect(markup).toContain('href="/onboarding?shadow=1"');
     expect(markup).toContain("In shadow mode it decides on your real bills while you keep paying them as you do now.");
@@ -207,6 +254,9 @@ describe("the term pages (PT8)", () => {
       expect(markup, slug).toContain(`What ${words} means</h1>`);
       expect(markup, slug).toContain(`value="${words}"`);
       expect(markup, slug).not.toContain(`href="/payment-terms/${slug}"`);
+      // Two header links, as on the other public pages, so the header fits a 375 px phone; the wordmark goes home.
+      expect(markup, slug).not.toMatch(/>Home<\/a>/);
+      expect(markup, slug).toMatch(/<a [^>]*href="\/payment-terms"[^>]*>Calculator<\/a>/);
     }
   });
 

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import type { LateFeeKind } from "@/lib/agent/late-fee";
-import { utcDay } from "@/lib/copy";
+import { plural, utcDay } from "@/lib/copy";
 import { breakEvenRate, costOfSkipping } from "@/lib/payment-terms/cost";
 import { CURRENCIES, payDecision } from "@/lib/payment-terms/decision";
 import { LATE_FEE_DAYS, MAX_DAYS_LATE, lateFeeAfter, lateFeeStartsOn, readLateFee, type CalculatorLateFee, type LateFeeCharge } from "@/lib/payment-terms/late-fee";
@@ -31,6 +31,8 @@ function localToday(): string {
 }
 
 const day = (value: string) => utcDay(`${value}T00:00:00.000Z`);
+/** "1 day", "30 days". */
+const days = (count: number) => `${count} ${plural(count, "day", "days")}`;
 
 const AMOUNT_PROBLEM = "Enter the invoice's amount, such as 1,250.00.";
 const RATE_PROBLEM = "A yearly rate is a percent from 0 to 100, such as 5.";
@@ -70,7 +72,7 @@ function LateFees({
   chosen: number | null;
 }) {
   const lateToday = daysBetween(dueOn, today);
-  const days = [...new Set([...LATE_FEE_DAYS, ...(chosen === null ? [] : [chosen]), ...(lateToday > 0 ? [lateToday] : [])])].sort((a, b) => a - b);
+  const rows = [...new Set([...LATE_FEE_DAYS, ...(chosen === null ? [] : [chosen]), ...(lateToday > 0 ? [lateToday] : [])])].sort((a, b) => a - b);
   const charged =
     fee.kind === "fixed" ? "charged once" : fee.charge === "month" ? "for each month or part of one, a month counted as 30 days" : "charged by the day";
   const rate = fee.kind === "fixed" ? `${money(fee.value)} ${currency}` : `${fee.value}% a month`;
@@ -81,10 +83,10 @@ function LateFees({
       </h3>
       <p className="mt-1 text-xs leading-relaxed text-ink-3">{`${rate}, ${charged}, from ${day(lateFeeStartsOn(dueOn, fee.graceDays))}. On the amount alone, never on a fee.`}</p>
       <dl className="mt-3 divide-y divide-line">
-        {days.map((daysLate) => {
+        {rows.map((daysLate) => {
           const at = lateFeeAfter(amount, fee, daysLate);
           return (
-            <Fact key={daysLate} term={daysLate === lateToday ? `${daysLate} days late, today` : `${daysLate} days late`}>
+            <Fact key={daysLate} term={daysLate === lateToday ? `${days(daysLate)} late, today` : `${days(daysLate)} late`}>
               {`${money(at.fee)} ${currency}`}
               <Detail>{at.formula}</Detail>
             </Fact>
@@ -109,13 +111,13 @@ function DiscountFacts({
   deadline: string;
   discount: { open: boolean; paid: number; saves: number };
 }) {
-  const { pct, days } = terms.discount;
-  const gained = terms.netDays - days;
+  const { pct, days: discountDays } = terms.discount;
+  const gained = terms.netDays - discountDays;
   return (
     <>
       <Fact term="Discount deadline">
         {day(deadline)}
-        <Detail>{`${days} days after ${terms.endOfMonth ? "the end of the invoice's month" : "the invoice date"}, the last day ${pct}% comes off.`}</Detail>
+        <Detail>{`${days(discountDays)} after ${terms.endOfMonth ? "the end of the invoice's month" : "the invoice date"}, the last day ${pct}% comes off.`}</Detail>
       </Fact>
       <Fact term="Paying by the deadline">
         {discount.open
@@ -123,7 +125,7 @@ function DiscountFacts({
           : `The discount ended with ${day(deadline)}: it would have saved ${money(discount.saves)} ${currency}.`}
       </Fact>
       <Fact term="Skipping the discount costs">
-        {`Like borrowing ${money(discount.paid)} ${currency} for ${gained} days and paying ${money(discount.saves)} ${currency} for it. As a yearly rate:`}
+        {`Like borrowing ${money(discount.paid)} ${currency} for ${days(gained)} and paying ${money(discount.saves)} ${currency} for it. As a yearly rate:`}
         <ul className="mt-2 space-y-1.5">
           {costOfSkipping(terms.discount, terms.netDays).map((cost) => (
             <li key={cost.basis}>
@@ -163,11 +165,12 @@ export function PaymentTermsCalculator({ initialTerms = TERM_PRESETS[0] }: { ini
   const dateValue = invoiceDate ?? today ?? "";
   const dateProblem = today !== null && !isCalendarDay(dateValue) ? "Enter the invoice's date." : null;
   const amount = readFigure(amountText);
-  const amountProblem = amount === null || amount <= 0 || amount > 1e12 ? AMOUNT_PROBLEM : null;
+  // Under a cent cannot be shown: every amount on the page has 2 decimals.
+  const amountProblem = amount === null || amount < 0.01 || amount > 1e12 ? AMOUNT_PROBLEM : null;
   const terms = parseTerms(termsText);
   const rate = rateText.trim() === "" ? null : readFigure(rateText);
   const rateProblem = rateText.trim() !== "" && (rate === null || rate > 100) ? RATE_PROBLEM : null;
-  const fee = readLateFee({ value: feeText, kind: feeKind, charge: feeCharge, grace: graceText });
+  const fee = readLateFee({ value: feeText, kind: feeKind, charge: feeCharge, grace: graceText, amount: amountProblem ? null : amount });
   const daysLate = daysLateText.trim() === "" ? null : readWholeNumber(daysLateText);
   const daysLateProblem = daysLateText.trim() !== "" && (daysLate === null || daysLate < 1 || daysLate > MAX_DAYS_LATE) ? DAYS_LATE_PROBLEM : null;
 
@@ -303,8 +306,8 @@ export function PaymentTermsCalculator({ initialTerms = TERM_PRESETS[0] }: { ini
                 {day(decision.dueOn)}
                 <Detail>
                   {terms.terms.endOfMonth
-                    ? `${terms.terms.netDays} days after ${day(decision.countFrom)}, the last day of the invoice's month.`
-                    : `${terms.terms.netDays} days after the invoice date, every calendar day counted.`}
+                    ? `${days(terms.terms.netDays)} after ${day(decision.countFrom)}, the last day of the invoice's month.`
+                    : `${days(terms.terms.netDays)} after the invoice date, every calendar day counted.`}
                 </Detail>
               </Fact>
               {terms.terms.discount && decision.discountDeadline && decision.discount && (

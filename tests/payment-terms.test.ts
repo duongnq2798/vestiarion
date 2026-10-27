@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ruleBasedExtraction } from "@/lib/invoice-document/extract";
 import { breakEvenRate, costOfSkipping } from "@/lib/payment-terms/cost";
-import { CURRENCIES, moneyInSentence, payDecision } from "@/lib/payment-terms/decision";
+import { CURRENCIES, moneyInSentence, payDecision, sentenceDecimals } from "@/lib/payment-terms/decision";
 import { LATE_FEE_DAYS, lateFeeAfter, lateFeeStartsOn, readLateFee } from "@/lib/payment-terms/late-fee";
 import { EXAMPLE_INVOICE_DATE, TERM_PAGES, termPage, workedExample } from "@/lib/payment-terms/pages";
 import { readWrittenTerms } from "@/lib/payment-terms/read";
@@ -53,6 +53,28 @@ describe("the calculator's terms (PT1)", () => {
     expect(terms("net 0")).toEqual({ discount: null, netDays: 0, endOfMonth: false });
   });
 
+  it("reads a discount written with a percent sign, with days, or before EOM", () => {
+    const twoTen = { discount: { pct: 2, days: 10 }, netDays: 30 };
+    expect(terms("2/10 EOM, n/30")).toEqual({ ...twoTen, endOfMonth: true });
+    expect(terms("2/10 EOM net 30")).toEqual({ ...twoTen, endOfMonth: true });
+    expect(terms("2/10 end of month, net 30")).toEqual({ ...twoTen, endOfMonth: true });
+    expect(terms("1% 10 Net 30")).toEqual({ discount: { pct: 1, days: 10 }, netDays: 30, endOfMonth: false });
+    expect(terms("2.5%/10 net 30")).toEqual({ discount: { pct: 2.5, days: 10 }, netDays: 30, endOfMonth: false });
+    expect(terms("2% 10 days, net 30 days")).toEqual({ ...twoTen, endOfMonth: false });
+    expect(terms("2/10 days net 30")).toEqual({ ...twoTen, endOfMonth: false });
+  });
+
+  it("refuses a discount it cannot read rather than dropping it", () => {
+    const unread = { ok: false, message: 'A discount in these terms could not be read. Write it as "2/10 net 30" or "2% 10 net 30", with one discount at most.' };
+    expect(parseTerms("net 30, 2/10")).toEqual(unread);
+    expect(parseTerms("net 30 2/10")).toEqual(unread);
+    expect(parseTerms("2% net 30")).toEqual(unread);
+    expect(parseTerms("2% within 10 days, net 30")).toEqual(unread);
+    // Two discounts, as in "2/10, 1/20, net 30": the reader would keep the second alone.
+    expect(parseTerms("2/10, 1/20, net 30")).toEqual(unread);
+    expect(parseTerms("2/10 EOM")).toEqual({ ok: false, message: 'These terms could not be read. Write them as "2/10 net 30", "net 45" or "net 30 EOM".' });
+  });
+
   it("says what is wrong instead of guessing", () => {
     expect(parseTerms("  ")).toEqual({ ok: false, message: 'Enter the terms as the invoice writes them, such as "2/10 net 30", "net 45" or "net 30 EOM".' });
     expect(parseTerms("pay soon")).toEqual({ ok: false, message: 'These terms could not be read. Write them as "2/10 net 30", "net 45" or "net 30 EOM".' });
@@ -97,6 +119,7 @@ describe("the dates (PT2)", () => {
     expect(readFigure("")).toBeNull();
     expect(money(1000)).toBe("1,000.00");
     expect(money(2.684932)).toBe("2.68");
+    expect(money(2.684932, 4)).toBe("2.6849");
     expect(percentWords(0.372449)).toBe("37.2%");
   });
 });
@@ -160,18 +183,27 @@ describe("the late fee after a number of days (PT4)", () => {
   });
 
   it("reads the fee's fields, refusing what a bill's late fee would refuse", () => {
-    expect(readLateFee({ value: "", kind: "percent_month", charge: "month", grace: "" })).toEqual({ ok: true, fee: null });
-    expect(readLateFee({ value: "1.5%", kind: "percent_month", charge: "day", grace: "5" })).toEqual({
+    expect(readLateFee({ value: "", kind: "percent_month", charge: "month", grace: "", amount: 1000 })).toEqual({ ok: true, fee: null });
+    expect(readLateFee({ value: "1.5%", kind: "percent_month", charge: "day", grace: "5", amount: 1000 })).toEqual({
       ok: true,
       fee: { kind: "percent_month", value: 1.5, charge: "day", graceDays: 5 },
     });
-    expect(readLateFee({ value: "12", kind: "percent_month", charge: "month", grace: "" })).toEqual({
+    expect(readLateFee({ value: "12", kind: "percent_month", charge: "month", grace: "", amount: 1000 })).toEqual({
       ok: false,
       field: "value",
       message: "A late fee as a percent a month is more than 0 and at most 10.",
     });
-    expect(readLateFee({ value: "0", kind: "fixed", charge: "month", grace: "" })).toEqual({ ok: false, field: "value", message: "A fixed late fee is more than 0." });
-    expect(readLateFee({ value: "25", kind: "fixed", charge: "month", grace: "2.5" })).toEqual({
+    const fixedProblem = { ok: false, field: "value", message: "A fixed late fee is more than 0 and at most the invoice's amount." };
+    expect(readLateFee({ value: "0", kind: "fixed", charge: "month", grace: "", amount: 1000 })).toEqual(fixedProblem);
+    // As a bill's: a fixed fee is at most the invoice's amount (src/lib/intake-validation.ts).
+    expect(readLateFee({ value: "1000.01", kind: "fixed", charge: "month", grace: "", amount: 1000 })).toEqual(fixedProblem);
+    expect(readLateFee({ value: "1000", kind: "fixed", charge: "month", grace: "", amount: 1000 })).toEqual({
+      ok: true,
+      fee: { kind: "fixed", value: 1000, charge: "month", graceDays: 0 },
+    });
+    // With no amount to weigh it against yet, only the amount's own field says what is wrong.
+    expect(readLateFee({ value: "5000", kind: "fixed", charge: "month", grace: "", amount: null })).toMatchObject({ ok: true });
+    expect(readLateFee({ value: "25", kind: "fixed", charge: "month", grace: "2.5", amount: 1000 })).toEqual({
       ok: false,
       field: "grace",
       message: "Days of grace are a whole number from 0 to 365.",
@@ -202,6 +234,31 @@ describe("the decision (PT5)", () => {
     );
   });
 
+  it("never calls one of two amounts that look equal worth more: they take the decimals that tell them apart", () => {
+    // Either side of the 37.2% break-even, the discount and the yield are both 20.00 USD to 2 decimals.
+    const under = payDecision({ ...base, terms: terms("2/10 net 30"), ratePct: 37.24 });
+    expect(under.payOn).toBe("2026-11-07");
+    expect(under.reason).toBe(
+      "A 2% early-payment discount (20.000 USD) is worth more than holding the cash to the due date (19.997 USD of yield); paying on the discount deadline, Nov 7, 2026."
+    );
+    const over = payDecision({ ...base, terms: terms("2/10 net 30"), ratePct: 37.25 });
+    expect(over.payOn).toBe("2026-11-27");
+    expect(over.reason).toBe(
+      "Yield to the due date (20.003 USD) is worth more than the 2% early-payment discount (20.000 USD); paying on the due date, Nov 27, 2026."
+    );
+    // Every amount in the sentence takes the same decimals.
+    const small = payDecision({ ...base, amount: 10, terms: terms("2/10 net 30"), ratePct: 37, lateFee: { kind: "percent_month", value: 1.5, charge: "month", graceDays: 0 } });
+    expect(small.reason).toBe(
+      "A 2% early-payment discount (0.200 USD) is worth more than holding the cash to the due date (0.199 USD of yield); paying on the discount deadline, Nov 7, 2026, before a 1.5% monthly late fee (0.150 USD) starts Nov 28, 2026."
+    );
+    expect(sentenceDecimals(20, 0)).toBe(2);
+    expect(sentenceDecimals(20, 20)).toBe(2);
+    expect(sentenceDecimals(null, 0)).toBe(2);
+    expect(sentenceDecimals(20, 19.997369)).toBe(3);
+    expect(sentenceDecimals(0.0002, 0)).toBe(4);
+    expect(sentenceDecimals(20, 19.999999)).toBe(6);
+  });
+
   it("counts no yield when no rate is given, and pays net terms on the due date", () => {
     expect(payDecision({ ...base, terms: terms("2/10 net 30") }).reason).toContain("(0.00 USD of yield)");
     const net = payDecision({ ...base, currency: "EUR", terms: terms("net 30 EOM") });
@@ -229,6 +286,7 @@ describe("the decision (PT5)", () => {
 
   it("shows amounts with 2 decimals, for the currency named only", () => {
     expect(moneyInSentence("Pay 1000 USD now, not 2.684932 USD; 5 USDC stays.", "USD")).toBe("Pay 1,000.00 USD now, not 2.68 USD; 5 USDC stays.");
+    expect(moneyInSentence("Pay 1000 USD now, not 2.684932 USD.", "USD", 4)).toBe("Pay 1,000.0000 USD now, not 2.6849 USD.");
     expect(CURRENCIES).toEqual(["USD", "EUR", "GBP", "CAD", "AUD", "USDC", "EURC"]);
   });
 });

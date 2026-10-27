@@ -114,8 +114,8 @@ export default async function PaymentTermPage({ params }: Props) {
   if (!page) notFound();
   return (
     <div className="flex min-h-dvh flex-col">
+      {/* Two links, as on the other public pages, so the header fits a 375 px phone; the wordmark goes home. */}
       <SiteHeader>
-        <SiteHeaderLink href="/">Home</SiteHeaderLink>
         <SiteHeaderLink href="/payment-terms">Calculator</SiteHeaderLink>
         <SiteHeaderLink href="/docs">Docs</SiteHeaderLink>
       </SiteHeader>

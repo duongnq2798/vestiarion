@@ -534,7 +534,8 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
   and OFAC's list in the browser.
 - **[Payment terms calculator](https://www.vestiarion.xyz/payment-terms)** — a free page that turns an invoice's terms
   (2/10 net 30, net 30 EOM) into its due date and discount deadline, what skipping the discount costs a year on three
-  bases, a late fee after any number of days, and the day to pay by the agent's own written policy, in the browser.
+  bases, a late fee after any number of days, and the day to pay by the agent's own written policy, with your rate
+  applied to the discounted amount, in the browser.
 
 ### Contracts on Arc testnet
 

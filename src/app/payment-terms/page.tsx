@@ -45,12 +45,17 @@ export default function PaymentTermsPage() {
           </p>
           <p className="mt-2 text-sm leading-relaxed text-ink-3">Everything is worked out in this page. Nothing you type is sent anywhere or kept.</p>
 
-          <div className="mt-8">
+          {/* A heading of its own, so the calculator's late-fee heading (an h3) follows an h2, as on the term pages. */}
+          <section aria-labelledby="calculator" className="mt-8">
+            <h2 id="calculator" className="sr-only">
+              Work out an invoice
+            </h2>
             <PaymentTermsCalculator />
-          </div>
+          </section>
 
-          <section aria-labelledby="how-it-works" className="mt-14 border-t border-line pt-8">
-            <h2 id="how-it-works" className={H2}>
+          {/* Not "how-it-works": the footer's landing links use the landing's section ids. */}
+          <section aria-labelledby="how-the-calculator-works" className="mt-14 border-t border-line pt-8">
+            <h2 id="how-the-calculator-works" className={H2}>
               How it works
             </h2>
             <p className={BODY}>
@@ -70,7 +75,8 @@ export default function PaymentTermsPage() {
             <p className={BODY}>
               The day to pay comes from the written payment policy Vestiarion&apos;s agent is checked against: take a discount on its last day when it
               is worth at least what the cash would earn to the due date, otherwise pay on the due date, and pay a bill that is due or overdue at
-              once. The sentence under it is the policy&apos;s own.
+              once. The sentence under it is the policy&apos;s own, with your rate applied to the discounted amount, the cash paying early would
+              use, so the day changes exactly at the break-even rate.
             </p>
             <p className={BODY}>
               A late fee is worked out as the contract charges it: a percent a month for each month or part of one, a month counted as 30 days; a

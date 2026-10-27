@@ -2,7 +2,9 @@
  * What a late fee comes to a number of days after the due date (docs/superpowers/specs/2026-10-28-payment-terms-design.md
  * PT4), as the contract says it is charged: a percent a month for each month or part of one, a percent a month by the
  * day, or a fixed amount once, after any days of grace. Always on the amount alone: no fee on a fee, nothing compounded.
- * The bill's own late fee (src/lib/agent/late-fee.ts, late fees LF1) sets the limits. Pure and browser-safe.
+ * The limits are a bill's late fee's (late fees LF1): a percent a month more than 0 and at most `LATE_FEE_MAX_PERCENT`
+ * (src/lib/agent/late-fee.ts), a fixed amount more than 0 and at most the invoice's amount (src/lib/intake-validation.ts).
+ * Pure and browser-safe.
  */
 
 import { plural } from "@/lib/copy";
@@ -71,14 +73,19 @@ export function plannerLateFee(fee: CalculatorLateFee, dueOn: string): LateFee {
 
 export type LateFeeRead = { ok: true; fee: CalculatorLateFee | null } | { ok: false; field: "value" | "grace"; message: string };
 
-/** The late fee's fields as typed: none when its value is blank, or what is wrong with them. */
-export function readLateFee(input: { value: string; kind: LateFeeKind; charge: LateFeeCharge; grace: string }): LateFeeRead {
+/**
+ * The late fee's fields as typed: none when its value is blank, or what is wrong with them. `amount` is the invoice's,
+ * which a fixed fee may not exceed; null while the amount itself cannot be read, which its own field says.
+ */
+export function readLateFee(input: { value: string; kind: LateFeeKind; charge: LateFeeCharge; grace: string; amount: number | null }): LateFeeRead {
   if (input.value.trim() === "") return { ok: true, fee: null };
   const value = readFigure(input.value);
   if (input.kind === "percent_month" && (value === null || value <= 0 || value > LATE_FEE_MAX_PERCENT)) {
     return { ok: false, field: "value", message: `A late fee as a percent a month is more than 0 and at most ${LATE_FEE_MAX_PERCENT}.` };
   }
-  if (value === null || value <= 0) return { ok: false, field: "value", message: "A fixed late fee is more than 0." };
+  if (value === null || value <= 0 || (input.kind === "fixed" && input.amount !== null && value > input.amount)) {
+    return { ok: false, field: "value", message: "A fixed late fee is more than 0 and at most the invoice's amount." };
+  }
   const graceDays = input.grace.trim() === "" ? 0 : readWholeNumber(input.grace);
   if (graceDays === null || graceDays > MAX_NET_DAYS) {
     return { ok: false, field: "grace", message: `Days of grace are a whole number from 0 to ${MAX_NET_DAYS}.` };

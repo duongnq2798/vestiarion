@@ -107,7 +107,8 @@ export function ruleBasedExtraction(text: string): RawExtraction {
   const issueDate = issueLine?.match(ISO_DATE)?.[1] ?? null;
   let dueDate = dueLine?.match(ISO_DATE)?.[1] ?? null;
 
-  // "2/10 net 30" or "net 30", read as the payment terms calculator reads them (payment terms PT1).
+  // "2/10 net 30" or "net 30", with the reader the payment terms calculator starts from, `readWrittenTerms` (payment
+  // terms PT1), but without the calculator's own reading of EOM, "n/30" or "2% 10": EOM terms count from the invoice date.
   let earlyPayDiscountPct: string | null = null;
   let discountDeadline: string | null = null;
   const terms = readWrittenTerms(text);

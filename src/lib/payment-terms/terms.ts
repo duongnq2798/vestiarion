@@ -24,14 +24,30 @@ export const MAX_NET_DAYS = 365;
 
 const EXAMPLES = '"2/10 net 30", "net 45" or "net 30 EOM"';
 const END_OF_MONTH = /\bEOM\b|\bend\s+of\s+(?:the\s+)?month\b/i;
+const END_OF_MONTH_ALL = new RegExp(END_OF_MONTH.source, "gi");
 /** "n/30", as in "2/10 n/30", for "net 30". */
 const N_SLASH = /\bn\s*\/\s*(\d+)/gi;
+/** "2% 10" or "2%/10", as in "1% 10 net 30", for "2/10". */
+const PERCENT_DAYS = /(\d+(?:\.\d+)?)\s*%\s*\/?\s*(\d+)/g;
+/** "days", as in "2/10 days, net 30 days": the days are counted either way. */
+const DAYS_WORD = /\bdays?\b/gi;
+/** Anything that looks like a discount: a "d/D", or a percent left over once "2% 10" is read as "2/10". */
+const DISCOUNT_LIKE = /\d+(?:\.\d+)?\s*\/\s*\d+|%/g;
 
-/** What someone typed as terms, or what is wrong with it: never a guess (PT1). */
+/**
+ * What someone typed as terms, or what is wrong with it: never a guess (PT1). Before the invoice reader's
+ * `readWrittenTerms` sees the terms, "n/30" becomes "net 30", "2% 10" becomes "2/10", and the words "days" and EOM go,
+ * EOM being read on its own; so "2/10 EOM, n/30" and "1% 10 net 30" read as their discount. A discount it still cannot
+ * read, such as one written after the net days ("net 30, 2/10"), or more than one, is refused, never dropped.
+ */
 export function parseTerms(text: string): TermsRead {
   if (text.trim() === "") return { ok: false, message: `Enter the terms as the invoice writes them, such as ${EXAMPLES}.` };
-  const written = readWrittenTerms(text.replace(N_SLASH, "net $1"));
+  const plain = text.replace(N_SLASH, "net $1").replace(PERCENT_DAYS, "$1/$2").replace(DAYS_WORD, " ").replace(END_OF_MONTH_ALL, " ");
+  const written = readWrittenTerms(plain);
   if (!written) return { ok: false, message: `These terms could not be read. Write them as ${EXAMPLES}.` };
+  if ((plain.match(DISCOUNT_LIKE)?.length ?? 0) !== (written.discount ? 1 : 0)) {
+    return { ok: false, message: 'A discount in these terms could not be read. Write it as "2/10 net 30" or "2% 10 net 30", with one discount at most.' };
+  }
   const pct = written.discount ? Number(written.discount.pct) : null;
   if (pct !== null && !(pct > 0 && pct < 100)) return { ok: false, message: "A discount is more than 0% and less than 100%." };
   if (written.netDays > MAX_NET_DAYS) return { ok: false, message: `Net days are at most ${MAX_NET_DAYS}.` };
@@ -111,9 +127,10 @@ export function readWholeNumber(text: string): number | null {
 
 const MONEY = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** An amount as the page shows it, with 2 decimals: "1,000.00". */
-export function money(value: number): string {
-  return MONEY.format(value);
+/** An amount as the page shows it, with 2 decimals, "1,000.00", or with as many as `decimals` asks for. */
+export function money(value: number, decimals = 2): string {
+  if (decimals === 2) return MONEY.format(value);
+  return new Intl.NumberFormat("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(value);
 }
 
 /** A yearly rate, a fraction, as a percent with one decimal: 0.37245 is "37.2%". */

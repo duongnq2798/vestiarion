@@ -13,7 +13,10 @@ export function PaymentTermsCta() {
       <h2 id="payment-terms-cta" className="text-lg font-semibold tracking-[-0.01em] text-ink">
         Your AI agent for bills and payments
       </h2>
-      <p className="mt-3 text-sm leading-relaxed text-ink-2">Vestiarion reads the terms on every bill and pays on the right day, within limits you set.</p>
+      <p className="mt-3 text-sm leading-relaxed text-ink-2">
+        Vestiarion&apos;s agent checks every bill before it is paid, weighs an early-payment discount against holding the cash to the due date, and
+        pays in USDC within the limits you set.
+      </p>
       <div className="mt-5">
         <Button asChild>
           <Link href={TRY_HREF} data-cta="payment-terms-start">

@@ -15,16 +15,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 ### Added
 
 - **A free payment terms calculator** at [/payment-terms](https://www.vestiarion.xyz/payment-terms). Enter an
-  invoice's date, amount and terms, such as 2/10 net 30, net 45 or net 30 EOM. It gives the due date and the discount
-  deadline, what paying by the deadline saves, what skipping the discount costs a year (simple on 365 days, simple on
-  360, and compounded, each with its formula: 37.2%, 36.7% and 44.6% for 2/10 net 30), and the break-even rate. With an
-  optional late fee, a percent a month for each month or part of one or by the day, or a fixed amount, after any days
-  of grace, it shows the fee 7, 30 and 60 days late or after any number of days. It ends with one decision, "Pay on" a
-  day, and the reason, from the same written policy the agent's own decisions are checked against, weighing the
-  discount against a yearly rate your cash earns or your borrowing costs. Seven pages explain common terms (2/10 net
-  30, 1/10 net 30, 2/10 net 60, 3/10 net 30, net 30, net 60 and net 30 EOM) with the formula and a worked example.
-  Everything runs in the browser: nothing typed is sent anywhere or kept. The invoice reader without a model now reads
-  terms with the calculator's reader, with the same results as before. No migration.
+  invoice's date, amount and terms, such as 2/10 net 30, 1% 10 net 30, net 45 or 2/10 EOM, n/30; terms it cannot read
+  in full are refused, never guessed. It gives the due date and the discount deadline, what paying by the deadline
+  saves, what skipping the discount costs a year (simple on 365 days, simple on 360, and compounded, each with its
+  formula: 37.2%, 36.7% and 44.6% for 2/10 net 30), and the break-even rate. With an optional late fee, a percent a
+  month for each month or part of one or by the day, or a fixed amount, after any days of grace, it shows the fee 7, 30
+  and 60 days late or after any number of days. It ends with one decision, "Pay on" a day, and the reason, from the
+  same written policy the agent's own decisions are checked against, weighing the discount against a yearly rate your
+  cash earns or your borrowing costs, applied to the discounted amount so the day changes at the break-even rate. Seven
+  pages explain common terms (2/10 net 30, 1/10 net 30, 2/10 net 60, 3/10 net 30, net 30, net 60 and net 30 EOM) with
+  the formula and a worked example. Everything runs in the browser: nothing typed is sent anywhere or kept. The invoice
+  reader without a model now reads terms with the calculator's reader, with the same results as before. No migration.
 - **Bills waiting for approval in Slack, each with a Review button.** While deciding payments from Slack is off, the
   default, the channel's message after each cycle now ends with the bills the agent held or flagged for a person, or
   asked details for, that still wait: one each with the amount, payee, what code stopped it on or the agent's reason
