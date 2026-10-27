@@ -60,7 +60,7 @@ body:
     id: version
     attributes:
       label: Version or commit
-      description: "For the hosted app, the date and time it happened, with your time zone. For a deployment you run, the release tag or commit. For the SDK or the CLI, its version (`vestiarion --version` for the CLI)."
+      description: "For anything at www.vestiarion.xyz (the app, the API, the MCP server or the docs), the date and time it happened, with your time zone. For a deployment you run, the release tag or commit. For the SDK or the CLI, its version (`vestiarion --version` for the CLI). For the Chrome extension, the version on its Details page in chrome://extensions."
     validations:
       required: true
   - type: textarea

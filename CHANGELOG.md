@@ -141,9 +141,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   `ACCESSIBILITY.md` names WCAG 2.2 AA as the target, not a claim, and says what is built and tested today, what has
   not been done (no audit, no recorded screen-reader test), the barriers already known, and how to report one. New
   issues use a form, for a bug, a feature or an accessibility barrier; the issue chooser sends security reports to a
-  private advisory and questions to the docs, and pull requests open on a template. The README links all four
-  documents, and it and the self-hosting guide now say that `npm run verify` also checks the lockfile and that CI then
-  builds the app. No migration.
+  private advisory and questions to the docs, and pull requests open on a template. The README links the three documents
+  and `SECURITY.md` from a new Contributing section; it and the self-hosting guide now say that `npm run verify` also
+  checks the lockfile and that CI then builds the app. No migration.
 
 ### Changed
 

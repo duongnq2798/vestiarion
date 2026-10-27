@@ -4298,9 +4298,10 @@ list of pages. Tests hold the content to the code: every nav page has its MDX,
 every link and anchor resolves, the OpenAPI document covers every v1 route, and
 the webhook verification snippets run against the signing code. The Guides
 pages (`content/docs/guides/`) are for people using the app rather than the
-API; they quote its buttons, fields and messages exactly, and
-`tests/docs-guides.test.ts` checks each quoted string against the source file
-it comes from, so renaming one in the app means updating the guide. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. The nav groups pages by what a reader is doing (`docs/superpowers/specs/2026-10-11-docs-clarity-design.md`,
+API; they quote its buttons, fields and messages exactly.
+`tests/docs-guides.test.ts` holds a list of quoted strings, each with the
+source file it comes from, and fails when the guide or the file no longer
+contains one; a quote not on that list is not checked. Their step screenshots are the app’s own components rendered with sample data by `/docs-shots/<name>` (`src/app/docs-shots/`), which answers only where `DOCS_SCREENSHOTS=1` is set; `npm run docs:screenshots` photographs them into `public/docs/guides/`, and `tests/docs-screenshots.test.tsx` holds every `<Screenshot>` to an existing PNG with alt text, and every PNG to a guide. The nav groups pages by what a reader is doing (`docs/superpowers/specs/2026-10-11-docs-clarity-design.md`,
 `docs/superpowers/specs/2026-10-16-docs-redesign-design.md`): Get started, Pay bills, Plan and report, Get paid, Trust and
 controls, Connect your tools, Developers, then the API reference, webhooks and the changelog. The long sections split
 their pages into short runs under a `NavPage.group` ("Accounting" in Connect your tools), which only the sidebar draws.
@@ -5086,8 +5087,8 @@ replayed through the same code (`docs/superpowers/specs/2026-10-26-quality-lab-s
 Pure contract and payload behavior is covered by `tests/api-contract.test.ts`;
 authentication and per-workspace scoping are covered by
 `tests/api-key-scope.test.ts`. `npm run verify` runs lockfile consistency,
-TypeScript, lint, and the complete Vitest suite. The suite never reaches the
-network: `tests/setup.ts` refuses any request to a host other than loopback, so a
-stub that leaves a chain read open fails at once rather than waiting on a real
-RPC. The suite includes the Quality Lab (see "The Quality Lab"). `npm run build` validates the production route graph. Live API checks use the local app plus a real
+TypeScript, lint, and the complete Vitest suite. `tests/setup.ts` makes any
+`fetch` to a host other than loopback fail at once, so a stub that leaves a
+chain read open fails rather than waiting on a real RPC; it does not guard
+`node:http`, sockets or the Postgres client. The suite includes the Quality Lab (see "The Quality Lab"). `npm run build` validates the production route graph. Live API checks use the local app plus a real
 workspace API key (created on `/o/<slug>/settings`) and Supabase data.

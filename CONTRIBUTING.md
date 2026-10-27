@@ -26,7 +26,8 @@ we will handle yours.
   correct: for example when it widens what the agent can do without a person, or adds something we would have to run
   and support. Asking in an issue first saves your time.
 - `main` is a protected branch: every change reaches it through a pull request whose CI run passed, the maintainers'
-  own included. A maintainer reviews a pull request and merges it.
+  own included. The branch rule requires CI to pass, not an approving review. A maintainer reviews a contributor's pull
+  request before merging it.
 
 ## Running it locally
 
@@ -40,23 +41,30 @@ npm install
 npm run verify
 ```
 
-The test suite needs no Supabase project, Circle account or model key, and never reaches the network: `tests/setup.ts`
-refuses any request to a host other than this machine. It runs every migration on an in-process Postgres (PGlite), on
-UTC whatever your time zone.
+The test suite needs no Supabase project, Circle account or model key. `tests/setup.ts` makes any `fetch` to a host
+other than this machine fail at once, so a test that reaches the network through `fetch` fails instead of waiting. The
+suite runs every migration on an in-process Postgres (PGlite), on UTC whatever your time zone.
 
 To run the app itself, you need a [Supabase](https://supabase.com) project of your own, made for development, never
 one that holds real workspaces:
 
 ```bash
 cp .env.example .env.local   # Supabase URL and keys, VESTIARION_MASTER_KEYS, SUPABASE_JWT_SECRET
-npm run db:migrate           # also needs SUPABASE_PROJECT_ID and SUPABASE_DATABASE_PASSWORD, or SUPABASE_DB_URL
+npm run db:migrate
 npm run dev
 ```
+
+`npm run db:migrate` connects with `SUPABASE_DB_URL` when it is set: the simplest is to copy the session pooler's
+connection string from the project's connection settings. Without it, it builds the session pooler's address from
+`SUPABASE_PROJECT_ID` and `SUPABASE_DATABASE_PASSWORD`, in the region `SUPABASE_REGION` names, `us-east-1` when it is
+not set.
 
 Sign in at `http://localhost:3000/login`; a first sign-in asks for a business name and creates a sandbox workspace.
 With no Circle or model keys, payments are simulated and decisions come from the rule-based policy, so the app runs
 end to end with no other credentials. [docs/self-hosting.md](docs/self-hosting.md) covers every variable, the scripts
-and going live. `npm run seed` replaces a workspace's business data, and is for a demo workspace only.
+and going live. `npm run seed -- <org-slug>` replaces that workspace's business data with a fictional fixture (the
+slug is the part after `/o/` in the workspace's address); it is destructive, so use it only on a disposable demo
+database.
 
 The app runs Next.js 16, which has breaking changes from earlier versions: read the relevant guide in
 `node_modules/next/dist/docs/` before writing code against it. `next dev` writes the first block of `AGENTS.md`
@@ -95,9 +103,10 @@ shape. A bug fix needs none.
   people who run a business on Vestiarion. It ends with "No migration." or names the migration.
 - **`content/docs/changelog.mdx`:** when `/api/v1` or the webhooks change, an entry headed `## YYYY-MM-DD: <title>`,
   newest first, saying what changed for an integrator.
-- **The guides** in `content/docs/guides/` quote the app's buttons, fields and messages exactly, and
-  `tests/docs-guides.test.ts` checks each quote against the file it comes from: renaming a button means updating its
-  guide.
+- **The guides** in `content/docs/guides/` quote the app's buttons, fields and messages exactly.
+  `tests/docs-guides.test.ts` holds a list of quoted strings, each with the file it comes from, and fails when the
+  guide or the file no longer contains one. When a guide quotes new app text, add it to that list. Quotes not on the
+  list are not checked, so search the guides for a button or message you rename.
 - **`README.md`, `ARCHITECTURE.md` and `docs/self-hosting.md`,** wherever they describe what you changed. Search for the
   old wording.
 - **Screenshots:** after changing a screen a guide shows, `npm run docs:screenshots` rebuilds the guides' screenshots

@@ -19,9 +19,12 @@ Each item names the code that does it and, where there is one, the test that fai
   figure for small text, computed with WCAG 2's formula (`tests/ui-tokens.test.ts`). The step labels of the landing
   page's dark safety section, and the secondary text in a highlighted menu, select or command row, are checked the
   same way.
-- **Visible keyboard focus.** A focused control shows one solid 2px outline (`src/app/globals.css`), turned white
-  inside agent-blue and dark sections so it does not vanish into them. `tests/ui-consistency.test.ts` fails on a focus
-  style that is only a soft halo, and on an agent-blue region that does not turn the outline white.
+- **Visible keyboard focus.** A focused button, link, tab, checkbox or other control shows one solid 2px outline
+  (`src/app/globals.css`), turned white inside agent-blue and dark sections so it does not vanish into them. The text
+  fields, text areas and select triggers built on `src/components/ui/Input.tsx` draw their own focus instead: their 1px
+  border turns agent-blue, with a soft halo beside it, and an invalid one keeps its red border and gains a 2px red
+  ring instead. `tests/ui-consistency.test.ts` fails on a focus style that is only a soft halo, and on an agent-blue
+  region that does not turn the outline white.
 - **One set of controls.** Screens are built from the components in `src/components/ui`. Its dialogs, side sheets,
   menus, selects, tabs, checkboxes, radio groups, popovers and tooltips are built on Radix UI, which supplies their
   roles, keyboard handling and focus management. A raw `<button>`, `<select>`, `<textarea>` or visible `<input>`
@@ -40,12 +43,17 @@ Each item names the code that does it and, where there is one, the test that fai
 - **Page structure.** Pages declare English (`lang="en"`) and start with a "Skip to content" link, which appears when it
   takes focus and leads to the page's `<main id="main">` (`src/app/layout.tsx`); no test checks that every page has
   one. A table with a label becomes a named region the keyboard can scroll (`tests/ui-display.test.tsx`).
-- **Reduced motion.** When the device asks for reduced motion, animations are cut, transitions change only colour or
-  opacity, smooth scrolling stops, and content that would slide in appears where it stands. Nothing on the landing page
-  animates without end, apart from a loading placeholder (`tests/motion-policy.test.ts`).
+- **Reduced motion.** When the device asks for reduced motion, smooth scrolling stops, content that would slide in
+  appears where it stands, and transitions keep only opacity, colour and shadow changes. Animations are cut, except in
+  the arch and the evidence replay at the top of How the agent decides (`/how-it-decides`), which are marked for calm
+  motion: there an animation changes only opacity or colour, and nothing flashes faster than once in 2 s. The tests
+  check that every other animation is cut; that the calm ones stay calm is a design rule
+  (`docs/superpowers/specs/2026-10-08-landing-motion-design.md`), not a test. Nothing on the landing page animates
+  without end, apart from a loading placeholder (`tests/motion-policy.test.ts`).
 - **Zoom and phones.** No page stops the browser from zooming. Approvals and Contractors, where a person decides a
-  held payment, were checked at 375px wide, and their decision buttons are 44px tall on a phone
-  (`tests/decide-from-a-phone.test.tsx`).
+  held payment, were checked at 375px wide in headless Microsoft Edge when they were made to work on a phone
+  (`docs/superpowers/specs/2026-10-21-decide-from-a-phone-design.md`). Below 640px wide their decision buttons are 44px
+  tall; `tests/decide-from-a-phone.test.tsx` checks the buttons' size classes in rendered markup, not at a width.
 - **Images and videos in the docs.** Every screenshot in the guides needs alt text and a caption
   (`tests/docs-screenshots.test.tsx`). Each of the 14 guide videos plays in the browser's own player, never starts,
   loops or mutes itself, and has a full transcript under "Read the transcript" (`tests/docs-videos.test.tsx`).
@@ -55,11 +63,19 @@ Each item names the code that does it and, where there is one, the test that fai
 - No independent accessibility audit, and no conformance report such as a VPAT.
 - No recorded test with a screen reader: nothing in the repository records a test with NVDA, JAWS, VoiceOver, TalkBack
   or Narrator.
-- No accessibility testing in a real browser. The tests check source files and rendered markup, some in a simulated
-  DOM; none opens a page in a browser, moves through it with Tab, or runs a checker such as axe. Lint has six
-  accessibility rules, from `eslint-config-next`, at warning level, so they do not fail CI.
-- Our design notes ask for Tab and Shift+Tab to be checked in the composed page (`docs/design/visual-system.md`), but
-  no record of those checks is kept.
+- No browser checks in the test suite. The tests check source files and rendered markup, some in a simulated DOM;
+  none opens a page in a browser, moves through it with Tab, or runs a checker such as axe. Lint has six accessibility
+  rules, from `eslint-config-next`, at warning level, so they do not fail CI.
+- A few checks were run once in headless Microsoft Edge, while a change was made, and their results are written in its
+  pull request: Tab through every focus stop on `/design`, `/` and `/login`, measuring the focus indicator's contrast
+  ([#38](https://github.com/duongnq2798/vestiarion/pull/38)); the payee, supplier, pay, receipt and statement link
+  pages, sign-in, `/open` and the docs' header and footer at 1440, 768, 520 and 375px wide, with keyboard cycles in
+  both directions, touch-target sizes, field labels and focus contrast
+  ([#465](https://github.com/duongnq2798/vestiarion/pull/465)); and Approvals and Contractors at 375px
+  ([#487](https://github.com/duongnq2798/vestiarion/pull/487)). Nothing runs them again, so a later change can undo
+  what they found without a test failing.
+- Our design notes ask for Tab and Shift+Tab to be checked in the composed page (`docs/design/visual-system.md`).
+  Apart from the pull requests above, no record of those checks is kept.
 - No test checks heading order across the app, or that every field in the app has a label: the components' own wiring
   is tested, not every screen that uses them.
 
@@ -71,8 +87,9 @@ Each item names the code that does it and, where there is one, the test that fai
   not yet confirmed in a browser or fixed.
 - **The `[` key.** On a wide screen, `[` on its own shows or hides the workspace sidebar. It is ignored while you type
   in a field, but it cannot be turned off or changed, which WCAG asks of a single-key shortcut (2.1.4).
-- **Phones.** Only Approvals and Contractors have had a pass at 375px. Bills & receivables and Settings have not, and
-  the New payment tabs (34px tall) and copy buttons (32px) are under the 44px we aim for on a phone.
+- **Phones.** In the signed-in app, only Approvals and Contractors have had a pass at 375px; of the public pages, the
+  ones #465 names had one too. Bills & receivables and Settings have not, and the New payment tabs (34px tall) and copy
+  buttons (32px) are under the 44px we aim for on a phone.
 - **Video captions.** The guide videos have transcripts but no synchronized captions, which WCAG asks for (1.2.2). The
   README's two films on YouTube, the demo and the product tour, have no transcript in this repository.
 - **Contrast is tested by colour pair, not on every screen.** A colour used on a background the tests do not list would
@@ -102,5 +119,4 @@ says.
 ## What happens next
 
 The form labels the issue `accessibility`. We do not promise a response time. Fixes land on `main`, which the hosted
-app runs, and pull requests labelled `accessibility` are listed under Accessibility in a release's generated notes.
-When a report shows that this page is wrong, we correct this page.
+app runs. When a report shows that this page is wrong, we correct this page.
