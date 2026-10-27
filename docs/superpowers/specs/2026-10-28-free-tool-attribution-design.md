@@ -24,7 +24,9 @@ one-line description. The footer, the sitemap and the tool's start button read i
 - The slug is lowercase words and hyphens: it is the tool's `utm_source`, and `<slug>-start` is its button's `data-cta`,
   which must match `CTA_ID`.
 - The path is the slug at the top level: public, never under `/tools` (which serves downloads).
-- Today the list holds the address checker: `check-address`, `/check-address`, "Address checker".
+- Today the list holds the address checker: `check-address`, `/check-address`, "Address checker". The payment terms
+  calculator followed it (`payment-terms`, `/payment-terms`, "Payment terms calculator";
+  `docs/superpowers/specs/2026-10-28-payment-terms-design.md`), its term pages listed after it in the sitemap.
 
 **TA2. A tool's first touch** (`freeToolFirstTouch`). What the tool's start links keep:
 - `utm_source` the tool's slug, `utm_medium` `free_tool` (`FREE_TOOL_MEDIUM`), `utm_campaign` `free_tools`

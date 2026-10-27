@@ -8,9 +8,10 @@ import { GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_U
 
 /**
  * The site footer (spec §2, F1, F3): its columns, where each link goes, and
- * how it opens. The full footer is the landing page's; the compact one is
- * every other public page's. Its Free tools group is read from the list of free
- * tools (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA5).
+ * how it opens. The full footer is the landing page's and the public pages'
+ * that lead to it (the free tools, /studios, /how-it-decides); the compact one
+ * is every other public page's. Its Free tools group is read from the list of
+ * free tools (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA5).
  */
 
 interface Anchor {
@@ -73,9 +74,12 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put every free tool, by its title, under Free tools: the address checker for now", () => {
+  it("put every free tool, by its title, under Free tools: the address checker and the payment terms calculator", () => {
     expect(FOOTER_COLUMNS[3].links).toEqual(FREE_TOOLS.map((tool) => ({ href: tool.path, label: tool.title })));
-    expect(FOOTER_COLUMNS[3].links).toEqual([{ href: "/check-address", label: "Address checker" }]);
+    expect(FOOTER_COLUMNS[3].links).toEqual([
+      { href: "/check-address", label: "Address checker" },
+      { href: "/payment-terms", label: "Payment terms calculator" },
+    ]);
   });
 
   it("put Terms, Privacy, Security and Contact (GitHub Issues) under Legal", () => {
@@ -96,10 +100,22 @@ describe("the full footer, rendered", () => {
     for (const column of FOOTER_COLUMNS) expect(markup).toContain(`<nav aria-label="${column.title}"`);
   });
 
-  it("renders every column link with its label", () => {
+  it("renders every column link with its label, a landing section as the landing page's from any other page", () => {
     for (const link of FOOTER_COLUMNS.flatMap((column) => column.links)) {
-      expect(links.some((anchor) => anchor.href === link.href && anchor.text === link.label), `${link.label} → ${link.href}`).toBe(true);
+      const href = link.href.startsWith("#") ? `/${link.href}` : link.href;
+      expect(links.some((anchor) => anchor.href === href && anchor.text === link.label), `${link.label} → ${href}`).toBe(true);
     }
+    // A bare "#safety" would go nowhere on a page that is not the landing.
+    expect(links.filter((anchor) => anchor.href.startsWith("#"))).toEqual([]);
+  });
+
+  it("links the landing's sections in place on the landing page itself", () => {
+    const landing = anchors(renderToStaticMarkup(<SiteFooter landing />));
+    for (const section of LANDING_SECTIONS) {
+      expect(landing.some((anchor) => anchor.href === section.href && anchor.text === section.label), section.href).toBe(true);
+    }
+    expect(landing.filter((anchor) => anchor.href.startsWith("/#"))).toEqual([]);
+    expect(readFileSync(path.join(process.cwd(), "src/app/page.tsx"), "utf8")).toContain("<SiteFooter landing />");
   });
 
   it("renders the same links on a free tool's page, where its Get started credits the tool (free tool attribution TA5)", () => {

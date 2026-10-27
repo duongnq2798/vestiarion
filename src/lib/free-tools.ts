@@ -25,6 +25,12 @@ export const FREE_TOOLS = [
     title: "Address checker",
     description: "Check an address before you pay it: whether it is made to look like one you know, hides a character, fails its checksum or is on OFAC's list.",
   },
+  {
+    slug: "payment-terms",
+    path: "/payment-terms",
+    title: "Payment terms calculator",
+    description: "Work out an invoice's due date and discount deadline, what skipping a discount such as 2/10 net 30 costs a year, a late fee, and the day to pay.",
+  },
 ] as const satisfies readonly FreeTool[];
 
 export type FreeToolSlug = (typeof FREE_TOOLS)[number]["slug"];

@@ -98,7 +98,7 @@ export default function LandingPage() {
         <FinalCta />
       </main>
 
-      <SiteFooter />
+      <SiteFooter landing />
     </div>
   );
 }

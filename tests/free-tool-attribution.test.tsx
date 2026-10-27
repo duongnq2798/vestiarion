@@ -38,8 +38,11 @@ const NOW = new Date("2026-10-28T09:15:00.000Z");
 const CHECK_ADDRESS = freeTool("check-address");
 
 describe("the list of free tools (TA1)", () => {
-  it("holds the address checker, with a slug, a path, a title and a one-line description", () => {
-    expect(FREE_TOOLS.map(({ slug, path: at, title }) => ({ slug, path: at, title }))).toEqual([{ slug: "check-address", path: "/check-address", title: "Address checker" }]);
+  it("holds the address checker and the payment terms calculator, each with a slug, a path, a title and a one-line description", () => {
+    expect(FREE_TOOLS.map(({ slug, path: at, title }) => ({ slug, path: at, title }))).toEqual([
+      { slug: "check-address", path: "/check-address", title: "Address checker" },
+      { slug: "payment-terms", path: "/payment-terms", title: "Payment terms calculator" },
+    ]);
     for (const tool of FREE_TOOLS) {
       expect(tool.description, tool.slug).toMatch(/^[A-Z][^\n]{20,160}\.$/);
       expect(tool.description.split(". ")).toHaveLength(1);
