@@ -164,7 +164,7 @@ export interface ListBill {
   cells: string[];
   /** The counterparty's name as written. */
   vendor: string;
-  /** The name bills are grouped by: without case, punctuation or a legal suffix (`nameKey`). */
+  /** The name bills are grouped by: without case, punctuation or a legal suffix (`vendorKeyOf`). */
   vendorKey: string;
   /** An exact decimal, in `currency`. */
   amount: string | null;
@@ -190,6 +190,19 @@ function percentOf(cell: string): number {
 }
 
 const dayAfter = (day: string) => new Date(Date.parse(`${day}T00:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10);
+
+const latinWord = (word: string) => /^[a-z0-9]+$/.test(word);
+
+/**
+ * The name a vendor's bills are grouped by (CB4): `nameKey`, without case, punctuation or a legal suffix. `nameKey` keeps
+ * a to z and 0 to 9 only, so a name with other letters keeps every word, a Latin legal suffix still left out: "東京 Design"
+ * and "大阪 Design" stay two vendors, as "東京 Design Ltd." and "東京 Design" are one.
+ */
+export function vendorKeyOf(vendor: string): string {
+  const words = vendor.toLowerCase().normalize("NFKD").replace(/\p{M}/gu, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  if (words.every(latinWord)) return nameKey(vendor) || vendor.toLowerCase();
+  return words.filter((word) => !latinWord(word) || nameKey(word) !== "").join(" ");
+}
 
 export function readBills(table: Table, answers: CheckAnswers): ListBill[] {
   const questions = questionsOf(table, answers);
@@ -233,7 +246,7 @@ export function readBills(table: Table, answers: CheckAnswers): ListBill[] {
       line: row.line,
       cells: row.cells,
       vendor,
-      vendorKey: nameKey(vendor) || vendor.toLowerCase(),
+      vendorKey: vendorKeyOf(vendor),
       amount,
       currency,
       dueDate,

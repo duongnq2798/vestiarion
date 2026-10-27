@@ -1,4 +1,4 @@
-import { normalisePo, RECURRING_MAX_DAYS, RECURRING_MIN_DAYS, scoreDuplicate, type InvoiceLike } from "../agent/duplicates";
+import { normalisePo, normaliseText, RECURRING_MAX_DAYS, RECURRING_MIN_DAYS, scoreDuplicate, type InvoiceLike } from "../agent/duplicates";
 import { lastDayWithoutFee } from "../agent/late-fee";
 import { currencyDigits, decimalKey } from "../bill-import/amounts";
 import { memoWithInvoiceNumber } from "../bill-import/memo";
@@ -11,12 +11,14 @@ import { questionsOf, readBills, type CheckAnswers, type ListBill } from "./read
  * What the free bill list check finds in a list (docs/superpowers/specs/2026-10-28-check-bills-design.md CB5–CB7): likely
  * duplicates by vendor, scored by the agent's own `scoreDuplicate` with its invoice numbers compared too; runs of the same
  * amount about a month apart, which its recurring rule keeps out of the duplicates; and the early-payment discounts and
- * late fees of the next 7 days, with what each is worth. Pure: it runs in the browser on what the person gave it.
+ * late fees of the next 7 days, with what each is worth, and whether the bill may repeat another. Pure: it runs in the
+ * browser on what the person gave it.
  */
 
 /**
  * Each bill is compared with at most this many bills before it that share its amount, and as many that share its
- * purchase order or its number, the ones due closest (CB5): 5,000 bills of one vendor and one amount stay a few seconds.
+ * purchase order or its number, the ones due closest (CB5), and a run looks at as many a month before each bill (CB6):
+ * 5,000 bills of one vendor and one amount are checked in a second or two.
  */
 export const COMPARED_PER_BUCKET = 50;
 
@@ -82,6 +84,8 @@ export interface Deadline {
   /** The discount, or a month of a percent fee, or a fixed fee. */
   worth: Total;
   words: string;
+  /** The row this bill may repeat, when it is a likely duplicate: it is checked before it is paid (CB7). */
+  repeats: number | null;
 }
 
 export interface BillCheck {
@@ -157,11 +161,13 @@ function invoiceLike(bill: ListBill): InvoiceLike {
 
 const amountKey = (bill: ListBill) => `${bill.currency} ${decimalKey(bill.amount!)}`;
 
-/** The buckets a bill is found in: its amount, its purchase order and its invoice number, as each is compared. */
-function bucketsOf(bill: ListBill): string[] {
-  const po = normalisePo(bill.poReference);
+/**
+ * A bill's invoice number as compared (CB5): its letters and digits as `sameNumber` reads them, and only when they hold
+ * a digit other than 0, so a placeholder a sheet fills an empty cell with ("N/A", "none", "TBD", "0") is no number.
+ */
+function numberOf(bill: ListBill): string {
   const number = sameNumber(bill.invoiceNumber);
-  return [`amount ${amountKey(bill)}`, ...(po ? [`po ${po}`] : []), ...(number ? [`number ${number}`] : [])];
+  return /[1-9]/.test(number) ? number : "";
 }
 
 function numberWordsOf(bill: ListBill, other: ListBill, sameAmount: boolean): string {
@@ -176,12 +182,50 @@ interface Compared {
   bill: ListBill;
   like: InvoiceLike;
   amount: string;
+  po: string | null;
   number: string;
-  buckets: string[];
+  /** Its description as `scoreDuplicate` compares it: the memo the import would write, case and spaces aside. */
+  memo: string | null;
+  /** Its due date as a count of days, to find the bills a month before it. */
+  day: number;
 }
 
 function compared(bill: ListBill): Compared {
-  return { bill, like: invoiceLike(bill), amount: amountKey(bill), number: sameNumber(bill.invoiceNumber), buckets: bucketsOf(bill) };
+  const like = invoiceLike(bill);
+  return {
+    bill,
+    like,
+    amount: amountKey(bill),
+    po: normalisePo(bill.poReference),
+    number: numberOf(bill),
+    memo: normaliseText(like.memo),
+    day: Math.round(Date.parse(`${bill.dueDate}T00:00:00.000Z`) / DAY_MS),
+  };
+}
+
+/** The buckets beside its amount a bill is found in: its purchase order and its invoice number, as each is compared. */
+const keysOf = (bill: Compared) => [...(bill.po ? [`po ${bill.po}`] : []), ...(bill.number ? [`number ${bill.number}`] : [])];
+
+/**
+ * Two bills of one vendor and one amount that the agent's recurring rule spares (CB6): the later due 24 to 32 days after
+ * the earlier, with no purchase order or invoice number in common, either of which makes them a likely duplicate.
+ */
+function monthApartPair(later: Compared, earlier: Compared): boolean {
+  const gap = later.day - earlier.day;
+  if (gap < RECURRING_MIN_DAYS || gap > RECURRING_MAX_DAYS) return false;
+  return !(later.po !== null && later.po === earlier.po) && !(later.number !== "" && later.number === earlier.number);
+}
+
+/** The first place in `indexes`, in order of due date, whose bill is due on `day` or after. */
+function firstDueFrom(indexes: readonly number[], sorted: readonly Compared[], day: number): number {
+  let low = 0;
+  let high = indexes.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (sorted[indexes[middle]].day < day) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }
 
 /** One bill against one due before it: the agent's score, and the invoice numbers. */
@@ -212,6 +256,8 @@ function stronger(a: DuplicateFinding, b: DuplicateFinding | null): DuplicateFin
 /**
  * Likely duplicates (CB5): within each vendor, each bill against the bills due before it that share its amount, purchase
  * order or invoice number, the closest `COMPARED_PER_BUCKET` of each, kept with its strongest match. Strongest vendors first.
+ * A bill that follows one of the same amount and description a month before it is the next month of that charge: it is
+ * compared by amount only with the bills since, not with the months before, which the agent's rule would take for repeats.
  */
 export function likelyDuplicates(bills: readonly ListBill[]): VendorDuplicates[] {
   const vendors: VendorDuplicates[] = [];
@@ -220,8 +266,18 @@ export function likelyDuplicates(bills: readonly ListBill[]): VendorDuplicates[]
     const buckets = new Map<string, number[]>();
     const findings: DuplicateFinding[] = [];
     sorted.forEach((bill, index) => {
+      const sameAmount = buckets.get(`amount ${bill.amount}`) ?? [];
+      const monthBefore = firstDueFrom(sameAmount, sorted, bill.day - RECURRING_MAX_DAYS);
+      const since = firstDueFrom(sameAmount, sorted, bill.day - RECURRING_MIN_DAYS + 1);
+      let monthly = false;
+      for (let at = monthBefore; at < since && !monthly; at++) {
+        const earlier = sorted[sameAmount[at]];
+        monthly = bill.memo !== null && earlier.memo === bill.memo && monthApartPair(bill, earlier);
+      }
+      const byAmount = sameAmount.slice(Math.max(monthly ? monthBefore : 0, sameAmount.length - COMPARED_PER_BUCKET));
+      const byKeys = keysOf(bill).flatMap((key) => (buckets.get(key) ?? []).slice(-COMPARED_PER_BUCKET));
       // The closest first: a later index is due later. Past the strongest finding there is, nothing farther can beat it.
-      const before = [...new Set(bill.buckets.flatMap((key) => (buckets.get(key) ?? []).slice(-COMPARED_PER_BUCKET)))].sort((a, b) => b - a);
+      const before = [...new Set([...byAmount, ...byKeys])].sort((a, b) => b - a);
       let best: DuplicateFinding | null = null;
       for (const at of before) {
         const finding = compare(bill, sorted[at]);
@@ -229,7 +285,7 @@ export function likelyDuplicates(bills: readonly ListBill[]): VendorDuplicates[]
         if (best && best.confidence >= SAME_NUMBER_CONFIDENCE) break;
       }
       if (best) findings.push(best);
-      for (const key of bill.buckets) addAt(buckets, key, index);
+      for (const key of [`amount ${bill.amount}`, ...keysOf(bill)]) addAt(buckets, key, index);
     });
     if (findings.length === 0) continue;
     findings.sort((a, b) => b.confidence - a.confidence || a.bill.line - b.bill.line);
@@ -243,45 +299,53 @@ export function likelyDuplicates(bills: readonly ListBill[]): VendorDuplicates[]
   return vendors.sort((a, b) => top(b) - top(a) || staked(b) - staked(a) || a.vendor.localeCompare(b.vendor));
 }
 
-const pairKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
-
 /**
  * Runs of the same amount about a month apart (CB6): bills of one vendor, in one currency, for one amount, each due
- * `RECURRING_MIN_DAYS` to `RECURRING_MAX_DAYS` after the one before, leaving out a pair already a likely duplicate.
+ * `RECURRING_MIN_DAYS` to `RECURRING_MAX_DAYS` after the one before it in the run, with no purchase order or invoice
+ * number in common (`monthApartPair`). Each bill follows the closest such bill before it that no other bill follows yet,
+ * one already in a run first, so a bill of the same amount between two months, or a month sent twice, breaks no run.
  */
-export function monthApart(bills: readonly ListBill[], duplicates: readonly VendorDuplicates[]): MonthApartRun[] {
-  const paired = new Set(duplicates.flatMap((vendor) => vendor.findings.map((finding) => pairKey(finding.bill.line, finding.other.line))));
+export function monthApart(bills: readonly ListBill[]): MonthApartRun[] {
   const runs: MonthApartRun[] = [];
-  const close = (run: ListBill[], gaps: number[]) => {
-    if (run.length < 2) return;
-    runs.push({ vendor: run[0].vendor, amount: decimalKey(run[0].amount!), currency: run[0].currency!, bills: run, gaps });
-  };
   for (const group of groupBy(bills.filter((bill) => bill.checked), (bill) => `${bill.vendorKey}\n${amountKey(bill)}`)) {
-    const sorted = [...group].sort(byDue);
-    let run = [sorted[0]];
-    let gaps: number[] = [];
-    for (const bill of sorted.slice(1)) {
-      const previous = run.at(-1)!;
-      const gap = daysBetween(previous.dueDate!, bill.dueDate!);
-      if (gap >= RECURRING_MIN_DAYS && gap <= RECURRING_MAX_DAYS && !paired.has(pairKey(previous.line, bill.line))) {
-        run.push(bill);
-        gaps.push(gap);
-      } else {
-        close(run, gaps);
-        run = [bill];
-        gaps = [];
+    const sorted = [...group].sort(byDue).map(compared);
+    const all = sorted.map((_, index) => index);
+    const follows = new Map<number, number>();
+    const followed = new Map<number, number>();
+    sorted.forEach((bill, index) => {
+      const open: number[] = [];
+      const from = firstDueFrom(all, sorted, bill.day - RECURRING_MAX_DAYS);
+      for (let at = firstDueFrom(all, sorted, bill.day - RECURRING_MIN_DAYS + 1) - 1; at >= from && open.length < COMPARED_PER_BUCKET; at--) {
+        if (!followed.has(at) && monthApartPair(bill, sorted[at])) open.push(at);
       }
-    }
-    close(run, gaps);
+      const earlier = open.find((at) => follows.has(at)) ?? open[0];
+      if (earlier === undefined) return;
+      follows.set(index, earlier);
+      followed.set(earlier, index);
+    });
+    sorted.forEach((first, index) => {
+      if (follows.has(index) || !followed.has(index)) return;
+      const run = [index];
+      for (let at = followed.get(index); at !== undefined; at = followed.get(at)) run.push(at);
+      runs.push({
+        vendor: first.bill.vendor,
+        amount: decimalKey(first.bill.amount!),
+        currency: first.bill.currency!,
+        bills: run.map((at) => sorted[at].bill),
+        gaps: run.slice(1).map((at, step) => sorted[at].day - sorted[run[step]].day),
+      });
+    });
   }
   return runs.sort((a, b) => a.bills[0].line - b.bills[0].line);
 }
 
 /**
  * The deadlines of the next `DEADLINE_DAYS` days from `today` (CB7): a discount whose last day is today or within them,
- * and a late fee whose first day falls in them, so its last day without the fee does. Nearest first.
+ * and a late fee whose first day falls in them, so its last day without the fee does. Nearest first. A deadline of a bill
+ * that may repeat another names that row, so the page does not urge paying it without a look.
  */
-export function deadlinesOf(bills: readonly ListBill[], today: string): Deadline[] {
+export function deadlinesOf(bills: readonly ListBill[], today: string, duplicates: readonly VendorDuplicates[]): Deadline[] {
+  const repeated = new Map(duplicates.flatMap((vendor) => vendor.findings.map((finding) => [finding.bill.line, finding.other.line] as const)));
   const deadlines: Deadline[] = [];
   const soon = (day: string) => {
     const left = daysBetween(today, day);
@@ -302,6 +366,7 @@ export function deadlinesOf(bills: readonly ListBill[], today: string): Deadline
           daysLeft: left,
           worth: { amount: worth, currency },
           words: `Pay by ${dayWords(bill.discount.deadline)} to keep the ${bill.discount.pct}% early-payment discount: ${moneyWords(worth, currency)}.`,
+          repeats: repeated.get(bill.line) ?? null,
         });
       }
     }
@@ -321,6 +386,7 @@ export function deadlinesOf(bills: readonly ListBill[], today: string): Deadline
             fee.kind === "fixed"
               ? `Pay by ${dayWords(lastDay)} to avoid a ${moneyWords(worth, currency)} late fee.`
               : `Pay by ${dayWords(lastDay)} to avoid a ${fee.value}% monthly late fee: ${moneyWords(worth, currency)} a month.`,
+          repeats: repeated.get(bill.line) ?? null,
         });
       }
     }
@@ -342,8 +408,8 @@ export function checkBills(table: Table, answers: CheckAnswers, today: string): 
     vendors: new Set(checked.map((bill) => bill.vendorKey)).size,
     duplicates,
     atStake,
-    monthApart: monthApart(bills, duplicates),
-    deadlines: deadlinesOf(bills, today),
+    monthApart: monthApart(bills),
+    deadlines: deadlinesOf(bills, today, duplicates),
     terms: {
       discount: answers.mapping.discountPct !== undefined,
       lateFee: answers.mapping.lateFeePercent !== undefined || answers.mapping.lateFeeAmount !== undefined,

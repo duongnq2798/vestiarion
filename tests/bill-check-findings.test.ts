@@ -79,6 +79,17 @@ describe("likely duplicates (CB5)", () => {
     expect(result.atStake).toEqual([{ currency: "USD", amount: 900 }]);
   });
 
+  it("keeps vendors apart whose names differ only in letters outside a to z", () => {
+    const { result } = check([
+      "東京 Design,,Logo,,2026-11-10,50.00,USD",
+      "大阪 Design,,Logo,,2026-11-11,50.00,USD",
+      "Магазин 1,,Stock,,2026-11-10,75.00,USD",
+      "Аптека 1,,Stock,,2026-11-11,75.00,USD",
+    ]);
+    expect(result.duplicates).toEqual([]);
+    expect(result.vendors).toBe(4);
+  });
+
   it("never pairs two vendors, nor the same figure in two currencies, nor different invoice numbers a week apart", () => {
     const { result } = check([
       "Harbor Studio Ltd,HS-1,Design,,2026-11-03,100.00,USD",
@@ -101,6 +112,45 @@ describe("likely duplicates (CB5)", () => {
     ]);
     expect(result.duplicates.map((vendor) => vendor.vendor)).toEqual(["Maple Street Cleaning", "Lakeside Freight"]);
     expect(result.atStake).toEqual([{ currency: "USD", amount: 1530 }]);
+  });
+
+  it("does not call a monthly charge with one description and no numbers a duplicate of its earlier months", () => {
+    const months = ["01", "02", "03", "04", "05", "06"].map((month) => `Landlord LLC,Rent,2026-${month}-01,2000.00,USD`);
+    const { result } = check(months, "Vendor,Description,Due date,Amount,Currency");
+    expect(result.duplicates).toEqual([]);
+    expect(result.atStake).toEqual([]);
+    expect(result.monthApart).toHaveLength(1);
+    expect(result.monthApart[0].bills.map((bill) => bill.line)).toEqual([2, 3, 4, 5, 6, 7]);
+    expect(result.monthApart[0].gaps).toEqual([31, 28, 31, 30, 31]);
+  });
+
+  it("still finds a month of such a charge sent twice, and a bill two months after another with nothing between", () => {
+    const sentTwice = check(
+      ["01", "02", "03", "03", "04"].map((month) => `Landlord LLC,Rent,2026-${month}-01,2000.00,USD`),
+      "Vendor,Description,Due date,Amount,Currency"
+    ).result;
+    expect(sentTwice.duplicates[0].findings.map((finding) => [finding.bill.line, finding.other.line, finding.confidence])).toEqual([[5, 4, 0.85]]);
+    // The run goes on from the month it had reached, past the copy.
+    expect(sentTwice.monthApart.map((run) => run.bills.map((bill) => bill.line))).toEqual([[2, 3, 4, 6]]);
+    // With no month between them, the agent's own rule stands.
+    const apart = check(["Landlord LLC,Rent,2026-01-01,2000.00,USD", "Landlord LLC,Rent,2026-03-01,2000.00,USD"], "Vendor,Description,Due date,Amount,Currency").result;
+    expect(apart.duplicates[0].findings.map((finding) => [finding.bill.line, finding.other.line, finding.confidence])).toEqual([[3, 2, 0.75]]);
+  });
+
+  it("takes no invoice number from a placeholder such as N/A, none, TBD or 0", () => {
+    const { result } = check([
+      "Landlord LLC,N/A,Rent,,2026-09-01,2000.00,USD",
+      "Landlord LLC,N/A,Rent,,2026-10-01,2000.00,USD",
+      "Landlord LLC,N/A,Rent,,2026-11-01,2000.00,USD",
+      "Orchard Signs,none,Decals,,2026-08-01,120.00,USD",
+      "Orchard Signs,none,Banner,,2026-09-14,145.00,USD",
+      "Juniper Office Supply,TBD,Paper,,2026-07-01,80.00,USD",
+      "Juniper Office Supply,tbd,Toner,,2026-10-15,95.00,USD",
+      "Harbor Studio,0,Design,,2026-07-01,300.00,USD",
+      "Harbor Studio,000,Photos,,2026-10-15,310.00,USD",
+    ]);
+    expect(result.duplicates).toEqual([]);
+    expect(result.monthApart.map((run) => run.bills.map((bill) => bill.line))).toEqual([[2, 3, 4]]);
   });
 
   it(`compares each bill with at most ${COMPARED_PER_BUCKET} bills of its amount before it, the ones due closest`, () => {
@@ -143,6 +193,32 @@ describe("same amount, about a month apart (CB6)", () => {
     expect(result.duplicates[0].findings).toHaveLength(1);
     expect(result.monthApart).toEqual([]);
   });
+
+  it("links a bill to the one a month before it past a bill of the same amount between them", () => {
+    const { result } = check([
+      "Northwind Hosting,NH-1,Cloud hosting,,2026-09-04,240.00,USD",
+      "Northwind Hosting,NH-9,Setup,,2026-09-20,240.00,USD",
+      "Northwind Hosting,NH-2,Cloud hosting,,2026-10-03,240.00,USD",
+      "Acme,,Hosting,,2027-01-01,100.00,USD",
+      "Acme,,Setup fee,,2027-01-15,100.00,USD",
+      "Acme,,Hosting,,2027-02-01,100.00,USD",
+    ]);
+    expect(result.duplicates).toEqual([]);
+    expect(result.monthApart.map((run) => [run.bills.map((bill) => bill.line), run.gaps])).toEqual([
+      [[2, 4], [29]],
+      [[5, 7], [31]],
+    ]);
+  });
+
+  it("keeps two charges of one price billed on different days of the month as two runs", () => {
+    const days = ["2026-08-04", "2026-08-20", "2026-09-04", "2026-09-20", "2026-10-04", "2026-10-20"];
+    const { result } = check(days.map((day, index) => `Northwind Hosting,NS-${index + 1},Seat,,${day},40.00,USD`));
+    expect(result.duplicates).toEqual([]);
+    expect(result.monthApart.map((run) => run.bills.map((bill) => bill.line))).toEqual([
+      [2, 4, 6],
+      [3, 5, 7],
+    ]);
+  });
 });
 
 describe("deadlines in the next 7 days (CB7)", () => {
@@ -176,6 +252,16 @@ describe("deadlines in the next 7 days (CB7)", () => {
       "Pay by Nov 3, 2026 to avoid a 25.00 USD late fee.",
     ]);
     expect(result.deadlines[2].worth).toEqual({ amount: 19.6, currency: "USD" });
+  });
+
+  it("says on a deadline that its bill may repeat another, so it is checked before it is paid", () => {
+    const row = "Lakeside Freight,LF-3310,2026-11-06,980.00,USD,2,2026-10-31,,,";
+    const { result } = check([row, row], header);
+    expect(result.duplicates[0].findings.map((finding) => [finding.bill.line, finding.other.line])).toEqual([[3, 2]]);
+    expect(result.deadlines.map((deadline) => [deadline.bill.line, deadline.repeats])).toEqual([
+      [2, null],
+      [3, 2],
+    ]);
   });
 
   it("says which terms the list has, so a list without them gets no deadlines", () => {
@@ -218,6 +304,14 @@ describe("the list back with a flag column (CB8)", () => {
     const answers = startingAnswers(table);
     const csv = checkedCsv(table, answers, checkBills(table, answers, TODAY));
     expect(csv.slice(1)).toBe(`Vendor;Amount;Due date;${FLAG_COLUMN}\r\nNorthwind;240,00;13.11.2026;\r\n`);
+  });
+
+  it("gives a tab-separated list back with commas", () => {
+    const table = readTable("Vendor\tAmount\tDue date\nNorthwind, Ltd\t240.00\t2026-11-13");
+    expect(table.delimiter).toBe("\t");
+    const answers = startingAnswers(table);
+    const csv = checkedCsv(table, answers, checkBills(table, answers, TODAY));
+    expect(csv.slice(1)).toBe(`Vendor,Amount,Due date,${FLAG_COLUMN}\r\n"Northwind, Ltd",240.00,2026-11-13,\r\n`);
   });
 
   it(`says which rows past the ${MAX_CHECK_BILLS.toLocaleString("en-US")}th were not checked`, () => {

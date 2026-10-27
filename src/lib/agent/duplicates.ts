@@ -109,7 +109,8 @@ export const RECURRING_MAX_DAYS = 32;
 
 const DAY_MS = 86_400_000;
 
-function normaliseText(value: string | null): string | null {
+/** A description as compared: case and runs of spaces aside. The free bill list check tells a monthly charge by it too (CB5). */
+export function normaliseText(value: string | null): string | null {
   if (!value) return null;
   const trimmed = value.toLowerCase().replace(/\s+/g, " ").trim();
   return trimmed.length === 0 ? null : trimmed;
