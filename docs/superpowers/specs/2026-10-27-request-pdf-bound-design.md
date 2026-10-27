@@ -51,7 +51,7 @@ the thread. The call is:
 
 Such a file now meets the worker's limits where it had none: one of more than 50 pages, or that pdf.js cannot read
 within 15 s, is not read. Encrypted invoices that open without a password (owner-password restrictions only, common
-from invoicing tools) are read as before, in the worker, about half a second slower.
+from invoicing tools) are read to the same text as before, a little slower, since a worker starts for each.
 
 **RB3. What a sent file's worker read says.**
 - A timeout while another PDF was read in this process (`PdfWorkerRefusal` `timeout` with `retry`, RB4) may not be the
@@ -100,6 +100,17 @@ pre-scan tests are updated to point here.
 - Measuring LZW, run-length or Brotli in the pre-scan. Fewer files would need the worker, but encrypted files, image
   codecs on text streams and filters in objects it cannot find would still be unmeasurable.
 - The payee link's wording for a PDF that could not be read ("Choose a PDF or a text file."), unchanged here.
+
+## Risks
+
+- Request functions start the worker for the first time. Its script loads unpdf with `import("unpdf")` from
+  `node_modules`, which the cycle's function is known to carry. The functions that read sent PDFs (the From a document
+  and payee link server actions, inbound email, Telegram, Slack, the extension's draft route) import read.ts, which
+  imports unpdf statically, so each traces it the same way; if one did not, an unmeasurable PDF there would be a plain
+  "try again" error, not a crash. To check on a preview deployment before release: read an LZW or encrypted PDF
+  through From a document.
+- A request's worker and the cycle's share the process's memory budget, measured from each worker's start. The lower
+  request budget makes the request's stop first in the usual case, not in every case.
 
 ## Tests (write first)
 
