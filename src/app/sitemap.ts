@@ -1,12 +1,14 @@
 import type { MetadataRoute } from "next";
 import { publishedPages } from "@/lib/docs/content";
+import { FREE_TOOLS } from "@/lib/free-tools";
 import { publicOrigin } from "@/lib/public-origin";
 import { docsHref } from "@/lib/docs/paths";
 
 /**
  * Served at /sitemap.xml: the landing page, the open numbers, the page for
- * studios, how the agent decides, the address checker, every docs page (the API reference included), then the terms, the privacy page and
- * the security page.
+ * studios, how the agent decides, the free tools (from their one list, free
+ * tool attribution TA5), every docs page (the API reference included), then
+ * the terms, the privacy page and the security page.
  * Sign-in and the workspaces are not public pages, so they are not listed.
  */
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -16,7 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${origin}/open` },
     { url: `${origin}/studios` },
     { url: `${origin}/how-it-decides` },
-    { url: `${origin}/check-address` },
+    ...FREE_TOOLS.map((tool) => ({ url: `${origin}${tool.path}` })),
     ...publishedPages().map((page) => ({ url: `${origin}${docsHref(page.slug)}` })),
     { url: `${origin}/terms` },
     { url: `${origin}/privacy` },

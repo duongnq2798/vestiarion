@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AddressChecker } from "@/components/address-check/AddressChecker";
-import { TRY_HREF } from "@/components/landing/cta";
 import { PublicMain } from "@/components/public/PublicMain";
+import { ToolCta } from "@/components/public/ToolCta";
 import { Button } from "@/components/ui/Button";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { SiteFooter, SiteHeader, SiteHeaderLink } from "@/components/vx/SiteChrome";
 import snapshot from "@/lib/data/ofac-sdn-evm-wallets.json";
+import { FREE_TOOL_COUNT_LINE } from "@/lib/free-tools";
 import { X_HANDLE } from "@/lib/site-links";
 
 // The root layout adds " · Vestiarion" to the page's title; the social cards carry the name themselves.
@@ -29,7 +30,9 @@ const listDate = new Date(snapshot.readAt).toLocaleDateString("en-US", { month: 
 /**
  * /check-address (docs/superpowers/specs/2026-10-21-address-checker-design.md AC6, AC7): a free page anyone can use
  * before paying an address. Static: the check runs in the browser against the dated OFAC snapshot the page carries, so
- * no address reaches the server. Not under /tools, which serves downloads.
+ * no address reaches the server. Not under /tools, which serves downloads. Its start button is the shared `ToolCta`,
+ * which credits a workspace opened after it to this tool
+ * (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA3, TA6).
  */
 export default function CheckAddressPage() {
   const sanctioned = snapshot.wallets.map(({ address, name }) => ({ address, name }));
@@ -48,7 +51,8 @@ export default function CheckAddressPage() {
             one of them, the trick called address poisoning, if a character in it is hidden, from another alphabet or fails its checksum, and if it
             is on OFAC&apos;s sanctions list.
           </p>
-          <p className="mt-2 text-sm leading-relaxed text-ink-3">The check runs in this page. Nothing you paste is sent anywhere or kept.</p>
+          {/* True whether analytics is set up or not (free tool attribution TA6). */}
+          <p className="mt-2 text-sm leading-relaxed text-ink-3">The check runs in this page, and nothing you paste is kept. {FREE_TOOL_COUNT_LINE}</p>
 
           <div className="mt-8">
             <AddressChecker sanctioned={sanctioned} listDate={listDate} />
@@ -81,11 +85,7 @@ export default function CheckAddressPage() {
               address against OFAC&apos;s list. Each step is signed into a ledger anyone can verify.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Button asChild>
-                <Link href={TRY_HREF} data-cta="check-address-start">
-                  Try it on your bills
-                </Link>
-              </Button>
+              <ToolCta tool="check-address" />
               <Button asChild variant="secondary">
                 <Link href="/docs/guides/first-payment#payee-lock">How the payee lock works</Link>
               </Button>

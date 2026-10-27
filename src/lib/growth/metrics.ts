@@ -1,3 +1,4 @@
+import { FREE_TOOLS_CAMPAIGN } from "@/lib/free-tools";
 import { ACCOUNTANT_CLIENT_CAMPAIGN } from "./attribution";
 import { STAGES, type OrderedStage, type RevenueKind, type Stage } from "./fields";
 import { LOOP_CAMPAIGN } from "./loop";
@@ -177,6 +178,32 @@ export function workspaceSource(workspace: WorkspaceRow): string | null {
   return null;
 }
 
+/** Workspaces from one source, and how many of them had the agent's decision on a real bill. */
+export interface SourceCount {
+  source: string;
+  workspaces: number;
+  activated: number;
+}
+
+const activatedCount = (workspaces: WorkspaceRow[]) => workspaces.filter((workspace) => workspace.firstDecisionAt !== null).length;
+
+/** Workspaces and those activated per first-touch utm_source ("none" when it has none), most workspaces first. */
+export function bySource(workspaces: WorkspaceRow[]): SourceCount[] {
+  const groups = new Map<string, WorkspaceRow[]>();
+  for (const workspace of workspaces) {
+    const source = workspace.attribution?.utmSource ?? "none";
+    groups.set(source, [...(groups.get(source) ?? []), workspace]);
+  }
+  return [...groups.entries()]
+    .map(([source, group]) => ({ source, workspaces: group.length, activated: activatedCount(group) }))
+    .sort((a, b) => b.workspaces - a.workspaces || a.source.localeCompare(b.source));
+}
+
+/** "check-address 2, 1 with a decision · payment-terms 1, 0 with a decision", or "" for none. */
+export function bySourceWords(counts: SourceCount[]): string {
+  return counts.map((count) => `${count.source} ${count.workspaces}, ${count.activated} with a decision`).join(" · ");
+}
+
 /** Sums money in cents, so 0.1 + 0.2 stays 0.30. */
 function sumMoney(values: number[]): number {
   return values.reduce((total, value) => total + Math.round(value * 100), 0) / 100;
@@ -201,6 +228,11 @@ export interface GrowthMetrics {
   costPerActivated: { spendUsd: number; activated: number; value: number | null };
   /** Customer workspaces whose first touch was a page or email a business sent a counterparty (counterparty loop C4). */
   fromLoop: { workspaces: number; activated: number };
+  /**
+   * Customer workspaces whose first touch was a free tool's start button, and those activated, in all and per tool by
+   * utm_source, most workspaces first (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA4).
+   */
+  fromFreeTools: { workspaces: number; activated: number; bySource: SourceCount[] };
   /** Customer workspaces an accountant's client link opened (accountant client links AC5), and those activated. */
   fromAccountants: { workspaces: number; activated: number };
   /**
@@ -246,6 +278,7 @@ export function growthMetrics({ leads, events, workspaces, spend, revenue, now, 
   const cashSpendUsd = sumMoney(spend.map((row) => row.usd));
   const activated = reachedCount("real_invoice_reviewed");
   const fromLoop = customers.filter((workspace) => workspace.attribution?.utmCampaign === LOOP_CAMPAIGN);
+  const fromFreeTools = customers.filter((workspace) => workspace.attribution?.utmCampaign === FREE_TOOLS_CAMPAIGN);
   const fromAccountants = customers.filter((workspace) => workspace.attribution?.utmCampaign === ACCOUNTANT_CLIENT_CAMPAIGN);
   const nudgedWorkspaces = customers.filter((workspace) => nudges.some((nudge) => nudge.orgId === workspace.orgId));
   const cameBack = nudgedWorkspaces.filter((workspace) =>
@@ -279,6 +312,7 @@ export function growthMetrics({ leads, events, workspaces, spend, revenue, now, 
     founderHours: Math.round(spend.reduce((total, row) => total + row.founder_hours * 10, 0)) / 10,
     costPerActivated: { spendUsd: cashSpendUsd, activated, value: activated > 0 ? Math.round((cashSpendUsd / activated) * 100) / 100 : null },
     fromLoop: { workspaces: fromLoop.length, activated: fromLoop.filter((workspace) => workspace.firstDecisionAt !== null).length },
+    fromFreeTools: { workspaces: fromFreeTools.length, activated: activatedCount(fromFreeTools), bySource: bySource(fromFreeTools) },
     fromAccountants: { workspaces: fromAccountants.length, activated: fromAccountants.filter((workspace) => workspace.firstDecisionAt !== null).length },
     nudged: { workspaces: nudgedWorkspaces.length, cameBack: cameBack.length },
   };

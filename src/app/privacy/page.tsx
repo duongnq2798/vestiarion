@@ -20,7 +20,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-25"
+      updated="2026-10-28"
       intro="Vestiarion is an AI agent for bills and payments on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -528,8 +528,10 @@ export default function PrivacyPage() {
       <LegalSection id="campaign-cookie" title="Which link brought a workspace">
         <p>
           When you arrive from a link that carries campaign tags (<code>utm_source</code>, <code>utm_medium</code>, <code>utm_campaign</code>,{" "}
-          <code>utm_content</code>, <code>utm_term</code> or <code>ref</code>), Vestiarion sets one first-party cookie, <code>vx_ft</code>, for 90 days. It is
-          set only when a link carries such a tag and the browser does not hold one already, and setting it sends nothing anywhere.
+          <code>utm_content</code>, <code>utm_term</code> or <code>ref</code>), Vestiarion sets one first-party cookie, <code>vx_ft</code>, for 90 days.
+          Choosing <strong>Try it on your bills</strong> on one of Vestiarion&apos;s free tools, such as the{" "}
+          <LegalLink href="/check-address">address checker</LegalLink>, sets it too. It is set only then, and only when the browser does not hold one
+          already, and setting it sends nothing anywhere.
         </p>
         <ul>
           <li>
@@ -537,6 +539,11 @@ export default function PrivacyPage() {
             host of the site that linked to it, and when.
           </li>
           <li>It never holds your email address, your name or anything you type; a tag with an @ in it is dropped.</li>
+          <li>
+            A free tool&apos;s button gives it the tool&apos;s name as <code>utm_source</code>, <code>free_tool</code> as <code>utm_medium</code>,{" "}
+            <code>free_tools</code> as <code>utm_campaign</code> and the tool&apos;s page as the page you landed on, with the host of the site that linked
+            to the tool and when: never anything you pasted or typed into the tool.
+          </li>
           <li>
             When you create a workspace, Vestiarion reads it once and keeps those tags with the workspace, never replaced, so the team can see which
             outreach or page brought it. Only the team sees them, and they are deleted with the workspace.

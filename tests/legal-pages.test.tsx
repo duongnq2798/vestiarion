@@ -11,6 +11,7 @@ import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
 import { loginRedirectFor, requiresSession } from "@/lib/auth/routes";
 import { FIRST_TOUCH_COOKIE, FIRST_TOUCH_DAYS, TAG_KEYS, TAG_MAX } from "@/lib/growth/attribution";
 import { CONSENT, MESSAGE_MAX } from "@/lib/growth/guided-setup";
+import { FREE_TOOL_MEDIUM, FREE_TOOLS_CAMPAIGN } from "@/lib/free-tools";
 import { REASON_MAX } from "@/lib/decision-reasons";
 import { SANDBOX_IDLE_DAYS, WEBHOOK_DELIVERY_RETENTION_DAYS } from "@/lib/platform/cleanup";
 import { PREVIEW_MAX } from "@/lib/email/customer-wrote";
@@ -36,7 +37,7 @@ const source = (file: string) => readFileSync(path.join(process.cwd(), file), "u
 
 const PAGES = [
   { path: "/terms", file: "src/app/terms/page.tsx", Page: TermsPage, metadata: termsMetadata, heading: "Terms of use", updated: "2026-10-25" },
-  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-25" },
+  { path: "/privacy", file: "src/app/privacy/page.tsx", Page: PrivacyPage, metadata: privacyMetadata, heading: "Privacy", updated: "2026-10-28" },
 ] as const;
 
 describe.each(PAGES)("$path", ({ path: route, file, Page, metadata, heading, updated }) => {
@@ -204,6 +205,20 @@ describe("the privacy page", () => {
     const cookie = source("src/lib/growth/attribution.ts");
     expect(cookie).toContain('"Path=/", "SameSite=Lax"');
     expect(cookie).not.toMatch(/Domain=/);
+  });
+
+  it("says a free tool's start button sets the cookie too, with what the code puts in it (free tool attribution TA7)", () => {
+    const section = text(renderToStaticMarkup(<PrivacyPage />).split('id="campaign-cookie"')[1]?.split('id="guided-setup"')[0] ?? "");
+    expect(section).toContain(
+      "Choosing Try it on your bills on one of Vestiarion's free tools, such as the address checker , sets it too. It is set only then, and only when the browser does not hold one already, and setting it sends nothing anywhere."
+    );
+    expect(section).toContain(
+      `A free tool's button gives it the tool's name as utm_source , ${FREE_TOOL_MEDIUM} as utm_medium , ${FREE_TOOLS_CAMPAIGN} as utm_campaign and the tool's page as the page you landed on, with the host of the site that linked to the tool and when: never anything you pasted or typed into the tool.`
+    );
+    // As the button does it: the tool's slug, the medium and the campaign, its path, and only when no first touch is kept.
+    const button = source("src/components/public/ToolCta.tsx");
+    expect(button).toContain("if (hasFirstTouch(document.cookie)) return;");
+    expect(source("src/lib/free-tools.ts")).toContain("utm_source: tool.slug, utm_medium: FREE_TOOL_MEDIUM, utm_campaign: FREE_TOOLS_CAMPAIGN, landing_path: tool.path");
   });
 
   it("says a workspace from a client link keeps the accountant's tags, and the cookie's when the accountant could not be added, as the join action does (accountant client links AC5)", () => {

@@ -11,6 +11,8 @@ import snapshot from "@/lib/data/ofac-sdn-evm-wallets.json";
 /**
  * /check-address (docs/superpowers/specs/2026-10-21-address-checker-design.md AC6, AC7): the free checker, rendered in a
  * DOM and typed into, and the page around it: static, public, and with nothing that could send what is pasted anywhere.
+ * Its start button is the shared one that credits a workspace to the tool, apart from the checker's code
+ * (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA3, TA6).
  */
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/check-address", useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
@@ -140,8 +142,16 @@ describe("the page (AC7)", () => {
     expect(metadata).toMatchObject({ title: "Address lookalike checker", alternates: { canonical: "/check-address" } });
     const markup = renderToStaticMarkup(<CheckAddressPage />);
     expect(markup).toContain("Check an address before you pay it");
-    expect(markup).toContain("Nothing you paste is sent anywhere or kept.");
+    expect(markup).toContain(
+      "The check runs in this page, and nothing you paste is kept. This page may count the visit and a click on Try it on your bills, by its address. What you paste or type is never sent."
+    );
+    expect(page).toContain("{FREE_TOOL_COUNT_LINE}");
+    // The shared start button (TA3, TA6), its analytics name kept so its clicks stay comparable.
+    expect(page).toContain('<ToolCta tool="check-address" />');
     expect(markup).toContain('data-cta="check-address-start"');
+    const start = markup.match(/<a [^>]*data-cta="check-address-start"[^>]*>[^<]*<\/a>/)?.[0] ?? "";
+    expect(start).toContain('href="/onboarding?shadow=1"');
+    expect(start).toContain(">Try it on your bills</a>");
     expect(markup).toContain('href="/docs/guides/first-payment#payee-lock"');
     const { requiresSession } = await import("@/lib/auth/routes");
     expect(requiresSession("/check-address")).toBe(false);

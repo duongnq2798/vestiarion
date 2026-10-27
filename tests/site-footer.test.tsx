@@ -2,13 +2,15 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS, LANDING_SECTIONS, SiteFooter } from "@/components/vx/SiteChrome";
+import { COMPACT_FOOTER_LINKS, FOOTER_COLUMNS, FOOTER_LAYOUT, LANDING_SECTIONS, SiteFooter } from "@/components/vx/SiteChrome";
+import { FREE_TOOLS } from "@/lib/free-tools";
 import { GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_URL, X_HANDLE, X_URL } from "@/lib/site-links";
 
 /**
  * The site footer (spec §2, F1, F3): its columns, where each link goes, and
  * how it opens. The full footer is the landing page's; the compact one is
- * every other public page's.
+ * every other public page's. Its Free tools group is read from the list of free
+ * tools (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA5).
  */
 
 interface Anchor {
@@ -35,8 +37,9 @@ function anchors(markup: string): Anchor[] {
 const isExternal = (href: string) => /^https?:\/\//.test(href);
 
 describe("the full footer's columns", () => {
-  it("are Product, Developers, Resources and Legal, in that order", () => {
-    expect(FOOTER_COLUMNS.map((column) => column.title)).toEqual(["Product", "Developers", "Resources", "Legal"]);
+  it("are Product, Developers, Resources, Free tools and Legal, in that order, Free tools above Legal in the fourth column", () => {
+    expect(FOOTER_COLUMNS.map((column) => column.title)).toEqual(["Product", "Developers", "Resources", "Free tools", "Legal"]);
+    expect(FOOTER_LAYOUT).toEqual([["Product"], ["Developers"], ["Resources"], ["Free tools", "Legal"]]);
   });
 
   it("put the landing sections, how the agent decides, sign-in and the call to action under Product", () => {
@@ -58,11 +61,10 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put the open numbers, the page for studios, the address checker, the two guides, Support (GitHub Issues), X and Product Hunt under Resources", () => {
+  it("put the open numbers, the page for studios, the two guides, Support (GitHub Issues), X and Product Hunt under Resources", () => {
     expect(FOOTER_COLUMNS[2].links).toEqual([
       { href: "/open", label: "Open numbers" },
       { href: "/studios", label: "For studios" },
-      { href: "/check-address", label: "Address checker" },
       { href: "/docs/guides/go-live", label: "Go live guide" },
       { href: "/docs/guides/first-payment", label: "First payment guide" },
       { href: ISSUES_URL, label: "Support" },
@@ -71,8 +73,13 @@ describe("the full footer's columns", () => {
     ]);
   });
 
+  it("put every free tool, by its title, under Free tools: the address checker for now", () => {
+    expect(FOOTER_COLUMNS[3].links).toEqual(FREE_TOOLS.map((tool) => ({ href: tool.path, label: tool.title })));
+    expect(FOOTER_COLUMNS[3].links).toEqual([{ href: "/check-address", label: "Address checker" }]);
+  });
+
   it("put Terms, Privacy, Security and Contact (GitHub Issues) under Legal", () => {
-    expect(FOOTER_COLUMNS[3].links).toEqual([
+    expect(FOOTER_COLUMNS[4].links).toEqual([
       { href: "/terms", label: "Terms" },
       { href: "/privacy", label: "Privacy" },
       { href: "/security", label: "Security" },
@@ -131,6 +138,10 @@ describe("the full footer, rendered", () => {
   it("lays its columns out two across on a phone, four from sm, and all four beside the wordmark from lg", () => {
     expect(markup).toMatch(/class="grid grid-cols-2 [^"]*sm:grid-cols-4 lg:grid-cols-6"/);
     expect(markup).toMatch(/<div class="col-span-2 sm:col-span-4 lg:col-span-2">/);
+    // Four columns at every width: Free tools and Legal share the last one.
+    expect(markup.match(/<div class="min-w-0 space-y-8">/g)).toHaveLength(4);
+    const lastColumn = markup.split('<div class="min-w-0 space-y-8">')[4] ?? "";
+    expect(lastColumn).toMatch(/^<nav aria-label="Free tools"[^>]*>[\s\S]*?<\/nav><nav aria-label="Legal"/);
   });
 });
 

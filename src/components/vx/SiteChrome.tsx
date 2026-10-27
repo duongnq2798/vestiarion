@@ -5,6 +5,7 @@ import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { START_LABEL, TRY_HREF } from "@/components/landing/cta";
 import { landingPrefetch } from "@/components/landing/prefetch";
+import { FREE_TOOLS } from "@/lib/free-tools";
 import { LOOP_PAGE_LINE, LOOP_PAGE_LINK, loopCtaId, loopPageHref, type LoopPage } from "@/lib/growth/loop";
 import { ARC_URL, CIRCLE_URL, GITHUB_URL, ISSUES_URL, LICENSE_URL, PRODUCT_HUNT_BADGE, PRODUCT_HUNT_URL, X_URL } from "@/lib/site-links";
 import { BrandMark } from "./Brand";
@@ -135,9 +136,11 @@ export interface FooterLink {
 }
 
 /**
- * The full footer's columns (spec §2, F1). An address starting `#` is a
- * section of the landing page, the one page this footer is on; `http…` is
- * another site and opens in a new tab; anything else is a page of this app.
+ * The full footer's groups of links, in reading order (spec §2, F1). An address
+ * starting `#` is a section of the landing page, the one page this footer is
+ * on; `http…` is another site and opens in a new tab; anything else is a page
+ * of this app. Free tools lists every free tool from their one list
+ * (docs/superpowers/specs/2026-10-28-free-tool-attribution-design.md TA5).
  */
 export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly FooterLink[] }> = [
   {
@@ -159,13 +162,16 @@ export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly Foot
     links: [
       { href: "/open", label: "Open numbers" },
       { href: "/studios", label: "For studios" },
-      { href: "/check-address", label: "Address checker" },
       { href: "/docs/guides/go-live", label: "Go live guide" },
       { href: "/docs/guides/first-payment", label: "First payment guide" },
       { href: ISSUES_URL, label: "Support" },
       { href: X_URL, label: "Updates on X" },
       { href: PRODUCT_HUNT_URL, label: "Product Hunt" },
     ],
+  },
+  {
+    title: "Free tools",
+    links: FREE_TOOLS.map((tool) => ({ href: tool.path, label: tool.title })),
   },
   {
     title: "Legal",
@@ -177,6 +183,13 @@ export const FOOTER_COLUMNS: ReadonlyArray<{ title: string; links: readonly Foot
     ],
   },
 ];
+
+/**
+ * How the groups fill the full footer's four columns, by title: Free tools sits
+ * above Legal in the last one, so the footer keeps four columns at every width
+ * (free tool attribution TA5).
+ */
+export const FOOTER_LAYOUT: ReadonlyArray<readonly string[]> = [["Product"], ["Developers"], ["Resources"], ["Free tools", "Legal"]];
 
 /** The compact footer's links, beside its one line. */
 export const COMPACT_FOOTER_LINKS: readonly FooterLink[] = [
@@ -309,19 +322,23 @@ export function SiteFooter({ compact = false, networkLabel = "Arc", loop }: { co
               <img src={PRODUCT_HUNT_BADGE.src} alt={PRODUCT_HUNT_BADGE.alt} width={PRODUCT_HUNT_BADGE.width} height={PRODUCT_HUNT_BADGE.height} loading="lazy" decoding="async" />
             </a>
           </div>
-          {FOOTER_COLUMNS.map((column) => (
-            <nav key={column.title} aria-label={column.title} className="min-w-0">
-              <Eyebrow>{column.title}</Eyebrow>
-              <ul className="mt-3 space-y-1">
-                {column.links.map((link) => (
-                  <li key={link.label}>
-                    <FooterAnchor href={link.href} className={COLUMN_LINK}>
-                      {link.label}
-                    </FooterAnchor>
-                  </li>
-                ))}
-              </ul>
-            </nav>
+          {FOOTER_LAYOUT.map((titles) => (
+            <div key={titles.join()} className="min-w-0 space-y-8">
+              {FOOTER_COLUMNS.filter((column) => titles.includes(column.title)).map((column) => (
+                <nav key={column.title} aria-label={column.title} className="min-w-0">
+                  <Eyebrow>{column.title}</Eyebrow>
+                  <ul className="mt-3 space-y-1">
+                    {column.links.map((link) => (
+                      <li key={link.label}>
+                        <FooterAnchor href={link.href} className={COLUMN_LINK}>
+                          {link.label}
+                        </FooterAnchor>
+                      </li>
+                    ))}
+                  </ul>
+                </nav>
+              ))}
+            </div>
           ))}
         </div>
         {/* The name, set across the footer as the page's last image (landing motion M3): decoration, the logo above already names it. */}
