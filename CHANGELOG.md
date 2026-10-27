@@ -14,6 +14,25 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A free bill list check** at [/check-bills](https://www.vestiarion.xyz/check-bills). Paste rows, or drop a CSV
+  exported from QuickBooks, Xero, Zoho Books or a sheet: its columns are matched as the bill import matches them, and
+  it asks only what the list cannot say, such as whether 03/04 is day or month first. It lists the bills that may
+  repeat each other, by vendor, scored by the agent's own duplicate rule, with its explanation, a confidence and the
+  amount at stake. The page also compares invoice numbers, which the agent's rule does not, counting one written
+  another way (BP-1042 and bp 1042) as the same number, and a placeholder such as N/A in place of an invoice number or
+  a purchase order as none. Bills of the same amount about a month apart, which that rule takes for a monthly charge,
+  are listed apart to look at, unless one is already a likely duplicate: each follows the bill of its description due
+  nearest the same day of the month before, so a bill of the same amount between two months breaks no run and two
+  charges of one price are two runs. A charge with one description whose month before is in the list is not called a
+  repeat of the months before it. Early-payment discounts ending and late fees starting in the next 7 days are listed with
+  what each is worth, when the list gives their terms, and say so when their bill may repeat another. The list comes
+  back as a CSV with a "Bill check" column, a sample list of made-up vendors shows every kind of finding, and up to
+  5,000 bills are read, the button showing it is busy meanwhile. It all runs in the browser: nothing pasted is sent
+  anywhere or kept. Like the address checker, it is listed under the footer's **Free tools**, and its **Try it on your
+  bills** and footer's **Get started** credit a workspace opened next to it, as below. In a workspace, the agent's
+  duplicate explanations are unchanged, reading an imported list's memos is faster, and the bill import's column
+  questions are the same controls the check uses. No migration.
+
 - **A free OFAC check for vendors, one name or a whole list.** At
   [/check-vendor](https://www.vestiarion.xyz/check-vendor), type a vendor's name, with its country if you like, or
   paste or drop a vendor list: its name, country and wallet columns are found by their names, and you can change
@@ -65,6 +84,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   footer has a **Free tools** group, where the address checker moved from Resources, and the sitemap reads the same
   list. The address checker now says it may count the visit and a click on its button, by the page's address, and that
   what you paste or type is never sent. The privacy page says a tool's start links can set the cookie. No migration.
+
 - **Bills waiting for approval in Slack, each with a Review button.** While deciding payments from Slack is off, the
   default, the channel's message after each cycle now ends with the bills the agent held or flagged for a person, or
   asked details for, that still wait: one each with the amount, payee, what code stopped it on or the agent's reason

@@ -5,6 +5,9 @@ import {
   DUPLICATE_MATCHES_IN_CONTEXT,
   duplicateMatchContext,
   findDuplicates,
+  normalisePo,
+  RECURRING_MAX_DAYS,
+  RECURRING_MIN_DAYS,
   scoreDuplicate,
   type InvoiceLike,
 } from "@/lib/agent/duplicates";
@@ -304,5 +307,21 @@ describe("scoreDuplicate — periods of one recurring payment (recurring payment
     expect(scoreDuplicate(weekly("w2b", "2026-10-10"), weekly("w2", "2026-10-10", "paid"))).not.toBeNull();
     const other = inv({ id: "o1", status: "paid", memo: "Weekly retainer", dueDate: "2026-10-03T12:00:00.000Z", recurringId: "rec-2", recurringPeriod: "2026-10-03" });
     expect(scoreDuplicate(weekly("w2", "2026-10-10"), other)).not.toBeNull();
+  });
+});
+
+describe("scoreDuplicate — a bill with no status (free bill list check CB5)", () => {
+  it("names no state for a bill whose status is not known, and stays below the confidence that blocks", () => {
+    const listed = (over: Partial<InvoiceLike> = {}) => inv({ status: "", ...over });
+    const match = scoreDuplicate(listed(), listed({ id: "inv-old", dueDate: "2026-09-25T00:00:00.000Z" }))!;
+    expect(match.explanation).toBe("Bills the same purchase order for the same 240 USDC as invoice due 2026-09-25 2 day(s) apart. Paying both would pay one obligation twice.");
+    expect(match.confidence).toBe(0.85);
+    expect(match.againstSettled).toBe(false);
+  });
+
+  it("exports the recurring window and the purchase order reading the free check groups bills by", () => {
+    expect([RECURRING_MIN_DAYS, RECURRING_MAX_DAYS]).toEqual([24, 32]);
+    expect(["PO-1042", "po 1042", "1042"].map(normalisePo)).toEqual(["1042", "1042", "1042"]);
+    expect(normalisePo("PO")).toBeNull();
   });
 });

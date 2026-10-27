@@ -540,6 +540,11 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
   vendor list with its wallets, against OFAC's SDN list in the browser: each possible match with why it matched and a
   link to Treasury's search, and a CSV back. The dated SDN snapshot it uses, `src/lib/data/ofac-sdn-names.json`, and
   the script that makes it, `scripts/ofac-sdn-wallets.mjs`, are in this repository for anyone to reuse.
+- **[Bill list check](https://www.vestiarion.xyz/check-bills)** — a free page that reads a bill list exported from
+  QuickBooks, Xero, Zoho Books or a sheet, in the browser, and lists the bills that may repeat each other by vendor,
+  scored by the agent's own duplicate rule or by a matching invoice number, the bills of the same amount about a month
+  apart, and the early-payment discounts and late fees of the next 7 days; the list comes back as a CSV with a flag
+  column.
 
 ### Contracts on Arc testnet
 

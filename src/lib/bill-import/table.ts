@@ -175,3 +175,13 @@ export function readTable(raw: string): Table {
   if (rows.length === 0) throw new TableError("The list is empty.");
   return { delimiter, rows };
 }
+
+/**
+ * The name a list is saved back under, made in the browser: its own name without its extension, letters and digits of
+ * any script kept, said to be what it now is (`ending`): "June bills.csv" with the rows not added is
+ * "June-bills-not-added.csv". The import's failed rows (I08) and the free bill list check (CB8) both use it.
+ */
+export function savedListName(source: string, ending: string): string {
+  const base = source.replace(/\.(csv|tsv|txt)$/i, "").replace(/[^\p{L}\p{N}._-]+/gu, "-").replace(/^-+|-+$/g, "") || "bills";
+  return `${base}-${ending}.csv`;
+}

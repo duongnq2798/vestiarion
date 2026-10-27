@@ -2331,7 +2331,8 @@ decimal strings) and `rows.ts` (the person's answers, which count only while
 their question is asked, and each row's fate: added,
 already in the workspace, or why not, and the failed rows as a CSV with the
 reason). The panel New ▾ › Import a list opens on Bills & receivables (`src/components/intake/BillImport.tsx`) asks the
-person to confirm the columns and answer what the list cannot say; the server
+person to confirm the columns and answer what the list cannot say, with the controls it shares with the free bill list
+check (`src/components/intake/list-steps.tsx`); the server
 (`checkBillListAction` and `importBillListAction`, `src/app/actions/bill-import.ts`)
 reads the list's text again with `checkBillList` (`src/lib/bill-import/check.ts`),
 which reads the counterparties, the invoices a row could repeat (same
@@ -4631,6 +4632,38 @@ browser, with no form, request carrying input, URL parameter or storage.
   `FREE_TOOL_COUNT_LINE` under its introduction.
 - `tests/check-vendor-page.test.tsx` holds the checker's code to making no request, and no cookie, and its words to
   never calling a result safe or cleared.
+
+**The bill list check.** `/check-bills` (`src/app/check-bills/page.tsx`,
+`docs/superpowers/specs/2026-10-28-check-bills-design.md`) is a free public page, static and outside `/tools`, like the
+address checker. A bill list is read and checked in the browser (`BillListChecker`,
+`src/components/bill-check/`): there is no form, request, URL parameter or storage.
+- `BillListChecker` reads the text with the bill import's own `decodeList` and `readTable`, and asks about its columns,
+  dates and amounts with the import's own controls (`src/components/intake/list-steps.tsx`). Each new step takes the
+  focus, and **Check N bills** shows it is busy for a frame before the check holds the page.
+- `src/lib/bill-check/read.ts` reads the bills from that table with the import's `detectMapping`, `readAmount`,
+  `readDate` and `dateOrderOf`, without `rows.ts`'s workspace parts, and reads up to 5,000 bills (`MAX_CHECK_BILLS`)
+  where an import takes 200. Vendors are grouped by `vendorKeyOf`: `nameKey`, keeping letters outside a to z with
+  their marks, so names that differ by a vowel sign or a voicing mark stay two vendors.
+- `likelyDuplicates` (`src/lib/bill-check/findings.ts`) scores each bill against the closest bills of its vendor due
+  before it that share its amount, purchase order or invoice number, with the agent's own `scoreDuplicate`. Each bill
+  carries the memo the import would add it with (`memoWithInvoiceNumber`, now in `src/lib/bill-import/memo.ts`) and no
+  status, so the explanation names none and the confidence stays at most 0.85. A bill that follows one of the same
+  amount and description a month before it is compared by amount only with the bills since, so a monthly charge is not
+  its own duplicate. Invoice numbers are compared as `sameNumber` reads them; that comparison is the page's own, not
+  the agent's, and the page says so. An invoice number or purchase order with no digit but 0 is a placeholder and
+  counts as none, in the memo too, where the import would write "Invoice N/A".
+- `monthApart` lists, as runs, the pairs the recurring rule (`RECURRING_MIN_DAYS` to `RECURRING_MAX_DAYS`) keeps out of
+  the duplicates. Each bill follows the bill of its amount a month before it that fits best, the links that fit best
+  made first: the same description, then due nearest the same day of the month before. So a bill between two months
+  breaks no run, and two charges of one price are two runs. A bill whose month-before bills are all taken is listed
+  with the best as a pair, unless it is a likely duplicate already. `deadlinesOf` lists the discounts ending and the
+  late fees starting (`lastDayWithoutFee`) in the 7 days from the person's own today, only from the terms the list
+  gives, each naming the row its bill may repeat.
+- `checkedCsv` gives the list back with a "Bill check" column, as the import gives back the rows it could not add.
+- It is `check-bills` in `FREE_TOOLS`. Its **Try it on your bills** is `ToolCta` (above), `check-bills-start` for the
+  analytics click, its full footer's **Get started** credits the tool too (`<SiteFooter tool="check-bills" />`), and the
+  page says `FREE_TOOL_COUNT_LINE` under its introduction, as the address checker does. Both start links live outside
+  the checker's code, which `tests/check-bills-page.test.tsx` holds to making no request and touching no cookie.
 
 ## Onboarding by role
 
