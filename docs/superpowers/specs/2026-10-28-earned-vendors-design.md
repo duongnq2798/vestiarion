@@ -51,14 +51,17 @@ Code comments and test names cite the ids, for example "(earned vendors AL12)".
   - The workspace's own limits and rails never break it: `workspace.*` (two approvals, the spending limit, the limit on
     Arc), `project.budget_exceeded`, `fx.*`, `bridge.*`, `treasury.*`, `payout.bank_needs_person`, a cash shortfall, the
     pause, and the shadow-mode hold itself.
-  - Agreed Hold and Ask for details verdicts neither count nor break. A decision with no verdict neither counts nor
-    breaks. A decision that is itself a break never counts, even with an Agree.
+  - Agreed Hold and Ask for details verdicts neither count nor break. A decision with no verdict does not count; it
+    breaks only if it ended flagged or a check on the vendor or its bill stopped it, as above, verdict or not. A
+    decision that is itself a break never counts, even with an Agree.
   - A verdict whose decision or bill is not among the facts read is left out, as in the ladder (AL3).
 - **AL13. Who can earn it.** A counterparty with role `vendor`, not sample data, whose `payment_limit` (the risk-tiered
-  figure the agent enforces) is above 0. Any other payee "cannot", saying why: no payment limit, or not a vendor.
-- **AL14. Pure.** `src/lib/earned-vendors.ts` works the statuses out from facts the report already reads, with three
-  fields added to that read (the verdict's time; the payee's role and payment limit). Browser-safe, with no read of its
-  own, as AL6. `earnedVendors(facts, streak)` returns one status per non-sample payee with a decision on its bills, in
+  figure the agent enforces) is above 0. Any other payee "cannot", saying why: not a vendor (`not_a_vendor`); screened
+  high risk (`high_risk`, from `risk_level`), since screening keeps a high-risk payee's limit at 0 whatever its owner set
+  (`paymentLimitForRisk`), so asking for a limit would be wrong; or no payment limit (`no_payment_limit`).
+- **AL14. Pure.** `src/lib/earned-vendors.ts` works the statuses out from facts the report already reads, with four
+  fields added to that read (the verdict's time; the payee's role, screening and payment limit). Browser-safe, with no
+  read of its own, as AL6. `earnedVendors(facts, streak)` returns one status per non-sample payee with a decision on its bills, in
   the ladder's vendor order (AL5): `earned` (how many agreed in a row, the counted decisions newest first, from and to,
   the break before them), `counting` (how many of `N`, the break) or `cannot` (why).
 - **AL15. The record.** Each change of a vendor's status is one signed entry, `vendor_earned` or `vendor_earned_lost`,
@@ -69,20 +72,25 @@ Code comments and test names cite the ids, for example "(earned vendors AL12)".
   - after each verdict is kept (`giveVerdictAction`), best effort: a failure is logged and never undoes the verdict;
   - inside the rule change (AL17);
   - at the start of the AP stage of a shadow workspace with bills to decide, best effort: a failure is logged and
-    changes none of the stage's outcomes.
+    changes none of the stage's outcomes. A stage with nothing to decide signs nothing, so the report says a vendor
+    earned but not signed yet "is recorded at your next verdict, or when the agent next decides a bill".
 
-  With no rule it reads the rule and stops: one read. Only the rule change that turned it off also signs
-  `vendor_earned_lost` (`rule_off`) for every vendor recorded earned. One that could not be signed then stays recorded
-  earned, which nothing shows while no rule is set; once a rule is set again it is signed as lost, or left earned if it
-  still is.
+  With no rule it reads the rule and the record, never the facts, and signs `vendor_earned_lost` (`rule_off`) for every
+  vendor still recorded earned: the rule change that turned it off does, and a loss it could not sign is signed by
+  whichever sync runs next, as AL15 says. Setting a rule where there was none first runs that sync while there is still
+  no rule, so no vendor's earned status runs on across a time with no rule into the new one. Before 0146 it reads the
+  rule and stops.
 
   A vendor recorded earned that is no longer earned is signed lost with why: the break, when it came after the vendor
-  was recorded earned (`disagreed`, `flagged`, `code_stop`, with the decision and rule); `no_payment_limit` or
-  `not_a_vendor`; otherwise `rule_changed`.
+  was recorded earned (`disagreed`, `flagged`, `code_stop`, with the decision, and the rule that flagged or stopped it);
+  `high_risk`, `no_payment_limit` or `not_a_vendor`; otherwise `rule_changed`.
 - **AL17. Rule changes are signed strictly.** `earned_vendor_rule_changed` `{ by, from, to }`, actor `human`, domain
   `system`. The signing key is checked before anything is written (`assertLedgerCanSign`); if the entry still cannot be
   signed, the change is put back and refused ("The change could not be signed in the ledger, so nothing changed. Try
-  again in a moment."), so no rule is in force without its entry.
+  again in a moment."), so no rule is in force without its entry. As the mirror address, it is put back only from its
+  own write (an update guarded by the value it wrote), so a change another owner made since stays. Should the put-back
+  fail too, that is logged and the owner reads "That did not work. Try again in a moment.", never that nothing
+  changed.
 - **AL18. In the report.** Under **How often you agreed**, while shadow mode is on (the readiness steps show): **Earned
   vendors**.
   - With no rule: "No rule is set. An owner sets one in Settings, under Earned vendors."
@@ -120,10 +128,13 @@ says "Not available in this workspace yet.", the report leaves the block out, an
 |---|---|---|
 | `earned_vendor_rule_changed` | human / system | `{ by, from, to }`, each a whole number from 5 to 50, or null for no rule |
 | `vendor_earned` | system / compliance | `{ counterpartyId, streak, agreed, evidence, from, to, since, trigger }`: `evidence` the counted decisions' entry seqs, newest first, at most 50; `from` and `to` the oldest and newest of their times; `since` the break before them `{ kind, at, decisionSeq, rule }` or null; `trigger` `verdict`, `rule` or `cycle` |
-| `vendor_earned_lost` | system / compliance | `{ counterpartyId, streak, because, decisionSeq, rule, trigger }`: `streak` null when the rule is off; `because` `disagreed`, `flagged`, `code_stop`, `rule_changed`, `rule_off`, `no_payment_limit` or `not_a_vendor`; `decisionSeq` and `rule` for a break, else null |
+| `vendor_earned_lost` | system / compliance | `{ counterpartyId, streak, because, decisionSeq, rule, trigger }`: `streak` null when the rule is off; `because` `disagreed`, `flagged`, `code_stop`, `rule_changed`, `rule_off`, `high_risk`, `no_payment_limit` or `not_a_vendor`; `decisionSeq` the decision of a break, else null; `rule` the rule that flagged or stopped it, else null (always for `disagreed`, and for the model's own flag) |
 
-Both per-vendor kinds are added to the counterparty entries the evidence read collects (`COMPLIANCE_ACTIONS`). No
-detail carries an email.
+A vendor's newest `vendor_earned` or `vendor_earned_lost` entry is its last signed status; while no rule is in force
+(the newest `earned_vendor_rule_changed` has `to: null`), no vendor is earned, whatever that entry says. The entries
+are read through `GET /api/v1/ledger`, webhooks and the report. A bill's evidence does not list them: nothing about a
+payment rests on them in step 2, and the evidence read keeps only the entries its steps cite (AL27 is where step 3
+would cite one). No detail carries an email.
 
 ## Where it is
 
@@ -136,13 +147,14 @@ detail carries an email.
 - `src/components/EarnedVendorsPanel.tsx`: the Settings section.
 - `src/components/vx/EarnedVendors.tsx`: the report's block; `ReportReadiness` shows it after the ladder.
 - `src/components/vx/LiveSliceStart.tsx`: `earned`, the picker's mark.
-- `src/lib/workspace-report-read.ts`: the verdict's `decided_at`, the payee's `role` and `payment_limit`.
+- `src/lib/workspace-report-read.ts`: the verdict's `decided_at`, the payee's `role`, `risk_level` and `payment_limit`.
 - `src/app/actions/verdicts.ts` and `runApStage` (`src/lib/agent/orchestrator.ts`): the sync after a verdict and at
   the stage's start.
 - Tests: `tests/earned-vendors.test.ts`, `tests/earned-vendors-store.test.ts`, `tests/earned-vendors-migration.test.ts`,
   `tests/earned-vendors-actions.test.ts`, `tests/earned-vendors-panel.test.tsx`, `tests/earned-vendors-view.test.tsx`,
   `tests/earned-vendors-cycle.test.ts`, `tests/verdict-actions.test.ts`. The Quality Lab (39 of 39) and the shadow
-  replay (37 same, 9 cannot rebuild, 0 wrong) are unchanged: their fake answers no rule, so the sync stops at its read.
+  replay (37 same, 9 cannot rebuild, 0 wrong) are unchanged: their fake answers no rule and an empty record, so the
+  sync signs nothing.
 - Docs: the shadow mode guide's **Earned vendors** and **What the ledger records**; the report guide's **Earned
   vendors** and **Start the live slice**; the API changelog; ARCHITECTURE.md (shadow mode); CHANGELOG.
 
@@ -165,7 +177,9 @@ Planned, not built. Nothing below exists in this pull request.
   stage.
 - **AL26. At most 3 waiting.** With 3 of a vendor's payments made on its own still waiting for a verdict, its next one
   waits.
-- **AL27. The record of each payment.** The `ap_pay` entry would carry `earned: { recordSeq, streak, agreed }`.
+- **AL27. The record of each payment.** The `ap_pay` entry would carry `earned: { recordSeq, streak, agreed }`, and
+  the bill's evidence would cite that `vendor_earned` entry, read with the counterparty's entries (`COMPLIANCE_ACTIONS`
+  in `src/lib/evidence-read.ts`, which does not read it in step 2, since no step cites it there).
 - **AL28. Words.** Every in-product sentence saying nothing is paid in shadow mode until a person agrees would name the
   exception while the switch is on.
 - **AL29. The report says who paid.** A payment made on the agent's own decision stays "The agent" after a later Agree.
