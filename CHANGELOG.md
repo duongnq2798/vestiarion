@@ -37,6 +37,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   else, as its own result already said. The page now says so in its introduction and in what the check covers; what
   the check does is unchanged. No migration.
 
+- **The free bill list check runs in a background tab too.** It waited for the browser to draw a frame before
+  checking, and a tab in the background draws none until it is shown again. It now also checks without a frame: after a
+  tenth of a second, or about a second in a background tab, where browsers slow timers down. No migration.
+
 ## [0.1.0-beta.14] - 2026-10-28
 
 ### Added
