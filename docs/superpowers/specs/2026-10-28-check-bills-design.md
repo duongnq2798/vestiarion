@@ -32,8 +32,9 @@ they check is the list its bill import reads, so the step after the check is sho
 - Each step replaces the one before it, and the button pressed goes with it, so the focus moves to the new step's place
   in the trail of steps (`StepTrail`): a keyboard carries on from the new step, and a screen reader says which it is.
 - While the check runs, **Check N bills** shows it is busy and takes no second press: the check waits for that to be
-  drawn, then runs. A tab in the background draws no frames, so the check also runs after 100 ms without one, and runs
-  once either way. 5,000 bills of one vendor for one amount take a second or two.
+  drawn, then runs. A tab in the background draws no frames until it is shown again, so the check also runs after
+  100 ms without one (about a second in a background tab, where browsers slow timers down), and runs once either way.
+  5,000 bills of one vendor for one amount take a second or two.
 
 **CB3. Which column is which** (`startingAnswers`, `questionsOf`, `unansweredOf`, `src/lib/bill-check/read.ts`).
 - The first row is read as column names when it looks like them (`looksLikeHeader`). Each field is matched by
