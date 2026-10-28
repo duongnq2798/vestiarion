@@ -19,17 +19,19 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   vendor that earned it and is signed as earned, which passed every check, is made at once instead of waiting for your
   verdict: the bill's amount to the address on file, in test USDC on Arc testnet, or simulated in a workspace with no
   wallet. Every limit and check still applies, as in a live workspace, and it counts against the agent's spending
-  limit, which turning it on needs and which keeps a figure while it is on. You give your verdict after: **Bills &
-  receivables** says "An earned vendor: paid without waiting for your verdict." and asks **Give your verdict**. One
-  disagreement, a flagged bill or a check in code stopping one of the vendor's bills takes its status away, at once for
-  the rest of that cycle, and once 3 of a vendor's payments made this way wait for your verdict its next one waits too.
-  Schedules, holds, milestones and payments already waiting are unchanged. Each change to the switch is signed as
-  `earned_vendor_payments_changed`, and undone if it cannot be signed; the agent's `ap_pay` carries `earned`; the
-  report counts such a payment as the agent's even after you agree, unless a person paid the bill after the agent's
-  own transfer failed. The Monday email in shadow mode says these payments apart from the bills you agreed with, and
-  **Try it on past decisions** counts them against the spending limit. Settings, the workspace status and the report
-  say the exception while it is on, and the public pages and the guides name it. Off by default, refused on Arc mainnet,
-  and turned off with the rule. The Quality Lab gains four scenarios (43 of 43) and two checks over every scenario:
+  limit, which turning it on needs and which keeps a figure while it is on, as the limit's dialog then says. You give
+  your verdict after: **Bills & receivables** says "An earned vendor: paid without waiting for your verdict." and asks
+  **Give your verdict**. One disagreement, a flagged bill or a check in code stopping one of the vendor's bills takes
+  its status away, at once for the rest of that cycle, and once 3 of a vendor's bills read that way with no verdict
+  yet, its next payment waits too. Schedules, holds, milestones and payments already waiting are unchanged. Each change
+  to the switch is signed as `earned_vendor_payments_changed`, and undone if it cannot be signed; the agent's `ap_pay`
+  carries `earned`; the report counts such a payment as the agent's even after you agree, or after an **Approve and
+  pay** that only recorded the agent's transfer (`approval_paid` with `recorded: true`), unless a person paid the bill
+  after the agent's own transfer failed. The Monday email in shadow mode says these payments apart from the bills you
+  agreed with, and **Try it on past decisions** counts them against the spending limit, and a bill of such a vendor
+  that a check held, but the figure tried lets through, as possibly paid on its own. Settings, the workspace status
+  and the report say the exception while it is on, and the public pages and the guides name it. Off by default,
+  refused on Arc mainnet, and turned off with the rule. The Quality Lab gains four scenarios (43 of 43) and two checks over every scenario:
   never more than a live workspace, and nothing changes for a vendor that has not earned it. No migration: 0146 holds
   the switch.
 - **Earned vendors in shadow mode.** An owner can now say when a vendor has earned their trust: a number of agreed

@@ -208,7 +208,9 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
   - While it is on, the agent's spending limit keeps a figure: `changeAgentBudget` refuses removing both
     (`earned_payments_need_figure`: "Keep a daily or 7-day figure while the agent pays earned vendors on its own, or
     have an owner turn that off first, under Earned vendors in Settings."), reading the switch only for that change, as
-    off before 0146. Without it, an owner or admin (`agent.budget`) could remove the limit after the switch went on: the
+    off before 0146. The console reads the switch too (never on Arc mainnet), so the limit's dialog says so while it is
+    on ("Leave a figure blank for no limit on it, but keep one while the agent pays earned vendors on its own."), as it
+    says Arc mainnet keeps a figure (mainnet copy C11). Without it, an owner or admin (`agent.budget`) could remove the limit after the switch went on: the
     gate would then grant none (AL24) while Settings, the header and the report still said the agent pays earned
     vendors on its own. Should a limit go some other way (two owners at once, a wallet's contract), the gate still grants
     none, and every payment waits for a verdict.
@@ -256,7 +258,11 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
   are paid or on their way with no verdict yet (`waiting`), and only those made since shadow mode last started, since a
   verdict can no longer be given on one before; with 3 (`EARNED_WAITING_MAX`) it is `paused`, and its next payment
   waits for a verdict as before, until a person gives one. Each payment the gate lets through in a stage counts toward
-  the 3 at once. The status stays earned; no entry is signed for the pause.
+  the 3 at once. The status stays earned; no entry is signed for the pause. A payment counts exactly while Bills asks a
+  verdict on it (AL28): its decision is the bill's newest, the only one a verdict is offered on (`verdictView`); the
+  bill is paid or on its way (`invoices.status` `paid` or `matched`), so not once its transfer failed and the bill is
+  held; and `paidOnItsOwn` holds, so no person paid the bill after it. The sync reads each bill's status and a
+  person's `approval_paid` entries for this (`readEarnedFacts`); the report hands in its own facts, which carry both.
 - **AL27. The record of each payment.** The `ap_pay` entry gains `earned: { recordSeq, streak, agreed }`, the
   `vendor_earned` entry that recorded the vendor earned, the rule, and the agreed verdicts in a row at the stage's
   start. It keeps `shadow: true` and has no `heldBecause` unless the live path held it (the pause, the cash). A verdict
@@ -275,15 +281,25 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
   verdict" while one can be given. "Paid this way" is `paidOnItsOwn` (`src/lib/earned-vendors.ts`), shared with the
   report and the weekly brief: the bill's newest decision carried out on its own ended paid or on its way, and no
   person paid the bill after it (`approval_paid`, which Approve and pay and Agree and pay both write). A bill a person
-  paid after the agent's own payment was held or its transfer failed is theirs. `shellStatus` reads the switch beside
-  shadow mode, at the same time, so a shadow-mode page waits on no extra round trip. In shadow mode the weekly brief
+  paid after the agent's own payment was held or its transfer failed is theirs. An Approve and pay that sent nothing
+  of its own, because a transfer already existed or a send Circle never answered was found (a payment to another chain
+  whose mint ran late, held for a person), only records the agent's transfer: its `approval_paid` carries
+  `recorded: true`, and the payment stays the agent's. `shellStatus` reads the switch beside
+  shadow mode, at the same time, so a shadow-mode page waits on no extra round trip, and not at all on Arc mainnet,
+  where it cannot be on. In shadow mode the weekly brief
   (W6) says the bills the agent paid on its own apart from the ones a person agreed with ("Paid 3 bills on Arc testnet,
   1,200.00 USDC in all: 2 on its own to earned vendors, 1 you agreed with."), and the rule trial (policy replay P6)
   counts such a payment against the spending limit, as any payment the agent made, saying "The agent pays it on its
-  own, for an earned vendor".
+  own, for an earned vendor". A bill a rule held then, of a vendor recorded earned while the switch was on, which a
+  tried figure lets through, may have been paid on its own: the trial counts it from nothing to its value and says
+  "The agent pays it, on its own for an earned vendor or once a person agrees, in shadow mode", and once it answers
+  one of a vendor's decisions otherwise than it was answered, counts the vendor's later payments the same way, since
+  the gate's answer (still earned, fewer than 3 waiting) is not replayed. It reads the switch's changes and every
+  vendor's statuses from the ledger for this.
 - **AL29. The report says who paid.** A payment made by the agent's own decision (`onItsOwn`, read from
   `detail.earned`) is "agent" in `decidedBy` even after a later Agree, unless a person paid the bill after it
-  (`paidOnItsOwn`, AL28): then it is the person's or the verdict's, as before. The report counts them (`paid.onItsOwn`), and its
+  (`paidOnItsOwn`, AL28; an approval that only recorded the agent's transfer, `recorded: true`, did not pay it): then
+  it is the person's or the verdict's, as before. The report counts them (`paid.onItsOwn`), and its
   **Needed a person** tile, which in shadow mode says "In shadow mode, every payment waits for your verdict", says
   instead how many the agent paid on its own once there is one.
 - **AL30. Quality Lab.** Four scenarios in the `switches` group (`switches-earned-vendor-paid`,
@@ -304,13 +320,20 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
 - `EarnedGate` has a third method, `paid`, so each payment the gate lets through counts toward the 3 in the same stage
   (AL26); the plan counted only the payments read as the stage started.
 - `waiting` counts only payments made since shadow mode last started: a verdict cannot be given on one before, so
-  counting it would pause the vendor for good.
+  counting it would pause the vendor for good. For the same reason it counts only a bill's newest decision, and, so
+  that it means what Bills asks for, only while the bill is paid or on its way and no person paid it after (AL26).
 - Turning the rule off also signs the switch's own entry (AL21), so the ledger names the switch off once it went off
   with the rule; an entry that could not be signed then is signed before the switch's next change.
 - Found in review and fixed before merge: the Bills mark, the report and the weekly brief read who paid from the
   decision itself and a person's payment after it (AL28, AL29); the weekly brief and the rule trial count these
   payments as the agent's (AL28); the spending limit cannot be removed while the switch is on (AL21); a rule change
   put back never turns the switch on against a signed off (AL21); and /open and Studios name the exception (AL28).
+  In a second review: an Approve and pay that only recorded the agent's own transfer leaves the payment the agent's
+  (`recorded: true`, AL28, AL29); `waiting` follows `paidOnItsOwn` and the bill's newest decision (AL26); the rule
+  trial counts a hold it frees for a vendor the agent may have paid on its own as possibly paid (AL28); the limit's
+  dialog says a figure stays while the switch is on (AL21); the header reads no switch on Arc mainnet (AL28); the
+  shadow mode guide and the Quality Lab page no longer say every shadow-mode payment waits for a verdict, nor three
+  code comments that Arc testnet only mirrors agreed payments.
 - The bill's evidence chain does not cite the `vendor_earned` entry as a fact of its own: its decision step cites the
   `ap_pay` entry, whose `earned.recordSeq` names it, and the entry is read through the ledger and the report. Citing
   it in the chain is left for later.

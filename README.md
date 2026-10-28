@@ -398,8 +398,9 @@ run in production, with its ledger entries and transactions.
   and why, how often a person stepped in, discounts measured from the transfers, and what is left before a live slice,
   with how often the business agreed with the agent by decision and by vendor and the number of verdicts behind each
   figure, and which vendors earned the owner's rule of N agreed verdicts in a row, each change signed in the ledger
-  and granting nothing, which an owner then opens on Arc mainnet with the vendors they choose, each showing that
-  agreement, carried over without typing them in again.
+  and granting nothing unless an owner lets the agent pay those vendors on its own in shadow mode; an owner then opens
+  the live slice on Arc mainnet with the vendors they choose, each showing that agreement, carried over without typing
+  them in again.
   Agent vs what really happened lays each bill's decision beside what the business recorded paying outside
   Vestiarion, one bill at a time, from a CSV, or from a bank statement whose lines are matched to the bills they could
   have paid, each figure linked to its signed entry. Value keeps measured, estimated and not-counted figures apart, and

@@ -843,12 +843,19 @@ plan, on Arc testnet).
   once) only after the batch is sent, so within one stage, between `cycle_complete` entries, a held milestone and a
   planned release weigh each other at the high end only. Shadow mode spends nothing: a bill's entry says so, and a
   milestone's only when held for a verdict; for one a rule stopped, `readShadowMode` and the network (never on Arc
-  mainnet) settle it where they can, and otherwise it counts from nothing to its value.
+  mainnet) settle it where they can, and otherwise it counts from nothing to its value. A payment the agent made on
+  its own for an earned vendor counts what it paid; a shadow-mode bill `pay` decided while the earned vendors switch
+  was on, for a vendor recorded earned (`EarnedHistory`, from `earned_vendor_payments_changed` and `vendor_earned*`
+  entries), counts from nothing to its value where a rule held it and the column lets it through, and so does every
+  later one of a vendor whose decision the column answered otherwise than it was answered (`earnedApart`), since the
+  gate's answer is not replayed.
 - **Can't tell** is counted, never guessed: an entry without an amount, decision or known rule, a missing risk level,
   an unsettled check, a spending-limit check whose low and high running totals disagree, or a contract refusal for want
   of room under other figures.
 - **Reading and the action:** `ruleReplay` (`src/lib/policy-replay-read.ts`) parses the candidate with the setting's own
-  parser and reads the window's decisions and cycle ends in pages (at most 20 of 1,000 each), and shadow mode's start.
+  parser and reads the window's decisions and cycle ends in pages (at most 20 of 1,000 each), shadow mode's start, and
+  the earned vendors switch and statuses from the start (none on Arc mainnet; unread, every such bill may have been
+  paid on the agent's own).
   `tryRuleAction` authorizes the permission that changes the setting (`records.write`, `approval.policy`,
   `agent.budget`) and changes nothing.
 - **Applying it** posts the setting's own form to its own action. `policy-replay-apply.ts` reads the figure tried
@@ -1619,7 +1626,8 @@ disagrees with every decision.
   back from its own write if the entry fails; a switch left in force without its entry is signed before the next
   change). Turning the rule off turns it off in the same write and signs its entry after the rule's; a rule change put
   back after its entry fails restores the switch only when the rule went off with it, and only while the ledger still
-  names it on. While it is on, `changeAgentBudget` refuses removing both figures (`earned_payments_need_figure`). In
+  names it on. While it is on, `changeAgentBudget` refuses removing both figures (`earned_payments_need_figure`), and
+  the console reads it, off Arc mainnet, so the limit's dialog says a figure stays (`budgetDialogDescription`). In
   `runApStage`
   of a shadow workspace with bills to decide, `earnedGateFor` (`src/lib/agent/earned-gate.ts`) replaces the bare sync:
   it syncs, then grants each vendor earned now and recorded earned while the switch is on, a spending limit is set and
@@ -1628,15 +1636,19 @@ disagrees with every decision.
   for a verdict: with a grant the payment takes the live path (`payApInvoiceIfNotPaused`, counted against the spending
   limit and the limit on Arc), its `ap_pay` carries `earned: { recordSeq, streak, agreed }` beside `shadow: true`, and
   its reasoning ends with `EARNED_PAID_NOTE`. A vendor with 3 such payments waiting for a verdict (`EARNED_WAITING_MAX`,
-  `waiting` on its earned status, counted only since shadow mode last started) waits again; a decision in the stage
+  `waiting` on its earned status, counted only since shadow mode last started, and only the bill's newest decision on a
+  bill still `paid` or `matched` that `paidOnItsOwn` gives the agent, as Bills marks it; `readEarnedFacts` reads the
+  bills' status and the `approval_paid` entries for it) waits again; a decision in the stage
   that flags the vendor's bill or that `breaksEarning` stops takes the grant away for the rest of the stage and signs
   `vendor_earned_lost` (`trigger: "cycle"`) best effort. Bills mark such a payment (`Decision.earned`) and ask "Give
   your verdict"; the report keeps it "The agent"'s (`onItsOwn`, from `detail.earned`) after a later Agree; both, and
   the weekly brief, which counts these payments apart from the agreed ones (`paid.onItsOwn`), decide it with
   `paidOnItsOwn` (`src/lib/earned-vendors.ts`): the newest own decision ended paid or on its way, and no
-  `approval_paid` came after it. The rule trial counts such a payment against the spending limit (`onItsOwn` in
-  `src/lib/policy-replay.ts`). Settings' shadow mode, the workspace status (`earnedPayments` from `shellStatus`,
-  read beside shadow mode, and `capabilityOf`) and the report name the exception while the switch is on. Two Quality Lab invariants (`tests/quality-lab-earned.test.ts`): never more than a
+  `approval_paid` that sent a transfer came after it (`approvePayable` marks one that only recorded the transfer sent
+  before it `recorded: true`). The rule trial counts such a payment against the spending limit (`onItsOwn` in
+  `src/lib/policy-replay.ts`), and one it may have made, freed by a tried figure, as possibly paid. Settings' shadow mode, the workspace status (`earnedPayments` from `shellStatus`,
+  read beside shadow mode, never on Arc mainnet, and `capabilityOf`) and the report name the exception while the
+  switch is on. Two Quality Lab invariants (`tests/quality-lab-earned.test.ts`): never more than a
   live workspace, and nothing changes for a vendor that has not earned it.
 - **Start the live slice** (`docs/superpowers/specs/2026-10-18-live-slice-design.md`). Under those steps an owner
   (`org.administer`, with Arc mainnet open to them) ticks vendors. `startLiveSlice` (`src/lib/live-slice.ts`) refuses
