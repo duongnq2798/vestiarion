@@ -12,6 +12,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Fixed
+
+- **The free bill list check no longer waits forever in a background tab.** It waited for the browser to draw a frame
+  before checking, and a tab in the background draws none. It now checks after a tenth of a second without one. No
+  migration.
+
 ## [0.1.0-beta.14] - 2026-10-28
 
 ### Added

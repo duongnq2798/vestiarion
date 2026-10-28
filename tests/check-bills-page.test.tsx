@@ -120,6 +120,19 @@ describe("the checker (CB2, CB3, CB10)", () => {
     expect(live()).toBe("");
   });
 
+  it("still checks in a tab that draws no frames, as a background tab does (CB2)", async () => {
+    const frames = vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 0);
+    click("Try the sample list");
+    click("Check 13 bills");
+    expect(button("Check 13 bills").getAttribute("aria-busy")).toBe("true");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    expect(frames).toHaveBeenCalled();
+    expect(text()).toContain("3. What it found");
+    expect(live()).toContain("2 likely duplicates");
+  });
+
   it("downloads the list back with its flag column, made in the page", async () => {
     const made: Blob[] = [];
     vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
