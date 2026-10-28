@@ -97,8 +97,11 @@ serves from `robots.ts` and `sitemap.ts`, so a copy edit or a new free tool fail
 - **The state**, each check's failures in a row and whether the team was told, is `.synthetic-state.json`, written after
   every round and kept between runs in the Actions cache. No database.
 - **The secret** `MONITOR_DISCORD_WEBHOOK_URL` is the only one, and the script never prints it. Without it the checks
-  still run and the job log says no alert could be sent. A run fails only when an alert that was due could not be sent
-  or the state file could not be read, never because a page failed.
+  still run and the job log says no alert could be sent. A run reads it when it starts and keeps the script of the
+  commit it was queued at, so a secret changed mid-run is used from the next run, and a script change from the first
+  run queued after it, up to about 7 hours later; running the workflow by hand, then cancelling the run in progress,
+  applies either at once (`docs/self-hosting.md`). A run fails only when an alert that was due could not be sent or the
+  state file could not be read, never because a page failed.
 - It reads public pages only, holds no token, and runs no JavaScript, so Google Analytics counts no probe; its user
   agent, `vestiarion-synthetic-check`, tells the probes apart in Vercel's logs. A fork checks nothing unless its
   repository variable `SYNTHETIC_ORIGIN` names its own deployment.

@@ -80,7 +80,12 @@ emails its actor about a broken monitor, never once per failing page.
 PC10. Reads only. Plain `GET`s of public pages with the header `User-Agent: vestiarion-synthetic-check
 (+https://github.com/duongnq2798/vestiarion)`, which Vercel's logs can filter on; no cookie, no token, no write. It
 runs no JavaScript, and the only analytics in the app is Google Analytics in the browser, so no probe counts as a
-visit. Database reads: the landing and `/open` each read it about 144 times a day.
+visit. Database load: the landing and `/open` are each opened about 144 times a day. Their reads are kept a minute on
+each Vercel instance, so with 10 minutes between rounds a landing load usually finds them gone and makes 11 to 16
+read-only calls: four open-numbers functions per network (`fetchOpenNumbers`); the team's journeys, one function and up
+to two workspace and two ledger reads; its recent decisions; and its latest decision, with its workspace's read. `/open`
+makes the same four per network, or none when the landing's check, made at the same moment, reached the same instance
+and is reading them already.
 
 PC11. Where it runs: GitHub's servers, outside Vercel and Supabase. A fork checks nothing unless its repository variable
 `SYNTHETIC_ORIGIN` names its own deployment, which it then checks instead of production.
@@ -93,15 +98,28 @@ checks, the verdict, the alert rule and the post are pure exported functions, te
 
 In Discord, on the team's own server: a private channel's settings > Integrations > Webhooks > New Webhook > Copy
 Webhook URL. In GitHub: the repository's Settings > Secrets and variables > Actions > New repository secret, named
-`MONITOR_DISCORD_WEBHOOK_URL`. Then run the workflow once by hand from the Actions tab to see the first round.
+`MONITOR_DISCORD_WEBHOOK_URL`.
+
+A run reads the secret when it starts, and once the hourly schedule has started a run, one is nearly always going, with
+the next hourly start waiting behind it. So to use the secret at once, in the Actions tab: open Vestiarion production
+check and use Run workflow, and the new run waits behind the run in progress, in place of any hourly start that was
+waiting; then cancel the run in progress. Its last round is saved (PC8), and the new run starts at once, with the
+secret, its first round in its log. The same two steps, in that order, apply a change to the script at once after it is
+on main. A secret added before the workflow first runs needs neither.
 
 ## Known limits
 
 - If GitHub Actions is down, or starts no hourly run for about 6 hours, rounds pause, and nothing says so: silence on
   the channel means every check passing, or no check running. The Actions tab shows the runs.
-- A change to the script reaches the loop at the next run, up to 6 hours later; cancelling the running run applies it
-  at the next start.
-- Hourly starts that wait behind a running run and are replaced by a newer one show as cancelled in the Actions tab.
+- A secret added or changed while a run is going is used from the next run, up to about 6 hours later, unless the two
+  steps in "What the owner adds" start one at once. A run that started without it says in its log that no alert can be
+  sent, and the checks it found failing are told by the first run with the secret, if they are still failing then.
+- A run keeps the script, and the workflow, of the commit that was on main when it was queued, and the waiting run was
+  queued up to an hour before it starts. So a change to either reaches the loop at the first run queued after it is on
+  main, up to about 7 hours later. Cancelling only the running run does not apply it sooner: the older waiting run
+  starts in its place, with the old script. The two steps in "What the owner adds" do.
+- A waiting run that a newer one replaces, an hourly start or a run by hand, shows as cancelled in the Actions tab and
+  checks nothing.
 - GitHub turns off a public repository's schedules after 60 days with no activity.
 - If Vercel's firewall ever challenges GitHub's runners, the checks fail with 403 or 429 and the team is told.
 - The health of the jobs Supabase Cron runs (a route answering 500 to pg_net) is still read with SQL only.
