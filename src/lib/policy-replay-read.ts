@@ -9,6 +9,7 @@ import {
   replaySummary,
   withCandidate,
   type CantTellReason,
+  type EarnedHistory,
   type ReplayChange,
   type ReplayCounts,
   type ReplayedDecision,
@@ -150,11 +151,12 @@ const CANT_TELL_WORDS: Record<CantTellReason, string> = {
 
 /**
  * What going ahead means: in shadow mode a payment the checks let through waits for a person to agree (P6), unless the
- * agent paid it on its own for an earned vendor (earned vendors AL22).
+ * agent paid it on its own for an earned vendor, or may have under these figures (earned vendors AL22).
  */
-function goesAheadWords(source: "bill" | "milestone", action: string, shadow: boolean | null, onItsOwn: boolean): string {
+function goesAheadWords(source: "bill" | "milestone", action: string, shadow: boolean | null, onItsOwn: boolean, mayBeOnItsOwn: boolean): string {
   if (source === "bill") {
     if (action === "ap_schedule") return "The agent schedules it";
+    if (mayBeOnItsOwn) return "The agent pays it, on its own for an earned vendor or once a person agrees, in shadow mode";
     if (onItsOwn) return "The agent pays it on its own, for an earned vendor";
     return shadow ? "The agent pays it once a person agrees, in shadow mode" : "The agent pays it";
   }
@@ -165,7 +167,7 @@ function goesAheadWords(source: "bill" | "milestone", action: string, shadow: bo
 function verdictWords(verdict: ReplayVerdict, decision: ReplayedDecision, action: string): string {
   switch (verdict.kind) {
     case "goes_ahead":
-      return goesAheadWords(decision.source, action, decision.shadow, decision.onItsOwn);
+      return goesAheadWords(decision.source, action, decision.shadow, decision.onItsOwn, verdict.mayBeOnItsOwn === true);
     case "paid_earlier":
       return "Paid by an earlier decision";
     case "stopped":
@@ -313,6 +315,38 @@ async function readShadowHistory(): Promise<ShadowHistory> {
   }
 }
 
+/** The ledger entries that say whether an earned vendor's payment may have been made on the agent's own (earned vendors AL15, AL21). */
+const EARNED_ACTIONS = ["earned_vendor_payments_changed", "vendor_earned", "vendor_earned_lost"] as const;
+
+/**
+ * What the ledger says of earned vendors (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL15, AL21), for a
+ * shadow-mode bill a figure frees (P6): each change of the owner's switch and each vendor's signed status, from the
+ * start, since a vendor recorded earned before the window still was in it. None on Arc mainnet, where shadow mode does
+ * not run; null when unread, so any such bill may have been paid on the agent's own.
+ */
+async function readEarnedHistory(): Promise<EarnedHistory | null> {
+  if (workspaceNetwork().id === "arc-mainnet") return { switches: [], records: [] };
+  try {
+    const rows = await readPages<{ seq: number; action: string; to: unknown; counterparty_id: string | null }>((after) =>
+      db()
+        .from("ledger_entries")
+        .select("seq, action, to:detail->to, counterparty_id:detail->>counterpartyId")
+        .in("action", [...EARNED_ACTIONS])
+        .gt("seq", after)
+        .order("seq", { ascending: true })
+        .limit(LEDGER_PAGE_SIZE)
+    );
+    return {
+      switches: rows.filter((row) => row.action === "earned_vendor_payments_changed").map((row) => ({ seq: Number(row.seq), on: row.to === true })),
+      records: rows.flatMap((row) =>
+        row.action !== "earned_vendor_payments_changed" && row.counterparty_id ? [{ seq: Number(row.seq), counterpartyId: row.counterparty_id, earned: row.action === "vendor_earned" }] : []
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
 interface Replayed {
   setting: TrialSetting;
   result: ReplayResult;
@@ -350,8 +384,8 @@ async function replay(input: RuleTrialInput, now: Date): Promise<Replayed> {
   const window = windowSpan(input.days, now);
   // The spending limit's 7 days reach back six UTC days before the window's first day (P6).
   const since = budgetWindows(new Date(window.from)).weekStart;
-  const [entries, cycleEnds, shadow] = await Promise.all([readDecisions(since), readCycleEnds(since), readShadowHistory()]);
-  const result = replayDecisions(entries, { windowStart: window.from, current, candidate: withCandidate(current, setting.candidate), cycleEnds, shadow });
+  const [entries, cycleEnds, shadow, earned] = await Promise.all([readDecisions(since), readCycleEnds(since), readShadowHistory(), readEarnedHistory()]);
+  const result = replayDecisions(entries, { windowStart: window.from, current, candidate: withCandidate(current, setting.candidate), cycleEnds, shadow, earned });
   return { setting, result, entries, names, window };
 }
 

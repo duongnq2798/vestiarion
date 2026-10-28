@@ -3,6 +3,7 @@ import {
   replayDecisions,
   replaySummary,
   withCandidate,
+  type EarnedHistory,
   type ReplayEntry,
   type RuleFigures,
   type ShadowHistory,
@@ -11,7 +12,9 @@ import {
 /**
  * Trying a rule figure on past decisions (docs/superpowers/specs/2026-10-10-policy-replay-design.md): the code's checks
  * replayed on recorded facts, with the figures in force and with a candidate swapped in. Pure, so every case is a list
- * of ledger entries and two sets of figures.
+ * of ledger entries and two sets of figures. In shadow mode, a payment the agent may have made on its own for an earned
+ * vendor (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22, AL26, AL28) counts from nothing to its value
+ * wherever its vendor's status, or the gate's answer, may differ from what happened.
  */
 
 const ACME = "cp-acme";
@@ -102,7 +105,7 @@ function figures(overrides: Partial<RuleFigures> = {}): RuleFigures {
   };
 }
 
-function run(entries: ReplayEntry[], current: RuleFigures, candidate: RuleFigures, options: { cycleEnds?: number[]; shadow?: ShadowHistory } = {}) {
+function run(entries: ReplayEntry[], current: RuleFigures, candidate: RuleFigures, options: { cycleEnds?: number[]; shadow?: ShadowHistory; earned?: EarnedHistory | null } = {}) {
   return replayDecisions(entries, { windowStart: WINDOW_START, current, candidate, ...options });
 }
 
@@ -328,6 +331,8 @@ describe("the spending limit, replayed in recorded order (P6)", () => {
     const EARNED = { shadow: true, earned: { recordSeq: 7, streak: 5, agreed: 6 } };
     const daily = (dailyUsdc: number) => figures({ spendingLimit: { dailyUsdc, weeklyUsdc: null } });
     const paidOnItsOwn = (at: string) => bill({ amount: 400, at, detail: EARNED });
+    /** What the ledger says of earned vendors: the owner's switch turned on, then Acme recorded earned, before `seq`. */
+    const earnedSince = (seq: number): EarnedHistory => ({ switches: [{ seq: seq - 2, on: true }], records: [{ seq: seq - 1, counterpartyId: ACME, earned: true }] });
 
     it("counts what it paid against the spending limit, as a live payment counts", () => {
       const entries = [paidOnItsOwn("2026-10-02T08:00:00.000Z"), paidOnItsOwn("2026-10-02T09:00:00.000Z"), paidOnItsOwn("2026-10-02T10:00:00.000Z")];
@@ -337,13 +342,68 @@ describe("the spending limit, replayed in recorded order (P6)", () => {
       expect(result.decisions.map((decision) => [decision.shadow, decision.onItsOwn])).toEqual([[true, true], [true, true], [true, true]]);
     });
 
-    it("rebuilds the hold the spending limit made after them, and frees it under a higher figure", () => {
+    it("rebuilds the hold the spending limit made after them, and frees it under a higher figure, as possibly paid on its own", () => {
       const paid = [paidOnItsOwn("2026-10-02T08:00:00.000Z"), paidOnItsOwn("2026-10-02T09:00:00.000Z")];
       const held = bill({ amount: 400, at: "2026-10-02T10:00:00.000Z", rule: "workspace.outflow_budget", detail: { shadow: true } });
-      const result = run([...paid, held], daily(1000), daily(2000));
+      const result = run([...paid, held], daily(1000), daily(2000), { earned: earnedSince(paid[0].seq) });
       expect(result.decisions[2].before).toEqual({ kind: "stopped", rule: "workspace.outflow_budget" });
       expect(changes(result)).toEqual(["unchanged", "unchanged", "now_paid"]);
       expect(result.decisions[2].onItsOwn).toBe(false);
+      // The vendor was earned and the switch on: freed, the gate may have paid it on its own, or held it for a verdict.
+      expect(result.decisions[2].after).toEqual({ kind: "goes_ahead", mayBeOnItsOwn: true });
+    });
+
+    it("counts a freed hold from nothing to its full value, so a later payment it may crowd out is Can't tell", () => {
+      const paid = [paidOnItsOwn("2026-10-02T08:00:00.000Z"), paidOnItsOwn("2026-10-02T09:00:00.000Z")];
+      const held = (at: string) => bill({ amount: 400, at, rule: "workspace.outflow_budget", detail: { shadow: true } });
+      const entries = [...paid, held("2026-10-02T10:00:00.000Z"), held("2026-10-02T11:00:00.000Z")];
+      // Under 1,500 a day: 800, then 400 more if the agent paid the third on its own, which the fourth would not fit.
+      const result = run(entries, daily(1000), daily(1500), { earned: earnedSince(paid[0].seq) });
+      expect(changes(result)).toEqual(["unchanged", "unchanged", "now_paid", "cant_tell"]);
+      expect(result.decisions[3].after).toEqual({ kind: "cant_tell", because: "budget_unsettled" });
+      expect(result.counts).toMatchObject({ nowPaid: 1, cantTell: 1 });
+    });
+
+    it("tells apart a later payment it made on its own, which a freed hold may have kept from being made or fitting", () => {
+      const paid = [paidOnItsOwn("2026-10-02T08:00:00.000Z"), paidOnItsOwn("2026-10-02T09:00:00.000Z")];
+      const held = bill({ amount: 400, at: "2026-10-02T10:00:00.000Z", rule: "workspace.outflow_budget", detail: { shadow: true } });
+      const later = bill({ amount: 150, at: "2026-10-02T11:00:00.000Z", detail: EARNED });
+      const result = run([...paid, held, later], daily(1000), daily(1200), { earned: earnedSince(paid[0].seq) });
+      expect(changes(result)).toEqual(["unchanged", "unchanged", "now_paid", "cant_tell"]);
+    });
+
+    it("counts nothing for a freed hold, which waits for a person, while the switch was off or the vendor not recorded earned", () => {
+      const held = (at: string, counterpartyId: string) => bill({ amount: 400, at, counterpartyId, rule: "workspace.outflow_budget", detail: { shadow: true } });
+      const entries = [held("2026-10-02T10:00:00.000Z", BOLT), held("2026-10-02T11:00:00.000Z", ACME)];
+      // Acme was recorded earned while the switch was on, then the switch went off, all before both bills.
+      const switchedOff: EarnedHistory = { switches: [{ seq: 1, on: true }, { seq: 3, on: false }], records: [{ seq: 2, counterpartyId: ACME, earned: true }] };
+      for (const earned of [undefined, switchedOff]) {
+        // Each waits for a person under 500 a day, and counts nothing: the second fits as the first did.
+        const result = run(entries, daily(300), daily(500), { earned });
+        expect(changes(result)).toEqual(["now_paid", "now_paid"]);
+        expect(result.decisions.map((decision) => decision.after)).toEqual([{ kind: "goes_ahead" }, { kind: "goes_ahead" }]);
+      }
+      // With the switch on, only Acme's may have been paid on its own: Bolt was never recorded earned.
+      const result = run(entries, daily(300), daily(500), { earned: { switches: [{ seq: 1, on: true }], records: [{ seq: 2, counterpartyId: ACME, earned: true }] } });
+      expect(result.decisions.map((decision) => decision.after)).toEqual([{ kind: "goes_ahead" }, { kind: "goes_ahead", mayBeOnItsOwn: true }]);
+    });
+
+    it("counts a payment it held for a verdict as possibly paid on its own once a lower figure holds one the agent paid", () => {
+      const paid = [paidOnItsOwn("2026-10-02T08:00:00.000Z"), paidOnItsOwn("2026-10-02T09:00:00.000Z")];
+      // Waiting for a verdict: the gate gave the vendor none then (3 already waited); with one fewer, it might have.
+      const waited = bill({ amount: 300, at: "2026-10-02T10:00:00.000Z", paid: false, detail: { shadow: true }, execution: { heldBecause: "shadow_verdict" } });
+      const later = bill({ amount: 200, at: "2026-10-02T11:00:00.000Z", detail: EARNED });
+      const result = run([...paid, waited, later], daily(2000), daily(700), { earned: earnedSince(paid[0].seq) });
+      expect(changes(result)).toEqual(["unchanged", "now_held", "unchanged", "cant_tell"]);
+      expect(result.decisions[2].after).toEqual({ kind: "goes_ahead", mayBeOnItsOwn: true });
+      // Under the figures in force nothing differs from what happened: it waited for a verdict, and the last was paid.
+      expect(result.decisions[2].before).toEqual({ kind: "goes_ahead" });
+      expect(result.decisions[3].before).toEqual({ kind: "goes_ahead" });
+    });
+
+    it("counts a freed hold as possibly paid on its own where what the ledger says of earned vendors could not be read", () => {
+      const held = bill({ amount: 400, at: "2026-10-02T10:00:00.000Z", rule: "workspace.outflow_budget", detail: { shadow: true } });
+      expect(run([held], daily(300), daily(500), { earned: null }).decisions[0].after).toEqual({ kind: "goes_ahead", mayBeOnItsOwn: true });
     });
 
     it("counts one before the window as it counts any payment the agent made", () => {
