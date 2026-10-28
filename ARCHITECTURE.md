@@ -85,7 +85,10 @@ minutes it opens nine public addresses on production with a plain `GET`, followi
 list each free tool. Each must answer 200 within its budget, 8 seconds for the landing and `/open`, which read the
 database, and 4 for the rest, and say a text from its source; `/open` must not say a network's numbers could not be
 read. `tests/synthetic-check.test.ts` holds each text to its source, and robots.txt and the sitemap to what Next.js
-serves from `robots.ts` and `sitemap.ts`, so a copy edit or a new free tool fails CI instead of alerting the team.
+serves from `robots.ts` and `sitemap.ts`, so CI fails a copy edit made without its check, or a free tool left out. Even
+a copy edit made with its check reaches the running checks only with a newer run (see the secret, below): until then
+they look for the old text, or a renamed free tool's old address, and the team is told the page is failing, then
+passing again, unless the workflow is run by hand right after the change is deployed.
 - **When the team is told.** A check that fails two rounds running goes into that round's one post to the team's
   private Discord channel, with its reason, the time it started failing and the run's link, and is not told again while
   it keeps failing. When it passes, it is told once more, with how long it was down. A post Discord does not take is
@@ -99,9 +102,11 @@ serves from `robots.ts` and `sitemap.ts`, so a copy edit or a new free tool fail
 - **The secret** `MONITOR_DISCORD_WEBHOOK_URL` is the only one, and the script never prints it. Without it the checks
   still run and the job log says no alert could be sent. A run reads it when it starts and keeps the script of the
   commit it was queued at, so a secret changed mid-run is used from the next run, and a script change from the first
-  run queued after it, up to about 7 hours later; running the workflow by hand, then cancelling the run in progress,
-  applies either at once (`docs/self-hosting.md`). A run fails only when an alert that was due could not be sent or the
-  state file could not be read, never because a page failed.
+  run queued after it, up to about 7 hours later. Running the workflow by hand applies either at once
+  (`docs/self-hosting.md`): the new run waits behind the run in progress, and starts when the owner cancels the older
+  run in progress, not the one just started. A new run that starts at once instead found none going, and the owner
+  should cancel nothing. A run fails only when an alert that was due could not be sent or the state file could not be
+  read, never because a page failed.
 - It reads public pages only, holds no token, and runs no JavaScript, so Google Analytics counts no probe; its user
   agent, `vestiarion-synthetic-check`, tells the probes apart in Vercel's logs. A fork checks nothing unless its
   repository variable `SYNTHETIC_ORIGIN` names its own deployment.

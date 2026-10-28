@@ -40,8 +40,11 @@ contain" text present, or a time over its budget. The reason says which, in a fe
 
 PC3. Each page's text is still in the source it comes from, and none holds an apostrophe, a quote, `&`, `<` or `>`,
 which React escapes in the page's HTML. Every free tool in `FREE_TOOLS` (`src/lib/free-tools.ts`) is checked, and the
-sitemap check looks for each one's own entry. `tests/synthetic-check.test.ts` holds all three, so a copy edit or a new
-free tool fails CI instead of alerting the team.
+sitemap check looks for each one's own entry. `tests/synthetic-check.test.ts` holds all three, so a copy edit made
+without its check, or a new free tool left out, fails CI. A copy edit made with its check, or a free tool renamed or
+removed, still reaches the running checks only with a newer run (Known limits): until then they look for the old text
+or address, and the team is told the page is failing, then passing again. The steps in "What the owner adds", taken
+right after such a change is deployed, start a run with the new checks.
 
 PC4. When it runs. `.github/workflows/synthetic-check.yml` runs on an hourly schedule, at 7 minutes past (a digits-only
 minute, as `tests/supabase-cron.test.ts` requires), and by hand. A run checks every 10 minutes for 5 hours 45 minutes,
@@ -102,22 +105,27 @@ Webhook URL. In GitHub: the repository's Settings > Secrets and variables > Acti
 
 A run reads the secret when it starts, and once the hourly schedule has started a run, one is nearly always going, with
 the next hourly start waiting behind it. So to use the secret at once, in the Actions tab: open Vestiarion production
-check and use Run workflow, and the new run waits behind the run in progress, in place of any hourly start that was
-waiting; then cancel the run in progress. Its last round is saved (PC8), and the new run starts at once, with the
-secret, its first round in its log. The same two steps, in that order, apply a change to the script at once after it is
-on main. A secret added before the workflow first runs needs neither.
+check and use Run workflow. If a run is in progress, the new run waits behind it, in place of any hourly start that was
+waiting; then cancel the older run in progress, not the one you just started. Its last round is saved (PC8), and the
+new run starts at once, with the secret, its first round in its log. If the new run started at once instead of
+waiting, none was going, as in a fork whose runs were skipped until it set `SYNTHETIC_ORIGIN`, after GitHub started no
+hourly run for a while, or after schedules were turned off and on again. It already has the secret, so cancel nothing.
+The same steps, in that order, apply a change to the script at once after it is on main, and a change to a checked text
+or a free tool's address right after it is deployed (PC3). A secret added before the workflow first runs needs none of
+them.
 
 ## Known limits
 
 - If GitHub Actions is down, or starts no hourly run for about 6 hours, rounds pause, and nothing says so: silence on
   the channel means every check passing, or no check running. The Actions tab shows the runs.
-- A secret added or changed while a run is going is used from the next run, up to about 6 hours later, unless the two
+- A secret added or changed while a run is going is used from the next run, up to about 6 hours later, unless the
   steps in "What the owner adds" start one at once. A run that started without it says in its log that no alert can be
   sent, and the checks it found failing are told by the first run with the secret, if they are still failing then.
 - A run keeps the script, and the workflow, of the commit that was on main when it was queued, and the waiting run was
   queued up to an hour before it starts. So a change to either reaches the loop at the first run queued after it is on
-  main, up to about 7 hours later. Cancelling only the running run does not apply it sooner: the older waiting run
-  starts in its place, with the old script. The two steps in "What the owner adds" do.
+  main, up to about 7 hours later. Cancelling only the running run applies it sooner only once an hourly start has been
+  queued after the change, as that start replaced the waiting run; before that, the older waiting run starts in its
+  place, with the old script. The steps in "What the owner adds" work at any time.
 - A waiting run that a newer one replaces, an hourly start or a run by hand, shows as cancelled in the Actions tab and
   checks nothing.
 - GitHub turns off a public repository's schedules after 60 days with no activity.
@@ -132,5 +140,6 @@ A public status page; a daily "all passing" post; checks that need a key or reac
 
 `tests/synthetic-check.test.ts`: the addresses checked, each text against its source and Next.js's robots and sitemap
 output, the verdict for each kind of failure, the alert rule round by round, posts refused and retried, the post's body,
-the secret never in the log, the command with no secret, a loop of rounds, an unreadable state file, and the workflow's
-schedule, concurrency, permissions, secret and checkout.
+the secret never in the log, the command with no secret, a loop of rounds, an unreadable state file, the workflow's
+schedule, concurrency, permissions, secret and checkout, and the owner's steps as the spec, `docs/self-hosting.md` and
+`ARCHITECTURE.md` give them: which run to cancel, when to cancel none, and the old text a copy edit leaves running.

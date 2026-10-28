@@ -470,12 +470,16 @@ Actions > Variables). Add the channel's webhook URL (the channel's settings > In
 Copy Webhook URL) as the repository secret `MONITOR_DISCORD_WEBHOOK_URL`: it is the workflow's only secret, and without
 it the checks still run and the job log says no alert could be sent. A run reads the secret when it starts and then
 checks for nearly 6 hours, so a secret added or changed meanwhile is used from the next run. To use it at once, in the
-Actions tab use Run workflow on Vestiarion production check (the new run waits in place of any hourly start that was
-waiting), then cancel the run in progress: its last round is saved, and the new run starts at once. It needs no token
-of the app's and no database change. Each page must say a text from the app's own copy (`CHECKS` in the script), so
-change those too if you change that copy. A run keeps the script of the commit it was queued at, so a change to it
-reaches the checks from the first run queued after it is on main, up to about 7 hours later, or at once after the same
-two steps.
+Actions tab use Run workflow on Vestiarion production check. If a run is in progress, yours waits behind it, in place
+of any hourly start that was waiting: then cancel the older run in progress, not the one you just started. Its last
+round is saved, and yours starts at once. If yours started at once instead of waiting, as in a fork that has just set
+`SYNTHETIC_ORIGIN`, none was going and yours already has the secret: cancel nothing. It needs no token of the app's and
+no database change. Each page must say a text from the app's own copy (`CHECKS` in the script), so change those too if
+you change that copy: CI fails a copy edit made without its check. A run keeps the script of the commit it was queued
+at, so a change to it reaches the checks from the first run queued after it is on main, up to about 7 hours later, or
+at once after the same steps. Until then the running checks look for the old text, or for a free tool's old address if
+one was renamed or removed, and the team is told the page is failing, then passing again, so take the same steps right
+after such a change is deployed.
 
 Circle also tells the deployment when a transfer settles, at `POST /api/circle/notifications`. On a
 subscribed account, while the agent runs, a payment confirmed after the agent stopped waiting for it

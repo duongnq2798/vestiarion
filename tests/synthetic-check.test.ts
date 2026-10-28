@@ -34,8 +34,8 @@ import {
  * The production check (docs/superpowers/specs/2026-10-28-production-check-design.md PC1-PC12): what a round opens and
  * what each page must say (PC1, PC3), a check's verdict (PC2), the alert rule round by round (PC5), the Discord post and
  * its retry (PC6), the secret kept out of the log (PC7), the state file (PC8), the exit code (PC9), plain reads (PC10),
- * and the workflow that runs it (PC4, PC11, PC12). Every page is served on loopback and Discord is a stub: nothing here
- * reaches the network.
+ * the workflow that runs it (PC4, PC11, PC12), and the owner's steps the docs give for it (PC3, PC4). Every page is
+ * served on loopback and Discord is a stub: nothing here reaches the network.
  */
 
 const read = (file: string) => readFileSync(path.join(process.cwd(), file), "utf8").replace(/\r\n/g, "\n");
@@ -173,7 +173,7 @@ describe("what a round opens (PC1, PC3)", () => {
     for (const check of CHECKS.filter((one) => !["/", "/open"].includes(one.path))) expect(check.budgetMs, check.path).toBe(4000);
   });
 
-  it("finds each page's text in the source it comes from, so a copy edit fails CI instead of alerting the team", () => {
+  it("finds each page's text in the source it comes from, so a copy edit made without its check fails CI", () => {
     for (const check of CHECKS.filter((one) => !FILES.includes(one.path))) {
       const source = read(SOURCES[check.path]);
       for (const text of [...check.contains, ...(check.lacks ?? [])]) expect(source, `${check.path}: ${text}`).toContain(text);
@@ -717,5 +717,30 @@ describe(".github/workflows/synthetic-check.yml (PC4, PC11, PC12)", () => {
     expect(imports.length).toBeGreaterThan(0);
     for (const specifier of imports) expect(specifier).toMatch(/^node:/);
     expect(read("scripts/synthetic-check.mjs")).not.toMatch(/\bimport\(|require\(/);
+  });
+});
+
+// ---- The owner's steps -----------------------------------------------------------------------------------------
+
+describe("the owner's steps in the docs (PC3, PC4)", () => {
+  const SPEC = "docs/superpowers/specs/2026-10-28-production-check-design.md";
+
+  /** Where each doc speaks of the check, on one line: the whole spec, and the paragraph naming the workflow elsewhere. */
+  const docs: Array<[string, string]> = [SPEC, "docs/self-hosting.md", "ARCHITECTURE.md"].map((file) => {
+    const text = read(file);
+    const start = file === SPEC ? 0 : text.indexOf("`.github/workflows/synthetic-check.yml`");
+    const about = start === -1 ? "" : file === SPEC ? text : text.slice(start, text.indexOf("\n\n", start));
+    return [file, about.replace(/\s+/g, " ")];
+  });
+
+  it("say to cancel the older run, never the one just started, and none when that one started at once", () => {
+    for (const [file, text] of docs) {
+      expect(text, file).toMatch(/cancel(s|ling)? the older run in progress, not the one (you )?just started/);
+      expect(text, file).toContain("cancel nothing");
+    }
+  });
+
+  it("say that a deployed copy edit reaches the running checks only with a newer run, the old text until then", () => {
+    for (const [file, text] of docs) expect(text, file).toContain("the old text");
   });
 });
