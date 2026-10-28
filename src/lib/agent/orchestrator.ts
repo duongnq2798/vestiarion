@@ -28,6 +28,7 @@ import type { HeldForProject } from "./follow-up";
 import type { SameWorkMatch } from "../projects/same-work";
 import { readPaymentPolicies, readTwoApprovalsAbove } from "../approval-policy";
 import { readShadowMode, type ShadowMode } from "../shadow-mode";
+import { syncEarnedVendors } from "../earned-vendors-store";
 import { choosePayoutRoute } from "../payout-route";
 import { needsTwoApprovals, TWO_APPROVALS_RULE } from "../two-approvals";
 import { approvedByTwo, usdcValueOfLatestDecision, type PaymentSource } from "./second-approval";
@@ -2577,6 +2578,16 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const payeeLock = input.payeeLock !== undefined ? input.payeeLock : (policies?.payeeLock ?? PAYEE_LOCK_OFF);
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
   const shadow = input.shadow !== undefined ? input.shadow : payables.length > 0 ? await shadowOnce() : null;
+  // In shadow mode, the vendors' statuses under the owner's rule for earned vendors are signed as the stage starts
+  // (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL16): one read with no rule. Best effort, and it grants
+  // nothing (AL20): no decision below reads a status, and a sync that fails is logged and changes none of them.
+  if (shadow && payables.length > 0) {
+    try {
+      await syncEarnedVendors(db, { trigger: "cycle" });
+    } catch (error) {
+      console.error("earned vendors: statuses not signed as the AP stage started", messageOf(error));
+    }
+  }
   // The addresses the payables' documents asked to be paid to (invoice pay-to hold IP2): read once for the stage, none
   // before migration 0136. A read that fails stops the stage, so a payment is never made past it.
   const documentPayTo = payables.length > 0 ? await readDocumentPayTo(payables.map((row) => row.id), db) : new Map<string, string>();
