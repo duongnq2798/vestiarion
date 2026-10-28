@@ -149,7 +149,7 @@ describe("the /open page", () => {
     const markup = await render();
     expect(cellsOf(markup, "Shadow mode decisions a person agreed with")).toEqual(["2 of 3", "1 of 1", "3 of 4"]);
     expect(text(markup)).toContain(
-      "In shadow mode, a person agrees or disagrees with each of the agent's payment decisions before anything is paid: customers agreed with 2 of 3 (67%)."
+      "In shadow mode, a person agrees or disagrees with each of the agent's payment decisions before anything is paid, unless an owner lets the agent pay vendors that earned it under their rule: customers agreed with 2 of 3 (67%)."
     );
   });
 

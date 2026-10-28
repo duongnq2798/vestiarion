@@ -217,7 +217,7 @@ export const FAQ: ReadonlyArray<{ question: string; answer: ReactNode }> = [
   {
     question: "What if the AI is wrong?",
     answer:
-      "You disagree and write why, and that invoice is not paid. Your agreement rate is shown, so you can judge the agent on your own invoices. Code also refuses decisions that break your rules; the count is read live above.",
+      "You disagree and write why, and that invoice is not paid; if the agent already paid an earned vendor on its own, the vendor loses its status and its next payment waits for you. Your agreement rate is shown, so you can judge the agent on your own invoices. Code also refuses decisions that break your rules; the count is read live above.",
   },
   {
     question: "Do my contractors need wallets?",
