@@ -11,7 +11,8 @@ import { changeEarnedVendorRule, EarnedVendorsError } from "@/lib/earned-vendors
  * Sets, changes or turns off the workspace's rule for earned vendors, from Settings
  * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11, AL17): an owner's alone, as the payee lock is. The
  * library refuses a change on Arc mainnet, while a cycle runs or when it cannot be signed, and signs the change and the
- * statuses under it. Earning grants nothing (AL20), so nothing held is freed and no cycle starts.
+ * statuses under it. A failure other than its refusals may leave a rule in force without its entry, so the page is read
+ * again. Earning grants nothing (AL20), so nothing held is freed and no cycle starts.
  */
 
 export interface EarnedVendorsActionResult {
@@ -38,6 +39,9 @@ export async function setEarnedVendorRuleAction(_previous: EarnedVendorsActionRe
     } catch (error) {
       if (error instanceof EarnedVendorsError) return { ok: false, message: error.message };
       console.error("earned vendors change failed", error instanceof Error ? error.message : "unknown error");
+      // It may have left the rule changed without its entry (AL17): Settings shows the rule in force, and asking for it
+      // again signs it.
+      revalidateOrgPages();
       return { ok: false, message: "That did not work. Try again in a moment." };
     }
   });

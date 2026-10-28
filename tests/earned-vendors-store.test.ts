@@ -14,10 +14,12 @@ import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type Recorded
  * Earned vendors, read, changed and signed (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11, AL13,
  * AL15-AL17): the rule read as none and not ready before migration 0146; an owner's change, refused on Arc mainnet, while
  * a cycle runs, unchanged or out of bounds, written to the workspace's row and signed strictly, put back from its own
- * write when it cannot be signed, and never said to have changed nothing when it could not be put back; and the sync,
- * which signs only what changed since each vendor's newest signed status, stops at one read before 0146, reads only the
- * rule and the record with no rule, and leaves a vendor whose entry failed as it was recorded, for the next sync to sign,
- * a loss the rule's turning off could not sign included.
+ * write when it cannot be signed, and never said to have changed nothing when it could not be put back; a rule left in
+ * force that way signed when an owner asks for it again, or before the next change, from the rule the ledger names; a
+ * rule where there was none refused, with nothing written, while a loss owed from the time with no rule cannot be
+ * signed; and the sync, which signs only what changed since each vendor's newest signed status, stops at one read before
+ * 0146, reads only the rule and the record with no rule, and leaves a vendor whose entry failed as it was recorded, for
+ * the next sync to sign, a loss the rule's turning off could not sign included.
  */
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -38,6 +40,10 @@ interface World {
   decisions: Array<{ seq: number; day: number; invoice: string; action?: string; rule?: string; status?: string }>;
   verdicts: Array<{ seq: number; verdict: "agree" | "disagree"; day: number }>;
   record: Array<{ seq: number; ts: string; action: string; counterparty_id: string }>;
+  /** The `earned_vendor_rule_changed` entries signed: a rule set already was signed when it was set. */
+  rules: Array<{ seq: number; from: number | null; to: number | null }>;
+  /** The record (`vendor_earned`, `vendor_earned_lost`) cannot be read. */
+  recordUnreadable?: boolean;
 }
 
 /** A workspace whose rule, facts and record a fake PostgREST answers, and whose writes and signed entries it keeps. */
@@ -99,7 +105,12 @@ function workspace(world: World) {
       };
     }
     if (path === "/rest/v1/ledger_entries" && params.get("action") === "in.(vendor_earned,vendor_earned_lost)") {
+      if (world.recordUnreadable) return { status: 500, body: { code: "XX000", message: "database unavailable" } };
       return { body: [...world.record].sort((a, b) => b.seq - a.seq) };
+    }
+    if (path === "/rest/v1/ledger_entries" && params.get("action") === "eq.earned_vendor_rule_changed") {
+      const newest = [...world.rules].sort((a, b) => b.seq - a.seq).slice(0, Number(params.get("limit") ?? "1000"));
+      return { body: newest.map((rule) => ({ detail: { by: OWNER, from: rule.from, to: rule.to } })) };
     }
     if (path === "/rest/v1/decision_verdicts") {
       return { body: world.verdicts.map((verdict) => ({ entry_seq: String(verdict.seq), verdict: verdict.verdict, decided_at: at(verdict.day) })) };
@@ -127,6 +138,7 @@ function signing(world: World, refuse: (entry: LedgerEntryInput) => boolean = ()
     if (entry.action === "vendor_earned" || entry.action === "vendor_earned_lost") {
       world.record.push({ seq, ts: at(40), action: entry.action, counterparty_id: entry.detail.counterpartyId as string });
     }
+    if (entry.action === "earned_vendor_rule_changed") world.rules.push({ seq, from: entry.detail.from as number | null, to: entry.detail.to as number | null });
     return { ...entry, seq, id: `e${seq}`, ts: at(40) };
   });
   return signed;
@@ -153,6 +165,7 @@ function northwindEarned(rule: World["rule"]): World {
       { seq: 108, verdict: "disagree" as const, day: 8 },
     ],
     record: [],
+    rules: rule && rule !== "missing" && rule.earned_vendor_streak !== null ? [{ seq: 800, from: null, to: rule.earned_vendor_streak }] : [],
   };
 }
 
@@ -289,6 +302,85 @@ describe("changing it (AL11, AL17)", () => {
       expect(world.rule).toMatchObject({ earned_vendor_streak: 8 });
       expect(console.error).toHaveBeenCalledWith("earned vendors: rule not put back", ORG, expect.any(String));
     }
+  });
+
+  it("signs a rule left in force without its entry when an owner asks for it again, never refusing it as unchanged", async () => {
+    const policyWrites = (requests: RecordedRequest[]) => requests.filter((r) => r.path === "/rest/v1/approval_policies" && r.method !== "GET").length;
+    for (const [before, after] of [
+      [null, 5],
+      [5, null],
+    ] as const) {
+      const world: World = { ...northwindEarned({ earned_vendor_streak: before, earned_vendor_payments: false }), update: () => ({ status: 500, body: { code: "XX000", message: "database unavailable" } }) };
+      let failing = true;
+      const signed = signing(world, (entry) => failing && entry.action === "earned_vendor_rule_changed");
+      const { fake, run } = workspace(world);
+
+      // Neither signed nor put back: the new rule is in force, and the ledger still names the old one.
+      const refused = await run(() => changeEarnedVendorRule({ actorId: OWNER, streak: after })).catch((error: unknown) => error);
+      expect(refused).not.toBeInstanceOf(EarnedVendorsError);
+      expect(world.rule).toMatchObject({ earned_vendor_streak: after });
+      expect(world.rules.map((rule) => rule.to)).toEqual(before === null ? [] : [before]);
+      const writes = policyWrites(fake.requests);
+
+      // Asked again while it still cannot sign: refused as not signed, and nothing is written.
+      await expect(run(() => changeEarnedVendorRule({ actorId: OWNER, streak: after }))).rejects.toMatchObject({ code: "not_signed" });
+      expect(policyWrites(fake.requests)).toBe(writes);
+
+      // Asked again once it can: the missing entry is signed, from the rule the ledger last named, and nothing written.
+      failing = false;
+      world.update = undefined;
+      expect(await run(() => changeEarnedVendorRule({ actorId: OWNER, streak: after }))).toEqual({ from: before, to: after });
+      expect(policyWrites(fake.requests)).toBe(writes);
+      expect(signed.filter((entry) => entry.action === "earned_vendor_rule_changed")).toEqual([
+        { actor: "human", domain: "system", action: "earned_vendor_rule_changed", summary: after === null ? "Earned vendors turned off" : "Earned vendors: 5 agreed verdicts in a row", detail: { by: OWNER, from: before, to: after } },
+      ]);
+      // Then the statuses under the rule now signed, as after any change (AL16).
+      if (after === 5) expect(signed.at(-1)).toMatchObject({ action: "vendor_earned", detail: { counterpartyId: NORTHWIND, streak: 5, trigger: "rule" } });
+
+      // Signed, the same value is unchanged.
+      await expect(run(() => changeEarnedVendorRule({ actorId: OWNER, streak: after }))).rejects.toMatchObject({ code: "unchanged" });
+    }
+  });
+
+  it("signs a turn-off left without its entry before the owner's next change, so the ledger's rules follow one another", async () => {
+    const world: World = { ...northwindEarned({ earned_vendor_streak: 5, earned_vendor_payments: false }), update: () => ({ status: 500, body: { code: "XX000", message: "database unavailable" } }) };
+    let failing = true;
+    signing(world, (entry) => failing && entry.action === "earned_vendor_rule_changed");
+    const { run } = workspace(world);
+    await run(() => changeEarnedVendorRule({ actorId: OWNER, streak: null })).catch(() => null);
+    expect(world.rule).toMatchObject({ earned_vendor_streak: null });
+
+    failing = false;
+    world.update = undefined;
+    expect(await run(() => changeEarnedVendorRule({ actorId: OWNER, streak: 10 }))).toEqual({ from: null, to: 10 });
+    expect(world.rules.map((rule) => [rule.from, rule.to])).toEqual([
+      [null, 5],
+      [5, null],
+      [null, 10],
+    ]);
+  });
+
+  it("refuses a rule where there was none, writing nothing, while a loss owed from the time with no rule cannot be signed", async () => {
+    const world = northwindEarned({ earned_vendor_streak: null, earned_vendor_payments: false });
+    // Recorded earned under an earlier rule, whose turning off could not sign its loss, and it cannot be signed now.
+    world.record.push({ seq: 900, ts: at(6), action: "vendor_earned", counterparty_id: NORTHWIND });
+    const signed = signing(world, (entry) => entry.action === "vendor_earned_lost");
+    const { fake, run } = workspace(world);
+    await expect(run(() => changeEarnedVendorRule({ actorId: OWNER, streak: 5 }))).rejects.toMatchObject({
+      code: "not_signed",
+      message: "The change could not be signed in the ledger, so nothing changed. Try again in a moment.",
+    });
+    expect(posts(fake.requests)).toHaveLength(0);
+    expect(signed).toEqual([]);
+
+    // Nor when the record cannot be read, so whether a loss is owed is not known.
+    const unknown: World = { ...northwindEarned({ earned_vendor_streak: null, earned_vendor_payments: false }), recordUnreadable: true };
+    const none = signing(unknown);
+    const unreadable = workspace(unknown);
+    await expect(unreadable.run(() => changeEarnedVendorRule({ actorId: OWNER, streak: 5 }))).rejects.toMatchObject({ code: "not_signed" });
+    expect(posts(unreadable.fake.requests)).toHaveLength(0);
+    expect(none).toEqual([]);
+    expect(console.error).toHaveBeenCalledWith("earned vendors: statuses not signed", ORG, expect.stringContaining("database unavailable"));
   });
 });
 

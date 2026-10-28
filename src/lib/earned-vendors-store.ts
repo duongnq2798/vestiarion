@@ -18,7 +18,7 @@ import {
   type EarnedVendorsView,
   type RecordedStatus,
 } from "./earned-vendors";
-import { appendLedgerEntry, assertLedgerCanSign } from "./ledger";
+import { appendLedgerEntry, assertLedgerCanSign, type LedgerEntryInput } from "./ledger";
 import { workspaceNetwork } from "./workspace-network";
 import { allRows } from "./workspace-report-read";
 
@@ -105,14 +105,32 @@ const logSync = (error: unknown) => {
   console.error("earned vendors: statuses not signed", currentOrgId(), messageOf(error));
 };
 
+/** The rule the ledger names (AL17): the newest `earned_vendor_rule_changed` entry's `to`, or none before the first. */
+async function signedRule(): Promise<number | null> {
+  const rows = unwrap(
+    await db().from("ledger_entries").select("detail").eq("action", "earned_vendor_rule_changed").order("seq", { ascending: false }).limit(1)
+  ) as Array<{ detail: { to?: number | string | null } | null }>;
+  return earnedRuleFromRow({ earned_vendor_streak: rows[0]?.detail?.to ?? null }).streak;
+}
+
+const ruleEntry = (by: string, from: number | null, to: number | null): LedgerEntryInput => ({
+  actor: "human",
+  domain: "system",
+  action: "earned_vendor_rule_changed",
+  summary: earnedRuleSummary(to),
+  detail: { by, from, to },
+});
+
 /**
  * An owner sets the rule, changes it, or turns it off (AL11), signed strictly as `earned_vendor_rule_changed` (AL17):
  * the key is checked before anything is written, and a change whose entry still cannot be signed is put back, only
- * from its own write, and refused, as the mirror address is undone when its entry fails, so no rule is in force
- * without its entry. A put-back that fails too is logged and refused as any failure is, never as one that changed
- * nothing. Refused on Arc mainnet, where there are no verdicts, and while a cycle runs, which signs statuses as it
- * starts. Setting a rule where there was none first signs any loss the rule's turning off could not sign; then the
- * statuses under the new rule are signed. Both best effort (AL16).
+ * from its own write, and refused, as the mirror address is undone when its entry fails. A put-back that fails too is
+ * logged and refused as any failure is, never as one that changed nothing, and leaves that rule in force without its
+ * entry: so every change first signs the rule in force where the ledger does not name it, and, as the mirror address
+ * is recorded when asked again, asking for that rule again signs it rather than being refused as unchanged. Refused on
+ * Arc mainnet, where there are no verdicts, and while a cycle runs, which signs statuses as it starts. Setting a rule
+ * where there was none first signs any loss the rule's turning off could not sign, and is refused with nothing written
+ * while one cannot be signed (AL16); then the statuses under the new rule are signed, best effort.
  */
 export async function changeEarnedVendorRule(input: { actorId: string; streak: number | null }): Promise<{ from: number | null; to: number | null }> {
   const to = input.streak;
@@ -122,7 +140,9 @@ export async function changeEarnedVendorRule(input: { actorId: string; streak: n
   const current = await readEarnedVendorRule(db());
   if (!current.ready) throw new EarnedVendorsError("not_ready");
   const from = current.streak;
-  if (from === to) throw new EarnedVendorsError("unchanged");
+  // A rule in force that the ledger does not name is one whose entry failed and could not be put back.
+  const signed = await signedRule();
+  if (from === to && signed === from) throw new EarnedVendorsError("unchanged");
 
   const running = unwrap(
     await db()
@@ -140,19 +160,35 @@ export async function changeEarnedVendorRule(input: { actorId: string; streak: n
     throw new EarnedVendorsError("not_signed");
   }
 
+  // The rule in force is signed first, by the owner asking, so the ledger's rules follow one another. Nothing is
+  // written before it, so a failure here changed nothing.
+  if (signed !== from) {
+    try {
+      await appendLedgerEntry(ruleEntry(input.actorId, signed, from));
+    } catch (error) {
+      console.error("earned vendors: rule in force not signed", currentOrgId(), messageOf(error));
+      throw new EarnedVendorsError("not_signed");
+    }
+    if (from === to) {
+      await syncEarnedVendors(db(), { trigger: "rule" }).catch(logSync);
+      return { from: signed, to };
+    }
+  }
+
   // While there is still no rule, a vendor left recorded earned from an earlier one is signed lost (`rule_off`), so no
-  // earned status runs on across a time with no rule into the new one.
-  if (from === null) await syncEarnedVendors(db(), { trigger: "rule" }).catch(logSync);
+  // earned status runs on across a time with no rule into the new one: until each is, the new rule is refused, with
+  // nothing written.
+  if (from === null) {
+    const off = await syncEarnedVendors(db(), { trigger: "rule" }).catch((error: unknown) => {
+      logSync(error);
+      return null;
+    });
+    if (!off || [...off.recorded.values()].some((status) => status.state === "earned")) throw new EarnedVendorsError("not_signed");
+  }
 
   await writeRule(to, input.actorId);
   try {
-    await appendLedgerEntry({
-      actor: "human",
-      domain: "system",
-      action: "earned_vendor_rule_changed",
-      summary: earnedRuleSummary(to),
-      detail: { by: input.actorId, from, to },
-    });
+    await appendLedgerEntry(ruleEntry(input.actorId, from, to));
   } catch (error) {
     console.error("earned vendors: rule change not signed", currentOrgId(), messageOf(error));
     // Put back only from this change's own write, as the mirror address is: a change another owner made since stays.

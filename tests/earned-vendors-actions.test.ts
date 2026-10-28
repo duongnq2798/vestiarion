@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * The owner's rule for earned vendors from Settings (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11,
  * AL17): authorized as `approval.policy`, a number from the form or Turn off, the library's refusals in its own words,
+ * any other failure said plainly with the page read again, since it may have left a rule in force without its entry,
  * and a toast that says the rule now in force. It frees nothing held, so no cycle starts.
  */
 
@@ -80,12 +81,16 @@ describe("setEarnedVendorRuleAction (AL11)", () => {
     expect((await setEarnedVendorRuleAction(INITIAL, form({ orgSlug: "pinecrest", intent: "save", streak: "8" }))).message).toBe(
       "The change could not be signed in the ledger, so nothing changed. Try again in a moment."
     );
+    // A refusal changed nothing: the page stays as it is.
+    expect(revalidateMock).not.toHaveBeenCalled();
 
-    changeMock.mockRejectedValueOnce(new Error("connection reset"));
+    // Any other failure may have left the rule changed without its entry (AL17): the page is read again, so Settings
+    // shows the rule in force, and asking for it again signs it.
+    changeMock.mockRejectedValueOnce(new Error("earned vendors: rule changed without its entry, and not put back: database unavailable"));
     expect(await setEarnedVendorRuleAction(INITIAL, form({ orgSlug: "pinecrest", intent: "save", streak: "8" }))).toEqual({
       ok: false,
       message: "That did not work. Try again in a moment.",
     });
-    expect(revalidateMock).not.toHaveBeenCalled();
+    expect(revalidateMock).toHaveBeenCalledTimes(1);
   });
 });
