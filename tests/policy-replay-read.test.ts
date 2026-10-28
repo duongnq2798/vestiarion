@@ -242,6 +242,13 @@ describe("shadow mode and the contractor stage's cycles", () => {
     expect(view.rows.map((row) => [row.before, row.after])).toEqual([["The agent pays it once a person agrees, in shadow mode", "Held: above the payment limit"]]);
   });
 
+  it("says the agent pays on its own a payment it made that way for an earned vendor (earned vendors AL22)", async () => {
+    const earned = { ...ENTRIES[0], detail: { ...ENTRIES[0].detail, shadow: true, earned: { recordSeq: 7, streak: 5, agreed: 6 } } };
+    fake = fakeSupabase(workspace({ entries: (r) => (r.params.get("seq") === "gt.0" ? [earned] : []) }));
+    const view = await run(() => ruleReplay({ rule: "counterparty_limit", counterpartyId: NORTHWIND, values: { paymentLimit: "200" }, days: 30 }, NOW));
+    expect(view.rows.map((row) => [row.before, row.after])).toEqual([["The agent pays it on its own, for an earned vendor", "Held: above the payment limit"]]);
+  });
+
   it("reads since when shadow mode is on for a milestone a rule stopped, whose entry does not say", async () => {
     const trial = { rule: "counterparty_limit" as const, counterpartyId: KESTREL, values: { paymentLimit: "400" }, days: 30 as const };
     fake = fakeSupabase(workspace({ entries: (r) => (r.params.get("seq") === "gt.0" ? [limitedRelease] : []), shadow: [{ currency: "USDC", started_at: "2026-10-01T00:00:00.000Z", started_by: null }] }));

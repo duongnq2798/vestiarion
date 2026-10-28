@@ -80,6 +80,11 @@ export interface ReplayedDecision {
   amountUsdc: number | null;
   /** Decided in shadow mode, where a payment the checks let through waits for a person to agree; null when unknown. */
   shadow: boolean | null;
+  /**
+   * Carried out on the agent's own decision in shadow mode, for an earned vendor (`detail.earned`; earned vendors AL22,
+   * AL27): it did not wait for a person.
+   */
+  onItsOwn: boolean;
   before: ReplayVerdict;
   after: ReplayVerdict;
   change: ReplayChange;
@@ -220,6 +225,11 @@ interface Facts {
   paidUsdc: number;
   /** Decided in shadow mode; null when neither the entry nor the workspace's history says. */
   shadow: boolean | null;
+  /**
+   * A shadow-mode payment the agent carried out on its own for an earned vendor (`detail.earned`, earned vendors AL27):
+   * it paid as a live workspace pays, so it counts against the spending limit as one does.
+   */
+  onItsOwn: boolean;
   /** A schedule's UTC day to pay on; null for anything else, or when the entry has none. */
   payOnDay: number | null;
   /** A milestone's place in its contractor stage's entries; `first` for a bill. */
@@ -307,6 +317,7 @@ function factsOf(entry: ReplayEntry, history: ShadowHistory): Facts | null {
     recordedRule,
     paidUsdc: agentOutflowUsdc({ actor: "agent", action: entry.action, detail }),
     shadow: shadowOf(entry, action, recordedRule, history),
+    onItsOwn: record(detail.earned) !== null,
     payOnDay: action === "schedule" ? payOnDayOf(decision) : null,
     order: source === "milestone" ? stageOrderOf(action, recordedRule, detail) : "first",
     crossChain: record(detail.payout) !== null,
@@ -490,12 +501,13 @@ const laterPayment = (facts: Facts) => facts.action === "schedule" && facts.reco
 
 /**
  * What a decision the column let through has the agent paying (P6), and on which day: what it paid if it paid; nothing
- * if something other than a rule stopped it then, or in shadow mode; its full USDC value if a rule stopped it then, from
- * nothing to that where shadow mode is not known. A schedule a rule held then, from nothing to its full USDC value on
- * its day, when the agent decides it again.
+ * if something other than a rule stopped it then, or in shadow mode, unless the agent paid it on its own there for an
+ * earned vendor (earned vendors AL22), which counts as a live payment does; its full USDC value if a rule stopped it
+ * then, from nothing to that where shadow mode is not known. A schedule a rule held then, from nothing to its full USDC
+ * value on its day, when the agent decides it again.
  */
 function spendOf(facts: Facts): Contribution | null {
-  if (facts.shadow === true) return null;
+  if (facts.shadow === true && !facts.onItsOwn) return null;
   if (laterPayment(facts)) return facts.payOnDay === null ? null : { day: facts.payOnDay, low: 0, high: facts.amountUsdc ?? Infinity };
   if (!facts.now) return null;
   if (facts.paidUsdc > 0) return { day: facts.day, low: facts.paidUsdc, high: facts.paidUsdc };
@@ -678,6 +690,7 @@ export function replayDecisions(entries: ReplayEntry[], options: ReplayOptions):
         currency: decided.currency,
         amountUsdc: decided.amountUsdc,
         shadow: decided.shadow,
+        onItsOwn: decided.onItsOwn,
         before: was[position],
         after: would[position],
         change,

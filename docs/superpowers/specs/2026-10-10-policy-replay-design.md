@@ -81,7 +81,9 @@ what was paid. That is enough to run the code's checks again with one figure cha
   running total of what the agent pays:
   - a decision the replay lets through counts what it paid if it paid; if code had stopped it, its full USDC value (an
     early-payment discount it might have taken is not known); if something other than a rule stopped it (a pause, the
-    cash it needed, a failed transfer), nothing, as then; in shadow mode nothing, since a person's verdict pays;
+    cash it needed, a failed transfer), nothing, as then; in shadow mode nothing, since a person's verdict pays,
+    except a payment the agent made on its own for an earned vendor (`detail.earned`, earned vendors AL22), which
+    counts what it paid, as the real spending limit counts it;
   - a schedule a rule stopped then, which the replay lets through, is decided again on its `payOn` day and may be paid
     then: it counts from nothing to its full USDC value on that day (no day recorded: can't tell);
   - shadow mode: a bill's entry always says (`shadow`); a milestone's says only when it was held for a verdict. For a
@@ -117,7 +119,8 @@ what was paid. That is enough to run the code's checks again with one figure cha
     above an amount.
   - Would now be held: went ahead before, stopped after by any other rule (a payment limit or the spending limit).
   - Can't tell: either column.
-  - In shadow mode, going ahead is a payment that waits for a person to agree, and the list says so.
+  - In shadow mode, going ahead is a payment that waits for a person to agree, and the list says so; for one the agent
+    paid on its own to an earned vendor, it says "The agent pays it on its own, for an earned vendor".
   *Cost if wrong:* a reader who wants the change between two rules that both stop a bill does not see it counted; the
   list names each column's rule for every decision it shows.
 

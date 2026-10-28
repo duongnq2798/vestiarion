@@ -148,10 +148,14 @@ const CANT_TELL_WORDS: Record<CantTellReason, string> = {
   earlier_unsettled: "an earlier decision on it cannot be told",
 };
 
-/** What going ahead means: in shadow mode a payment the checks let through waits for a person to agree (P6). */
-function goesAheadWords(source: "bill" | "milestone", action: string, shadow: boolean | null): string {
+/**
+ * What going ahead means: in shadow mode a payment the checks let through waits for a person to agree (P6), unless the
+ * agent paid it on its own for an earned vendor (earned vendors AL22).
+ */
+function goesAheadWords(source: "bill" | "milestone", action: string, shadow: boolean | null, onItsOwn: boolean): string {
   if (source === "bill") {
     if (action === "ap_schedule") return "The agent schedules it";
+    if (onItsOwn) return "The agent pays it on its own, for an earned vendor";
     return shadow ? "The agent pays it once a person agrees, in shadow mode" : "The agent pays it";
   }
   if (shadow === null) return "The agent releases it, once a person agrees if shadow mode was on";
@@ -161,7 +165,7 @@ function goesAheadWords(source: "bill" | "milestone", action: string, shadow: bo
 function verdictWords(verdict: ReplayVerdict, decision: ReplayedDecision, action: string): string {
   switch (verdict.kind) {
     case "goes_ahead":
-      return goesAheadWords(decision.source, action, decision.shadow);
+      return goesAheadWords(decision.source, action, decision.shadow, decision.onItsOwn);
     case "paid_earlier":
       return "Paid by an earlier decision";
     case "stopped":

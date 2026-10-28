@@ -324,6 +324,34 @@ describe("the spending limit, replayed in recorded order (P6)", () => {
     expect(result.decisions.map((decision) => decision.shadow)).toEqual([true, false]);
   });
 
+  describe("a payment the agent made on its own in shadow mode, for an earned vendor (earned vendors AL22, AL27)", () => {
+    const EARNED = { shadow: true, earned: { recordSeq: 7, streak: 5, agreed: 6 } };
+    const daily = (dailyUsdc: number) => figures({ spendingLimit: { dailyUsdc, weeklyUsdc: null } });
+    const paidOnItsOwn = (at: string) => bill({ amount: 400, at, detail: EARNED });
+
+    it("counts what it paid against the spending limit, as a live payment counts", () => {
+      const entries = [paidOnItsOwn("2026-10-02T08:00:00.000Z"), paidOnItsOwn("2026-10-02T09:00:00.000Z"), paidOnItsOwn("2026-10-02T10:00:00.000Z")];
+      const result = run(entries, daily(2000), daily(1000));
+      expect(changes(result)).toEqual(["unchanged", "unchanged", "now_held"]);
+      expect(result.decisions[2].after).toEqual({ kind: "stopped", rule: "workspace.outflow_budget" });
+      expect(result.decisions.map((decision) => [decision.shadow, decision.onItsOwn])).toEqual([[true, true], [true, true], [true, true]]);
+    });
+
+    it("rebuilds the hold the spending limit made after them, and frees it under a higher figure", () => {
+      const paid = [paidOnItsOwn("2026-10-02T08:00:00.000Z"), paidOnItsOwn("2026-10-02T09:00:00.000Z")];
+      const held = bill({ amount: 400, at: "2026-10-02T10:00:00.000Z", rule: "workspace.outflow_budget", detail: { shadow: true } });
+      const result = run([...paid, held], daily(1000), daily(2000));
+      expect(result.decisions[2].before).toEqual({ kind: "stopped", rule: "workspace.outflow_budget" });
+      expect(changes(result)).toEqual(["unchanged", "unchanged", "now_paid"]);
+      expect(result.decisions[2].onItsOwn).toBe(false);
+    });
+
+    it("counts one before the window as it counts any payment the agent made", () => {
+      const result = run([paidOnItsOwn("2026-09-29T08:00:00.000Z"), paidOnItsOwn("2026-10-02T08:00:00.000Z")], figures(), figures({ spendingLimit: { dailyUsdc: null, weeklyUsdc: 600 } }));
+      expect(changes(result)).toEqual(["now_held"]);
+    });
+  });
+
   describe("a milestone in shadow mode, whose entry names shadow mode only when it held it for a verdict", () => {
     const now = figures({ twoApprovalsAbove: 50, spendingLimit: { dailyUsdc: 100, weeklyUsdc: null } });
     const candidate = withCandidate(now, { kind: "two_approvals", above: null });
