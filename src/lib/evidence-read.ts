@@ -62,11 +62,7 @@ export function evidenceRequest(kind: unknown, id: unknown): EvidenceRequest | n
 const INTENT_COLUMNS =
   "status, provider, provider_mode, token, amount, destination, tx_hash, chain, destination_chain, mint_tx_hash, bridge_fee, payout_route, confirmed_at, network, provider_tx_id, provider_state, failure_reason, last_error";
 
-/**
- * The counterparty's own entries: who gave and confirmed the address, purchase orders and dismissed matches, which the
- * chain words; and, read with them, each change of its status under the owner's rule for earned vendors
- * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL15).
- */
+/** The counterparty entries the chain words: who gave and confirmed the address, purchase orders, dismissed matches. */
 const COMPLIANCE_ACTIONS = [
   "create_counterparty",
   "counterparty_address_changed",
@@ -75,10 +71,8 @@ const COMPLIANCE_ACTIONS = [
   "screening_match_dismissed",
   // Who created the payee link an address came through (independent review, 2026-10-15).
   "payee_link_created",
-  "vendor_earned",
-  "vendor_earned_lost",
 ];
-/** More than any counterparty has: each of these entries is a person's act, an address change or a change of status. */
+/** More than any counterparty has: each of these entries is a person's act or an address change. */
 const COMPLIANCE_LIMIT = 500;
 
 type Row = Record<string, unknown>;
