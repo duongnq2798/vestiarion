@@ -7,14 +7,18 @@ import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { consoleActor } from "@/lib/commands/actor";
 import { approvePayable, rejectPayable, returnPayable } from "@/lib/commands/payables";
+import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { syncEarnedVendors } from "@/lib/earned-vendors-store";
 import type { PaymentReceipt } from "@/lib/payment-receipt";
 import { giveVerdict, VerdictError, type GivenVerdict } from "@/lib/verdicts";
 
 /**
  * A person's verdict on a decision of the agent's, from the console (docs/superpowers/specs/2026-10-07-shadow-mode-design.md
  * S3, S4): by someone who may decide payments. What follows it, Agree and pay or Disagree and return or reject, runs
- * through the payable commands Approvals uses, so it is checked and worded the same.
+ * through the payable commands Approvals uses, so it is checked and worded the same. A kept verdict may change a
+ * vendor's status under the owner's rule for earned vendors, which is signed then, best effort
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL16).
  */
 
 export interface VerdictActionResult {
@@ -34,6 +38,15 @@ const inputSchema = z.object({
   shownAddress: z.string().max(200).optional(),
 });
 
+/** Signs what a kept verdict changed for earned vendors (AL16). Never throws: the verdict is kept already, and stays. */
+async function signEarnedStatuses(): Promise<void> {
+  try {
+    await syncEarnedVendors(db(), { trigger: "verdict" });
+  } catch (error) {
+    console.error("earned vendors: statuses not signed after a verdict", error instanceof Error ? error.message : "unknown error");
+  }
+}
+
 export async function giveVerdictAction(orgSlug: string, input: unknown): Promise<VerdictActionResult> {
   const auth = await authorize(orgSlug, "approval.decide");
   if (!auth.ok) return { ok: false, message: auth.message };
@@ -51,6 +64,7 @@ export async function giveVerdictAction(orgSlug: string, input: unknown): Promis
           returnToAgent: (invoiceId) => returnPayable(actor, { invoiceId, forVerdict: true }),
         }
       );
+      if (result.recorded) await signEarnedStatuses();
       revalidateOrgPages();
       if (result.already) {
         return { ok: true, message: `A verdict was given on this decision already: ${result.given.verdict === "agree" ? "agreed" : "disagreed"}.`, given: result.given };

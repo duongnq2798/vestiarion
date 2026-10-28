@@ -10,11 +10,13 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { cn } from "@/components/ui/cn";
 import { AgreementLadder } from "@/components/vx/AgreementLadder";
+import { EarnedVendors } from "@/components/vx/EarnedVendors";
 import { Hash, Money } from "@/components/vx/Primitives";
 import { StatTile } from "@/components/vx/StatTile";
 import { orgHref } from "@/lib/auth/org-paths";
 import type { AutonomyLadder } from "@/lib/autonomy-ladder";
 import { billDigits } from "@/lib/bill-amount";
+import type { EarnedVendorsView } from "@/lib/earned-vendors";
 import { plural, utcDay } from "@/lib/copy";
 import { networkProfile } from "@/lib/network";
 import { txUrl } from "@/lib/payee-chains";
@@ -101,6 +103,7 @@ export function WorkspaceReport({
   actuals,
   slice,
   ladder,
+  earned,
 }: {
   slug: string;
   report: Report;
@@ -110,6 +113,8 @@ export function WorkspaceReport({
   slice?: { opened: ReportSlice | null; start?: ReactNode };
   /** How often people agreed with the agent, by decision and by vendor (autonomy ladder AL7): shown with Before a live slice. */
   ladder?: AutonomyLadder | null;
+  /** The vendors earned under the owner's rule (earned vendors AL18): shown after the ladder. */
+  earned?: EarnedVendorsView | null;
 }) {
   if (report.bills.handled === 0) {
     return (
@@ -133,7 +138,7 @@ export function WorkspaceReport({
     <div className="space-y-8">
       <ReportSummary report={report} />
       {value}
-      {report.readiness && <ReportReadiness steps={report.readiness} slice={slice?.opened ?? null} start={slice?.start} ladder={ladder} />}
+      {report.readiness && <ReportReadiness steps={report.readiness} slice={slice?.opened ?? null} start={slice?.start} ladder={ladder} earned={earned} />}
       {actuals}
       <ReportLists slug={slug} report={report} />
     </div>
@@ -322,18 +327,21 @@ export function ReportLists({ slug, report }: { slug: string; report: Report }) 
 
 /**
  * What we suggest before a live slice, in shadow mode. After the steps, beside the one that counts verdicts, how often
- * people agreed with the agent by decision and by vendor (autonomy ladder AL7); then what starts the slice.
+ * people agreed with the agent by decision and by vendor (autonomy ladder AL7), and the vendors earned under the
+ * owner's rule (earned vendors AL18); then what starts the slice.
  */
 export function ReportReadiness({
   steps,
   slice = null,
   start,
   ladder = null,
+  earned = null,
 }: {
   steps: ReadinessStep[];
   slice?: ReportSlice | null;
   start?: ReactNode;
   ladder?: AutonomyLadder | null;
+  earned?: EarnedVendorsView | null;
 }) {
   const mainnetLabel = networkProfile("arc-mainnet").label;
   // The last step is ticked once the live slice opened from here is live (L5); before a slice, it is not counted.
@@ -393,6 +401,11 @@ export function ReportReadiness({
         {ladder && (
           <div className="border-t border-line px-3 pb-3 pt-4">
             <AgreementLadder ladder={ladder} />
+          </div>
+        )}
+        {earned && (
+          <div className="border-t border-line px-3 pb-3 pt-4">
+            <EarnedVendors view={earned} />
           </div>
         )}
         {start && <div className="border-t border-line px-3 pb-3 pt-4">{start}</div>}

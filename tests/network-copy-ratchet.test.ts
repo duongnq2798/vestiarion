@@ -68,6 +68,9 @@ const ALLOWED: Record<string, number> = {
   // pays is said from the workspace's capability (src/lib/capability.ts), which names its network from its profile.
   "src/components/ShadowModePanel.tsx": 1,
   "src/lib/shadow-mode.ts": 1,
+  // Earned vendors are counted from shadow-mode verdicts, so only on Arc testnet: the refusal of a rule on Arc mainnet
+  // (earned vendors AL11).
+  "src/lib/earned-vendors-store.ts": 1,
   // The exported shadow decisions' source sentence, which names the only network they were made on (shadow replay SX8).
   "src/lib/quality-lab/shadow-export.ts": 1,
   // A workspace opened from an accountant's client link is always on Arc testnet in shadow mode (accountant client links

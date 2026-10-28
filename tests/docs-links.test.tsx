@@ -28,6 +28,7 @@ const SECTIONS: Array<[string, string]> = [
   ["src/components/ApiKeysPanel.tsx", "/docs/get-started/authentication"],
   ["src/components/WebhooksPanel.tsx", "/docs/webhooks"],
   ["src/components/ShadowModePanel.tsx", "/docs/guides/shadow-mode"],
+  ["src/components/EarnedVendorsPanel.tsx", "/docs/guides/shadow-mode#earned-vendors"],
   ["src/components/GoLivePanel.tsx", "/docs/guides/go-live"],
   ["src/components/UsycReservePanel.tsx", "/docs/guides/go-live#earn-on-idle-cash-with-usyc"],
   ["src/components/SlackPanel.tsx", "/docs/guides/slack"],

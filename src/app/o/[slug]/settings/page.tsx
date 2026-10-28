@@ -25,7 +25,9 @@ import DiscordPanel from "@/components/DiscordPanel";
 import TwoApprovalsPanel from "@/components/TwoApprovalsPanel";
 import PayeeLockPanel from "@/components/PayeeLockPanel";
 import DocumentRequestsPanel from "@/components/DocumentRequestsPanel";
+import EarnedVendorsPanel from "@/components/EarnedVendorsPanel";
 import { readDocumentChecksStatus } from "@/lib/document-requests/setting";
+import { readEarnedVendorRule } from "@/lib/earned-vendors-store";
 import { readPayeeLockStatus } from "@/lib/payee-lock";
 import { UsycReservePanel } from "@/components/UsycReservePanel";
 import UsagePanel from "@/components/UsagePanel";
@@ -206,15 +208,20 @@ export default async function SettingsPage({
         return null;
       }),
     ]);
-    // The payee lock (payee lock PL1) and asking vendors for missing documents (document requests ER1), read together; best
-    // effort, like two approvals: a section that cannot be read is left out.
-    const [payeeLock, documentRequests] = await Promise.all([
+    // The payee lock (payee lock PL1), asking vendors for missing documents (document requests ER1) and the rule for
+    // earned vendors (earned vendors AL11), read together; best effort, like two approvals: a section that cannot be
+    // read is left out.
+    const [payeeLock, documentRequests, earnedRule] = await Promise.all([
       readPayeeLockStatus(db()).catch((error: unknown) => {
         console.error("settings: payee lock not loaded", error instanceof Error ? error.message : error);
         return null;
       }),
       readDocumentChecksStatus(db()).catch((error: unknown) => {
         console.error("settings: document requests not loaded", error instanceof Error ? error.message : error);
+        return null;
+      }),
+      readEarnedVendorRule(db()).catch((error: unknown) => {
+        console.error("settings: earned vendors not loaded", error instanceof Error ? error.message : error);
         return null;
       }),
     ]);
@@ -374,6 +381,15 @@ export default async function SettingsPage({
             content: shadow ? (
               <ShadowModePanel orgSlug={slug} mode={shadow.mode} network={membership.network} canChange={can(membership.role, "approval.policy")} capability={capability} />
             ) : null,
+          },
+          // Beside shadow mode, whose verdicts it counts (earned vendors AL11); left out on Arc mainnet, which has none.
+          {
+            id: "earned-vendors-title",
+            title: "Earned vendors",
+            content:
+              earnedRule && membership.network !== "arc-mainnet" ? (
+                <EarnedVendorsPanel orgSlug={slug} status={{ streak: earnedRule.streak, ready: earnedRule.ready }} canChange={can(membership.role, "approval.policy")} />
+              ) : null,
           },
           {
             id: "reporting-currency-title",
