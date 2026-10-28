@@ -1585,6 +1585,33 @@ disagrees with every decision.
   (`docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md`) shows how often people agreed with the agent by
   decision kind and by vendor, each figure with the number of verdicts behind it (see the workspace report, below). It
   only measures: no setting reads it.
+- **Earned vendors** (`docs/superpowers/specs/2026-10-28-earned-vendors-design.md`, the ladder's second step, migration
+  0146). An owner (`approval.policy`) sets one rule per workspace on Settings, right after Shadow mode:
+  `approval_policies.earned_vendor_streak`, 5 to 50 agreed verdicts in a row, null for none. `earnedVendors`
+  (`src/lib/earned-vendors.ts`, pure) counts Agree verdicts on `ap_pay` and `ap_schedule` decisions after a vendor's
+  last break: a Disagree on any decision on its bills (timed by `decision_verdicts.decided_at`), a decision that ended
+  flagged, or one a `counterparty.*`, `invoice.*` or `obligation.duplicate_reference` rule stopped (`breaksEarning`),
+  verdict or not; the workspace's own limits and rails never break it. Only a non-sample payee with role `vendor`, not
+  screened high risk (`risk_level`, which keeps its limit at 0), and a `payment_limit` above 0 can earn it. Statuses are
+  not stored: `syncEarnedVendors` (`src/lib/earned-vendors-store.ts`) signs only what changed since each vendor's newest
+  entry, strictly, one entry per vendor (`vendor_earned` with its evidence, or `vendor_earned_lost` with why; actor
+  `system`, domain `compliance`), after each kept verdict (`giveVerdictAction`), inside the rule change, and as the AP
+  stage of a shadow workspace with bills to decide starts (`runApStage`), best effort: a failure is logged and changes
+  nothing else, and an entry that failed is signed by the next sync. With no rule it reads only the rule and the
+  record, and signs `rule_off` for any vendor still recorded earned; setting a rule where there was none runs it first,
+  strictly: while it fails or leaves a vendor recorded earned, the new rule is refused with nothing written.
+  `changeEarnedVendorRule` refuses on Arc mainnet, while a cycle runs, and when the key cannot sign
+  (`assertLedgerCanSign`), and puts the rule back, only from its own write, if `earned_vendor_rule_changed` still fails
+  (a put-back that fails too is a plain failure, never "nothing changed", and the action reads Settings again). Every
+  change first reads the newest `earned_vendor_rule_changed` and, when it does not name the rule in force, signs the
+  missing entry before anything else, so a rule left in force that way is signed when an owner asks for it again,
+  rather than refused as unchanged, or changes it. The report reads the rule and the record
+  best effort (`readEarnedView`), works the statuses out from its own facts (which now carry the verdict's time and the
+  payee's role, screening and payment limit), and shows **Earned vendors** after the ladder; the live slice picker
+  marks a vendor earned and signed as "Earned under your rule", ticking nothing. It grants nothing: no code reads a
+  status to decide a payment, and a bill's evidence does not list the entries. 0146 also adds `earned_vendor_payments`
+  (off, never on without a rule) for the next step; nothing reads it yet. Before 0146 runs, the rule reads as none and
+  not ready.
 - **Start the live slice** (`docs/superpowers/specs/2026-10-18-live-slice-design.md`). Under those steps an owner
   (`org.administer`, with Arc mainnet open to them) ticks vendors. `startLiveSlice` (`src/lib/live-slice.ts`) refuses
   outside shadow mode, on Arc mainnet, when a slice was opened already, with no vendor or more than 25, then makes a

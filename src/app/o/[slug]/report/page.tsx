@@ -21,6 +21,7 @@ import { readStatementSetup } from "@/lib/bank-statements";
 import { simulatesPayments } from "@/lib/capability-read";
 import { shellModes } from "@/lib/circle";
 import { db } from "@/lib/dal";
+import { readEarnedView, shownEarned } from "@/lib/earned-vendors-store";
 import { inOrg } from "@/lib/dal/scope";
 import { listMembers } from "@/lib/platform/members";
 import { stats } from "@/lib/queries";
@@ -81,6 +82,15 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
     // picker (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md AL6-AL8): worked out from the facts read
     // above, with no read of its own.
     const ladder = report.readiness ? autonomyLadder(ladderVerdicts(facts)) : null;
+    // The vendors earned under the owner's rule (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL14, AL18,
+    // AL19): their statuses worked out from the same facts, with the rule and the signed record read best effort. A read
+    // that fails, or a database before migration 0146, leaves the block out.
+    const earned = report.readiness
+      ? await readEarnedView(db(), facts).catch((error: unknown) => {
+          console.error("report: earned vendors not read", error instanceof Error ? error.message : error);
+          return null;
+        })
+      : null;
     // In shadow mode, the live slice opened from here, or the vendors one would carry (live slice L1, L5). Best effort:
     // a read that fails shows the steps alone.
     const sliceRead = report.readiness
@@ -114,6 +124,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
                 accountants={accountants}
                 opened={opened ? { name: opened.name, slug: opened.slug, vendors: opened.vendors, skipped: opened.skipped } : null}
                 agreement={ladder?.byVendor}
+                earned={earned && earned.streak !== null ? shownEarned(earned) : undefined}
               />
             ),
         }
@@ -186,6 +197,7 @@ export default async function ReportPage({ params, searchParams }: { params: Pro
             report={report}
             slice={slice}
             ladder={ladder}
+            earned={earned}
             value={
               <ReportValue
                 value={value}

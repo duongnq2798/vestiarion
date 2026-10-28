@@ -26,7 +26,8 @@ import type { SliceAddress, SliceSkipReason, SliceVendor } from "@/lib/live-slic
  *
  * Beside each vendor, how often the owner agreed with the agent's decisions on its bills, from their verdicts, with
  * the count, so they tick the vendors with evidence (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md
- * AL8).
+ * AL8). Where an owner set a rule, a vendor that earned it, signed, is marked "Earned under your rule": display only,
+ * nothing is ticked (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL19).
  */
 
 const INITIAL: LiveSliceActionResult = { ok: false, message: "" };
@@ -77,6 +78,7 @@ export function LiveSliceStart({
   opened = null,
   accountants = [],
   agreement,
+  earned,
 }: {
   orgSlug: string;
   vendors: SliceVendor[];
@@ -85,6 +87,8 @@ export function LiveSliceStart({
   accountants?: SliceAccountant[];
   /** The report's agreement by vendor, keyed by counterparty id (AL8); a vendor with none says so. */
   agreement?: LadderRow[];
+  /** Vendors earned under the owner's rule and signed, by counterparty id (earned vendors AL19); absent with no rule. */
+  earned?: ReadonlySet<string>;
 }) {
   const agreementOf = new Map((agreement ?? []).map((row) => [row.key, row]));
   const [result, setResult] = useState<LiveSliceActionResult | null>(null);
@@ -158,6 +162,7 @@ export function LiveSliceStart({
           {agreement && (
             <p className="text-xs text-ink-3">{"Beside each vendor: how often you agreed with the agent's decisions on its bills, from your verdicts in shadow mode."}</p>
           )}
+          {earned && <p className="text-xs text-ink-3">Earned under your rule marks a vendor that met the rule an owner set in Settings.</p>}
           <Card className="overflow-hidden">
             <ul aria-label="Vendors to pay for real" className="divide-y divide-line">
               {vendors.map((vendor) => (
@@ -181,6 +186,11 @@ export function LiveSliceStart({
                           </>
                         )}
                         {agreement && <span className="tabular-nums">{agreementWords(agreementOf.get(vendor.id))}</span>}
+                        {earned?.has(vendor.id) && (
+                          <Badge tone="neutral" size="sm">
+                            Earned under your rule
+                          </Badge>
+                        )}
                       </span>
                     }
                   />
