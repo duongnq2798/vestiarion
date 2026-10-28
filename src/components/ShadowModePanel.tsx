@@ -15,6 +15,7 @@ import { useActionForm, type ActionResult } from "@/components/ui/useActionForm"
 import { withSuccessToast } from "@/components/withSuccessToast";
 import { agreedPaymentLine, type Capability } from "@/lib/capability";
 import { utcMinute } from "@/lib/copy";
+import { shadowModePaysWords } from "@/lib/earned-vendors";
 import type { Network } from "@/lib/network";
 import { SHADOW_CURRENCIES, type ShadowMode } from "@/lib/shadow-currency";
 import { DocsLink } from "@/components/DocsLink";
@@ -23,7 +24,8 @@ import { DocsLink } from "@/components/DocsLink";
  * The "Shadow mode" section of Settings (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S1): whether the
  * workspace runs alongside how the business pays today, and in which currency its bills are. Everyone sees it; an owner
  * (`canChange`) turns it on, choosing the currency, or off behind a confirmation that says what stays held. Not offered
- * on Arc mainnet, where the agent pays the real bills.
+ * on Arc mainnet, where the agent pays the real bills. While the owner lets the agent pay earned vendors on their own
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28), what it pays names them.
  */
 export interface ShadowModePanelProps {
   orgSlug: string;
@@ -32,6 +34,8 @@ export interface ShadowModePanelProps {
   canChange: boolean;
   /** What the workspace's payments do now (`readCapability()`): what agreeing pays is said in its words (capability and reasons R5). */
   capability?: Capability;
+  /** The owner lets the agent pay earned vendors on their own (earned vendors AL21); absent reads as off. */
+  earnedPayments?: boolean;
 }
 
 const INITIAL: ActionResult = { ok: false, message: "" };
@@ -90,7 +94,7 @@ function TurnOff({ orgSlug }: { orgSlug: string }) {
   );
 }
 
-export default function ShadowModePanel({ orgSlug, mode, network, canChange, capability }: ShadowModePanelProps) {
+export default function ShadowModePanel({ orgSlug, mode, network, canChange, capability, earnedPayments = false }: ShadowModePanelProps) {
   const mainnet = network === "arc-mainnet";
   return (
     <section aria-labelledby="shadow-mode-title">
@@ -99,7 +103,7 @@ export default function ShadowModePanel({ orgSlug, mode, network, canChange, cap
         <div className="space-y-1">
           <p className="text-sm font-medium text-ink">
             {mode
-              ? `On since ${utcMinute(mode.startedAt)}, for bills in ${mode.currency}: the agent pays nothing until a person agrees.`
+              ? `On since ${utcMinute(mode.startedAt)}, for bills in ${mode.currency}: ${shadowModePaysWords(earnedPayments)}.`
               : "Off: the agent pays on its own, within its limits."}
           </p>
           <p className="text-sm text-ink-2">

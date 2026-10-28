@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { apHarness, invoiceWrites, LabChain, ledgerEntries, scriptModel, today } from "./support/ap-harness";
 
 /**
- * Earned vendors at the AP stage (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL16, AL20): in shadow mode,
- * with bills to decide, the statuses are signed once as the stage starts; never outside shadow mode or with nothing to
- * decide. It grants nothing: a sync that signs, one that fails and none at all leave every decision, write and transfer
- * of the stage the same.
+ * Earned vendors at the AP stage (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL16, AL24): in shadow mode,
+ * with bills to decide, the statuses are signed once as the stage starts, by the gate that may let the agent pay an
+ * earned vendor on its own; never outside shadow mode or with nothing to decide. Without the owner's switch it grants
+ * nothing: a sync that signs, one that fails and none at all leave every decision, write and transfer of the stage the
+ * same.
  */
 
 const { decideMock, syncMock } = vi.hoisted(() => ({ decideMock: vi.fn(), syncMock: vi.fn() }));
@@ -58,11 +59,11 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-describe("the AP stage and earned vendors (AL16, AL20)", () => {
+describe("the AP stage and earned vendors (AL16, AL24)", () => {
   it("signs the statuses once as a shadow-mode stage starts, in the workspace's scope", async () => {
     const shadowed = await stage({ shadow: true });
     expect(syncMock).toHaveBeenCalledTimes(1);
-    expect(syncMock).toHaveBeenCalledWith(expect.anything(), { trigger: "cycle" });
+    expect(syncMock).toHaveBeenCalledWith(expect.anything(), { trigger: "cycle", shadow: expect.objectContaining({ startedAt: "2026-09-01T00:00:00Z" }) });
     // Shadow mode holds the payment for a verdict, as it always has: the sync changes nothing about it.
     expect(shadowed.sent).toEqual([]);
     expect(shadowed.decisions[0]).toMatchObject({ action: "ap_pay", execution: { resultingStatus: "held", heldBecause: "shadow_verdict" } });

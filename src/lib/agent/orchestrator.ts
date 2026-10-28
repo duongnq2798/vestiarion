@@ -28,7 +28,8 @@ import type { HeldForProject } from "./follow-up";
 import type { SameWorkMatch } from "../projects/same-work";
 import { readPaymentPolicies, readTwoApprovalsAbove } from "../approval-policy";
 import { readShadowMode, type ShadowMode } from "../shadow-mode";
-import { syncEarnedVendors } from "../earned-vendors-store";
+import { breaksEarning } from "../earned-vendors";
+import { EARNED_PAID_NOTE, earnedGateFor, NO_EARNED, type EarnedGate } from "./earned-gate";
 import { choosePayoutRoute } from "../payout-route";
 import { needsTwoApprovals, TWO_APPROVALS_RULE } from "../two-approvals";
 import { approvedByTwo, usdcValueOfLatestDecision, type PaymentSource } from "./second-approval";
@@ -1563,6 +1564,11 @@ async function decideApPayable(
     payeeLock?: PayeeLock;
     /** The workspace's shadow mode, null when it is off (shadow mode S2): a payment then waits for a person to agree. */
     shadow?: ShadowMode | null;
+    /**
+     * In shadow mode, the vendors the agent pays on its own, earned under the owner's rule
+     * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22): built once per stage; none when absent.
+     */
+    earned?: EarnedGate;
     /** The checks after the guardrails (project budgets P5, P9): the same work as a milestone, and the project's budget. */
     obligations?: ObligationGate;
     /** The address this payable's document asked to be paid to, read once per stage (invoice pay-to hold IP2); null for none. */
@@ -2054,9 +2060,13 @@ async function decideApPayable(
   // Held because the cash it needs is not there (`timing.shortfall`), and nothing else stopped it: decided again once
   // the operating wallet and the reserve cover it (reserve cash back R4). USDC from the operating wallet only: the
   // reserve holds no EURC, and a Gateway payout is paid from the Gateway balance.
+  // An earned vendor, in shadow mode with the owner's switch on (docs/superpowers/specs/2026-10-28-earned-vendors-design.md
+  // AL22): a payment that passed every check above is carried out as a live workspace carries it out, and a person gives
+  // the verdict after. Asked here alone, after every rule and check, so it never lets through what they stopped.
+  const grant = decision.action === "pay" && !guardrail.blocked && ctx.shadow ? (ctx.earned?.paysAlone(counterparty.id) ?? null) : null;
   // Shadow mode (shadow mode S2): a payment that passed every check waits for a person to agree. Not a refusal by code,
   // so it is no guardrail block and counts as none; the follow-up never reopens it, a person ends it.
-  const heldForVerdict = decision.action === "pay" && !guardrail.blocked && (ctx.shadow ?? null) !== null;
+  const heldForVerdict = decision.action === "pay" && !guardrail.blocked && (ctx.shadow ?? null) !== null && grant === null;
   // Held for a verdict, it is not held for want of cash too: a person's Agree and pay weighs the cash then (review M1).
   // A bank payout in USDB is not decided again for USDC coming in: the wallet's USDB is what it needs (bank payouts B13).
   const shortOfCash = !heldForBudget && !heldForVerdict && !guardrail.blocked && (timing.shortfall === true || timingRule === "cash.priority") && currency === "USDC" && !viaGateway && !paidInTestToken;
@@ -2121,6 +2131,11 @@ async function decideApPayable(
       if (isEurc && payment && (status === "paid" || status === "matched")) ctx.eurc.spent(payment.amountPaid);
       // And what it counts against the spending limit, so the next payment this cycle sees it (R5).
       if (payment && (status === "paid" || status === "matched")) ctx.budget.spend(countedUsdc(payment.amountPaid, currency, usdcValue, amount));
+      // Paid on its own for an earned vendor: its reasoning says so, and it now waits for a verdict too (AL22, AL26).
+      if (grant && (status === "paid" || status === "matched")) {
+        reasoning += EARNED_PAID_NOTE;
+        ctx.earned?.paid(counterparty.id);
+      }
     }
   }
 
@@ -2149,7 +2164,7 @@ async function decideApPayable(
   if (update.error) throw new Error(update.error.message);
   metrics.recordInvoice(status, guardrailBlocked);
 
-  await appendLedgerEntry({
+  const signed = await appendLedgerEntry({
     actor: "agent",
     domain: "ap",
     action: `ap_${decision.action}`,
@@ -2222,6 +2237,8 @@ async function decideApPayable(
       terms,
       // Decided in shadow mode: a payment code held is settled through a person's verdict too (shadow mode S4).
       ...(ctx.shadow ? { shadow: true } : {}),
+      // Carried out on its own for an earned vendor, and the `vendor_earned` entry that allowed it (earned vendors AL27).
+      ...(grant ? { earned: grant } : {}),
       // The day an earlier cycle scheduled this invoice for, now decided again.
       ...(previouslyScheduledFor ? { scheduledFor: previouslyScheduledFor } : {}),
       // Decided before that day because the cash will not cover it then: what the check measured (cash ahead A4).
@@ -2320,9 +2337,18 @@ async function decideApPayable(
     },
   });
 
+  // A decision that breaks an earned vendor's status takes it away for the rest of the stage (earned vendors AL25): flagged,
+  // or stopped by a check on the vendor or its bill. Signed after its own entry, which it names; it never throws.
+  const flagged = status === "flagged" || decision.action === "flag_fraud";
+  if (ctx.shadow && ctx.earned && signed && (flagged || (guardrailBlocked && breaksEarning(guardrail.rule)))) {
+    await ctx.earned.lose(counterparty.id, { kind: flagged ? "flagged" : "code_stop", decisionSeq: signed.seq, rule: guardrail.rule });
+  }
+
   const message = heldBecausePaused
     ? `${counterparty.name}: not paid, the agent was paused (${amount} ${currency})`
-    : scheduledFor
+    : grant && sent
+      ? `${counterparty.name}: paid on its own, an earned vendor (${sent.amountPaid} ${currency})`
+      : scheduledFor
       ? `${counterparty.name}: scheduled for ${payOn} (${amount} ${currency})`
       : sent && discount && sent.discountTaken > 0
         ? `${counterparty.name}: pay (${sent.amountPaid} ${currency} after a ${discount.pct}% early-payment discount on ${amount} ${currency})`
@@ -2382,6 +2408,11 @@ export interface ApStageInput {
   payeeLock?: PayeeLock;
   /** The workspace's shadow mode (shadow mode S2); read from the workspace when absent. */
   shadow?: ShadowMode | null;
+  /**
+   * In shadow mode, the vendors the agent pays on its own (docs/superpowers/specs/2026-10-28-earned-vendors-design.md
+   * AL22); built from the workspace when absent.
+   */
+  earned?: EarnedGate;
   /** The checks after the guardrails (project budgets P5, P9); read from the workspace when absent. */
   obligations?: ObligationGate;
   /** The payables whose purchase order came from their vendor's document (document checks DK8); read from the workspace when absent. */
@@ -2578,17 +2609,12 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const payeeLock = input.payeeLock !== undefined ? input.payeeLock : (policies?.payeeLock ?? PAYEE_LOCK_OFF);
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
   const shadow = input.shadow !== undefined ? input.shadow : payables.length > 0 ? await shadowOnce() : null;
-  // In shadow mode, with bills to decide, the vendors' statuses under the owner's rule for earned vendors are signed as
-  // the stage starts (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL16): with no rule, only the rule and
-  // the record are read. Best effort, and it grants nothing (AL20): no decision below reads a status, and a sync that
-  // fails is logged and changes none of them.
-  if (shadow && payables.length > 0) {
-    try {
-      await syncEarnedVendors(db, { trigger: "cycle" });
-    } catch (error) {
-      console.error("earned vendors: statuses not signed as the AP stage started", messageOf(error));
-    }
-  }
+  // In shadow mode, with bills to decide, the owner's earned vendors (docs/superpowers/specs/2026-10-28-earned-vendors-design.md
+  // AL16, AL22, AL24): their statuses are signed as the stage starts, and, with the owner's switch on, a vendor earned
+  // now and recorded earned is paid on its own. Built once; with no rule, only the rule and the record are read. It never
+  // throws: anything it cannot read grants none, and every payment then waits for a verdict as before. A live workspace
+  // never builds it.
+  const earned = input.earned ?? (shadow && payables.length > 0 ? await earnedGateFor(db, { network: provider.network.id, shadow }) : NO_EARNED);
   // The addresses the payables' documents asked to be paid to (invoice pay-to hold IP2): read once for the stage, none
   // before migration 0136. A read that fails stops the stage, so a payment is never made past it.
   const documentPayTo = payables.length > 0 ? await readDocumentPayTo(payables.map((row) => row.id), db) : new Map<string, string>();
@@ -2751,6 +2777,7 @@ export async function runApStage(input: ApStageInput): Promise<number> {
       twoApprovalsAbove,
       payeeLock,
       shadow,
+      earned,
       obligations,
       documentPayTo: (invoiceId) => documentPayTo.get(invoiceId) ?? null,
       vendorDocument: (invoiceId) => vendorDocuments.get(invoiceId) ?? null,

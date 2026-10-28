@@ -54,6 +54,11 @@ export interface ReportDecision {
   reasoning: string | null;
   /** The day a schedule pays on (`decision.payOn`, YYYY-MM-DD); null or absent otherwise. */
   payOn?: string | null;
+  /**
+   * Carried out on the agent's own decision for an earned vendor in shadow mode (`detail.earned`; earned vendors AL27):
+   * absent otherwise.
+   */
+  onItsOwn?: boolean;
 }
 
 /** A person's approve, reject or return of a payable. */
@@ -299,13 +304,20 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
     hasVerdict(payment.invoiceId) ||
     (facts.shadow !== null && Date.parse(payment.at) >= Date.parse(facts.shadow.startedAt));
 
+  // The agent paid it on its own, for an earned vendor (earned vendors AL29): the payment is the agent's, whatever verdict
+  // a person gave on it after.
+  const paidOnItsOwn = (invoiceId: string) =>
+    (decisionsOf.get(invoiceId) ?? []).some((decision) => decision.onItsOwn === true && (decision.resultingStatus === "paid" || decision.resultingStatus === "matched"));
+
   const paymentRows: PaymentRow[] = payments.map((payment) => {
     const bill = billsById.get(payment.invoiceId)!;
-    const decidedBy = agreedToPay(payment.invoiceId)
-      ? "verdict"
-      : (actionsOf.get(payment.invoiceId) ?? []).some((action) => action.action === "approval_paid")
-        ? "person"
-        : "agent";
+    const decidedBy = paidOnItsOwn(payment.invoiceId)
+      ? "agent"
+      : agreedToPay(payment.invoiceId)
+        ? "verdict"
+        : (actionsOf.get(payment.invoiceId) ?? []).some((action) => action.action === "approval_paid")
+          ? "person"
+          : "agent";
     return {
       invoiceId: payment.invoiceId,
       at: payment.at,

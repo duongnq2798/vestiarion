@@ -64,6 +64,11 @@ export interface Decision {
   heldForCashByCode?: boolean;
   /** A payment held in shadow mode for a person to agree, no rule refusing it (shadow mode S2). */
   heldForVerdict?: boolean;
+  /**
+   * A payment the agent made on its own in shadow mode, to a vendor that earned it under the owner's rule
+   * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22, AL27): the verdict is asked for after.
+   */
+  earned?: boolean;
   /** A person's verdict on the agent's decision, given or to give (shadow mode S3). */
   verdict?: VerdictView;
   /**

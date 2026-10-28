@@ -54,7 +54,7 @@ export function ProductShell({
   return (
     <>
       <WorkspaceHeader
-        page={{ chain: chainModes, shadow: status.shadow, screening: status.screening, clock: { mode: clockMode, day } }}
+        page={{ chain: chainModes, shadow: status.shadow, ...(status.earnedPayments ? { earnedPayments: true } : {}), screening: status.screening, clock: { mode: clockMode, day } }}
         // When the last cycle ran, or that one is running now; and a toast for each decision as it lands.
         activity={<AgentActivity lastCycleAt={lastCycleAt} />}
         crumb={crumb}

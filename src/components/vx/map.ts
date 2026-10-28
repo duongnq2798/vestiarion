@@ -451,6 +451,8 @@ function decideInvoice(
     ...(invoice.status === "held" && codeHeldForCash(decided?.detail) ? { heldForCashByCode: true } : {}),
     // Held in shadow mode for a person to agree, which no rule did (shadow mode S2).
     ...(invoice.status === "held" && awaitsVerdict(decided?.detail) ? { heldForVerdict: true } : {}),
+    // Paid, or on its way, on the agent's own decision for an earned vendor in shadow mode (earned vendors AL22, AL27).
+    ...((invoice.status === "paid" || invoice.status === "matched") && record(decided?.detail.earned) ? { earned: true } : {}),
     decisionMode: stringValue(entry?.detail.decisionMode),
     // A Gateway payout has no Arc transaction of its own: its hash is the mint, linked below on the payee's
     // chain. No mint is ever linked to Arc's explorer (Gateway review I4).

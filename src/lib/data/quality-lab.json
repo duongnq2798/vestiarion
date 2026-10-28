@@ -1,7 +1,7 @@
 {
   "summary": {
-    "scenarios": 39,
-    "right": 39,
+    "scenarios": 43,
+    "right": 43,
     "wrongPayments": 0
   },
   "scenarios": [
@@ -651,6 +651,90 @@
         "status": "held",
         "rule": null,
         "heldBecause": "shadow_verdict",
+        "transfers": 0
+      },
+      "right": true,
+      "wrongPayment": false
+    },
+    {
+      "id": "switches-earned-vendor-paid",
+      "group": "switches",
+      "title": "In shadow mode, a vendor that earned it under the owner's rule is paid on its own, on Arc testnet",
+      "expected": {
+        "money": "moves",
+        "status": "paid",
+        "rule": null,
+        "heldBecause": null,
+        "transfers": 1
+      },
+      "actual": {
+        "money": "moves",
+        "status": "paid",
+        "rule": null,
+        "heldBecause": null,
+        "transfers": 1
+      },
+      "right": true,
+      "wrongPayment": false
+    },
+    {
+      "id": "switches-not-earned-waits",
+      "group": "switches",
+      "title": "In shadow mode with earned vendors paid on their own, a vendor that has not earned it waits for a verdict",
+      "expected": {
+        "money": "stops",
+        "status": "held",
+        "rule": null,
+        "heldBecause": "shadow_verdict",
+        "transfers": 0
+      },
+      "actual": {
+        "money": "stops",
+        "status": "held",
+        "rule": null,
+        "heldBecause": "shadow_verdict",
+        "transfers": 0
+      },
+      "right": true,
+      "wrongPayment": false
+    },
+    {
+      "id": "switches-earned-address-changed",
+      "group": "switches",
+      "title": "An earned vendor's address changed and no one confirmed it: code stops the payment",
+      "expected": {
+        "money": "stops",
+        "status": "held",
+        "rule": "counterparty.address_unconfirmed",
+        "heldBecause": null,
+        "transfers": 0
+      },
+      "actual": {
+        "money": "stops",
+        "status": "held",
+        "rule": "counterparty.address_unconfirmed",
+        "heldBecause": null,
+        "transfers": 0
+      },
+      "right": true,
+      "wrongPayment": false
+    },
+    {
+      "id": "switches-earned-above-two-approvals",
+      "group": "switches",
+      "title": "An earned vendor's bill above the two-approvals figure waits for two people",
+      "expected": {
+        "money": "stops",
+        "status": "held",
+        "rule": "workspace.two_approvals",
+        "heldBecause": null,
+        "transfers": 0
+      },
+      "actual": {
+        "money": "stops",
+        "status": "held",
+        "rule": "workspace.two_approvals",
+        "heldBecause": null,
         "transfers": 0
       },
       "right": true,

@@ -68,6 +68,7 @@ type DecisionRow = {
   shadow: boolean | null;
   reasoning: string | null;
   pay_on: string | null;
+  earned?: unknown;
 };
 
 type PersonRow = { seq: number | string; ts: string; action: ReportPersonAction["action"]; invoice_id: string | null };
@@ -101,7 +102,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
       orgDb
         .from("ledger_entries")
         .select(
-          "seq, ts, action, invoice_id:detail->>invoiceId, guardrail_blocked:detail->guardrailBlocked, guardrail_rule:detail->>guardrailRule, held_because:detail->execution->>heldBecause, resulting_status:detail->execution->>resultingStatus, shadow:detail->shadow, reasoning:detail->decision->>reasoning, pay_on:detail->decision->>payOn"
+          "seq, ts, action, invoice_id:detail->>invoiceId, guardrail_blocked:detail->guardrailBlocked, guardrail_rule:detail->>guardrailRule, held_because:detail->execution->>heldBecause, resulting_status:detail->execution->>resultingStatus, shadow:detail->shadow, reasoning:detail->decision->>reasoning, pay_on:detail->decision->>payOn, earned:detail->earned"
         )
         .eq("actor", "agent")
         .in("action", [...AGENT_DECISION_ACTIONS])
@@ -180,6 +181,8 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
               shadow: row.shadow === true,
               reasoning: row.reasoning,
               payOn: row.pay_on,
+              // Carried out on its own for an earned vendor (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL27).
+              ...(row.earned != null ? { onItsOwn: true } : {}),
             },
           ]
         : []

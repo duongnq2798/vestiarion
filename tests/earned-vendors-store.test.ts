@@ -6,7 +6,7 @@ vi.mock("@/lib/ledger", async (importOriginal) => ({ ...(await importOriginal<ty
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { changeEarnedVendorRule, EarnedVendorsError, readEarnedVendorRule, readEarnedView, syncEarnedVendors } from "@/lib/earned-vendors-store";
+import { changeEarnedVendorPayments, changeEarnedVendorRule, EarnedVendorsError, readEarnedVendorRule, readEarnedView, syncEarnedVendors } from "@/lib/earned-vendors-store";
 import type { LedgerEntryInput } from "@/lib/ledger";
 import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -20,6 +20,11 @@ import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type Recorded
  * signed; and the sync, which signs only what changed since each vendor's newest signed status, stops at one read before
  * 0146, reads only the rule and the record with no rule, and leaves a vendor whose entry failed as it was recorded, for
  * the next sync to sign, a loss the rule's turning off could not sign included.
+ *
+ * Step 3's switch (AL21): an owner's, refused without a rule, without an agent spending limit, on Arc mainnet, while a
+ * cycle runs and before 0146; signed strictly as `earned_vendor_payments_changed` and put back from its own write when it
+ * cannot be; a switch left in force without its entry signed before the next change; and turned off, with its entry, when
+ * the rule is.
  */
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -44,6 +49,10 @@ interface World {
   rules: Array<{ seq: number; from: number | null; to: number | null }>;
   /** The record (`vendor_earned`, `vendor_earned_lost`) cannot be read. */
   recordUnreadable?: boolean;
+  /** The agent's spending limit row; none when absent. */
+  budget?: { daily_usdc: string | null; weekly_usdc: string | null };
+  /** The `earned_vendor_payments_changed` entries signed. */
+  switches?: Array<{ seq: number; from: boolean; to: boolean }>;
 }
 
 /** A workspace whose rule, facts and record a fake PostgREST answers, and whose writes and signed entries it keeps. */
@@ -67,13 +76,19 @@ function workspace(world: World) {
       const reply = world.update?.(body);
       if (reply) return reply;
       const guard = params.get("earned_vendor_streak");
+      const switchGuard = params.get("earned_vendor_payments");
       const current = world.rule && world.rule !== "missing" ? world.rule : null;
-      if (current && guard === (current.earned_vendor_streak === null ? "is.null" : `eq.${current.earned_vendor_streak}`)) {
+      const guarded =
+        switchGuard !== null
+          ? switchGuard === `eq.${current?.earned_vendor_payments}`
+          : guard === (current?.earned_vendor_streak === null ? "is.null" : `eq.${current?.earned_vendor_streak}`);
+      if (current && guarded) {
         world.rule = { ...current, ...(body as Partial<typeof current>) };
       }
       return { body: null };
     }
     if (path === "/rest/v1/cycle_runs") return { body: world.cycleRunning ? [{ id: "run-1" }] : [] };
+    if (path === "/rest/v1/agent_budgets") return { body: world.budget ? [world.budget] : [] };
     if (path === "/rest/v1/invoices") {
       return {
         body: world.bills.map((bill) => ({
@@ -112,6 +127,10 @@ function workspace(world: World) {
       const newest = [...world.rules].sort((a, b) => b.seq - a.seq).slice(0, Number(params.get("limit") ?? "1000"));
       return { body: newest.map((rule) => ({ detail: { by: OWNER, from: rule.from, to: rule.to } })) };
     }
+    if (path === "/rest/v1/ledger_entries" && params.get("action") === "eq.earned_vendor_payments_changed") {
+      const newest = [...(world.switches ?? [])].sort((a, b) => b.seq - a.seq).slice(0, Number(params.get("limit") ?? "1000"));
+      return { body: newest.map((entry) => ({ detail: { by: OWNER, from: entry.from, to: entry.to } })) };
+    }
     if (path === "/rest/v1/decision_verdicts") {
       return { body: world.verdicts.map((verdict) => ({ entry_seq: String(verdict.seq), verdict: verdict.verdict, decided_at: at(verdict.day) })) };
     }
@@ -139,6 +158,7 @@ function signing(world: World, refuse: (entry: LedgerEntryInput) => boolean = ()
       world.record.push({ seq, ts: at(40), action: entry.action, counterparty_id: entry.detail.counterpartyId as string });
     }
     if (entry.action === "earned_vendor_rule_changed") world.rules.push({ seq, from: entry.detail.from as number | null, to: entry.detail.to as number | null });
+    if (entry.action === "earned_vendor_payments_changed") (world.switches ??= []).push({ seq, from: entry.detail.from as boolean, to: entry.detail.to as boolean });
     return { ...entry, seq, id: `e${seq}`, ts: at(40) };
   });
   return signed;
@@ -381,6 +401,118 @@ describe("changing it (AL11, AL17)", () => {
     expect(posts(unreadable.fake.requests)).toHaveLength(0);
     expect(none).toEqual([]);
     expect(console.error).toHaveBeenCalledWith("earned vendors: statuses not signed", ORG, expect.stringContaining("database unavailable"));
+  });
+});
+
+describe("the owner's switch (AL21)", () => {
+  const LIMIT = { daily_usdc: "2000", weekly_usdc: null };
+  /** Northwind earned under a rule of 5, the switch as given, a spending limit, and the switch's signed entries. */
+  const ruled = (payments: boolean, extra: Partial<World> = {}): World => ({
+    ...northwindEarned({ earned_vendor_streak: 5, earned_vendor_payments: payments }),
+    budget: LIMIT,
+    switches: payments ? [{ seq: 810, from: false, to: true }] : [],
+    ...extra,
+  });
+
+  it("turns it on: writes the workspace's row and signs who, from what, to what, after checking it can sign", async () => {
+    const world = ruled(false);
+    const signed = signing(world);
+    const { fake, run } = workspace(world);
+    canSignMock.mockImplementation(() => expect(posts(fake.requests)).toHaveLength(0));
+
+    expect(await run(() => changeEarnedVendorPayments({ actorId: OWNER, on: true }))).toEqual({ from: false, to: true });
+
+    expect(canSignMock).toHaveBeenCalledTimes(1);
+    const [upsert] = posts(fake.requests);
+    expect(upsert.params.get("on_conflict")).toBe("org_id");
+    expect(upsert.body).toMatchObject({ org_id: ORG, earned_vendor_payments: true, updated_by: OWNER });
+    expect(upsert.body).not.toHaveProperty("earned_vendor_streak");
+    expect(signed).toEqual([
+      {
+        actor: "human",
+        domain: "system",
+        action: "earned_vendor_payments_changed",
+        summary: "The agent pays earned vendors on its own in shadow mode",
+        detail: { by: OWNER, from: false, to: true },
+      },
+    ]);
+    expect(world.rule).toMatchObject({ earned_vendor_payments: true });
+    for (const request of fake.requests.filter((r) => !r.path.startsWith("/rest/v1/rpc/"))) expect(carriesOrg(request, ORG), request.path).toBe(true);
+  });
+
+  it("turns it off without asking for a rule or a spending limit, and says so", async () => {
+    const world = ruled(true, { budget: undefined });
+    const signed = signing(world);
+    const { run } = workspace(world);
+    expect(await run(() => changeEarnedVendorPayments({ actorId: OWNER, on: false }))).toEqual({ from: true, to: false });
+    expect(signed.map((entry) => [entry.summary, entry.detail])).toEqual([["Earned vendors' payments wait for a verdict again", { by: OWNER, from: true, to: false }]]);
+  });
+
+  it("refuses it on without a rule, without an agent spending limit, unchanged, on Arc mainnet, while a cycle runs and before 0146, writing nothing", async () => {
+    const refusal = async (world: World, code: string, message: string, network: "arc-testnet" | "arc-mainnet" = "arc-testnet") => {
+      const { fake, run } = workspace(world);
+      await expect(run(() => changeEarnedVendorPayments({ actorId: OWNER, on: true }), network)).rejects.toMatchObject({ code, message });
+      expect(posts(fake.requests)).toHaveLength(0);
+    };
+    const noLimit = "Set the agent's spending limit first, in Settings: the agent's own payments always count against it.";
+    await refusal({ ...ruled(false), rule: { earned_vendor_streak: null, earned_vendor_payments: false } }, "no_rule", "Set a rule first: how many agreed verdicts in a row a vendor needs.");
+    await refusal(ruled(false, { budget: undefined }), "no_spending_limit", noLimit);
+    await refusal(ruled(false, { budget: { daily_usdc: null, weekly_usdc: null } }), "no_spending_limit", noLimit);
+    await refusal(ruled(true), "unchanged", "It is set to that already.");
+    await refusal(ruled(false), "mainnet", "Earned vendors are counted from your verdicts in shadow mode, which runs on Arc testnet.", "arc-mainnet");
+    await refusal(ruled(false, { cycleRunning: true }), "cycle_running", "A cycle is running. Try again in a minute, once it has finished.");
+    await refusal({ ...ruled(false), rule: "missing" }, "not_ready", "Not available in this workspace yet.");
+    canSignMock.mockImplementation(() => {
+      throw new Error("no ledger key");
+    });
+    await refusal(ruled(false), "not_signed", "The change could not be signed in the ledger, so nothing changed. Try again in a moment.");
+    expect(appendMock).not.toHaveBeenCalled();
+  });
+
+  it("puts the switch back and refuses when its entry cannot be signed, only from its own write", async () => {
+    const world = ruled(false);
+    signing(world, (entry) => entry.action === "earned_vendor_payments_changed");
+    const { fake, run } = workspace(world);
+    await expect(run(() => changeEarnedVendorPayments({ actorId: OWNER, on: true }))).rejects.toMatchObject({ code: "not_signed" });
+    const [back] = fake.requests.filter((r) => r.path === "/rest/v1/approval_policies" && r.method === "PATCH");
+    expect(back.params.get("earned_vendor_payments")).toBe("eq.true");
+    expect(back.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(back.body).toMatchObject({ earned_vendor_payments: false });
+    expect(world.rule).toMatchObject({ earned_vendor_payments: false });
+  });
+
+  it("never says nothing changed when the switch could not be put back either, and signs it when asked again", async () => {
+    const world = ruled(false, { update: () => ({ status: 500, body: { code: "XX000", message: "database unavailable" } }) });
+    let failing = true;
+    const signed = signing(world, (entry) => failing && entry.action === "earned_vendor_payments_changed");
+    const { run } = workspace(world);
+    const refused = await run(() => changeEarnedVendorPayments({ actorId: OWNER, on: true })).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(Error);
+    expect(refused).not.toBeInstanceOf(EarnedVendorsError);
+    expect(world.rule).toMatchObject({ earned_vendor_payments: true });
+    expect(console.error).toHaveBeenCalledWith("earned vendors: switch not put back", ORG, expect.any(String));
+
+    // Asked for again once it can sign: the switch in force is signed, from what the ledger last named, and nothing written.
+    failing = false;
+    expect(await run(() => changeEarnedVendorPayments({ actorId: OWNER, on: true }))).toEqual({ from: false, to: true });
+    expect(signed.map((entry) => entry.detail)).toEqual([{ by: OWNER, from: false, to: true }]);
+  });
+
+  it("is turned off with the rule, in the same write, and its entry signed after the rule's", async () => {
+    const world = ruled(true);
+    const signed = signing(world);
+    const { fake, run } = workspace(world);
+    expect(await run(() => changeEarnedVendorRule({ actorId: OWNER, streak: null }))).toEqual({ from: 5, to: null });
+    expect(posts(fake.requests)[0].body).toMatchObject({ earned_vendor_streak: null, earned_vendor_payments: false });
+    expect(signed.slice(0, 2).map((entry) => [entry.action, entry.detail])).toEqual([
+      ["earned_vendor_rule_changed", { by: OWNER, from: 5, to: null }],
+      ["earned_vendor_payments_changed", { by: OWNER, from: true, to: false }],
+    ]);
+  });
+
+  it("reads as off before 0146, and as stored after", async () => {
+    expect(await workspace(ruled(true)).run(() => readEarnedVendorRule(db()))).toEqual({ streak: 5, payments: true, ready: true });
+    expect(await workspace({ ...ruled(true), rule: "missing" }).run(() => readEarnedVendorRule(db()))).toEqual({ streak: null, payments: false, ready: false });
   });
 });
 

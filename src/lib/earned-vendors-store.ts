@@ -1,10 +1,12 @@
 import { CYCLE_IN_PROGRESS_MS } from "./agent/balances";
+import { readOutflowBudget } from "./agent/outflow-budget";
 import { AGENT_DECISION_ACTIONS } from "./agent/shadow-hold";
 import { currentOrgId } from "./context";
 import { db, unwrap, type OrgDb } from "./dal";
 import {
   earnedChanges,
   earnedLostEntry,
+  earnedPaymentsSummary,
   earnedRuleFromRow,
   earnedRuleSummary,
   earnedVendorEntry,
@@ -27,10 +29,11 @@ export * from "./earned-vendors";
 /**
  * Earned vendors, read, changed and signed (docs/superpowers/specs/2026-10-28-earned-vendors-design.md): the owner's
  * rule on the workspace's `approval_policies` row (AL11, migration 0146), changed with its signed entry or not at all
- * (AL17), and the sync that signs each change of a vendor's status (AL15, AL16). Every export runs inside an
- * organization scope; who may change the rule (`approval.policy`, owners) is the caller's check.
+ * (AL17), and the sync that signs each change of a vendor's status (AL15, AL16). Step 3's switch beside the rule, changed
+ * the same way (AL21). Every export runs inside an organization scope; who may change either (`approval.policy`, owners)
+ * is the caller's check.
  *
- * It grants nothing (AL20): nothing here is read to decide a payment.
+ * The AP stage's gate (./agent/earned-gate) is what reads a status, and the switch, to decide a payment (AL22).
  */
 
 /** The ledger's per-vendor entries, newest first per vendor: the record (AL15). */
@@ -61,7 +64,7 @@ export async function readEarnedVendorRule(orgDb: OrgDb): Promise<EarnedVendorRu
 // ---------------------------------------------------------------------------------------------------------------------
 // Changing the rule (AL11, AL17)
 
-export type EarnedVendorsErrorCode = "invalid" | "unchanged" | "cycle_running" | "not_ready" | "mainnet" | "not_signed";
+export type EarnedVendorsErrorCode = "invalid" | "unchanged" | "cycle_running" | "not_ready" | "mainnet" | "not_signed" | "no_rule" | "no_spending_limit";
 
 const MESSAGES: Record<EarnedVendorsErrorCode, string> = {
   invalid: "Choose a number from 5 to 50.",
@@ -70,6 +73,8 @@ const MESSAGES: Record<EarnedVendorsErrorCode, string> = {
   not_ready: "Not available in this workspace yet.",
   mainnet: "Earned vendors are counted from your verdicts in shadow mode, which runs on Arc testnet.",
   not_signed: "The change could not be signed in the ledger, so nothing changed. Try again in a moment.",
+  no_rule: "Set a rule first: how many agreed verdicts in a row a vendor needs.",
+  no_spending_limit: "Set the agent's spending limit first, in Settings: the agent's own payments always count against it.",
 };
 
 export class EarnedVendorsError extends Error {
@@ -112,6 +117,22 @@ async function signedRule(): Promise<number | null> {
   ) as Array<{ detail: { to?: number | string | null } | null }>;
   return earnedRuleFromRow({ earned_vendor_streak: rows[0]?.detail?.to ?? null }).streak;
 }
+
+/** The switch the ledger names (AL21): the newest `earned_vendor_payments_changed` entry's `to`, or off before the first. */
+async function signedPayments(): Promise<boolean> {
+  const rows = unwrap(
+    await db().from("ledger_entries").select("detail").eq("action", "earned_vendor_payments_changed").order("seq", { ascending: false }).limit(1)
+  ) as Array<{ detail: { to?: boolean | null } | null }>;
+  return rows[0]?.detail?.to === true;
+}
+
+const paymentsEntry = (by: string, from: boolean, to: boolean): LedgerEntryInput => ({
+  actor: "human",
+  domain: "system",
+  action: "earned_vendor_payments_changed",
+  summary: earnedPaymentsSummary(to),
+  detail: { by, from, to },
+});
 
 const ruleEntry = (by: string, from: number | null, to: number | null): LedgerEntryInput => ({
   actor: "human",
@@ -207,8 +228,96 @@ export async function changeEarnedVendorRule(input: { actorId: string; streak: n
     throw new EarnedVendorsError("not_signed");
   }
 
+  // The same write turned the switch off (0146's check): its own entry says so, after the rule's (AL21). The rule is off
+  // either way, so an entry that cannot be signed is logged, and signed before the switch's next change.
+  if (to === null && current.payments) {
+    await appendLedgerEntry(paymentsEntry(input.actorId, true, false)).catch((error: unknown) => {
+      console.error("earned vendors: switch turned off with the rule, not signed", currentOrgId(), messageOf(error));
+    });
+  }
+
   await syncEarnedVendors(db(), { trigger: "rule" }).catch(logSync);
   return { from, to };
+}
+
+/**
+ * An owner lets the agent pay earned vendors on their own, in shadow mode, or makes their payments wait for a verdict
+ * again (AL21), signed strictly as `earned_vendor_payments_changed`, as the rule is (AL17): the key is checked before
+ * anything is written, a change whose entry cannot be signed is put back from its own write and refused, and one that
+ * could not be put back either is in force without its entry, so every change first signs the switch in force where the
+ * ledger does not name it. On needs a rule and an agent spending limit, which the agent's own payments always count
+ * against; off needs neither. Refused on Arc mainnet, where there is no shadow mode, while a cycle runs, which reads the
+ * switch as it starts, and before migration 0146.
+ */
+export async function changeEarnedVendorPayments(input: { actorId: string; on: boolean }): Promise<{ from: boolean; to: boolean }> {
+  if (workspaceNetwork().id === "arc-mainnet") throw new EarnedVendorsError("mainnet");
+  const current = await readEarnedVendorRule(db());
+  if (!current.ready) throw new EarnedVendorsError("not_ready");
+  const from = current.payments;
+  // A switch in force that the ledger does not name is one whose entry failed and could not be put back, or one the
+  // rule's turning off could not sign.
+  const signed = await signedPayments();
+  if (from === input.on && signed === from) throw new EarnedVendorsError("unchanged");
+  if (input.on && !from) {
+    if (current.streak === null) throw new EarnedVendorsError("no_rule");
+    const budget = await readOutflowBudget(db());
+    if (!budget || (budget.dailyUsdc === null && budget.weeklyUsdc === null)) throw new EarnedVendorsError("no_spending_limit");
+  }
+
+  const running = unwrap(
+    await db()
+      .from("cycle_runs")
+      .select("id")
+      .eq("status", "running")
+      .gt("started_at", new Date(Date.now() - CYCLE_IN_PROGRESS_MS).toISOString())
+      .limit(1)
+  ) as Array<{ id: string }>;
+  if (running.length > 0) throw new EarnedVendorsError("cycle_running");
+
+  try {
+    assertLedgerCanSign();
+  } catch {
+    throw new EarnedVendorsError("not_signed");
+  }
+
+  // The switch in force is signed first, by the owner asking: nothing is written before it.
+  if (signed !== from) {
+    try {
+      await appendLedgerEntry(paymentsEntry(input.actorId, signed, from));
+    } catch (error) {
+      console.error("earned vendors: switch in force not signed", currentOrgId(), messageOf(error));
+      throw new EarnedVendorsError("not_signed");
+    }
+    if (from === input.on) return { from: signed, to: from };
+  }
+
+  const write = await db()
+    .from("approval_policies")
+    .upsert({ earned_vendor_payments: input.on, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
+  if (write.error) {
+    if (earnedColumnsMissing(write.error)) throw new EarnedVendorsError("not_ready");
+    throw new Error(write.error.message);
+  }
+  try {
+    await appendLedgerEntry(paymentsEntry(input.actorId, from, input.on));
+  } catch (error) {
+    console.error("earned vendors: switch change not signed", currentOrgId(), messageOf(error));
+    // Put back only from this change's own write: a change another owner made since stays.
+    const back = await db()
+      .from("approval_policies")
+      .update({ earned_vendor_payments: from, updated_by: input.actorId, updated_at: new Date().toISOString() })
+      .eq("earned_vendor_payments", input.on)
+      .then(
+        (result) => result.error?.message ?? null,
+        (failure: unknown) => messageOf(failure)
+      );
+    if (back) {
+      console.error("earned vendors: switch not put back", currentOrgId(), back);
+      throw new Error(`earned vendors: switch changed without its entry, and not put back: ${back}`);
+    }
+    throw new EarnedVendorsError("not_signed");
+  }
+  return { from, to: input.on };
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -235,13 +344,15 @@ type DecisionRow = {
   guardrail_blocked: boolean | null;
   guardrail_rule: string | null;
   resulting_status: string | null;
+  earned?: unknown;
 };
 type VerdictRow = { entry_seq: number | string; verdict: "agree" | "disagree"; decided_at: string | null };
 
 /**
  * What the sync works the statuses out from (AL14): the workspace's payables with their payee's role, screening and
- * payment limit, the agent's decisions on them, and every verdict with its time. The report reads the same fields with
- * the rest of its facts (`readReportFacts`); this reads only these, a page at a time.
+ * payment limit, the agent's decisions on them, whether each paid on its own (AL26, AL27), and every verdict with its
+ * time. The report reads the same fields with the rest of its facts (`readReportFacts`); this reads only these, a page
+ * at a time.
  */
 export async function readEarnedFacts(orgDb: OrgDb): Promise<EarnedFacts> {
   const [bills, decisions, verdicts] = await Promise.all([
@@ -257,7 +368,7 @@ export async function readEarnedFacts(orgDb: OrgDb): Promise<EarnedFacts> {
       orgDb
         .from("ledger_entries")
         .select(
-          "seq, ts, action, invoice_id:detail->>invoiceId, guardrail_blocked:detail->guardrailBlocked, guardrail_rule:detail->>guardrailRule, resulting_status:detail->execution->>resultingStatus"
+          "seq, ts, action, invoice_id:detail->>invoiceId, guardrail_blocked:detail->guardrailBlocked, guardrail_rule:detail->>guardrailRule, resulting_status:detail->execution->>resultingStatus, earned:detail->earned"
         )
         .eq("actor", "agent")
         .in("action", [...AGENT_DECISION_ACTIONS])
@@ -291,6 +402,7 @@ export async function readEarnedFacts(orgDb: OrgDb): Promise<EarnedFacts> {
               guardrailBlocked: row.guardrail_blocked === true,
               guardrailRule: row.guardrail_rule,
               resultingStatus: row.resulting_status,
+              ...(row.earned != null ? { onItsOwn: true } : {}),
             },
           ]
         : []
@@ -329,6 +441,8 @@ async function vendorNames(orgDb: OrgDb, ids: string[]): Promise<Map<string, str
 
 export interface EarnedSync {
   streak: number | null;
+  /** The owner's switch (AL21): off with no rule, and before 0146. */
+  payments: boolean;
   statuses: EarnedStatus[];
   /** Each vendor's newest signed status, the entries this sync signed included. */
   recorded: Map<string, RecordedStatus>;
@@ -342,13 +456,15 @@ export interface EarnedSync {
  * A second run in a row signs nothing. With no rule it reads the rule and the record, never the facts, and signs each
  * vendor still recorded earned as lost (`rule_off`): the rule change that turned it off, or, where that could not sign
  * one, whichever sync runs next. Before migration 0146 it reads the rule and stops. Callers run it best effort: a
- * failure throws to them, and they log it.
+ * failure throws to them, and they log it. The AP stage hands in shadow mode, so an earned vendor's payments made on its
+ * own count as waiting only while a verdict can still be given on them (AL26).
  */
-export async function syncEarnedVendors(orgDb: OrgDb, input: { trigger: EarnedTrigger }): Promise<EarnedSync> {
-  const { streak, ready } = await readEarnedVendorRule(orgDb);
-  if (!ready) return { streak, statuses: [], recorded: new Map(), signed: [] };
+export async function syncEarnedVendors(orgDb: OrgDb, input: { trigger: EarnedTrigger; shadow?: { startedAt: string } | null }): Promise<EarnedSync> {
+  const { streak, payments, ready } = await readEarnedVendorRule(orgDb);
+  if (!ready) return { streak, payments: false, statuses: [], recorded: new Map(), signed: [] };
 
-  const [recorded, facts] = await Promise.all([readEarnedRecord(orgDb), streak === null ? null : readEarnedFacts(orgDb)]);
+  const [recorded, read] = await Promise.all([readEarnedRecord(orgDb), streak === null ? null : readEarnedFacts(orgDb)]);
+  const facts = read && input.shadow !== undefined ? { ...read, shadow: input.shadow } : read;
   const statuses = facts && streak !== null ? earnedVendors(facts, streak) : [];
   const changes = earnedChanges(statuses, recorded, streak);
   const names =
@@ -368,12 +484,13 @@ export async function syncEarnedVendors(orgDb: OrgDb, input: { trigger: EarnedTr
       console.error("earned vendors: status not signed", entry.action, currentOrgId(), error instanceof Error ? error.message : "unknown error");
     }
   }
-  return { streak, statuses, recorded, signed };
+  return { streak, payments, statuses, recorded, signed };
 }
 
 /**
- * The report's view (AL18): the rule, each vendor's status worked out from the report's own facts, and the vendors
- * recorded earned. Null before migration 0146, which leaves the block out. Reads only the rule and the record.
+ * The report's view (AL18): the rule, the switch (AL28), each vendor's status worked out from the report's own facts,
+ * and the vendors recorded earned. Null before migration 0146, which leaves the block out. Reads only the rule and the
+ * record.
  */
 export async function readEarnedView(orgDb: OrgDb, facts: EarnedFacts): Promise<EarnedVendorsView | null> {
   const rule = await readEarnedVendorRule(orgDb);
@@ -381,5 +498,5 @@ export async function readEarnedView(orgDb: OrgDb, facts: EarnedFacts): Promise<
   if (rule.streak === null) return { streak: null, statuses: [], recorded: new Set() };
   const record = await readEarnedRecord(orgDb);
   const recorded = new Set([...record].filter(([, status]) => status.state === "earned").map(([vendorId]) => vendorId));
-  return { streak: rule.streak, statuses: earnedVendors(facts, rule.streak), recorded };
+  return { streak: rule.streak, payments: rule.payments, statuses: earnedVendors(facts, rule.streak), recorded };
 }

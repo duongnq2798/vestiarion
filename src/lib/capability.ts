@@ -10,6 +10,8 @@ import { networkProfile, type Network } from "./network";
  * - `live-testnet`: approved payments are sent in test USDC on Arc testnet.
  * - `simulated`: a sandbox paying through no wallet: payments are recorded and nothing is sent on chain.
  * - `shadow`: nothing is paid until a person agrees with the agent; what an agreement then pays is `afterVerdict`.
+ *   While the owner lets the agent pay earned vendors on their own (`earnedPayments`), those are the exception
+ *   (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28).
  * - `unavailable`: nothing can be paid now: payments switched off, a fact the payment gates need could not be read, or
  *   the workspace held (Arc mainnet off or not live, no Circle account, credentials that cannot be read).
  *
@@ -43,6 +45,8 @@ export interface CapabilityFacts {
   chainMode: "live" | "simulate";
   /** Whether shadow mode is on; null when it could not be read. */
   shadow: boolean | null;
+  /** In shadow mode, whether the owner lets the agent pay earned vendors on their own (earned vendors AL21); absent is off. */
+  earnedPayments?: boolean;
 }
 
 export interface Capability {
@@ -53,6 +57,8 @@ export interface Capability {
   /** When unavailable, why, as a cause and in a sentence; null otherwise. */
   cause: UnavailableCause | null;
   why: string | null;
+  /** In shadow mode, the agent pays earned vendors on its own (earned vendors AL22): only ever true. */
+  earnedPayments?: true;
 }
 
 /** The words for a workspace with no wallet a payment can be made from (a hold with no reason of its own). */
@@ -77,7 +83,9 @@ export function capabilityOf(facts: CapabilityFacts): Capability {
   // The agent pays nothing on a guess: a shadow mode it cannot read stops its payments too.
   if (facts.shadow === null) return unavailable(network, "shadow-unread", SHADOW_UNREAD);
   const live = facts.chainMode === "live";
-  if (facts.shadow) return { situation: "shadow", network, afterVerdict: live ? "live" : "simulated", cause: null, why: null };
+  if (facts.shadow) {
+    return { situation: "shadow", network, afterVerdict: live ? "live" : "simulated", cause: null, why: null, ...(facts.earnedPayments ? { earnedPayments: true as const } : {}) };
+  }
   if (!live) return { situation: "simulated", network, afterVerdict: null, cause: null, why: null };
   return { situation: network === "arc-mainnet" ? "live-mainnet" : "live-testnet", network, afterVerdict: null, cause: null, why: null };
 }
@@ -138,7 +146,9 @@ export function paymentSentence(capability: Capability): string {
     case "simulated":
       return "Payments are recorded here and nothing is sent on chain.";
     case "shadow":
-      return `Nothing is paid until a person agrees with the agent. ${agreedPaymentLine(capability)}`;
+      return capability.earnedPayments
+        ? `Nothing is paid until a person agrees with the agent, except vendors that earned it under the owner's rule, which the agent pays on its own. ${agreedPaymentLine(capability)}`
+        : `Nothing is paid until a person agrees with the agent. ${agreedPaymentLine(capability)}`;
     case "unavailable":
       return capability.why ?? NO_WALLET;
   }

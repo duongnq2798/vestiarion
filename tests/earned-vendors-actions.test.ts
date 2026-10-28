@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * The owner's rule for earned vendors from Settings (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11,
  * AL17): authorized as `approval.policy`, a number from the form or Turn off, the library's refusals in its own words,
  * any other failure said plainly with the page read again, since it may have left a rule in force without its entry,
- * and a toast that says the rule now in force. It frees nothing held, so no cycle starts.
+ * and a toast that says the rule now in force. It frees nothing held, so no cycle starts. Step 3's switch (AL21) is
+ * the same: an owner's, on or off from the form, the library's refusals in its own words.
  */
 
-const { authorizeMock, changeMock, raiseMock, revalidateMock } = vi.hoisted(() => ({
+const { authorizeMock, changeMock, switchMock, raiseMock, revalidateMock } = vi.hoisted(() => ({
   authorizeMock: vi.fn(),
   changeMock: vi.fn(),
+  switchMock: vi.fn(),
   raiseMock: vi.fn(),
   revalidateMock: vi.fn(),
 }));
@@ -22,9 +24,10 @@ vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<
 vi.mock("@/lib/earned-vendors-store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/earned-vendors-store")>()),
   changeEarnedVendorRule: changeMock,
+  changeEarnedVendorPayments: switchMock,
 }));
 
-import { setEarnedVendorRuleAction } from "@/app/actions/earned-vendors";
+import { setEarnedVendorPaymentsAction, setEarnedVendorRuleAction } from "@/app/actions/earned-vendors";
 import { EarnedVendorsError } from "@/lib/earned-vendors-store";
 
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000e1";
@@ -91,6 +94,44 @@ describe("setEarnedVendorRuleAction (AL11)", () => {
       ok: false,
       message: "That did not work. Try again in a moment.",
     });
+    expect(revalidateMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("setEarnedVendorPaymentsAction (AL21)", () => {
+  it("is an owner's: it asks for approval.policy before anything is changed", async () => {
+    authorizeMock.mockResolvedValueOnce({ ok: false, message: "Your role in this workspace (approver) cannot do that." });
+    expect((await setEarnedVendorPaymentsAction(INITIAL, form({ orgSlug: "pinecrest", on: "true" }))).ok).toBe(false);
+    expect(authorizeMock).toHaveBeenCalledWith("pinecrest", "approval.policy");
+    expect(switchMock).not.toHaveBeenCalled();
+  });
+
+  it("turns it on or off from the form as the signed-in owner, and says what it does now", async () => {
+    switchMock.mockResolvedValueOnce({ from: false, to: true });
+    expect(await setEarnedVendorPaymentsAction(INITIAL, form({ orgSlug: "pinecrest", on: "true" }))).toEqual({
+      ok: true,
+      message: "The agent pays earned vendors on its own now, and you give your verdict after.",
+    });
+    expect(switchMock).toHaveBeenCalledWith({ actorId: USER, on: true });
+    switchMock.mockResolvedValueOnce({ from: true, to: false });
+    expect(await setEarnedVendorPaymentsAction(INITIAL, form({ orgSlug: "pinecrest", on: "false" }))).toEqual({
+      ok: true,
+      message: "Earned vendors' payments wait for your verdict again.",
+    });
+    expect(switchMock).toHaveBeenLastCalledWith({ actorId: USER, on: false });
+    expect(revalidateMock).toHaveBeenCalledTimes(2);
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+
+  it("says the library's refusals in its words, and any other failure plainly, reading the page again", async () => {
+    switchMock.mockRejectedValueOnce(new EarnedVendorsError("no_spending_limit"));
+    expect(await setEarnedVendorPaymentsAction(INITIAL, form({ orgSlug: "pinecrest", on: "true" }))).toEqual({
+      ok: false,
+      message: "Set the agent's spending limit first, in Settings: the agent's own payments always count against it.",
+    });
+    expect(revalidateMock).not.toHaveBeenCalled();
+    switchMock.mockRejectedValueOnce(new Error("earned vendors: switch changed without its entry, and not put back: database unavailable"));
+    expect(await setEarnedVendorPaymentsAction(INITIAL, form({ orgSlug: "pinecrest", on: "true" }))).toEqual({ ok: false, message: "That did not work. Try again in a moment." });
     expect(revalidateMock).toHaveBeenCalledTimes(1);
   });
 });

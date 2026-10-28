@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { autonomyLadder, ladderVerdicts } from "@/lib/autonomy-ladder";
 import {
   breaksEarning,
+  EARNED_PAYMENTS_OFF,
+  EARNED_PAYMENTS_ON,
   EARNED_STREAK_MAX,
+  EARNED_WAITING_MAX,
+  earnedPaymentsConfirm,
+  earnedPaymentsSummary,
+  earnedWaitingWords,
   EARNED_STREAK_MIN,
   earnedChanges,
   earnedLostEntry,
@@ -25,6 +31,8 @@ import { VERDICTS_BEFORE_LIVE } from "@/lib/workspace-report";
  * counted again after a Disagree (timed by the verdict), a bill flagged for review, or a check in code on the vendor or
  * its bill, whether or not that decision has a verdict yet; never for a sample vendor, one screened high risk, one with
  * no payment limit, or a payee that is not a vendor. What changed since the newest signed status is what gets signed.
+ * Step 3: how many of an earned vendor's payments the agent made on its own still wait for a verdict, at most 3 before
+ * its next waits too (AL26), and the switch's words (AL21, AL28).
  */
 
 type Payee = EarnedFacts["bills"][number]["payee"];
@@ -48,7 +56,7 @@ function book() {
   let day = 0;
   const decide = (
     payee: Payee,
-    options: { action?: string; verdict?: "agree" | "disagree"; decidedOn?: number; rule?: string; status?: string; day?: number; amount?: number } = {}
+    options: { action?: string; verdict?: "agree" | "disagree"; decidedOn?: number; rule?: string; status?: string; day?: number; amount?: number; onItsOwn?: boolean } = {}
   ) => {
     seq += 1;
     day = options.day ?? day + 1;
@@ -62,6 +70,7 @@ function book() {
       guardrailBlocked: options.rule !== undefined,
       guardrailRule: options.rule ?? null,
       resultingStatus: options.status ?? "held",
+      ...(options.onItsOwn ? { onItsOwn: true } : {}),
     });
     if (options.verdict) facts.verdicts.push({ entrySeq: seq, verdict: options.verdict, decidedAt: at(options.decidedOn ?? day) });
     return seq;
@@ -420,5 +429,60 @@ describe("the words (AL15, AL17, AL18)", () => {
     const statuses = earnedVendors(facts, 5);
     expect([...shownEarned({ streak: 5, statuses, recorded: new Set([NORTHWIND.id, "cp-gone"]) })]).toEqual([NORTHWIND.id]);
     expect(shownEarned({ streak: null, statuses: [], recorded: new Set([NORTHWIND.id]) }).size).toBe(0);
+  });
+});
+
+describe("payments made on its own that wait for a verdict (AL26)", () => {
+  it("counts an earned vendor's payments the agent made on its own with no verdict yet, and pauses it at 3", () => {
+    const { facts, agree, decide } = book();
+    agree(NORTHWIND, 5);
+    const first = decide(NORTHWIND, { status: "paid", onItsOwn: true });
+    decide(NORTHWIND, { status: "matched", onItsOwn: true });
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ state: "earned", waiting: 2, paused: false });
+    decide(NORTHWIND, { status: "paid", onItsOwn: true });
+    expect(EARNED_WAITING_MAX).toBe(3);
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ state: "earned", waiting: 3, paused: true });
+    // An agreed verdict on one of them ends its wait, and counts: the vendor is no longer paused.
+    facts.verdicts.push({ entrySeq: first, verdict: "agree", decidedAt: at(20) });
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ state: "earned", agreed: 6, waiting: 2, paused: false });
+  });
+
+  it("does not count a payment held for a verdict, one that went nowhere, or one made before shadow mode last started", () => {
+    const { facts, agree, decide } = book();
+    agree(NORTHWIND, 5);
+    decide(NORTHWIND, { status: "held" });
+    decide(NORTHWIND, { status: "held", onItsOwn: true });
+    decide(NORTHWIND, { status: "paid", onItsOwn: true, day: 10 });
+    decide(NORTHWIND, { status: "paid", onItsOwn: true, day: 12 });
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ waiting: 2 });
+    // A verdict can no longer be given on a decision made before shadow mode was last turned on: it waits for none.
+    expect(statusOf(earnedVendors({ ...facts, shadow: { startedAt: at(11) } }, 5), NORTHWIND.id)).toMatchObject({ waiting: 1 });
+    expect(statusOf(earnedVendors({ ...facts, shadow: null }, 5), NORTHWIND.id)).toMatchObject({ waiting: 0 });
+  });
+
+  it("says how many wait, and that the next waits for you once 3 do", () => {
+    const { facts, agree, decide } = book();
+    agree(NORTHWIND, 5);
+    const status = () => statusOf(earnedVendors(facts, 5), NORTHWIND.id)!;
+    expect(earnedWaitingWords(status())).toBeNull();
+    decide(NORTHWIND, { status: "paid", onItsOwn: true });
+    expect(earnedWaitingWords(status())).toBe("1 of its payments made on its own waits for your verdict.");
+    decide(NORTHWIND, { status: "paid", onItsOwn: true });
+    expect(earnedWaitingWords(status())).toBe("2 of its payments made on its own wait for your verdict.");
+    decide(NORTHWIND, { status: "paid", onItsOwn: true });
+    expect(earnedWaitingWords(status())).toBe("3 of its payments made on its own wait for your verdict, so its next waits for you.");
+  });
+});
+
+describe("the owner's switch, in words (AL21, AL28)", () => {
+  it("says what the switch does, off and on, and what turning it on means, in test USDC or simulated", () => {
+    expect(EARNED_PAYMENTS_OFF).toBe("Earned vendors' payments wait for your verdict, as every payment in shadow mode does.");
+    expect(EARNED_PAYMENTS_ON).toBe("The agent pays earned vendors on its own, within every limit and check, and you give your verdict after.");
+    expect(earnedPaymentsConfirm(false)).toBe(
+      "In shadow mode, a payment to a vendor that earned it under your rule is made without waiting for your verdict, in test USDC on Arc testnet. Every limit and check still applies, and it counts against the agent's spending limit. You give your verdict after, and one disagreement takes the vendor's status away. At most 3 of a vendor's payments wait for your verdict at once."
+    );
+    expect(earnedPaymentsConfirm(true)).toContain("is made without waiting for your verdict, simulated: nothing is sent on chain.");
+    expect(earnedPaymentsSummary(true)).toBe("The agent pays earned vendors on its own in shadow mode");
+    expect(earnedPaymentsSummary(false)).toBe("Earned vendors' payments wait for a verdict again");
   });
 });

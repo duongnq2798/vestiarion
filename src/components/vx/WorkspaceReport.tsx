@@ -400,7 +400,7 @@ export function ReportReadiness({
         </ol>
         {ladder && (
           <div className="border-t border-line px-3 pb-3 pt-4">
-            <AgreementLadder ladder={ladder} />
+            <AgreementLadder ladder={ladder} ruled={earned !== null && earned.streak !== null} />
           </div>
         )}
         {earned && (

@@ -10,7 +10,9 @@ import { ruleInBrief } from "./next-step";
  * ladder is (AL14): the report works the statuses out from the facts it already read; ./earned-vendors-store reads and
  * signs them.
  *
- * It grants nothing (AL20): no code reads a vendor's status to decide a payment.
+ * Step 3 (AL21-AL30): with the owner's switch on, in shadow mode, the agent pays a vendor earned now and recorded earned
+ * on its own (./agent/earned-gate), and asks for the verdict after; at most 3 such payments of one vendor wait for a
+ * verdict at once (AL26). The status itself is worked out here, as before, and decides nothing else.
  */
 
 /**
@@ -23,11 +25,17 @@ export const EARNED_STREAK_MAX = 50;
 export const COUNTED_ACTIONS: readonly string[] = ["ap_pay", "ap_schedule"];
 /** The most decisions one `vendor_earned` entry names as its evidence (AL15). */
 export const EARNED_EVIDENCE_MAX = 50;
+/**
+ * The most of one vendor's payments the agent made on its own that may wait for a verdict at once (AL26): with that many
+ * waiting, its next payment waits for a verdict, as every payment in shadow mode does, until a person gives one.
+ */
+export const EARNED_WAITING_MAX = 3;
 
-/** The workspace's rule (AL11), and the step 3 switch 0146 adds beside it, which nothing reads yet (AL20). */
+/** The workspace's rule (AL11), and the switch 0146 adds beside it (AL21). */
 export interface EarnedVendorRule {
   /** Agreed verdicts in a row that make a vendor earned; null is no rule. */
   streak: number | null;
+  /** The agent pays earned vendors on its own, in shadow mode (AL21, AL22); never on without a rule. */
   payments: boolean;
 }
 
@@ -75,9 +83,16 @@ export interface EarnedFacts {
     guardrailBlocked: boolean;
     guardrailRule: string | null;
     resultingStatus: string | null;
+    /** The agent carried the payment out on its own, for an earned vendor (`detail.earned`, AL27). */
+    onItsOwn?: boolean;
   }>;
   /** `decidedAt` absent reads as now, the strictest: a Disagree then breaks every decision before it. */
   verdicts: ReadonlyArray<{ entrySeq: number; verdict: "agree" | "disagree"; decidedAt?: string }>;
+  /**
+   * Shadow mode, where it was read: since when a verdict can be given, so a payment made on its own before then waits
+   * for none (AL26); null when it is off. Absent, every payment made on its own counts.
+   */
+  shadow?: { startedAt: string } | null;
 }
 
 /** What started a vendor's count again (AL12), and when. */
@@ -110,6 +125,10 @@ export type EarnedStatus = { vendorId: string; name: string; given: number } & (
       from: string;
       to: string;
       since: EarnedBreak | null;
+      /** Its payments the agent made on its own that wait for a verdict that can still be given (AL26). */
+      waiting: number;
+      /** `waiting` reached `EARNED_WAITING_MAX`: its next payment waits for a verdict (AL26). */
+      paused: boolean;
     }
   | { state: "counting"; agreed: number; needed: number; since: EarnedBreak | null }
   | { state: "cannot"; because: "high_risk" | "no_payment_limit" | "not_a_vendor" }
@@ -125,13 +144,16 @@ const newer = (a: EarnedBreak | null, b: EarnedBreak): EarnedBreak => (!a || tim
 /**
  * Every non-sample payee with a decision on its bills, with its status under a rule of `streak` (AL12-AL14), in the
  * ladder's vendor order (autonomy ladder AL5): most verdicts first, then by name, then by id. A decision whose bill is
- * not among the facts is left out, as the ladder leaves its verdict out.
+ * not among the facts is left out, as the ladder leaves its verdict out. An earned vendor says how many of its payments
+ * the agent made on its own wait for a verdict (AL26).
  */
 export function earnedVendors(facts: EarnedFacts, streak: number): EarnedStatus[] {
   const bills = new Map(facts.bills.map((bill) => [bill.id, bill]));
   const verdicts = new Map(facts.verdicts.map((verdict) => [verdict.entrySeq, verdict]));
   // A verdict with no time was given now: after every decision read.
   const now = facts.decisions.reduce((latest, decision) => (time(decision.ts) > time(latest) ? decision.ts : latest), facts.decisions[0]?.ts ?? new Date(0).toISOString());
+  // A verdict can be given only on a decision made since shadow mode started (shadow mode S3): one before waits for none.
+  const verdictsFrom = facts.shadow === undefined ? -Infinity : facts.shadow ? time(facts.shadow.startedAt) : Infinity;
 
   type Row = { decision: EarnedFacts["decisions"][number]; bill: EarnedFacts["bills"][number]; verdict: EarnedFacts["verdicts"][number] | undefined };
   const vendors = new Map<string, { payee: EarnedFacts["bills"][number]["payee"]; rows: Row[] }>();
@@ -167,7 +189,12 @@ export function earnedVendors(facts: EarnedFacts, streak: number): EarnedStatus[
       .map(({ decision, bill }): EarnedDecision => ({ seq: decision.seq, at: decision.ts, action: decision.action, amount: bill.amount ?? null, currency: bill.currency ?? null }));
     if (counted.length < streak) return { ...base, state: "counting", agreed: counted.length, needed: streak, since };
     const times = counted.map((decision) => decision.at).sort((a, b) => time(a) - time(b));
-    return { ...base, state: "earned", agreed: counted.length, counted, from: times[0], to: times[times.length - 1], since };
+    // Paid or on its way, on the agent's own decision, with no verdict yet that can still be given (AL26).
+    const waiting = rows.filter(
+      ({ decision, verdict }) =>
+        decision.onItsOwn === true && (decision.resultingStatus === "paid" || decision.resultingStatus === "matched") && !verdict && time(decision.ts) >= verdictsFrom
+    ).length;
+    return { ...base, state: "earned", agreed: counted.length, counted, from: times[0], to: times[times.length - 1], since, waiting, paused: waiting >= EARNED_WAITING_MAX };
   });
   return statuses.sort((a, b) => b.given - a.given || a.name.localeCompare(b.name, "en") || byText(a.vendorId, b.vendorId));
 }
@@ -275,6 +302,11 @@ export function earnedRuleSummary(to: number | null): string {
   return to === null ? "Earned vendors turned off" : `Earned vendors: ${to} agreed verdicts in a row`;
 }
 
+/** `earned_vendor_payments_changed`'s summary (AL21). */
+export function earnedPaymentsSummary(to: boolean): string {
+  return to ? "The agent pays earned vendors on its own in shadow mode" : "Earned vendors' payments wait for a verdict again";
+}
+
 // ---------------------------------------------------------------------------------------------------------------------
 // What people read (AL11, AL18, AL19)
 
@@ -282,6 +314,28 @@ export function earnedRuleSummary(to: number | null): string {
 export function earnedVendorsSentence(streak: number | null): string {
   if (streak === null) return "Off: no vendor is counted as earned.";
   return `On: a vendor is earned after ${streak} agreed verdicts in a row on the agent's decisions to pay or schedule its bills. A disagreement, a bill flagged for review, or a check in code stopping one of its bills starts the count again.`;
+}
+
+/** What the switch does now (AL21), under the rule in Settings. */
+export const EARNED_PAYMENTS_OFF = "Earned vendors' payments wait for your verdict, as every payment in shadow mode does.";
+export const EARNED_PAYMENTS_ON = "The agent pays earned vendors on its own, within every limit and check, and you give your verdict after.";
+
+/**
+ * What turning the switch on means, in its confirmation (AL21, AL22, AL26): a payment the agent makes this way moves
+ * test USDC on Arc testnet, or is simulated where every payment of the workspace is.
+ */
+export function earnedPaymentsConfirm(simulated: boolean): string {
+  const made = simulated ? "simulated: nothing is sent on chain." : "in test USDC on Arc testnet.";
+  return `In shadow mode, a payment to a vendor that earned it under your rule is made without waiting for your verdict, ${made} Every limit and check still applies, and it counts against the agent's spending limit. You give your verdict after, and one disagreement takes the vendor's status away. At most ${EARNED_WAITING_MAX} of a vendor's payments wait for your verdict at once.`;
+}
+
+/**
+ * What shadow mode pays, as Settings and its toast say it to the owner (shadow mode S1; AL28): nothing until a person
+ * agrees, except, while the switch is on, the vendors that earned it, paid on the agent's own decision.
+ */
+export function shadowModePaysWords(earnedPayments: boolean): string {
+  const nothing = "the agent pays nothing until a person agrees";
+  return earnedPayments ? `${nothing}, except vendors that earned it under your rule, which it pays on its own and you review after` : nothing;
 }
 
 /** The days a run of agreed verdicts spans. */
@@ -320,9 +374,28 @@ export function earnedStatusWords(status: EarnedStatus, recordedEarned: boolean)
   return status.since ? `${count} ${sinceWords(status.since)}` : count;
 }
 
-/** The report's view of the rule (AL18): the rule, every vendor's status, and the vendors recorded earned. */
+/**
+ * How many of an earned vendor's payments the agent made on its own wait for your verdict, and, at 3, that its next
+ * waits too (AL26); null when none waits.
+ */
+export function earnedWaitingWords(status: EarnedStatus): string | null {
+  if (status.state !== "earned" || status.waiting === 0) return null;
+  if (status.paused) return `${status.waiting} of its payments made on its own wait for your verdict, so its next waits for you.`;
+  return status.waiting === 1 ? "1 of its payments made on its own waits for your verdict." : `${status.waiting} of its payments made on its own wait for your verdict.`;
+}
+
+/** What the report says earning changes, after the rule (AL18, AL28): the switch on, or what would let the agent pay. */
+export function earnedChangesWords(payments: boolean): string {
+  return payments
+    ? "The agent pays an earned vendor on its own, and you give your verdict after."
+    : "Earning changes nothing the agent may do unless an owner lets it pay earned vendors on its own, in Settings.";
+}
+
+/** The report's view of the rule (AL18): the rule, the switch, every vendor's status, and the vendors recorded earned. */
 export interface EarnedVendorsView {
   streak: number | null;
+  /** The owner's switch (AL21); absent reads as off. */
+  payments?: boolean;
   statuses: EarnedStatus[];
   recorded: ReadonlySet<string>;
 }
