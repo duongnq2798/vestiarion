@@ -280,6 +280,20 @@ describe("the page (CV8, CV9)", () => {
     expect(markup).toContain("OFAC&#x27;s SDN list as of Oct 28, 2026.");
   });
 
+  it("says each wallet is looked up among OFAC's addresses, and only 0x wallets are compared with each other", async () => {
+    const { default: CheckVendorPage } = await import("@/app/check-vendor/page");
+    const markup = renderToStaticMarkup(<CheckVendorPage />).replace(/\s+/g, " ");
+    expect(markup).toContain("and each wallet address with the addresses that list gives.");
+    expect(markup).toContain(
+      "A 0x wallet is also compared with the other 0x wallets in your list, so one made to look like another vendor&#x27;s, or one two vendors share, shows up."
+    );
+    expect(markup).toContain(
+      "Only the 0x wallets in your list are compared with each other. A wallet in another format, such as a Bitcoin or Tron address, is only looked up among the addresses OFAC&#x27;s list gives: one two vendors share, or one made to look like another, is not pointed out."
+    );
+    // `vendorRowChecker` compares no other wallet with the other rows, so the page never says every one is.
+    expect(markup).not.toContain("the rest of your list");
+  });
+
   it("says how close spellings count, as the matcher counts them", async () => {
     const { default: CheckVendorPage } = await import("@/app/check-vendor/page");
     const markup = renderToStaticMarkup(<CheckVendorPage />).replace(/\s+/g, " ");

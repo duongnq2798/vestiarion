@@ -57,8 +57,9 @@ export default function CheckVendorPage() {
           <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em] text-ink sm:text-3xl">Check your vendors against OFAC&apos;s sanctions list</h1>
           <p className="mt-3 text-base leading-relaxed text-ink-2">
             Type a vendor&apos;s name, or paste your whole vendor list. Each name is compared with every name on OFAC&apos;s SDN list, the US
-            Treasury&apos;s list of sanctioned people and companies, other names included, and each wallet address with the addresses the list
-            gives and with the rest of your list. You see each possible match and why it matched, and you can download the results as a CSV.
+            Treasury&apos;s list of sanctioned people and companies, other names included, and each wallet address with the addresses that list
+            gives. A 0x wallet is also compared with the other 0x wallets in your list, so one made to look like another vendor&apos;s, or one two
+            vendors share, shows up. You see each possible match and why it matched, and you can download the results as a CSV.
           </p>
           {/* True whether analytics is set up or not (free tool attribution TA6). */}
           <p className="mt-2 text-sm leading-relaxed text-ink-3">
@@ -81,6 +82,10 @@ export default function CheckVendorPage() {
               <li>
                 It compares names and the addresses the list gives. It does not know who owns a company: OFAC also blocks a company owned 50 percent
                 or more, together, by parties on the list, even when the company is not on it. It does not look at a wallet&apos;s history.
+              </li>
+              <li>
+                Only the 0x wallets in your list are compared with each other. A wallet in another format, such as a Bitcoin or Tron address, is only
+                looked up among the addresses OFAC&apos;s list gives: one two vendors share, or one made to look like another, is not pointed out.
               </li>
               <li>
                 A match is a reason to look closer: compare the entry&apos;s details with what you know of the vendor, and look it up on{" "}
