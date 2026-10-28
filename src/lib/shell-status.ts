@@ -4,6 +4,7 @@ import { readEarnedVendorRule } from "./earned-vendors-store";
 import { readNewestLiveCheck } from "./screening/health";
 import { screeningSourceLabel } from "./screening-source";
 import { readShadowMode } from "./shadow-mode";
+import { workspaceNetwork } from "./workspace-network";
 
 /**
  * What a workspace page's header says beside the chain modes (workspace shell design S5): whether shadow mode is on,
@@ -21,8 +22,9 @@ import { readShadowMode } from "./shadow-mode";
  *
  * The owner's switch that lets the agent pay earned vendors on their own is read beside them, at the same time
  * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28), so a shadow-mode header says the exception without
- * waiting on one more read; outside shadow mode it says nothing. Best effort: a switch that cannot be read is left out,
- * and the agent reads it itself before paying anyone this way.
+ * waiting on one more read; outside shadow mode it says nothing. None is read on Arc mainnet, where there is no shadow
+ * mode and the switch cannot be turned on. Best effort: a switch that cannot be read is left out, and the agent reads it
+ * itself before paying anyone this way.
  */
 export interface ShellStatus {
   shadow: boolean | null;
@@ -60,7 +62,12 @@ async function lastLookupFailed(): Promise<boolean> {
 
 export async function shellStatus(): Promise<ShellStatus> {
   const live = screeningMode() === "live";
-  const [shadow, failed, earnedOn] = await Promise.all([shadowOn(), live ? lastLookupFailed() : Promise.resolve(false), earnedPaymentsOn()]);
+  const mainnet = workspaceNetwork().id === "arc-mainnet";
+  const [shadow, failed, earnedOn] = await Promise.all([
+    shadowOn(),
+    live ? lastLookupFailed() : Promise.resolve(false),
+    mainnet ? Promise.resolve(false) : earnedPaymentsOn(),
+  ]);
   const earned = shadow === true && earnedOn;
   return { shadow, ...(earned ? { earnedPayments: true as const } : {}), screening: { live, source: screeningSourceLabel(), lastLookupFailed: failed } };
 }

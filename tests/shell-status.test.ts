@@ -13,7 +13,7 @@ import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } fr
  * live screening (SH3), from the same rows. Live lookups of the provider only, the workspace's own only: a verdict on a
  * payout address on OFAC's list is written as live but calls no provider, so it says nothing about the key. In shadow
  * mode, the owner's switch for earned vendors paid on their own, read with the others
- * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28).
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28), and never on Arc mainnet, where it cannot be on.
  */
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000005c01";
@@ -123,6 +123,12 @@ describe("earned vendors paid on their own, in the header (AL28)", () => {
     expect(await workspace(SANDBOX, () => ({ body: [] }), SHADOW).run(() => shellStatus())).not.toHaveProperty("earnedPayments");
     // Off shadow mode the agent pays what passes its checks: the switch says nothing.
     expect(await workspace(SANDBOX, () => ({ body: [] }), [], SWITCH_ON).run(() => shellStatus())).not.toHaveProperty("earnedPayments");
+  });
+
+  it("reads no switch on Arc mainnet, where there is no shadow mode to pay earned vendors in", async () => {
+    const { requests, run } = workspace({ ...SANDBOX, network: "arc-mainnet" }, () => ({ body: [] }), SHADOW, SWITCH_ON);
+    expect(await run(() => shellStatus())).not.toHaveProperty("earnedPayments");
+    expect(requests.some((request) => request.path === "/rest/v1/approval_policies")).toBe(false);
   });
 
   it("leaves it out when the switch cannot be read, and says shadow mode all the same", async () => {
