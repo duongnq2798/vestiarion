@@ -229,6 +229,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **Search engines can find the sitemap.** /robots.txt answered with the not-found page, so nothing pointed a search
+  engine at /sitemap.xml, and new pages such as the free tools were found only through links to them. It now names the
+  sitemap and, as before, lets every crawler read every page. No migration.
 - **The footer's links to the landing page's sections work from every page.** On /check-address, /studios and
   /how-it-decides, How it works, Who it's for, Safety and Proof in the footer's Product column went nowhere, since they
   pointed at sections of the page they were on. They now open those sections of the landing page, as they do on the

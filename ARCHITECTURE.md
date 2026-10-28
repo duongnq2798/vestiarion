@@ -4464,8 +4464,8 @@ tool's **Try it on your bills** goes to `/onboarding?shadow=1`, and `loginRedire
 `/login?next=…`. A tag on that link is lost at that redirect unless the sign-in link brings the visitor back to it in
 the same browser, and even then the landing path `FirstTouch` records is `/onboarding`, not the tool. The tool's start
 links write the first touch themselves instead. `FREE_TOOLS` (`src/lib/free-tools.ts`) is the one list of tools, each a
-slug, a top-level path, a title and a one-line description: today the address checker and the payment terms
-calculator. The full footer's **Free tools** group (above Legal, so the footer keeps four columns) and the sitemap read
+slug, a top-level path, a title and a one-line description: today the address checker, the payment terms
+calculator, the OFAC vendor check and the bill list check. The full footer's **Free tools** group (above Legal, so the footer keeps four columns) and the sitemap read
 it; the sitemap lists a tool's own pages, such as the payment terms calculator's term pages, right after it. `ToolStartLink` (`src/components/public/ToolCta.tsx`) is every start
 on a tool's page: `ToolCta`, its **Try it on your bills** button, named `<slug>-start` for the analytics click, and the
 full footer's **Get started** when the page passes `SiteFooter` its `tool`. On a click or a middle click, and only when
@@ -5147,6 +5147,16 @@ frame). Next.js allows no `opengraph-image` file after the optional catch-all
 and the docs pages point at them through `docsSocialMetadata()` in
 `src/lib/docs/social.ts`. A summary is cut short enough that it never reaches
 the footer, whether the title takes one line or two.
+
+## Search engines
+
+`src/app/sitemap.ts` serves `/sitemap.xml`: the landing page, the open numbers, the page for studios, how the agent
+decides, every free tool in `FREE_TOOLS` followed by its own pages, every published docs page, then the terms, privacy
+and security pages, all on `publicOrigin()`. `src/app/robots.ts` serves `/robots.txt`, which names that sitemap and
+lets every crawler read every page (`docs/superpowers/specs/2026-10-28-robots-sitemap-design.md`). It disallows
+nothing: a page kept out of search, such as the founder dashboard or a shared link page, says so with `noindex`, which
+a crawler barred from the page would never read. Neither file needs a session (`requiresSession`), and
+`tests/robots.test.ts` holds both to that.
 
 ## The Quality Lab
 
