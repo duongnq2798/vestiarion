@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-28: Earned vendors paid on their own
+
+- A new entry, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`: **`earned_vendor_payments_changed`**, domain `system`, actor `human`, when an owner lets the agent pay earned vendors on their own in shadow mode, or makes their payments wait for a verdict again. It carries `by`, `from` and `to`, each `true` or `false`. A change whose entry cannot be signed is put back; should that fail too, the missing entry is signed by the owner's next change, first. Turning the rule for earned vendors off turns this off too, in the same change: an `earned_vendor_payments_changed` with `to: false` follows the `earned_vendor_rule_changed` with `to: null`. While no rule is in force it is off, whatever its newest entry says.
+- **`ap_pay`** gains **`earned`**, `{ recordSeq, streak, agreed }`, when the agent paid the bill on its own in shadow mode for an earned vendor: `recordSeq` is the `seq` of the vendor's `vendor_earned` entry, `streak` the rule, and `agreed` the agreed verdicts in a row when the cycle started. The entry keeps `shadow: true` and has no `execution.heldBecause` of `shadow_verdict`; `execution.resultingStatus` says how it ended, `paid` or `matched` for a transfer, or `held` when the live path held it (the pause, the cash). A verdict can be given on it after, as on any decision. It is absent on every other `ap_pay`, and on every entry signed before this date.
+- **`vendor_earned_lost`** can now carry `trigger: "cycle"` with `because` `flagged` or `code_stop` signed in the middle of a cycle, right after the decision entry it names in `decisionSeq`, when a decision about a vendor the agent was paying on its own broke its status.
+- With the switch on, being earned changes what the agent does with a payment in shadow mode on Arc testnet; nothing changes on Arc mainnet or in a live workspace. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-28: Earned vendors
 
 - Three new entries, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, in a workspace on Arc testnet where an owner set a rule for earned vendors: N agreed shadow-mode verdicts in a row on the agent's decisions to pay or schedule a vendor's bills.

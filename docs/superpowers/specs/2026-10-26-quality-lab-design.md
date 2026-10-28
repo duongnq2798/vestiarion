@@ -44,7 +44,7 @@ QL4)".
 - If wrong: a lab that stubs the code it claims to test proves nothing. A seam added for the lab would be a new way into
   the money path.
 
-**QL2. Scenarios are plain data, 32 to 40 of them, in groups.**
+**QL2. Scenarios are plain data, 32 to 44 of them, in groups.**
 - `src/lib/quality-lab/scenarios.ts` holds each scenario: `id`, `group`, `title` in plain English, what the bill, the
   payee and the workspace look like, what else is on the books, the model's scripted answer, how the run goes (a lost
   answer from the provider, later cycles, two cycles at once) and the expected outcome. The runner builds its fixtures
@@ -67,6 +67,12 @@ QL4)".
     paid bill, the same work billed as a milestone (`obligation.duplicate_reference`), a missing purchase order and
     goods not received (`invoice.match_incomplete`), the pause switch, shadow mode, the model holding and flagging, and
     two cycles reaching the same bill;
+  - in shadow mode with the owner letting the agent pay earned vendors on their own
+    (`docs/superpowers/specs/2026-10-28-earned-vendors-design.md` AL30): an earned vendor paid on its own, a vendor
+    that has not earned it waiting for a verdict, and an earned vendor stopped by a changed address no one confirmed
+    and by the two-approvals figure. The cap went from 40 to 44 for these four, and two invariants in
+    `tests/quality-lab-earned.test.ts` run every scenario again with them: never more than live, and nothing changes
+    for a vendor that has not earned it;
   - clean bills where money should move: paid once, for exactly the bill's amount, to the address on file, and a clean
     schedule. The lab is not "stop everything".
 - Rule ids come from `src/lib/agent/guardrails.ts`; people read them through `ruleWords` and `ruleLabel`
@@ -180,6 +186,7 @@ QL4)".
 - `src/lib/quality-lab/words.ts`: an outcome in words, for the block, the page and its Markdown.
 - `src/lib/quality-lab/results.ts`: the committed results as imported, each group's count, and each group's table rows.
 - `src/lib/data/quality-lab.json`: the committed results (QL5).
-- `tests/support/ap-harness.ts`, `tests/quality-lab.test.ts`, `scripts/quality-lab.mjs` (QL1, QL6).
+- `tests/support/ap-harness.ts`, `tests/support/quality-lab-runner.ts`, `tests/quality-lab.test.ts`,
+  `scripts/quality-lab.mjs` (QL1, QL6); `tests/quality-lab-earned.test.ts` (earned vendors AL30).
 - `src/components/open/QualityLabResult.tsx` on `src/app/open/page.tsx` and in `src/components/landing/Claims.tsx` (QL7).
 - `src/components/docs/QualityLab.tsx`, `content/docs/research/quality-lab.mdx` (QL8).

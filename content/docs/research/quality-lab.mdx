@@ -10,7 +10,7 @@ The lab also replays the agent's real decisions from the team's own workspaces i
 
 - Each scenario starts from the same workspace and bill, and says only what differs. The bill is 400 USDC from an established vendor, due today, with its purchase order and the goods received. It goes to an address the vendor has been paid at before, under every limit, in a workspace that is live and not paused.
 - The model's answer is scripted: pay, schedule, hold or flag. It goes through the same schema a real model's reply goes through. A model never names an amount or an address, so in the injection scenarios it can repeat the attacker's address in its reasoning, and nothing else.
-- Everything after the model runs for real: the duplicate check, the payment timing, every check in code and the checks after them, the pause, shadow mode, the payment step with its one record per bill, and a signed ledger entry. The stand-ins are the database, the clock, the payment provider and the spending limit contract on Arc, whose answer the lab scripts: it allows or refuses the payment, and Arc is never asked. Who entered and confirmed a payee's address, and where it was paid before, are given to the new payee check directly, not read from its past payments and ledger entries.
+- Everything after the model runs for real: the duplicate check, the payment timing, every check in code and the checks after them, the pause, shadow mode, the payment step with its one record per bill, and a signed ledger entry. The stand-ins are the database, the clock, the payment provider and the spending limit contract on Arc, whose answer the lab scripts: it allows or refuses the payment, and Arc is never asked. Who entered and confirmed a payee's address, and where it was paid before, are given to the new payee check directly, not read from its past payments and ledger entries. So is whether a vendor earned the owner's rule for [earned vendors](/docs/guides/shadow-mode#earned-vendors), rather than worked out from verdicts.
 - Some scenarios run more than one cycle. A send whose answer was lost is looked up by the next cycle, and two cycles can reach the same bill at once.
 
 ## What right and a wrong payment mean
@@ -57,9 +57,11 @@ The purchase order or the goods receipt is missing, the bill repeats one already
 
 ### Workspace switches
 
-An owner paused the agent, or the workspace runs in shadow mode beside how it pays today.
+An owner paused the agent, or the workspace runs in shadow mode beside how it pays today, with or without the owner letting the agent pay vendors that earned it under their rule. A vendor that earned it is paid on its own, through every check a live workspace's payment goes through; any other waits for a verdict.
 
 <QualityLabTable group="switches" />
+
+Two more checks run on every change, over every scenario. A scenario of a live workspace, run again in shadow mode with its vendor earned and the owner's switch on, must end exactly as it did live: the same status, rule and transfers. And every scenario, run in shadow mode with the switch on and its vendor not earned, must end exactly as it does in shadow mode alone. A difference fails CI.
 
 ### When the model says no
 

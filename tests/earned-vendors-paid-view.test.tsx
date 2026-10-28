@@ -26,7 +26,7 @@ vi.mock("next/navigation", async (importOriginal) => ({ ...(await importOriginal
 vi.mock("@/app/actions/live-slice", () => ({ startLiveSliceAction: vi.fn() }));
 vi.mock("@/app/actions/shadow-mode", () => ({ setShadowModeAction: vi.fn() }));
 
-const { ReportReadiness } = await import("@/components/vx/WorkspaceReport");
+const { ReportReadiness, WorkspaceReport } = await import("@/components/vx/WorkspaceReport");
 const { default: ShadowModePanel } = await import("@/components/ShadowModePanel");
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&rsquo;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ");
@@ -186,11 +186,19 @@ describe("who paid, in the report (AL29)", () => {
     payments: [{ invoiceId: "inv-1", amount: 400, token: "USDC", txHash: "0xabc", at: "2026-10-28T09:00:05.000Z", simulated: false }],
   });
 
-  it("is the agent for a payment it made on its own, even after a person agreed with it", () => {
-    expect(buildReport(reportFacts({ onItsOwn: true })).paymentList[0].decidedBy).toBe("agent");
+  it("is the agent for a payment it made on its own, even after a person agreed with it, and counted as one", () => {
+    const report = buildReport(reportFacts({ onItsOwn: true }));
+    expect(report.paymentList[0].decidedBy).toBe("agent");
+    expect(report.paid.onItsOwn).toBe(1);
+    expect(text(renderToStaticMarkup(<WorkspaceReport slug="pinecrest" report={report} />))).toContain(
+      "In shadow mode, a payment waits for your verdict; 1 paid on its own to earned vendors"
+    );
   });
 
   it("is the verdict for a payment a person's Agree paid", () => {
-    expect(buildReport(reportFacts({ resultingStatus: "held", heldBecause: "shadow_verdict" })).paymentList[0].decidedBy).toBe("verdict");
+    const report = buildReport(reportFacts({ resultingStatus: "held", heldBecause: "shadow_verdict" }));
+    expect(report.paymentList[0].decidedBy).toBe("verdict");
+    expect(report.paid.onItsOwn).toBe(0);
+    expect(text(renderToStaticMarkup(<WorkspaceReport slug="pinecrest" report={report} />))).toContain("In shadow mode, every payment waits for your verdict");
   });
 });

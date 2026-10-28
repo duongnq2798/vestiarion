@@ -67,7 +67,7 @@ describe("/security", () => {
 
   it("renders its heading, the date it was last updated, the site header and the compact footer", () => {
     expect(markup).toMatch(/<h1[^>]*>Security<\/h1>/);
-    expect(body).toContain("Last updated 2026-10-26");
+    expect(body).toContain("Last updated 2026-10-28");
     expect(markup).toMatch(/<header[^>]*class="sticky top-0/);
     for (const href of ["/terms", "/privacy", "/security"]) expect(markup).toContain(`href="${href}"`);
   });
@@ -639,6 +639,18 @@ describe("claims narrowed to what the code does", () => {
     expect(section("access")).toContain("can be raised or lowered but not turned off");
     expect(SERVICE_DAILY_CAP_USDC).toBe(0.05);
     expect(section("access")).toContain(`a cap of their own, ${SERVICE_DAILY_CAP_USDC} USDC a day`);
+  });
+
+  it("earned vendors: an owner's switch, in shadow mode on Arc testnet, within every check, needing a spending limit (earned vendors AL21-AL24)", () => {
+    const access = section("access");
+    expect(access).toContain("In shadow mode on Arc testnet, an owner may let the agent pay a vendor that earned it under their rule without waiting for a verdict.");
+    expect(access).toContain("Every check and limit still applies, the agent's spending limit must be set, and one disagreement ends it.");
+    // The gate grants nothing on Arc mainnet or without a spending limit, and is asked only after every check.
+    const gate = source("src/lib/agent/earned-gate.ts");
+    expect(gate).toContain('if (input.network === "arc-mainnet") return NO_EARNED;');
+    expect(gate).toContain("if (!budget || (budget.dailyUsdc === null && budget.weeklyUsdc === null)) return NO_EARNED;");
+    expect(source("src/lib/agent/orchestrator.ts")).toContain('const grant = decision.action === "pay" && !guardrail.blocked && ctx.shadow ?');
+    expect(source("src/app/actions/earned-vendors.ts")).toContain('authorize(formData.get("orgSlug"), "approval.policy")');
   });
 
   it("the pause holds the agent, not a person; the payments switch holds what Vestiarion sends", () => {

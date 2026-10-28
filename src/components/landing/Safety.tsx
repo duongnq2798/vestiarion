@@ -294,7 +294,8 @@ export function Safety() {
           </Heading>
           <p className="mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-on-agent-muted">
             A model reads each bill and proposes what to do. Rules in code check every proposal before money moves, and can refuse it. In shadow mode nothing is
-            paid until a person agrees; in a live workspace the agent pays on its own only what passes every check.
+            paid until a person agrees, unless you let the agent pay vendors that earned it; in a live workspace the agent pays on its own only what passes
+            every check.
           </p>
         </Reveal>
 

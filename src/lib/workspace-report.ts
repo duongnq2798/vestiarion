@@ -155,7 +155,8 @@ export interface WorkspaceReport {
   openedAt: string | null;
   shadow: { currency: string; startedAt: string } | null;
   bills: { handled: number; decided: number; medianMinutesToDecision: number | null };
-  paid: { count: number; byCurrency: CurrencyAmount[]; onTime: number; untouched: number; mirrored: number };
+  /** `onItsOwn`: paid by the agent on its own for an earned vendor in shadow mode (earned vendors AL29). */
+  paid: { count: number; byCurrency: CurrencyAmount[]; onTime: number; untouched: number; mirrored: number; onItsOwn: number };
   stopped: { total: number; byCode: number; waited: number; byAgent: number; notSent: number };
   people: { steppedIn: number };
   verdicts: { agreed: number; disagreed: number; waiting: number } | null;
@@ -420,6 +421,7 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
       }).length,
       untouched: payments.filter((payment) => !actionsOf.has(payment.invoiceId) && billsById.get(payment.invoiceId)!.reviewedBy === null).length,
       mirrored: paymentRows.filter((row) => row.mirror).length,
+      onItsOwn: payments.filter((payment) => paidOnItsOwn(payment.invoiceId)).length,
     },
     stopped: {
       total: stoppedRows.length,

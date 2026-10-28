@@ -20,7 +20,7 @@ export default function SecurityPage() {
     <LegalPage
       eyebrow="Trust"
       title="Security"
-      updated="2026-10-26"
+      updated="2026-10-28"
       intro="How Vestiarion protects the data and the money it handles, for anyone reviewing the app, its API or its integrations. Every statement describes what the code does today, and the code is public, so each one can be checked against it. What we do not claim is at the end."
     >
       <LegalSection id="architecture" title="Architecture and data flow">
@@ -230,6 +230,11 @@ export default function SecurityPage() {
             <strong>The agent&apos;s spending limit.</strong> A daily and a 7-day figure cap what the agent pays on its own. On Arc mainnet a workspace
             always has one: it starts at 50 USDC a day and 150 USDC in 7 days, and a workspace whose limit is missing or empty is held to those
             figures. The agent&apos;s purchases of payee history over x402 have a cap of their own, 0.05 USDC a day.
+          </li>
+          <li>
+            <strong>Earned vendors.</strong> In shadow mode on Arc testnet, an owner may let the agent pay a vendor that earned it under their rule
+            without waiting for a verdict. Every check and limit still applies, the agent&apos;s spending limit must be set, and one disagreement
+            ends it. Turning it on is an owner&apos;s alone and is signed in the ledger.
           </li>
           <li>
             <strong>A spending limit contract.</strong> On Arc mainnet, the agent pays from a treasury in the owner&apos;s own wallet only through{" "}

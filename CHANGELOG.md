@@ -14,6 +14,21 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Earned vendors paid on their own, in shadow mode.** Under a rule for earned vendors, an owner can now choose **Let
+  the agent pay earned vendors** in **Settings**, under **Earned vendors**. With it on, in shadow mode, a payment to a
+  vendor that earned it and is signed as earned, which passed every check, is made at once instead of waiting for your
+  verdict: the bill's amount to the address on file, in test USDC on Arc testnet, or simulated in a workspace with no
+  wallet. Every limit and check still applies, as in a live workspace, and it counts against the agent's spending
+  limit, which turning it on needs. You give your verdict after: **Bills & receivables** says "An earned vendor: paid
+  without waiting for your verdict." and asks **Give your verdict**. One disagreement, a flagged bill or a check in code
+  stopping one of the vendor's bills takes its status away, at once for the rest of that cycle, and once 3 of a
+  vendor's payments made this way wait for your verdict its next one waits too. Schedules, holds, milestones and
+  payments already waiting are unchanged. Each change to the switch is signed as `earned_vendor_payments_changed`, and
+  undone if it cannot be signed; the agent's `ap_pay` carries `earned`; the report counts such a payment as the
+  agent's even after you agree. Settings, the workspace status and the report say the exception while it is on. Off by
+  default, refused on Arc mainnet, and turned off with the rule. The Quality Lab gains four scenarios (43 of 43) and
+  two checks over every scenario: never more than a live workspace, and nothing changes for a vendor that has not
+  earned it. No migration: 0146 holds the switch.
 - **Earned vendors in shadow mode.** An owner can now say when a vendor has earned their trust: a number of agreed
   verdicts in a row, from 5 to 50, in **Settings**, under **Earned vendors**, right after **Shadow mode**. A vendor
   earns it with that many Agree verdicts in a row on the agent's decisions to pay or schedule its bills; the count
@@ -25,8 +40,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   them. Each change to the rule is signed as `earned_vendor_rule_changed`, and undone if it cannot be signed (should
   undoing it fail too, saving that rule again, or the next change, signs it), and each vendor that earns it or loses
   it as `vendor_earned` or `vendor_earned_lost`, after each verdict, when the rule changes, and as the agent's cycle
-  starts on bills to decide. Earning changes nothing the agent may do: every payment in shadow mode still waits for
-  your verdict. Off by default, and refused on Arc mainnet. Needs migration 0146.
+  starts on bills to decide. Earning by itself changes nothing the agent may do: every payment in shadow mode still
+  waits for your verdict unless an owner lets the agent pay earned vendors on their own (above). Off by default, and
+  refused on Arc mainnet. Needs migration 0146.
 
 ## [0.1.0-beta.14] - 2026-10-28
 
