@@ -12,7 +12,30 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Earned vendors in shadow mode.** An owner can now say when a vendor has earned their trust: a number of agreed
+  verdicts in a row, from 5 to 50, in **Settings**, under **Earned vendors**, right after **Shadow mode**. A vendor
+  earns it with that many Agree verdicts in a row on the agent's decisions to pay or schedule its bills; the count
+  starts again after a disagreement (counted from when it was given), a bill flagged for review, or a check in code
+  stopping one of its bills, while your own limits, such as two approvals or the agent's spending limit, never start
+  it again. Only a vendor with a payment limit, and not screened high risk, can earn it. The report shows, after
+  **How often you agreed**, which vendors earned it, with the verdicts behind each, or how many they have so far and
+  what started the count again; the live slice's vendor list marks them **Earned under your rule**, without ticking
+  them. Each change to the rule is signed as `earned_vendor_rule_changed`, and undone if it cannot be signed (should
+  undoing it fail too, saving that rule again, or the next change, signs it), and each vendor that earns it or loses
+  it as `vendor_earned` or `vendor_earned_lost`, after each verdict, when the rule changes, and as the agent's cycle
+  starts on bills to decide. Earning changes nothing the agent may do: every payment in shadow mode still waits for
+  your verdict. Off by default, and refused on Arc mainnet. Needs migration 0146.
+
 ### Fixed
+
+- **The OFAC vendor check says which wallets it compares with each other.** The page at
+  [/check-vendor](https://www.vestiarion.xyz/check-vendor) said each wallet address was compared with the rest of your
+  list. Only 0x wallets are, so one made to look like another vendor's, or one two vendors share, shows up. A wallet in
+  another format, such as a Bitcoin or Tron address, is looked up among the addresses OFAC's list gives and nothing
+  else, as its own result already said. The page now says so in its introduction and in what the check covers; what
+  the check does is unchanged. No migration.
 
 - **The free bill list check runs in a background tab too.** It waited for the browser to draw a frame before
   checking, and a tab in the background draws none until it is shown again. It now also checks without a frame: after a

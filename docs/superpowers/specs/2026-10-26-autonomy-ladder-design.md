@@ -52,6 +52,9 @@ Code comments and test names cite the ids, for example "(autonomy ladder AL4)".
   percentage: its `rate` is null and `enough` false. At 5 or more it shows the rate and the agreed count. There is no
   other threshold. Nothing says or implies that the agent may now do more anywhere: no colour for a good rate, no
   "ready" mark.
+  - Step 2 keeps it: the rows themselves never carry a mark. The "earned" mark shows only where an owner set a rule for
+    earned vendors, in its own block after the ladder and in the live slice picker
+    (`docs/superpowers/specs/2026-10-28-earned-vendors-design.md`, AL18, AL19).
 - **AL5. A stable order, said.**
   - Decision kinds come in the agent's own order (`AGENT_DECISION_ACTIONS`: Pay, Schedule, Hold, Flag for review, Ask
     for details), only those with a verdict. An action outside that list, which no verdict can carry today, would come
@@ -92,14 +95,16 @@ Code comments and test names cite the ids, for example "(autonomy ladder AL4)".
 - **AL10. Nowhere else.** Not /open (whose figures are cross-workspace aggregates with their own privacy rules and
   their own method text), not the console's shadow mode panel, and not the weekly brief.
 
-## Later steps (planned, not built)
+## Later steps
 
-Planned, so that step 1's rows are read for what they are: a measurement.
-- A later step may let an owner move one decision kind or one vendor from "waits for my verdict" to "the agent pays on
-  its own, within its limits", inside a workspace.
-- It would use the rows here as the evidence shown at that moment.
+- **Step 2, built**: earned vendors (`docs/superpowers/specs/2026-10-28-earned-vendors-design.md`, AL11-AL20). An
+  owner sets one rule per workspace, N agreed verdicts in a row on the agent's decisions to pay or schedule a vendor's
+  bills, and the report shows, with the verdicts behind each, which vendors earned it. Every change of the rule and of
+  a vendor's status is signed. It grants nothing.
+- **Step 3, planned** (same spec, AL21-AL30, not built): an owner may let the agent pay an earned vendor on Arc testnet
+  in shadow mode without waiting for a verdict, within every limit and check.
 
-None of this exists. Today an owner gives the agent more room only with the controls the product already has, among
+Until step 3 is built, an owner gives the agent more room only with the controls the product already has, among
 them: turning shadow mode off, the live slice, a payee's payment limit, the agent's spending limit, the figure above
 which a payment needs two approvals, a vendor's purchase-order requirement, the payee lock, a project's budget and, on
 Arc mainnet with a treasury in the owner's own wallet, the daily and 7-day figures set in its contract.

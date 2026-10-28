@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authorizeMock, giveVerdictMock, commands } = vi.hoisted(() => ({
+const { authorizeMock, giveVerdictMock, syncMock, commands } = vi.hoisted(() => ({
   authorizeMock: vi.fn(),
   giveVerdictMock: vi.fn(),
+  syncMock: vi.fn(),
   commands: {
     approvePayable: vi.fn(),
     rejectPayable: vi.fn(),
@@ -14,6 +15,8 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/revalidate", () => ({ revalidateOrgPages: vi.fn() }));
 vi.mock("@/lib/auth/authorize", () => ({ authorize: authorizeMock }));
 vi.mock("@/lib/dal/scope", () => ({ inOrg: (_access: unknown, fn: () => Promise<unknown>) => fn() }));
+vi.mock("@/lib/dal", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/dal")>()), db: () => "the workspace's database" }));
+vi.mock("@/lib/earned-vendors-store", () => ({ syncEarnedVendors: syncMock }));
 vi.mock("@/lib/commands/actor", () => ({ consoleActor: () => ({ userId: "u1", surface: { kind: "console" } }) }));
 vi.mock("@/lib/commands/payables", () => commands);
 vi.mock("@/lib/verdicts", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/verdicts")>()), giveVerdict: giveVerdictMock }));
@@ -23,12 +26,15 @@ import { VerdictError } from "@/lib/verdicts";
 
 /**
  * A verdict from the console (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S3, S4): by someone who may decide
- * payments, read before anything is done, and what follows it through the same payable commands as Approvals.
+ * payments, read before anything is done, and what follows it through the same payable commands as Approvals. A kept
+ * verdict signs what it changed for earned vendors, best effort (docs/superpowers/specs/2026-10-28-earned-vendors-design.md
+ * AL16).
  */
 
 beforeEach(() => {
   authorizeMock.mockReset().mockResolvedValue({ ok: true, user: { id: "u1" }, orgId: "org-1" });
   giveVerdictMock.mockReset();
+  syncMock.mockReset().mockResolvedValue({ streak: null, statuses: [], recorded: new Map(), signed: [] });
   for (const command of Object.values(commands)) command.mockReset();
 });
 
@@ -121,5 +127,34 @@ describe("giveVerdictAction", () => {
     expect(await giveVerdictAction("northstar", { entrySeq: 41, verdict: "disagree" })).toEqual({ ok: false, message: "Keep the reason to 280 characters." });
     giveVerdictMock.mockRejectedValue(new Error("connection reset"));
     expect(await giveVerdictAction("northstar", { entrySeq: 41, verdict: "agree" })).toEqual({ ok: false, message: "That did not work. Try again in a moment." });
+  });
+});
+
+describe("giveVerdictAction and earned vendors (earned vendors AL16)", () => {
+  it("signs what a kept verdict changed, in the workspace's scope, and only for a verdict it kept", async () => {
+    giveVerdictMock.mockResolvedValue({ given: { verdict: "agree", reason: null }, already: false, recorded: true });
+    await giveVerdictAction("northstar", { entrySeq: 41, verdict: "agree" });
+    expect(syncMock).toHaveBeenCalledTimes(1);
+    expect(syncMock).toHaveBeenCalledWith("the workspace's database", { trigger: "verdict" });
+
+    syncMock.mockClear();
+    giveVerdictMock.mockResolvedValue({ given: { verdict: "disagree", reason: null }, already: true, recorded: false });
+    await giveVerdictAction("northstar", { entrySeq: 41, verdict: "agree" });
+    commands.approvePayable.mockResolvedValue({ ok: false, message: "Someone else must approve paying it." });
+    giveVerdictMock.mockImplementation(async (_input, actions) => ({ given: { verdict: "agree", reason: null }, already: false, recorded: false, after: await actions.approve("inv-1") }));
+    await giveVerdictAction("northstar", { entrySeq: 41, verdict: "agree", then: "pay" });
+    expect(syncMock).not.toHaveBeenCalled();
+  });
+
+  it("answers the verdict as kept when the sync fails, and logs it", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    syncMock.mockRejectedValue(new Error("ledger signing key not readable"));
+    giveVerdictMock.mockResolvedValue({ given: { verdict: "disagree", reason: "Wrong amount" }, already: false, recorded: true });
+    expect(await giveVerdictAction("northstar", { entrySeq: 41, verdict: "disagree", reason: "Wrong amount" })).toEqual({
+      ok: true,
+      message: "You disagreed with the agent.",
+      given: { verdict: "disagree", reason: "Wrong amount" },
+    });
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("earned vendors"), "ledger signing key not readable");
   });
 });
