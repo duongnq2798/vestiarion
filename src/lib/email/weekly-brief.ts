@@ -12,7 +12,12 @@ export interface WeeklyBriefFacts {
   /** The last 7 days, `YYYY-MM-DD`, both days included. */
   from: string;
   to: string;
-  paid: { count: number; usdc: number };
+  /**
+   * The week's confirmed payments. `onItsOwn`, in shadow mode: how many of them the agent made on its own for an earned
+   * vendor (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22, AL29), which no one agreed to first; absent
+   * when none.
+   */
+  paid: { count: number; usdc: number; onItsOwn?: number };
   received: { count: number; usdc: number };
   decisions: number;
   waiting: number;
@@ -31,7 +36,8 @@ export interface WeeklyBriefFacts {
   };
   /**
    * In shadow mode (W6): the verdicts given in the last 7 days, and since shadow mode began (`since`, `YYYY-MM-DD`). Null
-   * outside it. The wallet then only mirrors agreed payments, so `cash.short` is null.
+   * outside it. The wallet then only mirrors the business's bills, paid once a person agrees or, for an earned vendor the
+   * owner lets it pay, on the agent's own decision, so `cash.short` is null.
    */
   shadow?: { verdicts: { given: number; agreed: number }; sinceStart: { given: number; agreed: number; since: string } } | null;
   /**
@@ -83,6 +89,18 @@ export function payeeSentences(payees: WeeklyBriefFacts["payees"]): string[] {
   return said;
 }
 
+/**
+ * What the agent paid in shadow mode (W6): the bills a person agreed with, and apart from them the ones it paid on its
+ * own to earned vendors (earned vendors AL22), which no one agreed to first.
+ */
+function shadowPaidSentence(paid: WeeklyBriefFacts["paid"]): string {
+  if (paid.count === 0) return "Paid nothing on Arc testnet.";
+  const own = Math.min(paid.onItsOwn ?? 0, paid.count);
+  if (own === 0) return `Paid ${plural(paid.count, "bill you agreed with", "bills you agreed with")} on Arc testnet, ${usdc(paid.usdc)} in all.`;
+  const agreed = paid.count - own;
+  return `Paid ${plural(paid.count, "bill", "bills")} on Arc testnet, ${usdc(paid.usdc)} in all: ${own} on its own to ${own === 1 ? "an earned vendor" : "earned vendors"}${agreed > 0 ? `, ${agreed} you agreed with` : ""}.`;
+}
+
 /** The brief's sentences, shared by the HTML and the text version. */
 export function briefSentences(facts: WeeklyBriefFacts): {
   lastWeek: string[];
@@ -98,7 +116,7 @@ export function briefSentences(facts: WeeklyBriefFacts): {
     ? [
         `Made ${plural(facts.decisions, "decision", "decisions")} on your bills; in shadow mode each waits for your verdict.`,
         shadow.verdicts.given > 0 ? `You gave ${plural(shadow.verdicts.given, "verdict", "verdicts")} and agreed with ${shadow.verdicts.agreed}.` : "You gave no verdict.",
-        facts.paid.count > 0 ? `Paid ${plural(facts.paid.count, "bill you agreed with", "bills you agreed with")} on Arc testnet, ${usdc(facts.paid.usdc)} in all.` : "Paid nothing on Arc testnet.",
+        shadowPaidSentence(facts.paid),
         ...(facts.received.count > 0 ? [`Customers paid ${plural(facts.received.count, "invoice", "invoices")}, ${usdc(facts.received.usdc)}.`] : []),
       ]
     : [

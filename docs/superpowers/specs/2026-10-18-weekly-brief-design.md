@@ -37,11 +37,14 @@ no email went, `weekly_brief_failed` lets the claim go, and the next scheduled c
 the brief).
 
 **W6. Shadow mode (added the same night).** A business in shadow mode keeps paying its bills itself, and the wallet
-only mirrors the payments it agreed to, so the brief speaks of verdicts instead of cash: the agent's decisions on its
-bills, the verdicts given in the week and how many agreed, the agreed bills paid on Arc testnet, and the agreement since
+only mirrors its bills, so the brief speaks of verdicts instead of cash: the agent's decisions on its bills, the
+verdicts given in the week and how many agreed, the bills paid on Arc testnet, and the agreement since
 shadow mode began, from the signed `decision_verdict` entries. It says the business's own money did not move, and has no
 cash line. The subject leads with the agreement ("you agreed with the agent on 8 of 8"). The ledger entry carries
-`shadow`.
+`shadow`. The bills paid are the ones a person agreed with, and, said apart, the ones the agent paid on its own to
+earned vendors while an owner lets it (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22, AL28), which no
+one agreed to first: "Paid 3 bills on Arc testnet, 1,200.00 USDC in all: 2 on its own to earned vendors, 1 you agreed
+with." The entry's `paid` carries `onItsOwn` when there is one.
 
 ## Out of scope
 
