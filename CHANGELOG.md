@@ -12,6 +12,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Added
+
+- **Production is checked every 10 minutes.** From GitHub's servers, outside Vestiarion's hosting and database, a check
+  opens the landing page, the open numbers, the docs, the four free tools, robots.txt and the sitemap. When one fails
+  two checks running, the team is told on a private Discord channel, and told again once it works. The check reads
+  public pages only and is not counted as a visit. No migration.
+
 ## [0.1.0-beta.14] - 2026-10-28
 
 ### Added

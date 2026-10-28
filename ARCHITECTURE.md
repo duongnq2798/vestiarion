@@ -70,11 +70,38 @@ the Pacific, and a payee's **Keep this address** took about 4.4 seconds
 (`docs/superpowers/specs/2026-10-20-functions-beside-database-design.md`). The route-level `preferredRegion` is
 deprecated in this Next.js version, so the setting is not per route. `tests/vercel-region.test.ts` pins it, and
 `vercel.json` holds nothing else (no header: see the security page's test). The scheduled routes are called by Supabase
-Cron from the database itself (`supabase/cron/watches.sql`), and GitHub's schedule calls only the sandbox cleanup, so
-none is a Vercel cron. Calls to services in the US now leave from Tokyo: Circle (Wallets, Iris, Gateway), the Arc RPC,
+Cron from the database itself (`supabase/cron/watches.sql`), and GitHub's schedules run only the sandbox cleanup and
+the production check (next section), so none is a Vercel cron. Calls to services in the US now leave from Tokyo: Circle (Wallets, Iris, Gateway), the Arc RPC,
 the model providers, Resend, BlindPay, the accounting and CRM connectors, and customers' webhook endpoints. Their time
 limits (the tick's start cutoff, Circle waits, the connector sweep's budget) are wall-clock, so a slower call means
 less work in a run, never a run past its limit.
+
+## Production check
+
+`.github/workflows/synthetic-check.yml` runs `scripts/synthetic-check.mjs` on GitHub's servers, outside Vercel and
+Supabase, so it can see either one fail (`docs/superpowers/specs/2026-10-28-production-check-design.md`). Every 10
+minutes it opens nine public addresses on production with a plain `GET`, following no redirect: the landing, `/open`,
+`/docs`, every free tool in `FREE_TOOLS`, `/robots.txt`, which must name the sitemap, and `/sitemap.xml`, which must
+list each free tool. Each must answer 200 within its budget, 8 seconds for the landing and `/open`, which read the
+database, and 4 for the rest, and say a text from its source; `/open` must not say a network's numbers could not be
+read. `tests/synthetic-check.test.ts` holds each text to its source, and robots.txt and the sitemap to what Next.js
+serves from `robots.ts` and `sitemap.ts`, so a copy edit or a new free tool fails CI instead of alerting the team.
+- **When the team is told.** A check that fails two rounds running goes into that round's one post to the team's
+  private Discord channel, with its reason, the time it started failing and the run's link, and is not told again while
+  it keeps failing. When it passes, it is told once more, with how long it was down. A post Discord does not take is
+  made again the next round. Posts go only to `https://discord.com/api/webhooks/`, the URL rebuilt as
+  `parseDiscordWebhookUrl` rebuilds it, with no mention parsed and embeds suppressed.
+- **The schedule** is hourly, since `tests/supabase-cron.test.ts` refuses any GitHub schedule more often (GitHub started
+  5- and 10-minute schedules only a few times a day). Each run loops for 5 h 45 min, and the concurrency group
+  `synthetic-check` keeps the next hourly start waiting until it ends, without cancelling it.
+- **The state**, each check's failures in a row and whether the team was told, is `.synthetic-state.json`, written after
+  every round and kept between runs in the Actions cache. No database.
+- **The secret** `MONITOR_DISCORD_WEBHOOK_URL` is the only one, and the script never prints it. Without it the checks
+  still run and the job log says no alert could be sent. A run fails only when an alert that was due could not be sent
+  or the state file could not be read, never because a page failed.
+- It reads public pages only, holds no token, and runs no JavaScript, so Google Analytics counts no probe; its user
+  agent, `vestiarion-synthetic-check`, tells the probes apart in Vercel's logs. A fork checks nothing unless its
+  repository variable `SYNTHETIC_ORIGIN` names its own deployment.
 
 ## Content Security Policy
 

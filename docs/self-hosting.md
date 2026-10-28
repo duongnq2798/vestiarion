@@ -144,6 +144,7 @@ Two independent upgrades from there, in either order:
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
 | `npm run telegram:setup -- <https origin>` | Registers the Telegram bot's webhook and command menu, once the three `TELEGRAM_*` variables are set (see `.env.example`) |
 | `npm run docs:screenshots` | Rebuilds the user guides’ step screenshots in `public/docs/guides/` with local headless Edge. Run it after changing a screen a guide shows (Go live, the counterparty or invoice form, a decision or approval card, the audit log), then look at each PNG before committing |
+| `node scripts/synthetic-check.mjs` | One round of the production check (see [Running on a real clock](#running-on-a-real-clock)) against `SYNTHETIC_ORIGIN`, or production when it is unset: each page's status, time and, when it fails, why. Reads public pages only, and needs Node alone, no install |
 
 These scripts work on the database, as its operator. To work with one workspace through its API instead, from any
 machine, use the [`vestiarion` command](https://www.vestiarion.xyz/docs/get-started/cli) with a key from that workspace
@@ -460,6 +461,16 @@ deployment's origin in place of `https://www.vestiarion.xyz`. Its header lists w
 enable `pg_cron` and `pg_net`, and add `AGENT_API_TOKEN` to Vault as `agent_api_token`. Each job's
 workflow (`agent-cycle.yml`, `due-watch.yml`, `fx-watch.yml`, `transfer-watch.yml`, `webhooks.yml`,
 `accounting-sync.yml`, `fx-rates.yml`) stays for a manual run.
+
+`.github/workflows/synthetic-check.yml` checks the public pages every 10 minutes from GitHub's servers
+(`scripts/synthetic-check.mjs`): the landing, `/open`, `/docs`, the free tools, `/robots.txt` and `/sitemap.xml`. It
+tells a Discord channel when a check fails two rounds running, and once when it passes again. In a fork it runs only
+once the repository variable `SYNTHETIC_ORIGIN` holds your deployment's origin (Settings > Secrets and variables >
+Actions > Variables). Add the channel's webhook URL (the channel's settings > Integrations > Webhooks > New Webhook >
+Copy Webhook URL) as the repository secret `MONITOR_DISCORD_WEBHOOK_URL`: it is the workflow's only secret, and without
+it the checks still run and the job log says no alert could be sent. It needs no token of the app's and no database
+change. Each page must say a text from the app's own copy (`CHECKS` in the script), so change those too if you change
+that copy.
 
 Circle also tells the deployment when a transfer settles, at `POST /api/circle/notifications`. On a
 subscribed account, while the agent runs, a payment confirmed after the agent stopped waiting for it
