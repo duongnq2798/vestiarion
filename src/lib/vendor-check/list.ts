@@ -5,8 +5,9 @@ import { addressKey, matchName, nameCompared, nonLatinWords, type ListedAddress,
 
 /**
  * A vendor list through the vendor check (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV6): its columns,
- * its rows, each row's name matched and its wallet checked with the address checker's rules, the counts, and the CSV of
- * the results. Pure, and run in the browser, so nothing pasted leaves the page. The list itself is read as the bill
+ * its rows, each row's name matched and its wallet checked (a 0x one with the address checker's rules, against OFAC's
+ * addresses and the other rows' 0x wallets; any other looked up among OFAC's addresses alone), the counts, and the CSV
+ * of the results. Pure, and run in the browser, so nothing pasted leaves the page. The list itself is read as the bill
  * import reads one (`readTable`, `decodeList`), past title lines, and with names that hold commas kept whole
  * (`readVendorList`, `vendorTable`).
  */
@@ -150,8 +151,9 @@ export function vendorRows(table: Table, hasHeader: boolean, columns: VendorColu
 }
 
 /**
- * A row's wallet, checked (CV6): an EVM address with the address checker's rules, against OFAC's EVM addresses and the
- * other rows' addresses; any other, as written, against every address the list gives.
+ * A row's wallet, checked (CV6): an EVM address with the address checker's rules, against OFAC's EVM addresses and,
+ * when it is a whole 0x address, the other rows' whole 0x addresses; any other, as written, against every address the
+ * list gives and against no other row.
  */
 export type VendorWallet =
   | {
@@ -221,8 +223,9 @@ function lookalikeKeys(address: string): string[] {
 }
 
 /**
- * Checks one row at a time, against the whole list's wallets, so a long list can show how far it has got. Each other
- * address is compared once, under the first row that has it; rows with the very same address are counted apart.
+ * Checks one row at a time, against every whole 0x address in the list, so a long list can show how far it has got.
+ * Each other address is compared once, under the first row that has it; rows with the very same address are counted
+ * apart. A wallet in another format, or a 0x one that is not a whole address, is compared with no other row (CV6).
  */
 export function vendorRowChecker(index: NameIndex, rows: readonly VendorRow[]): (row: VendorRow) => VendorResult {
   const rowsOf = new Map<string, VendorRow[]>();

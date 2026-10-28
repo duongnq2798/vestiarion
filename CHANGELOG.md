@@ -33,6 +33,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   two checks running, the team is told on a private Discord channel, and told again once it works. The check reads
   public pages only and is not counted as a visit. No migration.
 
+### Fixed
+
+- **The OFAC vendor check says which wallets it compares with each other.** The page at
+  [/check-vendor](https://www.vestiarion.xyz/check-vendor) said each wallet address was compared with the rest of your
+  list. Only 0x wallets are, so one made to look like another vendor's, or one two vendors share, shows up. A wallet in
+  another format, such as a Bitcoin or Tron address, is looked up among the addresses OFAC's list gives and nothing
+  else, as its own result already said. The page now says so in its introduction and in what the check covers; what
+  the check does is unchanged. No migration.
+
 ## [0.1.0-beta.14] - 2026-10-28
 
 ### Added
