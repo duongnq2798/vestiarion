@@ -40,7 +40,7 @@ plan. A cleared alert says "The cash covers everything due in the next 30 days a
 decision: it takes its own tone, `notice`, so it is not counted among what waits for a person (review of #420).
 
 **S5. Where it is not.** Not in shadow mode, where the business pays its bills in its own money and the wallet only
-mirrors agreed payments. Not while the agent is paused: the cycle does not run. Code only: no model decides it.
+mirrors them. Not while the agent is paused: the cycle does not run. Code only: no model decides it.
 
 ## Out of scope
 

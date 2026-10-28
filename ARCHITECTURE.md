@@ -1617,7 +1617,10 @@ disagrees with every decision.
   `changeEarnedVendorPayments` refuses it without a rule or an agent spending limit (`readOutflowBudget`), on Arc
   mainnet, while a cycle runs and before 0146, and signs `earned_vendor_payments_changed` strictly, as the rule (put
   back from its own write if the entry fails; a switch left in force without its entry is signed before the next
-  change). Turning the rule off turns it off in the same write and signs its entry after the rule's. In `runApStage`
+  change). Turning the rule off turns it off in the same write and signs its entry after the rule's; a rule change put
+  back after its entry fails restores the switch only when the rule went off with it, and only while the ledger still
+  names it on. While it is on, `changeAgentBudget` refuses removing both figures (`earned_payments_need_figure`). In
+  `runApStage`
   of a shadow workspace with bills to decide, `earnedGateFor` (`src/lib/agent/earned-gate.ts`) replaces the bare sync:
   it syncs, then grants each vendor earned now and recorded earned while the switch is on, a spending limit is set and
   the network is not Arc mainnet; any failure grants none, logged (`NO_EARNED`), and a live workspace never builds it.
@@ -1628,9 +1631,12 @@ disagrees with every decision.
   `waiting` on its earned status, counted only since shadow mode last started) waits again; a decision in the stage
   that flags the vendor's bill or that `breaksEarning` stops takes the grant away for the rest of the stage and signs
   `vendor_earned_lost` (`trigger: "cycle"`) best effort. Bills mark such a payment (`Decision.earned`) and ask "Give
-  your verdict"; the report keeps it "The agent"'s (`onItsOwn`, from `detail.earned`) after a later Agree; Settings'
-  shadow mode, the workspace status (`earnedPayments` from `shellStatus` and `capabilityOf`) and the report name the
-  exception while the switch is on. Two Quality Lab invariants (`tests/quality-lab-earned.test.ts`): never more than a
+  your verdict"; the report keeps it "The agent"'s (`onItsOwn`, from `detail.earned`) after a later Agree; both, and
+  the weekly brief, which counts these payments apart from the agreed ones (`paid.onItsOwn`), decide it with
+  `paidOnItsOwn` (`src/lib/earned-vendors.ts`): the newest own decision ended paid or on its way, and no
+  `approval_paid` came after it. The rule trial counts such a payment against the spending limit (`onItsOwn` in
+  `src/lib/policy-replay.ts`). Settings' shadow mode, the workspace status (`earnedPayments` from `shellStatus`,
+  read beside shadow mode, and `capabilityOf`) and the report name the exception while the switch is on. Two Quality Lab invariants (`tests/quality-lab-earned.test.ts`): never more than a
   live workspace, and nothing changes for a vendor that has not earned it.
 - **Start the live slice** (`docs/superpowers/specs/2026-10-18-live-slice-design.md`). Under those steps an owner
   (`org.administer`, with Arc mainnet open to them) ticks vendors. `startLiveSlice` (`src/lib/live-slice.ts`) refuses
@@ -3513,8 +3519,10 @@ docs/superpowers/specs/2026-10-18-weekly-brief-design.md, `src/lib/notifications
 and the escalations, on the same never-throw terms. It goes only on a Monday (UTC), once per ISO week (`isoWeek`; the
 week's `weekly_brief_sent` entry without `preview` stops a second), and not when `briefWorthSending` finds nothing to
 say. In shadow mode (`readShadowMode`) `weeklyBriefFacts` also reads the `decision_verdict` entries since
-`shadow.startedAt` (the week's, and all of them), sets `cash.short` to null since the wallet only mirrors agreed
-payments, and the email speaks of verdicts: its subject leads with the agreement since shadow mode began. `weeklyBriefFacts` reads, for the last 7 days, confirmed USDC `payment_intents`, `ar_received`
+`shadow.startedAt` (the week's, and all of them), sets `cash.short` to null since the wallet only mirrors the
+business's bills, counts the week's payments the agent made on its own to earned vendors (`paid.onItsOwn`, from the
+bills' `ap_pay` and `approval_paid` entries through `paidOnItsOwn`), and the email speaks of verdicts, saying those
+payments apart from the agreed ones: its subject leads with the agreement since shadow mode began. `weeklyBriefFacts` reads, for the last 7 days, confirmed USDC `payment_intents`, `ar_received`
 entries and the agent's `ap_*`/`milestone_*` entries; the payables waiting for a person; and, through
 `readOpenCashOutlook` (shared with the cash alert, `src/lib/agent/cash-alert.ts`), the next 7 days' outflows and
 expected receipts and `cashShortOf`, over the 7 whole UTC days before today (`ar_received` and `ar_payment_applied`
@@ -5234,8 +5242,8 @@ replayed through the same code (`docs/superpowers/specs/2026-10-26-quality-lab-s
   unchanged.
 - **Invariants** (`tests/quality-lab-earned.test.ts`, earned vendors AL23, AL30): every scenario of a live workspace,
   run again in shadow mode with its vendor earned and the owner's switch on, ends with the same status, rule, hold
-  reason and transfers; and every scenario, run in shadow mode with the switch on and its vendor not earned, ends as in
-  shadow mode alone. A difference fails CI.
+  reason and transfers; and every scenario, run in shadow mode with the switch on and its vendor not earned, while
+  another vendor is, ends as in shadow mode alone. A difference fails CI.
 - **Judging** is `judgeScenario` (`src/lib/quality-lab/judge.ts`): right when money moved or stopped as expected, with
   the expected status, rule, hold reason and transfers; a wrong payment is a transfer or schedule where money should
   stop, a transfer to an address other than the one on file or for an amount other than the bill's, or a second

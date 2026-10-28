@@ -205,6 +205,13 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
     an agent spending limit ("Set the agent's spending limit first, in Settings: the agent's own payments always count
     against it."), read with `readOutflowBudget`. On or off is refused on Arc mainnet, while a cycle runs, before 0146,
     and unchanged ("It is set to that already."), in step 2's words.
+  - While it is on, the agent's spending limit keeps a figure: `changeAgentBudget` refuses removing both
+    (`earned_payments_need_figure`: "Keep a daily or 7-day figure while the agent pays earned vendors on its own, or
+    have an owner turn that off first, under Earned vendors in Settings."), reading the switch only for that change, as
+    off before 0146. Without it, an owner or admin (`agent.budget`) could remove the limit after the switch went on: the
+    gate would then grant none (AL24) while Settings, the header and the report still said the agent pays earned
+    vendors on its own. Should a limit go some other way (two owners at once, a wallet's contract), the gate still grants
+    none, and every payment waits for a verdict.
   - Signed strictly as `earned_vendor_payments_changed` `{ by, from, to }`, actor `human`, domain `system`, as the rule
     is (AL17): the key is checked before anything is written; a change whose entry cannot be signed is put back, only
     from its own write (an update guarded by the value it wrote), and refused; one that could not be put back either is
@@ -214,6 +221,9 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
   - Turning the rule off turns the switch off in the same write (0146's check), as step 2 built it; the rule's change
     then also signs `earned_vendor_payments_changed` `{ from: true, to: false }` after its own entry. The rule is off
     either way, so that entry is signed best effort, and a failure is signed before the switch's next change.
+  - A rule change whose entry cannot be signed puts back the rule alone: the switch was part of its write only when
+    the rule went off, and is then put back on only while the newest `earned_vendor_payments_changed` still names it on.
+    So a switch another owner turned off meanwhile stays off, and a put-back never turns on what an owner turned off.
   - Toasts: "The agent pays earned vendors on its own now, and you give your verdict after." / "Earned vendors'
     payments wait for your verdict again."
 - **AL22. What it changes, and only that.** At the start of the AP stage of a shadow-mode workspace with bills to decide,
@@ -259,11 +269,21 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
   vendor on its own, and you give your verdict after."). With the switch off it says "Earning changes nothing the agent
   may do unless an owner lets it pay earned vendors on its own, in Settings.", as Settings' explainer does. Once a rule
   is set, the ladder's last sentence reads "It only measures. What earning changes is under Earned vendors." Public
-  copy (landing FAQ and Safety, Studios, README, the guides) says the exception once, plainly. On Bills, a bill paid
-  this way reads "An earned vendor: paid without waiting for your verdict." and its next step is "Give your verdict"
-  while one can be given.
+  copy (landing FAQ and Safety, Studios, README, the guides, /open's method) says the exception once, plainly, and
+  Studios' "What if the AI is wrong?" says a Disagree after such a payment takes the vendor's status away. On Bills, a
+  bill paid this way reads "An earned vendor: paid without waiting for your verdict." and its next step is "Give your
+  verdict" while one can be given. "Paid this way" is `paidOnItsOwn` (`src/lib/earned-vendors.ts`), shared with the
+  report and the weekly brief: the bill's newest decision carried out on its own ended paid or on its way, and no
+  person paid the bill after it (`approval_paid`, which Approve and pay and Agree and pay both write). A bill a person
+  paid after the agent's own payment was held or its transfer failed is theirs. `shellStatus` reads the switch beside
+  shadow mode, at the same time, so a shadow-mode page waits on no extra round trip. In shadow mode the weekly brief
+  (W6) says the bills the agent paid on its own apart from the ones a person agreed with ("Paid 3 bills on Arc testnet,
+  1,200.00 USDC in all: 2 on its own to earned vendors, 1 you agreed with."), and the rule trial (policy replay P6)
+  counts such a payment against the spending limit, as any payment the agent made, saying "The agent pays it on its
+  own, for an earned vendor".
 - **AL29. The report says who paid.** A payment made by the agent's own decision (`onItsOwn`, read from
-  `detail.earned`) is "agent" in `decidedBy` even after a later Agree. The report counts them (`paid.onItsOwn`), and its
+  `detail.earned`) is "agent" in `decidedBy` even after a later Agree, unless a person paid the bill after it
+  (`paidOnItsOwn`, AL28): then it is the person's or the verdict's, as before. The report counts them (`paid.onItsOwn`), and its
   **Needed a person** tile, which in shadow mode says "In shadow mode, every payment waits for your verdict", says
   instead how many the agent paid on its own once there is one.
 - **AL30. Quality Lab.** Four scenarios in the `switches` group (`switches-earned-vendor-paid`,
@@ -271,7 +291,10 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
   from 40 to 44 (Quality Lab QL2), and two invariants (`tests/quality-lab-earned.test.ts`, over the runner factored into
   `tests/support/quality-lab-runner.ts`): every scenario of a live workspace ends the same in shadow mode with the
   switch on and its vendor earned (both runs with an agent spending limit where the scenario sets none), and every
-  scenario ends the same in shadow mode with the switch on and its vendor not earned. 43 scenarios, all right. The
+  scenario ends the same in shadow mode with the switch on and its vendor not earned, while another vendor is earned,
+  so the gate the stage asks holds a grant, none of it the scenario's payee's. 43 scenarios, all right.
+  `tests/ap-stage-earned.test.ts` also pins, through the stage, the 3-waiting count a stage's own payments add to
+  (AL26), and a vendor not granted beside one that is. The
   shadow replay runs with shadow mode off, so it builds no gate: 37 same, 9 cannot rebuild, 0 wrong, unchanged.
 
 ### Where step 3 differs from the plan
@@ -284,6 +307,10 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
   counting it would pause the vendor for good.
 - Turning the rule off also signs the switch's own entry (AL21), so the ledger names the switch off once it went off
   with the rule; an entry that could not be signed then is signed before the switch's next change.
+- Found in review and fixed before merge: the Bills mark, the report and the weekly brief read who paid from the
+  decision itself and a person's payment after it (AL28, AL29); the weekly brief and the rule trial count these
+  payments as the agent's (AL28); the spending limit cannot be removed while the switch is on (AL21); a rule change
+  put back never turns the switch on against a signed off (AL21); and /open and Studios name the exception (AL28).
 - The bill's evidence chain does not cite the `vendor_earned` entry as a fact of its own: its decision step cites the
   `ap_pay` entry, whose `earned.recordSeq` names it, and the entry is read through the ledger and the report. Citing
   it in the chain is left for later.
@@ -294,4 +321,4 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
   workspace, or past any rule or check, with it on (AL22-AL24).
 - Count verdicts outside shadow mode, on milestones, or any agreement but verdicts (AL1).
 - Carry a status to the live slice's workspace on Arc mainnet: the picker only marks it, and the owner still ticks.
-- Change the ladder's rows, the console's shadow mode panel, /open or the shared report.
+- Change the ladder's rows, the console's shadow mode panel, /open's figures or the shared report.

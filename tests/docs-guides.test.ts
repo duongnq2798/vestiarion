@@ -1395,6 +1395,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Turn off", TWO_APPROVALS_PANEL],
     ["This window holds too many decisions to try at once. Try the last 30 days.", REPLAY_READ],
     ["The agent pays it once a person agrees, in shadow mode", REPLAY_READ],
+    // A payment the agent made on its own to an earned vendor (earned vendors AL22).
+    ["The agent pays it on its own, for an earned vendor", REPLAY_READ],
   ],
   "guides/first-payment": [
     // A payee link that asks for the payee's invoice, or lets it choose its chain (payee invoice link P1, P5).
@@ -1521,6 +1523,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["spending_limit_enforced", "src/lib/circle/spending-limit-setup.ts"],
     ["spending_limit_unenforced", "src/lib/circle/spending-limit-setup.ts"],
     ["agent_budget_changed", "src/lib/agent-budget.ts"],
+    // The limit keeps a figure while the agent pays earned vendors on its own (earned vendors AL21).
+    ["Keep a daily or 7-day figure while the agent pays earned vendors on its own, or have an owner turn that off first, under Earned vendors in Settings.", "src/lib/agent-budget.ts"],
     ["workspace.outflow_budget", "src/lib/agent/guardrails.ts"],
     ["the agent's spending limit has room for it again", "src/lib/agent/follow-up.ts"],
     ["Screening match", SCREENING_MATCH],

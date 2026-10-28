@@ -48,8 +48,8 @@ who did not sign up.
   `/supplier/:token`. Its preview card names nothing of the link. A paid bill's link opens the public explorer, where
   anyone can see the paying wallet, so the copy never says the page hides it. A bill's memo is shown, so the Bills tab
   asks for internal notes to stay out of memos.
-- **V8. Not in shadow mode.** A workspace in shadow mode pays its bills its own way, and Arc testnet only mirrors the
-  ones it agrees with. A link is refused there, and an existing link shows no bills while shadow mode is on.
+- **V8. Not in shadow mode.** A workspace in shadow mode pays its bills its own way, and Arc testnet only mirrors
+  them. A link is refused there, and an existing link shows no bills while shadow mode is on.
 
 ## Data (0131)
 
