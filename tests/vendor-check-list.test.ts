@@ -27,8 +27,9 @@ import { buildNameIndex, type NameIndex } from "@/lib/vendor-check/match";
  * A vendor list through the vendor check (docs/superpowers/specs/2026-10-28-check-vendor-design.md CV2, CV6): read as
  * the bill import reads a list, past title lines above its column names, a list of one column read whole, its columns
  * found by their names, each row's name matched (or not compared, without a word in Latin letters other than legal
- * forms and numbers) and its wallet checked with the address checker's rules, chain prefixes, payment links and
- * currency labels read, against OFAC's addresses and the other rows', then counted and written back as a CSV.
+ * forms and numbers) and its wallet checked, chain prefixes, payment links and currency labels read: against OFAC's
+ * addresses, and a 0x one with the address checker's rules and against the other rows' 0x wallets too, while a wallet
+ * in another format is compared with no other row; then counted and written back as a CSV.
  */
 
 let index: NameIndex;
@@ -168,6 +169,24 @@ describe("checking a list (CV6)", () => {
     expect(walletWords(second.wallet!)).toEqual({ tone: "note", text: "The same address as Northwind Design's. Check one wallet is meant for both." });
     const [first] = check(`Vendor,Wallet\nNorthwind Design,${NORTHWIND}\n,${NORTHWIND}`);
     expect(walletWords(first.wallet!).text).toBe("The same address as row 3's. Check one wallet is meant for both.");
+  });
+
+  it("compares only whole 0x wallets with the other rows': the same address in another format, or a cut one, is not noted", () => {
+    const bech32 = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq";
+    const [first, second, third, fourth] = check(`Vendor,Wallet\nNorthwind Design,${bech32}\nHarbor Print Co,${bech32}\nA,0x7a2d\nB,0x7a2d`);
+    // Looked up among OFAC's addresses only, as its result says.
+    expect(first.wallet).toEqual({ kind: "unlisted" });
+    expect(second.wallet).toEqual({ kind: "unlisted" });
+    expect(walletWords(second.wallet!)).toEqual({ tone: "fine", text: "Not among the addresses on OFAC's SDN list. It is not an EVM address, so nothing else was checked." });
+    // A 0x cell that is not a whole address gets the checker's reason, and no other row is named.
+    for (const result of [third, fourth]) {
+      expect(result.wallet).toMatchObject({ kind: "evm", same: [] });
+      expect(walletWords(result.wallet!).text).toMatch(/^Not an address\. /);
+    }
+    // The same whole 0x address under two names is noted on each.
+    const [northwind, harbor] = check(`Vendor,Wallet\nNorthwind Design,${NORTHWIND}\nHarbor Print Co,${NORTHWIND}`);
+    expect(northwind.wallet).toMatchObject({ kind: "evm", same: ["Harbor Print Co"] });
+    expect(harbor.wallet).toMatchObject({ kind: "evm", same: ["Northwind Design"] });
   });
 
   it("stops at an address OFAC lists, EVM or not, naming the entry", () => {

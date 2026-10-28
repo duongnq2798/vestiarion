@@ -4620,9 +4620,11 @@ browser, with no form, request carrying input, URL parameter or storage.
   counts, shows and writes back that table. `detectVendorColumns` finds the name, country and wallet columns, up to
   5,000 rows. A wallet's EVM part (`evmPart`: the cell, the address after a chain prefix such as `eth:`, a payment
   link's own address, or for a link calling a contract its `address=` alone, or the cell from a `0x` that starts a
-  word) gets `checkAddress` against the snapshot's EVM addresses and the other rows' addresses that share an end with
-  it (first 3 and last 3, first 5 or last 5 hex digits); any other is looked up, as written and word by word (`XBT
-  <address>`, a payment link), among the listed addresses of every currency. A name not compared is counted apart.
+  word) gets `checkAddress` against the snapshot's EVM addresses and, when it is a whole 0x address, the other rows'
+  whole 0x addresses that share an end with it (first 3 and last 3, first 5 or last 5 hex digits); the same whole 0x
+  address under another row is a note. Any other wallet is looked up, as written and word by word (`XBT <address>`, a
+  payment link), among the listed addresses of every currency, and is compared with no other row, so the page says
+  only 0x wallets are compared with each other. A name not compared is counted apart.
   `vendorResultsCsv` writes the results. A match links to Treasury's search page, never to the entry's own page, so
   no outbound-click event carries what a name matched.
 - `VendorCheckCta` is the page's one call to action: what the product does before it pays, which is what the guardrails

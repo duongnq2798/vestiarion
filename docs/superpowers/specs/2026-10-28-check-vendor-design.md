@@ -166,16 +166,21 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
     this payment link calls a contract and gives no pay-to address (address=)." Its token contract is never checked
     as the payee;
   - that part gets the address checker's rules (AC1-AC4, `checkAddress`): its characters, its checksum, the EVM
-    addresses in the name snapshot, addresses that are not a wallet, and the other rows' addresses that share its
-    first 3 and last 3, first 5 or last 5 hex digits, so one made to look like another row's (AC3) stops, naming that
-    row, on both rows. When it is only part of the cell, the result starts "Read as <address>.";
-  - the very same address under another row is a note to look at: "The same address as Northwind Design's. Check one
-    wallet is meant for both.";
+    addresses in the name snapshot, addresses that are not a wallet, and, when it is a whole 0x address (`0x` and 40
+    hex digits), the other rows' whole 0x addresses that share its first 3 and last 3, first 5 or last 5 hex digits,
+    so one made to look like another row's (AC3) stops, naming that row, on both rows. A part that is not a whole
+    address gets the checker's reason and is compared with no other row. When it is only part of the cell, the result
+    starts "Read as <address>.";
+  - the very same whole 0x address under another row is a note to look at: "The same address as Northwind Design's.
+    Check one wallet is meant for both.";
   - any other is compared with every digital-currency address the snapshot lists, of any currency, case ignored for
     hex and single-case forms such as bech32: the cell as written, then each of its words, split at spaces, commas,
     colons, parentheses, `?`, `&`, `=` and the like. So an address written with its currency, as OFAC writes them
     (`XBT <address>`, `TRX <address>`, `USDT (TRC20): <address>`, `<address> (BTC)`), or inside a payment link such as
-    `bitcoin:<address>?amount=0.1` (BIP 21), stops when it is listed;
+    `bitcoin:<address>?amount=0.1` (BIP 21), stops when it is listed. It is compared with nothing else, the other
+    rows' wallets included: two rows with the same Bitcoin address are not noted, nor one made to look like another.
+    Its result says so when it is not listed: "Not among the addresses on OFAC's SDN list. It is not an EVM address,
+    so nothing else was checked.";
   - a row without a name is called by its row number.
 - A name with no word in Latin letters, or none but legal forms and numbers beside words in another script (CV2,
   `nameCompared`), is not compared: "Not compared: OFAC's SDN list writes every name in Latin letters." A name with
@@ -227,10 +232,17 @@ product checks. It sits beside the address lookalike checker (`2026-10-21-addres
   cards.
 - Heading "Check your vendors against OFAC's sanctions list", what it checks, and "The check runs in this page, and
   nothing you type or paste is kept.", then `FREE_TOOL_COUNT_LINE` (free tool attribution TA6) and the list's date.
+  What it checks is what CV6 does, and no more: each name with every name on the SDN list, other names included, and
+  each wallet address with the addresses that list gives, then "A 0x wallet is also compared with the other 0x wallets
+  in your list, so one made to look like another vendor's, or one two vendors share, shows up." It never says a
+  wallet is compared with the rest of the list, since one in another format is not.
 - Below the checker, "What this check covers, and what it does not":
   - it covers OFAC's SDN list only: not OFAC's other (non-SDN) lists, gathered in its Consolidated Sanctions List, nor
     the EU's, the UN's or the UK's;
   - names and listed addresses only: not who owns a company (OFAC's 50 percent rule), nor a wallet's history;
+  - "Only the 0x wallets in your list are compared with each other.": one in another format, such as a Bitcoin or Tron
+    address, is only looked up among OFAC's listed addresses, so one two vendors share, or one made to look like
+    another, is not pointed out (CV6);
   - a match is a reason to look closer on Treasury's search, and no match does not prove a vendor is not on the list;
   - a first look, not a compliance decision;
   - the list's date, and how it is refreshed, linking the script.
@@ -279,14 +291,25 @@ tools' shared `ToolCta` for `check-vendor` (`docs/superpowers/specs/2026-10-28-f
   two cells kept in its columns, a name in the last column joined back for the page's columns as for the check, the
   columns found, the row limit, wallets (OFAC's EVM and other addresses, chain prefixes and payment links, a transfer
   link read by its `address=` alone, a listed address written with its currency, a lookalike of another row's, the
-  same address under two names, a wrong checksum, not an address), names not compared (a legal form or a number
+  same address under two names, a wrong checksum, not an address; the same Bitcoin address under two names, and the
+  same 0x cell that is not a whole address, not noted on either row), names not compared (a legal form or a number
   beside another script among them), the counts and the CSV.
 - `tests/check-vendor-page.test.tsx`, in a DOM: one name, a name of rare words, a name not in Latin letters (with a
   legal form too), the example list and its download, one pasted column, a title line, a name joined back in the
   columns and the CSV, the counts' tone for names not compared, a folded row that wraps, the live headline, 16 px
   fields, a link to Treasury's search with no digit in its address; the page's metadata, headings, coverage notice,
-  new-tab links, how names are compared, the counting line, call to action (`ToolCta`) and footer start, and that it
-  is public; and no request, storage, cookie, address-bar or history write, analytics call, form or named field in the
-  checker's code.
+  what it says of wallets (each looked up among OFAC's addresses, only 0x ones compared with each other, and never
+  "the rest of your list"), new-tab links, how names are compared, the counting line, call to action (`ToolCta`) and
+  footer start, and that it is public; and no request, storage, cookie, address-bar or history write, analytics call,
+  form or named field in the checker's code.
 - `tests/free-tool-attribution.test.tsx`, `tests/site-footer.test.tsx` and `tests/docs-content.test.ts` cover the
   entry in `FREE_TOOLS`, the footer, the sitemap and the guide's link.
+
+## Amendment 2026-10-28: which wallets are compared between rows
+
+The page's introduction said each wallet address was compared "with the addresses the list gives and with the rest of
+your list". The code compares only a whole 0x address with the other rows, for lookalikes and the same address (CV6);
+a wallet in another format, such as a Bitcoin or Tron address, is looked up among the addresses OFAC's list gives and
+nothing else, as its own result says. The code was right and the words too broad, so the introduction and the
+coverage list now say which wallets are compared with each other (CV8). What the check does is unchanged. The tests
+above hold the page to those words, and pin a wallet in another format under two names as not noted.
