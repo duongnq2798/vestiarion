@@ -57,3 +57,8 @@ mcp-publisher
 mcp-publisher.exe
 mcp-publisher*.tar.gz
 .mcpregistry_*
+
+# The production check's state when it is run by hand with --state (scripts/synthetic-check.mjs); in Actions it is
+# kept in the cache.
+/.synthetic-state.json
+/.synthetic-state.json.tmp

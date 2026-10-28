@@ -53,9 +53,22 @@ function localToday(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
-/** Runs `work` once the page has painted what changed before it: the browser draws a frame, then the work holds it. */
+/** How long the check waits for a frame before it runs anyway: a tab in the background draws none (CB2). */
+const FRAME_WAIT_MS = 100;
+
+/**
+ * Runs `work` once the page has painted what changed before it: the browser draws a frame, then the work holds it. A
+ * tab in the background draws no frames, so `work` also runs after FRAME_WAIT_MS without one. It runs once either way.
+ */
 function afterPaint(work: () => void) {
-  requestAnimationFrame(() => setTimeout(work, 0));
+  let ran = false;
+  const once = () => {
+    if (ran) return;
+    ran = true;
+    work();
+  };
+  requestAnimationFrame(() => setTimeout(once, 0));
+  setTimeout(once, FRAME_WAIT_MS);
 }
 
 const plural = (count: number, one: string, many: string) => `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;

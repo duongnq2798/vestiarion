@@ -619,8 +619,8 @@ npm run quality-lab   # runs the scenarios and the replay and writes both result
 ```
 
 [docs/self-hosting.md](docs/self-hosting.md) covers the rest: environment variables, the founding workspace, every
-script, going live per path, the scheduled jobs (Supabase Cron), Circle notifications, GitHub, and what is live versus
-simulated.
+script, going live per path, the scheduled jobs (Supabase Cron), the production check, Circle notifications, GitHub,
+and what is live versus simulated.
 
 ## Contributing
 
