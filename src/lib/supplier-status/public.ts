@@ -88,8 +88,8 @@ export async function readSupplierStatus(token: string, now: number = Date.now()
   const network = networkOf(link.network);
 
   return withOrg(link.orgId, async () => {
-    // In shadow mode the business pays its bills its own way, and Arc testnet only mirrors the ones it agrees with: a
-    // supplier must never read those as its payments (V8).
+    // In shadow mode the business pays its bills its own way, and Arc testnet only mirrors them: a supplier must never
+    // read those as its payments (V8).
     if (await readShadowMode(db())) return { state: "unavailable" as const };
     const since = new Date(now - RECENT_PAID_DAYS * 86_400_000).toISOString();
     // The open bills, and apart the ones paid recently, so a long history never hides an open one.

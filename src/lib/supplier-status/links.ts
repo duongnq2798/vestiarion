@@ -97,8 +97,8 @@ export async function createSupplierLink(input: {
   const supplier = ((found.data ?? []) as Array<{ id: string; name: string; role: string }>)[0];
   if (!supplier) throw new SupplierLinkError("not_found");
   if (supplier.role !== "vendor") throw new SupplierLinkError("not_supplier");
-  // In shadow mode Arc testnet only mirrors the bills the business agrees with: a supplier must never read those as its
-  // payments (V8).
+  // In shadow mode Arc testnet only mirrors the business's bills: a supplier must never read those as its payments
+  // (V8).
   if (await readShadowMode(db())) throw new SupplierLinkError("shadow");
 
   const now = input.now ?? Date.now();
