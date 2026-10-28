@@ -22,10 +22,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   it again. Only a vendor with a payment limit, and not screened high risk, can earn it. The report shows, after
   **How often you agreed**, which vendors earned it, with the verdicts behind each, or how many they have so far and
   what started the count again; the live slice's vendor list marks them **Earned under your rule**, without ticking
-  them. Each change to the rule is signed as `earned_vendor_rule_changed`, and undone if it cannot be signed, and each
-  vendor that earns it or loses it as `vendor_earned` or `vendor_earned_lost`, after each verdict, when the rule
-  changes, and as the agent's cycle starts on bills to decide. Earning changes nothing the agent may do: every payment
-  in shadow mode still waits for your verdict. Off by default, and refused on Arc mainnet. Needs migration 0146.
+  them. Each change to the rule is signed as `earned_vendor_rule_changed`, and undone if it cannot be signed (should
+  undoing it fail too, saving that rule again, or the next change, signs it), and each vendor that earns it or loses
+  it as `vendor_earned` or `vendor_earned_lost`, after each verdict, when the rule changes, and as the agent's cycle
+  starts on bills to decide. Earning changes nothing the agent may do: every payment in shadow mode still waits for
+  your verdict. Off by default, and refused on Arc mainnet. Needs migration 0146.
 
 ## [0.1.0-beta.14] - 2026-10-28
 

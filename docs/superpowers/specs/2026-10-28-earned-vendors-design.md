@@ -78,8 +78,9 @@ Code comments and test names cite the ids, for example "(earned vendors AL12)".
   With no rule it reads the rule and the record, never the facts, and signs `vendor_earned_lost` (`rule_off`) for every
   vendor still recorded earned: the rule change that turned it off does, and a loss it could not sign is signed by
   whichever sync runs next, as AL15 says. Setting a rule where there was none first runs that sync while there is still
-  no rule, so no vendor's earned status runs on across a time with no rule into the new one. Before 0146 it reads the
-  rule and stops.
+  no rule, and is refused ("The change could not be signed in the ledger, so nothing changed. Try again in a moment.")
+  with nothing written when that sync fails or leaves a vendor recorded earned, so no vendor's earned status runs on
+  across a time with no rule into the new one. Before 0146 it reads the rule and stops.
 
   A vendor recorded earned that is no longer earned is signed lost with why: the break, when it came after the vendor
   was recorded earned (`disagreed`, `flagged`, `code_stop`, with the decision, and the rule that flagged or stopped it);
@@ -87,10 +88,16 @@ Code comments and test names cite the ids, for example "(earned vendors AL12)".
 - **AL17. Rule changes are signed strictly.** `earned_vendor_rule_changed` `{ by, from, to }`, actor `human`, domain
   `system`. The signing key is checked before anything is written (`assertLedgerCanSign`); if the entry still cannot be
   signed, the change is put back and refused ("The change could not be signed in the ledger, so nothing changed. Try
-  again in a moment."), so no rule is in force without its entry. As the mirror address, it is put back only from its
-  own write (an update guarded by the value it wrote), so a change another owner made since stays. Should the put-back
-  fail too, that is logged and the owner reads "That did not work. Try again in a moment.", never that nothing
-  changed.
+  again in a moment."). As the mirror address, it is put back only from its own write (an update guarded by the value
+  it wrote), so a change another owner made since stays.
+  - Should the put-back fail too, that is logged and the owner reads "That did not work. Try again in a moment.",
+    never that nothing changed, and Settings is read again, so it shows the rule in force.
+  - That rule is then in force without its entry until it is signed: every change first reads the newest
+    `earned_vendor_rule_changed`, and when its `to` is not the rule in force (or there is none and a rule is in force),
+    signs the missing entry before anything else, `from` that `to` and `by` the owner asking. Asking for the rule in
+    force again signs it rather than being refused as unchanged ("It is set to that already."), as the mirror address
+    is recorded when asked again; a different change signs it first, so the ledger's rules follow one another. A
+    missing entry that cannot be signed refuses the change, with nothing written.
 - **AL18. In the report.** Under **How often you agreed**, while shadow mode is on (the readiness steps show): **Earned
   vendors**.
   - With no rule: "No rule is set. An owner sets one in Settings, under Earned vendors."
@@ -131,10 +138,12 @@ says "Not available in this workspace yet.", the report leaves the block out, an
 | `vendor_earned_lost` | system / compliance | `{ counterpartyId, streak, because, decisionSeq, rule, trigger }`: `streak` null when the rule is off; `because` `disagreed`, `flagged`, `code_stop`, `rule_changed`, `rule_off`, `high_risk`, `no_payment_limit` or `not_a_vendor`; `decisionSeq` the decision of a break, else null; `rule` the rule that flagged or stopped it, else null (always for `disagreed`, and for the model's own flag) |
 
 A vendor's newest `vendor_earned` or `vendor_earned_lost` entry is its last signed status; while no rule is in force
-(the newest `earned_vendor_rule_changed` has `to: null`), no vendor is earned, whatever that entry says. The entries
-are read through `GET /api/v1/ledger`, webhooks and the report. A bill's evidence does not list them: nothing about a
-payment rests on them in step 2, and the evidence read keeps only the entries its steps cite (AL27 is where step 3
-would cite one). No detail carries an email.
+(the newest `earned_vendor_rule_changed` has `to: null`), no vendor is earned, whatever that entry says. The newest
+`earned_vendor_rule_changed` names the rule in force, except after a change that could be neither signed nor put back,
+until an owner's next change signs it (AL17); a status signed meanwhile carries the rule it was signed under in
+`streak`. The entries are read through `GET /api/v1/ledger`, webhooks and the report. A bill's evidence does not list
+them: nothing about a payment rests on them in step 2, and the evidence read keeps only the entries its steps cite
+(AL27 is where step 3 would cite one). No detail carries an email.
 
 ## Where it is
 
