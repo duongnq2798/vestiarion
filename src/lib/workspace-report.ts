@@ -68,6 +68,12 @@ export interface ReportPersonAction {
   ts: string;
   action: "approval_paid" | "approval_rejected" | "approval_returned";
   invoiceId: string;
+  /**
+   * An approval that sent nothing of its own: it only recorded the transfer sent before it (`detail.recorded`), so a
+   * payment the agent made on its own stays the agent's (docs/superpowers/specs/2026-10-28-earned-vendors-design.md
+   * AL29). Absent otherwise.
+   */
+  recorded?: boolean;
 }
 
 export interface ReportVerdict {

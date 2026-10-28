@@ -95,7 +95,10 @@ function matchingEntry(entries: LedgerEntry[], key: "invoiceId" | "milestoneId",
   );
 }
 
-/** A payable's steps toward its payment (earned vendors AL29): the agent's decisions, and a person's that paid it. */
+/**
+ * A payable's steps toward its payment (earned vendors AL29): the agent's decisions, and a person's that paid it, or
+ * only recorded the transfer sent before it.
+ */
 function paymentSteps(invoiceId: string, entries: LedgerEntry[]): PaymentStep[] {
   return entries
     .filter((entry) => entry.detail.invoiceId === invoiceId && (entry.action === "approval_paid" || (entry.actor === "agent" && entry.action.startsWith("ap_"))))
@@ -104,6 +107,7 @@ function paymentSteps(invoiceId: string, entries: LedgerEntry[]): PaymentStep[] 
       action: entry.action,
       onItsOwn: record(entry.detail.earned) !== undefined,
       resultingStatus: stringValue(record(entry.detail.execution)?.resultingStatus) ?? null,
+      ...(entry.action === "approval_paid" && entry.detail.recorded === true ? { recorded: true } : {}),
     }));
 }
 

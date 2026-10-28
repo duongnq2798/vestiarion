@@ -104,6 +104,18 @@ describe("a bill the agent paid on its own (AL22, AL27)", () => {
     const reconciled = entry(44, "ap_reconcile", { invoiceId: "inv-1", status: "paid" });
     expect(invoiceDecision(invoice(), undefined, [reconciled, failedOwn], { network: "arc-testnet" }).earned).toBe(true);
   });
+
+  it("stays marked, and asks for the verdict, when a person's Approve and pay only recorded the agent's own transfer", () => {
+    // Sent to another chain on its own; its mint ran late, so the reconcile held the bill for a person.
+    const own = entry(41, "ap_pay", { ...onItsOwn.detail, execution: { resultingStatus: "matched", destinationChain: "BASE" } });
+    const late = entry(42, "ap_reconcile", { invoiceId: "inv-1", execution: { resultingStatus: "held" } });
+    // Approve and pay read the transfer the agent sent, and sent nothing of its own.
+    const recorded = { ...entry(43, "approval_paid", { invoiceId: "inv-1", status: "matched", txRef: "0xabc", recorded: true }), actor: "human" as const };
+    const decision = invoiceDecision(invoice({ status: "matched" }), undefined, [recorded, late, own], { network: "arc-testnet", verdicts });
+    expect(decision.earned).toBe(true);
+    expect(earnedPaidWhy(decision)).toBe("An earned vendor: paid without waiting for your verdict.");
+    expect(billNextStep(decision, { status: "matched", waiting: undefined, rule: null, canWrite: true, canDecide: true, counterparty: { id: "cp-1", name: "N" } })?.text).toBe("Give your verdict");
+  });
 });
 
 const STEPS: ReadinessStep[] = [
@@ -228,6 +240,18 @@ describe("who paid, in the report (AL29)", () => {
     });
     expect(agreed.paymentList[0].decidedBy).toBe("verdict");
     expect(agreed.paid.onItsOwn).toBe(0);
+  });
+
+  it("stays the agent's when a person's Approve and pay only recorded the transfer the agent sent on its own", () => {
+    const own = { seq: 41, ts: "2026-10-28T09:00:00.000Z", action: "ap_pay", invoiceId: "inv-1", guardrailBlocked: false, guardrailRule: null, heldBecause: null, resultingStatus: "matched", shadow: true, reasoning: null, onItsOwn: true };
+    const report = buildReport({
+      ...reportFacts({}),
+      decisions: [own],
+      verdicts: [{ entrySeq: 41, verdict: "agree", decidedAt: "2026-10-28T11:00:00.000Z" }],
+      personActions: [{ seq: 43, ts: "2026-10-28T10:00:00.000Z", action: "approval_paid", invoiceId: "inv-1", recorded: true }],
+    });
+    expect(report.paymentList[0].decidedBy).toBe("agent");
+    expect(report.paid.onItsOwn).toBe(1);
   });
 
   it("is the verdict for a payment a person's Agree paid", () => {

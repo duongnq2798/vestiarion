@@ -25,7 +25,8 @@ import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type Recorded
  * cycle runs and before 0146; signed strictly as `earned_vendor_payments_changed` and put back from its own write when it
  * cannot be; a switch left in force without its entry signed before the next change; turned off, with its entry, when
  * the rule is; and never turned back on by a rule change put back, unless that change turned it off and the ledger still
- * names it on.
+ * names it on. For the payments made on the agent's own that wait for a verdict (AL26), the sync also reads each bill's
+ * status and a person's payments of the bills.
  */
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -42,8 +43,10 @@ interface World {
   upsert?: (body: Record<string, unknown>) => FakeReply | null;
   /** The answer to a put-back (`PATCH`), in place of writing it where its guard matches. */
   update?: (body: Record<string, unknown>) => FakeReply | null;
-  bills: Array<{ id: string; vendor: string; name: string; limit?: string | null; risk?: string }>;
-  decisions: Array<{ seq: number; day: number; invoice: string; action?: string; rule?: string; status?: string }>;
+  bills: Array<{ id: string; vendor: string; name: string; limit?: string | null; risk?: string; status?: string }>;
+  decisions: Array<{ seq: number; day: number; invoice: string; action?: string; rule?: string; status?: string; earned?: boolean }>;
+  /** A person's payments of the bills (`approval_paid`), or records of the transfer sent before them. */
+  payments?: Array<{ seq: number; invoice: string; recorded?: boolean }>;
   verdicts: Array<{ seq: number; verdict: "agree" | "disagree"; day: number }>;
   record: Array<{ seq: number; ts: string; action: string; counterparty_id: string }>;
   /** The `earned_vendor_rule_changed` entries signed: a rule set already was signed when it was set. */
@@ -96,6 +99,7 @@ function workspace(world: World) {
           id: bill.id,
           amount: "120.000000",
           currency: "USDC",
+          status: bill.status ?? "held",
           counterparties: {
             id: bill.vendor,
             name: bill.name,
@@ -117,8 +121,12 @@ function workspace(world: World) {
           guardrail_blocked: decision.rule ? true : null,
           guardrail_rule: decision.rule ?? null,
           resulting_status: decision.status ?? "held",
+          earned: decision.earned ? { recordSeq: 900, streak: 5, agreed: 5 } : null,
         })),
       };
+    }
+    if (path === "/rest/v1/ledger_entries" && params.get("actor") === "eq.human") {
+      return { body: (world.payments ?? []).map((payment) => ({ seq: String(payment.seq), action: "approval_paid", invoice_id: payment.invoice, recorded: payment.recorded ?? null })) };
     }
     if (path === "/rest/v1/ledger_entries" && params.get("action") === "in.(vendor_earned,vendor_earned_lost)") {
       if (world.recordUnreadable) return { status: 500, body: { code: "XX000", message: "database unavailable" } };
@@ -702,6 +710,30 @@ describe("the sync (AL15, AL16)", () => {
     failing = false;
     await run(() => syncEarnedVendors(db(), { trigger: "verdict" }));
     expect(signed.map((entry) => entry.detail.counterpartyId)).toEqual([LUMEN, NORTHWIND]);
+  });
+
+  it("counts as waiting only a payment made on its own whose bill is paid or on its way and that no person paid after (AL26)", async () => {
+    const world = northwindEarned({ earned_vendor_streak: 5, earned_vendor_payments: true });
+    world.record.push({ seq: 900, ts: at(5), action: "vendor_earned", counterparty_id: NORTHWIND });
+    // On its way; failed and held for a person; paid again by a person; only recorded by a person's Approve and pay.
+    for (const [n, status] of [[6, "matched"], [7, "held"], [8, "paid"], [9, "matched"]] as const) {
+      world.bills.push({ id: `inv-n${n}`, vendor: NORTHWIND, name: "Northwind Packaging", status });
+      world.decisions.push({ seq: 200 + n, day: 9 + n, invoice: `inv-n${n}`, status: "matched", earned: true });
+    }
+    world.payments = [
+      { seq: 220, invoice: "inv-n8" },
+      { seq: 221, invoice: "inv-n9", recorded: true },
+    ];
+    signing(world);
+    const { fake, run } = workspace(world);
+
+    const sync = await run(() => syncEarnedVendors(db(), { trigger: "cycle", shadow: { startedAt: at(0) } }));
+    expect(sync.statuses.find((status) => status.vendorId === NORTHWIND)).toMatchObject({ state: "earned", waiting: 2, paused: false });
+    // What it read for that: each bill's status, and a person's payments of the bills with whether each only recorded one.
+    expect(fake.requests.find((r) => r.path === "/rest/v1/invoices")?.params.get("select")).toContain("status");
+    const payments = fake.requests.find((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("actor") === "eq.human");
+    expect(payments?.params.get("action")).toBe("eq.approval_paid");
+    expect(payments?.params.get("select")).toContain("recorded:detail->recorded");
   });
 });
 

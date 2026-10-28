@@ -330,6 +330,7 @@ type BillRow = {
   id: string;
   amount: number | string;
   currency: string | null;
+  status?: string | null;
   counterparties: {
     id: string;
     name: string;
@@ -350,19 +351,21 @@ type DecisionRow = {
   earned?: unknown;
 };
 type VerdictRow = { entry_seq: number | string; verdict: "agree" | "disagree"; decided_at: string | null };
+type PaidRow = { seq: number | string; action: string; invoice_id: string | null; recorded?: unknown };
 
 /**
- * What the sync works the statuses out from (AL14): the workspace's payables with their payee's role, screening and
- * payment limit, the agent's decisions on them, whether each paid on its own (AL26, AL27), and every verdict with its
- * time. The report reads the same fields with the rest of its facts (`readReportFacts`); this reads only these, a page
- * at a time.
+ * What the sync works the statuses out from (AL14): the workspace's payables with their status and their payee's role,
+ * screening and payment limit, the agent's decisions on them, whether each paid on its own (AL26, AL27), every verdict
+ * with its time, and a person's payments of the bills, each with whether it only recorded the transfer sent before it
+ * (AL26, AL28). The report reads the same fields with the rest of its facts (`readReportFacts`); this reads only these,
+ * a page at a time.
  */
 export async function readEarnedFacts(orgDb: OrgDb): Promise<EarnedFacts> {
-  const [bills, decisions, verdicts] = await Promise.all([
+  const [bills, decisions, verdicts, paid] = await Promise.all([
     allRows<BillRow>((from, to) =>
       orgDb
         .from("invoices")
-        .select("id, amount, currency, counterparties(id, name, sample, role, risk_level, payment_limit)")
+        .select("id, amount, currency, status, counterparties(id, name, sample, role, risk_level, payment_limit)")
         .eq("direction", "payable")
         .order("id", { ascending: true })
         .range(from, to)
@@ -379,12 +382,22 @@ export async function readEarnedFacts(orgDb: OrgDb): Promise<EarnedFacts> {
         .range(from, to)
     ),
     allRows<VerdictRow>((from, to) => orgDb.from("decision_verdicts").select("entry_seq, verdict, decided_at").order("entry_seq", { ascending: true }).range(from, to)),
+    allRows<PaidRow>((from, to) =>
+      orgDb
+        .from("ledger_entries")
+        .select("seq, action, invoice_id:detail->>invoiceId, recorded:detail->recorded")
+        .eq("actor", "human")
+        .eq("action", "approval_paid")
+        .order("seq", { ascending: true })
+        .range(from, to)
+    ),
   ]);
   return {
     bills: bills.map((row) => ({
       id: row.id,
       amount: Number(row.amount),
       currency: row.currency ?? "USDC",
+      ...(row.status ? { status: row.status } : {}),
       payee: {
         id: row.counterparties?.id ?? "",
         name: row.counterparties?.name ?? "a supplier",
@@ -411,6 +424,9 @@ export async function readEarnedFacts(orgDb: OrgDb): Promise<EarnedFacts> {
         : []
     ),
     verdicts: verdicts.map((row) => ({ entrySeq: Number(row.entry_seq), verdict: row.verdict, ...(row.decided_at ? { decidedAt: row.decided_at } : {}) })),
+    personActions: paid.flatMap((row) =>
+      row.invoice_id ? [{ seq: Number(row.seq), action: row.action, invoiceId: row.invoice_id, ...(row.recorded === true ? { recorded: true } : {}) }] : []
+    ),
   };
 }
 

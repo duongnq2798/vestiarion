@@ -1283,6 +1283,8 @@ describe("approveAndPay on a transfer Circle is found to have failed", () => {
 
     const paid = rpcBodies(fake.requests, "append_ledger_entry").filter((body) => body.p_action === "approval_paid");
     expect(paid.map((body) => (body.p_detail as Record<string, unknown>).attempt)).toEqual([1, 2]);
+    // The first only recorded the transfer sent before it; the second sent one of its own (earned vendors AL29).
+    expect(paid.map((body) => (body.p_detail as Record<string, unknown>).recorded)).toEqual([true, undefined]);
     expect((paid[0].p_detail as Record<string, unknown>)).not.toHaveProperty("retriedAfter");
     expect((paid[1].p_detail as Record<string, unknown>).retriedAfter).toEqual({
       providerTxId: "circle-tx-1", providerState: "FAILED", failureReason: "FAILED_ON_CHAIN",
@@ -1744,6 +1746,9 @@ describe("a payment Circle never answered (payment safety R1)", () => {
     await run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID, shownAddress: "0xdead" }));
 
     expect(fake.requests.filter((r) => r.path === "/rest/v1/counterparties" && r.method === "PATCH")).toHaveLength(1);
+    // A new payment, sent by this approval: nothing marks it as only recorded (earned vendors AL29).
+    const paid = rpcBodies(fake.requests, "append_ledger_entry").find((body) => body.p_action === "approval_paid")?.p_detail as Record<string, unknown>;
+    expect(paid).not.toHaveProperty("recorded");
   });
 
   it("records the transfer Circle has without the balance check, which it already lowered, and never as a retry of a failure", async () => {
@@ -1751,13 +1756,16 @@ describe("a payment Circle never answered (payment safety R1)", () => {
       providerTxId: "circle-tx-7", txHash: null, txRef: "circle-tx-7", chain: "ARC-TESTNET", status: "pending", feeUsd: 0.003,
       feeSource: "provider_estimate", providerMode: "live", settledInMs: null, providerState: "SENT", failureReason: null,
     });
-    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "circle-tx-7", execution: execution({ status: "pending" }), note: "", operatingBalance: 0 });
-    const { run } = approvalsFake({ account: () => ({ body: accountRow("40") }), intents: [unanswered()] });
+    payInvoiceMock.mockResolvedValue({ status: "matched", txRef: "circle-tx-7", execution: execution({ status: "pending", reconciled: true }), note: "", operatingBalance: 0 });
+    const { fake, run } = approvalsFake({ account: () => ({ body: accountRow("40") }), intents: [unanswered()] });
 
     await expect(run(() => approveAndPay({ actorId: ACTOR, invoiceId: INVOICE_ID }))).resolves.toMatchObject({ status: "matched" });
     expect(findTransferByRef).toHaveBeenCalledTimes(1);
     expect(payInvoiceMock).toHaveBeenCalledTimes(1);
     expect(payInvoiceMock.mock.calls[0][1]).toMatchObject({ retryTerminalFailure: false });
+    // It sent nothing of its own: its entry says it only recorded the transfer sent before it (earned vendors AL29).
+    const paid = rpcBodies(fake.requests, "append_ledger_entry").find((body) => body.p_action === "approval_paid")?.p_detail as Record<string, unknown>;
+    expect(paid.recorded).toBe(true);
   });
 
   it("lists it as possibly sent, its last attempt unanswered", async () => {

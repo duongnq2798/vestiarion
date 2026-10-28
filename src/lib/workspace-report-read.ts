@@ -71,7 +71,7 @@ type DecisionRow = {
   earned?: unknown;
 };
 
-type PersonRow = { seq: number | string; ts: string; action: ReportPersonAction["action"]; invoice_id: string | null };
+type PersonRow = { seq: number | string; ts: string; action: ReportPersonAction["action"]; invoice_id: string | null; recorded?: unknown };
 type VerdictRow = { entry_seq: number | string; verdict: ReportVerdict["verdict"]; decided_at?: string | null };
 type PaymentRow = {
   source_id: string;
@@ -112,7 +112,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
     allRows<PersonRow>((from, to) =>
       orgDb
         .from("ledger_entries")
-        .select("seq, ts, action, invoice_id:detail->>invoiceId")
+        .select("seq, ts, action, invoice_id:detail->>invoiceId, recorded:detail->recorded")
         .eq("actor", "human")
         .in("action", [...PERSON_ACTIONS])
         .order("seq", { ascending: true })
@@ -187,7 +187,20 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
           ]
         : []
     ),
-    personActions: people.flatMap<ReportPersonAction>((row) => (row.invoice_id ? [{ seq: Number(row.seq), ts: row.ts, action: row.action, invoiceId: row.invoice_id }] : [])),
+    personActions: people.flatMap<ReportPersonAction>((row) =>
+      row.invoice_id
+        ? [
+            {
+              seq: Number(row.seq),
+              ts: row.ts,
+              action: row.action,
+              invoiceId: row.invoice_id,
+              // Only recorded the transfer sent before it (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL29).
+              ...(row.recorded === true ? { recorded: true } : {}),
+            },
+          ]
+        : []
+    ),
     verdicts: verdicts.map((row) => ({ entrySeq: Number(row.entry_seq), verdict: row.verdict, ...(row.decided_at ? { decidedAt: row.decided_at } : {}) })),
     payments: payments.map<ReportPayment>((row) => ({
       invoiceId: row.source_id,

@@ -71,14 +71,20 @@ export interface PaymentStep {
   onItsOwn?: boolean;
   /** How the decision ended (`execution.resultingStatus`); absent on a person's step. */
   resultingStatus?: string | null;
+  /**
+   * A person's payment that sent nothing of its own: it only read and recorded the transfer sent before it
+   * (`detail.recorded`), so the payment is still whoever's sent that transfer.
+   */
+  recorded?: boolean;
 }
 
 /**
  * Whether a bill's payment was the agent's own, for an earned vendor (AL22, AL29): its newest decision carried out on
  * its own ended paid or on its way, and no person paid the bill after it. A decision the live path held (the pause, the
  * cash, a transfer that failed) paid nothing on its own, and a payment a person's Approve and pay or Agree and pay sent
- * after one, both `approval_paid`, is that person's, whatever the agent's decision before it was. Whether the bill is
- * paid now is the caller's to check.
+ * after one, both `approval_paid`, is that person's, whatever the agent's decision before it was. An Approve and pay
+ * that only recorded the transfer the agent had sent (`recorded`), as one does for a payment to another chain whose
+ * mint ran late, sent nothing, and leaves the payment the agent's. Whether the bill is paid now is the caller's to check.
  */
 export function paidOnItsOwn(steps: readonly PaymentStep[]): boolean {
   let own: PaymentStep | null = null;
@@ -86,7 +92,7 @@ export function paidOnItsOwn(steps: readonly PaymentStep[]): boolean {
     if (step.onItsOwn === true && (step.resultingStatus === "paid" || step.resultingStatus === "matched") && (!own || step.seq > own.seq)) own = step;
   }
   const after = own?.seq;
-  return after !== undefined && !steps.some((step) => step.action === "approval_paid" && step.seq > after);
+  return after !== undefined && !steps.some((step) => step.action === "approval_paid" && step.recorded !== true && step.seq > after);
 }
 
 /**
@@ -99,6 +105,11 @@ export interface EarnedFacts {
     id: string;
     amount?: number;
     currency?: string;
+    /**
+     * The bill's status now: a payment made on its own waits for a verdict only while its bill is paid or on its way
+     * (AL26), as Bills marks it. Absent, it is not checked.
+     */
+    status?: string;
     payee: { id: string; name: string; sample: boolean; role?: string; riskLevel?: string; paymentLimit?: number | null };
   }>;
   decisions: ReadonlyArray<{
@@ -119,6 +130,11 @@ export interface EarnedFacts {
    * for none (AL26); null when it is off. Absent, every payment made on its own counts.
    */
   shadow?: { startedAt: string } | null;
+  /**
+   * A person's actions on the bills: one that paid a bill after the agent's own payment (`approval_paid`, not only
+   * `recorded`) makes the payment theirs, so it waits for no verdict (AL26, AL28). Absent, none.
+   */
+  personActions?: ReadonlyArray<{ seq: number; action: string; invoiceId: string; recorded?: boolean }>;
 }
 
 /** What started a vendor's count again (AL12), and when. */
@@ -171,7 +187,8 @@ const newer = (a: EarnedBreak | null, b: EarnedBreak): EarnedBreak => (!a || tim
  * Every non-sample payee with a decision on its bills, with its status under a rule of `streak` (AL12-AL14), in the
  * ladder's vendor order (autonomy ladder AL5): most verdicts first, then by name, then by id. A decision whose bill is
  * not among the facts is left out, as the ladder leaves its verdict out. An earned vendor says how many of its payments
- * the agent made on its own wait for a verdict (AL26).
+ * the agent made on its own wait for a verdict (AL26): those Bills asks a verdict on (AL28), each its bill's newest
+ * decision, on a bill paid or on its way that no person paid after it.
  */
 export function earnedVendors(facts: EarnedFacts, streak: number): EarnedStatus[] {
   const bills = new Map(facts.bills.map((bill) => [bill.id, bill]));
@@ -180,6 +197,14 @@ export function earnedVendors(facts: EarnedFacts, streak: number): EarnedStatus[
   const now = facts.decisions.reduce((latest, decision) => (time(decision.ts) > time(latest) ? decision.ts : latest), facts.decisions[0]?.ts ?? new Date(0).toISOString());
   // A verdict can be given only on a decision made since shadow mode started (shadow mode S3): one before waits for none.
   const verdictsFrom = facts.shadow === undefined ? -Infinity : facts.shadow ? time(facts.shadow.startedAt) : Infinity;
+  // A verdict is offered only on a bill's newest decision (`verdictView`): one a later decision replaced waits for none.
+  const newest = new Map<string, number>();
+  for (const decision of facts.decisions) newest.set(decision.invoiceId, Math.max(newest.get(decision.invoiceId) ?? -Infinity, decision.seq));
+  // A person's payments of each bill, which make a payment after the agent's own theirs (AL28).
+  const paidBy = new Map<string, PaymentStep[]>();
+  for (const action of facts.personActions ?? []) {
+    if (action.action === "approval_paid") paidBy.set(action.invoiceId, [...(paidBy.get(action.invoiceId) ?? []), action]);
+  }
 
   type Row = { decision: EarnedFacts["decisions"][number]; bill: EarnedFacts["bills"][number]; verdict: EarnedFacts["verdicts"][number] | undefined };
   const vendors = new Map<string, { payee: EarnedFacts["bills"][number]["payee"]; rows: Row[] }>();
@@ -215,10 +240,16 @@ export function earnedVendors(facts: EarnedFacts, streak: number): EarnedStatus[
       .map(({ decision, bill }): EarnedDecision => ({ seq: decision.seq, at: decision.ts, action: decision.action, amount: bill.amount ?? null, currency: bill.currency ?? null }));
     if (counted.length < streak) return { ...base, state: "counting", agreed: counted.length, needed: streak, since };
     const times = counted.map((decision) => decision.at).sort((a, b) => time(a) - time(b));
-    // Paid or on its way, on the agent's own decision, with no verdict yet that can still be given (AL26).
+    // Paid or on its way, on the agent's own decision, with no verdict yet that can still be given (AL26): the bill's
+    // newest decision, made since shadow mode last started, on a bill still paid or on its way, which `paidOnItsOwn`
+    // says is the agent's, as Bills, the report and the weekly brief do.
     const waiting = rows.filter(
-      ({ decision, verdict }) =>
-        decision.onItsOwn === true && (decision.resultingStatus === "paid" || decision.resultingStatus === "matched") && !verdict && time(decision.ts) >= verdictsFrom
+      ({ decision, bill, verdict }) =>
+        !verdict &&
+        time(decision.ts) >= verdictsFrom &&
+        newest.get(bill.id) === decision.seq &&
+        (bill.status === undefined || bill.status === "paid" || bill.status === "matched") &&
+        paidOnItsOwn([decision, ...(paidBy.get(bill.id) ?? [])])
     ).length;
     return { ...base, state: "earned", agreed: counted.length, counted, from: times[0], to: times[times.length - 1], since, waiting, paused: waiting >= EARNED_WAITING_MAX };
   });

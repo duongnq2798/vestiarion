@@ -32,7 +32,8 @@ import { VERDICTS_BEFORE_LIVE } from "@/lib/workspace-report";
  * its bill, whether or not that decision has a verdict yet; never for a sample vendor, one screened high risk, one with
  * no payment limit, or a payee that is not a vendor. What changed since the newest signed status is what gets signed.
  * Step 3: how many of an earned vendor's payments the agent made on its own still wait for a verdict, at most 3 before
- * its next waits too (AL26), and the switch's words (AL21, AL28).
+ * its next waits too (AL26): each its bill's newest decision, on a bill paid or on its way that no person paid after it,
+ * as Bills asks for those verdicts (AL28); and the switch's words (AL21, AL28).
  */
 
 type Payee = EarnedFacts["bills"][number]["payee"];
@@ -45,23 +46,32 @@ const DAY = 24 * 3_600_000;
 const START = Date.parse("2026-10-01T09:00:00.000Z");
 const at = (days: number) => new Date(START + days * DAY).toISOString();
 
-/** A book built one decision at a time: each on its own bill of its vendor, a day after the one before unless told. */
+/**
+ * A book built one decision at a time: each on its own bill of its vendor, unless told the bill it is about, a day after
+ * the one before unless told.
+ */
 function book() {
-  const facts: { bills: Array<EarnedFacts["bills"][number]>; decisions: Array<EarnedFacts["decisions"][number]>; verdicts: Array<EarnedFacts["verdicts"][number]> } = {
+  const facts: {
+    bills: Array<EarnedFacts["bills"][number]>;
+    decisions: Array<EarnedFacts["decisions"][number]>;
+    verdicts: Array<EarnedFacts["verdicts"][number]>;
+    personActions: Array<NonNullable<EarnedFacts["personActions"]>[number]>;
+  } = {
     bills: [],
     decisions: [],
     verdicts: [],
+    personActions: [],
   };
   let seq = 100;
   let day = 0;
   const decide = (
     payee: Payee,
-    options: { action?: string; verdict?: "agree" | "disagree"; decidedOn?: number; rule?: string; status?: string; day?: number; amount?: number; onItsOwn?: boolean } = {}
+    options: { action?: string; verdict?: "agree" | "disagree"; decidedOn?: number; rule?: string; status?: string; day?: number; amount?: number; onItsOwn?: boolean; bill?: string } = {}
   ) => {
     seq += 1;
     day = options.day ?? day + 1;
-    const invoiceId = `inv-${seq}`;
-    facts.bills.push({ id: invoiceId, amount: options.amount ?? 100, currency: "USDC", payee });
+    const invoiceId = options.bill ?? `inv-${seq}`;
+    if (!options.bill) facts.bills.push({ id: invoiceId, amount: options.amount ?? 100, currency: "USDC", payee });
     facts.decisions.push({
       seq,
       ts: at(day),
@@ -76,7 +86,16 @@ function book() {
     return seq;
   };
   const agree = (payee: Payee, count: number, action = "ap_pay") => Array.from({ length: count }, () => decide(payee, { action, verdict: "agree" }));
-  return { facts, decide, agree };
+  /** A person's Approve and pay of a bill, or one that only recorded the transfer sent before it. */
+  const personPays = (bill: string, options: { recorded?: boolean } = {}) => {
+    seq += 1;
+    facts.personActions.push({ seq, action: "approval_paid", invoiceId: bill, ...(options.recorded ? { recorded: true } : {}) });
+  };
+  /** The bill's status now, as the invoices table says it. */
+  const billIs = (bill: string, status: string) => {
+    facts.bills = facts.bills.map((one) => (one.id === bill ? { ...one, status } : one));
+  };
+  return { facts, decide, agree, personPays, billIs };
 }
 
 const statusOf = (statuses: EarnedStatus[], vendorId: string) => statuses.find((status) => status.vendorId === vendorId);
@@ -458,6 +477,41 @@ describe("payments made on its own that wait for a verdict (AL26)", () => {
     // A verdict can no longer be given on a decision made before shadow mode was last turned on: it waits for none.
     expect(statusOf(earnedVendors({ ...facts, shadow: { startedAt: at(11) } }, 5), NORTHWIND.id)).toMatchObject({ waiting: 1 });
     expect(statusOf(earnedVendors({ ...facts, shadow: null }, 5), NORTHWIND.id)).toMatchObject({ waiting: 0 });
+  });
+
+  it("does not count one a later decision on its bill replaced, since a verdict is given only on the newest", () => {
+    const { facts, agree, decide } = book();
+    agree(NORTHWIND, 5);
+    // A send Circle never answered, then found never taken: the bill is decided again, paid on its own and agreed with.
+    const unanswered = decide(NORTHWIND, { status: "matched", onItsOwn: true });
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ waiting: 1 });
+    decide(NORTHWIND, { bill: `inv-${unanswered}`, status: "paid", onItsOwn: true, verdict: "agree" });
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ state: "earned", agreed: 6, waiting: 0, paused: false });
+    // Decided again and held for a verdict instead: that one waits as any payment in shadow mode does, not toward the 3.
+    const second = decide(NORTHWIND, { status: "matched", onItsOwn: true });
+    decide(NORTHWIND, { bill: `inv-${second}`, status: "held" });
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ waiting: 0 });
+  });
+
+  it("does not count one a person paid after, nor one whose bill is no longer paid or on its way, as Bills asks no verdict on either", () => {
+    const { facts, agree, decide, personPays, billIs } = book();
+    agree(NORTHWIND, 5);
+    const failed = `inv-${decide(NORTHWIND, { status: "matched", onItsOwn: true })}`;
+    const late = `inv-${decide(NORTHWIND, { status: "matched", onItsOwn: true })}`;
+    const paid = `inv-${decide(NORTHWIND, { status: "paid", onItsOwn: true })}`;
+    for (const bill of [failed, late]) billIs(bill, "matched");
+    billIs(paid, "paid");
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ waiting: 3, paused: true });
+    // Circle failed the transfer: the bill is held for a person, and the payment went nowhere.
+    billIs(failed, "held");
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ waiting: 2, paused: false });
+    // A person's Approve and pay sent it again: the payment is theirs (AL28).
+    billIs(failed, "paid");
+    personPays(failed);
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ waiting: 2 });
+    // One that only recorded the transfer the agent sent leaves the payment the agent's, and waiting.
+    personPays(late, { recorded: true });
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ waiting: 2 });
   });
 
   it("says how many wait, and that the next waits for you once 3 do", () => {

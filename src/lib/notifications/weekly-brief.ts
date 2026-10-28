@@ -110,7 +110,7 @@ type PaidRow = { amount: string | number; token: string | null; source_type?: st
 /**
  * Of the week's payments in shadow mode, how many the agent made on its own for an earned vendor
  * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22, AL29), which no one agreed to first: read from the
- * bills' pay decisions and a person's payments of them, as the report reads them.
+ * bills' pay decisions and a person's payments of them, or records of the transfer sent before, as the report reads them.
  */
 async function paidOnItsOwnCount(orgDb: OrgDb, paid: PaidRow[]): Promise<number> {
   const bills = [...new Set(paid.flatMap((row) => (row.source_type === "invoice" && row.source_id ? [row.source_id] : [])))];
@@ -118,15 +118,21 @@ async function paidOnItsOwnCount(orgDb: OrgDb, paid: PaidRow[]): Promise<number>
   const rows = unwrap(
     await orgDb
       .from("ledger_entries")
-      .select("seq, action, invoice_id:detail->>invoiceId, earned:detail->earned, resulting_status:detail->execution->>resultingStatus")
+      .select("seq, action, invoice_id:detail->>invoiceId, earned:detail->earned, resulting_status:detail->execution->>resultingStatus, recorded:detail->recorded")
       .in("action", ["ap_pay", "approval_paid"])
       .in("detail->>invoiceId", bills)
       .limit(5000)
-  ) as Array<{ seq: number | string; action: string; invoice_id: string | null; earned: unknown; resulting_status: string | null }>;
+  ) as Array<{ seq: number | string; action: string; invoice_id: string | null; earned: unknown; resulting_status: string | null; recorded?: unknown }>;
   const stepsOf = new Map<string, PaymentStep[]>();
   for (const row of rows) {
     if (!row.invoice_id) continue;
-    const step: PaymentStep = { seq: Number(row.seq), action: row.action, onItsOwn: row.earned !== null && typeof row.earned === "object", resultingStatus: row.resulting_status };
+    const step: PaymentStep = {
+      seq: Number(row.seq),
+      action: row.action,
+      onItsOwn: row.earned !== null && typeof row.earned === "object",
+      resultingStatus: row.resulting_status,
+      ...(row.recorded === true ? { recorded: true } : {}),
+    };
     stepsOf.set(row.invoice_id, [...(stepsOf.get(row.invoice_id) ?? []), step]);
   }
   return paid.filter((row) => row.source_type === "invoice" && row.source_id && paidOnItsOwn(stepsOf.get(row.source_id) ?? [])).length;

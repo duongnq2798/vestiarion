@@ -50,7 +50,7 @@ interface World {
   /** The week's confirmed payments; three by default, none with its bill. */
   intents?: Array<Record<string, unknown>>;
   /** The agent's pay decisions and a person's payments on those bills, as `ap_pay` and `approval_paid` entries. */
-  steps?: Array<{ seq: number; action: string; invoiceId: string; earned?: boolean; status?: string }>;
+  steps?: Array<{ seq: number; action: string; invoiceId: string; earned?: boolean; status?: string; recorded?: boolean }>;
 }
 function world(w: World = {}) {
   return fakeSupabase((request) => {
@@ -75,10 +75,18 @@ function world(w: World = {}) {
       }
       if (action === "in.(ap_pay,approval_paid)") {
         const bills = request.params.get("detail->>invoiceId")?.match(/^in\.\((.*)\)$/)?.[1].split(",") ?? [];
+        expect(request.params.get("select")).toContain("recorded:detail->recorded");
         return {
           body: (w.steps ?? [])
             .filter((step) => bills.includes(step.invoiceId))
-            .map((step) => ({ seq: String(step.seq), action: step.action, invoice_id: step.invoiceId, earned: step.earned ? { recordSeq: 7, streak: 5, agreed: 6 } : null, resulting_status: step.status ?? null })),
+            .map((step) => ({
+              seq: String(step.seq),
+              action: step.action,
+              invoice_id: step.invoiceId,
+              earned: step.earned ? { recordSeq: 7, streak: 5, agreed: 6 } : null,
+              resulting_status: step.status ?? null,
+              recorded: step.recorded ?? null,
+            })),
         };
       }
       if (action === "in.(ar_received,ar_payment_applied)") return { body: [{ detail: { amount: 29.925, currency: "USDC" } }, { detail: { amount: 5, currency: "EURC" } }] };
@@ -358,6 +366,7 @@ describe("the brief in shadow mode (W6)", () => {
       { amount: "400", token: "USDC", source_type: "invoice", source_id: "inv-own" },
       { amount: "300", token: "USDC", source_type: "invoice", source_id: "inv-agreed" },
       { amount: "200", token: "USDC", source_type: "invoice", source_id: "inv-taken-over" },
+      { amount: "100", token: "USDC", source_type: "invoice", source_id: "inv-recorded" },
     ];
     const steps = [
       { seq: 10, action: "ap_pay", invoiceId: "inv-own", earned: true, status: "paid" },
@@ -366,13 +375,16 @@ describe("the brief in shadow mode (W6)", () => {
       // The agent's own transfer failed, and a person paid the bill after it: theirs.
       { seq: 13, action: "ap_pay", invoiceId: "inv-taken-over", earned: true, status: "matched" },
       { seq: 14, action: "approval_paid", invoiceId: "inv-taken-over" },
+      // A person's Approve and pay only recorded the transfer the agent sent on its own: still the agent's.
+      { seq: 15, action: "ap_pay", invoiceId: "inv-recorded", earned: true, status: "matched" },
+      { seq: 16, action: "approval_paid", invoiceId: "inv-recorded", recorded: true },
     ];
     const shadow = { currency: "USD", startedAt: "2026-10-08T09:00:00Z", startedBy: null };
     const facts = await run(world({ shadow: true, intents, steps }), () => weeklyBriefFacts(db(), MONDAY, shadow));
-    expect(facts.paid).toEqual({ count: 3, usdc: 900, onItsOwn: 1 });
+    expect(facts.paid).toEqual({ count: 4, usdc: 1000, onItsOwn: 2 });
     // Outside shadow mode nothing more is read: the agent pays what passes its checks.
     const client = world({ intents, steps });
-    expect((await run(client, () => weeklyBriefFacts(db(), MONDAY))).paid).toEqual({ count: 3, usdc: 900 });
+    expect((await run(client, () => weeklyBriefFacts(db(), MONDAY))).paid).toEqual({ count: 4, usdc: 1000 });
     expect(client.requests.some((r) => r.params.get("action") === "in.(ap_pay,approval_paid)")).toBe(false);
   });
 
