@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.14] - 2026-10-28
+
 ### Added
 
 - **A free bill list check** at [/check-bills](https://www.vestiarion.xyz/check-bills). Paste rows, or drop a CSV
@@ -47,8 +49,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   screening applies to its provider's score, on this page's own score) and possible from 0.70: why it matched,
   whether the country agrees, the entry's type, programs, other names and listed addresses, and a link to Treasury's
   own search to look it up by its name. Wallets get the address checker's rules, chain prefixes such as `eth:`,
-  payment links and addresses written with their currency (`XBT <address>`) read, against OFAC's addresses and the
-  rest of the list, so a wallet made to look like another vendor's stops. Counts, and a CSV of the results. It runs
+  payment links and addresses written with their currency (`XBT <address>`) read, against OFAC's addresses, and a 0x
+  wallet also against the other 0x wallets in the list, so one made to look like another vendor's stops. Counts, and
+  a CSV of the results. It runs
   in the browser, on a dated snapshot loaded and indexed in small steps when a check runs: nothing typed or pasted is
   sent anywhere. The page says it covers the SDN list only and is a first look, not a compliance decision. It is the
   third free tool in the footer's **Free tools** group and the sitemap, and its **Try it on your bills** and footer
@@ -1644,7 +1647,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.13...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.14...HEAD
+[0.1.0-beta.14]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.14
 [0.1.0-beta.13]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.13
 [0.1.0-beta.12]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.12
 [0.1.0-beta.11]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.11
