@@ -19,9 +19,10 @@ import { readShadowMode } from "./shadow-mode";
  * saying plain "Live". A newest check that cannot be read leaves "Live" as it was: it is the configured fact, and
  * nothing is paid on it.
  *
- * In shadow mode, the owner's switch that lets the agent pay earned vendors on their own is read after it
- * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28), so the header says the exception; best effort, a
- * switch that cannot be read is left out, and the agent reads it itself before paying anyone this way.
+ * The owner's switch that lets the agent pay earned vendors on their own is read beside them, at the same time
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28), so a shadow-mode header says the exception without
+ * waiting on one more read; outside shadow mode it says nothing. Best effort: a switch that cannot be read is left out,
+ * and the agent reads it itself before paying anyone this way.
  */
 export interface ShellStatus {
   shadow: boolean | null;
@@ -59,7 +60,7 @@ async function lastLookupFailed(): Promise<boolean> {
 
 export async function shellStatus(): Promise<ShellStatus> {
   const live = screeningMode() === "live";
-  const [shadow, failed] = await Promise.all([shadowOn(), live ? lastLookupFailed() : Promise.resolve(false)]);
-  const earned = shadow === true && (await earnedPaymentsOn());
+  const [shadow, failed, earnedOn] = await Promise.all([shadowOn(), live ? lastLookupFailed() : Promise.resolve(false), earnedPaymentsOn()]);
+  const earned = shadow === true && earnedOn;
   return { shadow, ...(earned ? { earnedPayments: true as const } : {}), screening: { live, source: screeningSourceLabel(), lastLookupFailed: failed } };
 }
