@@ -432,7 +432,7 @@ describe("readReportFacts", () => {
               fx_rate: "1.000000000000",
               fx_source: "USD = USDC",
               fx_at: "2026-10-07T09:00:00Z",
-              counterparties: { id: "cp-1", name: "Hetzner", sample: false, mirror_wallet_id: "w-1" },
+              counterparties: { id: "cp-1", name: "Hetzner", sample: false, mirror_wallet_id: "w-1", role: "vendor", payment_limit: "500.000000" },
             },
           ],
         };
@@ -460,7 +460,7 @@ describe("readReportFacts", () => {
       if (request.path === "/rest/v1/ledger_entries" && request.params.get("actor") === "eq.human") {
         return { body: [{ seq: "43", ts: "2026-10-07T09:05:00Z", action: "approval_paid", invoice_id: "inv-1" }] };
       }
-      if (request.path === "/rest/v1/decision_verdicts") return { body: [{ entry_seq: "41", verdict: "agree" }] };
+      if (request.path === "/rest/v1/decision_verdicts") return { body: [{ entry_seq: "41", verdict: "agree", decided_at: "2026-10-07T09:04:00Z" }] };
       if (request.path === "/rest/v1/payment_intents") {
         return {
           body: [
@@ -495,7 +495,8 @@ describe("readReportFacts", () => {
         bill: { amount: 196, currency: "USD" },
         // The rate it was converted at, as read: its source and time say which it was (currency provenance M3).
         conversion: { perUsd: "1.000000000000", source: "USD = USDC", at: "2026-10-07T09:00:00Z" },
-        payee: { id: "cp-1", name: "Hetzner", mirror: true, sample: false },
+        // Its role and payment limit, which earned vendors read (earned vendors AL13, AL14).
+        payee: { id: "cp-1", name: "Hetzner", mirror: true, sample: false, role: "vendor", paymentLimit: 500 },
       },
     ]);
     expect(read.decisions).toEqual([
@@ -513,7 +514,8 @@ describe("readReportFacts", () => {
       },
     ]);
     expect(read.personActions).toEqual([{ seq: 43, ts: "2026-10-07T09:05:00Z", action: "approval_paid", invoiceId: "inv-1" }]);
-    expect(read.verdicts).toEqual([{ entrySeq: 41, verdict: "agree" }]);
+    // When each was given: a Disagree starts an earned vendor's count again from then (earned vendors AL12).
+    expect(read.verdicts).toEqual([{ entrySeq: 41, verdict: "agree", decidedAt: "2026-10-07T09:04:00Z" }]);
     expect(read.sandbox).toBe(false);
     expect(read.payments).toEqual([
       { invoiceId: "inv-1", amount: 196, token: "USDC", txHash: `0x${"b".repeat(64)}`, at: "2026-10-07T09:06:00Z", simulated: false },

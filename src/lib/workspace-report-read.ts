@@ -8,15 +8,19 @@ import type { ReportBill, ReportDecision, ReportFacts, ReportPayment, ReportPers
 /**
  * Reads what the workspace report counts (docs/superpowers/specs/2026-10-09-workspace-report-design.md R2), inside the
  * workspace's organization scope: its payables, the agent's decisions on them and people's approvals from the ledger,
- * the verdicts, and the payables' confirmed payments, live or simulated (a sandbox's). Ledger entries come back with the few fields the
- * report reads, not their whole detail. Every read pages through, so a long-lived workspace is counted whole.
+ * the verdicts with when each was given, and the payables' confirmed payments, live or simulated (a sandbox's). Ledger
+ * entries come back with the few fields the report reads, not their whole detail. Every read pages through, so a
+ * long-lived workspace is counted whole.
  */
 
 const PAGE = 1000;
 const PERSON_ACTIONS = ["approval_paid", "approval_rejected", "approval_returned"] as const;
 
-/** Every row of a read, a page at a time; `read` orders its rows so the pages do not overlap. */
-async function allRows<T>(read: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<T[]> {
+/**
+ * Every row of a read, a page at a time; `read` orders its rows so the pages do not overlap. Earned vendors read theirs
+ * with it.
+ */
+export async function allRows<T>(read: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<T[]> {
   const rows: T[] = [];
   for (let from = 0; ; from += PAGE) {
     const page = unwrap(await read(from, from + PAGE - 1)) as T[];
@@ -41,7 +45,14 @@ type InvoiceRow = {
   fx_rate: number | string | null;
   fx_source: string | null;
   fx_at: string | null;
-  counterparties: { id: string; name: string; sample: boolean | null; mirror_wallet_id: string | null } | null;
+  counterparties: {
+    id: string;
+    name: string;
+    sample: boolean | null;
+    mirror_wallet_id: string | null;
+    role?: string | null;
+    payment_limit?: number | string | null;
+  } | null;
 };
 
 type DecisionRow = {
@@ -59,7 +70,7 @@ type DecisionRow = {
 };
 
 type PersonRow = { seq: number | string; ts: string; action: ReportPersonAction["action"]; invoice_id: string | null };
-type VerdictRow = { entry_seq: number | string; verdict: ReportVerdict["verdict"] };
+type VerdictRow = { entry_seq: number | string; verdict: ReportVerdict["verdict"]; decided_at?: string | null };
 type PaymentRow = {
   source_id: string;
   provider: string;
@@ -79,7 +90,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
       orgDb
         .from("invoices")
         .select(
-          "id, created_at, due_date, amount, currency, status, reviewed_by, paid_amount, early_pay_discount_pct, discount_due_date, original_currency, original_amount, fx_rate, fx_source, fx_at, counterparties(id, name, sample, mirror_wallet_id)"
+          "id, created_at, due_date, amount, currency, status, reviewed_by, paid_amount, early_pay_discount_pct, discount_due_date, original_currency, original_amount, fx_rate, fx_source, fx_at, counterparties(id, name, sample, mirror_wallet_id, role, payment_limit)"
         )
         .eq("direction", "payable")
         .order("id", { ascending: true })
@@ -105,7 +116,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
         .order("seq", { ascending: true })
         .range(from, to)
     ),
-    allRows<VerdictRow>((from, to) => orgDb.from("decision_verdicts").select("entry_seq, verdict").order("entry_seq", { ascending: true }).range(from, to)),
+    allRows<VerdictRow>((from, to) => orgDb.from("decision_verdicts").select("entry_seq, verdict, decided_at").order("entry_seq", { ascending: true }).range(from, to)),
     allRows<PaymentRow>((from, to) =>
       orgDb
         .from("payment_intents")
@@ -137,6 +148,11 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
       name: row.counterparties?.name ?? "a supplier",
       mirror: Boolean(row.counterparties?.mirror_wallet_id),
       sample: row.counterparties?.sample === true,
+      // Who can earn the owner's rule (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL13).
+      ...(row.counterparties?.role ? { role: row.counterparties.role } : {}),
+      ...(row.counterparties && "payment_limit" in row.counterparties
+        ? { paymentLimit: row.counterparties.payment_limit == null ? null : Number(row.counterparties.payment_limit) }
+        : {}),
     },
   }));
 
@@ -167,7 +183,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
         : []
     ),
     personActions: people.flatMap<ReportPersonAction>((row) => (row.invoice_id ? [{ seq: Number(row.seq), ts: row.ts, action: row.action, invoiceId: row.invoice_id }] : [])),
-    verdicts: verdicts.map((row) => ({ entrySeq: Number(row.entry_seq), verdict: row.verdict })),
+    verdicts: verdicts.map((row) => ({ entrySeq: Number(row.entry_seq), verdict: row.verdict, ...(row.decided_at ? { decidedAt: row.decided_at } : {}) })),
     payments: payments.map<ReportPayment>((row) => ({
       invoiceId: row.source_id,
       amount: Number(row.amount),
