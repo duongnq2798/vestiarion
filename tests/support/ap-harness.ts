@@ -155,9 +155,10 @@ export interface ApWorldOptions {
   reserveApy?: number;
   /**
    * The vendors the stage's gate lets the agent pay on its own in shadow mode, earned and recorded earned (earned vendors
-   * AL22); absent, the stage builds its gate from the workspace.
+   * AL22), each with none of its payments made that way waiting for a verdict, or with `waiting` of them (AL26); absent,
+   * the stage builds its gate from the workspace.
    */
-  earned?: string[];
+  earned?: Array<string | { vendorId: string; waiting: number }>;
 }
 
 /** A PostgREST filter value `eq.x`, `is.null` or `in.(a,b)` as a test on one column's value. */
@@ -249,7 +250,14 @@ export function apHarness() {
       (book.find((row) => row.counterparty_id === vendorId)?.counterparties as { name?: string } | undefined)?.name ?? "A vendor";
     const earned = () =>
       options.earned
-        ? { earned: earnedGate(options.earned.map((vendorId) => ({ vendorId, name: nameOf(vendorId), grant: { recordSeq: 900, streak: 5, agreed: 5 }, waiting: 0 }))) }
+        ? {
+            earned: earnedGate(
+              options.earned.map((vendor) => {
+                const { vendorId, waiting } = typeof vendor === "string" ? { vendorId: vendor, waiting: 0 } : vendor;
+                return { vendorId, name: nameOf(vendorId), grant: { recordSeq: 900, streak: 5, agreed: 5 }, waiting };
+              })
+            ),
+          }
         : {};
     const stage = (operatingBalance = 5000) =>
       runWith({ config, db: fake.client, fetch: fake.fetch }, () =>

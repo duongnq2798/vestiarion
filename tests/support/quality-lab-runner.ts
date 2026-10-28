@@ -94,14 +94,18 @@ function spendingLimitOnArc(scenario: QualityLabScenario): OnChainLimitGate | un
   return onChainLimitGate({ read: async () => LIMIT, verdict: async () => verdict });
 }
 
+/** A vendor that earned the owner's rule in every run with the switch on, never the scenario's payee. */
+const OTHER_EARNED_VENDOR = "018f8ce0-1557-7b54-a931-4d777f6be0a1";
+
 /**
- * The vendors the stage's gate grants (earned vendors AL22): with the owner's switch on, the payee when it earned it
- * under the rule and none otherwise; with the switch off, none is handed in, and the stage builds its gate from the
- * workspace, whose fake has no rule.
+ * The vendors the stage's gate grants (earned vendors AL22): with the owner's switch on, another vendor, and the payee
+ * too when it earned it under the rule, so a payee that has not earned it is weighed with the switch on and some vendor
+ * earned; with the switch off, none is handed in, and the stage builds its gate from the workspace, whose fake has no
+ * rule.
  */
 function earnedOf(scenario: QualityLabScenario): string[] | undefined {
   if (!scenario.workspace?.earnedVendorPayments) return undefined;
-  return scenario.payee?.earned ? [LAB_PAYEE_ID] : [];
+  return scenario.payee?.earned ? [OTHER_EARNED_VENDOR, LAB_PAYEE_ID] : [OTHER_EARNED_VENDOR];
 }
 
 export function expectedOf(scenario: QualityLabScenario): QualityLabOutcome {

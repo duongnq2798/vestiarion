@@ -13,7 +13,8 @@ import { qualityLabRunner } from "./support/quality-lab-runner";
  *    address, for the same amount. Both runs carry an agent spending limit, which the switch needs, where the scenario
  *    sets none.
  * 2. **Nothing changes for vendors that have not earned it.** Each scenario, run in shadow mode, ends exactly as it does
- *    with the switch on and its vendor not earned.
+ *    with the switch on and its vendor not earned, while another vendor is: the gate the stage asks holds a grant, none
+ *    of it the scenario's payee's.
  *
  * A difference fails, naming the scenario.
  */
