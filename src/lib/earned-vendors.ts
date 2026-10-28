@@ -57,14 +57,15 @@ export function breaksEarning(rule: string | null | undefined): boolean {
 
 /**
  * What the statuses are worked out from: the report's own facts carry these fields (`readReportFacts`), and so does
- * the sync's narrower read (`readEarnedFacts`). A bill's amount is only for the report's list of verdicts.
+ * the sync's narrower read (`readEarnedFacts`). A bill's amount is only for the report's list of verdicts. A payee's
+ * `riskLevel` is its screening's (`counterparties.risk_level`), which keeps a high-risk payee's limit at 0.
  */
 export interface EarnedFacts {
   bills: ReadonlyArray<{
     id: string;
     amount?: number;
     currency?: string;
-    payee: { id: string; name: string; sample: boolean; role?: string; paymentLimit?: number | null };
+    payee: { id: string; name: string; sample: boolean; role?: string; riskLevel?: string; paymentLimit?: number | null };
   }>;
   decisions: ReadonlyArray<{
     seq: number;
@@ -111,7 +112,7 @@ export type EarnedStatus = { vendorId: string; name: string; given: number } & (
       since: EarnedBreak | null;
     }
   | { state: "counting"; agreed: number; needed: number; since: EarnedBreak | null }
-  | { state: "cannot"; because: "no_payment_limit" | "not_a_vendor" }
+  | { state: "cannot"; because: "high_risk" | "no_payment_limit" | "not_a_vendor" }
 );
 
 export type EarnedStatusOf<State extends EarnedStatus["state"]> = Extract<EarnedStatus, { state: State }>;
@@ -145,6 +146,9 @@ export function earnedVendors(facts: EarnedFacts, streak: number): EarnedStatus[
   const statuses = [...vendors.values()].map(({ payee, rows }): EarnedStatus => {
     const base = { vendorId: payee.id, name: payee.name, given: rows.filter((row) => row.verdict).length };
     if (payee.role !== "vendor") return { ...base, state: "cannot", because: "not_a_vendor" };
+    // Screening keeps a high-risk payee's limit at 0 whatever its owner set (`paymentLimitForRisk`): it says so, rather
+    // than asking for a limit that is set already.
+    if (payee.riskLevel === "high") return { ...base, state: "cannot", because: "high_risk" };
     if (!(Number(payee.paymentLimit ?? 0) > 0)) return { ...base, state: "cannot", because: "no_payment_limit" };
 
     let since: EarnedBreak | null = null;
@@ -172,7 +176,7 @@ export function earnedVendors(facts: EarnedFacts, streak: number): EarnedStatus[
 // What gets signed (AL15, AL16)
 
 /** Why a vendor recorded earned no longer is (AL16). */
-export type LostBecause = "disagreed" | "flagged" | "code_stop" | "rule_changed" | "rule_off" | "no_payment_limit" | "not_a_vendor";
+export type LostBecause = "disagreed" | "flagged" | "code_stop" | "rule_changed" | "rule_off" | "high_risk" | "no_payment_limit" | "not_a_vendor";
 
 /** Where a sync ran (AL16): after a verdict, inside a rule change, or as the AP stage started. */
 export type EarnedTrigger = "verdict" | "rule" | "cycle";
@@ -243,6 +247,7 @@ const LOST_WORDS: Record<LostBecause, string> = {
   code_stop: "a check in code stopped one of its bills",
   rule_changed: "the rule changed",
   rule_off: "the rule is off",
+  high_risk: "it is screened high risk",
   no_payment_limit: "it has no payment limit",
   not_a_vendor: "it is not a vendor",
 };
@@ -293,16 +298,23 @@ function sinceWords(since: EarnedBreak): string {
   return `since a check in code stopped a bill on ${day}${brief ? `: ${brief}` : ""}`;
 }
 
+const CANNOT_WORDS: Record<EarnedStatusOf<"cannot">["because"], string> = {
+  high_risk: "Cannot earn it: screened high risk.",
+  no_payment_limit: "Cannot earn it: no payment limit. Set one on Counterparties.",
+  not_a_vendor: "Cannot earn it: only a vendor can.",
+};
+
 /**
  * A vendor's status as the report says it (AL18). Earned only once it is also recorded earned: earned now and not yet
- * signed says so.
+ * signed says when it will be, which is when a sync runs (AL16): after a verdict, or as a stage with bills to decide
+ * starts, not at every cycle.
  */
 export function earnedStatusWords(status: EarnedStatus, recordedEarned: boolean): string {
-  if (status.state === "cannot") {
-    return status.because === "no_payment_limit" ? "Cannot earn it: no payment limit. Set one on Counterparties." : "Cannot earn it: only a vendor can.";
-  }
+  if (status.state === "cannot") return CANNOT_WORDS[status.because];
   if (status.state === "earned") {
-    return recordedEarned ? `Earned: ${status.agreed} agreed in a row, ${span(status.from, status.to)}` : "Earned under your rule. It is recorded at the next verdict or cycle.";
+    return recordedEarned
+      ? `Earned: ${status.agreed} agreed in a row, ${span(status.from, status.to)}`
+      : "Earned under your rule. It is recorded at your next verdict, or when the agent next decides a bill.";
   }
   const count = `${status.agreed} of ${status.needed} agreed in a row`;
   return status.since ? `${count} ${sinceWords(status.since)}` : count;

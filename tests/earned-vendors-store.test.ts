@@ -11,11 +11,13 @@ import type { LedgerEntryInput } from "@/lib/ledger";
 import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
 /**
- * Earned vendors, read, changed and signed (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11, AL15-AL17):
- * the rule read as none and not ready before migration 0146; an owner's change, refused on Arc mainnet, while a cycle
- * runs, unchanged or out of bounds, written to the workspace's row and signed strictly, and put back when it cannot be
- * signed; and the sync, which signs only what changed since each vendor's newest signed status, stops at one read with
- * no rule, and leaves a vendor whose entry failed as it was recorded, for the next sync to sign.
+ * Earned vendors, read, changed and signed (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11, AL13,
+ * AL15-AL17): the rule read as none and not ready before migration 0146; an owner's change, refused on Arc mainnet, while
+ * a cycle runs, unchanged or out of bounds, written to the workspace's row and signed strictly, put back from its own
+ * write when it cannot be signed, and never said to have changed nothing when it could not be put back; and the sync,
+ * which signs only what changed since each vendor's newest signed status, stops at one read before 0146, reads only the
+ * rule and the record with no rule, and leaves a vendor whose entry failed as it was recorded, for the next sync to sign,
+ * a loss the rule's turning off could not sign included.
  */
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -30,7 +32,9 @@ interface World {
   rule: { earned_vendor_streak: number | null; earned_vendor_payments: boolean } | null | "missing";
   cycleRunning?: boolean;
   upsert?: (body: Record<string, unknown>) => FakeReply | null;
-  bills: Array<{ id: string; vendor: string; name: string; limit?: string | null }>;
+  /** The answer to a put-back (`PATCH`), in place of writing it where its guard matches. */
+  update?: (body: Record<string, unknown>) => FakeReply | null;
+  bills: Array<{ id: string; vendor: string; name: string; limit?: string | null; risk?: string }>;
   decisions: Array<{ seq: number; day: number; invoice: string; action?: string; rule?: string; status?: string }>;
   verdicts: Array<{ seq: number; verdict: "agree" | "disagree"; day: number }>;
   record: Array<{ seq: number; ts: string; action: string; counterparty_id: string }>;
@@ -52,6 +56,17 @@ function workspace(world: World) {
       world.rule = { ...current, ...(body as Partial<typeof current>) };
       return { status: 201, body: null };
     }
+    if (path === "/rest/v1/approval_policies" && method === "PATCH") {
+      const body = request.body as Record<string, unknown>;
+      const reply = world.update?.(body);
+      if (reply) return reply;
+      const guard = params.get("earned_vendor_streak");
+      const current = world.rule && world.rule !== "missing" ? world.rule : null;
+      if (current && guard === (current.earned_vendor_streak === null ? "is.null" : `eq.${current.earned_vendor_streak}`)) {
+        world.rule = { ...current, ...(body as Partial<typeof current>) };
+      }
+      return { body: null };
+    }
     if (path === "/rest/v1/cycle_runs") return { body: world.cycleRunning ? [{ id: "run-1" }] : [] };
     if (path === "/rest/v1/invoices") {
       return {
@@ -59,7 +74,14 @@ function workspace(world: World) {
           id: bill.id,
           amount: "120.000000",
           currency: "USDC",
-          counterparties: { id: bill.vendor, name: bill.name, sample: false, role: "vendor", payment_limit: bill.limit === undefined ? "500" : bill.limit },
+          counterparties: {
+            id: bill.vendor,
+            name: bill.name,
+            sample: false,
+            role: "vendor",
+            risk_level: bill.risk ?? "clear",
+            payment_limit: bill.limit === undefined ? "500" : bill.limit,
+          },
         })),
       };
     }
@@ -243,24 +265,95 @@ describe("changing it (AL11, AL17)", () => {
     signing(world, (entry) => entry.action === "earned_vendor_rule_changed");
     const { fake, run } = workspace(world);
     await expect(run(() => changeEarnedVendorRule({ actorId: OWNER, streak: null }))).rejects.toMatchObject({ code: "not_signed" });
-    const writes = posts(fake.requests).map((r) => r.body);
-    expect(writes).toHaveLength(2);
-    expect(writes[0]).toMatchObject({ earned_vendor_streak: null, earned_vendor_payments: false });
-    expect(writes[1]).toMatchObject({ earned_vendor_streak: 8, earned_vendor_payments: true });
+    expect(posts(fake.requests).map((r) => r.body)).toEqual([expect.objectContaining({ earned_vendor_streak: null, earned_vendor_payments: false })]);
+    // Put back only from this change's own write, as the mirror address is: another owner's change since stays.
+    const [back] = fake.requests.filter((r) => r.path === "/rest/v1/approval_policies" && r.method === "PATCH");
+    expect(back.params.get("earned_vendor_streak")).toBe("is.null");
+    expect(back.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(back.body).toMatchObject({ earned_vendor_streak: 8, earned_vendor_payments: true });
     expect(world.rule).toMatchObject({ earned_vendor_streak: 8, earned_vendor_payments: true });
+  });
+
+  it("never says nothing changed when the rule could not be put back either: it fails as anything else does, and logs it", async () => {
+    const refusedWrite = () => ({ status: 500, body: { code: "XX000", message: "database unavailable" } });
+    const unreachable = (): FakeReply => {
+      throw new Error("fetch failed");
+    };
+    for (const update of [refusedWrite, unreachable]) {
+      const world = { ...northwindEarned({ earned_vendor_streak: null, earned_vendor_payments: false }), update };
+      signing(world, (entry) => entry.action === "earned_vendor_rule_changed");
+      const { run } = workspace(world);
+      const refused = await run(() => changeEarnedVendorRule({ actorId: OWNER, streak: 8 })).catch((error: unknown) => error);
+      expect(refused).toBeInstanceOf(Error);
+      expect(refused).not.toBeInstanceOf(EarnedVendorsError);
+      expect(world.rule).toMatchObject({ earned_vendor_streak: 8 });
+      expect(console.error).toHaveBeenCalledWith("earned vendors: rule not put back", ORG, expect.any(String));
+    }
   });
 });
 
 describe("the sync (AL15, AL16)", () => {
-  it("with no rule, reads the rule and stops: one read after a verdict or as a cycle starts", async () => {
+  it("with no rule, reads only the rule and the record, and signs nothing while no vendor is recorded earned; before 0146, one read", async () => {
     for (const trigger of ["verdict", "cycle"] as const) {
-      const { fake, run } = workspace(northwindEarned(null));
+      const world = northwindEarned(null);
+      world.record.push({ seq: 901, ts: at(6), action: "vendor_earned_lost", counterparty_id: NORTHWIND });
+      const signed = signing(world);
+      const { fake, run } = workspace(world);
       expect(await run(() => syncEarnedVendors(db(), { trigger }))).toMatchObject({ streak: null, statuses: [], signed: [] });
-      expect(fake.requests.map((r) => r.path)).toEqual(["/rest/v1/approval_policies"]);
+      expect(fake.requests.map((r) => [r.path, r.params.get("action")])).toEqual([
+        ["/rest/v1/approval_policies", null],
+        ["/rest/v1/ledger_entries", "in.(vendor_earned,vendor_earned_lost)"],
+      ]);
+      expect(signed).toEqual([]);
     }
     const before = workspace(northwindEarned("missing"));
     expect(await before.run(() => syncEarnedVendors(db(), { trigger: "cycle" }))).toMatchObject({ streak: null, signed: [] });
     expect(before.fake.requests).toHaveLength(1);
+  });
+
+  it("with no rule, signs at the next verdict or cycle a loss the rule's turning off could not sign (AL15)", async () => {
+    const world = northwindEarned({ earned_vendor_streak: 5, earned_vendor_payments: false });
+    world.record.push({ seq: 900, ts: at(6), action: "vendor_earned", counterparty_id: NORTHWIND });
+    let failing = true;
+    const signed = signing(world, (entry) => failing && entry.action === "vendor_earned_lost");
+    const { fake, run } = workspace(world);
+
+    // The rule is off and signed, but Northwind's loss is not: it stays recorded earned, for now.
+    await run(() => changeEarnedVendorRule({ actorId: OWNER, streak: null }));
+    expect(signed.map((entry) => entry.action)).toEqual(["earned_vendor_rule_changed"]);
+
+    failing = false;
+    const next = await run(() => syncEarnedVendors(db(), { trigger: "verdict" }));
+    expect(signed.slice(1)).toEqual([
+      {
+        actor: "system",
+        domain: "compliance",
+        action: "vendor_earned_lost",
+        summary: "Northwind Packaging is no longer an earned vendor: the rule is off",
+        detail: { counterpartyId: NORTHWIND, streak: null, because: "rule_off", decisionSeq: null, rule: null, trigger: "verdict" },
+      },
+    ]);
+    expect(next.recorded.get(NORTHWIND)?.state).toBe("lost");
+    // With no rule, the facts are never read: only the rule, the record and the names a loss gives.
+    expect(fake.requests.some((r) => r.path === "/rest/v1/decision_verdicts" || r.path === "/rest/v1/invoices")).toBe(false);
+
+    await run(() => syncEarnedVendors(db(), { trigger: "cycle" }));
+    expect(signed).toHaveLength(2);
+  });
+
+  it("signs a loss still owed from while the rule was off before a new rule is set, so no earned status spans a time with no rule", async () => {
+    const world = northwindEarned({ earned_vendor_streak: null, earned_vendor_payments: false });
+    // Recorded earned under an earlier rule, whose turning off could not sign its loss; it is earned under the new one.
+    world.record.push({ seq: 900, ts: at(6), action: "vendor_earned", counterparty_id: NORTHWIND });
+    const signed = signing(world);
+    const { run } = workspace(world);
+
+    await run(() => changeEarnedVendorRule({ actorId: OWNER, streak: 5 }));
+    expect(signed.map((entry) => [entry.action, entry.detail.counterpartyId, entry.detail.because, entry.detail.streak])).toEqual([
+      ["vendor_earned_lost", NORTHWIND, "rule_off", null],
+      ["earned_vendor_rule_changed", undefined, undefined, undefined],
+      ["vendor_earned", NORTHWIND, undefined, 5],
+    ]);
   });
 
   it("signs a vendor that earned the rule once, with its evidence; a second sync in a row signs nothing", async () => {
@@ -284,9 +377,10 @@ describe("the sync (AL15, AL16)", () => {
     await run(() => syncEarnedVendors(db(), { trigger: "cycle" }));
     expect(signed).toHaveLength(1);
 
-    // What it read: the payees with their role and payment limit, the agent's decisions, and each verdict's time.
+    // What it read: the payees with their role, screening and payment limit, the agent's decisions, and each verdict's
+    // time.
     const invoices = fake.requests.find((r) => r.path === "/rest/v1/invoices");
-    expect(invoices?.params.get("select")).toContain("counterparties(id,name,sample,role,payment_limit)");
+    expect(invoices?.params.get("select")).toContain("counterparties(id,name,sample,role,risk_level,payment_limit)");
     expect(invoices?.params.get("direction")).toBe("eq.payable");
     expect(fake.requests.find((r) => r.path === "/rest/v1/decision_verdicts")?.params.get("select")).toBe("entry_seq,verdict,decided_at");
     const record = fake.requests.find((r) => r.params.get("action") === "in.(vendor_earned,vendor_earned_lost)");
@@ -308,6 +402,22 @@ describe("the sync (AL15, AL16)", () => {
         summary: "Northwind Packaging is no longer an earned vendor: a check in code stopped one of its bills",
         detail: { counterpartyId: NORTHWIND, streak: 5, because: "code_stop", decisionSeq: 109, rule: "invoice.pay_to_differs", trigger: "cycle" },
       },
+    ]);
+  });
+
+  it("signs a vendor screened high risk as lost for that, never as one with no payment limit (AL13)", async () => {
+    const world = northwindEarned({ earned_vendor_streak: 5, earned_vendor_payments: false });
+    world.record.push({ seq: 900, ts: at(5), action: "vendor_earned", counterparty_id: NORTHWIND });
+    // Screening keeps a high-risk payee's limit at 0, whatever limit the owner set.
+    for (const bill of world.bills) if (bill.vendor === NORTHWIND) Object.assign(bill, { risk: "high", limit: "0" });
+    const signed = signing(world);
+    await workspace(world).run(() => syncEarnedVendors(db(), { trigger: "cycle" }));
+    expect(signed).toEqual([
+      expect.objectContaining({
+        action: "vendor_earned_lost",
+        summary: "Northwind Packaging is no longer an earned vendor: it is screened high risk",
+        detail: expect.objectContaining({ counterpartyId: NORTHWIND, because: "high_risk", decisionSeq: null, rule: null }),
+      }),
     ]);
   });
 

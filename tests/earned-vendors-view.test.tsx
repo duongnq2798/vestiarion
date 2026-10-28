@@ -77,9 +77,9 @@ describe("the report's Earned vendors (AL18)", () => {
     expect(words.indexOf("Oct 24, 2026 · Schedule")).toBeLessThan(words.indexOf("Oct 20, 2026 · Pay"));
   });
 
-  it("says a vendor earned now and not signed yet is recorded at the next verdict or cycle, with no verdicts listed as its evidence", () => {
+  it("says a vendor earned now and not signed yet is recorded at the next verdict or decision, with no verdicts listed as its evidence", () => {
     const words = text(renderToStaticMarkup(<ReportReadiness steps={STEPS} ladder={LADDER} earned={view([])} />));
-    expect(words).toContain("Cobalt Cloud Earned under your rule. It is recorded at the next verdict or cycle.");
+    expect(words).toContain("Cobalt Cloud Earned under your rule. It is recorded at your next verdict, or when the agent next decides a bill.");
     expect(words).not.toContain("The verdicts behind it");
   });
 

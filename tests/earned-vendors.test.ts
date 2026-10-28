@@ -23,8 +23,8 @@ import { VERDICTS_BEFORE_LIVE } from "@/lib/workspace-report";
  * Earned vendors, the pure rules (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11-AL14, AL16, AL18): a
  * vendor earns the owner's rule with N agreed verdicts in a row on the agent's decisions to pay or schedule its bills,
  * counted again after a Disagree (timed by the verdict), a bill flagged for review, or a check in code on the vendor or
- * its bill; never for a sample vendor, one with no payment limit, or a payee that is not a vendor. What changed since the
- * newest signed status is what gets signed.
+ * its bill, whether or not that decision has a verdict yet; never for a sample vendor, one screened high risk, one with
+ * no payment limit, or a payee that is not a vendor. What changed since the newest signed status is what gets signed.
  */
 
 type Payee = EarnedFacts["bills"][number]["payee"];
@@ -180,6 +180,23 @@ describe("what earns it (AL12)", () => {
     expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ state: "counting", agreed: 4, since: null });
   });
 
+  it("never counts a decision with no verdict yet, which starts the count again only if it ended flagged or a check stopped it", () => {
+    const { facts, decide, agree } = book();
+    agree(NORTHWIND, 5);
+    // A payment waiting for its verdict: not counted, and nothing broken.
+    decide(NORTHWIND);
+    decide(NORTHWIND, { action: "ap_schedule" });
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ state: "earned", agreed: 5, since: null });
+    // A bill a check on it stopped breaks it before anyone gives a verdict on that decision.
+    const stopped = decide(NORTHWIND, { rule: "invoice.pay_to_differs" });
+    expect(statusOf(earnedVendors(facts, 5), NORTHWIND.id)).toMatchObject({ state: "counting", agreed: 0, since: { kind: "code_stop", decisionSeq: stopped } });
+    // So does a bill flagged for review.
+    const second = book();
+    second.agree(NORTHWIND, 5);
+    const flagged = second.decide(NORTHWIND, { action: "ap_flag_fraud", status: "flagged" });
+    expect(statusOf(earnedVendors(second.facts, 5), NORTHWIND.id)).toMatchObject({ state: "counting", agreed: 0, since: { kind: "flagged", decisionSeq: flagged } });
+  });
+
   it("needs N decisions made after a break to earn it again", () => {
     const { facts, decide, agree } = book();
     agree(NORTHWIND, 7);
@@ -227,6 +244,16 @@ describe("who can earn it (AL13)", () => {
     expect(statusOf(statuses, NORTHWIND.id)).toMatchObject({ state: "cannot", because: "no_payment_limit", given: 6 });
     expect(statusOf(statuses, LUMEN.id)).toMatchObject({ state: "cannot", because: "no_payment_limit" });
     expect(statusOf(statuses, "cp-taller")).toMatchObject({ state: "cannot", because: "not_a_vendor" });
+  });
+
+  it("says a vendor screened high risk cannot for that, never for want of a limit the owner did set", () => {
+    const { facts, agree } = book();
+    // Screening keeps a high-risk payee's limit at 0, whatever its owner set (paymentLimitForRisk).
+    agree({ ...NORTHWIND, riskLevel: "high", paymentLimit: 0 }, 6);
+    agree({ ...LUMEN, riskLevel: "medium", paymentLimit: 50 }, 5);
+    const statuses = earnedVendors(facts, 5);
+    expect(statusOf(statuses, NORTHWIND.id)).toMatchObject({ state: "cannot", because: "high_risk", given: 6 });
+    expect(statusOf(statuses, LUMEN.id)).toMatchObject({ state: "earned", agreed: 5 });
   });
 
   it("lists the vendors in the ladder's own order: most verdicts first, then by name (autonomy ladder AL5)", () => {
@@ -287,8 +314,12 @@ describe("what gets signed (AL16)", () => {
   it("signs a vendor that can no longer earn it as lost, saying why", () => {
     const { facts, agree } = book();
     agree({ ...NORTHWIND, paymentLimit: null }, 5);
-    const [change] = earnedChanges(earnedVendors(facts, 5), recorded({ [NORTHWIND.id]: "earned" }), 5);
-    expect(change).toMatchObject({ to: "lost", because: "no_payment_limit" });
+    agree({ ...LUMEN, riskLevel: "high", paymentLimit: 0 }, 5);
+    const changes = earnedChanges(earnedVendors(facts, 5), recorded({ [NORTHWIND.id]: "earned", [LUMEN.id]: "earned" }), 5);
+    expect(changes).toEqual([
+      { vendorId: LUMEN.id, to: "lost", because: "high_risk", since: null },
+      { vendorId: NORTHWIND.id, to: "lost", because: "no_payment_limit", since: null },
+    ]);
   });
 
   it("with no rule, signs every vendor recorded earned as lost, rule_off, and nothing else", () => {
@@ -344,6 +375,7 @@ describe("the words (AL15, AL17, AL18)", () => {
     expect(words("rule_changed")).toBe("Lumen Print Co. is no longer an earned vendor: the rule changed");
     expect(words("rule_off")).toBe("Lumen Print Co. is no longer an earned vendor: the rule is off");
     expect(words("no_payment_limit")).toBe("Lumen Print Co. is no longer an earned vendor: it has no payment limit");
+    expect(words("high_risk")).toBe("Lumen Print Co. is no longer an earned vendor: it is screened high risk");
     expect(words("not_a_vendor")).toBe("Lumen Print Co. is no longer an earned vendor: it is not a vendor");
   });
 
@@ -368,7 +400,8 @@ describe("the words (AL15, AL17, AL18)", () => {
     const statuses = earnedVendors(facts, 5);
     const words = (id: string, recordedEarned = false) => earnedStatusWords(statusOf(statuses, id)!, recordedEarned);
     expect(words(NORTHWIND.id, true)).toBe(`Earned: 5 agreed in a row, Oct 2, 2026 to Oct 6, 2026`);
-    expect(words(NORTHWIND.id)).toBe("Earned under your rule. It is recorded at the next verdict or cycle.");
+    // Signed by the sync after a verdict, or as the agent's cycle starts on bills to decide: not by every cycle (AL16).
+    expect(words(NORTHWIND.id)).toBe("Earned under your rule. It is recorded at your next verdict, or when the agent next decides a bill.");
     expect(words(LUMEN.id)).toBe("2 of 5 agreed in a row since you disagreed on Oct 7, 2026");
     expect(words("cp-flag")).toBe("0 of 5 agreed in a row since a bill was flagged for review on Oct 10, 2026");
     expect(words("cp-stop")).toBe(
@@ -377,6 +410,7 @@ describe("the words (AL15, AL17, AL18)", () => {
     expect(words("cp-none")).toBe("Cannot earn it: no payment limit. Set one on Counterparties.");
     expect(words("cp-new")).toBe("1 of 5 agreed in a row");
     expect(earnedStatusWords({ vendorId: "c", name: "C", given: 1, state: "cannot", because: "not_a_vendor" }, false)).toBe("Cannot earn it: only a vendor can.");
+    expect(earnedStatusWords({ vendorId: "h", name: "H", given: 6, state: "cannot", because: "high_risk" }, false)).toBe("Cannot earn it: screened high risk.");
   });
 
   it("marks in the live slice picker only a vendor earned now and recorded earned (AL19)", () => {

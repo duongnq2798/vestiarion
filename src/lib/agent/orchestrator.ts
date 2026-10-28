@@ -2578,9 +2578,10 @@ export async function runApStage(input: ApStageInput): Promise<number> {
   const payeeLock = input.payeeLock !== undefined ? input.payeeLock : (policies?.payeeLock ?? PAYEE_LOCK_OFF);
   // Whether the workspace is in shadow mode (shadow mode S2): read once for the stage, when anything is decided.
   const shadow = input.shadow !== undefined ? input.shadow : payables.length > 0 ? await shadowOnce() : null;
-  // In shadow mode, the vendors' statuses under the owner's rule for earned vendors are signed as the stage starts
-  // (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL16): one read with no rule. Best effort, and it grants
-  // nothing (AL20): no decision below reads a status, and a sync that fails is logged and changes none of them.
+  // In shadow mode, with bills to decide, the vendors' statuses under the owner's rule for earned vendors are signed as
+  // the stage starts (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL16): with no rule, only the rule and
+  // the record are read. Best effort, and it grants nothing (AL20): no decision below reads a status, and a sync that
+  // fails is logged and changes none of them.
   if (shadow && payables.length > 0) {
     try {
       await syncEarnedVendors(db, { trigger: "cycle" });

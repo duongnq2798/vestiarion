@@ -432,7 +432,7 @@ describe("readReportFacts", () => {
               fx_rate: "1.000000000000",
               fx_source: "USD = USDC",
               fx_at: "2026-10-07T09:00:00Z",
-              counterparties: { id: "cp-1", name: "Hetzner", sample: false, mirror_wallet_id: "w-1", role: "vendor", payment_limit: "500.000000" },
+              counterparties: { id: "cp-1", name: "Hetzner", sample: false, mirror_wallet_id: "w-1", role: "vendor", risk_level: "medium", payment_limit: "500.000000" },
             },
           ],
         };
@@ -495,8 +495,8 @@ describe("readReportFacts", () => {
         bill: { amount: 196, currency: "USD" },
         // The rate it was converted at, as read: its source and time say which it was (currency provenance M3).
         conversion: { perUsd: "1.000000000000", source: "USD = USDC", at: "2026-10-07T09:00:00Z" },
-        // Its role and payment limit, which earned vendors read (earned vendors AL13, AL14).
-        payee: { id: "cp-1", name: "Hetzner", mirror: true, sample: false, role: "vendor", paymentLimit: 500 },
+        // Its role, screening and payment limit, which earned vendors read (earned vendors AL13, AL14).
+        payee: { id: "cp-1", name: "Hetzner", mirror: true, sample: false, role: "vendor", riskLevel: "medium", paymentLimit: 500 },
       },
     ]);
     expect(read.decisions).toEqual([

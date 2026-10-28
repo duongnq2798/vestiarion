@@ -91,9 +91,9 @@ Under it, **Earned vendors** shows which vendors met the rule an owner set in **
 With a rule, it says the rule, then each vendor of **By vendor**, in the same order:
 
 - **Earned**, with how many agreed in a row and the days they span, such as "Earned: 8 agreed in a row, Oct 20, 2026 to Oct 28, 2026". **The verdicts behind it** opens the list: each decision's day, what the agent decided, the bill's amount and Agreed, newest first.
-- "Earned under your rule. It is recorded at the next verdict or cycle.", for a vendor that has just earned it and whose entry is not signed yet. A vendor reads as earned only once it is signed in the ledger.
+- "Earned under your rule. It is recorded at your next verdict, or when the agent next decides a bill.", for a vendor that has just earned it and whose entry is not signed yet: a cycle with no bill to decide signs nothing. A vendor reads as earned only once it is signed in the ledger.
 - How many it has so far, such as "3 of 8 agreed in a row", and what started the count again: "since you disagreed on" a day, "since a bill was flagged for review on" a day, or "since a check in code stopped a bill on" a day, with the check in a few words.
-- Why it cannot: "Cannot earn it: no payment limit. Set one on Counterparties.", or "Cannot earn it: only a vendor can." for a payee that is not a vendor.
+- Why it cannot: "Cannot earn it: no payment limit. Set one on Counterparties."; "Cannot earn it: screened high risk." for a vendor whose screening keeps its limit at 0, whatever limit you set; or "Cannot earn it: only a vendor can." for a payee that is not a vendor.
 
 Earning changes nothing the agent may do, and the block says so. "Each change is signed in the ledger as vendor_earned or vendor_earned_lost." If the rule or that record cannot be read, the block is left out and the rest of the report is unchanged.
 

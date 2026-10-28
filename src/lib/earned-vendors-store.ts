@@ -98,12 +98,21 @@ async function writeRule(streak: number | null, actorId: string): Promise<void> 
   }
 }
 
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : "unknown error");
+
+/** A sync that runs best effort (AL16) logs its failure and changes nothing else. */
+const logSync = (error: unknown) => {
+  console.error("earned vendors: statuses not signed", currentOrgId(), messageOf(error));
+};
+
 /**
  * An owner sets the rule, changes it, or turns it off (AL11), signed strictly as `earned_vendor_rule_changed` (AL17):
- * the key is checked before anything is written, and a change whose entry still cannot be signed is put back and
- * refused, as the mirror address is undone when its entry fails, so no rule is ever in force without its entry. Refused
- * on Arc mainnet, where there are no verdicts, and while a cycle runs, which signs statuses as it starts. Then the
- * statuses under the new rule are signed, best effort (AL16).
+ * the key is checked before anything is written, and a change whose entry still cannot be signed is put back, only
+ * from its own write, and refused, as the mirror address is undone when its entry fails, so no rule is in force
+ * without its entry. A put-back that fails too is logged and refused as any failure is, never as one that changed
+ * nothing. Refused on Arc mainnet, where there are no verdicts, and while a cycle runs, which signs statuses as it
+ * starts. Setting a rule where there was none first signs any loss the rule's turning off could not sign; then the
+ * statuses under the new rule are signed. Both best effort (AL16).
  */
 export async function changeEarnedVendorRule(input: { actorId: string; streak: number | null }): Promise<{ from: number | null; to: number | null }> {
   const to = input.streak;
@@ -131,6 +140,10 @@ export async function changeEarnedVendorRule(input: { actorId: string; streak: n
     throw new EarnedVendorsError("not_signed");
   }
 
+  // While there is still no rule, a vendor left recorded earned from an earlier one is signed lost (`rule_off`), so no
+  // earned status runs on across a time with no rule into the new one.
+  if (from === null) await syncEarnedVendors(db(), { trigger: "rule" }).catch(logSync);
+
   await writeRule(to, input.actorId);
   try {
     await appendLedgerEntry({
@@ -141,19 +154,24 @@ export async function changeEarnedVendorRule(input: { actorId: string; streak: n
       detail: { by: input.actorId, from, to },
     });
   } catch (error) {
-    console.error("earned vendors: rule change not signed", currentOrgId(), error instanceof Error ? error.message : "unknown error");
-    await db()
+    console.error("earned vendors: rule change not signed", currentOrgId(), messageOf(error));
+    // Put back only from this change's own write, as the mirror address is: a change another owner made since stays.
+    const written = db()
       .from("approval_policies")
-      .upsert({ earned_vendor_streak: from, earned_vendor_payments: current.payments, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" })
-      .then(({ error: undo }) => {
-        if (undo) console.error("earned vendors: rule not put back", currentOrgId(), undo.message);
-      });
+      .update({ earned_vendor_streak: from, earned_vendor_payments: current.payments, updated_by: input.actorId, updated_at: new Date().toISOString() });
+    const back = await (to === null ? written.is("earned_vendor_streak", null) : written.eq("earned_vendor_streak", to)).then(
+      (result) => result.error?.message ?? null,
+      (failure: unknown) => messageOf(failure)
+    );
+    // A change that could not be put back is in force without its entry: it is not one that changed nothing.
+    if (back) {
+      console.error("earned vendors: rule not put back", currentOrgId(), back);
+      throw new Error(`earned vendors: rule changed without its entry, and not put back: ${back}`);
+    }
     throw new EarnedVendorsError("not_signed");
   }
 
-  await syncEarnedVendors(db(), { trigger: "rule" }).catch((error: unknown) => {
-    console.error("earned vendors: statuses not signed", currentOrgId(), error instanceof Error ? error.message : "unknown error");
-  });
+  await syncEarnedVendors(db(), { trigger: "rule" }).catch(logSync);
   return { from, to };
 }
 
@@ -164,7 +182,14 @@ type BillRow = {
   id: string;
   amount: number | string;
   currency: string | null;
-  counterparties: { id: string; name: string; sample: boolean | null; role: string | null; payment_limit: number | string | null } | null;
+  counterparties: {
+    id: string;
+    name: string;
+    sample: boolean | null;
+    role: string | null;
+    risk_level: string | null;
+    payment_limit: number | string | null;
+  } | null;
 };
 type DecisionRow = {
   seq: number | string;
@@ -178,14 +203,19 @@ type DecisionRow = {
 type VerdictRow = { entry_seq: number | string; verdict: "agree" | "disagree"; decided_at: string | null };
 
 /**
- * What the sync works the statuses out from (AL14): the workspace's payables with their payee's role and payment limit,
- * the agent's decisions on them, and every verdict with its time. The report reads the same fields with the rest of its
- * facts (`readReportFacts`); this reads only these, a page at a time.
+ * What the sync works the statuses out from (AL14): the workspace's payables with their payee's role, screening and
+ * payment limit, the agent's decisions on them, and every verdict with its time. The report reads the same fields with
+ * the rest of its facts (`readReportFacts`); this reads only these, a page at a time.
  */
 export async function readEarnedFacts(orgDb: OrgDb): Promise<EarnedFacts> {
   const [bills, decisions, verdicts] = await Promise.all([
     allRows<BillRow>((from, to) =>
-      orgDb.from("invoices").select("id, amount, currency, counterparties(id, name, sample, role, payment_limit)").eq("direction", "payable").order("id", { ascending: true }).range(from, to)
+      orgDb
+        .from("invoices")
+        .select("id, amount, currency, counterparties(id, name, sample, role, risk_level, payment_limit)")
+        .eq("direction", "payable")
+        .order("id", { ascending: true })
+        .range(from, to)
     ),
     allRows<DecisionRow>((from, to) =>
       orgDb
@@ -210,6 +240,7 @@ export async function readEarnedFacts(orgDb: OrgDb): Promise<EarnedFacts> {
         name: row.counterparties?.name ?? "a supplier",
         sample: row.counterparties?.sample === true,
         role: row.counterparties?.role ?? undefined,
+        riskLevel: row.counterparties?.risk_level ?? undefined,
         paymentLimit: row.counterparties?.payment_limit == null ? null : Number(row.counterparties.payment_limit),
       },
     })),
@@ -272,13 +303,14 @@ export interface EarnedSync {
 /**
  * Signs the difference between what the facts say now and each vendor's newest signed status (AL16), one strict entry
  * per vendor (AL15): a vendor whose entry could not be signed is left as it was recorded, and the next sync signs it.
- * A second run in a row signs nothing. With no rule it reads the rule and stops, but for the rule change that turned
- * it off (`trigger: "rule"`), which signs each vendor recorded earned as lost. Callers run it best effort: a failure
- * throws to them, and they log it.
+ * A second run in a row signs nothing. With no rule it reads the rule and the record, never the facts, and signs each
+ * vendor still recorded earned as lost (`rule_off`): the rule change that turned it off, or, where that could not sign
+ * one, whichever sync runs next. Before migration 0146 it reads the rule and stops. Callers run it best effort: a
+ * failure throws to them, and they log it.
  */
 export async function syncEarnedVendors(orgDb: OrgDb, input: { trigger: EarnedTrigger }): Promise<EarnedSync> {
-  const { streak } = await readEarnedVendorRule(orgDb);
-  if (streak === null && input.trigger !== "rule") return { streak, statuses: [], recorded: new Map(), signed: [] };
+  const { streak, ready } = await readEarnedVendorRule(orgDb);
+  if (!ready) return { streak, statuses: [], recorded: new Map(), signed: [] };
 
   const [recorded, facts] = await Promise.all([readEarnedRecord(orgDb), streak === null ? null : readEarnedFacts(orgDb)]);
   const statuses = facts && streak !== null ? earnedVendors(facts, streak) : [];

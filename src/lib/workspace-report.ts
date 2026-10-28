@@ -32,8 +32,11 @@ export interface ReportBill {
    * rate's source and when it was published (0084's `fx_*`; currency provenance M3). Absent where it was not read.
    */
   conversion?: { perUsd: number | string; source: string; at: string } | null;
-  /** Its role and payment limit, where they were read: who can earn the owner's rule for earned vendors (AL13). */
-  payee: { id: string; name: string; mirror: boolean; sample: boolean; role?: string; paymentLimit?: number | null };
+  /**
+   * Its role, screening (`risk_level`) and payment limit, where they were read: who can earn the owner's rule for
+   * earned vendors (AL13).
+   */
+  payee: { id: string; name: string; mirror: boolean; sample: boolean; role?: string; riskLevel?: string; paymentLimit?: number | null };
 }
 
 /** One of the agent's AP decisions about a payable, from its ledger entry. */

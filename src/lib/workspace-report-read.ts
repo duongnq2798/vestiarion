@@ -51,6 +51,7 @@ type InvoiceRow = {
     sample: boolean | null;
     mirror_wallet_id: string | null;
     role?: string | null;
+    risk_level?: string | null;
     payment_limit?: number | string | null;
   } | null;
 };
@@ -90,7 +91,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
       orgDb
         .from("invoices")
         .select(
-          "id, created_at, due_date, amount, currency, status, reviewed_by, paid_amount, early_pay_discount_pct, discount_due_date, original_currency, original_amount, fx_rate, fx_source, fx_at, counterparties(id, name, sample, mirror_wallet_id, role, payment_limit)"
+          "id, created_at, due_date, amount, currency, status, reviewed_by, paid_amount, early_pay_discount_pct, discount_due_date, original_currency, original_amount, fx_rate, fx_source, fx_at, counterparties(id, name, sample, mirror_wallet_id, role, risk_level, payment_limit)"
         )
         .eq("direction", "payable")
         .order("id", { ascending: true })
@@ -150,6 +151,7 @@ export async function readReportFacts(orgDb: OrgDb, network: Network, workspace:
       sample: row.counterparties?.sample === true,
       // Who can earn the owner's rule (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL13).
       ...(row.counterparties?.role ? { role: row.counterparties.role } : {}),
+      ...(row.counterparties?.risk_level ? { riskLevel: row.counterparties.risk_level } : {}),
       ...(row.counterparties && "payment_limit" in row.counterparties
         ? { paymentLimit: row.counterparties.payment_limit == null ? null : Number(row.counterparties.payment_limit) }
         : {}),
