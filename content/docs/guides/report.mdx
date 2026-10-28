@@ -84,6 +84,19 @@ Each row gives its **Verdicts**, how many it rests on, and **Agreed**: from five
 
 The figures are your verdicts in shadow mode and nothing else. They are not **Agent vs what really happened**, below, which compares the agent with what your business paid, and not how often the agent followed its written policy. They only measure: nothing here changes what the agent may do, and the vendors you tick under **Start the live slice** are still your choice.
 
+### Earned vendors
+
+Under it, **Earned vendors** shows which vendors met the rule an owner set in **Settings**, under **Earned vendors**: a number of agreed verdicts in a row on the agent's decisions to pay or schedule a vendor's bills, counted again after a disagreement, a bill flagged for review, or a check in code stopping one of its bills. See [Earned vendors](/docs/guides/shadow-mode#earned-vendors) for what counts. With no rule it says "No rule is set. An owner sets one in Settings, under Earned vendors."
+
+With a rule, it says the rule, then each vendor of **By vendor**, in the same order:
+
+- **Earned**, with how many agreed in a row and the days they span, such as "Earned: 8 agreed in a row, Oct 20, 2026 to Oct 28, 2026". **The verdicts behind it** opens the list: each decision's day, what the agent decided, the bill's amount and Agreed, newest first.
+- "Earned under your rule. It is recorded at the next verdict or cycle.", for a vendor that has just earned it and whose entry is not signed yet. A vendor reads as earned only once it is signed in the ledger.
+- How many it has so far, such as "3 of 8 agreed in a row", and what started the count again: "since you disagreed on" a day, "since a bill was flagged for review on" a day, or "since a check in code stopped a bill on" a day, with the check in a few words.
+- Why it cannot: "Cannot earn it: no payment limit. Set one on Counterparties.", or "Cannot earn it: only a vendor can." for a payee that is not a vendor.
+
+Earning changes nothing the agent may do, and the block says so. "Each change is signed in the ledger as vendor_earned or vendor_earned_lost." If the rule or that record cannot be read, the block is left out and the rest of the report is unchanged.
+
 ### Start the live slice
 
 Under the steps, an owner ticks the vendors to pay in real USDC and chooses **Open the live slice on Arc mainnet**. Vestiarion opens a workspace on Arc mainnet for them, named after this one with "live slice" at the end, and adds each vendor with its name, payment limit, notice email and purchase-order setting, so nothing is typed in again. Each vendor says how its address goes over:
@@ -94,7 +107,7 @@ Under the steps, an owner ticks the vendors to pay in real USDC and chooses **Op
 - **Address not confirmed here: it adds its own there**: an address sent through a payee link or changed, that no one has confirmed yet, is not carried.
 - **No address yet: it adds its own there**, the same way.
 
-Beside each vendor, the list also says how often you agreed with the agent's decisions on its bills, from your verdicts: such as **83% agreed, 5 of 6 verdicts**, **2 verdicts: too few to tell yet** under five, or **No verdicts yet**. The line above the list says so: "Beside each vendor: how often you agreed with the agent's decisions on its bills, from your verdicts in shadow mode." The vendors stay in the order of their names, and a vendor that cannot go shows it too.
+Beside each vendor, the list also says how often you agreed with the agent's decisions on its bills, from your verdicts: such as **83% agreed, 5 of 6 verdicts**, **2 verdicts: too few to tell yet** under five, or **No verdicts yet**. The line above the list says so: "Beside each vendor: how often you agreed with the agent's decisions on its bills, from your verdicts in shadow mode." The vendors stay in the order of their names, and a vendor that cannot go shows it too. Where an owner set a rule for [earned vendors](#earned-vendors), a vendor that earned it is marked **Earned under your rule**, and the line above the list says what the mark means: "Earned under your rule marks a vendor that met the rule an owner set in Settings." The mark ticks nothing: the vendors you pay for real are still your choice.
 
 A vendor with no payment limit cannot go: set one on **Counterparties** first. Nothing else is carried: no bill, no history, no verdict, no member but the accountants you bring along (below), and no limit changed here, since the new workspace starts with the usual Arc mainnet limits.
 

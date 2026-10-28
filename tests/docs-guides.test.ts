@@ -416,6 +416,11 @@ const RECEIPT_PDF = "src/components/receipt/SavePdfButton.tsx";
 const AGREEMENT_LADDER = "src/components/vx/AgreementLadder.tsx";
 const LADDER_LIBRARY = "src/lib/autonomy-ladder.ts";
 const LIVE_SLICE_START = "src/components/vx/LiveSliceStart.tsx";
+/** Earned vendors (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11, AL15-AL19). */
+const EARNED_PANEL = "src/components/EarnedVendorsPanel.tsx";
+const EARNED_RULES = "src/lib/earned-vendors.ts";
+const EARNED_STORE = "src/lib/earned-vendors-store.ts";
+const EARNED_REPORT = "src/components/vx/EarnedVendors.tsx";
 
 const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   "guides/collections": [
@@ -2963,6 +2968,20 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["2 verdicts: too few to tell yet", LIVE_SLICE_START, ": too few to tell yet"],
     ["No verdicts yet", LIVE_SLICE_START],
     ["Beside each vendor: how often you agreed with the agent's decisions on its bills, from your verdicts in shadow mode.", LIVE_SLICE_START],
+    // Earned vendors on the report and in the picker (earned vendors AL18, AL19).
+    ["No rule is set. An owner sets one in Settings, under Earned vendors.", EARNED_REPORT],
+    ["Earned: 8 agreed in a row, Oct 20, 2026 to Oct 28, 2026", EARNED_RULES, "Earned: ${status.agreed} agreed in a row, "],
+    ["The verdicts behind it", EARNED_REPORT],
+    ["Earned under your rule. It is recorded at the next verdict or cycle.", EARNED_RULES],
+    ["3 of 8 agreed in a row", EARNED_RULES, "${status.agreed} of ${status.needed} agreed in a row"],
+    ["since you disagreed on", EARNED_RULES],
+    ["since a bill was flagged for review on", EARNED_RULES],
+    ["since a check in code stopped a bill on", EARNED_RULES],
+    ["Cannot earn it: no payment limit. Set one on Counterparties.", EARNED_RULES],
+    ["Cannot earn it: only a vendor can.", EARNED_RULES],
+    ["Each change is signed in the ledger as vendor_earned or vendor_earned_lost.", EARNED_REPORT],
+    ["Earned under your rule", LIVE_SLICE_START],
+    ["Earned under your rule marks a vendor that met the rule an owner set in Settings.", LIVE_SLICE_START],
     // Start the live slice (live slice L1, L3, L5).
     ["Go live with", REPORT, "Go live with ${slice.name}"],
     ["Start the live slice", "src/components/vx/LiveSliceStart.tsx"],
@@ -3287,6 +3306,27 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["By vendor", AGREEMENT_LADDER],
     ["Too few to tell yet", AGREEMENT_LADDER],
     ["Flag for review", LADDER_LIBRARY],
+    // Earned vendors: the rule in Settings, what the report and the picker show, and what is signed (earned vendors AL11-AL19).
+    ["Earned vendors", EARNED_PANEL],
+    ["Agreed verdicts in a row", EARNED_PANEL],
+    ["Turn off", EARNED_PANEL],
+    ["Off: no vendor is counted as earned.", EARNED_RULES],
+    ["An owner of this workspace can change it.", EARNED_PANEL],
+    ["Earning changes nothing the agent may do", EARNED_PANEL],
+    ["The verdicts behind it", EARNED_REPORT],
+    ["since you disagreed on", EARNED_RULES],
+    ["Cannot earn it: no payment limit. Set one on Counterparties.", EARNED_RULES],
+    ["Earned under your rule", LIVE_SLICE_START],
+    ["Not available in this workspace yet.", EARNED_PANEL],
+    ["earned_vendor_rule_changed", EARNED_STORE],
+    ["vendor_earned", EARNED_RULES],
+    ["vendor_earned_lost", EARNED_RULES],
+    ["rule_off", EARNED_RULES],
+    ["no_payment_limit", EARNED_RULES],
+    ["Choose a number from 5 to 50.", EARNED_STORE],
+    ["It is set to that already.", EARNED_STORE],
+    ["Earned vendors are counted from your verdicts in shadow mode, which runs on Arc testnet.", EARNED_STORE],
+    ["The change could not be signed in the ledger, so nothing changed. Try again in a moment.", EARNED_STORE],
     // Start the live slice, from the report (live slice L1, L4, L6).
     ["Start the live slice", "src/components/vx/LiveSliceStart.tsx"],
     ["live_slice_started", "src/lib/live-slice.ts"],
