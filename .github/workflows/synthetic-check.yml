@@ -1,0 +1,57 @@
+name: Vestiarion production check
+
+# Opens production's public pages every 10 minutes from GitHub's servers, outside Vercel and Supabase, and tells the
+# team on a private Discord channel when a check fails two rounds running, and once when it passes again
+# (docs/superpowers/specs/2026-10-28-production-check-design.md). It only reads public pages: no production token, no
+# database. GitHub started 5- and 10-minute schedules only a few times a day (tests/supabase-cron.test.ts), so an
+# hourly schedule starts a run that checks every 10 minutes for 5 h 45 min. A start that comes while one runs waits as
+# the group's one pending run and begins when it ends, so the rounds go on as long as GitHub starts one in 6 hours.
+# The one secret, MONITOR_DISCORD_WEBHOOK_URL, is never printed; without it the checks still run, and the log says no
+# alert could be sent. The run fails only when the check itself could not do its job, never because a page did.
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synthetic-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # A fork checks nothing, unless its repository variable SYNTHETIC_ORIGIN names its own deployment.
+    if: github.repository == 'duongnq2798/vestiarion' || vars.SYNTHETIC_ORIGIN != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      # The script alone, run with the runner's own Node: it uses Node's built-ins only.
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/synthetic-check.mjs
+          sparse-checkout-cone-mode: false
+
+      # Each check's failures in a row and whether the team was told, from the newest run that saved them.
+      - name: Restore the last run's state
+        uses: actions/cache/restore@v4
+        with:
+          path: .synthetic-state.json
+          key: synthetic-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: synthetic-state-
+
+      - name: Check production every 10 minutes
+        env:
+          SYNTHETIC_ORIGIN: ${{ vars.SYNTHETIC_ORIGIN || 'https://www.vestiarion.xyz' }}
+          MONITOR_DISCORD_WEBHOOK_URL: ${{ secrets.MONITOR_DISCORD_WEBHOOK_URL }}
+        run: node scripts/synthetic-check.mjs --loop --minutes 345 --every 10 --state .synthetic-state.json
+
+      # The script writes the file after every round, so a run that failed or was cancelled still saves its last one.
+      - name: Save the state for the next run
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .synthetic-state.json
+          key: synthetic-state-${{ github.run_id }}-${{ github.run_attempt }}

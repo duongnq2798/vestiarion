@@ -28,6 +28,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   starts on bills to decide. Earning changes nothing the agent may do: every payment in shadow mode still waits for
   your verdict. Off by default, and refused on Arc mainnet. Needs migration 0146.
 
+- **Production is checked every 10 minutes.** From GitHub's servers, outside Vestiarion's hosting and database, a check
+  opens the landing page, the open numbers, the docs, the four free tools, robots.txt and the sitemap. When one fails
+  two checks running, the team is told on a private Discord channel, and told again once it works. The check reads
+  public pages only and is not counted as a visit. No migration.
+
 ### Fixed
 
 - **The OFAC vendor check says which wallets it compares with each other.** The page at
