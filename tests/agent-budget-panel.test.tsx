@@ -5,7 +5,8 @@ import { AgentBudgetPanel, budgetDialogDescription, ON_ARC_COPY, type AgentBudge
 /**
  * The console's spending limit panel with its "On Arc" part (docs/superpowers/specs/2026-10-03-onchain-spending-limit-design.md
  * §4, R14), as the markup it renders on the server: what it offers in a sandbox, in a live workspace with and without a
- * figure, while it is being set up, and once it is enforced, with the contract's own count.
+ * figure, while it is being set up, and once it is enforced, with the contract's own count. Its dialog says a figure
+ * stays on Arc mainnet (mainnet copy C11), and while the agent pays earned vendors on its own (earned vendors AL21).
  */
 
 // Try it on past decisions, inside the setting's form (policy replay §2): a server action, as the form's own.
@@ -86,11 +87,28 @@ describe("the spending limit panel, on Arc", () => {
   });
 });
 
+const RULE = "What the agent may pay on its own, in USDC, counted from 00:00 UTC. A payment past either figure is held for a person in Approvals; one a person approves does not count.";
+
 describe("the spending limit's dialog on each network (mainnet copy C11)", () => {
   it("lets Arc testnet leave a figure blank, and says Arc mainnet keeps one", () => {
-    const rule = "What the agent may pay on its own, in USDC, counted from 00:00 UTC. A payment past either figure is held for a person in Approvals; one a person approves does not count.";
-    expect(budgetDialogDescription("arc-testnet")).toBe(`${rule} Leave a figure blank for no limit.`);
-    expect(budgetDialogDescription("arc-mainnet")).toBe(`${rule} A workspace on Arc mainnet keeps a daily or 7-day limit.`);
+    expect(budgetDialogDescription("arc-testnet")).toBe(`${RULE} Leave a figure blank for no limit.`);
+    expect(budgetDialogDescription("arc-mainnet")).toBe(`${RULE} A workspace on Arc mainnet keeps a daily or 7-day limit.`);
+  });
+});
+
+describe("the spending limit's dialog while the agent pays earned vendors on its own (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL21)", () => {
+  it("says a figure stays, as saving with both blank is refused then", () => {
+    expect(budgetDialogDescription("arc-testnet", true)).toBe(`${RULE} Leave a figure blank for no limit on it, but keep one while the agent pays earned vendors on its own.`);
+    expect(budgetDialogDescription("arc-testnet", false)).toBe(`${RULE} Leave a figure blank for no limit.`);
+    // Arc mainnet keeps one anyway, and has no shadow mode to pay earned vendors in.
+    expect(budgetDialogDescription("arc-mainnet", true)).toBe(`${RULE} A workspace on Arc mainnet keeps a daily or 7-day limit.`);
+  });
+
+  it("is told by the console whether the switch is on", async () => {
+    const { readFileSync } = await import("node:fs");
+    const page = readFileSync("src/app/o/[slug]/console/page.tsx", "utf8");
+    expect(page).toContain("earnedPayments={earnedPayments}");
+    expect(page).toContain("readEarnedVendorRule(db())");
   });
 });
 

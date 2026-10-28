@@ -43,6 +43,7 @@ import { spendingLimitStatus } from "@/lib/circle/spending-limit-setup";
 import { readServiceBudget } from "@/lib/service-budget";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { readEarnedVendorRule } from "@/lib/earned-vendors-store";
 import { gettingStarted, ownBillCount, ownDecidedCount, ownPayableCount, type GettingStarted as Checklist } from "@/lib/getting-started";
 import { agentMovableUsdc } from "@/lib/treasury/wallet-treasury";
 import { cookies } from "next/headers";
@@ -94,7 +95,7 @@ export default async function DashboardPage({
   return inOrg(access, async () => {
     const network = workspaceNetwork().id;
     const query = await searchParams;
-    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit, recurring, planned] = await Promise.all([
+    const [accountsRows, actionRows, forecastRow, dashboardStats, invoices, counterparties, headEntries, waiting, pause, milestones, budget, onChainLimit, recurring, planned, earnedPayments] = await Promise.all([
       listAccounts(),
       listTreasuryActions(),
       latestForecast(),
@@ -131,6 +132,18 @@ export default async function DashboardPage({
       // Deal lines not invoiced yet, named apart in Next 30 days and the cash scenarios, never in a balance (deal
       // schedule D14). Best effort: none before migration 0104 runs, null when unread.
       readPlannedDealLines(),
+      // Whether an owner lets the agent pay earned vendors on its own, which keeps a spending limit figure: the limit's
+      // dialog says so (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL21). Never on Arc mainnet, off
+      // before 0146. Best effort: unread, the dialog does not say it, and Save still refuses removing both figures.
+      network === "arc-mainnet"
+        ? false
+        : readEarnedVendorRule(db()).then(
+            (rule) => rule.payments,
+            (error: unknown) => {
+              console.error("console: earned vendors not loaded", access.membership.orgId, error instanceof Error ? error.message : error);
+              return false;
+            }
+          ),
     ]);
     // Modes, not the provider: the page must still render when the
     // organization's Circle credentials cannot be read (R12).
@@ -607,6 +620,7 @@ export default async function DashboardPage({
                   orgSlug={slug}
                   canEdit={can(role, "agent.budget")}
                   live={access.membership.mode === "live"}
+                  earnedPayments={earnedPayments}
                   onChain={onChainLimit ? { ...onChainLimit, reading: onChainLimit.reading?.state === "read" ? onChainLimit.reading : null } : null}
                   view={{
                     dailyUsdc: budget.budget?.dailyUsdc ?? null,

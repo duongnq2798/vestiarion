@@ -22,10 +22,15 @@ import { withSuccessToast } from "@/components/withSuccessToast";
 import { addressUrl } from "@/lib/payee-chains";
 import { networkProfile, type Network } from "@/lib/network";
 
-/** What the limit dialog says a figure is, and what leaving one blank does: on Arc mainnet a figure stays (mainnet copy C11). */
-export function budgetDialogDescription(network: Network): string {
+/**
+ * What the limit dialog says a figure is, and what leaving one blank does: on Arc mainnet a figure stays (mainnet copy
+ * C11), and so does one while the agent pays earned vendors on its own, which Save refuses to remove
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL21).
+ */
+export function budgetDialogDescription(network: Network, earnedPayments = false): string {
   const rule = "What the agent may pay on its own, in USDC, counted from 00:00 UTC. A payment past either figure is held for a person in Approvals; one a person approves does not count.";
-  return network === "arc-mainnet" ? `${rule} A workspace on Arc mainnet keeps a daily or 7-day limit.` : `${rule} Leave a figure blank for no limit.`;
+  if (network === "arc-mainnet") return `${rule} A workspace on Arc mainnet keeps a daily or 7-day limit.`;
+  return earnedPayments ? `${rule} Leave a figure blank for no limit on it, but keep one while the agent pays earned vendors on its own.` : `${rule} Leave a figure blank for no limit.`;
 }
 
 const INITIAL: ActionResult = { ok: false, message: "" };
@@ -81,6 +86,7 @@ export function AgentBudgetPanel({
   onChain = null,
   network,
   walletTreasury = false,
+  earnedPayments = false,
 }: {
   /** The workspace's network: its explorer links what this shows (network threading P6). */
   network: Network;
@@ -93,6 +99,8 @@ export function AgentBudgetPanel({
   onChain?: OnChainLimitView | null;
   /** The workspace pays from its owner's own wallet, whose contract only that wallet changes (wallet treasury W14). */
   walletTreasury?: boolean;
+  /** An owner lets the agent pay earned vendors on its own, which keeps a figure (earned vendors AL21). */
+  earnedPayments?: boolean;
 }) {
   const unset = view.dailyUsdc === null && view.weeklyUsdc === null;
   return (
@@ -119,7 +127,7 @@ export function AgentBudgetPanel({
               : "A payment past it waits for you in Approvals. What a person approves does not count."}
           </p>
           {/* Once the owner's wallet deployed its contract, only that wallet changes the figures (wallet treasury W14). */}
-          {canEdit && !(walletTreasury && onChain?.contract) && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} network={network} />}
+          {canEdit && !(walletTreasury && onChain?.contract) && <BudgetDialog orgSlug={orgSlug} view={view} unset={unset} network={network} earnedPayments={earnedPayments} />}
           {/* Only where the network runs the spending-limit contract: Arc mainnet does not (final review I1, mainnet copy C3). */}
           {walletTreasury ? (
             <OnArcWallet orgSlug={orgSlug} onChain={onChain} network={network} />
@@ -212,7 +220,19 @@ function Usage({ label, spent, limit }: { label: string; spent: number; limit: n
 }
 
 /** The figures, which can be tried on past decisions first and applied from the result (policy replay §2). */
-function BudgetDialog({ orgSlug, view, unset, network }: { orgSlug: string; view: AgentBudgetView; unset: boolean; network: Network }) {
+function BudgetDialog({
+  orgSlug,
+  view,
+  unset,
+  network,
+  earnedPayments,
+}: {
+  orgSlug: string;
+  view: AgentBudgetView;
+  unset: boolean;
+  network: Network;
+  earnedPayments: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const trial = useRuleTrial("spending_limit");
   const { clear } = trial;
@@ -237,7 +257,7 @@ function BudgetDialog({ orgSlug, view, unset, network }: { orgSlug: string; view
       </DialogTrigger>
       <DialogContent
         title="Agent spending limit"
-        description={budgetDialogDescription(network)}
+        description={budgetDialogDescription(network, earnedPayments)}
       >
         <form {...formProps} onChange={clear} className="grid gap-5">
           <input type="hidden" name="orgSlug" value={orgSlug} />
