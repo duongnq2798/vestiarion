@@ -23,8 +23,9 @@ import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type Recorded
  *
  * Step 3's switch (AL21): an owner's, refused without a rule, without an agent spending limit, on Arc mainnet, while a
  * cycle runs and before 0146; signed strictly as `earned_vendor_payments_changed` and put back from its own write when it
- * cannot be; a switch left in force without its entry signed before the next change; and turned off, with its entry, when
- * the rule is.
+ * cannot be; a switch left in force without its entry signed before the next change; turned off, with its entry, when
+ * the rule is; and never turned back on by a rule change put back, unless that change turned it off and the ledger still
+ * names it on.
  */
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -294,7 +295,7 @@ describe("changing it (AL11, AL17)", () => {
   });
 
   it("puts the rule back and refuses when its entry cannot be signed, so no rule is in force without its entry", async () => {
-    const world = northwindEarned({ earned_vendor_streak: 8, earned_vendor_payments: true });
+    const world = { ...northwindEarned({ earned_vendor_streak: 8, earned_vendor_payments: true }), switches: [{ seq: 810, from: false, to: true }] };
     signing(world, (entry) => entry.action === "earned_vendor_rule_changed");
     const { fake, run } = workspace(world);
     await expect(run(() => changeEarnedVendorRule({ actorId: OWNER, streak: null }))).rejects.toMatchObject({ code: "not_signed" });
@@ -305,6 +306,42 @@ describe("changing it (AL11, AL17)", () => {
     expect(back.params.get("org_id")).toBe(`eq.${ORG}`);
     expect(back.body).toMatchObject({ earned_vendor_streak: 8, earned_vendor_payments: true });
     expect(world.rule).toMatchObject({ earned_vendor_streak: 8, earned_vendor_payments: true });
+  });
+
+  it("puts back only the rule after a change from one rule to another, so a switch another owner turned off since stays off", async () => {
+    const world: World = { ...northwindEarned({ earned_vendor_streak: 5, earned_vendor_payments: true }), switches: [{ seq: 810, from: false, to: true }] };
+    // Another owner turns the switch off, signed, between this change's write and its entry.
+    world.upsert = (body) => {
+      world.rule = { earned_vendor_streak: body.earned_vendor_streak as number, earned_vendor_payments: false };
+      world.switches!.push({ seq: 811, from: true, to: false });
+      return { status: 201, body: null };
+    };
+    signing(world, (entry) => entry.action === "earned_vendor_rule_changed");
+    const { fake, run } = workspace(world);
+    await expect(run(() => changeEarnedVendorRule({ actorId: OWNER, streak: 10 }))).rejects.toMatchObject({ code: "not_signed" });
+    const [back] = fake.requests.filter((r) => r.path === "/rest/v1/approval_policies" && r.method === "PATCH");
+    expect(back.params.get("earned_vendor_streak")).toBe("eq.10");
+    expect(back.body).toMatchObject({ earned_vendor_streak: 5 });
+    expect(back.body).not.toHaveProperty("earned_vendor_payments");
+    expect(world.rule).toMatchObject({ earned_vendor_streak: 5, earned_vendor_payments: false });
+  });
+
+  it("puts the switch back on with the rule only while the ledger still names it on", async () => {
+    const world: World = { ...northwindEarned({ earned_vendor_streak: 5, earned_vendor_payments: true }), switches: [{ seq: 810, from: false, to: true }] };
+    // The rule's turning off wrote the switch off; another owner then signed it off, before the rule's entry failed.
+    world.upsert = (body) => {
+      world.rule = { earned_vendor_streak: null, earned_vendor_payments: false };
+      expect(body).toMatchObject({ earned_vendor_streak: null, earned_vendor_payments: false });
+      world.switches!.push({ seq: 811, from: true, to: false });
+      return { status: 201, body: null };
+    };
+    signing(world, (entry) => entry.action === "earned_vendor_rule_changed");
+    const { fake, run } = workspace(world);
+    await expect(run(() => changeEarnedVendorRule({ actorId: OWNER, streak: null }))).rejects.toMatchObject({ code: "not_signed" });
+    const [back] = fake.requests.filter((r) => r.path === "/rest/v1/approval_policies" && r.method === "PATCH");
+    expect(back.params.get("earned_vendor_streak")).toBe("is.null");
+    expect(back.body).not.toHaveProperty("earned_vendor_payments");
+    expect(world.rule).toMatchObject({ earned_vendor_streak: 5, earned_vendor_payments: false });
   });
 
   it("never says nothing changed when the rule could not be put back either: it fails as anything else does, and logs it", async () => {

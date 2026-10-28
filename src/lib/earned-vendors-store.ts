@@ -212,10 +212,13 @@ export async function changeEarnedVendorRule(input: { actorId: string; streak: n
     await appendLedgerEntry(ruleEntry(input.actorId, from, to));
   } catch (error) {
     console.error("earned vendors: rule change not signed", currentOrgId(), messageOf(error));
-    // Put back only from this change's own write, as the mirror address is: a change another owner made since stays.
+    // Put back only from this change's own write, as the mirror address is: a change another owner made since stays. The
+    // switch was part of that write only when the rule went off with it, and goes back on only while the ledger still
+    // names it on (AL21, AL24): one another owner turned off since, or one never signed on, stays off.
+    const switchBack = to === null && current.payments && (await signedPayments().catch(() => false));
     const written = db()
       .from("approval_policies")
-      .update({ earned_vendor_streak: from, earned_vendor_payments: current.payments, updated_by: input.actorId, updated_at: new Date().toISOString() });
+      .update({ earned_vendor_streak: from, ...(switchBack ? { earned_vendor_payments: true } : {}), updated_by: input.actorId, updated_at: new Date().toISOString() });
     const back = await (to === null ? written.is("earned_vendor_streak", null) : written.eq("earned_vendor_streak", to)).then(
       (result) => result.error?.message ?? null,
       (failure: unknown) => messageOf(failure)
