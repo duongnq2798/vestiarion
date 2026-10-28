@@ -2,6 +2,7 @@ import { committedState } from "@/lib/agent/duplicates";
 import { invoiceLateFee, lateFeeLine } from "@/lib/agent/late-fee";
 import { invoiceDiscount } from "@/lib/agent/payment-timing";
 import { utcDay } from "@/lib/copy";
+import { paidOnItsOwn, type PaymentStep } from "@/lib/earned-vendors";
 import { explainMilestone, explainPayable, explainTreasury, presentReasoning } from "@/lib/reasoning-copy";
 import { recordedFacts } from "@/lib/added-details";
 import { awaitsVerdict, codeHeldForCash, heldForCash } from "@/lib/next-step";
@@ -92,6 +93,18 @@ function matchingEntry(entries: LedgerEntry[], key: "invoiceId" | "milestoneId",
       // An accounting tool's entries (a bill closed there, a booking of its payment) are no decision (accounting write-back W9).
       !entry.action.startsWith("accounting_")
   );
+}
+
+/** A payable's steps toward its payment (earned vendors AL29): the agent's decisions, and a person's that paid it. */
+function paymentSteps(invoiceId: string, entries: LedgerEntry[]): PaymentStep[] {
+  return entries
+    .filter((entry) => entry.detail.invoiceId === invoiceId && (entry.action === "approval_paid" || (entry.actor === "agent" && entry.action.startsWith("ap_"))))
+    .map((entry) => ({
+      seq: entry.seq,
+      action: entry.action,
+      onItsOwn: record(entry.detail.earned) !== undefined,
+      resultingStatus: stringValue(record(entry.detail.execution)?.resultingStatus) ?? null,
+    }));
 }
 
 /**
@@ -451,8 +464,10 @@ function decideInvoice(
     ...(invoice.status === "held" && codeHeldForCash(decided?.detail) ? { heldForCashByCode: true } : {}),
     // Held in shadow mode for a person to agree, which no rule did (shadow mode S2).
     ...(invoice.status === "held" && awaitsVerdict(decided?.detail) ? { heldForVerdict: true } : {}),
-    // Paid, or on its way, on the agent's own decision for an earned vendor in shadow mode (earned vendors AL22, AL27).
-    ...((invoice.status === "paid" || invoice.status === "matched") && record(decided?.detail.earned) ? { earned: true } : {}),
+    // Paid, or on its way, on the agent's own decision for an earned vendor in shadow mode (earned vendors AL22, AL27):
+    // read from that decision's own end, as the report reads it (AL29), never from a person's payment after one the live
+    // path held or whose transfer failed.
+    ...((invoice.status === "paid" || invoice.status === "matched") && paidOnItsOwn(paymentSteps(invoice.id, entries)) ? { earned: true } : {}),
     decisionMode: stringValue(entry?.detail.decisionMode),
     // A Gateway payout has no Arc transaction of its own: its hash is the mint, linked below on the payee's
     // chain. No mint is ever linked to Arc's explorer (Gateway review I4).

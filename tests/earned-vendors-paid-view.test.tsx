@@ -83,9 +83,26 @@ describe("a bill the agent paid on its own (AL22, AL27)", () => {
     expect(invoiceDecision(invoice(), undefined, [agreed], { network: "arc-testnet" }).earned).toBeUndefined();
     const held = invoiceDecision(invoice({ status: "held", tx_ref: null }), undefined, [onItsOwn], { network: "arc-testnet" });
     expect(held.earned).toBeUndefined();
-    expect(earnedPaidWhy({ ...held, earned: undefined } as Decision)).toBeNull();
+    expect(earnedPaidWhy(held)).toBeNull();
     // A shadow-mode hold still says why it waits.
     expect(stoppedWhy({ ...held, heldForVerdict: true, guardrail: null } as Decision)).toBe("Shadow mode: it waits for a person to agree.");
+  });
+
+  it("is not marked for a bill a person paid after the agent's own payment was held or failed, nor asks for a verdict on it", () => {
+    const approved = { ...entry(43, "approval_paid", { invoiceId: "inv-1", status: "paid", txRef: "0xdef" }), actor: "human" as const };
+    // Held by the live path (the cash, a pause, a failed transfer), then paid by a person's Approve and pay.
+    const heldOwn = entry(41, "ap_pay", { ...onItsOwn.detail, execution: { resultingStatus: "held", heldBecause: "cash" } });
+    // Taken by Circle, then failed for good, then paid by a person.
+    const failedOwn = entry(41, "ap_pay", { ...onItsOwn.detail, execution: { resultingStatus: "matched" } });
+    for (const own of [heldOwn, failedOwn]) {
+      const decision = invoiceDecision(invoice(), undefined, [approved, own], { network: "arc-testnet", verdicts });
+      expect(decision.earned).toBeUndefined();
+      expect(earnedPaidWhy(decision)).toBeNull();
+      expect(billNextStep(decision, { status: "paid", waiting: undefined, rule: null, canWrite: true, canDecide: true, counterparty: { id: "cp-1", name: "N" } })?.text).not.toBe("Give your verdict");
+    }
+    // On its way, then confirmed by the reconcile, with no person in between: still the agent's own.
+    const reconciled = entry(44, "ap_reconcile", { invoiceId: "inv-1", status: "paid" });
+    expect(invoiceDecision(invoice(), undefined, [reconciled, failedOwn], { network: "arc-testnet" }).earned).toBe(true);
   });
 });
 
@@ -193,6 +210,24 @@ describe("who paid, in the report (AL29)", () => {
     expect(text(renderToStaticMarkup(<WorkspaceReport slug="pinecrest" report={report} />))).toContain(
       "In shadow mode, a payment waits for your verdict; 1 paid on its own to earned vendors"
     );
+  });
+
+  it("is a person's for a payment sent after the agent's own transfer failed, never the agent's", () => {
+    const own = { seq: 41, ts: "2026-10-28T09:00:00.000Z", action: "ap_pay", invoiceId: "inv-1", guardrailBlocked: false, guardrailRule: null, heldBecause: null, resultingStatus: "matched", shadow: true, reasoning: null, onItsOwn: true };
+    // Approve and pay, after Circle failed the transfer the agent made on its own.
+    const approved = buildReport({ ...reportFacts({}), decisions: [own], verdicts: [], personActions: [{ seq: 43, ts: "2026-10-28T10:00:00.000Z", action: "approval_paid", invoiceId: "inv-1" }] });
+    expect(approved.paymentList[0].decidedBy).toBe("person");
+    expect(approved.paid.onItsOwn).toBe(0);
+    // Decided again, held for a verdict, and paid by a person's Agree.
+    const heldAgain = { ...own, seq: 42, ts: "2026-10-28T09:30:00.000Z", resultingStatus: "held", heldBecause: "shadow_verdict", onItsOwn: undefined };
+    const agreed = buildReport({
+      ...reportFacts({}),
+      decisions: [own, heldAgain],
+      verdicts: [{ entrySeq: 42, verdict: "agree", decidedAt: "2026-10-28T10:00:00.000Z" }],
+      personActions: [{ seq: 43, ts: "2026-10-28T10:00:00.000Z", action: "approval_paid", invoiceId: "inv-1" }],
+    });
+    expect(agreed.paymentList[0].decidedBy).toBe("verdict");
+    expect(agreed.paid.onItsOwn).toBe(0);
   });
 
   it("is the verdict for a payment a person's Agree paid", () => {

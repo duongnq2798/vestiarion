@@ -63,6 +63,32 @@ export function breaksEarning(rule: string | null | undefined): boolean {
   return rule.startsWith("counterparty.") || rule.startsWith("invoice.") || rule === "obligation.duplicate_reference";
 }
 
+/** One step toward a bill's payment: one of the agent's decisions about it, or a person's that paid it (`approval_paid`). */
+export interface PaymentStep {
+  seq: number;
+  action: string;
+  /** The agent carried the payment out on its own, for an earned vendor (`detail.earned`, AL27). */
+  onItsOwn?: boolean;
+  /** How the decision ended (`execution.resultingStatus`); absent on a person's step. */
+  resultingStatus?: string | null;
+}
+
+/**
+ * Whether a bill's payment was the agent's own, for an earned vendor (AL22, AL29): its newest decision carried out on
+ * its own ended paid or on its way, and no person paid the bill after it. A decision the live path held (the pause, the
+ * cash, a transfer that failed) paid nothing on its own, and a payment a person's Approve and pay or Agree and pay sent
+ * after one, both `approval_paid`, is that person's, whatever the agent's decision before it was. Whether the bill is
+ * paid now is the caller's to check.
+ */
+export function paidOnItsOwn(steps: readonly PaymentStep[]): boolean {
+  let own: PaymentStep | null = null;
+  for (const step of steps) {
+    if (step.onItsOwn === true && (step.resultingStatus === "paid" || step.resultingStatus === "matched") && (!own || step.seq > own.seq)) own = step;
+  }
+  const after = own?.seq;
+  return after !== undefined && !steps.some((step) => step.action === "approval_paid" && step.seq > after);
+}
+
 /**
  * What the statuses are worked out from: the report's own facts carry these fields (`readReportFacts`), and so does
  * the sync's narrower read (`readEarnedFacts`). A bill's amount is only for the report's list of verdicts. A payee's
