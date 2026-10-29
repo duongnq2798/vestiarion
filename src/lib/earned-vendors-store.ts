@@ -294,13 +294,19 @@ export async function changeEarnedVendorPayments(input: { actorId: string; on: b
     if (from === input.on) return { from: signed, to: from };
   }
 
-  const write = await db()
+  // An update of the workspace's row, never an upsert: Postgres checks 0146's check (never on without a rule) on the row
+  // an upsert would insert, before it finds the existing one, and that row has no rule, so turning on was always refused.
+  // The row is there: turning on needs its rule, still set when written, and turning off needs the switch on.
+  const update = db()
     .from("approval_policies")
-    .upsert({ earned_vendor_payments: input.on, updated_by: input.actorId, updated_at: new Date().toISOString() }, { onConflict: "org_id" });
+    .update({ earned_vendor_payments: input.on, updated_by: input.actorId, updated_at: new Date().toISOString() });
+  const write = await (input.on ? update.not("earned_vendor_streak", "is", null) : update.eq("earned_vendor_payments", true)).select("org_id");
   if (write.error) {
     if (earnedColumnsMissing(write.error)) throw new EarnedVendorsError("not_ready");
     throw new Error(write.error.message);
   }
+  // Nothing written: another owner took the rule away, or turned the switch off, since it was read.
+  if ((write.data ?? []).length === 0) throw new EarnedVendorsError(input.on ? "no_rule" : "unchanged");
   try {
     await appendLedgerEntry(paymentsEntry(input.actorId, from, input.on));
   } catch (error) {

@@ -67,6 +67,11 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   checking, and a tab in the background draws none until it is shown again. It now also checks without a frame: after a
   tenth of a second, or about a second in a background tab, where browsers slow timers down. No migration.
 
+- **Letting the agent pay earned vendors on its own can be turned on.** Turning it on in **Settings**, under **Earned
+  vendors**, always failed with "That did not work. Try again in a moment.": the database refused the way the switch was
+  written. It is now written as a change to the workspace's settings, and refused as without a rule if the rule was
+  taken away meanwhile. No migration.
+
 ## [0.1.0-beta.14] - 2026-10-28
 
 ### Added
