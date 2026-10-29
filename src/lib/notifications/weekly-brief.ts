@@ -2,6 +2,7 @@ import { siteOrigin } from "../auth/env";
 import { billsHref } from "../bills-view";
 import { currentOrgId } from "../context";
 import { db, platformDb, unwrap, type OrgDb } from "../dal";
+import { paidOnItsOwn, type PaymentStep } from "../earned-vendors";
 import { emailSettingsFromEnv, sendEmail } from "../email/send";
 import { BRIEF_LINES, payeeSentences, weeklyBriefEmail, type WeeklyBriefFacts } from "../email/weekly-brief";
 import { readPayeeLock } from "../payee-lock";
@@ -103,6 +104,40 @@ export async function payeeWeek(orgDb: OrgDb, since: string, until: string): Pro
   }
 }
 
+/** A confirmed payment of the week: what it carried, and its bill or milestone. */
+type PaidRow = { amount: string | number; token: string | null; source_type?: string | null; source_id?: string | null };
+
+/**
+ * Of the week's payments in shadow mode, how many the agent made on its own for an earned vendor
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22, AL29), which no one agreed to first: read from the
+ * bills' pay decisions and a person's payments of them, or records of the transfer sent before, as the report reads them.
+ */
+async function paidOnItsOwnCount(orgDb: OrgDb, paid: PaidRow[]): Promise<number> {
+  const bills = [...new Set(paid.flatMap((row) => (row.source_type === "invoice" && row.source_id ? [row.source_id] : [])))];
+  if (bills.length === 0) return 0;
+  const rows = unwrap(
+    await orgDb
+      .from("ledger_entries")
+      .select("seq, action, invoice_id:detail->>invoiceId, earned:detail->earned, resulting_status:detail->execution->>resultingStatus, recorded:detail->recorded")
+      .in("action", ["ap_pay", "approval_paid"])
+      .in("detail->>invoiceId", bills)
+      .limit(5000)
+  ) as Array<{ seq: number | string; action: string; invoice_id: string | null; earned: unknown; resulting_status: string | null; recorded?: unknown }>;
+  const stepsOf = new Map<string, PaymentStep[]>();
+  for (const row of rows) {
+    if (!row.invoice_id) continue;
+    const step: PaymentStep = {
+      seq: Number(row.seq),
+      action: row.action,
+      onItsOwn: row.earned !== null && typeof row.earned === "object",
+      resultingStatus: row.resulting_status,
+      ...(row.recorded === true ? { recorded: true } : {}),
+    };
+    stepsOf.set(row.invoice_id, [...(stepsOf.get(row.invoice_id) ?? []), step]);
+  }
+  return paid.filter((row) => row.source_type === "invoice" && row.source_id && paidOnItsOwn(stepsOf.get(row.source_id) ?? [])).length;
+}
+
 /** The brief's figures, read in the workspace's scope (W3). */
 export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number, shadow: ShadowMode | null = null): Promise<WeeklyBriefFacts> {
   // The 7 whole UTC days before today, as the heading says them (review of the brief).
@@ -111,13 +146,15 @@ export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number, shadow: Shad
   const until = new Date(today).toISOString();
   const [{ outlook, accounts }, paidRead, receivedRead, decisionsRead, waitingRead] = await Promise.all([
     readOpenCashOutlook(orgDb, nowMs),
-    orgDb.from("payment_intents").select("amount, token").eq("status", "confirmed").gte("confirmed_at", since).lt("confirmed_at", until).limit(1000),
+    orgDb.from("payment_intents").select("amount, token, source_type, source_id").eq("status", "confirmed").gte("confirmed_at", since).lt("confirmed_at", until).limit(1000),
     // A receivable paid in full, and the rest of one paid in part (receipts), as the agent matched them.
     orgDb.from("ledger_entries").select("detail").in("action", ["ar_received", "ar_payment_applied"]).gte("ts", since).lt("ts", until).limit(1000),
     orgDb.from("ledger_entries").select("seq").eq("actor", "agent").in("action", AGENT_DECISIONS).gte("ts", since).lt("ts", until).limit(1000),
     orgDb.from("invoices").select("id").eq("direction", "payable").in("status", WAITING_STATUSES).limit(1000),
   ]);
-  const paid = (unwrap(paidRead) as Array<{ amount: string | number; token: string | null }>).filter((row) => (row.token ?? "USDC") === "USDC");
+  const paid = (unwrap(paidRead) as PaidRow[]).filter((row) => (row.token ?? "USDC") === "USDC");
+  // In shadow mode, the ones the agent paid on its own for earned vendors are said apart: no one agreed to them first.
+  const onItsOwn = shadow ? await paidOnItsOwnCount(orgDb, paid) : 0;
   const received = (unwrap(receivedRead) as Array<{ detail: Record<string, unknown> }>).filter((row) => (row.detail.currency ?? "USDC") === "USDC");
   const lastDay = utcDay(nowMs + 6 * DAY_MS);
   const ahead = outlook.days.filter((entry) => entry.day <= lastDay);
@@ -134,7 +171,7 @@ export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number, shadow: Shad
     week: isoWeek(new Date(nowMs)),
     from: utcDay(today - 7 * DAY_MS),
     to: utcDay(today - DAY_MS),
-    paid: { count: paid.length, usdc: round(paid.reduce((sum, row) => sum + Number(row.amount), 0)) },
+    paid: { count: paid.length, usdc: round(paid.reduce((sum, row) => sum + Number(row.amount), 0)), ...(onItsOwn > 0 ? { onItsOwn } : {}) },
     received: { count: received.length, usdc: round(received.reduce((sum, row) => sum + Number(row.detail.amount ?? 0), 0)) },
     decisions: (unwrap(decisionsRead) as unknown[]).length,
     waiting: (unwrap(waitingRead) as unknown[]).length,
@@ -142,7 +179,7 @@ export async function weeklyBriefFacts(orgDb: OrgDb, nowMs: number, shadow: Shad
     cash: {
       operating: Number(accounts.find((account) => account.kind === "operating")?.balance ?? 0),
       reserve: Number(accounts.find((account) => account.kind === "reserve")?.balance ?? 0),
-      // The wallet only mirrors agreed payments in shadow mode: its shortfall is not the business's.
+      // The wallet only mirrors the business's bills in shadow mode: its shortfall is not the business's.
       short: !shadow && short && short.need >= 0.01 ? { shortOn: short.shortOn, shortBy: short.shortBy, lowestOn: short.lowestOn, need: short.need } : null,
     },
     shadow: shadow

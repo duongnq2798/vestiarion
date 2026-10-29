@@ -199,7 +199,7 @@ export const FAQ: ReadonlyArray<{ question: string; answer: ReactNode }> = [
   {
     question: "Why would I trust an AI with payments?",
     answer:
-      "You don't have to, to start. In shadow mode it pays nothing from your accounts: it proposes, and you agree or disagree. In a live workspace it pays only what passes the rules in code you set, holds the rest for a person, and signs every decision.",
+      "You don't have to, to start. In shadow mode it pays nothing from your accounts: it proposes, and you agree or disagree. If you let it, it pays vendors that earned it under your rule on its own, on Arc testnet, and you review after. In a live workspace it pays only what passes the rules in code you set, holds the rest for a person, and signs every decision.",
   },
   {
     question: "Will it move my money automatically?",
@@ -217,7 +217,7 @@ export const FAQ: ReadonlyArray<{ question: string; answer: ReactNode }> = [
   {
     question: "What if the AI is wrong?",
     answer:
-      "You disagree and write why, and that invoice is not paid. Your agreement rate is shown, so you can judge the agent on your own invoices. Code also refuses decisions that break your rules; the count is read live above.",
+      "You disagree and write why, and that invoice is not paid; if the agent already paid an earned vendor on its own, the vendor loses its status and its next payment waits for you. Your agreement rate is shown, so you can judge the agent on your own invoices. Code also refuses decisions that break your rules; the count is read live above.",
   },
   {
     question: "Do my contractors need wallets?",

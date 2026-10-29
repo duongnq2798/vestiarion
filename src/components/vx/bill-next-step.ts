@@ -45,12 +45,14 @@ function addWords(missing: { poReference: boolean; goodsReceived: boolean }): st
 
 /**
  * The one thing a person does next on a bill, in the order its card offers it (`WaitingPayableAction`): a verdict the
- * agent asks for, the details the match lacks, the fix for a rule, Approvals. None for a bill on its way.
+ * agent asks for, the details the match lacks, the fix for a rule, Approvals. None for a bill on its way, except one the
+ * agent paid on its own for an earned vendor, whose verdict it asks for after (earned vendors AL22).
  */
 export function billNextStep(decision: Decision, facts: NextStepFacts): NextStep | null {
   if (decision.domain !== "ap") return null;
   const verdict = decision.verdict;
   if (verdict && verdict.heldForVerdict && verdict.open && verdict.given === null) return { text: "Give your verdict", tone: "agent", opens: "detail" };
+  if (verdict && decision.earned && verdict.open && verdict.given === null) return { text: "Give your verdict", tone: "agent", opens: "detail" };
 
   const refused = decision.outcome === "refused";
   if (facts.waiting) {

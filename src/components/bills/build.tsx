@@ -1,5 +1,5 @@
 import { billBlockers, billNextStep, collectionState } from "@/components/vx/bill-next-step";
-import { stoppedWhy } from "@/components/vx/decision-signals";
+import { earnedPaidWhy, stoppedWhy } from "@/components/vx/decision-signals";
 import type { Decision } from "@/components/vx/types";
 import type { AddedDetails, OnFile } from "@/lib/added-details";
 import {
@@ -124,7 +124,8 @@ export function billRowItem(facts: RowFacts): BillRowItem {
     outcomeLabel: decision.outcomeLabel,
     quiet: !payable && invoice.status === "pending",
     blockers: needsYou ? billBlockers(decision) : [],
-    why: needsYou ? stoppedWhy(decision) : null,
+    // Paid on its own for an earned vendor, its row says so (earned vendors AL22).
+    why: needsYou ? stoppedWhy(decision) : earnedPaidWhy(decision),
     note: payable ? null : (facts.owedNote ?? null),
     context: payable ? null : (facts.dealContext ?? null),
     next: payable

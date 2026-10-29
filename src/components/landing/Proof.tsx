@@ -206,7 +206,8 @@ export function CustomerFigures({ mainnet, testnet }: LandingNumbers) {
 
 /**
  * The agent's decisions in every workspace, customers' and ours, each network's count beside the sum, and how often
- * customers agreed with it in shadow mode, where nothing is paid until a person agrees.
+ * customers agreed with it in shadow mode, where nothing is paid until a person agrees, unless an owner lets the agent
+ * pay vendors that earned it under their rule.
  */
 export function DecisionFigures({ mainnet, testnet }: LandingNumbers) {
   if (!mainnet || !testnet) return <Unread network={!mainnet ? ARC_MAINNET.label : ARC_TESTNET.label} />;

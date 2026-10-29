@@ -42,6 +42,7 @@ import { sectionTitle } from "@/components/vx/nav";
 import { twoApprovalsStatus } from "@/lib/approval-policy";
 import { requireMembership } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
+import { paysSimulated } from "@/lib/capability";
 import { readCapability } from "@/lib/capability-read";
 import { shellModes } from "@/lib/circle";
 import { db, platformDb, unwrap } from "@/lib/dal";
@@ -378,17 +379,31 @@ export default async function SettingsPage({
           {
             id: "shadow-mode-title",
             title: "Shadow mode",
+            // What shadow mode pays names the earned vendors the agent pays on its own while the switch is on (AL28).
             content: shadow ? (
-              <ShadowModePanel orgSlug={slug} mode={shadow.mode} network={membership.network} canChange={can(membership.role, "approval.policy")} capability={capability} />
+              <ShadowModePanel
+                orgSlug={slug}
+                mode={shadow.mode}
+                network={membership.network}
+                canChange={can(membership.role, "approval.policy")}
+                capability={capability}
+                earnedPayments={earnedRule?.payments === true}
+              />
             ) : null,
           },
-          // Beside shadow mode, whose verdicts it counts (earned vendors AL11); left out on Arc mainnet, which has none.
+          // Beside shadow mode, whose verdicts it counts (earned vendors AL11), with the switch that lets the agent pay earned
+          // vendors on their own (AL21), in the capability's words; left out on Arc mainnet, which has neither.
           {
             id: "earned-vendors-title",
             title: "Earned vendors",
             content:
               earnedRule && membership.network !== "arc-mainnet" ? (
-                <EarnedVendorsPanel orgSlug={slug} status={{ streak: earnedRule.streak, ready: earnedRule.ready }} canChange={can(membership.role, "approval.policy")} />
+                <EarnedVendorsPanel
+                  orgSlug={slug}
+                  status={{ streak: earnedRule.streak, ready: earnedRule.ready, payments: earnedRule.payments }}
+                  simulated={capability ? paysSimulated(capability) : false}
+                  canChange={can(membership.role, "approval.policy")}
+                />
               ) : null,
           },
           {

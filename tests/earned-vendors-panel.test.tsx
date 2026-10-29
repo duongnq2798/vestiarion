@@ -4,12 +4,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import EarnedVendorsPanel from "@/components/EarnedVendorsPanel";
 
-vi.mock("@/app/actions/earned-vendors", () => ({ setEarnedVendorRuleAction: vi.fn() }));
+vi.mock("@/app/actions/earned-vendors", () => ({ setEarnedVendorRuleAction: vi.fn(), setEarnedVendorPaymentsAction: vi.fn() }));
 
 /**
  * The "Earned vendors" section of Settings (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11, AL20),
- * rendered to static markup: the rule in force, that earning changes nothing the agent may do, the owner's field and
- * Turn off, what anyone else reads, and what it shows before the workspace's database has it.
+ * rendered to static markup: the rule in force, that earning changes nothing the agent may do unless an owner lets it
+ * pay earned vendors on its own, the owner's field and Turn off, what anyone else reads, and what it shows before the
+ * workspace's database has it. Under a rule, step 3's switch (AL21): what it does now, and the owner's button.
  */
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;|&rsquo;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ");
@@ -18,12 +19,12 @@ const render = (props: Partial<Parameters<typeof EarnedVendorsPanel>[0]> = {}) =
   renderToStaticMarkup(<EarnedVendorsPanel orgSlug="pinecrest" status={{ streak: null, ready: true }} canChange={false} {...props} />);
 
 describe("EarnedVendorsPanel", () => {
-  it("says the rule in force, and that earning changes nothing the agent may do (AL20)", () => {
+  it("says the rule in force, and that earning changes nothing the agent may do unless an owner lets it pay (AL20, AL28)", () => {
     const off = text(render());
     expect(off).toContain("Earned vendors");
     expect(off).toContain("Off: no vendor is counted as earned.");
     expect(off).toContain(
-      "Counted from your verdicts in shadow mode. A vendor needs a payment limit to earn it. Earning changes nothing the agent may do: Report shows which vendors earned it, and the verdicts behind each."
+      "Counted from your verdicts in shadow mode. A vendor needs a payment limit to earn it. Earning changes nothing the agent may do unless an owner lets it pay earned vendors on its own. Report shows which vendors earned it, and the verdicts behind each."
     );
     expect(text(render({ status: { streak: 8, ready: true } }))).toContain("On: a vendor is earned after 8 agreed verdicts in a row on the agent's decisions to pay or schedule its bills.");
   });
@@ -60,6 +61,32 @@ describe("EarnedVendorsPanel", () => {
   });
 });
 
+describe("the switch to pay earned vendors on their own (AL21)", () => {
+  it("shows only under a rule, saying what it does now", () => {
+    expect(text(render({ canChange: true }))).not.toContain("Pay earned vendors on their own");
+    const off = text(render({ status: { streak: 8, ready: true, payments: false } }));
+    expect(off).toContain("Pay earned vendors on their own");
+    expect(off).toContain("Earned vendors' payments wait for your verdict, as every payment in shadow mode does.");
+    const on = text(render({ status: { streak: 8, ready: true, payments: true } }));
+    expect(on).toContain("The agent pays earned vendors on its own, within every limit and check, and you give your verdict after.");
+  });
+
+  it("offers an owner the switch: on behind a confirmation, off at once", () => {
+    const off = render({ canChange: true, status: { streak: 8, ready: true, payments: false } });
+    expect(text(off)).toContain("Let the agent pay earned vendors");
+    expect(off).toMatch(/<input(?=[^>]*name="on")(?=[^>]*value="true")/);
+    const on = render({ canChange: true, status: { streak: 8, ready: true, payments: true } });
+    expect(text(on)).toContain("Make them wait for my verdict");
+    expect(on).toMatch(/<input(?=[^>]*name="on")(?=[^>]*value="false")/);
+  });
+
+  it("offers anyone else no button", () => {
+    const viewer = text(render({ status: { streak: 8, ready: true, payments: false } }));
+    expect(viewer).not.toContain("Let the agent pay earned vendors");
+    expect(viewer).not.toContain("Make them wait for my verdict");
+  });
+});
+
 describe("the Settings page", () => {
   // A server component the suite does not render: its wiring is read from its source.
   const page = readFileSync(path.join(process.cwd(), "src/app/o/[slug]/settings/page.tsx"), "utf8").replace(/\s+/g, " ");
@@ -71,5 +98,11 @@ describe("the Settings page", () => {
     expect(page).toContain('readEarnedVendorRule(db()).catch(');
     expect(page).toContain('earnedRule && membership.network !== "arc-mainnet" ?');
     expect(page).toContain('canChange={can(membership.role, "approval.policy")} />');
+  });
+
+  it("hands the panel the switch and whether payments are simulated, and Shadow mode the switch (AL21, AL28)", () => {
+    expect(page).toContain("payments: earnedRule.payments");
+    expect(page).toContain("simulated={capability ? paysSimulated(capability) : false}");
+    expect(page).toContain("earnedPayments={earnedRule?.payments === true}");
   });
 });

@@ -61,7 +61,8 @@ export const QUALITY_LAB_GROUPS: ReadonlyArray<QualityLabGroup> = [
   {
     id: "switches",
     title: "Workspace switches",
-    about: "The agent is paused, or the workspace runs in shadow mode beside how it pays today.",
+    about:
+      "The agent is paused, or the workspace runs in shadow mode beside how it pays today, with or without the owner letting the agent pay vendors that earned it.",
   },
   {
     id: "model",
@@ -132,6 +133,11 @@ export interface QualityLabScenario {
     addressChanged?: { hoursAgo: number; confirmedHoursAgo: number | null };
     /** Never paid at this address: one member gave it alone, or a second member confirmed it. */
     firstPayment?: "one_member" | "two_members";
+    /**
+     * It earned the owner's rule for earned vendors, and is recorded earned (earned vendors AL12, AL15): with the
+     * workspace's `earnedVendorPayments`, the agent pays it on its own in shadow mode.
+     */
+    earned?: boolean;
   };
   workspace?: {
     paused?: boolean;
@@ -143,6 +149,11 @@ export interface QualityLabScenario {
     dailySpendingLimit?: number;
     /** The spending limit contract on Arc, and what it says of this payment: an answer the runner scripts, never asking Arc. */
     spendingLimitOnArc?: "allows" | "refuses";
+    /**
+     * The owner lets the agent pay earned vendors on their own, in shadow mode (earned vendors AL21, AL22): the runner
+     * hands the stage a gate that grants the payee when it is `earned`, and none otherwise.
+     */
+    earnedVendorPayments?: boolean;
   };
   history?: {
     /** The same bill, same purchase order and amount, already paid. */
@@ -445,6 +456,42 @@ export const QUALITY_LAB_SCENARIOS: ReadonlyArray<QualityLabScenario> = [
     workspace: { shadowMode: true },
     model: { action: "pay", reasoning: "Due today, matched and within the limit; paying it." },
     expected: stopped("held", null, "shadow_verdict"),
+  },
+  {
+    id: "switches-earned-vendor-paid",
+    group: "switches",
+    title: "In shadow mode, a vendor that earned it under the owner's rule is paid on its own, on Arc testnet",
+    payee: { earned: true },
+    workspace: { shadowMode: true, earnedVendorPayments: true, dailySpendingLimit: 2000 },
+    model: { action: "pay", reasoning: "Due today, matched and within the limit; paying it." },
+    expected: PAID,
+  },
+  {
+    id: "switches-not-earned-waits",
+    group: "switches",
+    title: "In shadow mode with earned vendors paid on their own, a vendor that has not earned it waits for a verdict",
+    payee: { earned: false },
+    workspace: { shadowMode: true, earnedVendorPayments: true, dailySpendingLimit: 2000 },
+    model: { action: "pay", reasoning: "Due today, matched and within the limit; paying it." },
+    expected: stopped("held", null, "shadow_verdict"),
+  },
+  {
+    id: "switches-earned-address-changed",
+    group: "switches",
+    title: "An earned vendor's address changed and no one confirmed it: code stops the payment",
+    payee: { earned: true, addressChanged: { hoursAgo: 3, confirmedHoursAgo: null } },
+    workspace: { shadowMode: true, earnedVendorPayments: true, dailySpendingLimit: 2000 },
+    model: { action: "pay", reasoning: "Due today, matched and within the limit; paying it." },
+    expected: stopped("held", "counterparty.address_unconfirmed"),
+  },
+  {
+    id: "switches-earned-above-two-approvals",
+    group: "switches",
+    title: "An earned vendor's bill above the two-approvals figure waits for two people",
+    payee: { earned: true },
+    workspace: { shadowMode: true, earnedVendorPayments: true, dailySpendingLimit: 2000, twoApprovalsAbove: 300 },
+    model: { action: "pay", reasoning: "Due today, matched and within the limit; paying it." },
+    expected: stopped("held", "workspace.two_approvals"),
   },
 
   // When the model says no.

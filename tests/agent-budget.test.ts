@@ -6,7 +6,9 @@ import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } fr
 
 /**
  * Setting the agent's spending limit (docs/superpowers/specs/2026-10-02-outflow-budget-design.md R7):
- * one row per workspace, written as a whole, refused while a cycle runs, each change in the ledger.
+ * one row per workspace, written as a whole, refused while a cycle runs, each change in the ledger. Removing both figures
+ * is refused while an owner lets the agent pay earned vendors on its own, which needs a figure
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL21).
  */
 
 const { ledgerMock, setLimitsMock } = vi.hoisted(() => ({ ledgerMock: vi.fn(), setLimitsMock: vi.fn() }));
@@ -23,8 +25,12 @@ const ACTOR = "a1b2c3d4-0000-4000-8000-000000000001";
 let fake: ReturnType<typeof fakeSupabase>;
 const run = <T,>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG, userId: ACTOR }), fn);
 
-function workspace(over: { budget?: unknown[]; running?: unknown[]; payments?: unknown[]; upsert?: FakeReply; onChain?: Record<string, unknown> } = {}) {
+function workspace(over: { budget?: unknown[]; running?: unknown[]; payments?: unknown[]; upsert?: FakeReply; onChain?: Record<string, unknown>; policy?: unknown[] | "missing" } = {}) {
   return (r: RecordedRequest): FakeReply => {
+    if (r.path === "/rest/v1/approval_policies") {
+      if (over.policy === "missing") return { status: 400, body: { code: "42703", message: "column approval_policies.earned_vendor_streak does not exist" } };
+      return { body: over.policy ?? [] };
+    }
     if (r.path === "/rest/v1/spending_limit_contracts") return { body: over.onChain ?? null };
     if (r.path === "/rest/v1/agent_budgets" && r.method === "GET") return { body: over.budget ?? [] };
     if (r.path === "/rest/v1/agent_budgets" && r.method === "POST") return over.upsert ?? { status: 201, body: null };
@@ -111,6 +117,26 @@ describe("changeAgentBudget", () => {
     const result = await run(() => changeAgentBudget({ actorId: ACTOR, daily: "", weekly: "" }));
     expect(result.to).toEqual({ dailyUsdc: null, weeklyUsdc: null });
     expect(ledgerMock.mock.calls[0][1].summary).toBe("Removed the agent's spending limit of 100 USDC a day and 300 USDC in 7 days");
+  });
+
+  it("keeps a figure while the agent pays earned vendors on its own: removing both is refused, writing nothing", async () => {
+    const earnedOn = [{ earned_vendor_streak: 5, earned_vendor_payments: true }];
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "100", weekly_usdc: "300" }], policy: earnedOn }));
+    const attempt = run(() => changeAgentBudget({ actorId: ACTOR, daily: "", weekly: "" }));
+    await expect(attempt).rejects.toMatchObject({ code: "earned_payments_need_figure" });
+    await expect(attempt).rejects.toThrow(
+      "Keep a daily or 7-day figure while the agent pays earned vendors on its own, or have an owner turn that off first, under Earned vendors in Settings."
+    );
+    expect(fake.requests.some((r) => r.path === "/rest/v1/agent_budgets" && r.method === "POST")).toBe(false);
+    expect(ledgerMock).not.toHaveBeenCalled();
+
+    // A figure kept is a change like any other; with the switch off, or before migration 0146, both go as before.
+    fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "100", weekly_usdc: "300" }], policy: earnedOn }));
+    await run(() => changeAgentBudget({ actorId: ACTOR, daily: "", weekly: "200" }));
+    for (const policy of [[{ earned_vendor_streak: 5, earned_vendor_payments: false }], "missing" as const]) {
+      fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "100", weekly_usdc: "300" }], policy }));
+      expect((await run(() => changeAgentBudget({ actorId: ACTOR, daily: "", weekly: "" }))).to).toEqual({ dailyUsdc: null, weeklyUsdc: null });
+    }
   });
 
   it("refuses an invalid figure, an unchanged limit, and a change while a cycle runs, writing nothing", async () => {

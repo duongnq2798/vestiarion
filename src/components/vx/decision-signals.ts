@@ -42,6 +42,14 @@ export function payableSignals(decision: Decision): DecisionSignal[] {
 const WHY_LENGTH = 160;
 
 /**
+ * What a bill's row says, beside its outcome, when the agent paid it on its own in shadow mode for an earned vendor
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22): nothing stopped it, and the verdict comes after.
+ */
+export function earnedPaidWhy(decision: Decision): string | null {
+  return decision.domain === "ap" && decision.earned ? "An earned vendor: paid without waiting for your verdict." : null;
+}
+
+/**
  * Why a payable waits for a person, in one line under its row's title, so the row says it before it is opened: the
  * rule that stopped it, when code did, else the first sentence of the agent's own reasoning. The card keeps the whole.
  */

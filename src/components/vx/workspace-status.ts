@@ -41,6 +41,11 @@ export interface PageStatus {
   /** Whether shadow mode is on; null when it could not be read. */
   shadow: boolean | null;
   /**
+   * In shadow mode, whether the owner lets the agent pay earned vendors on their own
+   * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28); absent is off.
+   */
+  earnedPayments?: boolean;
+  /**
    * The workspace's own screening, read in its scope: live, and which source ("OpenSanctions", "bundled list", "no
    * service"); and whether its newest live lookup failed (screening health SH4).
    */
@@ -82,6 +87,7 @@ export function headerCapability(platform: PlatformStatus, page: PageStatus | un
     hold: networkHeld ?? (page?.chain.held ? (page.chain.hold ?? NO_WALLET) : null),
     chainMode: page?.chain.mode ?? "simulate",
     shadow: page ? page.shadow : false,
+    ...(page?.earnedPayments ? { earnedPayments: true } : {}),
   });
 }
 
@@ -173,7 +179,15 @@ export function statusRows(platform: PlatformStatus, page?: PageStatus): StatusR
       page.shadow === null
         ? { key: "shadow", label: "Shadow mode", value: "Could not be read", tone: "unknown", detail: "Reload the page to try again." }
         : page.shadow
-          ? { key: "shadow", label: "Shadow mode", value: "On", tone: "shadow", detail: "The agent decides each bill, and each decision waits for a person's verdict." }
+          ? {
+              key: "shadow",
+              label: "Shadow mode",
+              value: "On",
+              tone: "shadow",
+              detail: page.earnedPayments
+                ? "The agent decides each bill, and each decision waits for a person's verdict, except payments to vendors that earned it under the owner's rule."
+                : "The agent decides each bill, and each decision waits for a person's verdict.",
+            }
           : { key: "shadow", label: "Shadow mode", value: "Off", tone: "quiet", detail: "The agent pays what passes its checks; anything else waits in Approvals." }
     );
   }

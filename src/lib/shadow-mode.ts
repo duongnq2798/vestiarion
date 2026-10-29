@@ -7,7 +7,9 @@ import { workspaceNetwork } from "./workspace-network";
 
 /**
  * Shadow mode (docs/superpowers/specs/2026-10-07-shadow-mode-design.md S1): a business keeps paying its bills as it
- * does today, in its own currency, while the agent decides on the same bills and pays nothing until a person agrees.
+ * does today, in its own currency, while the agent decides on the same bills and pays nothing until a person agrees,
+ * except vendors that earned it under the owner's rule while the owner lets the agent pay them on their own
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL21, AL28).
  * One row per workspace in `shadow_modes`, read by the agent once per stage. Arc testnet only: on Arc mainnet the agent
  * pays the real bills. Every export runs inside an organization scope; who may turn it on and off (`approval.policy`,
  * owners) is the caller's check. A change is refused while a cycle runs, as two approvals are: the cycle read it when
@@ -56,7 +58,11 @@ async function refuseWhileCycleRuns(): Promise<void> {
   if (running.length > 0) throw new ShadowModeError("cycle_running");
 }
 
-export async function startShadowMode(input: { actorId: string; currency: string }): Promise<ShadowMode> {
+/**
+ * Turns shadow mode on. `earnedPayments`, the owner's switch for earned vendors as the caller read it, only changes what
+ * the signed entry says the agent pays (earned vendors AL28).
+ */
+export async function startShadowMode(input: { actorId: string; currency: string; earnedPayments?: boolean }): Promise<ShadowMode> {
   const currency = shadowModeCurrency(input.currency);
   if (!currency) throw new ShadowModeError("invalid_currency");
   if (workspaceNetwork().id === "arc-mainnet") throw new ShadowModeError("mainnet");
@@ -76,7 +82,9 @@ export async function startShadowMode(input: { actorId: string; currency: string
     actor: "human",
     domain: "system",
     action: "shadow_mode_started",
-    summary: `Shadow mode started, for bills in ${currency}: the agent pays nothing until a person agrees`,
+    summary: `Shadow mode started, for bills in ${currency}: the agent pays nothing until a person agrees${
+      input.earnedPayments ? ", except vendors that earned it under the owner's rule" : ""
+    }`,
     detail: { by: input.actorId, currency },
   });
   return { currency, startedAt, startedBy: input.actorId };

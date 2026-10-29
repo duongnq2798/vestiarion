@@ -376,7 +376,7 @@ function ShadowAgreement({ customers }: { customers: SideNumbers }) {
   if (given === null || agreed === null || given === 0) return null;
   return (
     <p className="mt-4 max-w-3xl text-sm leading-relaxed text-ink-2">
-      {`In shadow mode, a person agrees or disagrees with each of the agent's payment decisions before anything is paid: customers agreed with ${formatFigure(agreed, "count")} of ${formatFigure(given, "count")} (${formatPercent(agreed, given)}).`}
+      {`In shadow mode, a person agrees or disagrees with each of the agent's payment decisions before anything is paid, unless an owner lets the agent pay vendors that earned it under their rule: customers agreed with ${formatFigure(agreed, "count")} of ${formatFigure(given, "count")} (${formatPercent(agreed, given)}).`}
     </p>
   );
 }

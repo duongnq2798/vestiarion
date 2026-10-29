@@ -80,7 +80,9 @@ Code comments and test names cite the ids, for example "(autonomy ladder AL4)".
     **Too few to tell yet**.
 
   Before any verdict on a real bill it says **No verdict on a real bill yet**. The steps, their numbering and their
-  ticks are unchanged. On a phone each row stacks its name and count over its figure, as the currency report's tables
+  ticks are unchanged. The paragraph ends "It only measures: nothing here changes what the agent may do."; once an
+  owner set a rule for earned vendors it ends "It only measures. What earning changes is under Earned vendors.", since
+  step 3 can let earning change what the agent pays (`docs/superpowers/specs/2026-10-28-earned-vendors-design.md` AL28). On a phone each row stacks its name and count over its figure, as the currency report's tables
   do, so nothing scrolls sideways at 375 px.
 - **AL8. In the live slice's vendor picker.** Each vendor's own row says, beside its checkbox, how often the owner
   agreed with the agent on its bills: "83% agreed, 5 of 6 verdicts", "2 verdicts: too few to tell yet", or "No verdicts
@@ -101,10 +103,10 @@ Code comments and test names cite the ids, for example "(autonomy ladder AL4)".
   owner sets one rule per workspace, N agreed verdicts in a row on the agent's decisions to pay or schedule a vendor's
   bills, and the report shows, with the verdicts behind each, which vendors earned it. Every change of the rule and of
   a vendor's status is signed. It grants nothing.
-- **Step 3, planned** (same spec, AL21-AL30, not built): an owner may let the agent pay an earned vendor on Arc testnet
-  in shadow mode without waiting for a verdict, within every limit and check.
+- **Step 3, built** (same spec, AL21-AL30, no migration): an owner may let the agent pay an earned vendor on Arc
+  testnet in shadow mode without waiting for a verdict, within every limit and check, with the verdict given after.
 
-Until step 3 is built, an owner gives the agent more room only with the controls the product already has, among
+Beyond that switch, an owner gives the agent more room only with the controls the product already has, among
 them: turning shadow mode off, the live slice, a payee's payment limit, the agent's spending limit, the figure above
 which a payment needs two approvals, a vendor's purchase-order requirement, the payee lock, a project's budget and, on
 Arc mainnet with a treasury in the owner's own wallet, the daily and 7-day figures set in its contract.

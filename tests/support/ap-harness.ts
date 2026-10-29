@@ -4,6 +4,7 @@ import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
 import { runApStage, type CycleLogLine } from "@/lib/agent/orchestrator";
+import { earnedGate } from "@/lib/agent/earned-gate";
 import { onChainLimitGate, type OnChainLimitGate } from "@/lib/agent/onchain-limit";
 import type { ObligationGate } from "@/lib/agent/obligation-gate";
 import type { BudgetRoom } from "@/lib/agent/outflow-budget";
@@ -36,6 +37,10 @@ import { APPENDED_LEDGER_ROW, signedOrgs } from "./signed-org";
  * hands in three more, each as a decision recorded it, and unused by the scenarios: the agent's spending limit's room
  * (`spendingLimitRoom`, so its own figures are weighed, not read), the checks after the guardrails (`obligations`: the
  * same work and the project's answer) and the reserve's yield (`reserveApy`).
+ *
+ * Earned vendors paid on their own (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22, AL30) hand in the
+ * vendors the stage's gate grants (`earned`), each stage a fresh gate, as the stage builds one; with none handed in, the
+ * stage builds its own from the workspace, whose fake has no rule, so it grants none.
  *
  * Call `apHarness()` at the top of a test file, so the signing hooks register there.
  */
@@ -148,6 +153,12 @@ export interface ApWorldOptions {
   obligations?: ObligationGate;
   /** The reserve's yield, as a fraction; 0.045 when absent. */
   reserveApy?: number;
+  /**
+   * The vendors the stage's gate lets the agent pay on its own in shadow mode, earned and recorded earned (earned vendors
+   * AL22), each with none of its payments made that way waiting for a verdict, or with `waiting` of them (AL26); absent,
+   * the stage builds its gate from the workspace.
+   */
+  earned?: Array<string | { vendorId: string; waiting: number }>;
 }
 
 /** A PostgREST filter value `eq.x`, `is.null` or `in.(a,b)` as a test on one column's value. */
@@ -234,6 +245,20 @@ export function apHarness() {
     const chain = options.chain ?? new LabChain();
     const metrics = new CycleMetricsCollector();
     const lines: CycleLogLine[] = [];
+    /** A vendor's name from the book, for the loss a gate signs. */
+    const nameOf = (vendorId: string) =>
+      (book.find((row) => row.counterparty_id === vendorId)?.counterparties as { name?: string } | undefined)?.name ?? "A vendor";
+    const earned = () =>
+      options.earned
+        ? {
+            earned: earnedGate(
+              options.earned.map((vendor) => {
+                const { vendorId, waiting } = typeof vendor === "string" ? { vendorId: vendor, waiting: 0 } : vendor;
+                return { vendorId, name: nameOf(vendorId), grant: { recordSeq: 900, streak: 5, agreed: 5 }, waiting };
+              })
+            ),
+          }
+        : {};
     const stage = (operatingBalance = 5000) =>
       runWith({ config, db: fake.client, fetch: fake.fetch }, () =>
         withOrg(LAB_ORG, () =>
@@ -250,6 +275,7 @@ export function apHarness() {
             ...(options.newPayee ? { newPayee: { load: async () => options.newPayee! } } : {}),
             ...("spendingLimitRoom" in options ? { budget: { room: async () => options.spendingLimitRoom ?? null, spend: () => {} } } : {}),
             ...(options.obligations ? { obligations: options.obligations } : {}),
+            ...earned(),
           })
         )
       );

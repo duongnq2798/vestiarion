@@ -5,9 +5,11 @@ import { VERDICTS_BEFORE_LIVE } from "@/lib/workspace-report";
 /**
  * How often the owner agreed with the agent, by decision and by vendor, under the report's Before a live slice
  * (docs/superpowers/specs/2026-10-26-autonomy-ladder-design.md AL7): what agreement means here said first (AL1, AL3),
- * then a count of verdicts behind every figure, and no percentage under five (AL4). It only measures.
+ * then a count of verdicts behind every figure, and no percentage under five (AL4). It only measures. Once an owner set a
+ * rule for earned vendors (`ruled`), it points to the block that says what earning changes
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28).
  */
-export function AgreementLadder({ ladder }: { ladder: AutonomyLadder }) {
+export function AgreementLadder({ ladder, ruled = false }: { ladder: AutonomyLadder; ruled?: boolean }) {
   return (
     <section aria-labelledby="report-agreement" className="space-y-4">
       <div>
@@ -17,8 +19,8 @@ export function AgreementLadder({ ladder }: { ladder: AutonomyLadder }) {
         <p className="mt-0.5 text-xs leading-relaxed text-ink-3">
           {"From your verdicts in shadow mode: each Agree or Disagree you gave on one of the agent's decisions about a real bill, sample data left out."}{" "}
           A bill the agent decided twice can carry two verdicts. This is not Agent vs what really happened, below, which compares the agent with what your
-          business paid. {`Under ${VERDICTS_BEFORE_LIVE} verdicts, a row says too few to tell yet.`} It only measures: nothing here changes what the agent may
-          do.
+          business paid. {`Under ${VERDICTS_BEFORE_LIVE} verdicts, a row says too few to tell yet.`}{" "}
+          {ruled ? "It only measures. What earning changes is under Earned vendors." : "It only measures: nothing here changes what the agent may do."}
         </p>
       </div>
       {ladder.given === 0 ? (

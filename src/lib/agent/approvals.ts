@@ -1433,6 +1433,10 @@ export async function approveAndPay(
       // Which transfer attempt this approval ended on, and on a retry the
       // attempt Circle failed before it: ids and states only.
       ...(result.execution ? { attempt: result.execution.attempt } : {}),
+      // This approval sent nothing of its own: it read and recorded the transfer sent before it (one that existed, or a
+      // send Circle never answered, found), so that payment stays whoever's sent it, the agent's own for an earned
+      // vendor included (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL29).
+      ...(alreadySent || result.execution?.reconciled === true ? { recorded: true } : {}),
       ...(result.execution?.retriedAfter ? { retriedAfter: result.execution.retriedAfter } : {}),
       // A new payment to another chain: the route it took and both routes' fees, as an ap_pay entry records them. A bank
       // payout: BlindPay's quote and payout, and the account's bank and last four (bank payouts B10).

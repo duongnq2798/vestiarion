@@ -21,14 +21,18 @@ const ALLOWED: Record<string, number> = {
   // mode, Arc testnet beside Arc mainnet), the network picker that names both networks, and /open, which counts each
   // network apart. The landing's integrations name Arc testnet beside Arc mainnet for what each is for, say which
   // Circle products run on Arc testnet alone (landing Arc and Circle AC2), and that Xero books payments on Arc testnet
-  // only into a demo company (accounting write-back W1).
-  "src/components/landing/Faq.tsx": 1,
+  // only into a demo company (accounting write-back W1). The FAQ also says an owner may let the agent pay earned vendors
+  // on their own in shadow mode, which runs only on Arc testnet (earned vendors AL28).
+  "src/components/landing/Faq.tsx": 3,
   "src/components/landing/Integrations.tsx": 3,
   "src/lib/docs/nav.ts": 2,
   "src/components/CreateWorkspaceForm.tsx": 1,
   "src/app/open/page.tsx": 4,
-  // The page for studios: shadow mode and its mirror addresses, both only on Arc testnet, in its FAQ.
-  "src/components/studios/StudiosSections.tsx": 2,
+  // The page for studios: shadow mode and its mirror addresses, both only on Arc testnet, in its FAQ, and the earned
+  // vendors the agent may pay on its own there (earned vendors AL28).
+  "src/components/studios/StudiosSections.tsx": 3,
+  // The security page's access rules: earned vendors paid on their own, only in shadow mode on Arc testnet (AL21).
+  "src/app/security/page.tsx": 1,
   // Terms and privacy, which name both networks and say what runs on Arc testnet only: hosted wallets, Circle's faucet,
   // shadow mode, the USYC reserve, escrow, the EURC swap, payouts to other chains and the agent's payee history.
   "src/app/terms/page.tsx": 11,
@@ -69,8 +73,11 @@ const ALLOWED: Record<string, number> = {
   "src/components/ShadowModePanel.tsx": 1,
   "src/lib/shadow-mode.ts": 1,
   // Earned vendors are counted from shadow-mode verdicts, so only on Arc testnet: the refusal of a rule on Arc mainnet
-  // (earned vendors AL11).
+  // (earned vendors AL11), and the switch's confirmation, which Settings shows only off Arc mainnet (AL21).
   "src/lib/earned-vendors-store.ts": 1,
+  "src/lib/earned-vendors.ts": 1,
+  // A Quality Lab scenario's title: an earned vendor paid on its own in shadow mode, which runs only on Arc testnet (AL30).
+  "src/lib/quality-lab/scenarios.ts": 1,
   // The exported shadow decisions' source sentence, which names the only network they were made on (shadow replay SX8).
   "src/lib/quality-lab/shadow-export.ts": 1,
   // A workspace opened from an accountant's client link is always on Arc testnet in shadow mode (accountant client links
@@ -91,8 +98,9 @@ const ALLOWED: Record<string, number> = {
   "src/components/MirrorAddressControl.tsx": 1,
   "src/app/o/[slug]/counterparties/page.tsx": 1,
   "src/lib/mirror-address.ts": 2,
-  // The weekly brief in shadow mode (weekly brief W6): what agreeing paid, and that nothing did, both only on Arc testnet.
-  "src/lib/email/weekly-brief.ts": 2,
+  // The weekly brief in shadow mode (weekly brief W6): what agreeing paid, and that nothing did, both only on Arc testnet;
+  // and what the agent paid on its own to earned vendors beside it, only in shadow mode (earned vendors AL28).
+  "src/lib/email/weekly-brief.ts": 3,
   // Passkey wallets, offered only to a payee on Arc testnet (`modularWallets`).
   "src/components/payee/PasskeyWalletOption.tsx": 1,
   "src/components/wallet/PasskeyWallet.tsx": 1,

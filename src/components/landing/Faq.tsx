@@ -38,7 +38,8 @@ export function landingFaq(mainnetForEveryone: boolean): ReadonlyArray<{ questio
       answer: (
         <>
           Yes. In shadow mode you keep paying the way you do today and agree or disagree with each of the agent&apos;s decisions on your real
-          bills: nothing is paid until a person agrees, and no wallet or funds are needed. A workspace runs on Arc testnet, where test USDC has
+          bills: nothing is paid until a person agrees, unless you let the agent pay vendors that earned it under your rule, on Arc testnet. No
+          wallet or funds are needed. A workspace runs on Arc testnet, where test USDC has
           no market value, or on Arc mainnet, where payments move real USDC
           {mainnetForEveryone ? "." : ", for the accounts it is open to so far."}
           <More href="/docs/guides/try-it">See your first decision in five minutes</More>
@@ -59,7 +60,7 @@ export function landingFaq(mainnetForEveryone: boolean): ReadonlyArray<{ questio
     {
       question: "Can Vestiarion pay bills and contractors automatically?",
       answer:
-        "Yes, in a live workspace: a bill, or a contractor milestone whose work is verified, that passes every check and fits your limits is paid on its own, on the day the agent picks. Anything else, such as a bill above its payee's limit or a first payment to a new address, waits for a person in Approvals. In shadow mode nothing is paid until someone agrees.",
+        "Yes, in a live workspace: a bill, or a contractor milestone whose work is verified, that passes every check and fits your limits is paid on its own, on the day the agent picks. Anything else, such as a bill above its payee's limit or a first payment to a new address, waits for a person in Approvals. In shadow mode nothing is paid until someone agrees, unless the owner lets the agent pay vendors that earned it under their rule, on Arc testnet.",
     },
     {
       question: "What happens if a payment fails?",

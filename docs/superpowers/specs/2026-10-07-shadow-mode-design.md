@@ -33,6 +33,9 @@ USDC.
 - A milestone release that passes every check is held the same way, with `heldBecause: "shadow_verdict"`. Its verdict
   control comes later; until then a person releases it on Contractors as any held release.
 - The follow-up stage never reopens a payable held for a verdict. Only a person ends that hold.
+- Since 2026-10-28 one exception, off by default: while an owner lets the agent pay earned vendors on their own, a `pay`
+  that passed every check for a vendor that earned the owner's rule is carried out as in a live workspace, and the
+  verdict is given after (`docs/superpowers/specs/2026-10-28-earned-vendors-design.md` AL21-AL30).
 
 **S3. A verdict on each decision.**
 - A person who may decide payments (`approval.decide`) gives one verdict per agent decision entry: **Agree** or

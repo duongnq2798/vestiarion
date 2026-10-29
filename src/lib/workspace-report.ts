@@ -1,4 +1,5 @@
 import { HELD_FOR_VERDICT } from "./agent/shadow-hold";
+import { paidOnItsOwn } from "./earned-vendors";
 import { heldWords } from "./latest-decision";
 import type { Network } from "./network";
 import { ruleInBrief } from "./next-step";
@@ -54,6 +55,11 @@ export interface ReportDecision {
   reasoning: string | null;
   /** The day a schedule pays on (`decision.payOn`, YYYY-MM-DD); null or absent otherwise. */
   payOn?: string | null;
+  /**
+   * Carried out on the agent's own decision for an earned vendor in shadow mode (`detail.earned`; earned vendors AL27):
+   * absent otherwise.
+   */
+  onItsOwn?: boolean;
 }
 
 /** A person's approve, reject or return of a payable. */
@@ -62,6 +68,12 @@ export interface ReportPersonAction {
   ts: string;
   action: "approval_paid" | "approval_rejected" | "approval_returned";
   invoiceId: string;
+  /**
+   * An approval that sent nothing of its own: it only recorded the transfer sent before it (`detail.recorded`), so a
+   * payment the agent made on its own stays the agent's (docs/superpowers/specs/2026-10-28-earned-vendors-design.md
+   * AL29). Absent otherwise.
+   */
+  recorded?: boolean;
 }
 
 export interface ReportVerdict {
@@ -150,7 +162,8 @@ export interface WorkspaceReport {
   openedAt: string | null;
   shadow: { currency: string; startedAt: string } | null;
   bills: { handled: number; decided: number; medianMinutesToDecision: number | null };
-  paid: { count: number; byCurrency: CurrencyAmount[]; onTime: number; untouched: number; mirrored: number };
+  /** `onItsOwn`: paid by the agent on its own for an earned vendor in shadow mode (earned vendors AL29). */
+  paid: { count: number; byCurrency: CurrencyAmount[]; onTime: number; untouched: number; mirrored: number; onItsOwn: number };
   stopped: { total: number; byCode: number; waited: number; byAgent: number; notSent: number };
   people: { steppedIn: number };
   verdicts: { agreed: number; disagreed: number; waiting: number } | null;
@@ -299,13 +312,19 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
     hasVerdict(payment.invoiceId) ||
     (facts.shadow !== null && Date.parse(payment.at) >= Date.parse(facts.shadow.startedAt));
 
+  // The agent paid it on its own, for an earned vendor (earned vendors AL29): the payment is the agent's, whatever verdict
+  // a person gave on it after, unless a person paid the bill after the agent's own transfer failed.
+  const paidByAgentAlone = (invoiceId: string) => paidOnItsOwn([...(decisionsOf.get(invoiceId) ?? []), ...(actionsOf.get(invoiceId) ?? [])]);
+
   const paymentRows: PaymentRow[] = payments.map((payment) => {
     const bill = billsById.get(payment.invoiceId)!;
-    const decidedBy = agreedToPay(payment.invoiceId)
-      ? "verdict"
-      : (actionsOf.get(payment.invoiceId) ?? []).some((action) => action.action === "approval_paid")
-        ? "person"
-        : "agent";
+    const decidedBy = paidByAgentAlone(payment.invoiceId)
+      ? "agent"
+      : agreedToPay(payment.invoiceId)
+        ? "verdict"
+        : (actionsOf.get(payment.invoiceId) ?? []).some((action) => action.action === "approval_paid")
+          ? "person"
+          : "agent";
     return {
       invoiceId: payment.invoiceId,
       at: payment.at,
@@ -408,6 +427,7 @@ export function buildReport(facts: ReportFacts): WorkspaceReport {
       }).length,
       untouched: payments.filter((payment) => !actionsOf.has(payment.invoiceId) && billsById.get(payment.invoiceId)!.reviewedBy === null).length,
       mirrored: paymentRows.filter((row) => row.mirror).length,
+      onItsOwn: payments.filter((payment) => paidByAgentAlone(payment.invoiceId)).length,
     },
     stopped: {
       total: stoppedRows.length,

@@ -45,6 +45,15 @@ const SINCE: Record<StoppedRow["since"], { word: string; tone: "proof" | "refuse
   open: { word: "Still open", tone: "held" },
 };
 
+/**
+ * In shadow mode a payment waits for a verdict, so who stepped in is not counted against what was paid alone; a payment
+ * the agent made on its own for an earned vendor is the exception, said with how many (earned vendors AL28).
+ */
+function shadowPeopleWords(onItsOwn: number): string {
+  if (onItsOwn === 0) return "In shadow mode, every payment waits for your verdict";
+  return `In shadow mode, a payment waits for your verdict; ${onItsOwn} paid on its own to earned vendors`;
+}
+
 const DECIDED_BY: Record<PaymentRow["decidedBy"], string> = {
   agent: "The agent",
   person: "A person",
@@ -188,7 +197,7 @@ export function ReportSummary({ report }: { report: Report }) {
         >
           {report.stopped.total}
         </StatTile>
-        <StatTile label="Needed a person" sub={report.shadow ? "In shadow mode, every payment waits for your verdict" : `${report.paid.untouched} paid with no one stepping in`}>
+        <StatTile label="Needed a person" sub={report.shadow ? shadowPeopleWords(report.paid.onItsOwn) : `${report.paid.untouched} paid with no one stepping in`}>
           {report.people.steppedIn}
         </StatTile>
         {report.verdicts && (
@@ -400,7 +409,7 @@ export function ReportReadiness({
         </ol>
         {ladder && (
           <div className="border-t border-line px-3 pb-3 pt-4">
-            <AgreementLadder ladder={ladder} />
+            <AgreementLadder ladder={ladder} ruled={earned !== null && earned.streak !== null} />
           </div>
         )}
         {earned && (

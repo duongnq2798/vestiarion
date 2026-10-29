@@ -1,5 +1,6 @@
 import { agentOutflowUsdc, budgetRoom, exceedsBudget, type OutflowBudget } from "./agent/outflow-budget";
 import { paymentLimitForRisk } from "./compliance";
+import { breaksEarning } from "./earned-vendors";
 import { heldForCash, heldForVerdict, VENDOR_DOCUMENT } from "./next-step";
 import { TWO_APPROVALS_RULE } from "./two-approvals";
 
@@ -58,7 +59,14 @@ export type CantTellReason =
 
 /** What code does with one decision under one set of figures. */
 export type ReplayVerdict =
-  | { kind: "goes_ahead" }
+  | {
+      kind: "goes_ahead";
+      /**
+       * In shadow mode, the agent may have paid it on its own for an earned vendor, or held it for a verdict: which, the
+       * replay cannot tell (earned vendors AL22, AL26).
+       */
+      mayBeOnItsOwn?: true;
+    }
   | { kind: "paid_earlier"; seq: number }
   | { kind: "stopped"; rule: string }
   | { kind: "agent_held" }
@@ -80,6 +88,11 @@ export interface ReplayedDecision {
   amountUsdc: number | null;
   /** Decided in shadow mode, where a payment the checks let through waits for a person to agree; null when unknown. */
   shadow: boolean | null;
+  /**
+   * Carried out on the agent's own decision in shadow mode, for an earned vendor (`detail.earned`; earned vendors AL22,
+   * AL27): it did not wait for a person.
+   */
+  onItsOwn: boolean;
   before: ReplayVerdict;
   after: ReplayVerdict;
   change: ReplayChange;
@@ -98,6 +111,48 @@ export interface ShadowHistory {
 
 /** Nothing known: a milestone a rule stopped may have been decided in shadow mode or not. */
 const SHADOW_UNKNOWN: ShadowHistory = { onSince: null, earlierPossible: true };
+
+/**
+ * What the ledger says of earned vendors (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL15, AL21), for a
+ * shadow-mode bill the agent did not pay on its own: whether the owner's switch was on, and its vendor recorded earned,
+ * when it was decided. Then, under other figures, the agent may have paid it on its own (AL22).
+ */
+export interface EarnedHistory {
+  /** Each change of the owner's switch (`earned_vendor_payments_changed`), by ledger sequence. */
+  switches: ReadonlyArray<{ seq: number; on: boolean }>;
+  /** Each vendor's signed statuses (`vendor_earned`, `vendor_earned_lost`), by ledger sequence. */
+  records: ReadonlyArray<{ seq: number; counterpartyId: string; earned: boolean }>;
+}
+
+/** The switch was never on: the agent paid no vendor on its own. */
+const NEVER_EARNED: EarnedHistory = { switches: [], records: [] };
+
+/** Whether the switch was on, and a vendor recorded earned, just before a decision's entry; both where nothing is known. */
+interface EarnedAt {
+  switchOn(seq: number): boolean;
+  recordedEarned(counterpartyId: string, seq: number): boolean;
+}
+
+function earnedAt(history: EarnedHistory | null): EarnedAt {
+  if (history === null) return { switchOn: () => true, recordedEarned: () => true };
+  const bySeq = <T extends { seq: number }>(list: readonly T[]) => [...list].sort((a, b) => a.seq - b.seq);
+  // The newest of a list in ledger order written before `seq`: the switch and statuses are signed as they change.
+  const before = <T extends { seq: number }>(list: readonly T[], seq: number): T | undefined => {
+    let found: T | undefined;
+    for (const item of list) {
+      if (item.seq >= seq) break;
+      found = item;
+    }
+    return found;
+  };
+  const switches = bySeq(history.switches);
+  const records = new Map<string, Array<{ seq: number; earned: boolean }>>();
+  for (const record of bySeq(history.records)) records.set(record.counterpartyId, [...(records.get(record.counterpartyId) ?? []), record]);
+  return {
+    switchOn: (seq) => before(switches, seq)?.on === true,
+    recordedEarned: (counterpartyId, seq) => before(records.get(counterpartyId) ?? [], seq)?.earned === true,
+  };
+}
 
 export interface ReplayCounts {
   decisions: number;
@@ -220,6 +275,18 @@ interface Facts {
   paidUsdc: number;
   /** Decided in shadow mode; null when neither the entry nor the workspace's history says. */
   shadow: boolean | null;
+  /**
+   * A shadow-mode payment the agent carried out on its own for an earned vendor (`detail.earned`, earned vendors AL27):
+   * it paid as a live workspace pays, so it counts against the spending limit as one does.
+   */
+  onItsOwn: boolean;
+  /**
+   * A shadow-mode bill decided while the owner's switch for earned vendors was on (AL21), as the ledger says it, or one
+   * the agent paid on its own.
+   */
+  earnedSwitch: boolean;
+  /** And its vendor recorded earned then (AL15): the gate was asked about it, or would have been, had a check passed. */
+  earnedPossible: boolean;
   /** A schedule's UTC day to pay on; null for anything else, or when the entry has none. */
   payOnDay: number | null;
   /** A milestone's place in its contractor stage's entries; `first` for a bill. */
@@ -267,7 +334,7 @@ function payOnDayOf(decision: Record<string, unknown> | null): number | null {
   return Number.isFinite(at) ? Math.floor(at / DAY_MS) : null;
 }
 
-function factsOf(entry: ReplayEntry, history: ShadowHistory): Facts | null {
+function factsOf(entry: ReplayEntry, history: ShadowHistory, earned: EarnedAt): Facts | null {
   const source = entry.action.startsWith("ap_") ? "bill" : entry.action.startsWith("milestone_") ? "milestone" : null;
   if (!source) return null;
   const detail = entry.detail;
@@ -288,13 +355,18 @@ function factsOf(entry: ReplayEntry, history: ShadowHistory): Facts | null {
   const execution = record(detail.execution);
   const goes = source === "bill" ? action === "pay" || action === "schedule" : action === "release";
   const sourceId = source === "bill" ? detail.invoiceId : detail.milestoneId;
+  const counterpartyId = typeof detail.counterpartyId === "string" ? detail.counterpartyId : null;
+  const shadow = shadowOf(entry, action, recordedRule, history);
+  const onItsOwn = record(detail.earned) !== null;
+  // Only the AP stage pays an earned vendor on its own, and only in shadow mode (earned vendors AL22).
+  const earnedSwitch = source === "bill" && shadow === true && (onItsOwn || earned.switchOn(entry.seq));
   return {
     seq: entry.seq,
     ts: entry.ts,
     day: Math.floor(Date.parse(entry.ts) / DAY_MS),
     source,
     sourceId: typeof sourceId === "string" ? sourceId : null,
-    counterpartyId: typeof detail.counterpartyId === "string" ? detail.counterpartyId : null,
+    counterpartyId,
     action,
     goes,
     now: action === "pay" || action === "release",
@@ -306,7 +378,10 @@ function factsOf(entry: ReplayEntry, history: ShadowHistory): Facts | null {
     recordedLimit: observed?.paymentLimit === null ? null : (numeric(observed?.paymentLimit) ?? undefined),
     recordedRule,
     paidUsdc: agentOutflowUsdc({ actor: "agent", action: entry.action, detail }),
-    shadow: shadowOf(entry, action, recordedRule, history),
+    shadow,
+    onItsOwn,
+    earnedSwitch,
+    earnedPossible: earnedSwitch && (onItsOwn || (counterpartyId !== null && earned.recordedEarned(counterpartyId, entry.seq))),
     payOnDay: action === "schedule" ? payOnDayOf(decision) : null,
     order: source === "milestone" ? stageOrderOf(action, recordedRule, detail) : "first",
     crossChain: record(detail.payout) !== null,
@@ -377,6 +452,11 @@ interface Column {
   paid: Map<string, number>;
   /** Sources a decision this column cannot tell may have paid. */
   unsettled: Set<string>;
+  /**
+   * Vendors whose earned status, or how many of whose payments wait for a verdict, may differ in this column from what
+   * happened (earned vendors AL25, AL26): any of their shadow-mode payments may have been made on the agent's own, or not.
+   */
+  earnedApart: Set<string>;
 }
 
 type StageAnswer = "fires" | "passes" | { cantTell: CantTellReason };
@@ -488,14 +568,36 @@ function verdictIn(facts: Facts, column: Column, spentAround: () => SpentRange):
 /** A schedule a rule held then, outside shadow mode: let through, its day's decision is not in the ledger (P6). */
 const laterPayment = (facts: Facts) => facts.action === "schedule" && facts.recordedRule !== null && facts.shadow !== true;
 
+const earnedApart = (facts: Facts, column: Column) => facts.counterpartyId !== null && column.earnedApart.has(facts.counterpartyId);
+
+/**
+ * What a shadow-mode payment counts where the agent may have paid it on its own for an earned vendor (earned vendors
+ * AL22, AL26): undefined where it cannot have (the switch off, the vendor not recorded earned), or where nothing about
+ * its vendor differs in this column from what happened, so the gate answered as it did then. Otherwise from nothing to
+ * what it paid, or to its full USDC value where it waited: whether the gate grants it (the vendor still earned, fewer
+ * than 3 of its payments waiting) is not replayed.
+ */
+function ownSpendOf(facts: Facts, column: Column): Contribution | null | undefined {
+  const apart = earnedApart(facts, column);
+  if (facts.action !== "pay" || !(facts.earnedPossible || (facts.earnedSwitch && apart))) return undefined;
+  if (!apart && (facts.onItsOwn || facts.recordedRule === null)) return undefined;
+  if (facts.onItsOwn) return facts.paidUsdc > 0 ? { day: facts.day, low: 0, high: facts.paidUsdc } : null;
+  return { day: facts.day, low: 0, high: facts.amountUsdc ?? Infinity };
+}
+
 /**
  * What a decision the column let through has the agent paying (P6), and on which day: what it paid if it paid; nothing
- * if something other than a rule stopped it then, or in shadow mode; its full USDC value if a rule stopped it then, from
- * nothing to that where shadow mode is not known. A schedule a rule held then, from nothing to its full USDC value on
- * its day, when the agent decides it again.
+ * if something other than a rule stopped it then, or in shadow mode, unless the agent paid it on its own there for an
+ * earned vendor (earned vendors AL22), which counts as a live payment does, or may have (`ownSpendOf`); its full USDC
+ * value if a rule stopped it then, from nothing to that where shadow mode is not known. A schedule a rule held then,
+ * from nothing to its full USDC value on its day, when the agent decides it again.
  */
-function spendOf(facts: Facts): Contribution | null {
-  if (facts.shadow === true) return null;
+function spendOf(facts: Facts, column: Column): Contribution | null {
+  if (facts.shadow === true) {
+    const own = ownSpendOf(facts, column);
+    if (own !== undefined) return own;
+    if (!facts.onItsOwn) return null;
+  }
   if (laterPayment(facts)) return facts.payOnDay === null ? null : { day: facts.payOnDay, low: 0, high: facts.amountUsdc ?? Infinity };
   if (!facts.now) return null;
   if (facts.paidUsdc > 0) return { day: facts.day, low: facts.paidUsdc, high: facts.paidUsdc };
@@ -505,10 +607,12 @@ function spendOf(facts: Facts): Contribution | null {
 }
 
 /** The most a decision the column cannot tell may have the agent paying, and on which day. */
-function mostSpendOf(facts: Facts): Contribution | null {
+function mostSpendOf(facts: Facts, column: Column): Contribution | null {
   if (facts.paidUsdc > 0) return { day: facts.day, low: 0, high: facts.paidUsdc };
   if (facts.action !== null) {
-    if (facts.shadow === true || facts.recordedRule === null) return null;
+    // In shadow mode only a payment the agent may have made on its own pays anything (earned vendors AL22).
+    if (facts.shadow === true) return ownSpendOf(facts, column) ?? null;
+    if (facts.recordedRule === null) return null;
     if (laterPayment(facts)) return facts.payOnDay === null ? null : { day: facts.payOnDay, low: 0, high: facts.amountUsdc ?? Infinity };
     if (!facts.now) return null;
   }
@@ -516,18 +620,50 @@ function mostSpendOf(facts: Facts): Contribution | null {
 }
 
 /** What a decision has the agent paying in one column, once replayed there. */
-function contributionOf(facts: Facts, verdict: ReplayVerdict): Contribution | null {
-  if (verdict.kind === "goes_ahead") return spendOf(facts);
-  if (verdict.kind === "cant_tell") return mostSpendOf(facts);
+function contributionOf(facts: Facts, verdict: ReplayVerdict, column: Column): Contribution | null {
+  if (verdict.kind === "goes_ahead") return spendOf(facts, column);
+  if (verdict.kind === "cant_tell") return mostSpendOf(facts, column);
   return null;
+}
+
+/** Going ahead in shadow mode, a payment the agent may have made on its own says so (earned vendors AL22). */
+function withOwn(verdict: ReplayVerdict, facts: Facts, column: Column): ReplayVerdict {
+  if (verdict.kind !== "goes_ahead" || facts.shadow !== true) return verdict;
+  const own = ownSpendOf(facts, column);
+  return own ? { kind: "goes_ahead", mayBeOnItsOwn: true } : verdict;
+}
+
+/** Whether a column's answer leaves a vendor's earned status as the decision left it then (earned vendors AL25). */
+function sameForEarning(facts: Facts, verdict: ReplayVerdict): boolean {
+  switch (verdict.kind) {
+    case "agent_held":
+      return true;
+    case "goes_ahead":
+      return facts.recordedRule === null;
+    case "stopped":
+      return typeof facts.recordedRule === "string" && breaksEarning(verdict.rule) === breaksEarning(facts.recordedRule);
+    default:
+      return false;
+  }
+}
+
+/**
+ * A vendor the agent may have paid on its own whose decision this column answers otherwise than it was answered then
+ * (earned vendors AL25, AL26): let through where a rule held it, held where it went ahead, stopped by a check that takes
+ * the vendor's status away where the other did not, or not told. From then on its status, and how many of its payments
+ * wait for a verdict, may differ in this column from what happened.
+ */
+function markEarnedApart(facts: Facts, verdict: ReplayVerdict, column: Column): void {
+  if (facts.counterpartyId === null || !facts.earnedPossible || sameForEarning(facts, verdict)) return;
+  column.earnedApart.add(facts.counterpartyId);
 }
 
 /**
  * What a milestone counts against the spending limit for the rest of its contractor stage: a release the stage planned
  * counts its amount at once, whatever came of the transfer (the stage's `budget.spend`); anything else what it pays.
  */
-function stageSpendOf(facts: Facts, verdict: ReplayVerdict): Contribution | null {
-  if (facts.order !== "last") return contributionOf(facts, verdict);
+function stageSpendOf(facts: Facts, verdict: ReplayVerdict, column: Column): Contribution | null {
+  if (facts.order !== "last") return contributionOf(facts, verdict, column);
   const amount = facts.amountUsdc ?? Infinity;
   if (verdict.kind === "goes_ahead") return { day: facts.day, low: amount, high: amount };
   if (verdict.kind === "cant_tell") return { day: facts.day, low: 0, high: amount };
@@ -537,7 +673,7 @@ function stageSpendOf(facts: Facts, verdict: ReplayVerdict): Contribution | null
 /** A bill or milestone the column has surely paid is paid; one it may have paid is unsettled for later decisions on it. */
 function markSource(facts: Facts, verdict: ReplayVerdict, column: Column): void {
   const key = sourceKey(facts);
-  const part = contributionOf(facts, verdict);
+  const part = contributionOf(facts, verdict, column);
   if (key === null || part === null) return;
   if (verdict.kind === "goes_ahead" && part.low > 0) column.paid.set(key, facts.seq);
   else if (part.high > 0) column.unsettled.add(key);
@@ -580,16 +716,18 @@ function replayStage(group: Facts[], column: Column): ReplayVerdict[] {
       }
       return range;
     };
-    const verdict = verdictIn(facts, column, spentAround);
+    const verdict = withOwn(verdictIn(facts, column, spentAround), facts, column);
     markSource(facts, verdict, column);
-    const part = stageSpendOf(facts, verdict);
+    const part = stageSpendOf(facts, verdict, column);
     if (part) (facts.order === "last" ? planned : asDecided).add(part.day, part.low, part.high);
     return verdict;
   });
   for (const [index, facts] of group.entries()) {
-    const part = contributionOf(facts, verdicts[index]);
+    const part = contributionOf(facts, verdicts[index], column);
     if (part) column.spend.add(part.day, part.low, part.high);
   }
+  // Only once its own payment is counted: a decision that sets its vendor apart is counted as it was answered.
+  for (const [index, facts] of group.entries()) markEarnedApart(facts, verdicts[index], column);
   return verdicts;
 }
 
@@ -612,6 +750,11 @@ export interface ReplayOptions {
   cycleEnds?: number[];
   /** What is known of shadow mode, for a milestone whose entry does not say; nothing by default. */
   shadow?: ShadowHistory;
+  /**
+   * What the ledger says of earned vendors (earned vendors AL15, AL21); null when it could not be read, so any
+   * shadow-mode payment may have been made on the agent's own. By default the switch was never on.
+   */
+  earned?: EarnedHistory | null;
 }
 
 /**
@@ -622,8 +765,9 @@ export interface ReplayOptions {
 export function replayDecisions(entries: ReplayEntry[], options: ReplayOptions): ReplayResult {
   const from = Date.parse(options.windowStart);
   const history = options.shadow ?? SHADOW_UNKNOWN;
+  const earned = earnedAt(options.earned === undefined ? NEVER_EARNED : options.earned);
   const ends = [...(options.cycleEnds ?? [])].sort((a, b) => a - b);
-  const column = (figures: RuleFigures): Column => ({ figures, spend: new Spend(), paid: new Map(), unsettled: new Set() });
+  const column = (figures: RuleFigures): Column => ({ figures, spend: new Spend(), paid: new Map(), unsettled: new Set(), earnedApart: new Set() });
   const before = column(options.current);
   const after = column(options.candidate);
   const decisions: ReplayedDecision[] = [];
@@ -638,7 +782,7 @@ export function replayDecisions(entries: ReplayEntry[], options: ReplayOptions):
 
   const all = [...entries]
     .sort((a, b) => a.seq - b.seq)
-    .map((entry) => factsOf(entry, history))
+    .map((entry) => factsOf(entry, history, earned))
     .filter((facts): facts is Facts => facts !== null);
   let end = 0;
   /** Whether `next` may be from the same contractor stage as `previous`, the decision just before it. */
@@ -678,6 +822,7 @@ export function replayDecisions(entries: ReplayEntry[], options: ReplayOptions):
         currency: decided.currency,
         amountUsdc: decided.amountUsdc,
         shadow: decided.shadow,
+        onItsOwn: decided.onItsOwn,
         before: was[position],
         after: would[position],
         change,

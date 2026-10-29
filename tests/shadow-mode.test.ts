@@ -62,6 +62,17 @@ describe("startShadowMode", () => {
     expect(ledgerMock).toHaveBeenCalledWith(ORG, expect.objectContaining({ actor: "human", domain: "system", action: "shadow_mode_started", detail: { by: OWNER, currency: "VND" } }));
   });
 
+  it("records that the agent pays earned vendors on its own when the owner's switch for them is on (earned vendors AL28)", async () => {
+    fake = fakeSupabase(workspace());
+    await run(() => startShadowMode({ actorId: OWNER, currency: "USD" }));
+    expect(ledgerMock).toHaveBeenLastCalledWith(ORG, expect.objectContaining({ summary: "Shadow mode started, for bills in USD: the agent pays nothing until a person agrees" }));
+    await run(() => startShadowMode({ actorId: OWNER, currency: "USD", earnedPayments: true }));
+    expect(ledgerMock).toHaveBeenLastCalledWith(
+      ORG,
+      expect.objectContaining({ summary: "Shadow mode started, for bills in USD: the agent pays nothing until a person agrees, except vendors that earned it under the owner's rule" })
+    );
+  });
+
   it("turns it on in USDC, for bills entered in USDC with nothing converted", async () => {
     fake = fakeSupabase(workspace());
     const started = await run(() => startShadowMode({ actorId: OWNER, currency: " usdc " }));

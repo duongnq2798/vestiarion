@@ -218,7 +218,8 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
                 </li>
                 <li>
                   In shadow mode, a workspace keeps paying its bills as it does today while the agent decides on the same bills, and a
-                  person agrees or disagrees with each decision before anything is paid. A decision a person agreed with counts as agreed;
+                  person agrees or disagrees with each decision before anything is paid, unless an owner lets the agent pay vendors that earned
+                  it under their rule, whose payments a person agrees or disagrees with after. A decision a person agreed with counts as agreed;
                   bills of sample payees are never counted.
                 </li>
               </Method>

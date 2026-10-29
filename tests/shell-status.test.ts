@@ -11,7 +11,9 @@ import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } fr
  * beside it (docs/superpowers/specs/2026-10-22-screening-health-design.md SH4): one `limit 1` query on the workspace's
  * live checks, run with the shadow mode read and only where screening is live. And the Compliance page's last successful
  * live screening (SH3), from the same rows. Live lookups of the provider only, the workspace's own only: a verdict on a
- * payout address on OFAC's list is written as live but calls no provider, so it says nothing about the key.
+ * payout address on OFAC's list is written as live but calls no provider, so it says nothing about the key. In shadow
+ * mode, the owner's switch for earned vendors paid on their own, read with the others
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL28), and never on Arc mainnet, where it cannot be on.
  */
 
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000005c01";
@@ -21,9 +23,10 @@ const SANDBOX = configFromEnv(BASE);
 
 type Responder = (request: RecordedRequest) => FakeReply;
 
-function workspace(config: typeof LIVE, checks: Responder, shadow: unknown[] = []) {
+function workspace(config: typeof LIVE, checks: Responder, shadow: unknown[] = [], policy: unknown[] = []) {
   const fake = fakeSupabase((request) => {
     if (request.path === "/rest/v1/shadow_modes") return { body: shadow };
+    if (request.path === "/rest/v1/approval_policies") return { body: policy };
     if (request.path === "/rest/v1/compliance_checks") return checks(request);
     return { status: 500, body: { message: `${request.path} is not read here` } };
   });
@@ -108,6 +111,34 @@ describe("the header's screening fact, read in scope (SH4)", () => {
     const { run } = workspace(LIVE, () => ({ status: 500, body: { message: "boom" } }), [{ currency: "USDC", started_at: "2026-10-01T00:00:00Z", started_by: null }]);
     expect(await run(() => shellStatus())).toEqual({ shadow: true, screening: { live: true, source: "OpenSanctions", lastLookupFailed: false } });
     expect(errors).toHaveBeenCalledWith("shell status: newest live check not read", expect.stringContaining("boom"));
+  });
+});
+
+describe("earned vendors paid on their own, in the header (AL28)", () => {
+  const SHADOW = [{ currency: "USD", started_at: "2026-10-01T00:00:00Z", started_by: null }];
+  const SWITCH_ON = [{ earned_vendor_streak: 5, earned_vendor_payments: true }];
+
+  it("says the agent pays earned vendors on its own only in shadow mode, with the switch on", async () => {
+    expect(await workspace(SANDBOX, () => ({ body: [] }), SHADOW, SWITCH_ON).run(() => shellStatus())).toMatchObject({ shadow: true, earnedPayments: true });
+    expect(await workspace(SANDBOX, () => ({ body: [] }), SHADOW).run(() => shellStatus())).not.toHaveProperty("earnedPayments");
+    // Off shadow mode the agent pays what passes its checks: the switch says nothing.
+    expect(await workspace(SANDBOX, () => ({ body: [] }), [], SWITCH_ON).run(() => shellStatus())).not.toHaveProperty("earnedPayments");
+  });
+
+  it("reads no switch on Arc mainnet, where there is no shadow mode to pay earned vendors in", async () => {
+    const { requests, run } = workspace({ ...SANDBOX, network: "arc-mainnet" }, () => ({ body: [] }), SHADOW, SWITCH_ON);
+    expect(await run(() => shellStatus())).not.toHaveProperty("earnedPayments");
+    expect(requests.some((request) => request.path === "/rest/v1/approval_policies")).toBe(false);
+  });
+
+  it("leaves it out when the switch cannot be read, and says shadow mode all the same", async () => {
+    const fake = fakeSupabase((request) => {
+      if (request.path === "/rest/v1/shadow_modes") return { body: SHADOW };
+      return { status: 500, body: { message: "boom" } };
+    });
+    const status = await runWith(orgTestContext({ config: SANDBOX, client: fake.client, orgId: ORG }), () => shellStatus());
+    expect(status).toEqual({ shadow: true, screening: { live: false, source: "bundled list", lastLookupFailed: false } });
+    expect(errors).toHaveBeenCalledWith("shell status: earned vendors not read", expect.stringContaining("boom"));
   });
 });
 

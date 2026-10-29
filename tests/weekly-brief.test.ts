@@ -6,7 +6,9 @@ import { fakeSupabase, orgTestContext } from "./support/fake-supabase";
 /**
  * The agent's weekly brief (docs/superpowers/specs/2026-10-18-weekly-brief-design.md): on a Monday, once per ISO week
  * (W1), to the members who decide payments (W2), with figures code worked out (W3); sent at once to one member from
- * Settings (W4); never in the way (W5). The book is our test workspace's on Oct 17.
+ * Settings (W4); never in the way (W5). The book is our test workspace's on Oct 17. In shadow mode, the payments the
+ * agent made on its own for earned vendors are said apart from the ones a person agreed with
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL22, AL29).
  */
 
 const { sendMock, ledgerMock, claimMock, recipientsMock } = vi.hoisted(() => ({ sendMock: vi.fn(), ledgerMock: vi.fn(), claimMock: vi.fn(), recipientsMock: vi.fn() }));
@@ -45,6 +47,10 @@ interface World {
   book?: Array<Record<string, unknown>>;
   /** The person's signed verdicts, in shadow mode. */
   verdicts?: Array<{ ts: string; verdict: string }>;
+  /** The week's confirmed payments; three by default, none with its bill. */
+  intents?: Array<Record<string, unknown>>;
+  /** The agent's pay decisions and a person's payments on those bills, as `ap_pay` and `approval_paid` entries. */
+  steps?: Array<{ seq: number; action: string; invoiceId: string; earned?: boolean; status?: string; recorded?: boolean }>;
 }
 function world(w: World = {}) {
   return fakeSupabase((request) => {
@@ -59,13 +65,29 @@ function world(w: World = {}) {
     }
     if (request.path === "/rest/v1/milestones") return { body: [] };
     if (request.path === "/rest/v1/receivable_allocations") return { body: [] };
-    if (request.path === "/rest/v1/payment_intents") return { body: [{ amount: "140", token: "USDC" }, { amount: "1", token: "USDC" }, { amount: "5", token: "EURC" }] };
+    if (request.path === "/rest/v1/payment_intents") return { body: w.intents ?? [{ amount: "140", token: "USDC" }, { amount: "1", token: "USDC" }, { amount: "5", token: "EURC" }] };
     if (request.path === "/rest/v1/ledger_entries") {
       const action = request.params.get("action");
       if (action === "eq.decision_verdict") {
         const from = request.params.get("ts")?.replace(/^gte\./, "") ?? "";
         expect(from).toBe("2026-10-08T09:00:00Z");
         return { body: (w.verdicts ?? []).map((row) => ({ ts: row.ts, detail: { verdict: row.verdict } })) };
+      }
+      if (action === "in.(ap_pay,approval_paid)") {
+        const bills = request.params.get("detail->>invoiceId")?.match(/^in\.\((.*)\)$/)?.[1].split(",") ?? [];
+        expect(request.params.get("select")).toContain("recorded:detail->recorded");
+        return {
+          body: (w.steps ?? [])
+            .filter((step) => bills.includes(step.invoiceId))
+            .map((step) => ({
+              seq: String(step.seq),
+              action: step.action,
+              invoice_id: step.invoiceId,
+              earned: step.earned ? { recordSeq: 7, streak: 5, agreed: 6 } : null,
+              resulting_status: step.status ?? null,
+              recorded: step.recorded ?? null,
+            })),
+        };
       }
       if (action === "in.(ar_received,ar_payment_applied)") return { body: [{ detail: { amount: 29.925, currency: "USDC" } }, { detail: { amount: 5, currency: "EURC" } }] };
       const briefs = w.briefs ?? [];
@@ -337,6 +359,44 @@ describe("the brief in shadow mode (W6)", () => {
     const email = weeklyBriefEmail({ orgName: "Northwind Ops", facts, links: { console: "https://x/console", approvals: "https://x/approvals", plan: "https://x/plan" }, origin: "https://x" });
     expect(email.subject).toBe("Northwind Ops: you agreed with the agent on 8 of 8 · your week in shadow mode");
     expect(email.html).toContain("Your week with the agent · shadow mode");
+  });
+
+  it("counts the payments the agent made on its own for earned vendors apart, and never as ones you agreed with", async () => {
+    const intents = [
+      { amount: "400", token: "USDC", source_type: "invoice", source_id: "inv-own" },
+      { amount: "300", token: "USDC", source_type: "invoice", source_id: "inv-agreed" },
+      { amount: "200", token: "USDC", source_type: "invoice", source_id: "inv-taken-over" },
+      { amount: "100", token: "USDC", source_type: "invoice", source_id: "inv-recorded" },
+    ];
+    const steps = [
+      { seq: 10, action: "ap_pay", invoiceId: "inv-own", earned: true, status: "paid" },
+      { seq: 11, action: "ap_pay", invoiceId: "inv-agreed", status: "held" },
+      { seq: 12, action: "approval_paid", invoiceId: "inv-agreed" },
+      // The agent's own transfer failed, and a person paid the bill after it: theirs.
+      { seq: 13, action: "ap_pay", invoiceId: "inv-taken-over", earned: true, status: "matched" },
+      { seq: 14, action: "approval_paid", invoiceId: "inv-taken-over" },
+      // A person's Approve and pay only recorded the transfer the agent sent on its own: still the agent's.
+      { seq: 15, action: "ap_pay", invoiceId: "inv-recorded", earned: true, status: "matched" },
+      { seq: 16, action: "approval_paid", invoiceId: "inv-recorded", recorded: true },
+    ];
+    const shadow = { currency: "USD", startedAt: "2026-10-08T09:00:00Z", startedBy: null };
+    const facts = await run(world({ shadow: true, intents, steps }), () => weeklyBriefFacts(db(), MONDAY, shadow));
+    expect(facts.paid).toEqual({ count: 4, usdc: 1000, onItsOwn: 2 });
+    // Outside shadow mode nothing more is read: the agent pays what passes its checks.
+    const client = world({ intents, steps });
+    expect((await run(client, () => weeklyBriefFacts(db(), MONDAY))).paid).toEqual({ count: 4, usdc: 1000 });
+    expect(client.requests.some((r) => r.params.get("action") === "in.(ap_pay,approval_paid)")).toBe(false);
+  });
+
+  it("says the payments it made on its own apart from those you agreed with", () => {
+    const facts: WeeklyBriefFacts = {
+      week: "2026-W43", from: "2026-10-12", to: "2026-10-18", paid: { count: 3, usdc: 1200, onItsOwn: 2 }, received: { count: 0, usdc: 0 }, decisions: 3, waiting: 0,
+      next7: { count: 0, usdc: 0, expectedUsdc: 0, lines: [] }, cash: { operating: 150, reserve: 0, short: null },
+      shadow: { verdicts: { given: 1, agreed: 1 }, sinceStart: { given: 8, agreed: 8, since: "2026-10-08" } },
+    };
+    expect(briefSentences(facts).lastWeek[2]).toBe("Paid 3 bills on Arc testnet, 1,200.00 USDC in all: 2 on its own to earned vendors, 1 you agreed with.");
+    expect(briefSentences({ ...facts, paid: { count: 1, usdc: 400, onItsOwn: 1 } }).lastWeek[2]).toBe("Paid 1 bill on Arc testnet, 400.00 USDC in all: 1 on its own to an earned vendor.");
+    expect(briefSentences({ ...facts, paid: { count: 1, usdc: 400 } }).lastWeek[2]).toBe("Paid 1 bill you agreed with on Arc testnet, 400.00 USDC in all.");
   });
 
   it("goes to a shadow-mode workspace on a Monday, and from Settings, with the verdicts signed", async () => {

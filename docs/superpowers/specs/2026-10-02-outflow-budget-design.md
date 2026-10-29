@@ -48,6 +48,9 @@ a company card gives: a ceiling per day and per week, and anything past it waits
   `weekly_usdc`, each positive or null, and who changed them last.
   - The 7-day figure, when both are set, is at least the daily one; otherwise it is meaningless.
   - Owners and admins set it (`agent.budget`).
+  - Removing both figures is refused while an owner lets the agent pay earned vendors on its own in shadow mode
+    (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL21): those payments always count against a figure.
+    The dialog says so then, as it says Arc mainnet keeps a figure.
   - Each change appends `agent_budget_changed` (actor `human`, domain `system`) with the figures
     before and after.
 - **R8 — fail closed.** If the limit or what was spent cannot be read, the stage fails as any read

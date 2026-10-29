@@ -25,7 +25,8 @@ describe("the landing's FAQ", () => {
 
   it("keeps shadow mode, Arc testnet and Arc mainnet apart, and promises Arc mainnet only where it is open", () => {
     const open = text(landingFaq(true)[0].answer);
-    expect(open).toContain("nothing is paid until a person agrees, and no wallet or funds are needed.");
+    // Unless the owner lets the agent pay earned vendors on their own, on Arc testnet (earned vendors AL28).
+    expect(open).toContain("nothing is paid until a person agrees, unless you let the agent pay vendors that earned it under your rule, on Arc testnet. No wallet or funds are needed.");
     expect(open).toContain("Arc testnet, where test USDC has no market value, or on Arc mainnet, where payments move real USDC.");
     expect(text(landingFaq(false)[0].answer)).toContain("where payments move real USDC, for the accounts it is open to so far.");
   });

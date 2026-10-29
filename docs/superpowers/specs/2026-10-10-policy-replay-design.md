@@ -81,7 +81,19 @@ what was paid. That is enough to run the code's checks again with one figure cha
   running total of what the agent pays:
   - a decision the replay lets through counts what it paid if it paid; if code had stopped it, its full USDC value (an
     early-payment discount it might have taken is not known); if something other than a rule stopped it (a pause, the
-    cash it needed, a failed transfer), nothing, as then; in shadow mode nothing, since a person's verdict pays;
+    cash it needed, a failed transfer), nothing, as then; in shadow mode nothing, since a person's verdict pays,
+    except a payment the agent made on its own for an earned vendor (`detail.earned`, earned vendors AL22), which
+    counts what it paid, as the real spending limit counts it;
+  - earned vendors in shadow mode (earned vendors AL22, AL26): the reader reads every `earned_vendor_payments_changed`
+    and `vendor_earned` / `vendor_earned_lost` entry, from the start (none on Arc mainnet; unread, everything is
+    possible). A shadow-mode bill `pay` decided while the switch was on, for a vendor recorded earned then, may have been
+    paid on its own: let through where a rule held it, it counts from nothing to its full USDC value and says "The
+    agent pays it, on its own for an earned vendor or once a person agrees, in shadow mode", since whether the gate
+    granted it (still earned, fewer than 3 waiting) is not replayed. Once a column answers such a vendor's decision
+    otherwise than it was answered (held where it went ahead, let through where a rule held it, stopped by a check that
+    `breaksEarning` where the recorded one did not, or the other way, can't tell), the vendor is apart in that column:
+    its later shadow-mode payments, made on its own or held for a verdict, count from nothing to what they paid or to
+    their full value, while the switch was on;
   - a schedule a rule stopped then, which the replay lets through, is decided again on its `payOn` day and may be paid
     then: it counts from nothing to its full USDC value on that day (no day recorded: can't tell);
   - shadow mode: a bill's entry always says (`shadow`); a milestone's says only when it was held for a verdict. For a
@@ -117,7 +129,9 @@ what was paid. That is enough to run the code's checks again with one figure cha
     above an amount.
   - Would now be held: went ahead before, stopped after by any other rule (a payment limit or the spending limit).
   - Can't tell: either column.
-  - In shadow mode, going ahead is a payment that waits for a person to agree, and the list says so.
+  - In shadow mode, going ahead is a payment that waits for a person to agree, and the list says so; for one the agent
+    paid on its own to an earned vendor, it says "The agent pays it on its own, for an earned vendor", and for one it
+    may have (P6), "The agent pays it, on its own for an earned vendor or once a person agrees, in shadow mode".
   *Cost if wrong:* a reader who wants the change between two rules that both stop a bill does not see it counted; the
   list names each column's rule for every decision it shows.
 
@@ -146,7 +160,8 @@ what was paid. That is enough to run the code's checks again with one figure cha
 
 - **P11 — no new command name and no migration.** Settings changes are console-only server actions today, outside
   `COMMAND_PERMISSIONS`, which lists what other surfaces may run; this keeps them there. The replay reads
-  `ledger_entries` (the agent's decisions and `cycle_complete`), `counterparties`, `invoices`, `milestones`,
+  `ledger_entries` (the agent's decisions, `cycle_complete`, and the earned vendors switch and statuses),
+  `counterparties`, `invoices`, `milestones`,
   `approval_policies`, `agent_budgets` and `shadow_modes` through the organization-scoped `db()`. *Cost if wrong:* if settings move into commands, the apply moves with them.
 
 ## 4. Code

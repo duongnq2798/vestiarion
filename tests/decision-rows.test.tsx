@@ -118,7 +118,8 @@ describe("the Bills & receivables page", () => {
 
   it("says on each row what is in the way and what to do next, and why it waits when no check says", () => {
     expect(build).toContain("blockers: needsYou ? billBlockers(decision) : [],");
-    expect(build).toContain("why: needsYou ? stoppedWhy(decision) : null,");
+    // A bill the agent paid on its own for an earned vendor says so instead (earned vendors AL22).
+    expect(build).toContain("why: needsYou ? stoppedWhy(decision) : earnedPaidWhy(decision),");
     expect(build).toContain("next: payable\n      ? billNextStep(decision, {");
     expect(page).toContain("waiting: waiting.get(row.id),");
     // Every payable's card keeps the footer it had: the verdict first, then what a waiting bill needs or its receipt.

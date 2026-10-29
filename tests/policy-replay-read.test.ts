@@ -10,7 +10,9 @@ import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type Recorded
 /**
  * The server side of trying a rule (docs/superpowers/specs/2026-10-10-policy-replay-design.md §4): the candidate read
  * with the setting's own parser, the figures in force, the window's agent decisions in pages, and names for what
- * changed. Against a real supabase-js client whose network is a recorder, inside an organization scope.
+ * changed. Against a real supabase-js client whose network is a recorder, inside an organization scope. In shadow mode,
+ * what the ledger says of earned vendors (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL15, AL21, AL22),
+ * so a hold freed for a vendor the agent may have paid on its own is said and counted as possibly paid.
  */
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
@@ -72,7 +74,8 @@ function workspace(over: { entries?: (request: RecordedRequest) => unknown[]; po
   };
 }
 
-const ledgerReads = () => fake.requests.filter((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("action")?.startsWith("in."));
+/** The reads of the agent's decisions, apart from what the ledger says of earned vendors. */
+const ledgerReads = () => fake.requests.filter((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("actor") === "eq.agent" && r.params.get("action")?.startsWith("in."));
 const cycleReads = () => fake.requests.filter((r) => r.path === "/rest/v1/ledger_entries" && r.params.get("action") === "eq.cycle_complete");
 
 beforeEach(() => {
@@ -240,6 +243,64 @@ describe("shadow mode and the contractor stage's cycles", () => {
     fake = fakeSupabase(workspace({ entries: (r) => (r.params.get("seq") === "gt.0" ? [shadowBill] : []) }));
     const view = await run(() => ruleReplay({ rule: "counterparty_limit", counterpartyId: NORTHWIND, values: { paymentLimit: "200" }, days: 30 }, NOW));
     expect(view.rows.map((row) => [row.before, row.after])).toEqual([["The agent pays it once a person agrees, in shadow mode", "Held: above the payment limit"]]);
+  });
+
+  it("says the agent pays on its own a payment it made that way for an earned vendor (earned vendors AL22)", async () => {
+    const earned = { ...ENTRIES[0], detail: { ...ENTRIES[0].detail, shadow: true, earned: { recordSeq: 7, streak: 5, agreed: 6 } } };
+    fake = fakeSupabase(workspace({ entries: (r) => (r.params.get("seq") === "gt.0" ? [earned] : []) }));
+    const view = await run(() => ruleReplay({ rule: "counterparty_limit", counterpartyId: NORTHWIND, values: { paymentLimit: "200" }, days: 30 }, NOW));
+    expect(view.rows.map((row) => [row.before, row.after])).toEqual([["The agent pays it on its own, for an earned vendor", "Held: above the payment limit"]]);
+  });
+
+  describe("a hold a figure frees, for a vendor the agent may have paid on its own (earned vendors AL22, AL26)", () => {
+    const EARNED_ACTIONS = "in.(earned_vendor_payments_changed,vendor_earned,vendor_earned_lost)";
+    const at = (hour: number) => `2026-10-08T${String(hour).padStart(2, "0")}:00:00.000Z`;
+    const own = (seq: number, hour: number) => {
+      const entry = decision(seq, { action: "ap_pay", counterpartyId: NORTHWIND, amount: 400, ts: at(hour), sourceId: `inv-o${seq}` });
+      return { ...entry, detail: { ...entry.detail, shadow: true, earned: { recordSeq: 6, streak: 5, agreed: 6 } } };
+    };
+    const held = (seq: number, hour: number) => {
+      const entry = decision(seq, { action: "ap_pay", counterpartyId: NORTHWIND, amount: 400, ts: at(hour), rule: "workspace.outflow_budget", sourceId: `inv-h${seq}` });
+      return { ...entry, detail: { ...entry.detail, shadow: true } };
+    };
+    // The owner's switch turned on, then Northwind recorded earned, before every decision.
+    const history = [
+      { seq: 5, action: "earned_vendor_payments_changed", to: true, counterparty_id: null },
+      { seq: 6, action: "vendor_earned", to: null, counterparty_id: NORTHWIND },
+    ];
+    const entries = (r: RecordedRequest) =>
+      r.params.get("seq") !== "gt.0" ? [] : r.params.get("action") === EARNED_ACTIONS ? history : [own(21, 8), own(22, 9), held(23, 10), held(24, 11)];
+    const trial = { rule: "spending_limit" as const, values: { daily: "1500", weekly: "" }, days: 30 as const };
+
+    it("says it may be paid on the agent's own, and counts it as possibly paid, from what the ledger says of the switch", async () => {
+      fake = fakeSupabase(workspace({ budget: [{ daily_usdc: "1000", weekly_usdc: null }], entries }));
+      const view = await run(() => ruleReplay(trial, NOW));
+      expect(view.counts).toMatchObject({ decisions: 4, nowPaid: 1, cantTell: 1 });
+      expect(view.rows.map((row) => [row.change, row.before, row.after])).toEqual([
+        ["now_paid", "Held: past the agent's spending limit", "The agent pays it, on its own for an earned vendor or once a person agrees, in shadow mode"],
+        ["cant_tell", "Held: past the agent's spending limit", "Can't tell: the spending limit depends on a decision it cannot tell"],
+      ]);
+      // The switch's changes and every vendor's signed statuses, from the start, in ledger order.
+      const read = fake.requests.find((r) => r.params.get("action") === EARNED_ACTIONS);
+      expect(read?.params.get("select")).toBe("seq,action,to:detail->to,counterparty_id:detail->>counterpartyId");
+      expect(read?.params.get("order")).toBe("seq.asc");
+      expect(read?.params.has("ts")).toBe(false);
+    });
+
+    it("counts it as possibly paid when that cannot be read, and reads none of it on Arc mainnet", async () => {
+      fake = fakeSupabase((r) =>
+        r.path === "/rest/v1/ledger_entries" && r.params.get("action") === EARNED_ACTIONS
+          ? { status: 500, body: { message: "boom" } }
+          : workspace({ budget: [{ daily_usdc: "1000", weekly_usdc: null }], entries })(r)
+      );
+      expect((await run(() => ruleReplay(trial, NOW))).counts).toMatchObject({ nowPaid: 1, cantTell: 1 });
+
+      fake = fakeSupabase(workspace({ entries }));
+      await runWith(orgTestContext({ config: { ...config, network: "arc-mainnet" }, client: fake.client, orgId: ORG }), () =>
+        ruleReplay({ rule: "counterparty_limit", counterpartyId: NORTHWIND, values: { paymentLimit: "200" }, days: 30 }, NOW)
+      );
+      expect(fake.requests.some((r) => r.params.get("action") === EARNED_ACTIONS)).toBe(false);
+    });
   });
 
   it("reads since when shadow mode is on for a milestone a rule stopped, whose entry does not say", async () => {

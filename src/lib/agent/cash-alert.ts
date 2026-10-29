@@ -173,7 +173,7 @@ export async function readOpenCashOutlook(orgDb: OrgDb, nowMs: number): Promise<
 /** The stage: work out the outlook, decide whether to tell, and sign it. */
 export async function alertCashShort(orgDb: OrgDb, options: { now?: number } = {}): Promise<CycleLogLine[]> {
   const nowMs = options.now ?? Date.now();
-  // Shadow mode (S5): the business pays in its own money, and the wallet only mirrors agreed payments.
+  // Shadow mode (S5): the business pays in its own money, and the wallet only mirrors its bills.
   if (await readShadowMode(orgDb)) return [];
   const [{ outlook, accounts, invoices }, lastRead] = await Promise.all([
     readOpenCashOutlook(orgDb, nowMs),

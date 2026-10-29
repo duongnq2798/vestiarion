@@ -3,6 +3,7 @@ import { readSpendingLimitContract, setLimitsOnChain } from "./circle/spending-l
 import { agentSpent, budgetRoom, parseBudgetForm, readOutflowBudget, type BudgetRoom, type BudgetSpent, type OutflowBudget } from "./agent/outflow-budget";
 import { currentOrgConfig, currentOrgId } from "./context";
 import { db, unwrap } from "./dal";
+import { readEarnedVendorRule } from "./earned-vendors-store";
 import { appendLedgerEntryBestEffort } from "./ledger-best-effort";
 import { sameFigure, type ReplaySummary } from "./policy-replay";
 import { workspaceNetwork } from "./workspace-network";
@@ -22,15 +23,31 @@ import { workspaceNetwork } from "./workspace-network";
  * Applied after trying it on past decisions (docs/superpowers/specs/2026-10-10-policy-replay-design.md P10), a change
  * carries the figures the replay ran against and is refused when they are no longer the ones in force; its signed entry
  * records the replay's summary.
+ *
+ * While an owner lets the agent pay earned vendors on its own in shadow mode
+ * (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL21), removing both figures is refused: those payments
+ * always count against the limit, and the agent makes none without one, so Settings would say it pays them while it
+ * paid none. The switch is read only for that change, and reads as off before migration 0146.
  */
 
-export type AgentBudgetErrorCode = "invalid" | "unchanged" | "cycle_running" | "enforced_needs_figure" | "onchain" | "mainnet_needs_figure" | "wallet_contract" | "stale";
+export type AgentBudgetErrorCode =
+  | "invalid"
+  | "unchanged"
+  | "cycle_running"
+  | "enforced_needs_figure"
+  | "onchain"
+  | "mainnet_needs_figure"
+  | "wallet_contract"
+  | "stale"
+  | "earned_payments_need_figure";
 
 const MESSAGES: Record<Exclude<AgentBudgetErrorCode, "invalid" | "onchain">, string> = {
   unchanged: "That is already the agent's spending limit.",
   cycle_running: "A cycle is running. Try again in a minute, once it has finished.",
   enforced_needs_figure: "Keep a daily or 7-day figure while the limit is enforced on Arc, or turn that off first.",
   mainnet_needs_figure: "A workspace on Arc mainnet keeps a daily or 7-day limit.",
+  earned_payments_need_figure:
+    "Keep a daily or 7-day figure while the agent pays earned vendors on its own, or have an owner turn that off first, under Earned vendors in Settings.",
   wallet_contract: "This workspace's figures are its wallet's contract's: change them with that wallet in Settings, under Go live.",
   stale: "The agent's spending limit changed since you tried it. Try it again.",
 };
@@ -85,6 +102,8 @@ export async function changeAgentBudget(input: {
   const expected = input.expected;
   if (expected && !(sameFigure(from.dailyUsdc, expected.dailyUsdc) && sameFigure(from.weeklyUsdc, expected.weeklyUsdc))) throw new AgentBudgetError("stale");
   if (from.dailyUsdc === to.dailyUsdc && from.weeklyUsdc === to.weeklyUsdc) throw new AgentBudgetError("unchanged");
+  // The agent's own payments to earned vendors always count against a figure (earned vendors AL21).
+  if (to.dailyUsdc === null && to.weeklyUsdc === null && (await readEarnedVendorRule(db())).payments) throw new AgentBudgetError("earned_payments_need_figure");
 
   const running = unwrap(
     await db()

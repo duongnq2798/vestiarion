@@ -416,7 +416,7 @@ const RECEIPT_PDF = "src/components/receipt/SavePdfButton.tsx";
 const AGREEMENT_LADDER = "src/components/vx/AgreementLadder.tsx";
 const LADDER_LIBRARY = "src/lib/autonomy-ladder.ts";
 const LIVE_SLICE_START = "src/components/vx/LiveSliceStart.tsx";
-/** Earned vendors (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11, AL15-AL19). */
+/** Earned vendors (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL11, AL15-AL19, AL21-AL28). */
 const EARNED_PANEL = "src/components/EarnedVendorsPanel.tsx";
 const EARNED_RULES = "src/lib/earned-vendors.ts";
 const EARNED_STORE = "src/lib/earned-vendors-store.ts";
@@ -1395,6 +1395,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Turn off", TWO_APPROVALS_PANEL],
     ["This window holds too many decisions to try at once. Try the last 30 days.", REPLAY_READ],
     ["The agent pays it once a person agrees, in shadow mode", REPLAY_READ],
+    // A payment the agent made on its own to an earned vendor (earned vendors AL22).
+    ["The agent pays it on its own, for an earned vendor", REPLAY_READ],
   ],
   "guides/first-payment": [
     // A payee link that asks for the payee's invoice, or lets it choose its chain (payee invoice link P1, P5).
@@ -1521,6 +1523,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["spending_limit_enforced", "src/lib/circle/spending-limit-setup.ts"],
     ["spending_limit_unenforced", "src/lib/circle/spending-limit-setup.ts"],
     ["agent_budget_changed", "src/lib/agent-budget.ts"],
+    // The limit keeps a figure while the agent pays earned vendors on its own (earned vendors AL21).
+    ["Keep a daily or 7-day figure while the agent pays earned vendors on its own, or have an owner turn that off first, under Earned vendors in Settings.", "src/lib/agent-budget.ts"],
     ["workspace.outflow_budget", "src/lib/agent/guardrails.ts"],
     ["the agent's spending limit has room for it again", "src/lib/agent/follow-up.ts"],
     ["Screening match", SCREENING_MATCH],
@@ -2983,6 +2987,13 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Each change is signed in the ledger as vendor_earned or vendor_earned_lost.", EARNED_REPORT],
     ["Earned under your rule", LIVE_SLICE_START],
     ["Earned under your rule marks a vendor that met the rule an owner set in Settings.", LIVE_SLICE_START],
+    // What earning changes, on the report, and the ladder's pointer to it once a rule is set (earned vendors AL26, AL28).
+    ["It only measures. What earning changes is under Earned vendors.", AGREEMENT_LADDER],
+    ["Earning changes nothing the agent may do unless an owner lets it pay earned vendors on its own, in Settings.", EARNED_RULES],
+    ["The agent pays an earned vendor on its own, and you give your verdict after.", EARNED_RULES],
+    ["1 of its payments made on its own waits for your verdict.", EARNED_RULES],
+    ["so its next waits for you", EARNED_RULES],
+    ["Pay earned vendors on their own", EARNED_PANEL],
     // Start the live slice (live slice L1, L3, L5).
     ["Go live with", REPORT, "Go live with ${slice.name}"],
     ["Start the live slice", "src/components/vx/LiveSliceStart.tsx"],
@@ -3314,6 +3325,19 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Off: no vendor is counted as earned.", EARNED_RULES],
     ["An owner of this workspace can change it.", EARNED_PANEL],
     ["Earning changes nothing the agent may do", EARNED_PANEL],
+    // Paying earned vendors on their own (earned vendors AL21, AL22, AL26-AL28).
+    ["except vendors that earned it under your rule, which it pays on its own and you review after", EARNED_RULES],
+    ["Pay earned vendors on their own", EARNED_PANEL],
+    ["Earned vendors' payments wait for your verdict, as every payment in shadow mode does.", EARNED_RULES],
+    ["Let the agent pay earned vendors", EARNED_PANEL],
+    ["Turn on", EARNED_PANEL],
+    ["The agent pays earned vendors on its own, within every limit and check, and you give your verdict after.", EARNED_RULES],
+    ["Make them wait for my verdict", EARNED_PANEL],
+    ["Set a rule first: how many agreed verdicts in a row a vendor needs.", EARNED_STORE],
+    ["Set the agent's spending limit first, in Settings: the agent's own payments always count against it.", EARNED_STORE],
+    ["An earned vendor: paid without waiting for your verdict.", "src/components/vx/decision-signals.ts"],
+    ["Give your verdict", "src/components/vx/bill-next-step.ts"],
+    ["earned_vendor_payments_changed", EARNED_STORE],
     ["The verdicts behind it", EARNED_REPORT],
     ["since you disagreed on", EARNED_RULES],
     ["Cannot earn it: no payment limit. Set one on Counterparties.", EARNED_RULES],

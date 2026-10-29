@@ -9,7 +9,8 @@ import { buildReport, type ReadinessStep, type ReportFacts } from "@/lib/workspa
 /**
  * Earned vendors where people read them (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL18-AL20): the
  * report's block under How often you agreed, only in shadow mode, earned only once it is also signed, with the verdicts
- * behind it; and the live slice picker's mark, which ticks nothing. The ladder's own rows and its sentence are unchanged.
+ * behind it; and the live slice picker's mark, which ticks nothing. The ladder's own rows are unchanged; once a rule is
+ * set, its sentence points to Earned vendors, which says what earning changes (step 3, AL28).
  */
 
 vi.mock("server-only", () => ({}));
@@ -57,7 +58,7 @@ describe("the report's Earned vendors (AL18)", () => {
     const html = renderToStaticMarkup(<ReportReadiness steps={STEPS} ladder={LADDER} earned={view()} />);
     const words = text(html);
     expect(words).toContain(
-      "Under your rule: 5 agreed verdicts in a row on a vendor's payments. A disagreement, a bill flagged for review, or a check in code stopping one of its bills starts the count again. Earning changes nothing the agent may do."
+      "Under your rule: 5 agreed verdicts in a row on a vendor's payments. A disagreement, a bill flagged for review, or a check in code stopping one of its bills starts the count again. Earning changes nothing the agent may do unless an owner lets it pay earned vendors on its own, in Settings."
     );
     expect(words).toContain("Cobalt Cloud Earned: 5 agreed in a row, Oct 20, 2026 to Oct 24, 2026");
     expect(words).toContain("Lumen Print Co. 0 of 5 agreed in a row since you disagreed on Oct 26, 2026");
@@ -65,8 +66,8 @@ describe("the report's Earned vendors (AL18)", () => {
     expect(words).toContain("Each change is signed in the ledger as vendor_earned or vendor_earned_lost.");
     expect(html).toContain('id="report-earned"');
     expect(words.indexOf("Earned vendors")).toBeGreaterThan(words.indexOf("How often you agreed, by decision and by vendor"));
-    // The ladder's own sentence stays true: earning changes nothing the agent may do (AL20).
-    expect(words).toContain("It only measures: nothing here changes what the agent may do.");
+    // The ladder only measures; under a rule it points to what earning changes (AL28).
+    expect(words).toContain("It only measures. What earning changes is under Earned vendors.");
   });
 
   it("lists the verdicts behind an earned vendor: each decision's day, kind, amount and Agreed", () => {

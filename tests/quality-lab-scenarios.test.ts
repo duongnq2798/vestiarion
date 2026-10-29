@@ -4,16 +4,17 @@ import { RULE_WORDS } from "@/lib/rule-words";
 
 /**
  * The Quality Lab's scenarios as data (docs/superpowers/specs/2026-10-26-quality-lab-design.md QL2, QL3): between 32 and
- * 40, grouped, each with a plain-English title and an expected outcome, and together covering what the spec lists,
- * including bills where money should move.
+ * 44, grouped, each with a plain-English title and an expected outcome, and together covering what the spec lists,
+ * including bills where money should move, and an earned vendor paid on its own in shadow mode beside one that has not
+ * earned it (docs/superpowers/specs/2026-10-28-earned-vendors-design.md AL30).
  */
 
 const rules = new Set(QUALITY_LAB_SCENARIOS.map((scenario) => scenario.expected.rule).filter((rule): rule is string => rule !== null));
 
 describe("the scenarios (QL2)", () => {
-  it("are between 32 and 40, each with its own id", () => {
+  it("are between 32 and 44, each with its own id", () => {
     expect(QUALITY_LAB_SCENARIOS.length).toBeGreaterThanOrEqual(32);
-    expect(QUALITY_LAB_SCENARIOS.length).toBeLessThanOrEqual(40);
+    expect(QUALITY_LAB_SCENARIOS.length).toBeLessThanOrEqual(44);
     const ids = QUALITY_LAB_SCENARIOS.map((scenario) => scenario.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
@@ -79,6 +80,16 @@ describe("the scenarios (QL2)", () => {
     expect(QUALITY_LAB_SCENARIOS.some((scenario) => scenario.payee?.address === "0x0330070fd38ec3bb94f58fa55d40368271e9e54a")).toBe(true);
     expect(QUALITY_LAB_SCENARIOS.some((scenario) => scenario.history?.paidTwin)).toBe(true);
     expect(QUALITY_LAB_SCENARIOS.some((scenario) => scenario.history?.milestoneSamePurchaseOrder)).toBe(true);
+  });
+
+  it("pay an earned vendor on its own in shadow mode, and keep one that has not earned it waiting for a verdict (AL30)", () => {
+    const earnedOn = QUALITY_LAB_SCENARIOS.filter((scenario) => scenario.workspace?.shadowMode && scenario.workspace.earnedVendorPayments);
+    expect(earnedOn.every((scenario) => scenario.group === "switches")).toBe(true);
+    expect(earnedOn.some((scenario) => scenario.payee?.earned && scenario.expected.money === "moves" && scenario.expected.status === "paid")).toBe(true);
+    expect(earnedOn.some((scenario) => !scenario.payee?.earned && scenario.expected.heldBecause === "shadow_verdict")).toBe(true);
+    // Every check still stops an earned vendor's payment: a rule of the vendor's, and one of the workspace's own.
+    const stopped = earnedOn.filter((scenario) => scenario.payee?.earned && scenario.expected.money === "stops").map((scenario) => scenario.expected.rule);
+    expect(stopped).toEqual(expect.arrayContaining(["counterparty.address_unconfirmed", "workspace.two_approvals"]));
   });
 
   it("include prompt injection in a memo and in purchase-order text, the model fooled into paying", () => {

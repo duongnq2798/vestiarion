@@ -22,7 +22,7 @@ The report counts from two things the workspace already keeps: its signed ledger
 - **Time to decide**: the median time from a bill arriving to the agent's first decision on it.
 - **Paid on Arc**: how many bills were paid, how much in each currency, and how many were paid on or before their due day (UTC).
 - **Stopped before paying**: bills one of the agent's decisions kept from being paid, by the newest such decision, split by why: refused by code (a check the agent cannot talk its way past, such as a payment limit or a first payment to a new address), the agent's own call, and waited (no cash in the operating wallet, the agent paused, or the spending limit full for the day). When a payment the agent decided was not sent, because the transfer itself failed, it is counted as not sent. A payment held for your verdict in shadow mode is not counted as stopped: a person decides it by design.
-- **Needed a person**: bills a person approved, rejected or returned after the agent or a check stopped them, and how many were paid with no one stepping in. In shadow mode every payment waits for your verdict by design, so that second figure is not shown.
+- **Needed a person**: bills a person approved, rejected or returned after the agent or a check stopped them, and how many were paid with no one stepping in. In shadow mode every payment waits for your verdict by design, so that second figure is not shown; once the agent has paid [earned vendors](#earned-vendors) on its own, it says how many instead.
 - **Your verdicts**: in shadow mode, or once any verdict was given, how many of the agent's decisions you agreed with, and how many still wait for a verdict. In shadow mode, [How often you agreed](#how-often-you-agreed) splits your verdicts on real bills by decision and by vendor.
 - **Discounts captured**: what early-payment discounts actually took off bills, measured as the bill's amount less what its transfer carried. Beside it, what was on offer across all bills with discount terms, worked out from the terms. That second figure is an estimate.
 
@@ -56,7 +56,7 @@ Choose **Answer the question**, then fill in **Before Vestiarion, how many minut
   caption="What the agent stopped and why, and each payment with its transaction."
 />
 
-**Payments and their proof** shows the newest ten payments: the day, the payee, the amount (and the bill's own amount when it was written in another currency), who decided it (**The agent**; **A person**, who approved it; or **Your verdict**, when you agreed with the agent's decision to pay it in shadow mode), and its transaction on the explorer. **Every entry, signed: Audit log** opens every entry, each signed and hash-linked, which you can export and check yourself: see [Verify an audit export](/docs/guides/audit-export). For one payment's whole chain, from the purchase order to the receipt, open its bill on **Bills & receivables** and choose **Why it was paid**: see [Why a payment was paid](/docs/guides/evidence).
+**Payments and their proof** shows the newest ten payments: the day, the payee, the amount (and the bill's own amount when it was written in another currency), who decided it (**The agent**, including a payment it made on its own for an [earned vendor](#earned-vendors), even after you agree with it; **A person**, who approved it; or **Your verdict**, when you agreed with the agent's decision to pay it in shadow mode), and its transaction on the explorer. **Every entry, signed: Audit log** opens every entry, each signed and hash-linked, which you can export and check yourself: see [Verify an audit export](/docs/guides/audit-export). For one payment's whole chain, from the purchase order to the receipt, open its bill on **Bills & receivables** and choose **Why it was paid**: see [Why a payment was paid](/docs/guides/evidence).
 
 ## Before a live slice
 
@@ -82,7 +82,7 @@ Under the steps, **How often you agreed, by decision and by vendor** splits your
 
 Each row gives its **Verdicts**, how many it rests on, and **Agreed**: from five verdicts, the share you agreed with and how many, such as 83% · 5 of 6; under five, **Too few to tell yet**, and no share. A verdict is given on a decision, so a bill the agent decided twice can carry two. Only verdicts on real bills count. Sample data is left out, even while the report and **Your verdicts** count it for want of a real bill. Before any verdict on a real bill it says **No verdict on a real bill yet.**
 
-The figures are your verdicts in shadow mode and nothing else. They are not **Agent vs what really happened**, below, which compares the agent with what your business paid, and not how often the agent followed its written policy. They only measure: nothing here changes what the agent may do, and the vendors you tick under **Start the live slice** are still your choice.
+The figures are your verdicts in shadow mode and nothing else. They are not **Agent vs what really happened**, below, which compares the agent with what your business paid, and not how often the agent followed its written policy. They only measure: nothing here changes what the agent may do, and the vendors you tick under **Start the live slice** are still your choice. Once an owner has set a rule for earned vendors, the last sentence reads "It only measures. What earning changes is under Earned vendors."
 
 ### Earned vendors
 
@@ -95,7 +95,7 @@ With a rule, it says the rule, then each vendor of **By vendor**, in the same or
 - How many it has so far, such as "3 of 8 agreed in a row", and what started the count again: "since you disagreed on" a day, "since a bill was flagged for review on" a day, or "since a check in code stopped a bill on" a day, with the check in a few words.
 - Why it cannot: "Cannot earn it: no payment limit. Set one on Counterparties."; "Cannot earn it: screened high risk." for a vendor whose screening keeps its limit at 0, whatever limit you set; or "Cannot earn it: only a vendor can." for a payee that is not a vendor.
 
-Earning changes nothing the agent may do, and the block says so. "Each change is signed in the ledger as vendor_earned or vendor_earned_lost." If the rule or that record cannot be read, the block is left out and the rest of the report is unchanged.
+After the rule, the block says what earning changes. Until an owner lets the agent pay earned vendors on their own, in **Settings** under **Pay earned vendors on their own**, it says "Earning changes nothing the agent may do unless an owner lets it pay earned vendors on its own, in Settings." With that on, it says "The agent pays an earned vendor on its own, and you give your verdict after.", and under each earned vendor how many of its payments made that way wait for your verdict, such as "1 of its payments made on its own waits for your verdict."; at 3, "so its next waits for you". See [Pay earned vendors on their own](/docs/guides/shadow-mode#pay-earned-vendors-on-their-own). "Each change is signed in the ledger as vendor_earned or vendor_earned_lost." If the rule or that record cannot be read, the block is left out and the rest of the report is unchanged.
 
 ### Start the live slice
 
