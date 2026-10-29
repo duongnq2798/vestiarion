@@ -205,6 +205,10 @@ on Arc testnet, to the address on file, or simulated in a workspace whose paymen
     an agent spending limit ("Set the agent's spending limit first, in Settings: the agent's own payments always count
     against it."), read with `readOutflowBudget`. On or off is refused on Arc mainnet, while a cycle runs, before 0146,
     and unchanged ("It is set to that already."), in step 2's words.
+  - It is written as an update of the workspace's row, never an upsert: Postgres checks 0146's check on the row an
+    upsert would insert before it finds the existing one, and that row has no rule, so an upsert turning it on is always
+    refused (found in production on Oct 29; `tests/earned-vendors-migration.test.ts` holds it). Turning on writes only
+    while a rule is set, and a rule taken away since it was read refuses it as without a rule.
   - While it is on, the agent's spending limit keeps a figure: `changeAgentBudget` refuses removing both
     (`earned_payments_need_figure`: "Keep a daily or 7-day figure while the agent pays earned vendors on its own, or
     have an owner turn that off first, under Earned vendors in Settings."), reading the switch only for that change, as

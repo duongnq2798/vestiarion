@@ -35,6 +35,12 @@ const OWNER = "a1b2c3d4-0000-4000-8000-0000000e4e01";
 const NORTHWIND = "c0c0c0c0-0000-4000-8000-00000000a001";
 const LUMEN = "c0c0c0c0-0000-4000-8000-00000000a002";
 
+/** Postgres refusing a row with the switch on and no rule (0146's check). */
+const PAYMENTS_CHECK: FakeReply = {
+  status: 400,
+  body: { code: "23514", message: 'new row for relation "approval_policies" violates check constraint "approval_policies_earned_vendor_payments_check"' },
+};
+
 const at = (day: number) => new Date(Date.parse("2026-10-01T09:00:00.000Z") + day * 86_400_000).toISOString();
 
 interface World {
@@ -71,6 +77,10 @@ function workspace(world: World) {
       const body = request.body as Record<string, unknown>;
       const reply = world.upsert?.(body);
       if (reply) return reply;
+      // As Postgres does: an upsert's CHECK is checked on the row it would insert, before it looks for the existing one
+      // (tests/earned-vendors-migration.test.ts), so a body without a rule cannot turn the switch on.
+      const inserted = { earned_vendor_streak: null, earned_vendor_payments: false, ...(body as Partial<{ earned_vendor_streak: number | null; earned_vendor_payments: boolean }>) };
+      if (inserted.earned_vendor_payments && inserted.earned_vendor_streak === null) return PAYMENTS_CHECK;
       const current = world.rule && world.rule !== "missing" ? world.rule : { earned_vendor_streak: null, earned_vendor_payments: false };
       world.rule = { ...current, ...(body as Partial<typeof current>) };
       return { status: 201, body: null };
@@ -85,11 +95,14 @@ function workspace(world: World) {
       const guarded =
         switchGuard !== null
           ? switchGuard === `eq.${current?.earned_vendor_payments}`
-          : guard === (current?.earned_vendor_streak === null ? "is.null" : `eq.${current?.earned_vendor_streak}`);
-      if (current && guarded) {
-        world.rule = { ...current, ...(body as Partial<typeof current>) };
-      }
-      return { body: null };
+          : guard === "not.is.null"
+            ? current?.earned_vendor_streak !== null
+            : guard === (current?.earned_vendor_streak === null ? "is.null" : `eq.${current?.earned_vendor_streak}`);
+      const next = current && guarded ? { ...current, ...(body as Partial<typeof current>) } : null;
+      if (next && next.earned_vendor_payments && next.earned_vendor_streak === null) return PAYMENTS_CHECK;
+      if (next) world.rule = next;
+      // With `select`, PostgREST answers the rows it changed.
+      return { body: params.has("select") ? (next ? [{ org_id: ORG }] : []) : null };
     }
     if (path === "/rest/v1/cycle_runs") return { body: world.cycleRunning ? [{ id: "run-1" }] : [] };
     if (path === "/rest/v1/agent_budgets") return { body: world.budget ? [world.budget] : [] };
@@ -468,10 +481,13 @@ describe("the owner's switch (AL21)", () => {
     expect(await run(() => changeEarnedVendorPayments({ actorId: OWNER, on: true }))).toEqual({ from: false, to: true });
 
     expect(canSignMock).toHaveBeenCalledTimes(1);
-    const [upsert] = posts(fake.requests);
-    expect(upsert.params.get("on_conflict")).toBe("org_id");
-    expect(upsert.body).toMatchObject({ org_id: ORG, earned_vendor_payments: true, updated_by: OWNER });
-    expect(upsert.body).not.toHaveProperty("earned_vendor_streak");
+    // An update of the row that holds the rule, never an upsert, which Postgres refuses (see the fake above).
+    expect(posts(fake.requests)).toHaveLength(0);
+    const [write] = fake.requests.filter((r) => r.path === "/rest/v1/approval_policies" && r.method === "PATCH");
+    expect(write.params.get("earned_vendor_streak")).toBe("not.is.null");
+    expect(write.params.get("org_id")).toBe(`eq.${ORG}`);
+    expect(write.body).toMatchObject({ earned_vendor_payments: true, updated_by: OWNER });
+    expect(write.body).not.toHaveProperty("earned_vendor_streak");
     expect(signed).toEqual([
       {
         actor: "human",
@@ -514,12 +530,23 @@ describe("the owner's switch (AL21)", () => {
     expect(appendMock).not.toHaveBeenCalled();
   });
 
+  it("refuses it on, signing nothing, when the rule was taken away before the write", async () => {
+    // Another owner turned the rule off between the read and the write: the guarded update changes no row.
+    const world = ruled(false, { update: (body) => (body.earned_vendor_payments === true ? { body: [] } : null) });
+    const signed = signing(world);
+    const { run } = workspace(world);
+    await expect(run(() => changeEarnedVendorPayments({ actorId: OWNER, on: true }))).rejects.toMatchObject({ code: "no_rule" });
+    expect(signed).toEqual([]);
+    expect(world.rule).toMatchObject({ earned_vendor_payments: false });
+  });
+
   it("puts the switch back and refuses when its entry cannot be signed, only from its own write", async () => {
     const world = ruled(false);
     signing(world, (entry) => entry.action === "earned_vendor_payments_changed");
     const { fake, run } = workspace(world);
     await expect(run(() => changeEarnedVendorPayments({ actorId: OWNER, on: true }))).rejects.toMatchObject({ code: "not_signed" });
-    const [back] = fake.requests.filter((r) => r.path === "/rest/v1/approval_policies" && r.method === "PATCH");
+    // The turning on, then its put-back.
+    const [, back] = fake.requests.filter((r) => r.path === "/rest/v1/approval_policies" && r.method === "PATCH");
     expect(back.params.get("earned_vendor_payments")).toBe("eq.true");
     expect(back.params.get("org_id")).toBe(`eq.${ORG}`);
     expect(back.body).toMatchObject({ earned_vendor_payments: false });
@@ -527,7 +554,8 @@ describe("the owner's switch (AL21)", () => {
   });
 
   it("never says nothing changed when the switch could not be put back either, and signs it when asked again", async () => {
-    const world = ruled(false, { update: () => ({ status: 500, body: { code: "XX000", message: "database unavailable" } }) });
+    // The turning on is written; only its put-back, to off, cannot be.
+    const world = ruled(false, { update: (body) => (body.earned_vendor_payments === false ? { status: 500, body: { code: "XX000", message: "database unavailable" } } : null) });
     let failing = true;
     const signed = signing(world, (entry) => failing && entry.action === "earned_vendor_payments_changed");
     const { run } = workspace(world);

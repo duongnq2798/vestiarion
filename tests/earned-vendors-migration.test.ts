@@ -64,6 +64,20 @@ describe("approval_policies' earned vendor rule", () => {
     expect(await read(org)).toEqual({ earned_vendor_streak: null, earned_vendor_payments: false });
   });
 
+  it("refuses an upsert turning the switch on without the rule, even on a row that has one, and takes an update", async () => {
+    // Postgres checks the row an upsert would insert before it finds the existing one: the store updates instead (AL21).
+    await db.query("update public.approval_policies set earned_vendor_streak = 9, earned_vendor_payments = false where org_id = $1", [org]);
+    await expect(
+      db.query(
+        "insert into public.approval_policies (org_id, earned_vendor_payments) values ($1, true) on conflict (org_id) do update set earned_vendor_payments = excluded.earned_vendor_payments",
+        [org]
+      )
+    ).rejects.toThrow(/approval_policies_earned_vendor_payments_check/);
+    await db.query("update public.approval_policies set earned_vendor_payments = true where org_id = $1 and earned_vendor_streak is not null", [org]);
+    expect(await read(org)).toEqual({ earned_vendor_streak: 9, earned_vendor_payments: true });
+    await db.query("update public.approval_policies set earned_vendor_streak = null, earned_vendor_payments = false where org_id = $1", [org]);
+  });
+
   it("is the workspace's own: the tenant role sees and changes only its own row", async () => {
     await db.query("insert into public.approval_policies (org_id, earned_vendor_streak) values ($1, 10) on conflict (org_id) do update set earned_vendor_streak = 10", [other]);
     const seen = await asTenant(db, org, (tx) => tx.query<{ org_id: string }>("select org_id from public.approval_policies"));
