@@ -6,6 +6,7 @@ import { getInsightsData } from "@/lib/insights";
 import {
   appendLedgerEntry,
   ledgerEntryCount,
+  ledgerHead,
   ledgerPublicKeyPem,
   ledgerReadWarnings,
   listLedgerEntries,
@@ -49,6 +50,7 @@ const READS: Array<[string, () => Promise<unknown>]> = [
   ["listLedgerEntriesForTargets", () => listLedgerEntriesForTargets({ invoiceIds: ["i1"] })],
   ["listLedgerEntryPage", () => listLedgerEntryPage({ limit: 10 })],
   ["ledgerEntryCount", () => ledgerEntryCount()],
+  ["ledgerHead", () => ledgerHead()],
   ["verifyLedger", () => verifyLedger()],
   ["getInsightsData", () => getInsightsData()],
 ];

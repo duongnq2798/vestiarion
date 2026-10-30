@@ -63,6 +63,20 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   two checks running, the team is told on a private Discord channel, and told again once it works. The check reads
   public pages only and is not counted as a visit. No migration.
 
+### Changed
+
+- **The audit log and Insights send far less to open.** A page of a hundred audit entries was about 2 MB, half of it
+  the data the browser rebuilds the page from, which repeated every row, and much of the rest each entry's hashes and
+  detail, sent whether or not its row was opened. Each row is now sent once, as the facts it shows; an entry's hashes,
+  signature and detail are drawn in the browser when its row is opened, and for every row as soon as the page is
+  ready, so find-in-page still finds them; the chevron and domain glyph every row repeated are drawn once. Insights
+  sends each table's readings as plain values and styles their cells once per table, and writes each chart's dots to
+  the precision of its lines. Measured on the same hundred entries, the list went from about 1.8 MB to 0.4 MB, and
+  Insights with the longest history it reads from about 2.3 MB to 0.8 MB. Both pages now read only the clock their
+  header shows, not every paid bill and two exact counts, and the newest page of the audit log no longer reads its
+  newest entry a second time. What either page shows, and what opens, hovers and copies, is unchanged, as are the
+  ledger, its exports and the API. No migration.
+
 ### Fixed
 
 - **The OFAC vendor check says which wallets it compares with each other.** The page at

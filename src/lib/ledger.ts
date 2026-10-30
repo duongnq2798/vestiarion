@@ -356,6 +356,13 @@ export async function listLedgerEntryPage({
   return rows.map(rowToEntry);
 }
 
+/** The chain's head, its newest entry's number and hash, and nothing else of it: `null` while the chain is empty. */
+export async function ledgerHead(): Promise<Pick<LedgerEntry, "seq" | "hash"> | null> {
+  const result = await db().from("ledger_entries").select("seq, hash").order("seq", { ascending: false }).limit(1).maybeSingle();
+  if (result.error) throw new Error(result.error.message);
+  return (result.data as Pick<LedgerEntry, "seq" | "hash"> | null) ?? null;
+}
+
 export async function ledgerEntryCount(): Promise<number> {
   const result = await db().from("ledger_entries").select("*", { count: "exact", head: true });
   if (result.error) throw new Error(result.error.message);

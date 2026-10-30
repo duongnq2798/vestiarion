@@ -2,7 +2,8 @@ import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import { AuditLedger, DomainFilter } from "@/components/vx/AuditLedger";
+import { AuditLedger, auditRowFacts, DomainFilter } from "@/components/vx/AuditLedger";
+import { AuditEntryFacts } from "@/components/vx/AuditRow";
 import { CycleReport } from "@/components/vx/CycleReport";
 import type { LedgerEntry } from "@/lib/ledger";
 
@@ -28,6 +29,12 @@ function entry(seq: number, overrides: Partial<LedgerEntry> = {}): LedgerEntry {
     ...overrides,
   };
 }
+
+/**
+ * What a row shows once opened: its facts and detail are drawn in the browser from the data sent for it, when it is
+ * first opened or the page is ready, so the server's HTML holds them only for an opened row.
+ */
+const opened = (row: LedgerEntry, previous?: LedgerEntry) => html(<AuditEntryFacts row={auditRowFacts(row, previous)} />);
 
 /** The opening tag of the link whose text is exactly `text`, or of the first link containing it. */
 function anchor(markup: string, text: string): string {
@@ -64,9 +71,29 @@ describe("AuditLedger", () => {
     expect(markup).not.toMatch(/<details[^>]* open=""/);
   });
 
+  it("sends a closed row's facts and detail as data, not as markup", () => {
+    const e = entry(2, { detail: { day: 3, invoiceId: "inv-77" } });
+    const markup = html(<AuditLedger entries={[entry(1), e]} />);
+    expect(markup).not.toContain("inv-77");
+    expect(markup).not.toContain(e.signature);
+    expect(markup).not.toContain("<pre");
+    expect(opened(e, entry(1))).toContain("inv-77");
+  });
+
+  it("draws each row's icons once for the ledger, and each row points at its domain's", () => {
+    const markup = html(<AuditLedger entries={[entry(1), entry(2, { domain: "treasury" }), entry(3)]} />);
+    expect(markup.match(/<symbol id="audit-domain-ap"/g)).toHaveLength(1);
+    expect(markup.match(/<symbol id="audit-domain-treasury"/g)).toHaveLength(1);
+    expect(markup).not.toContain('id="audit-domain-system"');
+    expect(markup.match(/<symbol id="audit-row-open"/g)).toHaveLength(1);
+    expect(markup.match(/<use href="#audit-domain-ap">/g)).toHaveLength(2);
+    expect(markup.match(/<use href="#audit-domain-treasury">/g)).toHaveLength(1);
+    expect(markup.match(/<use href="#audit-row-open">/g)).toHaveLength(3);
+  });
+
   it("offers to copy the full hash, previous hash, body hash and signature", () => {
     const e = entry(2);
-    const markup = html(<AuditLedger entries={[entry(1), e]} />);
+    const markup = opened(e, entry(1));
     for (const what of ["hash", "previous hash", "body hash", "signature"]) {
       expect(markup).toContain(`aria-label="Copy the ${what} of #0002"`);
     }
@@ -76,9 +103,11 @@ describe("AuditLedger", () => {
   });
 
   it("says whether each entry links to the one before it", () => {
-    expect(html(<AuditLedger entries={[entry(1), entry(2)]} />)).toContain("matches hash of #0001");
-    expect(html(<AuditLedger entries={[entry(1), entry(2, { prevHash: hash("tampered") })]} />)).toContain("does not match hash of #0001");
-    expect(html(<AuditLedger entries={[entry(1)]} />)).toContain("genesis — first link in the chain");
+    expect(opened(entry(2), entry(1))).toContain("matches hash of #0001");
+    expect(opened(entry(2, { prevHash: hash("tampered") }), entry(1))).toContain("does not match hash of #0001");
+    expect(opened(entry(1))).toContain("genesis — first link in the chain");
+    // The entry before it on another page: nothing said either way, as before.
+    expect(opened(entry(2))).not.toMatch(/match hash of/);
   });
 
   it("tags a sweep and a risk change in words", () => {

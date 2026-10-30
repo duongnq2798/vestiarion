@@ -27,11 +27,20 @@ export function DomainGlyph({
   className = "size-3",
   filled = false,
 }: GlyphProps & { domain: Domain; filled?: boolean }) {
+  return (
+    <svg viewBox="0 0 12 12" className={`shrink-0 ${className}`} aria-hidden>
+      <DomainShape domain={domain} filled={filled} />
+    </svg>
+  );
+}
+
+/** A domain's drawing on a 12-unit square, without its frame: for a sheet of icons a list points at (`use`). */
+export function DomainShape({ domain, filled = false }: { domain: Domain; filled?: boolean }) {
   const fill = filled ? "currentColor" : "none";
   const common = { fill, stroke: "currentColor", strokeWidth: 1.5 } as const;
 
   return (
-    <svg viewBox="0 0 12 12" className={`shrink-0 ${className}`} aria-hidden>
+    <>
       {(domain === "ap" || domain === "ar") && (
         <rect x="2" y="1.75" width="8" height="8.5" rx="1" {...common} />
       )}
@@ -45,7 +54,7 @@ export function DomainGlyph({
       {domain === "system" && (
         <path d="M1.75 4.5h8.5M1.75 7.5h8.5" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
       )}
-    </svg>
+    </>
   );
 }
 

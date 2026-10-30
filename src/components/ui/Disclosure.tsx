@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { cn } from "./cn";
 
 /**
@@ -18,6 +18,7 @@ export function Disclosure({
   className,
   summaryClassName,
   contentClassName,
+  onToggle,
 }: {
   summary: ReactNode;
   children: ReactNode;
@@ -29,10 +30,12 @@ export function Disclosure({
   className?: string;
   summaryClassName?: string;
   contentClassName?: string;
+  /** From a client component only: told when it opens or closes, for content drawn when it is first opened. */
+  onToggle?: ComponentProps<"details">["onToggle"];
 }) {
   const framed = variant === "default";
   return (
-    <details id={id} name={name} open={defaultOpen} className={cn("disclosure group/disclosure", framed && "rounded-2xl border border-line bg-surface shadow-surface", className)}>
+    <details id={id} name={name} open={defaultOpen} onToggle={onToggle} className={cn("disclosure group/disclosure", framed && "rounded-2xl border border-line bg-surface shadow-surface", className)}>
       <summary
         className={cn(
           "cursor-pointer list-none select-none [&::-webkit-details-marker]:hidden",

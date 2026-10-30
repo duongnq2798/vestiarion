@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { curveMonotoneX, line as d3Line, scaleBand, scaleLinear, scaleTime } from "d3";
 import type {
   CycleRunTelemetry,
@@ -8,13 +8,11 @@ import type {
   TransferTelemetry,
   TreasuryMoveTelemetry,
 } from "@/lib/insights";
-import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
-import { Disclosure } from "@/components/ui/Disclosure";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Eyebrow } from "@/components/ui/Eyebrow";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
+import { DetailsTable } from "./InsightsTable";
 import { fmt } from "./Primitives";
 
 const utc = new Intl.DateTimeFormat("en-US", {
@@ -73,58 +71,6 @@ function EmptyChart({ what }: { what: string }) {
 }
 
 /**
- * A chart's every reading, folded under it: newest first, in a frame of its own height that scrolls under a
- * header that stays, so opening a table of fifty cycles never stretches the page or the card beside it.
- */
-function DetailsTable({ summary, headers, rows }: {
-  summary: string;
-  headers: string[];
-  rows: ReactNode[][];
-}) {
-  const newestFirst = [...rows].reverse();
-  return (
-    <Disclosure
-      variant="bare"
-      className="mt-4 border-t border-line pt-3"
-      summaryClassName="w-fit"
-      contentClassName="mt-3"
-      summary={
-        <span className="inline-flex items-center gap-1 text-xs font-medium text-agent transition-colors duration-150 ease-standard hover:underline">
-          <ChevronRight aria-hidden className="size-3.5 transition-transform duration-200 ease-standard group-open/disclosure:rotate-90" />
-          {summary}
-        </span>
-      }
-    >
-      <p className="mb-2 text-xs text-ink-3">
-        {rows.length} {rows.length === 1 ? "row" : "rows"}, newest first.
-      </p>
-      <Table label={summary} className="min-w-[34rem] text-xs" containerClassName="max-h-80 overflow-auto rounded-lg border border-line">
-        <TableHeader>
-          <TableRow>
-            {headers.map((header) => (
-              <TableHead key={header} className="sticky top-0 z-10 bg-surface px-2 py-2">
-                {header}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {newestFirst.map((row, rowIndex) => (
-            <TableRow key={rowIndex}>
-              {row.map((cell, cellIndex) => (
-                <TableCell key={cellIndex} className="whitespace-nowrap px-2 py-2 tabular-nums text-ink-2">
-                  {cell}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </Disclosure>
-  );
-}
-
-/**
  * Shows a dollar figure at the precision it was measured to. A chain fee on Arc
  * is a fraction of a cent, and USDC carries six decimals, so rounding to two
  * would turn every real reading into "$0.00" — a measured number displayed as
@@ -174,6 +120,14 @@ function policyDeparture(run: CycleRunTelemetry): string {
 type Frame = "compact" | "wide";
 const FRAMES: Frame[] = ["compact", "wide"];
 const FRAME_CLASS: Record<Frame, string> = { compact: "sm:hidden", wide: "hidden sm:block" };
+
+/**
+ * A position on a chart to the thousandth of a unit, as d3 writes its lines' paths: a dot then sits exactly on the
+ * line it marks, and is written `63.81`, not `63.809999999999995`, in the page and again in the data React sends.
+ */
+function at(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
 
 function MetricPlot({ values, label, unit, color, valueLabel }: {
   values: number[];
@@ -253,7 +207,10 @@ function MetricSvg({ frame, values, label, color, valueLabel }: {
         <path d={`${path} L ${x(values.length - 1)},${height - bottom} L ${x(0)},${height - bottom} Z`} fill={`url(#${gradient})`} />
         <path d={path} fill="none" stroke={color} strokeWidth="2.25" vectorEffect="non-scaling-stroke" />
       </>}
-      {values.map((value, index) => <circle key={index} cx={x(values.length === 1 ? 0.5 : index)} cy={y(value)} r="3.5" fill="var(--color-surface)" stroke={color} strokeWidth="2"><title>{valueLabel(value)}</title></circle>)}
+      {/* Each dot's paint, once for all of them: the dots inherit it. */}
+      <g fill="var(--color-surface)" stroke={color} strokeWidth="2">
+        {values.map((value, index) => <circle key={index} cx={at(x(values.length === 1 ? 0.5 : index))} cy={at(y(value))} r="3.5"><title>{valueLabel(value)}</title></circle>)}
+      </g>
       {values.length === 1 ? (
         <text x={width / 2} y={height - 8} textAnchor="middle" fill="var(--color-ink-3)" fontSize={axisFont}>only observation</text>
       ) : (
@@ -297,7 +254,7 @@ function TransferChart({ transfers }: { transfers: TransferTelemetry[] }) {
           usdLabel(transfer.feeUsd),
           transfer.feeSource.replaceAll("_", " "),
           transfer.settledInMs == null ? "pending / unavailable" : `${Math.round(transfer.settledInMs)} ms`,
-          <span key={transfer.id} title={transfer.txRef}>{transfer.txRef.slice(0, 12)}…</span>,
+          { text: `${transfer.txRef.slice(0, 12)}…`, title: transfer.txRef },
         ])}
       />
     </ChartCard>
@@ -374,14 +331,29 @@ function BalanceSvg({ frame, snapshots, moves }: { frame: Frame; snapshots: Cycl
         {liquidPath && <path d={liquidPath} fill="none" stroke="var(--color-agent)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
         {reservePath && <path d={reservePath} fill="none" stroke="var(--color-proof)" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />}
       </>}
-      {snapshots.map((snapshot) => <g key={snapshot.id}>
-        <circle cx={xTime(new Date(snapshot.capturedAt))} cy={y(snapshot.totalLiquid)} r="3.5" fill="var(--color-surface)" stroke="var(--color-agent)" strokeWidth="2" />
-        <circle cx={xTime(new Date(snapshot.capturedAt))} cy={y(snapshot.reservePosition)} r="3.5" fill="var(--color-surface)" stroke="var(--color-proof)" strokeWidth="2" />
-      </g>)}
-      {relevantMoves.map((move) => <g key={move.id}>
-        <line x1={xTime(new Date(move.createdAt))} y1={top} x2={xTime(new Date(move.createdAt))} y2={height - bottom} stroke="var(--color-held)" strokeDasharray="3 4" opacity="0.7" />
-        <text x={xTime(new Date(move.createdAt))} y={top - 7} textAnchor="middle" fill="var(--color-held)" fontSize={font + 1}>{move.action === "sweep_to_usyc" ? "S" : move.action === "redeem_from_usyc" ? "R" : "B"}</text>
-      </g>)}
+      {/* The dots' shared paint, once: each keeps its line's colour, and each snapshot's pair is drawn in its turn, as before. */}
+      <g fill="var(--color-surface)" strokeWidth="2">
+        {snapshots.map((snapshot) => {
+          const cx = at(xTime(new Date(snapshot.capturedAt)));
+          return <Fragment key={snapshot.id}>
+            <circle cx={cx} cy={at(y(snapshot.totalLiquid))} r="3.5" stroke="var(--color-agent)" />
+            <circle cx={cx} cy={at(y(snapshot.reservePosition))} r="3.5" stroke="var(--color-proof)" />
+          </Fragment>;
+        })}
+      </g>
+      {/* Each kind of mark's paint once: the lines run down the plot and the letters sit above it, so drawing every line
+          before every letter covers nothing it did not. A line keeps its own opacity, which a group's would flatten. */}
+      {relevantMoves.length > 0 && <>
+        <g stroke="var(--color-held)" strokeDasharray="3 4">
+          {relevantMoves.map((move) => {
+            const moveX = at(xTime(new Date(move.createdAt)));
+            return <line key={move.id} x1={moveX} y1={top} x2={moveX} y2={height - bottom} opacity="0.7" />;
+          })}
+        </g>
+        <g textAnchor="middle" fill="var(--color-held)" fontSize={font + 1}>
+          {relevantMoves.map((move) => <text key={move.id} x={at(xTime(new Date(move.createdAt)))} y={top - 7}>{move.action === "sweep_to_usyc" ? "S" : move.action === "redeem_from_usyc" ? "R" : "B"}</text>)}
+        </g>
+      </>}
       <text x={left} y={height - 12} fill="var(--color-ink-3)" fontSize={font}>{when(snapshots[0].capturedAt)}</text>
       <text x={width - right} y={height - 12} textAnchor="end" fill="var(--color-ink-3)" fontSize={font}>{when(snapshots.at(-1)?.capturedAt ?? snapshots[0].capturedAt)}</text>
     </svg>
