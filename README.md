@@ -352,7 +352,8 @@ run in production, with its ledger entries and transactions.
   from the browser with the Chrome extension, or sent through the API; recurring payables; early-payment discounts taken when they pay;
   late fees weighed when a bill waits and when cash is short, never added to what is paid.
 - **Approvals inbox** — approve and pay, reject, or return to the agent; claims keep two people from deciding the
-  same row.
+  same row. Select 2 to 20 bills to approve them with one confirmation, each still checked and signed on its own, and
+  paid in one Arc transaction where they can be.
 - **Try a limit first** — see which past bills a new payment limit, two-approvals figure or spending limit would have
   held or let through, then apply it from the result.
 - **Contractor milestones** — verified by a merged pull request, by a person accepting the Asana task the work was

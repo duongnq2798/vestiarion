@@ -2232,6 +2232,26 @@ three decisions:
 - **Return to the agent** sets it back to `pending` for the next cycle to
   decide again.
 
+**Several bills with one confirmation** (`docs/superpowers/specs/2026-10-30-approve-many-design.md`). On the console's
+Approvals page only, a person selects 2 to 20 bills and approves them at once (`approveManyAction`, command
+`payable.approve_many`, `approveAndPayMany`). `approveAndPay` is split into `prepareApproval` (every check through the
+claim), the payment, and `recordApproval`, and a selection runs the same three steps per bill, in the page's order:
+
+- The server takes a bill only when it is USDC to an address on the workspace's own chain, no one else is deciding it,
+  and no payment intent exists for it (AM2); anything else is refused by name ("Approve it on its own: ...") and never
+  claimed. The full amounts are set against the operating wallet's USDC before any claim, and a selection never brings
+  cash back from the reserve (AM4).
+- The prepared bills that pay a new transfer go to `payInvoices` (`src/lib/agent/pay.ts`): one `executePaymentBatch`
+  call where they can share one `executeBatch` transaction, as the milestone stage's batches would (batch payouts
+  R1-R7), and otherwise, as on an EOA network, each alone through `executePayment` with its own catch. One paid through
+  the owner's wallet contract goes alone through `payInvoice` as soon as it is decided, so the contract checks the next
+  bill with it counted. A bill whose checks fail, or throw, is that bill's alone (AM5). Each is recorded as alone, its
+  `approval_paid` entry adding `approvedTogether` and, for a shared transaction, `batch` (AM7).
+- In the browser, `src/components/approvals/` holds the selection: each `ApprovalCard` offers its bill while
+  `selectableInSelection` (AM2, from the card's own facts) allows it, `ApprovalSelection` keeps the ticked bills across
+  `AutoRefresh` and drops one no card offers any more, and draws the bar and the keys (`keys.ts`, AM12);
+  `ApproveSelectionDialog` is the one confirmation and the result, one line per bill (AM11).
+
 Every decision first claims the row through `claim_invoice_decision`
 (migration `0025`), a compare-and-set that moves the invoice to `processing`
 only while it is still waiting. This covers two races: two people deciding
