@@ -236,7 +236,8 @@ function endpointTables(origin: string): string {
 /**
  * The MCP page's tool table, as `McpToolTable` renders it: each tool with its
  * arguments, its operation's summary, and the endpoint's reference page. The
- * full description is on that page and in `tools/list`.
+ * full description is in `tools/list`, and on that page but for the evidence
+ * reads, whose tools describe their digest (MCP evidence MT10).
  */
 function mcpToolTable(origin: string): string {
   return table(

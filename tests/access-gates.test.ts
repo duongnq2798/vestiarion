@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { OPERATIONS } from "@/lib/api/openapi";
+import { OPERATIONS, operationById } from "@/lib/api/openapi";
+import { MCP_TOOLS } from "@/lib/mcp/tools";
 
 /**
  * The access gates Plan 1 put in place, pinned as source structure.
@@ -444,19 +445,6 @@ describe("every component", () => {
  */
 const PUBLIC_V1_ROUTES = ["src/app/api/v1/openapi.json/route.ts"];
 
-/**
- * The keyed v1 routes with no MCP tool yet (docs/superpowers/specs/2026-10-25-sdk-0-4-evidence-receipts-close-pack-design.md
- * EA9): the evidence reads, whose answers carry every entry in full and text from outside. The MCP route reaches every
- * other keyed route. When one gets its tool, its operation loses `mcp: false` and its row goes from here.
- */
-const NO_MCP_TOOL_YET = [
-  "src/app/api/v1/close-packs/[month]/route.ts",
-  "src/app/api/v1/invoices/[id]/evidence/route.ts",
-  "src/app/api/v1/invoices/[id]/receipt/route.ts",
-  "src/app/api/v1/milestones/[id]/evidence/route.ts",
-  "src/app/api/v1/payee-lock/evidence/route.ts",
-];
-
 /** The route file that serves an operation's path: `/api/v1/invoices/{id}/evidence` is `src/app/api/v1/invoices/[id]/evidence/route.ts`. */
 const routeFileOf = (operationPath: string) => `src/app${operationPath.replace(/\{([^}]+)\}/g, "[$1]")}/route.ts`;
 
@@ -555,15 +543,17 @@ describe("the MCP route", () => {
     }
   });
 
-  it("leaves out exactly the routes of the operations that have no tool yet (evidence API EA9)", () => {
-    const untooled = OPERATIONS.filter((op) => op.mcp === false).map((op) => routeFileOf(op.path));
-    expect([...untooled].sort()).toEqual([...NO_MCP_TOOL_YET].sort());
-    for (const file of NO_MCP_TOOL_YET) expect(V1_ROUTES.map(rel)).toContain(file);
+  it("has a tool for every keyed route: each serves an operation that has one, the evidence reads included (MCP evidence MT1)", () => {
+    const keyed = V1_ROUTES.map(rel).filter((file) => !PUBLIC_V1_ROUTES.includes(file));
+    const tooled = new Set(MCP_TOOLS.map((tool) => routeFileOf(operationById(tool.operationId)!.path)));
+    expect(keyed.length).toBeGreaterThan(0);
+    expect(keyed.filter((file) => !tooled.has(file))).toEqual([]);
+    for (const op of OPERATIONS.filter((candidate) => candidate.tag === "Evidence")) expect(tooled).toContain(routeFileOf(op.path));
   });
 
-  it("reaches tenant data only through the keyed /api/v1 route handlers", () => {
+  it("reaches tenant data only through the keyed /api/v1 route handlers, and reaches every one of them", () => {
     const keyed = V1_ROUTES.map(rel)
-      .filter((file) => !PUBLIC_V1_ROUTES.includes(file) && !NO_MCP_TOOL_YET.includes(file))
+      .filter((file) => !PUBLIC_V1_ROUTES.includes(file))
       .map((file) => file.replace(/\.ts$/, ""));
     // The v1 routes and their guard are pinned above; the walk stops at them.
     const boundary = (name: string) => name === "src/lib/api/guard" || name.startsWith("src/app/api/v1/");

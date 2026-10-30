@@ -1,10 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
-import { OPERATIONS } from "@/lib/api/openapi";
+import { OPERATIONS, operationById } from "@/lib/api/openapi";
+import { CLOSE_PACK_TOO_LARGE, EVIDENCE_READS_LIMITED, MONTH_REFUSED, PAYEE_LOCK_TOO_LARGE, readPaymentEvidence } from "@/lib/api/evidence";
+import { closePackDocument } from "@/lib/close-pack/export";
+import { readClosePack } from "@/lib/close-pack/read";
+import { readPayeeLockEvidence } from "@/lib/payee-lock-evidence-read";
 import { authenticateApiKey, type AuthenticatedKey } from "@/lib/platform/api-keys";
+import { publicOrigin } from "@/lib/public-origin";
+import { readReceiptDocument } from "@/lib/receipts/document-read";
 import { GET as getInvoices } from "@/app/api/v1/invoices/route";
 import { callOperation } from "@/lib/mcp/call";
+import { DIGESTED_OPERATIONS, digestAnswer, type DigestedOperationId } from "@/lib/mcp/digests";
+import { samplePack } from "./support/close-pack-fixtures";
 import { carriesOrg, fakeSupabase, type RecordedRequest } from "./support/fake-supabase";
 import { APPENDED_LEDGER_ROW, signedOrgs } from "./support/signed-org";
 
@@ -32,6 +40,25 @@ vi.mock("@/lib/platform/api-keys", async (importOriginal) => {
     authenticateApiKey: vi.fn(actual.authenticateApiKey),
     touchApiKeyUsed: vi.fn(async () => {}),
   };
+});
+
+// The evidence reads' readers read as they do unless a test hands one a document, as its route would have read it
+// (MCP evidence MT2): the route still guards, checks, brakes and answers it.
+vi.mock("@/lib/api/evidence", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/evidence")>();
+  return { ...actual, readPaymentEvidence: vi.fn(actual.readPaymentEvidence) };
+});
+vi.mock("@/lib/receipts/document-read", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/receipts/document-read")>();
+  return { ...actual, readReceiptDocument: vi.fn(actual.readReceiptDocument) };
+});
+vi.mock("@/lib/payee-lock-evidence-read", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/payee-lock-evidence-read")>();
+  return { ...actual, readPayeeLockEvidence: vi.fn(actual.readPayeeLockEvidence) };
+});
+vi.mock("@/lib/close-pack/read", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/close-pack/read")>();
+  return { ...actual, readClosePack: vi.fn(actual.readClosePack) };
 });
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k", NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key", SUPABASE_JWT_SECRET: "test-request-token-secret-at-least-32-characters" });
@@ -168,22 +195,15 @@ describe("callOperation", () => {
     expect(JSON.parse(result.content[0].text)).toEqual({ error: { code: "not_found", message: `Counterparty "${id}" was not found.` } });
   });
 
-  it("has no route for an operation with no tool yet, such as a close pack (evidence API EA9)", async () => {
+  it.each(OPERATIONS.filter((op) => op.method === "get").map((op) => [op.id]))("%s runs its route in the key's workspace, and names only that one", async (operationId) => {
     vi.mocked(authenticateApiKey).mockResolvedValue(KEY_A);
     const fake = fakeSupabase(database());
-    const result = await inScope(fake, () => callOperation("get-close-pack", { month: "2026-01" }, AUTHORIZATION, ORIGIN));
-    expect(result).toEqual({ content: [{ type: "text", text: "No such operation." }], isError: true });
-    expect(fake.requests).toEqual([]);
-  });
-
-  it.each(OPERATIONS.filter((op) => op.method === "get" && op.mcp !== false).map((op) => [op.id]))("%s runs its route in the key's workspace, and names only that one", async (operationId) => {
-    vi.mocked(authenticateApiKey).mockResolvedValue(KEY_A);
-    const fake = fakeSupabase(database());
-    const args = operationId === "get-counterparty" ? { id: "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de" } : {};
+    const byId = operationById(operationId)!.params.some((param) => param.in === "path" && param.name === "id");
+    const args = byId ? { id: "0b6c1c9e-4a4f-4a7e-9b1e-00000000c0de" } : operationId === "get-close-pack" ? { month: "2026-01" } : {};
     const result = await inScope(fake, () => callOperation(operationId, args, AUTHORIZATION, ORIGIN));
 
-    // An empty workspace: every operation answers, and the one lookup by id is not found.
-    if (operationId === "get-counterparty") expect(JSON.parse(result.content[0].text).error.code).toBe("not_found");
+    // An empty workspace: every operation answers, and each lookup by id is not found.
+    if (byId) expect(JSON.parse(result.content[0].text).error.code, result.content[0].text).toBe("not_found");
     else expect(result.isError, result.content[0].text).toBeUndefined();
 
     const tenant = tenantRequests(fake);
@@ -300,5 +320,139 @@ describe("callOperation for a write", () => {
     expect(result.structuredContent).toBeUndefined();
     expect(JSON.parse(result.content[0].text)).toEqual({ error: { code: "forbidden", message: "This key cannot do that." } });
     expect(tenantRequests(fake)).toEqual([]);
+  });
+});
+
+/**
+ * An evidence read's tool runs its route as every tool does, and answers the digest of the route's own answer, as text
+ * and as `structuredContent`; an error passes through as it is (docs/superpowers/specs/2026-10-30-mcp-evidence-tools-
+ * design.md, MT2). Each test has a key of its own, so the brake the five share starts full (evidence API EA6).
+ */
+describe("callOperation for an evidence read", () => {
+  const ID = "7d1e4c2a-5b3f-4e8a-9c61-2f0a8b3d4e51";
+  let issued = 0;
+  /** A read key of the workspace whose evidence reads nothing else has spent. */
+  function freshKey(): AuthenticatedKey {
+    issued += 1;
+    return { ...KEY_A, keyId: `1a1a1a1a-0000-4000-8000-${String(issued).padStart(12, "0")}` };
+  }
+
+  /** What each tool is called with, and the document its reader hands the route, as JSON: each operation's example. */
+  const document = (id: DigestedOperationId) => JSON.parse(JSON.stringify((operationById(id)!.example as { data: unknown }).data));
+  const ARGS: Record<DigestedOperationId, Record<string, unknown>> = {
+    "get-invoice-evidence": { id: ID },
+    "get-milestone-evidence": { id: ID },
+    "get-invoice-receipt": { id: ID },
+    "get-payee-lock-evidence": { from: "2026-10-01", to: "2026-10-31" },
+    "get-close-pack": { month: "2026-10" },
+  };
+
+  /** Hands the operation's reader its document once, and says what the route will answer. */
+  function serve(id: DigestedOperationId): { data: unknown } {
+    if (id === "get-close-pack") {
+      const pack = samplePack({ people: "id" });
+      vi.mocked(readClosePack).mockResolvedValueOnce(pack);
+      return { data: JSON.parse(JSON.stringify(closePackDocument(pack, { origin: publicOrigin() }))) };
+    }
+    const data = document(id);
+    if (id === "get-invoice-evidence" || id === "get-milestone-evidence") vi.mocked(readPaymentEvidence).mockResolvedValueOnce(data);
+    if (id === "get-invoice-receipt") vi.mocked(readReceiptDocument).mockResolvedValueOnce(data);
+    if (id === "get-payee-lock-evidence") vi.mocked(readPayeeLockEvidence).mockResolvedValueOnce(data);
+    return { data };
+  }
+
+  it.each([...DIGESTED_OPERATIONS])("%s answers the digest of its route's answer, as text and as structuredContent (MCP evidence MT2)", async (id) => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(freshKey());
+    const answer = serve(id);
+    const expected = digestAnswer(id, answer);
+    const fake = fakeSupabase(database());
+    const result = await inScope(fake, () => callOperation(id, ARGS[id], AUTHORIZATION, ORIGIN));
+
+    expect(result.isError, result.content[0].text).toBeUndefined();
+    expect(result.structuredContent).toEqual(expected);
+    expect(result.content).toEqual([{ type: "text", text: JSON.stringify(expected) }]);
+    expect(Object.keys(result.structuredContent!)[0]).toBe("about");
+    // Not the file: none of its entries' signatures, nor its keys, reach the model.
+    const { entries, keys } = answer.data as { entries: Array<{ signature: string }>; keys: Array<{ publicKeyPem: string }> };
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) expect(result.content[0].text).not.toContain(entry.signature);
+    for (const key of keys) expect(result.content[0].text).not.toContain(key.publicKeyPem);
+    expect(result.content[0].text.length).toBeLessThan(JSON.stringify(answer).length);
+  });
+
+  it("calls each reader with the arguments, in the key's workspace", async () => {
+    const key = freshKey();
+    vi.mocked(authenticateApiKey).mockResolvedValue(key);
+    const fake = fakeSupabase(database());
+    for (const id of DIGESTED_OPERATIONS) {
+      serve(id);
+      await inScope(fake, () => callOperation(id, ARGS[id], AUTHORIZATION, ORIGIN));
+    }
+    expect(vi.mocked(readPaymentEvidence).mock.calls.slice(-2)).toEqual([
+      ["invoice", ID],
+      ["milestone", ID],
+    ]);
+    expect(vi.mocked(readReceiptDocument).mock.lastCall?.[0]).toMatchObject({ invoiceId: ID, workspace: { slug: "org-a", name: "Org A" } });
+    expect(vi.mocked(readPayeeLockEvidence).mock.lastCall?.[0]).toMatchObject({ period: { from: "2026-10-01", to: "2026-10-31" }, people: "id" });
+    expect(vi.mocked(readClosePack).mock.lastCall?.[0]).toMatchObject({ month: { key: "2026-10" }, people: "id" });
+    for (const request of tenantRequests(fake)) expect(carriesOrg(request, ORG_A), `${request.method} ${request.path}`).toBe(true);
+  });
+
+  it("passes a 404 through as the route's own error, with no digest", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(freshKey());
+    const fake = fakeSupabase(database());
+    const result = await inScope(fake, () => callOperation("get-invoice-receipt", { id: ID }, AUTHORIZATION, ORIGIN));
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toEqual({ error: { code: "not_found", message: expect.stringContaining(ID) } });
+  });
+
+  it("passes a month that does not read through as the route's 400, before anything is read", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(freshKey());
+    const fake = fakeSupabase(database());
+    const result = await inScope(fake, () => callOperation("get-close-pack", { month: "2026-13" }, AUTHORIZATION, ORIGIN));
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.content[0].text)).toEqual({ error: { code: "invalid_request", message: MONTH_REFUSED } });
+    expect(tenantRequests(fake)).toEqual([]);
+  });
+
+  it("passes a month or a period whose file is over 4 MB through as the route's 400, with no digest (evidence API EA7, MCP evidence MT2)", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(freshKey());
+    const fake = fakeSupabase(database());
+    // A payee named in 4 MB: the route refuses the whole file before a digest could be made of it.
+    const pack = samplePack({ people: "id" });
+    vi.mocked(readClosePack).mockResolvedValueOnce({ ...pack, rows: pack.rows.map((row) => ({ ...row, payee: { ...row.payee, name: "P".repeat(4_000_000) } })) });
+    const lock = document("get-payee-lock-evidence");
+    lock.changes[0].counterparty.name = "P".repeat(4_000_000);
+    vi.mocked(readPayeeLockEvidence).mockResolvedValueOnce(lock);
+
+    const month = await inScope(fake, () => callOperation("get-close-pack", ARGS["get-close-pack"], AUTHORIZATION, ORIGIN));
+    const period = await inScope(fake, () => callOperation("get-payee-lock-evidence", ARGS["get-payee-lock-evidence"], AUTHORIZATION, ORIGIN));
+    for (const result of [month, period]) {
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+    }
+    expect(JSON.parse(month.content[0].text)).toEqual({ error: { code: "invalid_request", message: CLOSE_PACK_TOO_LARGE } });
+    expect(JSON.parse(period.content[0].text)).toEqual({ error: { code: "invalid_request", message: PAYEE_LOCK_TOO_LARGE } });
+  });
+
+  it("keeps the evidence reads' brake per key: the eleventh read at once is the route's 429 (evidence API EA6)", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(freshKey());
+    const fake = fakeSupabase(database());
+    const results = [];
+    for (let read = 0; read < 11; read += 1) results.push(await inScope(fake, () => callOperation("get-payee-lock-evidence", {}, AUTHORIZATION, ORIGIN)));
+    expect(results.slice(0, 10).every((result) => result.isError === undefined)).toBe(true);
+    expect(results[10].isError).toBe(true);
+    expect(JSON.parse(results[10].content[0].text)).toEqual({ error: { code: "rate_limited", message: EVIDENCE_READS_LIMITED } });
+  });
+
+  it("reports a 2xx that is not a document as a failure, logging the operation id alone", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValue(freshKey());
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(readPayeeLockEvidence).mockResolvedValueOnce([] as never);
+    const fake = fakeSupabase(database());
+    const result = await inScope(fake, () => callOperation("get-payee-lock-evidence", {}, AUTHORIZATION, ORIGIN));
+    expect(result).toEqual({ content: [{ type: "text", text: "The operation failed. Try again." }], isError: true });
+    expect(log).toHaveBeenCalledExactlyOnceWith("mcp tool failed", "get-payee-lock-evidence");
   });
 });

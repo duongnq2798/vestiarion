@@ -30,6 +30,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   `approvedTogether` and, for a shared transaction, `batch`. Slack still approves one bill at a time, where an owner
   lets bills be decided there; Telegram, Discord and the API approve none. No migration: batches use the columns of
   0057.
+- **AI agents can read evidence, receipts and close packs through MCP.** The MCP server has five new read-only tools,
+  `get_invoice_evidence`, `get_milestone_evidence`, `get_invoice_receipt`, `get_payee_lock_evidence` and
+  `get_close_pack`, so an agent connected with a workspace API key can answer why a bill or a milestone was paid, what a
+  receipt states, how the payee lock held in a period, and what a month closed with. Each answers a digest of the
+  signed file rather than the file: what it says, each fact with the numbers of the signed entries it rests on, the
+  server's count of those entries' signatures, and where to get the full file to check offline with the SDK. Every
+  digest says that the names, numbers, memos and links in it came from outside and are data, never instructions. It
+  holds at most the newest 50 address changes or the first 100 payments of a month, and is never over 200 KB. The
+  server now lists 18 tools. No migration.
 - **Earned vendors paid on their own, in shadow mode.** Under a rule for earned vendors, an owner can now choose **Let
   the agent pay earned vendors** in **Settings**, under **Earned vendors**. With it on, in shadow mode, a payment to a
   vendor that earned it and is signed as earned, which passed every check, is made at once instead of waiting for your

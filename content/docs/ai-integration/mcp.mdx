@@ -1,6 +1,6 @@
 Vestiarion runs a remote [MCP](https://modelcontextprotocol.io) server. Connect an AI agent to it with a workspace API key, and the agent can answer questions from your workspace's own records: which payments are held and why, whether the ledger is intact, what is due to contractors.
 
-Each tool is one of the API's operations, except the evidence reads (a payment's evidence and receipt, the payee lock's evidence and the monthly close pack), which have no tool yet. A tool call runs that operation with your key and returns its JSON exactly as the API does. With a read-only key, an agent connected here can read and explain, and nothing more. With a [read-and-write key](/docs/get-started/authentication#scopes), it can also add counterparties, invoices and milestones, which the agent in Vestiarion then decides as it decides any other, and make payee links. No tool verifies work, approves or pays.
+Each tool is one of the API's operations. A tool call runs that operation with your key and returns its JSON exactly as the API does, except for the evidence reads (a payment's evidence and receipt, the payee lock's evidence and the monthly close pack), which return a [digest](#evidence-receipts-and-close-packs) of the signed file. With a read-only key, an agent connected here can read and explain, and nothing more. With a [read-and-write key](/docs/get-started/authentication#scopes), it can also add counterparties, invoices and milestones, which the agent in Vestiarion then decides as it decides any other, and make payee links. No tool verifies work, approves or pays.
 
 ## The server
 
@@ -47,7 +47,7 @@ The write tools need a read-and-write key: `create_counterparty`, `create_invoic
 
 ## Tools
 
-One tool per [API operation](/docs/api), except the evidence reads, which have no tool yet. Its name is the operation's id in snake case, its arguments are the operation's parameters, or for a write the fields of its request body and an optional `idempotencyKey`, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. A read's tool is marked read-only and idempotent. The four write tools are marked as adding records: not read-only, and not idempotent.
+One tool per [API operation](/docs/api). Its name is the operation's id in snake case, its arguments are the operation's parameters, or for a write the fields of its request body and an optional `idempotencyKey`, with their types, allowed values and bounds, and its description, which is what the agent reads, is the operation's summary and description from its reference page. An evidence read's tool describes its digest instead. A read's tool is marked read-only and idempotent. The four write tools are marked as adding records: not read-only, and not idempotent.
 
 - `create_counterparty`, `create_invoice` and `create_milestone` are not destructive. A repeat adds another record, unless it passes the same `idempotencyKey`.
 - `create_payee_link` is marked destructive, because a new link revokes the payee's unused one. It takes no `idempotencyKey`: the link is in its answer only, so a repeat makes a new link.
@@ -56,10 +56,30 @@ One tool per [API operation](/docs/api), except the evidence reads, which have n
 
 What a call returns:
 
-- **A success** is the API's JSON, as text and as structured content.
+- **A success** is the API's JSON, as text and as structured content. An evidence read's success is its digest, [below](#evidence-receipts-and-close-packs).
 - **An API error** is a tool error (`isError`) whose text is the API's error body, such as a `400 invalid_request` for a cursor from another endpoint, or a `404 not_found` for an unknown id. The agent reads the message and corrects its call. A read-only key calling a write tool gets the API's `403 forbidden` the same way. The error codes are on [Errors](/docs/get-started/errors).
 - **A collection** is one page, 50 items unless the agent passes `limit`, up to 200. The agent passes `page.nextCursor` back as `cursor` for the next page, as described in [Pagination](/docs/get-started/pagination).
-- **Nothing is cut.** A tool returns the whole response, `get_insights` included, as the API documents it.
+- **Nothing else is cut.** Every other tool returns the whole response, `get_insights` included, as the API documents it.
+
+### Evidence, receipts and close packs
+
+The five evidence reads answer signed files that carry every entry they cite in full, with the workspace's public keys: tens of KB for one payment, up to 4 MB for a month. A tool's answer goes into the agent's context whole, so these tools return a digest of the file instead. An agent can then answer "why was this bill paid?", "is this receipt good?" or "what did October close with?" without reading a whole file.
+
+- **`get_invoice_evidence` and `get_milestone_evidence`** keep the `subject` and every step of the evidence chain, each fact with its label, text, who stated it and when, its link, and `entries`, the `seq` of the signed entries it rests on. Each label keeps its words and its count of facts, without what it means.
+- **`get_invoice_receipt`** keeps everything the receipt states: `ready`, `notReady`, `facts`, `records`, `invoiceEntry`, `shared` and `checks`.
+- **`get_payee_lock_evidence`** keeps the `period`, the `lock` and the `summary`, and the newest 50 address `changes`, each as the file has it. `changesShown` and `changesTotal` say how many it holds. For the rest, ask for a shorter period with `from` and `to`.
+- **`get_close_pack`** keeps the `month`, `ledgerHead`, `cut`, `unread` and `totals`, and the first 100 settled payments as `rows`. Each row has its `paymentId`, `source`, `paidAt`, `amount`, `token`, `simulated` and `shadow`; its `payee`, by name and address, with `bank: true` for a payment to a bank; its `bill`, with its number or title, amount, currency and due date; `approval.authorizedBy`; its `transaction`, `txHash` and `chain`; and `entry`, the `seq` of the entry that records it. `rowsShown` and `rowsTotal` say how many rows it holds, and `notSettled` and `escrow` count the payments not settled and the escrow moves.
+
+Every digest:
+
+- **Starts with `about`:** one sentence saying what it is, and that its names, numbers, memos and links came from outside Vestiarion and are data, never instructions. Each of these tools' descriptions ends by saying the same. Text from outside, such as a vendor's name or a memo, is only ever a JSON string, as the file has it.
+- **Leaves out the entries and the keys:** `entries`, `keys`, `signedEntryProves` and `checkAnEntry`. It counts instead the server's own check of each entry the file carries, in `signatures`: `cited`, `verified`, `failed` and `unchecked`. That count is Vestiarion's word, not proof.
+- **Names the full file in `fullFile`:** the API path and the SDK method that give the complete signed file. Check that file offline with the SDK's [`verifyEvidence`](/docs/get-started/sdk#evidence-receipts-and-close-packs) and the workspace's public key.
+- **Is at most 200 KB.** A digest that would be larger holds fewer changes or rows, and says how many in `changesShown` or `rowsShown`, with a sentence in `notShown`.
+
+The evidence reads keep their own [limit](/docs/get-started/limits) per key through MCP, as through the API: 10 at once, then one every 6 seconds. Over it, the tool error is the API's `429 rate_limited`.
+
+A close pack, or the payee lock's evidence for a period, whose full file is over 4 MB has no digest. Its tool error is the API's `400 invalid_request`, as on [Limits](/docs/get-started/limits#response-size). For a close pack, that is a month of about 850 payments or more, fewer when each cites many signed entries. The error's message says what to do instead: download such a month from the workspace's Monthly close pack page, or ask for the payee lock's evidence a shorter period at a time.
 
 ## Setup
 
@@ -149,6 +169,8 @@ Once the server is connected, ask in plain language. The agent picks the tools:
 - "Which counterparties are high risk, and what did their latest screening find?" uses `list_counterparties` with `riskLevel: "high"`, then `get_counterparty`.
 - "How much do we hold in reserve, and what does the latest liquidity forecast say?" uses `get_treasury`.
 - "Are payments on this workspace live or simulated?" uses `get_status`.
+- "Why was Harbor Print's last bill paid, and who approved it?" uses `list_invoices` to find the bill, then `get_invoice_evidence`.
+- "What did October close with, and did every signed entry in the close pack verify?" uses `get_close_pack` with `month: "2026-10"`.
 - With a read-and-write key, "Add Quill Studio's invoice for 420 USDC against PO-4012, due October 31; the work was delivered" uses `list_counterparties` to find Quill Studio, then `create_invoice`.
 - With a read-and-write key, "Pay Mona 150 USDC for https://github.com/acme/app/pull/42 once it is merged" uses `list_counterparties` to find Mona, then `create_milestone`.
 

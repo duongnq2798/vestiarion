@@ -4301,9 +4301,17 @@ are in `src/lib/api/evidence.ts`: `documentAnswer` serializes once with `cache-c
 `workspaceInScope` reads the key's workspace's slug and name. A malformed id, month or period is refused before any
 read, then `takeApiEvidenceToken` (10 at once, then one every 6 seconds, per key, one bucket for the five) brakes
 them, since each checks every cited entry's signature and the evidence reads ask the chain's RPC and check the links
-people gave. They write nothing: no ledger entry, no row, no webhook. Their operations carry `mcp: false`, so they
-have no MCP tool until the tools are designed for them, and `NO_MCP_TOOL_YET` in `tests/access-gates.test.ts` names
-their routes.
+people gave. They write nothing: no ledger entry, no row, no webhook.
+
+Their MCP tools (docs/superpowers/specs/2026-10-30-mcp-evidence-tools-design.md) run the same routes through
+`callOperation`, but answer a digest of the file rather than the file, since a tool's answer goes into a model's context
+whole and these carry every cited entry in full and text from outside. `src/lib/mcp/digests.ts` builds each digest
+from the route's JSON alone, imports types only, and holds each tool's description, which describes the digest, so the
+OpenAPI document and the reference pages keep the full file's words. A digest keeps what the file says, each fact with
+the `seq` of its entries, leaves out `entries`, `keys`, `signedEntryProves` and `checkAnEntry`, counts the server's
+check of each carried entry in `signatures`, and names the full file and `verifyEvidence` in `fullFile`. The payee
+lock's keeps the newest 50 changes and the close pack's the first 100 rows, and none is over 200 KB
+(`DIGEST_MAX_BYTES`): a larger one holds fewer and says how many.
 
 Collections intended for human browsing are newest first and use
 `created_at + id` as a stable cursor. The ledger is the exception: its `seq`

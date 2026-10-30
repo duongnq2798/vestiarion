@@ -181,6 +181,11 @@ workspace (`ReceiptDocument`, `src/lib/receipts/document.ts`):
   route but those, and the list equals the routes of the operations with `mcp: false`. D16 removes the flag and the list
   row by row.
 - If wrong: an agent on MCP cannot read evidence until D16. It still reads the ledger and the records.
+- Replaced on 2026-10-30 by MT1-MT11 of `docs/superpowers/specs/2026-10-30-mcp-evidence-tools-design.md`: the five
+  have tools (`get_invoice_evidence`, `get_milestone_evidence`, `get_invoice_receipt`, `get_payee_lock_evidence`,
+  `get_close_pack`) that answer a digest of the file, built from the route's answer in `src/lib/mcp/digests.ts`.
+  `DocOperation.mcp` and `NO_MCP_TOOL_YET` are gone, and `MCP_TOOLS` is every operation. The operations' descriptions
+  and this spec's EA16 sentence still describe the full file; the tools' own descriptions describe the digest.
 
 **EA10. Schemas and types the SDK can render.**
 - `src/lib/api/schemas.ts` adds `EntryCheckSchema`, `OnChainCheckSchema`, `EvidenceKeySchema`, `SignedEntrySchema`,
