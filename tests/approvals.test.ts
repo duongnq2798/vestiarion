@@ -2140,6 +2140,17 @@ describe("listWaitingPayables", () => {
     expect(listing?.params.get("order")).toBe("due_date.asc");
   });
 
+  it("says a payment was tried for a bill whose send Circle refused before giving it an id, which neither paymentSent nor lastAttempt shows (approve many AM2)", async () => {
+    const { run } = approvalsFake({
+      intents: [intentRow({ status: "failed", provider_tx_id: null, provider_state: null, last_error: "Circle refused the transfer: invalid destination address" })],
+    });
+
+    const [row] = await run(() => listWaitingPayables());
+
+    // So the card offers it to no selection, which the server would refuse: it is approved on its own.
+    expect(row).toMatchObject({ paymentSent: false, lastAttempt: null, paymentTried: true });
+  });
+
   it("explains reasoning that reads as a log from the facts its decision recorded, as a person reads it (plain reasoning R2)", async () => {
     const technical = "Counterparty is riskLevel 'clear'; goodsReceived is true and duplicateMatchesTotal 0. [guardrail override: counterparty is high risk — pay refused before execution]";
     const entry = {

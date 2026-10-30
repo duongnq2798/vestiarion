@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useCallback, useState, type FormEvent } from "react";
 import { approveInvoiceAction, cosignInvoiceAction, rejectInvoiceAction, returnInvoiceAction } from "@/app/actions/approvals";
 import { AddDetailsDialog } from "@/components/AddDetailsDialog";
+import { SelectBill } from "@/components/approvals/SelectBill";
+import { useSelectableBill, useSelection } from "@/components/approvals/selection-context";
 import { AttachDocumentDialog } from "@/components/document-requests/AttachDocumentDialog";
 import { DocumentRequestLine } from "@/components/document-requests/DocumentRequestLine";
 import { suggestedPoOf, type DocumentRequestView } from "@/lib/document-requests/rules";
@@ -232,6 +234,10 @@ const UNFINISHED: { label: string; tone: BadgeProps["tone"] } = { label: "Unfini
  * (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md DK8, DK13). While vendor requests are in
  * shadow or on (`documentChecks`), an owner or admin may also attach a document the vendor emailed them, for the cycle to
  * check (DK11).
+ *
+ * Inside Approvals' selection, a bill that can be approved with others in one confirmation shows a checkbox beside its
+ * payee, and a selected card is outlined (docs/superpowers/specs/2026-10-30-approve-many-design.md AM2). Each card there
+ * can take focus, for the keys that move between them (AM12).
  */
 export default function ApprovalCard({
   orgSlug,
@@ -302,18 +308,42 @@ export default function ApprovalCard({
   // Beside Add details, while it waits for its purchase order or goods receipt (DK11): what `missingDetails` names, so a
   // vendor paid without purchase orders, its goods received, is offered nothing the server would refuse.
   const attach = canAddDetails && payable.status === "awaiting_info" && missingDetails(payable) !== null ? documentChecks : null;
+  // On Approvals, a bill this person can approve with others in one confirmation offers itself to the selection (approve
+  // many AM2), with what the confirmation lists of it. The keys move between the cards, so each can take focus (AM12).
+  const inSelection = useSelection() !== null;
+  const select = useSelectableBill(
+    payable.id,
+    canDecide && selectableInSelection(payable, viewerId, ownEntry, ownAddress, verdict)
+      ? {
+          id: payable.id,
+          payee: payable.counterpartyName,
+          amount: payable.amount,
+          address: payable.address as string,
+          overridesHold: overridesHold(payable),
+          pays: !two || two.approvals.some((approval) => approval.by !== viewerId),
+          discounted: amountToPay(payable.amount, payable.discount, new Date()).discountTaken > 0,
+        }
+      : null
+  );
 
   return (
-    <Card asChild tone={payable.status === "flagged" ? "refused" : processing ? "agent" : "held"}>
-      <article id={approvalAnchor(payable.id)} className="scroll-mt-4">
+    <Card asChild tone={payable.status === "flagged" ? "refused" : processing ? "agent" : "held"} className={select?.selected ? "ring-2 ring-agent" : undefined}>
+      <article
+        id={approvalAnchor(payable.id)}
+        className={inSelection ? "scroll-mt-4 scroll-mb-40" : "scroll-mt-4"}
+        {...(inSelection ? { "data-bill": payable.id, tabIndex: -1 } : {})}
+      >
         <CardHeader className="gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <CardTitle className="truncate">{payable.counterpartyName}</CardTitle>
-            <p className="text-sm text-ink-2">
-              Due {utcDay(payable.dueDate)}
-              {payable.decidedAt && <span className="text-ink-3"> · stopped {utcMinute(payable.decidedAt)}</span>}
-            </p>
-            {exception && !processing && <ExceptionLine facts={exception} viewerEmail={viewerEmail} className="pt-0.5" />}
+          <div className="flex min-w-0 items-start gap-3">
+            {select && <SelectBill id={payable.id} payee={payable.counterpartyName} amount={payable.amount} selected={select.selected} onToggle={select.toggle} />}
+            <div className="min-w-0 space-y-1">
+              <CardTitle className="truncate">{payable.counterpartyName}</CardTitle>
+              <p className="text-sm text-ink-2">
+                Due {utcDay(payable.dueDate)}
+                {payable.decidedAt && <span className="text-ink-3"> · stopped {utcMinute(payable.decidedAt)}</span>}
+              </p>
+              {exception && !processing && <ExceptionLine facts={exception} viewerEmail={viewerEmail} className="pt-0.5" />}
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end sm:gap-1.5">
             <Money value={payable.amount} token={payable.currency ?? "USDC"} className="text-lg font-semibold text-ink" />
@@ -558,6 +588,30 @@ export function payBlockedReason(payable: WaitingPayable, viewerId: string, ownE
         : payable.riskLevel === "high"
           ? "Screened high risk"
           : null;
+}
+
+/**
+ * Whether a bill can join Approvals' selection, to be approved with others in one confirmation, for a viewer who may
+ * decide (docs/superpowers/specs/2026-10-30-approve-many-design.md AM2), from the card's own facts:
+ *
+ * - the card shows this person Approve, or Approve and pay, enabled: no one else is deciding it, and no earlier decision
+ *   is left unfinished, which Approve and pay alone records (`processing`); no open shadow verdict decides it,
+ *   nor one not read; and `payBlockedReason` is null, so it is not their own entry or address unless they decide alone,
+ *   not screened high risk, and not their own first of two approvals;
+ * - it is in USDC, paid to an address on the workspace's own chain: no bank payout, no payout across chains;
+ * - no payment was ever tried for it: no payment intent at all (`paymentTried`), which also covers a `lastAttempt` and
+ *   `paymentSent`, and a send Circle refused before giving it an id, which neither shows;
+ * - its payee is not frozen, which Approve and pay refuses (address change check AC5).
+ *
+ * Anything else is approved on its own. The server checks the same facts again, and refuses by name a bill that fails them.
+ */
+export function selectableInSelection(payable: WaitingPayable, viewerId: string, ownEntry: boolean, ownAddress: boolean, verdict?: VerdictView): boolean {
+  if (payable.status === "processing") return false;
+  if (payable.heldForVerdict && (!verdict || verdict.open)) return false;
+  if (payBlockedReason(payable, viewerId, ownEntry, ownAddress) !== null) return false;
+  if (payable.currency !== "USDC" || payable.bank || !payable.address || paidAcrossChains(payable.payeeChain)) return false;
+  if (payable.paymentTried || payable.paymentSent || payable.lastAttempt) return false;
+  return payable.payeeFrozen !== true;
 }
 
 /**

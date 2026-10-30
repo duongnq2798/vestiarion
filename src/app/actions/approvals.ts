@@ -8,7 +8,7 @@ import { cosignsNow } from "@/lib/approval-policy";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { consoleActor } from "@/lib/commands/actor";
-import { addPayableDetails, approvePayable, rejectPayable, returnPayable } from "@/lib/commands/payables";
+import { addPayableDetails, approvePayable, approvePayables, rejectPayable, returnPayable, type SelectionLine, type SharedTransaction } from "@/lib/commands/payables";
 import { inOrg } from "@/lib/dal/scope";
 import { invoiceDetailsInputSchema, invoiceFormRefusal } from "@/lib/intake-validation";
 import { COSIGN_OFF, COSIGNED } from "@/lib/two-approvals";
@@ -50,6 +50,60 @@ export async function approveInvoiceAction(_previous: ApprovalActionResult, form
     // A reason for paying what the agent held, when the person gave one: optional, and never what the payment waits on.
     const outcome = await approvePayable(consoleActor(auth), { invoiceId: parsed.data, shownAddress: formString(formData, "address"), ...reasonOf(formData) });
     return { ...consoleAnswer(outcome), ...(outcome.ok && outcome.receipt ? { receipt: outcome.receipt } : {}) };
+  });
+}
+
+/** What approving a selection says, laid out one line per bill (docs/superpowers/specs/2026-10-30-approve-many-design.md AM11). */
+export interface ApproveManyActionResult {
+  /** True when at least one bill was paid, submitted or approved; false when none was, or the selection was refused whole. */
+  ok: boolean;
+  message: string;
+  /** One line per bill, in the order sent; absent when the selection was refused whole (AM3, AM4). */
+  bills?: SelectionLine[];
+  /** The one Arc transaction bills shared, with its link, when they did. */
+  transaction?: SharedTransaction;
+}
+
+/**
+ * The selection a confirmation sends: one `items` field holding a JSON array, in the page's order, of each bill's id and
+ * the address its card showed, `{ invoiceId, address }`. The size is the approvals library's rule (AM3), refused whole
+ * there in its words; here only the shape.
+ */
+const selectionSchema = z.array(z.object({ invoiceId: z.string().uuid(), address: z.string().max(200).optional() }).strict());
+
+function selectionOf(formData: FormData): Array<{ invoiceId: string; shownAddress?: string }> | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(formString(formData, "items"));
+  } catch {
+    return null;
+  }
+  const parsed = selectionSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  return parsed.data.map((item) => ({ invoiceId: item.invoiceId, ...(item.address !== undefined ? { shownAddress: item.address } : {}) }));
+}
+
+/**
+ * Approves the bills selected on Approvals with one confirmation (approve many AM1): authorized as Approve and pay is,
+ * then each decided as one is, with the address its card showed. The pages are refreshed once for the whole selection,
+ * whenever anything changed (AM10).
+ */
+export async function approveManyAction(_previous: ApproveManyActionResult, formData: FormData): Promise<ApproveManyActionResult> {
+  const auth = await authorize(formData.get("orgSlug"), "approval.decide");
+  if (!auth.ok) return { ok: false, message: auth.message };
+  return inOrg(auth, async () => {
+    const items = selectionOf(formData);
+    if (!items) return { ok: false, message: "Those bills are not waiting for a decision." };
+    // A reason for paying what the agent held, asked once for the selection: optional, and never what a payment waits on.
+    const outcome = await approvePayables(consoleActor(auth), { items, ...reasonOf(formData) });
+    const answer = consoleAnswer(outcome);
+    if (!outcome.ok) return answer;
+    return {
+      ok: outcome.bills.some((line) => line.outcome === "paid" || line.outcome === "submitted" || line.outcome === "approved"),
+      message: answer.message,
+      bills: outcome.bills,
+      ...(outcome.transaction ? { transaction: outcome.transaction } : {}),
+    };
   });
 }
 

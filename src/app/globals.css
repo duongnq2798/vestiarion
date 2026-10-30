@@ -194,6 +194,15 @@
     scroll-padding-top: 4.5rem;
   }
 
+  /* While bills are selected on Approvals, the selection bar sticks to the
+     bottom (approve many AM12): a control Tab moves to, or an anchor, is
+     scrolled clear of its height, never left hidden under it (WCAG 2.4.11).
+     10rem holds the bar at its tallest, wrapped at 520px with its hint and
+     keys line. */
+  html:has([data-selection-bar]) {
+    scroll-padding-bottom: 10rem;
+  }
+
   /* Radix's scroll lock pads the body by the scrollbar's width; the stable
      gutter above already holds that space. */
   html body[data-scroll-locked] {

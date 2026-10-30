@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { readSource } from "@/lib/docs/content";
+import { SURFACE_COMMANDS } from "@/lib/commands/policy";
 import { GoLiveError, type GoLiveErrorCode } from "@/lib/platform/go-live";
 import { txUrl } from "@/lib/payee-chains";
 
@@ -102,6 +103,9 @@ const DECISION_CARD = "src/components/vx/DecisionCard.tsx";
 const PRIMITIVES = "src/components/vx/Primitives.tsx";
 const APPROVAL_CARD = "src/components/ApprovalCard.tsx";
 const APPROVALS_PAGE = "src/app/o/[slug]/approvals/page.tsx";
+/** Approvals' selection, its bar and its one confirmation (docs/superpowers/specs/2026-10-30-approve-many-design.md). */
+const APPROVAL_SELECTION = "src/components/approvals/ApprovalSelection.tsx";
+const APPROVE_SELECTION_DIALOG = "src/components/approvals/ApproveSelectionDialog.tsx";
 const VERIFY_BADGE = "src/components/VerifyLedgerBadge.tsx";
 const AUDIT_PAGE = "src/app/o/[slug]/audit/page.tsx";
 const CHECKLIST = "src/components/vx/GettingStarted.tsx";
@@ -1803,6 +1807,27 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Attach a document", "src/components/document-requests/AttachDocumentDialog.tsx"],
     ["Attach and check", "src/components/document-requests/AttachDocumentDialog.tsx"],
     ["A member attached Northstar Studio's document on Oct 25.", "src/lib/document-requests/rules.ts", "A member attached ${vendorName}'s document on "],
+    // Several bills approved with one confirmation (docs/superpowers/specs/2026-10-30-approve-many-design.md AM2-AM12).
+    ["Clear", APPROVAL_SELECTION],
+    ["Approve and pay", APPROVAL_SELECTION],
+    ["Select one more bill to approve them together.", APPROVAL_SELECTION],
+    ["Select at most 20 bills to approve together.", APPROVAL_SELECTION, "Select at most ${MAX_SELECTION} bills to approve together."],
+    ["Approve it on its own:", "src/lib/agent/approvals.ts"],
+    ["Total", APPROVE_SELECTION_DIALOG],
+    ["Approve and pay 2 bills?", APPROVE_SELECTION_DIALOG, "Approve and pay ${count} bills?"],
+    ["The operating wallet must hold the total: a selection never brings cash back from the reserve.", APPROVE_SELECTION_DIALOG],
+    ["Select fewer, or approve them one at a time, which can bring cash back from the reserve.", "src/lib/agent/approvals.ts"],
+    ["Why pay them anyway?", APPROVE_SELECTION_DIALOG],
+    ["First of two approvals: nothing is paid yet.", APPROVE_SELECTION_DIALOG],
+    ["Pay now", APPROVE_SELECTION_DIALOG],
+    ["Approve and pay", APPROVE_SELECTION_DIALOG],
+    ["Paid", APPROVE_SELECTION_DIALOG],
+    ["Submitted", APPROVE_SELECTION_DIALOG],
+    ["Approved", APPROVE_SELECTION_DIALOG],
+    ["Not paid", APPROVE_SELECTION_DIALOG],
+    ["Paid 2 bills in one Arc transaction.", "src/lib/commands/payables.ts", "Paid ${size} bills in one Arc transaction."],
+    ["View transaction", APPROVE_SELECTION_DIALOG],
+    ["approvedTogether", "src/lib/agent/approvals.ts"],
   ],
   "guides/get-paid": [
     ["Your address", PAYEE_STEPS],
@@ -3893,6 +3918,49 @@ describe("the Slack guide on the bills waiting for approval (docs/superpowers/sp
       expect(text, name).not.toMatch(/shown as plain text/);
       expect(text, name).toMatch(/Slack's own formatting marks in a (?:value|name), such as `\*` or `_`, still format/);
     }
+  });
+});
+
+describe("the guide on approving several bills at once (docs/superpowers/specs/2026-10-30-approve-many-design.md)", () => {
+  const guide = readSource("guides/first-payment").replace(/\s+/g, " ");
+  const integrators = readSource("changelog").replace(/\s+/g, " ");
+  const entry = sourceFile("CHANGELOG.md").split("- **Approve several bills at once.**")[1]?.split("\n- **")[0].replace(/\s+/g, " ") ?? "";
+  const runbook = readSource("guides/payment-exceptions").replace(/\s+/g, " ");
+
+  it("says only Slack approves a bill outside the console, as each surface's commands allow: Telegram, Discord and the API approve none (AM13)", () => {
+    // Discord is no surface at all: it only posts links.
+    const approving = (Object.keys(SURFACE_COMMANDS) as Array<keyof typeof SURFACE_COMMANDS>).filter(
+      (kind) => kind !== "console" && SURFACE_COMMANDS[kind].some((command) => command.startsWith("payable.approve"))
+    );
+    expect(approving).toEqual(["slack"]);
+    expect(entry).not.toBe("");
+    for (const [name, text] of [["the guide", guide], ["the integrators' changelog", integrators], ["the CHANGELOG entry", entry]] as const) {
+      expect(text, name).not.toMatch(/(?:Telegram|Discord|the API)[^.]*approves? one bill at a time/);
+      expect(text, name).toMatch(/Telegram(?:,| and) Discord(?: and the API)? approve none/);
+    }
+  });
+
+  it("names the confirmation's button as it reads: Pay now, Approve and pay with a first of two approvals, Approve when none pays now", () => {
+    expect(guide).not.toContain("**Pay now** approves them");
+    expect(guide).toContain(
+      "Its button, **Pay now** (**Approve and pay** when one of the bills is a first of two approvals, **Approve** when none pays now), approves them; no key ever pays."
+    );
+  });
+
+  it("says Approve it on its own: only of what a selection never takes, as the server words its refusals", () => {
+    expect(guide).not.toContain('its line says "Approve it on its own:" and why, while');
+    expect(guide).toContain('For a bank payout, a payout to another chain, a bill in EURC or one with an earlier attempt, it says "Approve it on its own:" and why.');
+  });
+
+  it("says in the exceptions runbook that bills sent together are looked for by their transaction's own reference, as milestones are (AM8)", () => {
+    expect(runbook).toContain(
+      "A milestone the agent released, or a bill approved with others on **Approvals**, sent in one Arc transaction with others is looked for by that transaction's own reference"
+    );
+  });
+
+  it("says a bill paid together has the batch in its reasoning, not at its end, which a failed balance sync's note follows (AM7)", () => {
+    expect(integrators).not.toMatch(/agentReasoning[^.]* ends ` \[paid in one Arc transaction/);
+    expect(integrators).toContain("includes ` [paid in one Arc transaction with 1 other bill]`");
   });
 });
 

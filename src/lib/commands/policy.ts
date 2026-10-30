@@ -10,6 +10,9 @@ import { refused, type Refused } from "./outcome";
  */
 export const COMMAND_PERMISSIONS = {
   "payable.approve": "approval.decide",
+  // Several held payables approved with one confirmation, each as `payable.approve` approves one: the console's
+  // Approvals page only, so no other surface lists it (docs/superpowers/specs/2026-10-30-approve-many-design.md AM13).
+  "payable.approve_many": "approval.decide",
   "payable.reject": "approval.decide",
   "payable.return": "approval.decide",
   "payable.add_details": "records.write",
@@ -138,7 +141,7 @@ export const SURFACE_COMMANDS: Record<SurfaceKind, readonly CommandName[]> = {
 };
 
 /** A person's decisions on what the agent stopped: off on a chat whose workspace allows none there (Slack design S8). */
-const DECISIONS: ReadonlySet<CommandName> = new Set(["payable.approve", "payable.reject", "payable.return", "milestone.pay", "milestone.close"]);
+const DECISIONS: ReadonlySet<CommandName> = new Set(["payable.approve", "payable.approve_many", "payable.reject", "payable.return", "milestone.pay", "milestone.close"]);
 
 /** A surface ran a command for an actor outside the scope it entered: a bug in that surface, never a refusal. */
 export class ActorScopeError extends Error {

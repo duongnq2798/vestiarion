@@ -1,4 +1,4 @@
-import { addInvoiceDetails, approveAndPay, ApprovalError, rejectInvoice, returnInvoice } from "../agent/approvals";
+import { addInvoiceDetails, approveAndPay, approveAndPayMany, ApprovalError, rejectInvoice, returnInvoice, type SelectionDecision } from "../agent/approvals";
 import { runCycleSoon } from "../agent/cycle-soon";
 import { fromReserveNote, fromReserveStaysNote } from "../agent/liquidity";
 import { sendNoticesSoon } from "../payment-notices-soon";
@@ -138,6 +138,115 @@ export async function approvePayable(
   const message = paidMessage(result.status, result.paid, result.txRef);
   const receipt = result.paid ? paymentReceipt(result.status, result.paid, result.txRef, result.fromReserveUsdc, input.forVerdict === true) : null;
   return done(`${message}${fromReserveNote(result.fromReserveUsdc)}`, { status: result.status, txRef: result.txRef, ...(receipt ? { receipt } : {}) });
+}
+
+/** One bill's line in what a selection's confirmation says (docs/superpowers/specs/2026-10-30-approve-many-design.md AM11). */
+export interface SelectionLine {
+  invoiceId: string;
+  /** Whom it pays, and what: what went out once it did, the bill's amount otherwise; null for a bill not read as waiting. */
+  payee: string | null;
+  amount: number | null;
+  currency: string | null;
+  /** Paid; submitted, awaiting confirmation; approved, one more approval pays it; held after a failed transfer; refused. */
+  outcome: "paid" | "submitted" | "approved" | "held" | "refused";
+  /** In the words `approvePayable` uses for one bill: what went out, or why it was not paid. */
+  message: string;
+  txRef: string | null;
+}
+
+/** The one Arc transaction several bills of a selection shared, said once with its link (AM11). */
+export interface SharedTransaction {
+  txRef: string | null;
+  /** How many bills it carried. */
+  size: number;
+  /** Its transaction on the explorer, once it has a hash; null in a sandbox. */
+  txUrl: string | null;
+  message: string;
+}
+
+/**
+ * Several held payables approved with one confirmation, from the console's Approvals page only (approve many AM1, AM13):
+ * each decided as `approvePayable` decides one, through `approveAndPayMany`. What follows is raised once for the
+ * selection: the reason, kept for each bill whose approval went against the agent's hold and decided a new payment
+ * (AM9), and one `sendNoticesSoon` for the payees of confirmed payments (AM10). A selection refused whole (AM3, AM4) is
+ * one refusal; otherwise one line per bill, in order, and the transaction bills shared, when they did (AM11).
+ */
+export async function approvePayables(
+  actor: Actor,
+  input: { items: Array<{ invoiceId: string; shownAddress?: string }>; reason?: string }
+): Promise<CommandOutcome<{ bills: SelectionLine[]; transaction: SharedTransaction | null }>> {
+  const refusal = gate(actor, "payable.approve_many");
+  if (refusal) return refusal;
+  let decisions: SelectionDecision[];
+  try {
+    decisions = await approveAndPayMany({ actorId: actor.userId, items: input.items, ...provenanceOf(actor) });
+  } catch (error) {
+    return approvalRefusal(error);
+  }
+  // As `approvePayable` keeps it: not for a failed transfer, nor for an approval that only checked an earlier one (R10).
+  for (const decision of decisions) {
+    const outcome = decision.outcome;
+    if (!outcome || outcome.status === "held" || outcome.checkedFirst || !decision.overridesHold) continue;
+    await keepReason(actor, "approvals.pay_held", { invoiceId: decision.invoiceId, reason: input.reason });
+  }
+  // Confirmed payments' payees hear of them now, once for the selection (payment notices R5).
+  if (decisions.some((decision) => decision.outcome?.status === "paid")) sendNoticesSoon(accessOf(actor));
+  const bills = decisions.map(selectionLine);
+  return done(selectionSummary(bills), { bills, transaction: sharedTransaction(decisions) });
+}
+
+/** A bill's line, in the words `approvePayable` gives it alone (AM11). */
+function selectionLine(decision: SelectionDecision): SelectionLine {
+  const bill = { invoiceId: decision.invoiceId, payee: decision.bill?.payee ?? null, amount: decision.bill?.amount ?? null, currency: decision.bill?.currency ?? null };
+  const outcome = decision.outcome;
+  if (!outcome) return { ...bill, outcome: "refused", message: approvalRefusal(decision.error).message, txRef: null };
+  if (outcome.status === "held") return { ...bill, outcome: "held", message: heldMessage(outcome.note), txRef: outcome.txRef };
+  if (outcome.status === "approved") return { ...bill, outcome: "approved", message: APPROVAL_RECORDED, txRef: null };
+  return {
+    ...bill,
+    ...(outcome.paid ? { amount: outcome.paid.amount, currency: outcome.paid.currency } : {}),
+    outcome: outcome.status === "paid" ? "paid" : "submitted",
+    message: paidMessage(outcome.status, outcome.paid, outcome.txRef),
+    txRef: outcome.txRef,
+  };
+}
+
+/** "4 bills: 2 paid, 1 approved, 1 not paid." Each line says the rest. */
+function selectionSummary(lines: SelectionLine[]): string {
+  const count = (...outcomes: Array<SelectionLine["outcome"]>) => lines.filter((line) => outcomes.includes(line.outcome)).length;
+  const parts: Array<[number, string]> = [
+    [count("paid"), "paid"],
+    [count("submitted"), "submitted"],
+    [count("approved"), "approved"],
+    [count("held", "refused"), "not paid"],
+  ];
+  return `${lines.length} bills: ${parts
+    .filter(([n]) => n > 0)
+    .map(([n, words]) => `${n} ${words}`)
+    .join(", ")}.`;
+}
+
+/**
+ * The transaction bills shared, when their transfers went out together (AM11): "Paid N bills in one Arc transaction"
+ * once Circle confirmed it, submitted until then; never called sent or paid while Circle has not answered (I17). Null
+ * when none shared one, or the one they shared failed, which each bill's line says.
+ */
+function sharedTransaction(decisions: SelectionDecision[]): SharedTransaction | null {
+  const members = decisions.filter((decision) => decision.outcome?.batch && (decision.outcome.status === "paid" || decision.outcome.status === "matched"));
+  if (members.length === 0) return null;
+  const first = members[0].outcome as NonNullable<SelectionDecision["outcome"]>;
+  const size = (first.batch as { size: number }).size;
+  const txRef = first.txRef;
+  const simulated = first.paid?.simulated === true;
+  const network = workspaceNetwork();
+  const message = members.every((member) => member.outcome?.status === "paid")
+    ? simulated
+      ? `Paid ${size} bills in one transaction in the sandbox (simulated).`
+      : `Paid ${size} bills in one Arc transaction.`
+    : txRef
+      ? `Submitted ${size} bills in one Arc transaction; waiting for Circle to confirm it.`
+      : `Submitted ${size} bills in one Arc transaction; Circle has not answered yet, so the outcome is unknown and nothing goes out again until it does.`;
+  return { txRef, size, txUrl: !simulated && txRef && TX_HASH.test(txRef) ? txUrl(network.id, txRef) : null, message };
 }
 
 export async function rejectPayable(actor: Actor, input: { invoiceId: string; reason: string; card?: ShownCard; forVerdict?: boolean }): Promise<CommandOutcome> {
