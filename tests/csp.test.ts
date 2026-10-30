@@ -5,6 +5,7 @@ import { MAX_REPORT_BYTES, POST } from "@/app/api/csp-report/route";
 import { ASANA_AUTHORIZE } from "@/lib/asana/http";
 import { GOOGLE_AUTHORIZE } from "@/lib/googlesheets/http";
 import { HUBSPOT_AUTHORIZE } from "@/lib/hubspot/http";
+import { LINEAR_AUTHORIZE } from "@/lib/linear/http";
 import { NETWORKS } from "@/lib/network";
 import { PIPEDRIVE_AUTHORIZE } from "@/lib/pipedrive/http";
 import { INTUIT_AUTHORIZE } from "@/lib/quickbooks/http";
@@ -106,6 +107,7 @@ describe("the policy (CSP1, CSP2)", () => {
       asana: [ASANA_AUTHORIZE],
       googlesheets: [GOOGLE_AUTHORIZE],
       hubspot: [HUBSPOT_AUTHORIZE],
+      linear: [LINEAR_AUTHORIZE],
       pipedrive: [PIPEDRIVE_AUTHORIZE],
       quickbooks: [INTUIT_AUTHORIZE],
       xero: [XERO_AUTHORIZE],

@@ -128,6 +128,7 @@ export const TENANT_TABLES = [
   "supplier_status_links",
   "address_change_checks",
   "document_requests",
+  "linear_issue_links",
 ] as const;
 
 export interface SeededRows {
@@ -415,6 +416,17 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     `insert into asana_task_links (org_id, milestone_id, connection_id, workspace_gid, task_gid, task_name)
      select $1, m.id, $2, '1204081671801519', $3, 'Logo animation' from milestones m where m.org_id = $1 and m.title = $4`,
     [orgId, asanaConnectionId, String(crypto.randomInt(1, 2 ** 40)), `m-${tag}`]
+  );
+  // A Linear connection, and an issue linked to the workspace's milestone (0147).
+  const linearConnectionId = await one(
+    `insert into accounting_connections (org_id, provider, external_org_id, consent_version, consented_at, window_from)
+     values ($1, 'linear', gen_random_uuid()::text, 'linear-2026-10-31', now(), '2026-08-02') returning id`,
+    [orgId]
+  );
+  await db.query(
+    `insert into linear_issue_links (org_id, milestone_id, connection_id, issue_id, identifier, issue_title)
+     select $1, m.id, $2, gen_random_uuid()::text, $3, 'Billing export' from milestones m where m.org_id = $1 and m.title = $4`,
+    [orgId, linearConnectionId, `ENG-${crypto.randomInt(1, 999_999)}`, `m-${tag}`]
   );
   // A member's checklist mark: Approvals opened while a bill waited there (0114).
   await db.query("insert into onboarding_marks (org_id, user_id, mark) values ($1, $2, 'approvals_opened')", [orgId, approver]);

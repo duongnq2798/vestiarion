@@ -191,7 +191,7 @@ for adding, testing and removing a workspace's own webhook endpoints — `owner`
 every other member sees the endpoint list with each URL reduced to its host — see
 [Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)), and `integrations.manage` (`src/app/actions/slack.ts`,
 `/api/slack/install`, `src/app/actions/github.ts` and `/api/github/install`, `src/app/actions/xero.ts` and
-`/api/integrations/xero/*`, `src/app/actions/asana.ts` and `/api/integrations/asana/*`, and `src/app/actions/discord.ts`, for connecting and removing the workspace's Slack, GitHub, Xero, Asana and Discord — `owner` and `admin` hold it; the
+`/api/integrations/xero/*`, `src/app/actions/asana.ts` and `/api/integrations/asana/*`, `src/app/actions/linear.ts` and `/api/integrations/linear/*`, and `src/app/actions/discord.ts`, for connecting and removing the workspace's Slack, GitHub, Xero, Asana, Linear and Discord — `owner` and `admin` hold it; the
 limit on deciding payments from Slack takes `org.administer`, an owner's). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
 `approver`, `accountant` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
@@ -3701,7 +3701,7 @@ Intuit app; `QUICKBOOKS_ENVIRONMENT` picks sandbox or production companies), Zoh
 otherwise its card and routes are not there. The Settings card (`AccountingPanel`), the review list (`AccountingBillsReview`), the
 account picker, the launch and connect pages and the server actions (`src/app/actions/accounting.ts`) are one set, given
 the provider. The core's providers are `xero`, `quickbooks` and `zohobooks` (kind `accounting`), `hubspot`, `pipedrive`
-and `zohocrm` (`crm`, below), `asana` (`work`) and `googlesheets` (`export`: it brings nothing in, and writes close
+and `zohocrm` (`crm`, below), `asana` and `linear` (`work`) and `googlesheets` (`export`: it brings nothing in, and writes close
 packs out; see "Google Sheets: the close pack exported").
 
 - **Schema (migration `0101`).** Four tenant tables, with row-level security, the restrictive guard and composite
@@ -3735,7 +3735,7 @@ packs out; see "Google Sheets: the close pack exported").
 - **Disconnecting from Settings** (docs/superpowers/specs/2026-10-27-disconnect-confirmation-design.md). A disconnect
   action revalidates the page before it answers, and the card it leaves no longer draws the Disconnect button, so the
   answer and the page without the button land in one render. The Disconnect forms of `AccountingPanel`,
-  `HubSpotPanel`, `PipedrivePanel`, `ZohoCrmPanel` and `AsanaPanel`, and likewise `SlackPanel`'s Disconnect my account
+  `HubSpotPanel`, `PipedrivePanel`, `ZohoCrmPanel`, `AsanaPanel` and `LinearPanel`, and likewise `SlackPanel`'s Disconnect my account
   and Remove Slack and the per-row Disconnect of `GitHubPanel` and `ChromeExtensionPanel`, pass their action through
   `withSuccessToast`, which raises the toast as the action answers, not `useActionForm`'s `toastOnSuccess`, whose
   effect would run in the button that is gone (DC1, DC2). A refusal answers before anything is revalidated and stays
@@ -4220,6 +4220,79 @@ exclusive. Consent `asana-2026-10-14`.
   outside, its link checked through Asana's API) beside the person's acceptance.
 - **Before migration 0115**, reads answer not set up (42P01, PGRST205, 42703 and the function codes): no card, no
   controls, the cycle and the sweeper read nothing, and the connect flow sends no one to Asana.
+
+## Contractor work accepted from Linear
+
+A milestone's work can be delivered in a Linear issue and accepted against its criteria, as Asana's above
+(docs/superpowers/specs/2026-10-31-linear-acceptance-design.md, LN1 to LN16). Linear is a second `work` provider on the
+connector core: `src/lib/linear/` mirrors `src/lib/asana/` file for file, and reuses Asana's provider-neutral parts
+(the deliverables' shapes, link reading and fingerprint in `asana/deliverables.ts`, `durationWords`). It is on only with
+`LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` and `LINEAR_WEBHOOK_SECRET` (`settings.ts`); without the webhook's secret
+there is no Linear at all, card, controls or routes. Every request goes to `api.linear.app` (`http.ts`): OAuth with scope
+`read` only, `actor=user` and `prompt=consent` (`oauth.ts`; Linear rotates the refresh token on each refresh, so a refresh
+happens only under the token row's lease), and GraphQL queries naming an issue by a variable, its UUID or its identifier
+(`ENG-123`), never by a link (`api.ts`). A grant is one Linear user's in one Linear workspace: the connection keeps that
+workspace's id and name (`viewer { organization { id name } }`) as its external organisation. Not exclusive: several
+Vestiarion workspaces may connect the same Linear workspace. Consent `linear-2026-10-31`. Disconnect revokes the token at
+Linear; there is no webhook to delete.
+
+- **Schema (migration `0147`).** The provider checks of `accounting_connections` and `accounting_tokens` take `linear`,
+  keeping every value 0145 lists, and `milestones.verification_method` takes `linear`, keeping 0115's; each is replaced
+  only while it does not take the value yet. `linear_issue_links`, a tenant table as `asana_task_links` (RLS, the
+  restrictive guard, composite foreign keys; read, insert and update, never delete): one live link per milestone and per
+  issue, the issue's UUID, identifier, team key and link, Linear's workflow state as last read (its type and name,
+  completed, when, by whom, the assignee, archived or deleted), the deliverables and their fingerprint, how many
+  attachments and comments were read and whether there are more, the link's state and the version accepted.
+  `accept_linear_issue` and `hold_linear_acceptance` are Asana's two moves for Linear; `linear_connector_ready(p_org_id)`
+  is the probe the connect flow asks first. No webhook table: the app's webhook is one URL and one secret, in env.
+  `tests/linear-migration.test.ts` runs it in PGlite, again, and with 0115 and 0145 after it.
+- **Reads** (`reads.ts`, `acceptance.ts`, pure `planRead`): one query reads the issue whole, with its state, `completedAt`,
+  who completed it (from the issue's history: Linear's `Issue` has no completed-by field), the assignee, archived or
+  trashed, 50 attachments and 100 comments (fewer than Asana's 100 and 300). Deliverables (`deliverables.ts`) are the
+  attachments, by id and address (never `updatedAt`, which Linear moves whenever an integration refreshes an
+  attachment), and the https links in the description and comments, uploads included: at most 50, as Asana's, and fewer
+  when their links are long, so the list stays within 0147's 32,000-byte check (`storedBytes`, Postgres's own count of
+  jsonb's text); the rest count in the fingerprint by number. A done issue is `ready` with criteria and `held`
+  (`no_criteria`) without; a canceled one is `held` (`canceled`); never accepted by a read. An accepted issue reopened (or reopened and
+  done again), canceled, archived or deleted, with another fingerprint, or no longer shown is withdrawn through
+  `hold_linear_acceptance`. The ledger entries are Linear's own (`linear_issue_linked`, `linear_issue_unlinked`,
+  `linear_issue_ready`, `linear_work_accepted`, `linear_acceptance_withdrawn`), so Asana's card counts none of them;
+  `milestone_criteria_set` is shared. Reads run where Asana's do, with its budgets: `refreshAcceptedWork` and
+  `recheckAcceptedWork` read both tools at once and report Linear under `linear`, the sweeper reads the live links of open
+  milestones every 15 minutes, **Check Linear now** and **Check linked issues now** read at once, and an acceptance
+  reads first. `tests/linear-paying-path.test.ts` pins, as Asana's, that the paying path reaches Linear only there.
+- **Webhooks** (`webhook.ts`, `POST /api/integrations/linear/webhook`): Linear makes the app's webhook for every Linear
+  workspace that authorizes it. `Linear-Signature` (hex HMAC-SHA256 of the raw body) is compared in constant time
+  first, then `webhookTimestamp` must be within 60 seconds; either failing answers 401. A signed delivery answers 200 at
+  once and, in `after()`, reads again the one issue it names (an `Issue`'s id, a `Comment`'s or an `Attachment`'s
+  `issueId`) in each workspace connected to its Linear organization, where it is linked; nothing else in the body is
+  believed. An `OAuthApp` revoked delivery marks those connections to reconnect.
+- **Commands** (`src/lib/commands/linear.ts`, `records.write`, the console only): `milestone.link_issue` (a pasted link
+  or identifier read by `issueRefOf`, never opened; the issue read once; refused on a milestone verified by a pull
+  request or linked to Asana, and for a link whose workspace key is not the issue's own), `milestone.set_issue_criteria`
+  (`setLinearAcceptanceCriteria`, which knows Linear's links), `milestone.accept_issue`, `milestone.unlink_issue` and
+  `milestone.check_issue`. Self-acceptance (`identities.ts`, LN9), as Asana's A9: the member's email against the payee's
+  notice email, and the Linear user with the payee's notice email, looked up across the Linear workspace whoever is on
+  the issue, against the member's own Linear user (the connection's viewer for whoever connected it, else the Linear
+  user with the member's email), in one query of ids by email at acceptance; no email is kept. Pay now refuses the
+  payee by email only (`approvesOwnLinearPayout`); Verify manually is refused on a linked milestone, and Revoke
+  manually on one accepted from Linear, whose acceptance is taken back by unlinking the issue.
+- **Where it shows.** Settings: `LinearPanel`, headed by Linear's name beside the product's icon for work tools (lucide's
+  `SquareKanban`; no Linear logo is shipped, and `UNMARKED_PROVIDERS` lists `linear`), with the Linear workspace's name,
+  the linked issues by state and the last 30 days' figures. Contractors: `LinearIssueCard` under each milestone waiting
+  for verification or linked, which links by an issue's link or identifier (no picker), takes the criteria and offers
+  Accept the work; ready and held links count under **Needs you**. `workToolCards` (`src/lib/work-tool-cards.ts`) picks
+  the cards: a linked card always shows, an open milestone linked in one tool offers none for the other (Asana's link
+  does not refuse a Linear-linked milestone, so its card is not offered there), and an unlinked milestone offers a
+  tool's card where that tool is connected or the other one is not; where both offer to link it, Asana's card alone
+  asks for the criteria (`linearCriteria`); without Linear, Asana's card is as before. The evidence page:
+  `deliveredFromLinear`, Linear's word that the issue was done beside the person's acceptance, its link checked through
+  Linear's API (`linear_issue` in the evidence links' allow-list), and taken as checked only when the issue Linear
+  answers is in the Linear workspace the link names, since Linear finds an identifier in the connection's own.
+  `/integrations/linear` and `/integrations/linear/connect` are Asana's pages for Linear; `/docs-shots/linear/<state>`
+  draws the card and the states with sample data (`src/app/docs-shots/linear-fixture.ts`).
+- **Before migration 0147**, reads answer not set up: the Settings card says so, Contractors shows no Linear controls,
+  the cycle and the sweeper read nothing, and the connect flow sends no one to Linear.
 
 ## API
 
@@ -4840,10 +4913,11 @@ as a short checklist, ticked from what happened, rendered by one component (`Get
 `docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md` (E1 to E4); `src/lib/evidence-links/`.
 
 - **The allow-list** (`allow-list.ts`, pure). `checkTargetOf` takes a pull request or a comment on `github.com`, an
-  Asana task or attachment on `app.asana.com`, and a signed link (`/storage/v1/object/sign/...?token=`) to the
+  Asana task or attachment on `app.asana.com`, a Linear issue on `linear.app`, and a signed link (`/storage/v1/object/sign/...?token=`) to the
   workspace's own Supabase (`storageHostOf`, https and a public name only), and builds the request address itself:
   GitHub's API from the link's owner, repository and number; Asana's `/api/1.0/tasks/<id>` or `/api/1.0/attachments/<id>`
-  from the id alone. Anything
+  from the id alone; Linear's GraphQL API, `api.linear.app/graphql`, with a query for the issue built from its identifier
+  alone and sent as a POST. Anything
   else is `notChecked` with its reason: another scheme, credentials, a port, an IP literal in any notation, a local name,
   another host, another path. `requestAllowed` checks every address again before a request, a redirect's included.
 - **The check** (`check.ts`). `checkEvidenceLinks(hrefs)` answers `open` (public, or a private repository the
@@ -4851,7 +4925,8 @@ as a short checklist, ticked from what happened, rendered by one component (`Get
   expired), `not_checked` or `no_answer`. Each host is resolved and the request dropped unless every
   address is public (`isPublicAddress`, as webhooks use it); `redirect: "manual"`, five seconds, at most one redirect and
   only GitHub's API to itself; at most 25 links a call. Asana is asked with the workspace's own Asana connection's token
-  alone, sent to Asana's API only, and without one an Asana link is not checked. GitHub is asked with the workspace's own connection
+  alone, sent to Asana's API only, and without one an Asana link is not checked; Linear likewise, with the workspace's
+  own Linear connection's token, sent to Linear's API only. GitHub is asked with the workspace's own connection
   (`pullRequestTokens`), else the deployment's `GITHUB_TOKEN`, sent to `api.github.com` only; a private repository seen
   only through the deployment's token, or a 403 to that token, answers as not public, as a deleted one does, after as
   many requests (a comment's repository is asked first) and kept as long. A signed link's expiry is read from

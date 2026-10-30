@@ -476,6 +476,21 @@ export default function PrivacyPage() {
             workspace&apos;s signed ledger.
           </li>
           <li>
+            <strong>Linear</strong>, for a workspace an owner or admin connects to their Linear after agreeing to it, is read from, as that person,
+            with read access only, and never written to. Vestiarion reads the Linear workspace&apos;s id and name once, when it is connected, and for
+            each issue linked to a milestone its title, its status, whether and when it was done and by whom (their name and Linear user ID), its
+            assignee (their name and Linear user ID), whether it was archived or deleted, its attachments (their titles and links) and the links in its description and comments. It keeps the
+            linked issues&apos; IDs, titles and links, the names and Linear user IDs of who completed and was assigned each one, the
+            deliverables&apos; names and links and their fingerprint, the Linear workspace&apos;s id and name, the access granted and the agreement
+            given, and Linear&apos;s tokens encrypted, readable only by the server and never shown in the browser, a log, a model&apos;s prompt or a
+            webhook; it does not keep the words of an issue&apos;s description or comments. To refuse an acceptance by the payee, it asks Linear,
+            when a person accepts, which Linear user has the email a contractor&apos;s payment notices go to, and which is that person&apos;s own,
+            and keeps no email. A notice from Linear carries no
+            issue&apos;s facts that Vestiarion keeps: it only has the issue read again. Vestiarion never uses Linear data to train or improve any AI
+            model, and never passes it to anyone else without the workspace&apos;s say. Disconnecting revokes the app&apos;s access at Linear and
+            deletes the tokens; the acceptances already recorded stay with the workspace&apos;s signed ledger.
+          </li>
+          <li>
             <strong>Google Sheets</strong> (Google Drive), for a workspace an owner or admin connects to a Google account after agreeing to it, is
             written to only when an owner, admin or accountant exports a month&apos;s close pack. Vestiarion asks Google only for access to the files
             it makes, so it cannot see or open any other file in that Drive. Each export makes or updates one spreadsheet for the month in that

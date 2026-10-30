@@ -52,6 +52,7 @@ type GuideSlug =
   | "guides/pipedrive"
   | "guides/zohocrm"
   | "guides/asana"
+  | "guides/linear"
   | "guides/audit-export"
   | "guides/evidence"
   | "guides/evidence-and-receipts"
@@ -190,6 +191,14 @@ const ASANA_CONNECT_PAGE = "src/app/integrations/asana/connect/page.tsx";
 const ASANA_ACCEPTANCE = "src/lib/asana/acceptance.ts";
 const ASANA_COMMANDS = "src/lib/commands/asana.ts";
 const ASANA_READS = "src/lib/asana/reads.ts";
+// Linear's card, a milestone's Linear card, and the connect page, as Asana's (Linear acceptance LN16).
+const LINEAR_PANEL = "src/components/LinearPanel.tsx";
+const LINEAR_CARD = "src/components/LinearIssueCard.tsx";
+const LINEAR_CONNECT_PAGE = "src/app/integrations/linear/connect/page.tsx";
+const LINEAR_ACCEPTANCE = "src/lib/linear/acceptance.ts";
+const LINEAR_COMMANDS = "src/lib/commands/linear.ts";
+const LINEAR_READS = "src/lib/linear/reads.ts";
+const LINEAR_VIEWS = "src/lib/linear/views.ts";
 const CRM_WORDS = "src/lib/connectors/crm.ts";
 const CRM_CHANGES = "src/components/CrmDealChanges.tsx";
 // Pipedrive's card and connect page are its own; its list is the CRM list HubSpot's uses, in Pipedrive's words (Pipedrive connector P20).
@@ -2754,6 +2763,71 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
     ["Acceptances already recorded stay in Vestiarion's signed ledger.", ACCOUNTING_CONSENT],
   ],
+  "guides/linear": [
+    ["Connect Linear", LINEAR_PANEL],
+    ["An owner or admin connects Linear.", LINEAR_PANEL],
+    ["I agree", ACCOUNTING_CONSENT],
+    ["Continue to Linear", LINEAR_CONNECT_PAGE],
+    ["Linear asks you to allow read access as yourself", LINEAR_CONNECT_PAGE],
+    ["It keeps the links and names, not the words of the description or the comments.", ACCOUNTING_CONSENT],
+    ["Linear tells Vestiarion when a linked issue, its comments or its attachments change, and Vestiarion then reads the issue again from Linear.", ACCOUNTING_CONSENT],
+    ["Vestiarion writes nothing to Linear.", ACCOUNTING_CONSENT],
+    ["Nothing from Linear sets an amount or a payee.", ACCOUNTING_CONSENT],
+    ["Linear is connected. Link a milestone to its Linear issue on Contractors.", LINEAR_PANEL],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["Accept from Linear", LINEAR_CARD],
+    ["The Linear issue the work is delivered in", LINEAR_CARD],
+    ["Link the issue", LINEAR_CARD],
+    ["Vestiarion reads the issue through Linear with this workspace's connection, never by opening the link.", LINEAR_CARD, "Vestiarion reads the issue through Linear with this workspace&apos;s connection, never by opening the link."],
+    ["Linear does not show that issue to the connected account. Check the ID, or ask whoever connected Linear to join the issue's team.", LINEAR_COMMANDS],
+    ["That link is to another Linear workspace than the one connected. Link an issue of the connected workspace.", LINEAR_COMMANDS],
+    ["That Linear issue is linked to another milestone already: one issue verifies one milestone.", LINEAR_COMMANDS],
+    ["This milestone is linked to an Asana task. Unlink the task first to accept the work from Linear.", LINEAR_COMMANDS],
+    ["linear_issue_linked", LINEAR_COMMANDS],
+    ["Unlink the issue", LINEAR_CARD],
+    ["linear_issue_unlinked", LINEAR_COMMANDS],
+    ["Acceptance criteria, from the agreement", LINEAR_CARD],
+    ["Add the criteria", LINEAR_CARD],
+    ["Accept from Asana", ASANA_CARD],
+    ["The issue is done, but the milestone has no acceptance criteria. Add the criteria from the agreement, then accept the work.", LINEAR_ACCEPTANCE],
+    ["The work was accepted against these criteria. Unlink the issue to change them.", LINEAR_COMMANDS],
+    ["milestone_criteria_set", LINEAR_COMMANDS],
+    ["Waiting for the issue", LINEAR_ACCEPTANCE],
+    ["Ready for acceptance", LINEAR_ACCEPTANCE],
+    ["Held for review", LINEAR_ACCEPTANCE],
+    ["Check Linear now", LINEAR_CARD],
+    ["Check linked issues now", LINEAR_PANEL],
+    ["linear_issue_ready", LINEAR_READS],
+    ["Deliverables in Linear", LINEAR_CARD],
+    [
+      "Linear has more than Vestiarion reads: the first 50 attachments and 100 comments were checked.",
+      LINEAR_VIEWS,
+      "Linear has more than Vestiarion reads: the first ${ATTACHMENTS_READ} attachments and ${COMMENTS_READ} comments were checked.",
+    ],
+    ["I checked each criterion against these deliverables, as shown here.", LINEAR_CARD],
+    ["Accept the work", LINEAR_CARD],
+    ["Accepted. The agent decides on pay within a minute, under every guardrail.", LINEAR_COMMANDS],
+    ["The deliverables changed in Linear since you opened this. Look at them again before accepting.", LINEAR_COMMANDS],
+    ["linear_work_accepted", LINEAR_ACCEPTANCE],
+    ["You are this milestone's payee, so someone else accepts the work.", LINEAR_ACCEPTANCE],
+    ["Your Linear account is this milestone's payee, so someone else accepts the work.", LINEAR_ACCEPTANCE],
+    ["You are this milestone's payee, so someone else approves paying it.", MILESTONE_COMMAND],
+    ["linear_acceptance_withdrawn", LINEAR_ACCEPTANCE],
+    ["To take the acceptance back, unlink the issue: the milestone then waits for verification again.", LINEAR_CARD],
+    ["Revoke manually", MILESTONE_CHECK],
+    ["Changed after payment", LINEAR_ACCEPTANCE],
+    ["The issue changed in Linear after the payment was sent. Review it with the contractor: Vestiarion does not take a payment back.", LINEAR_ACCEPTANCE],
+    ["Evidence checked by a person", LINEAR_PANEL],
+    ["Disputes", LINEAR_PANEL],
+    ["From acceptance to the agent's decision", LINEAR_PANEL, "From acceptance to the agent&apos;s decision"],
+    ["Linear reported the issue done.", EVIDENCE_CHAIN],
+    ["Reconnect Linear", LINEAR_PANEL],
+    ["Linear did not answer just now. It is read again within 15 minutes.", LINEAR_READS],
+    ["Linear is not set up on this deployment yet.", LINEAR_PANEL],
+    ["Disconnect Linear", LINEAR_PANEL],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
+    ["Acceptances already recorded stay in Vestiarion's signed ledger.", ACCOUNTING_CONSENT],
+  ],
   "guides/xero": [
     ["Connect Xero", ACCOUNTING_PANEL, "`Connect ${label}`"],
     ["An owner or admin connects Xero.", ACCOUNTING_PANEL, "An owner or admin connects {label}."],
@@ -3745,6 +3819,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/pipedrive": 20,
   "guides/zohocrm": 20,
   "guides/asana": 20,
+  "guides/linear": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,
   "guides/evidence-and-receipts": 20,

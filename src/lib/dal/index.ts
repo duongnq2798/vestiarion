@@ -87,6 +87,8 @@ export const TENANT_TABLES = [
   "address_change_checks",
   // Asking a bill's vendor for its missing purchase order or goods receipt (migration 0142, document requests ER2-ER6).
   "document_requests",
+  // The Linear issues milestones are linked to (migration 0147, Linear acceptance LN3).
+  "linear_issue_links",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -101,6 +103,10 @@ export const TENANT_RPCS = [
   "create_deal", "revise_deal",
   "reserve_project_budget", "project_figures",
   "accept_asana_task", "hold_asana_acceptance",
+  // Accepting work delivered in Linear, and taking an acceptance back (migration 0147, Linear acceptance LN8, LN10).
+  "accept_linear_issue", "hold_linear_acceptance",
+  // Whether migration 0147 has run (Linear acceptance LN3): it reads nothing.
+  "linear_connector_ready",
   // Whether migration 0116 has run (Pipedrive connector P2): it reads nothing.
   "pipedrive_connector_ready",
   // Whether migration 0122 has run (Zoho Books connector Z12): it reads nothing.

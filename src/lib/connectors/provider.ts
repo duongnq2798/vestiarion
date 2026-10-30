@@ -5,19 +5,21 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 /**
  * The providers shown with no brand mark (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md GS18):
  * Google's product icons are not used in another product's interface without Google's brand permission, so the Google
- * Sheets card and connect page write its name beside a neutral icon. `PROVIDER_MARKS` holds the others.
+ * Sheets card and connect page write its name beside a neutral icon. Linear's logo is not shipped yet
+ * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN16): its card uses the icon for work tools until the
+ * brand asset is added. `PROVIDER_MARKS` holds the others.
  */
-export const UNMARKED_PROVIDERS = ["googlesheets"] as const;
+export const UNMARKED_PROVIDERS = ["googlesheets", "linear"] as const;
 export type MarkedProviderId = Exclude<ProviderId, (typeof UNMARKED_PROVIDERS)[number]>;
 
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books", zohocrm: "Zoho CRM", googlesheets: "Google Sheets" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books", zohocrm: "Zoho CRM", googlesheets: "Google Sheets", linear: "Linear" };
 
 /**
  * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
@@ -26,7 +28,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quick
  * is written to it (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md GS1). The core's words follow it.
  */
 export type ProviderKind = "accounting" | "crm" | "work" | "export";
-export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting", zohocrm: "crm", googlesheets: "export" };
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting", zohocrm: "crm", googlesheets: "export", linear: "work" };
 
 /** The kind of a provider named by its id or its label; accounting for a name neither is. */
 export function providerKind(provider: string): ProviderKind {
@@ -56,6 +58,11 @@ export interface ProviderWords {
    * "No organization in Pipedrive" (docs/superpowers/specs/2026-10-14-pipedrive-connector-design.md P1). Absent: company.
    */
   customer?: string;
+  /**
+   * A work tool's word for what a milestone is linked to: Linear's issue
+   * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN1). Absent: task, Asana's.
+   */
+  workItem?: string;
 }
 
 export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
@@ -145,6 +152,18 @@ export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
     idleDays: 0,
     bills: "close packs",
     approval: "A close pack in Google Sheets is a copy: the signed ledger stays the record.",
+  },
+  // A work tool, as Asana (Linear acceptance LN1): a Linear workspace, its issues linked to milestones; no chart, and a
+  // refresh token Linear rotates on each use, which lasts while the app stays authorized, so no idle days.
+  linear: {
+    possessive: "Linear's",
+    organisation: "workspace",
+    contacts: "users",
+    accounts: "no accounts",
+    idleDays: 0,
+    bills: "linked issues",
+    approval: "An issue done in Linear is never by itself a reason to pay: a person accepts the work against its criteria.",
+    workItem: "issue",
   },
 };
 
@@ -412,7 +431,7 @@ export type ConnectingProvider = Pick<
 export type CrmProviderId = "hubspot" | "pipedrive" | "zohocrm";
 
 /**
- * The accounting tools among the providers: those that bring bills in (HubSpot connector H1; Asana acceptance A1). Google
- * Sheets brings nothing in (close pack Sheets GS1), so it never reads as one.
+ * The accounting tools among the providers: those that bring bills in (HubSpot connector H1; Asana acceptance A1; Linear
+ * acceptance LN1). Google Sheets brings nothing in (close pack Sheets GS1), so it never reads as one.
  */
-export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana" | "googlesheets">;
+export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana" | "googlesheets" | "linear">;

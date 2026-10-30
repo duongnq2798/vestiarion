@@ -39,13 +39,20 @@ export const COMMAND_PERMISSIONS = {
   /** A bill list, each of its rows then added through `invoice.add` (import design B12); the console only. */
   "invoice.import": "records.write",
   "milestone.add": "records.write",
-  // Contractor work accepted from Asana: linking a milestone to its task, writing the criteria it is held to, and
-  // accepting the work against them are what verifying a milestone by hand is, a record (Asana acceptance A4, A5, A8).
+  // Contractor work accepted from Asana or Linear: linking a milestone to its task or issue, writing the criteria it is
+  // held to, and accepting the work against them are what verifying a milestone by hand is, a record (Asana acceptance
+  // A4, A5, A8; Linear acceptance LN4, LN5, LN8).
   "milestone.link_task": "records.write",
   "milestone.unlink_task": "records.write",
   "milestone.set_criteria": "records.write",
   "milestone.accept": "records.write",
   "milestone.check_task": "records.write",
+  // The same for a Linear issue (Linear acceptance LN4, LN5, LN8, LN12): a record, as with Asana.
+  "milestone.link_issue": "records.write",
+  "milestone.unlink_issue": "records.write",
+  "milestone.set_issue_criteria": "records.write",
+  "milestone.accept_issue": "records.write",
+  "milestone.check_issue": "records.write",
   "payee_link.create": "records.write",
   // A deal on the receivables side, its versions, and the switch that releases its lines on their days: records, as a
   // receivable is (deal schedule D13). Releasing a line adds a receivable, so it needs what adding one needs today.

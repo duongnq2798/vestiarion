@@ -1,6 +1,6 @@
 import { db, platformDb } from "../dal";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
-import { PROVIDER_LABELS, providerKind, type ExternalOrganisation, type ProviderId } from "./provider";
+import { PROVIDER_LABELS, PROVIDER_WORDS, providerKind, type ExternalOrganisation, type ProviderId } from "./provider";
 import type { Consent } from "./state";
 import type { ConnectionState } from "./status";
 import { deleteTokens, refreshTokenOf } from "./token-store";
@@ -233,13 +233,13 @@ export async function saveConnection(input: {
   const connection = toConnection(((saved.data ?? []) as unknown as ConnectionRow[])[0]);
   const label = PROVIDER_LABELS[input.provider];
   // A CRM's won deals come in to be planned; an accounting tool's bills to be added (HubSpot connector H19); a work tool's
-  // tasks are linked to milestones one at a time (Asana acceptance A2); nothing comes in from an export tool, which close
-  // packs are written to (close pack Sheets GS1).
+  // tasks or issues are linked to milestones one at a time (Asana acceptance A2, Linear acceptance LN2); nothing comes in
+  // from an export tool, which close packs are written to (close pack Sheets GS1).
   const comesIn =
     kind === "export"
       ? "Close packs can be exported to its Google Drive from Monthly close pack"
       : kind === "work"
-      ? "Its tasks can be linked to milestones on Contractors"
+      ? `Its ${PROVIDER_WORDS[input.provider].workItem ?? "task"}s can be linked to milestones on Contractors`
       : kind === "crm"
         ? "Its won deals come in to plan collections on Bills & receivables"
         : "Its bills come in for review on Bills & receivables";

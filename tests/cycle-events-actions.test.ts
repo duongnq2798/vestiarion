@@ -166,6 +166,28 @@ describe("verifying a milestone by hand", () => {
     await manualMilestoneVerificationAction(empty, form({ milestoneId: MILESTONE, intent: "revoke", note: "Not merged after all" }));
     expect(raiseMock).not.toHaveBeenCalled();
   });
+
+  it("refuses to revoke a milestone accepted from a Linear issue, whose acceptance is taken back by unlinking it (Linear acceptance LN10)", async () => {
+    fake = fakeSupabase((sent) => {
+      if (sent.path === "/rest/v1/milestones" && sent.method === "GET") return { body: [{ id: MILESTONE, title: "Shipped", verified: true, status: "verified", verification_source: null }] };
+      if (sent.path === "/rest/v1/linear_issue_links" && sent.method === "GET") {
+        const at = "2026-10-31T08:00:00Z";
+        return {
+          body: [
+            {
+              id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001c1", milestone_id: MILESTONE, issue_id: "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c01", identifier: "ENG-123", state: "accepted",
+              held_at: null, completed: true, completed_at: at, last_read_at: at, accepted_at: at, accepted_completed_at: at, deliverables: [], accepted_deliverables: [], linked_at: at,
+            },
+          ],
+        };
+      }
+      return workspace(sent);
+    });
+    const result = await manualMilestoneVerificationAction(empty, form({ milestoneId: MILESTONE, intent: "revoke", note: "Not merged after all" }));
+    expect(result).toEqual({ ok: false, message: "This milestone's work was accepted from its Linear issue. Unlink the issue to take the acceptance back." });
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/milestones" && sent.method !== "GET")).toHaveLength(0);
+    expect(mocks.appendLedgerEntry).not.toHaveBeenCalled();
+  });
 });
 
 describe("returning a payable to the agent", () => {

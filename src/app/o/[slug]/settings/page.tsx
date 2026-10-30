@@ -6,6 +6,7 @@ import EmailInboxPanel from "@/components/EmailInboxPanel";
 import GoLivePanel from "@/components/GoLivePanel";
 import GitHubPanel from "@/components/GitHubPanel";
 import AsanaPanel from "@/components/AsanaPanel";
+import LinearPanel from "@/components/LinearPanel";
 import GoogleSheetsPanel from "@/components/GoogleSheetsPanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
 import PipedrivePanel from "@/components/PipedrivePanel";
@@ -66,6 +67,7 @@ import { accountingProvider, accountingProviderOn } from "@/lib/accounting-provi
 import { crmPanelView, type CrmPanelView } from "@/lib/connectors/crm-review";
 import { NotSetUpError } from "@/lib/connectors/connections";
 import { asanaPanelFor } from "@/lib/asana/panel";
+import { linearPanelFor } from "@/lib/linear/panel";
 import { googleSheetsPanelFor } from "@/lib/googlesheets/panel";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { pipedriveSettingsFromEnv } from "@/lib/pipedrive/settings";
@@ -301,6 +303,13 @@ export default async function SettingsPage({
       return null;
     });
     const asanaOutcome = ((await searchParams) as { asana?: string | string[] }).asana;
+    // Linear (Linear acceptance LN16), as Asana's: only on a deployment where it is configured; best effort. Before
+    // migration 0147 the card says Linear is not set up yet. How connecting it went comes back in `?linear=`.
+    const linear = await linearPanelFor().catch((error: unknown) => {
+      console.error("settings: Linear status not loaded", error instanceof Error ? error.message : error);
+      return null;
+    });
+    const linearOutcome = ((await searchParams) as { linear?: string | string[] }).linear;
     // Google Sheets (close pack Sheets GS2): only on a deployment with its Google client; best effort, like Asana's.
     // Before migration 0145 the card says Google Sheets is not set up yet. How connecting it went comes back in
     // `?googlesheets=`.
@@ -559,6 +568,13 @@ export default async function SettingsPage({
             title: "Asana",
             content: asana ? (
               <AsanaPanel orgSlug={slug} view={asana} canManage={canManageIntegrations} notice={typeof asanaOutcome === "string" ? asanaOutcome : null} />
+            ) : null,
+          },
+          {
+            id: "linear-title",
+            title: "Linear",
+            content: linear ? (
+              <LinearPanel orgSlug={slug} view={linear} canManage={canManageIntegrations} notice={typeof linearOutcome === "string" ? linearOutcome : null} />
             ) : null,
           },
           {

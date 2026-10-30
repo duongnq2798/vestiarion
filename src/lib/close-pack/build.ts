@@ -696,6 +696,15 @@ function milestoneCheck(ctx: Context, bill: Bill, own: readonly ClosePackLedgerR
       entries: accepted ? [accepted.seq] : [],
     });
   }
+  // Work accepted from Linear, the same way (Linear acceptance LN8).
+  if (milestone.verification_method === "linear" && milestone.verified) {
+    const accepted = newest(own, (entry) => entry.action === "linear_work_accepted");
+    const by = accepted ? whoWords(ctx.who(accepted.detail.by)) : "a member";
+    return check("verified", `Linear reported the issue done, and ${by} accepted the work against its criteria.`, {
+      at: accepted?.ts ?? milestone.verified_at,
+      entries: accepted ? [accepted.seq] : [],
+    });
+  }
   if (!milestone.verified) return check("missing", "The work was not verified before it was paid.", { warn: true });
   if (milestone.verification_method === "seed") return check("inferred", "Sample data: marked verified as an example.");
   const by = newest(own, (entry) => entry.action === "verify_milestone_manual" || (entry.action === "milestone_approval_paid" && entry.detail.heldFor === "unverified"));

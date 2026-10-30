@@ -60,7 +60,7 @@ const reconnectWords = (label: string) =>
   providerKind(label) === "export"
     ? EXPORT_RECONNECT(label)
     : providerKind(label) === "work"
-    ? `${label} no longer accepts this connection: the app's access was removed in ${label}. Reconnect ${label} to go on reading the tasks linked to milestones.`
+    ? `${label} no longer accepts this connection: the app's access was removed in ${label}. Reconnect ${label} to go on reading the ${providerWords(label).workItem ?? "task"}s linked to milestones.`
     : providerKind(label) === "crm"
       ? `${label} no longer accepts this connection: the app was uninstalled in ${label}, or its access was removed. Reconnect ${label} to go on bringing its deals in.`
       : providerWords(label).idleDays > 0

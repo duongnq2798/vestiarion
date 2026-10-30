@@ -7,6 +7,7 @@ import { createMilestone, type CreatedMilestone } from "../milestones/create";
 import { sendNoticesSoon } from "../payment-notices-soon";
 import { accessOf, cycleEventOf, provenanceOf, type Actor } from "./actor";
 import { paysOwnPayout } from "../asana/identities";
+import { approvesOwnLinearPayout } from "../linear/identities";
 import { done, refused, type CommandOutcome, type Refused } from "./outcome";
 import { gate } from "./policy";
 import { APPROVAL_RECORDED } from "../two-approvals";
@@ -31,6 +32,8 @@ export async function payMilestoneNow(
   if (refusal) return refusal;
   // Work accepted from Asana: its payee never approves their own payout (Asana acceptance A9). Only ever a refusal.
   if (await paysOwnPayout(actor, input.milestoneId)) return refused("self_payout", "You are this milestone's payee, so someone else approves paying it.");
+  // And from Linear (Linear acceptance LN9), the same way.
+  if (await approvesOwnLinearPayout(actor, input.milestoneId)) return refused("self_payout", "You are this milestone's payee, so someone else approves paying it.");
   let result: Awaited<ReturnType<typeof payHeldMilestone>>;
   try {
     result = await payHeldMilestone({ actorId: actor.userId, milestoneId: input.milestoneId, ...provenanceOf(actor) });

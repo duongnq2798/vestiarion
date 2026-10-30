@@ -3938,6 +3938,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       message: `Checked ${acceptedWork.checked} Asana task${acceptedWork.checked === 1 ? "" : "s"} accepted for milestones: ${acceptedWork.withdrawn} taken back for review, ${acceptedWork.failed} not read`,
     });
   }
+  // And work accepted from Linear, in the same read (Linear acceptance LN12).
+  if (acceptedWork.linear.checked > 0) {
+    lines.push({
+      domain: "contractor",
+      message: `Checked ${acceptedWork.linear.checked} Linear issue${acceptedWork.linear.checked === 1 ? "" : "s"} accepted for milestones: ${acceptedWork.linear.withdrawn} taken back for review, ${acceptedWork.linear.failed} not read`,
+    });
+  }
 
   });
 
@@ -4667,6 +4674,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     const recheck = await recheckAcceptedWork(planned.map((entry) => entry.milestone.id));
     if (!recheck.complete) {
       lines.push({ domain: "contractor", message: "Asana: not every accepted task could be read again just before sending; those acceptances stand as given" });
+    }
+    if (!recheck.linear.complete) {
+      lines.push({ domain: "contractor", message: "Linear: not every accepted issue could be read again just before sending; those acceptances stand as given" });
     }
   }
   const verifiedNow = planned.length > 0 && operating ? await stillVerified(db, planned.map((entry) => entry.milestone.id)) : new Set<string>();

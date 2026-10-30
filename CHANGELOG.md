@@ -14,6 +14,23 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Accept contractor work from Linear.** An owner or admin connects Linear in Settings, read-only. On Contractors, a
+  milestone is linked to the Linear issue its work is delivered in, by pasting the issue's link or its ID (such as
+  `ENG-123`), and holds the acceptance criteria from the agreement, written in Vestiarion. When the issue is done in
+  Linear, the milestone is **ready for acceptance**: a person checks the deliverables (the issue's attachments, such as
+  a pull request, and the links in its description and comments) against the criteria and accepts the work, and only
+  then is it verified and decided by the agent under every guardrail. Anyone in a Linear workspace can mark an issue
+  done, so a done issue alone never pays; a done issue without criteria, or a canceled one, is held; an acceptance by
+  the payee is refused, matched by email, and by Linear account for the member who connected Linear, as with Asana:
+  Vestiarion knows another member's Linear account only by their own email; and Pay now by the payee is refused,
+  matched by email. If the issue is reopened, canceled, archived or deleted, or its deliverables change, after
+  acceptance and Vestiarion reads that before the payment is sent, the acceptance is taken back and the milestone is
+  held for review; unlinking the issue takes it back by hand. Linear's webhook only has the issue read again, as do the
+  agent's cycle, the read right before sending and a check every 15 minutes. The Linear card names the Linear workspace
+  connected and counts acceptances, disputes and the time from acceptance to the agent's decision. Linear refuses a
+  milestone linked to an Asana task, and Contractors offers no Asana card on a milestone linked to Linear. Linear's
+  logo is not shown yet: its card uses an icon for work tools. Migration `0147`. SDK 0.4.1 accepts `linear` as a milestone's
+  verification method.
 - **Approve several bills at once.** On **Approvals**, a bill you could pay now in USDC, to an address on the
   workspace's own chain, with no payment tried for it yet, has a checkbox beside its payee. Tick from 2 to 20 and a bar
   at the bottom of the screen gives their count and total, with **Clear** and **Approve and pay** and the count. One

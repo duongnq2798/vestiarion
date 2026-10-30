@@ -30,6 +30,7 @@ vi.mock("@/lib/pipedrive/settings", async (original) => ({ ...(await original<ty
 vi.mock("@/lib/asana/settings", async (original) => ({ ...(await original<typeof import("@/lib/asana/settings")>()), asanaSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/zohocrm/settings", async (original) => ({ ...(await original<typeof import("@/lib/zohocrm/settings")>()), zohoCrmSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/googlesheets/settings", async (original) => ({ ...(await original<typeof import("@/lib/googlesheets/settings")>()), googleSheetsSettingsFromEnv: () => ({}) }));
+vi.mock("@/lib/linear/settings", async (original) => ({ ...(await original<typeof import("@/lib/linear/settings")>()), linearSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/connectors/token-store", () => ({ pendingChoice: vi.fn(async () => pending.value) }));
 vi.mock("@/lib/dal/scope", () => ({ withOrg: (_org: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/components/vx/SiteChrome", () => ({ SiteHeader: () => null, SiteFooter: () => null }));
@@ -49,6 +50,7 @@ import PipedriveConnectPage from "@/app/integrations/pipedrive/connect/page";
 import AsanaConnectPage from "@/app/integrations/asana/connect/page";
 import ZohoCrmConnectPage from "@/app/integrations/zohocrm/connect/page";
 import GoogleSheetsConnectPage from "@/app/integrations/googlesheets/connect/page";
+import LinearConnectPage from "@/app/integrations/linear/connect/page";
 import { CONSENT_CHANGED, CONSENT_VERSIONS, consentStatement, HOSTED_MODEL_PROVIDER, namesModelProvider } from "@/lib/connectors/consent";
 import type { ProviderId } from "@/lib/connectors/provider";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
@@ -243,12 +245,13 @@ const anyConnectPage = async (provider: ProviderId, query: Record<string, string
   if (provider === "asana") return renderToStaticMarkup(await AsanaConnectPage({ searchParams }));
   if (provider === "zohocrm") return renderToStaticMarkup(await ZohoCrmConnectPage({ searchParams }));
   if (provider === "googlesheets") return renderToStaticMarkup(await GoogleSheetsConnectPage({ searchParams }));
+  if (provider === "linear") return renderToStaticMarkup(await LinearConnectPage({ searchParams }));
   return connectPage(provider, query);
 };
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets"] as const)("the %s connect page's statement", (provider) => {
+describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear"] as const)("the %s connect page's statement", (provider) => {
   it("posts the version it shows, inside the form", async () => {
     memberships.value = [workspace("acme")];
     const form = (await anyConnectPage(provider)).match(/<form[^>]*>[^]*?<\/form>/)?.[0] ?? "";
@@ -264,8 +267,8 @@ describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks
     const terms = `<a href="${escape(HOSTED_MODEL_PROVIDER.terms)}" target="_blank" rel="noopener noreferrer"[^>]*>API terms</a>`;
     const privacy = `<a href="${escape(HOSTED_MODEL_PROVIDER.privacy)}" target="_blank" rel="noopener noreferrer"[^>]*>privacy policy</a>`;
     const naming = consentStatement(provider).filter(namesModelProvider);
-    // Every tool whose facts the agent decides on names it; Asana's and Google Sheets' statements do not.
-    expect(naming).toHaveLength(provider === "asana" || provider === "googlesheets" ? 0 : 1);
+    // Every tool whose facts the agent decides on names it; Asana's, Linear's and Google Sheets' statements do not.
+    expect(naming).toHaveLength(provider === "asana" || provider === "linear" || provider === "googlesheets" ? 0 : 1);
     expect(markup.match(new RegExp(terms, "g")) ?? []).toHaveLength(naming.length);
     expect(markup.match(new RegExp(privacy, "g")) ?? []).toHaveLength(naming.length);
     for (const line of naming) {
@@ -320,5 +323,54 @@ describe("the Google Sheets connect page (close pack Sheets GS2, GS3, GS18)", ()
     expect(words).toContain("Only an owner or admin connects Google Sheets");
     expect(words).toContain("Ask an owner or admin of your workspace to connect Google Sheets, or sign in with the account that is one.");
     expect(words).not.toContain("Continue to Google");
+  });
+});
+
+describe("the Linear connect page (Linear acceptance LN2, LN16)", () => {
+  const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ");
+
+  it("names Linear in words beside the icon for work tools, says what it reads, and goes to Linear", async () => {
+    memberships.value = [workspace("acme")];
+    const markup = await anyConnectPage("linear");
+    const words = text(markup);
+    expect(markup).toMatch(/<h1[^>]*>[^]*?<svg[^>]*lucide-square-kanban[^]*?Connect Linear[^]*?<\/h1>/);
+    // No Linear logo until the brand asset is added (LN16).
+    expect(markup).not.toContain("/brands/");
+    expect(words).toContain(
+      "Pay contractors for work delivered in Linear. You link a milestone to its Linear issue; when the issue is done, a person accepts the work against the milestone's criteria, and only then does the agent decide on pay, under every guardrail."
+    );
+    expect(words).toContain("What Vestiarion does with Linear's data");
+    for (const line of consentStatement("linear")) expect(words).toContain(line);
+    expect(words).toContain("Linear asks you to allow read access as yourself: Vestiarion sees the issues you can see, and reads only the ones linked to milestones.");
+    expect(words).toContain("Connecting records your agreement, with its date, on the connection and in the workspace's signed ledger.");
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>[^]*?Continue to Linear<\/button>/);
+    expect(words).toContain("Signed in as dana@example.com.");
+    expect(markup).toContain('action="/api/integrations/linear/connect"');
+  });
+
+  it("picks the workspace a Settings card named, among several, with real radio buttons", async () => {
+    memberships.value = [workspace("acme"), workspace("beta", "admin")];
+    const markup = await anyConnectPage("linear", { org: "beta" });
+    const radios = inputs(markup).filter((input) => input.type === "radio");
+    expect(radios.map((radio) => radio.value)).toEqual(["acme", "beta"]);
+    expect(radios.filter((radio) => "checked" in radio).map((radio) => radio.value)).toEqual(["beta"]);
+    const boxes = inputs(markup).filter((input) => input.type === "checkbox");
+    expect(boxes).toEqual([expect.objectContaining({ name: "consent", value: "yes" })]);
+    expect(labelFor(markup, boxes[0].id)).toMatch(/^I agree/);
+  });
+
+  it("says why the connect route sent the person back", async () => {
+    memberships.value = [workspace("acme")];
+    expect(text(await anyConnectPage("linear", { error: "forbidden" }))).toContain("Only an owner or admin of a workspace connects Linear to it.");
+    expect(text(await anyConnectPage("linear", { error: "not_set_up" }))).toContain("Linear is not set up on this deployment yet.");
+    expect(text(await anyConnectPage("linear", { consent: "missing" }))).toContain("Tick I agree to connect Linear.");
+  });
+
+  it("tells a person who manages no workspace's integrations who can connect it", async () => {
+    memberships.value = [workspace("acme", "approver")];
+    const words = text(await anyConnectPage("linear"));
+    expect(words).toContain("Only an owner or admin connects Linear");
+    expect(words).toContain("Ask an owner or admin of your workspace to connect Linear, or sign in with the account that is one.");
+    expect(words).not.toContain("Continue to Linear");
   });
 });
