@@ -78,6 +78,9 @@ export function ModeBadge({ mode }: { mode?: string }) {
   );
 }
 
+/** A ledger entry's sequence number as the audit log writes it after its `#`: four digits at least, 42 as 0042. */
+export const pad = (value: number) => String(value).padStart(4, "0");
+
 export function shortHash(value: string): string {
   return value.length > 14 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
 }

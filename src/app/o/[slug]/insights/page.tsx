@@ -8,7 +8,7 @@ import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import { readDecisionReasons } from "@/lib/decision-reasons";
 import { getInsightsData } from "@/lib/insights";
-import { stats } from "@/lib/queries";
+import { shellClock } from "@/lib/queries";
 import { shellStatus } from "@/lib/shell-status";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +21,17 @@ export default async function InsightsPage({ params }: { params: Promise<{ slug:
   return inOrg(access, async () => {
     // The reasons people gave as they went against the agent, for owners and admins (capability and reasons R13).
     const owner = access.membership.role === "owner" || access.membership.role === "admin";
-    const [data, dashboardStats, reasons] = await Promise.all([getInsightsData(), stats(), owner ? readDecisionReasons(20) : Promise.resolve(null)]);
+    // The header needs the clock and nothing else `stats()` reads (every paid bill, two exact counts), and its status is
+    // read with the rest, not after them.
+    const [data, clock, reasons, status] = await Promise.all([
+      getInsightsData(),
+      shellClock(),
+      owner ? readDecisionReasons(20) : Promise.resolve(null),
+      shellStatus(),
+    ]);
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
+      <ProductShell network={access.membership.network} day={clock.day} clockMode={clock.clockMode} lastCycleAt={clock.lastCycleAt} chainModes={shellModes()} status={status}>
         <PageHead
           title={sectionTitle("insights")}
           sub="Measured outcomes: receipts from completed cycles, payment execution, and screening checks. Empty space means the system has not measured it yet."

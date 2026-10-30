@@ -23,15 +23,15 @@ import { shellModes } from "@/lib/circle";
 import { inOrg } from "@/lib/dal/scope";
 import {
   ledgerEntryCount,
+  ledgerHead,
   ledgerPublicKeyId,
   ledgerPublicKeyPem,
   ledgerReadWarnings,
   ledgerVerificationKeyring,
-  listLedgerEntries,
   listLedgerEntryPage,
 } from "@/lib/ledger";
 import { exportKeys } from "@/lib/ledger-export";
-import { stats } from "@/lib/queries";
+import { shellClock } from "@/lib/queries";
 import { DocsLink } from "@/components/DocsLink";
 import { shellStatus } from "@/lib/shell-status";
 
@@ -59,16 +59,21 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
     const domain = DOMAINS.includes(domainValue as Domain) ? (domainValue as Domain) : undefined;
     const beforeValue = typeof query.before === "string" ? Number(query.before) : undefined;
     const before = Number.isSafeInteger(beforeValue) && Number(beforeValue) > 0 ? Number(beforeValue) : undefined;
-    const [entries, headEntries, totalEntries, dashboardStats] = await Promise.all([
+    // The newest entries, unfiltered, start with the head, which is then not read again; any other page reads the
+    // head's number and hash alone. The header needs the clock and nothing else `stats()` reads, and its status is
+    // read with the rest, not after them.
+    const newest = before === undefined && !domain;
+    const [entries, readHead, totalEntries, clock, status] = await Promise.all([
       listLedgerEntryPage({ before, domain, limit: 100 }),
-      listLedgerEntries(1),
+      newest ? Promise.resolve(null) : ledgerHead(),
       ledgerEntryCount(),
-      stats(),
+      shellClock(),
+      shellStatus(),
     ]);
     const shown = entries;
     const sinceValue = typeof query.since === "string" ? Number(query.since) : undefined;
     const since = Number.isFinite(sinceValue) ? sinceValue : undefined;
-    const head = headEntries[0];
+    const head = newest ? entries[0] : readHead;
     const hasOlder = entries.length === 100;
     const publicKey = ledgerPublicKeyPem();
     const keyId = ledgerPublicKeyId();
@@ -76,11 +81,11 @@ export default async function AuditPage({ params, searchParams }: AuditPageProps
     const retiredKeys = exportKeys(ledgerVerificationKeyring()).filter((key) => key.status === "retired");
 
     return (
-      <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()}>
+      <ProductShell network={access.membership.network} day={clock.day} clockMode={clock.clockMode} lastCycleAt={clock.lastCycleAt} chainModes={shellModes()} status={status}>
         <PageHead
           title={sectionTitle("audit")}
           sub="Every decision is appended here, hash-linked to the one before it and signed with Ed25519. The summary stays readable; raw detail and cryptographic material remain inspectable."
-          right={<AgentControls orgSlug={slug} nextDay={dashboardStats.day + 1} headSeq={head?.seq ?? 0} clockMode={dashboardStats.clockMode} />}
+          right={<AgentControls orgSlug={slug} nextDay={clock.day + 1} headSeq={head?.seq ?? 0} clockMode={clock.clockMode} />}
         />
 
         <Card asChild className="mb-6 p-4 sm:p-6">
