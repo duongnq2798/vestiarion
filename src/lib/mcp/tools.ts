@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { OPERATIONS, type DocOperation, type DocParam } from "@/lib/api/openapi";
+import { DIGEST_DESCRIPTIONS, isDigested } from "./digests";
 
 /**
  * The MCP tools: one per `/api/v1` operation, generated from `OPERATIONS`
@@ -11,6 +12,10 @@ import { OPERATIONS, type DocOperation, type DocParam } from "@/lib/api/openapi"
  * argument the API does not, or refuse one it takes. A call runs the
  * operation's own route (`src/lib/mcp/call.ts`), so the route still has the
  * last word on every value, and on whether the key may write at all.
+ *
+ * A tool's description is its operation's summary and description, except
+ * for the evidence reads, whose tools answer a digest of the file rather than
+ * the file: theirs describe the digest (MCP evidence MT10, `./digests.ts`).
  */
 
 export interface McpTool {
@@ -65,7 +70,7 @@ function paramSchema(param: DocParam): z.ZodType {
 }
 
 function toTool(op: DocOperation): McpTool {
-  const description = `${op.summary}. ${op.description}`;
+  const description = `${op.summary}. ${isDigested(op.id) ? DIGEST_DESCRIPTIONS[op.id] : op.description}`;
   const params = Object.fromEntries(op.params.map((param) => [argumentName(param), paramSchema(param)]));
   // Only a write that takes an `Idempotency-Key` is told about one: a payee link keeps no outcome for it (part 2, W3).
   const keyed = op.params.some((param) => param.in === "header" && param.name === "Idempotency-Key");
@@ -85,5 +90,5 @@ function toTool(op: DocOperation): McpTool {
   };
 }
 
-/** One tool per operation that has one: the evidence reads have none yet (evidence API EA9). */
-export const MCP_TOOLS: readonly McpTool[] = OPERATIONS.filter((op) => op.mcp !== false).map(toTool);
+/** One tool per operation, the evidence reads included (MCP evidence MT1). */
+export const MCP_TOOLS: readonly McpTool[] = OPERATIONS.map(toTool);

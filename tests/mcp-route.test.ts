@@ -380,12 +380,12 @@ describe("the MCP protocol, with a valid key", () => {
   });
 
   describe.each(ERAS)("a %s client", (_version, request) => {
-    it("lists the thirteen tools: the nine reads read-only, the four writes as adding records (write API R9; part 2, W7)", async () => {
+    it("lists the eighteen tools: the fourteen reads read-only, the five evidence reads among them, and the four writes as adding records (write API R9; part 2, W7; MCP evidence MT1)", async () => {
       const fake = fakeSupabase(database());
       const response = await post(fake, request(2, "tools/list"));
       expect(response.status).toBe(200);
       const tools = (await reply(response)).result?.tools as Array<{ name: string; title: string; inputSchema: { type: string }; annotations: Record<string, unknown> }>;
-      expect(tools).toHaveLength(13);
+      expect(tools).toHaveLength(18);
       expect(tools.map((tool) => tool.name).sort()).toEqual(MCP_TOOLS.map((tool) => tool.name).sort());
       for (const tool of tools) {
         const write = tool.name.startsWith("create_");

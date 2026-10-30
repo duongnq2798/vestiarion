@@ -128,7 +128,7 @@ Only a payment on chain has a receipt:
 - A bill not paid yet says "This invoice is not paid yet."
 - A contractor's milestone and a receivable have no receipt.
 
-An integration reads a paid bill's receipt, shared or not, from `GET /api/v1/invoices/{id}/receipt`; it never gets the link.
+An integration reads a paid bill's receipt, shared or not, from `GET /api/v1/invoices/{id}/receipt`; it never gets the link. An AI agent connected to the [MCP server](/docs/ai-integration/mcp#evidence-receipts-and-close-packs) reads it with `get_invoice_receipt`.
 
 ## 8. What the payee sees
 

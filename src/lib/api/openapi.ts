@@ -96,11 +96,6 @@ export interface DocOperation {
   collection: boolean;
   errors: ApiErrorCode[];
   example: unknown;
-  /**
-   * No MCP tool yet (evidence API EA9): a tool's answer goes into a model's context whole, and these carry every entry in
-   * full and text from outside. Their tools are designed with their own answers and handling, then this flag goes.
-   */
-  mcp?: false;
 }
 
 const PAGE_PARAMS: DocParam[] = [
@@ -441,7 +436,9 @@ export const OPERATIONS: readonly DocOperation[] = [
   },
   // The evidence reads (docs/superpowers/specs/2026-10-25-sdk-0-4-evidence-receipts-close-pack-design.md EA1): the
   // workspace's signed files, each as its page downloads it, with members named by user id. One brake per key for the
-  // five (EA6); no MCP tool yet (EA9). Their examples are built by scripts/evidence-examples.ts, not recorded (EA11).
+  // five (EA6). Their MCP tools answer a digest of the file instead, with descriptions of their own
+  // (src/lib/mcp/digests.ts; docs/superpowers/specs/2026-10-30-mcp-evidence-tools-design.md MT1-MT10). Their examples are
+  // built by scripts/evidence-examples.ts, not recorded (EA11).
   {
     id: "get-invoice-evidence",
     method: "get",
@@ -457,7 +454,6 @@ export const OPERATIONS: readonly DocOperation[] = [
     collection: false,
     errors: EVIDENCE_RECORD_ERRORS,
     example: getInvoiceEvidenceExample,
-    mcp: false,
   },
   {
     id: "get-milestone-evidence",
@@ -474,7 +470,6 @@ export const OPERATIONS: readonly DocOperation[] = [
     collection: false,
     errors: EVIDENCE_RECORD_ERRORS,
     example: getMilestoneEvidenceExample,
-    mcp: false,
   },
   {
     id: "get-invoice-receipt",
@@ -491,7 +486,6 @@ export const OPERATIONS: readonly DocOperation[] = [
     collection: false,
     errors: EVIDENCE_RECORD_ERRORS,
     example: getInvoiceReceiptExample,
-    mcp: false,
   },
   {
     id: "get-payee-lock-evidence",
@@ -511,7 +505,6 @@ export const OPERATIONS: readonly DocOperation[] = [
     collection: false,
     errors: EVIDENCE_PERIOD_ERRORS,
     example: getPayeeLockEvidenceExample,
-    mcp: false,
   },
   {
     id: "get-close-pack",
@@ -528,7 +521,6 @@ export const OPERATIONS: readonly DocOperation[] = [
     collection: false,
     errors: EVIDENCE_PERIOD_ERRORS,
     example: getClosePackExample,
-    mcp: false,
   },
 ];
 
