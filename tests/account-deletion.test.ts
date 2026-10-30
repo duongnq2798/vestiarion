@@ -165,6 +165,10 @@ describe("0023 is idempotent", () => {
         { tbl: "invoice_inboxes", col: "created_by", action: "n" },
         { tbl: "invoices", col: "created_by", action: "n" },
         { tbl: "invoices", col: "reviewed_by", action: "n" },
+        // Who linked, unlinked and accepted a Linear issue (0147): the record stays, without the person.
+        { tbl: "linear_issue_links", col: "accepted_by", action: "n" },
+        { tbl: "linear_issue_links", col: "linked_by", action: "n" },
+        { tbl: "linear_issue_links", col: "unlinked_by", action: "n" },
         { tbl: "memberships", col: "invited_by", action: "n" },
         { tbl: "memberships", col: "user_id", action: "c" },
         { tbl: "milestones", col: "acceptance_criteria_by", action: "n" },

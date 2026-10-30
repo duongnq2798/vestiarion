@@ -56,6 +56,7 @@ export const ACTION_LABELS: Record<string, string> = {
   zohobooks: "Zoho Books",
   zohocrm: "Zoho CRM",
   asana: "Asana",
+  linear: "Linear",
 };
 
 export function actionLabel(action: string): string {

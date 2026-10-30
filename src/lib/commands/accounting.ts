@@ -59,6 +59,7 @@ function accountingProviderOf(connection: Connection): AccountingProviderId {
     connection.provider === "pipedrive" ||
     connection.provider === "zohocrm" ||
     connection.provider === "asana" ||
+    connection.provider === "linear" ||
     connection.provider === "googlesheets"
   )
     throw new Error("Only an accounting tool brings bills in");

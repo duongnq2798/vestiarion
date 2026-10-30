@@ -23,6 +23,7 @@ export const CONSENT_VERSIONS: Record<ProviderId, string> = {
   zohobooks: "zohobooks-2026-10-16",
   zohocrm: "zohocrm-2026-10-16",
   googlesheets: "googlesheets-2026-10-25",
+  linear: "linear-2026-10-31",
 };
 
 /**
@@ -39,6 +40,7 @@ export const CONSENT_HISTORY: Record<ProviderId, readonly string[]> = {
   zohobooks: ["zohobooks-2026-10-16"],
   zohocrm: ["zohocrm-2026-10-16"],
   googlesheets: ["googlesheets-2026-10-25"],
+  linear: ["linear-2026-10-31"],
 };
 
 /**
@@ -136,6 +138,21 @@ const WORK_STATEMENT = (label: string) => [
 ];
 
 /**
+ * Linear's statement (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN2, LN6, LN11, LN13, LN16): read
+ * only, as the Linear user who connects; what is read of a linked issue and kept; that Linear's notices only have an
+ * issue read again; and that nothing from Linear moves money. Linear's app webhook is the app's own, made by Linear for
+ * each workspace that authorizes it, so Vestiarion makes and deletes none.
+ */
+const LINEAR_STATEMENT: readonly string[] = [
+  "Vestiarion reads Linear as the Linear user who connects, with read access only, and sees the issues that person can see. It reads the name of your Linear workspace once, when you connect.",
+  "For each issue linked to a milestone it reads its title, its status, whether and when it was completed and by whom, its assignee, whether it was archived or deleted, its attachments and the links in its description and comments. It keeps the links and names, not the words of the description or the comments. When a person accepts the work, it asks Linear which Linear user has the payee's email, and which is that person's own, only to refuse an acceptance by the payee, and keeps no email.",
+  "Linear tells Vestiarion when a linked issue, its comments or its attachments change, and Vestiarion then reads the issue again from Linear. What a notice says is never used as it is. Vestiarion writes nothing to Linear.",
+  "An issue done in Linear is never by itself a reason to pay: a person here accepts the work against the milestone's criteria, and the agent then decides the payment under every guardrail. Nothing from Linear sets an amount or a payee.",
+  "Vestiarion never uses Linear data to train or improve any AI model, and never passes it to anyone else without your workspace's say.",
+  "Disconnecting stops the reading at once and revokes Vestiarion's access at Linear. Acceptances already recorded stay in Vestiarion's signed ledger.",
+];
+
+/**
  * Google Sheets' statement (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md, the connect page): the
  * one Drive permission, what an export writes and reads back, the account's id and masked email, that nothing is shared
  * or comes back, and what disconnecting does with a grant another workspace shares. No model sees any of it.
@@ -156,6 +173,7 @@ export function consentStatement(provider: ProviderId): string[] {
   if (provider === "zohocrm") return [...ZOHO_CRM_STATEMENT];
   if (provider === "asana") return WORK_STATEMENT(label);
   if (provider === "googlesheets") return [...GOOGLE_SHEETS_STATEMENT];
+  if (provider === "linear") return [...LINEAR_STATEMENT];
   return [
     WHAT_IS_READ[provider],
     `The bills you add are shown to this workspace's members and to its agent. ${MODEL_PROVIDER} sees each bill's facts to decide on it, under that provider's own API terms.`,

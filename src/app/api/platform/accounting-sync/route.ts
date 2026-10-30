@@ -2,18 +2,21 @@ import { NextResponse } from "next/server";
 import { accountingProvider } from "@/lib/accounting-providers";
 import { hasValidAgentBearer } from "@/lib/agent-security";
 import { asanaProviderFromEnv } from "@/lib/asana/provider";
-import { syncAsanaConnection } from "@/lib/asana/workspace";
+import { syncAsanaConnection, type AsanaSyncOutcome } from "@/lib/asana/workspace";
 import { crmSyncInScope } from "@/lib/connectors/crm-store";
 import { sweepAccounting } from "@/lib/connectors/sweep";
 import { crmProvider } from "@/lib/crm-providers";
+import { linearProviderFromEnv, type LinearProvider } from "@/lib/linear/provider";
+import { syncLinearConnection, type LinearSyncOutcome } from "@/lib/linear/workspace";
 
 /** A sweep stops starting syncs after 240 seconds (docs/superpowers/specs/2026-10-12-xero-connector-design.md X7). */
 export const maxDuration = 300;
 
 /**
  * Brings bills in from the accounting tools workspaces connected, and deals from their CRMs (HubSpot connector H7), and
- * reads again the Asana tasks linked to milestones (Asana acceptance A11), without a person: bearer-protected, run every
- * 15 minutes by Supabase Cron (`supabase/cron/watches.sql`) and by hand from `.github/workflows/accounting-sync.yml`.
+ * reads again the Asana tasks and the Linear issues linked to milestones (Asana acceptance A11, Linear acceptance LN12),
+ * without a person: bearer-protected, run every 15 minutes by Supabase Cron (`supabase/cron/watches.sql`) and by hand
+ * from `.github/workflows/accounting-sync.yml`.
  */
 export async function POST(request: Request) {
   if (!hasValidAgentBearer(request.headers.get("authorization"), process.env.AGENT_API_TOKEN)) {
@@ -21,13 +24,18 @@ export async function POST(request: Request) {
   }
   try {
     // Counts only: this body is printed into the workflow's log, and the repository is public.
-    // One Asana provider for the run, when it is set up on this deployment.
+    // One Asana provider and one Linear provider for the run, each when it is set up on this deployment.
     const asana = asanaProviderFromEnv();
+    const linear = linearProviderFromEnv();
     return NextResponse.json(
       await sweepAccounting({
         providerFor: accountingProvider,
         crm: { providerFor: crmProvider, sync: crmSyncInScope },
-        work: { providerFor: (id) => (id === "asana" ? asana : null), sync: syncAsanaConnection },
+        work: {
+          providerFor: (id) => (id === "asana" ? asana : id === "linear" ? linear : null),
+          sync: (connectionId, provider): Promise<{ outcome: AsanaSyncOutcome | LinearSyncOutcome }> =>
+            provider.id === "linear" ? syncLinearConnection(connectionId, provider as LinearProvider) : syncAsanaConnection(connectionId, provider as NonNullable<typeof asana>),
+        },
       }),
       { status: 200 }
     );

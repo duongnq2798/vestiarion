@@ -5,6 +5,7 @@ import "server-only";
 import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { AsanaNotSetUpError, liveLinks } from "@/lib/asana/links";
+import { LinearNotSetUpError, liveLinks as linearLinks } from "@/lib/linear/links";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { db } from "@/lib/dal";
@@ -56,6 +57,16 @@ export async function createMilestoneAction(
     const placed = await assignToProjectCommand(actor, { subject: { kind: "milestone", id: added.milestoneId }, projectId, atEntry: true });
     return consoleAnswer({ ...added, message: placed.ok ? `${added.message} ${placed.message}` : `${added.message} It was not put in the project: ${placed.message}` });
   });
+}
+
+/** A milestone's live link to a Linear issue, and its state; none, before migration 0147. */
+async function linearLinkOf(milestoneId: string): Promise<{ state: string } | null> {
+  try {
+    return (await linearLinks({ milestoneIds: [milestoneId] }))[0] ?? null;
+  } catch (error) {
+    if (error instanceof LinearNotSetUpError) return null;
+    throw error;
+  }
 }
 
 /** Whether a milestone is linked to an Asana task; never, before migration 0115. */
@@ -110,6 +121,15 @@ export async function manualMilestoneVerificationAction(
     // (Asana acceptance A8). Revoking stays open.
     if (intent === "verify" && (await asanaLinked(milestone.id))) {
       return { ok: false, message: "This milestone's work is accepted from its Asana task. Accept it there against its criteria, or unlink the task first." };
+    }
+    // So is work delivered in Linear (Linear acceptance LN8). An acceptance from Linear is taken back with its issue, which
+    // holds it for review before any payment (LN10): revoked here, the issue's card would still say it was accepted.
+    const linearLink = await linearLinkOf(milestone.id);
+    if (intent === "verify" && linearLink) {
+      return { ok: false, message: "This milestone's work is accepted from its Linear issue. Accept it there against its criteria, or unlink the issue first." };
+    }
+    if (intent === "revoke" && linearLink?.state === "accepted") {
+      return { ok: false, message: "This milestone's work was accepted from its Linear issue. Unlink the issue to take the acceptance back." };
     }
 
     const verified = intent === "verify";

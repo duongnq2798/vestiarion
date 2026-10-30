@@ -34,6 +34,7 @@ const SECTIONS: Array<[string, string]> = [
   ["src/components/SlackPanel.tsx", "/docs/guides/slack"],
   ["src/components/DiscordPanel.tsx", "/docs/guides/discord"],
   ["src/components/GitHubPanel.tsx", "/docs/guides/github"],
+  ["src/components/LinearPanel.tsx", "/docs/guides/linear"],
   ["src/components/EmailInboxPanel.tsx", "/docs/guides/email-invoices"],
   ["src/components/intake/BillImport.tsx", "/docs/guides/import-bills"],
   ["src/components/TwoApprovalsPanel.tsx", "/docs/guides/first-payment#two-approvals-above-a-figure"],

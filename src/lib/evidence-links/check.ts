@@ -3,9 +3,11 @@ import { z } from "zod";
 import { currentConfig, currentOrgId, hasScope } from "../context";
 import type { GitHubPullRequestRef } from "../github-verification";
 import { asanaAccessToken } from "../asana/workspace";
+import { issueRefOf } from "../linear/urls";
+import { linearAccessToken } from "../linear/workspace";
 import { pullRequestTokens } from "../github/tokens";
 import { isPublicAddress, type LookupFn } from "../webhooks/safe-url";
-import { ASANA_HOST, checkTargetOf, NOT_CHECKED_WORDS, requestAllowed, storageHostOf, type CheckTarget } from "./allow-list";
+import { ASANA_HOST, checkTargetOf, LINEAR_API_HOST, NOT_CHECKED_WORDS, requestAllowed, storageHostOf, type CheckTarget } from "./allow-list";
 
 /**
  * Whether an evidence link can be opened, checked before a page says "verified" or offers it
@@ -49,6 +51,12 @@ export const LINK_WORDS = {
   asanaRefused: "Asana refused access to it.",
   asanaSilent: "Asana did not answer just now.",
   asanaLimited: "Asana's rate limit was reached; it is checked again in a minute.",
+  linearNotConnected: "Connect Linear to this workspace to check Linear links: Vestiarion asks Linear with the workspace's own connection only.",
+  linearNotFound: "Linear could not find it: it was deleted, or the workspace's Linear connection does not reach it.",
+  linearRefused: "Linear refused access to it.",
+  linearOtherWorkspace: "It is in another Linear workspace than the one connected, so Vestiarion did not check it.",
+  linearSilent: "Linear did not answer just now.",
+  linearLimited: "Linear's rate limit was reached; it is checked again in a minute.",
   githubLimited: "GitHub's rate limit was reached; it is checked again in a minute.",
   storageSilent: "Storage did not answer just now.",
   redirected: "It was sent on to an address Vestiarion does not open.",
@@ -66,6 +74,11 @@ export interface LinkCheckOptions {
    * asked with it alone: never the deployment's, never the person's.
    */
   asanaToken?: () => Promise<string | null>;
+  /**
+   * The workspace's own Linear connection's access token, fresh, or null without one (Linear acceptance LN14). Linear is
+   * asked with it alone.
+   */
+  linearToken?: () => Promise<string | null>;
   /** The deployment's own GitHub token; the configured one when absent. */
   fallbackToken?: string | null;
   /** The workspace's Supabase address, whose storage's signed links are checked; the configured one when absent. */
@@ -114,17 +127,31 @@ type Sent = { response: Response } | { refused: LinkAccess };
  * One request to an allowed address, and at most one redirect, to GitHub's API only. The address is checked again here,
  * whatever built it, and its host resolved; credentials go to GitHub's API and nowhere else.
  */
-async function send(url: string, init: { headers: Record<string, string>; storageHost: string | null }, options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">>): Promise<Sent> {
+async function send(
+  url: string,
+  init: { headers: Record<string, string>; storageHost: string | null; body?: string },
+  options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">>
+): Promise<Sent> {
   let next = url;
   for (let hop = 0; hop < 2; hop += 1) {
     if (!requestAllowed(next, { storageHost: init.storageHost })) return { refused: { state: "not_checked", reason: hop === 0 ? NOT_CHECKED_WORDS.host : LINK_WORDS.redirected } };
     if (!(await hostIsPublic(next, options.resolve))) return { refused: { state: "not_checked", reason: NOT_CHECKED_WORDS.address } };
     const toGitHub = new URL(next).hostname === "api.github.com";
-    // A credential goes to GitHub's API, and the workspace's Asana token to Asana's API (whose path `requestAllowed` held
-    // to one task or attachment), and nowhere else.
+    // A credential goes to GitHub's API, the workspace's Asana token to Asana's API (whose path `requestAllowed` held
+    // to one task or attachment), and its Linear token to Linear's GraphQL API, and nowhere else.
     const toAsana = new URL(next).hostname === ASANA_HOST;
-    const headers = toGitHub || toAsana ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
-    const response = await options.fetch(next, { method: "GET", headers, redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const toLinear = new URL(next).hostname === LINEAR_API_HOST;
+    const headers = toGitHub || toAsana || toLinear ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
+    // Linear's API is GraphQL, asked with a POST of the query built from the link's identifier; every other check is a GET.
+    const post = toLinear && init.body !== undefined && hop === 0;
+    const response = await options.fetch(next, {
+      method: post ? "POST" : "GET",
+      headers,
+      ...(post ? { body: init.body } : {}),
+      redirect: "manual",
+      cache: "no-store",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
     if (![301, 302, 303, 307, 308].includes(response.status)) return { response };
     await response.body?.cancel().catch(() => {});
     const location = response.headers.get("location");
@@ -216,6 +243,46 @@ async function askAsana(
   return { state: "no_answer", reason: LINK_WORDS.asanaSilent };
 }
 
+/**
+ * A Linear issue, asked about at Linear's GraphQL API by its identifier with the workspace's own connection; no redirect
+ * is followed. Linear answers an issue it does not show with an error, `Entity not found`, in an answer that may be a
+ * 200; only the id and the link it answers are read. Linear finds an identifier in the connection's own Linear
+ * workspace, so an issue answered is the link's only when its own link names the link's Linear workspace: a link to
+ * another one is not checked, as `linkLinearIssue` refuses it (Linear acceptance LN14).
+ */
+async function askLinear(target: Extract<CheckTarget, { kind: "linear_issue" }>, options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">> & { token: string | null }): Promise<LinkAccess> {
+  if (!options.token) return { state: "not_checked", reason: LINK_WORDS.linearNotConnected };
+  const headers = { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${options.token}` };
+  const sent = await send(target.request, { headers, storageHost: null, body: target.body }, options);
+  if ("refused" in sent) return sent.refused;
+  const { response } = sent;
+  if (response.status === 429 || response.status === 403 || response.status === 401 || response.status >= 500) {
+    await response.body?.cancel().catch(() => {});
+    if (response.status === 429) return { state: "no_answer", reason: LINK_WORDS.linearLimited };
+    if (response.status === 403) return { state: "cannot_open", reason: LINK_WORDS.linearRefused };
+    return { state: "no_answer", reason: LINK_WORDS.linearSilent };
+  }
+  const parsed = linearAnswerSchema.safeParse(await response.json().catch(() => null));
+  if (!parsed.success) return { state: "no_answer", reason: LINK_WORDS.linearSilent };
+  const errors = parsed.data.errors ?? [];
+  if (errors.some((error) => error.extensions?.code === "RATELIMITED")) return { state: "no_answer", reason: LINK_WORDS.linearLimited };
+  if (errors.some((error) => error.extensions?.code === "FORBIDDEN")) return { state: "cannot_open", reason: LINK_WORDS.linearRefused };
+  if (errors.some((error) => /entity not found|could not find referenced/i.test(error.message ?? ""))) return { state: "cannot_open", reason: LINK_WORDS.linearNotFound };
+  const issue = parsed.data.data?.issue;
+  if (issue?.id) {
+    const answered = issue.url ? issueRefOf(issue.url)?.workspaceKey : null;
+    if (!answered) return { state: "no_answer", reason: LINK_WORDS.linearSilent };
+    return answered.toLowerCase() === target.workspaceKey.toLowerCase() ? { state: "open" } : { state: "not_checked", reason: LINK_WORDS.linearOtherWorkspace };
+  }
+  if (parsed.data.data && issue === null) return { state: "cannot_open", reason: LINK_WORDS.linearNotFound };
+  return { state: "no_answer", reason: LINK_WORDS.linearSilent };
+}
+
+const linearAnswerSchema = z.object({
+  data: z.object({ issue: z.object({ id: z.string(), url: z.string().optional() }).nullable().optional() }).nullable().optional(),
+  errors: z.array(z.object({ message: z.string().optional(), extensions: z.object({ code: z.string().optional() }).optional() })).optional(),
+});
+
 async function askStorage(target: Extract<CheckTarget, { kind: "signed_storage" }>, options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">>, now: number): Promise<LinkAccess> {
   if (target.expiresAt !== null && target.expiresAt <= now) return { state: "cannot_open", reason: LINK_WORDS.expired(target.expiresAt) };
   // The link's own signature is its only credential: no key of Vestiarion's, and no session, is sent with it.
@@ -253,6 +320,10 @@ export async function checkEvidenceLinks(hrefs: readonly string[], options: Link
   let asana: Promise<string | null> | undefined;
   const asanaToken = (): Promise<string | null> =>
     (asana ??= (options.asanaToken ? options.asanaToken() : scoped ? asanaAccessToken() : Promise.resolve(null)).catch(() => null));
+  // And its Linear connection's, the same way.
+  let linear: Promise<string | null> | undefined;
+  const linearToken = (): Promise<string | null> =>
+    (linear ??= (options.linearToken ? options.linearToken() : scoped ? linearAccessToken() : Promise.resolve(null)).catch(() => null));
   let asked = 0;
 
   await Promise.all(
@@ -280,13 +351,21 @@ export async function checkEvidenceLinks(hrefs: readonly string[], options: Link
           try {
             if (target.kind === "signed_storage") return await askStorage(target, io, now);
             if (target.kind === "asana_task" || target.kind === "asana_attachment") return await askAsana(target, { ...io, token: await asanaToken() });
+            if (target.kind === "linear_issue") return await askLinear(target, { ...io, token: await linearToken() });
             return await askGitHub(target, { ...io, tokenFor: await tokenFor(), fallbackToken });
           } catch (error) {
             // The host and the error's name only: a signed link carries its token, and is never logged.
             console.error("evidence link: check failed", new URL(target.request).hostname, error instanceof Error ? error.name : "unknown");
             return {
               state: "no_answer",
-              reason: target.kind === "signed_storage" ? LINK_WORDS.storageSilent : target.kind === "asana_task" || target.kind === "asana_attachment" ? LINK_WORDS.asanaSilent : LINK_WORDS.githubSilent,
+              reason:
+                target.kind === "signed_storage"
+                  ? LINK_WORDS.storageSilent
+                  : target.kind === "asana_task" || target.kind === "asana_attachment"
+                    ? LINK_WORDS.asanaSilent
+                    : target.kind === "linear_issue"
+                      ? LINK_WORDS.linearSilent
+                      : LINK_WORDS.githubSilent,
             };
           }
         })().then((access) => {

@@ -97,8 +97,8 @@ export default function TermsPage() {
             access to;
           </li>
           <li>
-            the work tool you connect, such as your Asana, and the acceptance criteria you write: a person in your workspace, never Asana, accepts a
-            contractor&apos;s work against them;
+            the work tool you connect, such as your Asana or Linear, and the acceptance criteria you write: a person in your workspace, never the
+            work tool, accepts a contractor&apos;s work against them;
           </li>
           <li>using the service lawfully where you and the people you pay are, including any rules on paying in stablecoins.</li>
         </ul>
@@ -202,6 +202,18 @@ export default function TermsPage() {
           keeping anyone else from accepting their own work stays the workspace&apos;s. Vestiarion never uses Asana data to train or improve any AI model, and never
           passes it to anyone else without the workspace&apos;s say. Disconnecting stops the reading at once; acceptances already recorded stay with
           the workspace.
+        </p>
+        <p>
+          When an owner or admin connects Linear to a workspace, they agree, for the workspace, that Vestiarion reads Linear as them, with read access
+          only: the name of the Linear workspace, and for each issue linked to a milestone its status, whether and when it was done and by whom, its
+          assignee, whether it was archived or deleted, its attachments and the links in its description and comments. Vestiarion writes nothing to
+          Linear. Anyone in a Linear workspace can mark an issue done, so an issue done in Linear is never by itself a reason to pay: a person in the
+          workspace accepts the work against the milestone&apos;s criteria, an acceptance by a member Vestiarion can tell is the payee is refused, and
+          the agent then decides the payment within the workspace&apos;s guardrails. Nothing from Linear sets an amount or a payee, and an issue
+          reopened, canceled or changed after it was accepted is held for review when Vestiarion reads that before the payment is sent; keeping
+          anyone else from accepting their own work stays the workspace&apos;s. Vestiarion never uses Linear data to train or improve any AI model,
+          and never passes it to anyone else without the workspace&apos;s say. Disconnecting stops the reading at once and revokes Vestiarion&apos;s
+          access at Linear; acceptances already recorded stay with the workspace.
         </p>
         <p>
           When an owner or admin connects Google Sheets to a workspace, they agree, for the workspace, that Vestiarion makes spreadsheets in the Drive

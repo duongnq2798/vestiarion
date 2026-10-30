@@ -8,7 +8,7 @@ import { ENS_GATEWAY_HOSTS, ENS_RPC_DEFAULT } from "./ens-hosts";
 import { NETWORKS } from "./network";
 
 /** The day this list was last checked against the code. */
-export const SUBPROCESSORS_AS_OF = "2026-10-25";
+export const SUBPROCESSORS_AS_OF = "2026-10-31";
 
 const hostOf = (url: string) => new URL(url).host;
 
@@ -203,6 +203,14 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     names: ["Asana"],
     purpose: "read for the tasks linked to milestones, and written to only to make and delete their webhooks",
     data: "the requests that read linked tasks, the webhooks made on them, and the email addresses it asks about to tell whether one belongs to an Asana user",
+    when: ONLY_IF_CONNECTED,
+  },
+  {
+    name: "Linear",
+    privacyEntry: "Linear",
+    names: ["Linear"],
+    purpose: "read for the issues linked to milestones, and never written to",
+    data: "the requests that read the linked issues and the people on them, each naming an issue by its ID",
     when: ONLY_IF_CONNECTED,
   },
   {

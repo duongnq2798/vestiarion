@@ -1,4 +1,5 @@
 import { recheckBeforeSending, refreshAsanaMilestones } from "./asana/workspace";
+import { recheckLinearBeforeSending, refreshLinearMilestones } from "./linear/workspace";
 import { parseGitHubPullRequestUrl, verifyGitHubPullRequest } from "./github-verification";
 import { pullRequestTokens } from "./github/tokens";
 import { appendLedgerEntry } from "./ledger";
@@ -112,21 +113,36 @@ export interface AcceptedWorkRefresh {
  * Work accepted from Asana, read again before the contractor release pass (docs/superpowers/specs/2026-10-14-asana-
  * acceptance-design.md A11), as merged pull requests are above: a task reopened or changed since its acceptance takes
  * the acceptance back here, through the milestone's verification, so this cycle's contractor stage never releases it.
- * Nothing else of Asana reaches the agent. Never throws.
+ * Work accepted from Linear is read again the same way, at the same time and within the same budget
+ * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN12), and counted apart under `linear`. Nothing else
+ * of Asana or Linear reaches the agent. Never throws.
  */
-export async function refreshAcceptedWork(): Promise<AcceptedWorkRefresh> {
-  const summary = await refreshAsanaMilestones();
-  return { checked: summary.checked, withdrawn: summary.withdrawn, failed: summary.failed };
+export async function refreshAcceptedWork(): Promise<AcceptedWorkRefresh & { linear: AcceptedWorkRefresh }> {
+  const [summary, linear] = await Promise.all([refreshAsanaMilestones(), refreshLinearMilestones()]);
+  return {
+    checked: summary.checked,
+    withdrawn: summary.withdrawn,
+    failed: summary.failed,
+    linear: { checked: linear.checked, withdrawn: linear.withdrawn, failed: linear.failed },
+  };
 }
 
 /**
  * The accepted Asana work of the releases the contractor stage is about to send, read once more just before they are
  * sent (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A10): a task reopened or changed while the stage
  * decided takes its acceptance back through the milestone's verification, and the stage's still-verified check then
- * holds that release. Nothing else of Asana reaches the agent. Never throws, and waits at most 20 seconds; `complete`
- * is false when a task was not read again by then, whose acceptance then stands as it was.
+ * holds that release. The accepted Linear issues of those releases are read at the same time (Linear acceptance LN10,
+ * LN12), and counted apart under `linear`. Nothing else of Asana or Linear reaches the agent. Never throws, and waits at
+ * most 20 seconds, the two reads together; `complete` is false when an Asana task was not read again by then, and
+ * `linear.complete` when a Linear issue was not, whose acceptance then stands as it was.
  */
-export async function recheckAcceptedWork(milestoneIds: readonly string[]): Promise<AcceptedWorkRefresh & { complete: boolean }> {
-  const summary = await recheckBeforeSending(milestoneIds);
-  return { checked: summary.checked, withdrawn: summary.withdrawn, failed: summary.failed, complete: summary.complete };
+export async function recheckAcceptedWork(milestoneIds: readonly string[]): Promise<AcceptedWorkRefresh & { complete: boolean; linear: AcceptedWorkRefresh & { complete: boolean } }> {
+  const [summary, linear] = await Promise.all([recheckBeforeSending(milestoneIds), recheckLinearBeforeSending(milestoneIds)]);
+  return {
+    checked: summary.checked,
+    withdrawn: summary.withdrawn,
+    failed: summary.failed,
+    complete: summary.complete,
+    linear: { checked: linear.checked, withdrawn: linear.withdrawn, failed: linear.failed, complete: linear.complete },
+  };
 }

@@ -13,6 +13,7 @@ An owner or admin connects each one from **Settings**. Connecting one changes no
 | [Pipedrive](/docs/guides/pipedrive) | Won deals with their organizations and persons, to plan their collections | Once allowed, and only for payments on Arc mainnet outside shadow mode: what each planned deal collected | Reads, and writes once allowed: when Pipedrive says a deal changed, and every 15 minutes |
 | [Zoho CRM](/docs/guides/zohocrm) | Won deals with their accounts and contacts, to plan their collections | Nothing | Read-only: every 15 minutes |
 | [Asana](/docs/guides/asana) | The task a contractor's milestone is linked to: whether it is completed, and its deliverables | Nothing written to the task | Event-triggered: Asana's webhook on each linked task, read again within a minute |
+| [Linear](/docs/guides/linear) | The issue a contractor's milestone is linked to: whether it is done, and its deliverables | Nothing: it writes nothing to Linear | Event-triggered: Linear says when a linked issue changes, and it is read again; and every 15 minutes |
 | [Google Sheets](/docs/guides/accountants#export-the-close-pack-to-google-sheets) | Nothing: it reads nothing from Google | A month's close pack, in a spreadsheet Vestiarion makes in the connected account's Drive, when an owner, admin or accountant exports it | A Google account: when someone exports |
 | [GitHub](/docs/guides/github) | Pull requests and their comments, on the repositories you choose | A comment on each pull request a milestone was paid for, with the amount, the network and the transaction | An app on your repositories |
 | [Slack](/docs/guides/slack) | What members ask, and invoices an owner or admin adds from a message | The agent's decisions, in a channel you pick, with each bill still waiting for approval and a button to review it in Approvals | A chat app: a minute after each decision |
@@ -22,7 +23,7 @@ An owner or admin connects each one from **Settings**. Connecting one changes no
 
 ## What no integration does
 
-None of them approves or pays. A bill approved in Xero or open in QuickBooks, a won deal, a completed Asana task, a merged pull request, a message or a captured invoice comes in to be decided: a person adds the bill or plans the deal, the agent decides each payment under every check, and people decide what the checks stop. See [How payments are controlled](/docs/guides/controls).
+None of them approves or pays. A bill approved in Xero or open in QuickBooks, a won deal, a completed Asana task or Linear issue, a merged pull request, a message or a captured invoice comes in to be decided: a person adds the bill or plans the deal, the agent decides each payment under every check, and people decide what the checks stop. See [How payments are controlled](/docs/guides/controls).
 
 The one place outside Vestiarion where a person decides a payment is Slack, when an owner allows it: a payment the agent stopped can be decided from its message, under the same checks, and on Arc mainnet it is approved in Vestiarion only. See [deciding from Slack](/docs/guides/slack). Discord only links to the bill in Approvals: opening its link approves nothing.
 

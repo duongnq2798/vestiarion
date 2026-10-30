@@ -1,0 +1,120 @@
+Pay contractors for work they deliver in Linear. You link a milestone to the Linear issue its work is delivered in. When the issue is done in Linear, the milestone is **ready for acceptance**: a person checks the deliverables against the milestone's acceptance criteria and accepts the work. Only then is the milestone verified, and the agent decides the payment under every guardrail, as it does for any [milestone](/docs/guides/pay-a-contractor), on the workspace's network: Arc testnet or Arc mainnet.
+
+Anyone in your Linear workspace can mark an issue done, the contractor included. So an issue done in Linear is never by itself a reason to pay, and nothing from Linear sets an amount or a payee. If the issue is reopened, canceled, archived or deleted, or its deliverables change, after the work was accepted, and Vestiarion reads that before the payment is sent, the acceptance is taken back and the milestone is held for review.
+
+Linear works here as [Asana](/docs/guides/asana) does. Linear refuses a milestone linked to an Asana task, and Contractors offers no Asana card on a milestone linked to Linear.
+
+## Before you start
+
+- **An owner or admin** of the workspace connects Linear. Anyone else sees "An owner or admin connects Linear." Linking issues, writing criteria and accepting work are for whoever verifies milestones by hand: an owner or admin.
+- **A milestone** for the contractor, waiting for verification. [Pay a contractor](/docs/guides/pay-a-contractor) adds one. A milestone verified by a GitHub pull request, or linked to an Asana task, is not linked to Linear as well.
+- **A Linear issue** for the work, in a team the person who connects Linear can see, with the deliverables attached to it (a pull request, a design file, a document) or linked in its description or comments.
+
+## 1. Connect Linear
+
+Open **Settings**, then **Integrations**. Under **Linear**, choose **Connect Linear**.
+
+The connect page has the workspace you came from already picked and says what Vestiarion does with Linear's data, among it:
+
+- It reads Linear as the person who connects, with read access only. For each linked issue it reads its title, its status, whether and when it was done and by whom, its assignee, whether it was archived or deleted, its attachments and the links in its description and comments. It keeps the links and names, not the words of the description or the comments.
+- Linear tells Vestiarion when a linked issue, its comments or its attachments change, and Vestiarion then reads the issue again from Linear. Vestiarion writes nothing to Linear.
+- Nothing from Linear sets an amount or a payee.
+
+Tick **I agree**, then choose **Continue to Linear**. Linear asks you to allow read access as yourself. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
+
+Back in Settings, the card says "Linear is connected. Link a milestone to its Linear issue on Contractors." and names the Linear workspace it reads. The ledger records `accounting_connected`, with `provider: "linear"`.
+
+## 2. Link a milestone to its issue
+
+On **Contractors**, open the milestone's row. Under its card, **Accept from Linear** asks for **The Linear issue the work is delivered in**. Paste the issue's link from Linear, such as `https://linear.app/your-workspace/issue/ENG-123/...`, or its ID alone, such as `ENG-123`, and choose **Link the issue**. Vestiarion reads the issue through Linear with this workspace's connection, never by opening the link.
+
+Vestiarion links only an issue the connection can see:
+
+- An issue Linear does not show is refused with "Linear does not show that issue to the connected account. Check the ID, or ask whoever connected Linear to join the issue's team."
+- A link to another Linear workspace is refused with "That link is to another Linear workspace than the one connected. Link an issue of the connected workspace."
+- One issue verifies one milestone: an issue linked to another milestone is refused with "That Linear issue is linked to another milestone already: one issue verifies one milestone."
+- A milestone linked to an Asana task is refused with "This milestone is linked to an Asana task. Unlink the task first to accept the work from Linear."
+
+The ledger records `linear_issue_linked`. **Unlink the issue** takes the link off, and takes back an acceptance the agent has not paid (`linear_issue_unlinked`).
+
+## 3. Write the acceptance criteria
+
+The criteria are what the work is held to, taken from your agreement with the contractor. Type them in **Acceptance criteria, from the agreement** and choose **Add the criteria**. Linear never writes them: anyone in your Linear workspace can edit an issue's description, the contractor included, so it is evidence, not the agreement.
+
+When Asana is connected too, a milestone not linked yet asks for its criteria once, under **Accept from Asana**: they are the milestone's, and hold in Linear as well.
+
+Without criteria, a done issue is held: "The issue is done, but the milestone has no acceptance criteria. Add the criteria from the agreement, then accept the work." Once the work is accepted, its criteria stay as they were accepted: "The work was accepted against these criteria. Unlink the issue to change them." The ledger records `milestone_criteria_set`, with the criteria.
+
+## 4. When the issue is done
+
+The card says where the issue stands:
+
+| Status | What it means |
+| --- | --- |
+| **Waiting for the issue** | Not done in Linear yet. |
+| **Ready for acceptance** | Done in Linear, with criteria written. A person accepts the work. |
+| **Accepted** | A person accepted the work against its criteria. The agent decides on pay. |
+| **Held for review** | Reopened, canceled, archived or deleted, or changed after acceptance; no longer readable; or done without criteria. |
+
+An issue is done when Linear puts it in one of its completed statuses, such as **Done**. A canceled issue is held for review, and never accepted.
+
+Vestiarion reads the issue again when Linear says it, its comments or its attachments changed, before each of the agent's cycles once the work is accepted and again right before the agent sends its payment, and every 15 minutes. **Check Linear now** reads it at once; **Check linked issues now**, on the Linear card in Settings, reads the issues of every open milestone. When the issue becomes ready, the ledger records `linear_issue_ready`, with when it was done and by whom.
+
+Under **Deliverables in Linear**, the card lists each attachment, each link in the description and each link in a comment, files uploaded to Linear included. A Linear attachment is a link: a pull request, a design file or a document. Before a link is offered, a Linear issue among them is checked through Linear with the workspace's own connection, and a GitHub pull request through GitHub; a link to an issue in another Linear workspace, or to another site, is shown as given and never opened by Vestiarion. Vestiarion reads at most 50 attachments and 100 comments of an issue. When it has more, the card says "Linear has more than Vestiarion reads: the first 50 attachments and 100 comments were checked." It lists at most 50 deliverables, and fewer when their links are very long; the rest are counted, not listed.
+
+## 5. Accept the work
+
+When the issue is ready, read the deliverables against the criteria. Tick "I checked each criterion against these deliverables, as shown here." and choose **Accept the work**. The card says "Accepted. The agent decides on pay within a minute, under every guardrail."
+
+Vestiarion reads the issue again first. If its deliverables changed since you opened the page, nothing is accepted: "The deliverables changed in Linear since you opened this. Look at them again before accepting." The milestone is verified only for the version you saw: the ledger records `linear_work_accepted`, with the deliverables, their fingerprint and the criteria's hash.
+
+Vestiarion refuses an acceptance by the payee, as far as it can tell who the payee is:
+
+- A member whose email is the payee's (the email the contractor's payment notices go to) is refused with "You are this milestone's payee, so someone else accepts the work."
+- A member whose own Linear account has the payee's email is refused too, whoever is on the issue: "Your Linear account is this milestone's payee, so someone else accepts the work." Vestiarion asks Linear which account has that email for this check only, and keeps no email.
+- On such a milestone, **Pay now** is refused to the payee as well: "You are this milestone's payee, so someone else approves paying it."
+
+Vestiarion knows a member's own Linear account only when that member connected Linear, or when their Vestiarion email is their Linear email. So it cannot tell a payee who joined the workspace under another email than their Linear account's and did not connect Linear, or a payee with no notice email. Whoever may verify a milestone by hand, an owner or admin, may accept, and the ledger names who did.
+
+From here the agent decides on the release as for any verified milestone: the contractor's screening, their limit, the workspace's spending limit, two approvals above its figure, and a confirmed address.
+
+## 6. Reopened or changed after acceptance
+
+After the work was accepted, any of these takes the acceptance back:
+
+- the issue is reopened in Linear, even if it is marked done again later;
+- it is canceled, archived or deleted;
+- its deliverables change: an attachment or a link added, removed or replaced;
+- or Linear no longer shows it to the connection.
+
+The acceptance is taken back when Vestiarion reads that before the payment is sent: when Linear says the issue changed, right before the agent decides on contractors, once more right before it sends the payment, every 15 minutes, or on **Check Linear now**. The milestone waits for verification again and the card says **Held for review**. The ledger records `linear_acceptance_withdrawn`, with why. Accept the work again once the issue is done, against what Linear shows now.
+
+Renaming an attachment changes nothing, and neither does Linear refreshing what a pull request attachment shows. If Linear cannot be read at those times, the acceptance stands as the person gave it. What a link to another site points at is never read, so a change there is not seen.
+
+To take an acceptance back yourself, choose **Unlink the issue**: the card says "To take the acceptance back, unlink the issue: the milestone then waits for verification again." **Revoke manually** is not offered on a milestone accepted from Linear.
+
+If the payment was sent already, the card says **Changed after payment**: "The issue changed in Linear after the payment was sent. Review it with the contractor: Vestiarion does not take a payment back."
+
+## 7. The Linear card's figures
+
+The Linear card in Settings counts, over the last 30 days:
+
+- **Evidence checked by a person**: each acceptance is a person's check of the deliverables against the criteria.
+- **Disputes**: acceptances taken back because the issue was reopened or changed.
+- **From acceptance to the agent's decision**: the median time from an acceptance to the agent's first decision on that milestone.
+
+They count Linear's acceptances only. Asana's card counts its own.
+
+## Why it was paid
+
+A milestone accepted from Linear says so on its [evidence page](/docs/guides/evidence): "Linear reported the issue done.", verified outside, beside the person who accepted the work against its criteria.
+
+## Status and errors
+
+- Linear needs you to reconnect, when the app's access was removed in Linear. Choose **Reconnect Linear**.
+- "Linear did not answer just now. It is read again within 15 minutes." on an issue the card could not read.
+- "Linear is not set up on this deployment yet." until the deployment runs migration 0147. A deployment without Linear's app settings shows no Linear card.
+
+## Disconnect
+
+Choose **Disconnect Linear** on the card. Vestiarion ends its access in Linear and deletes its tokens. Acceptances already recorded stay in Vestiarion's signed ledger. The ledger records `accounting_disconnected`.

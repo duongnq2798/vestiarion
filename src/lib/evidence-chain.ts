@@ -590,6 +590,7 @@ function deliveredMilestone(ctx: Context, milestone: EvidenceMilestone): Evidenc
     }
   }
   if (milestone.verification_method === "asana") return deliveredFromAsana(ctx, milestone);
+  if (milestone.verification_method === "linear") return deliveredFromLinear(ctx, milestone);
   if (!milestone.verified) {
     return step("delivered", title, [{ kind: "missing", text: "Not verified yet.", fill: "Verify it on Contractors, or link a merged pull request.", seqs: [] }]);
   }
@@ -648,6 +649,58 @@ function deliveredFromAsana(ctx: Context, milestone: EvidenceMilestone): Evidenc
       notes: [
         ...(deliverables !== null ? [`${deliverables} ${deliverables === 1 ? "deliverable" : "deliverables"} accepted, by their fingerprint ${String(accepted?.detail.fingerprint ?? "").slice(0, 12)}.`] : []),
         "A completed task alone never verifies a milestone: a person accepts it.",
+      ],
+    }),
+  ]);
+}
+
+const LINEAR_WITHDRAWN_WORDS: Record<string, string> = {
+  reopened: "was reopened in Linear",
+  canceled: "was canceled in Linear",
+  deliverable_changed: "changed its deliverables in Linear",
+  archived: "was archived or deleted in Linear",
+  issue_unreachable: "could no longer be read in Linear",
+  unlinked: "was unlinked",
+};
+
+/**
+ * Work accepted from Linear (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN8, LN10, LN16), as Asana's
+ * above: Linear's word that the issue was done, verified outside, beside the person's acceptance against the criteria,
+ * which is what verifies the milestone. The issue's link is checked through Linear's API before it is offered. An
+ * acceptance taken back is missing.
+ */
+function deliveredFromLinear(ctx: Context, milestone: EvidenceMilestone): EvidenceStep {
+  const title = "What was delivered";
+  const detail = milestone.verification_detail ?? {};
+  const accepted = newest(ctx.own, (entry) => entry.action === "linear_work_accepted");
+  const withdrawn = newest(ctx.own, (entry) => entry.action === "linear_acceptance_withdrawn");
+  const issue = text(detail.linearIssue) ?? text(accepted?.detail.issueUrl);
+  const identifier = text(detail.identifier) ?? text(accepted?.detail.identifier);
+  const label = identifier ? `${identifier} in Linear` : "The issue in Linear";
+  const link: EvidenceLink | undefined = issue?.startsWith("https://linear.app/") ? { href: issue, label, state: "not_opened", given: true } : undefined;
+  if (!milestone.verified) {
+    const reason = text(detail.heldReason) ?? text(withdrawn?.detail.reason);
+    return step("delivered", title, [
+      {
+        kind: "missing",
+        text: `The acceptance was taken back before payment: the issue ${(reason && LINEAR_WITHDRAWN_WORDS[reason]) ?? "changed in Linear"}.`,
+        fill: "A person accepts the work again on Contractors, once the issue is done, against its criteria.",
+        at: withdrawn?.ts ?? null,
+        seqs: withdrawn ? [withdrawn.seq] : [],
+        ...(link ? { link } : {}),
+        warn: true,
+      },
+    ]);
+  }
+  const completedAt = text(detail.completedAt) ?? text(accepted?.detail.completedAt);
+  const deliverables = Array.isArray(accepted?.detail.deliverables) ? accepted.detail.deliverables.length : null;
+  return step("delivered", title, [
+    { kind: "verified", text: "Linear reported the issue done.", at: completedAt, seqs: [], ...(link ? { link } : {}) },
+    stated(ctx, `The work was accepted against the milestone's acceptance criteria${accepted ? via(accepted.detail) : ""}, as the deliverables shown then.`, accepted, {
+      at: accepted?.ts ?? milestone.verified_at,
+      notes: [
+        ...(deliverables !== null ? [`${deliverables} ${deliverables === 1 ? "deliverable" : "deliverables"} accepted, by their fingerprint ${String(accepted?.detail.fingerprint ?? "").slice(0, 12)}.`] : []),
+        "An issue marked done alone never verifies a milestone: a person accepts it.",
       ],
     }),
   ]);

@@ -1,5 +1,6 @@
 import net from "node:net";
 import { attachmentGidOf, taskRefOf } from "../asana/urls";
+import { issueRefOf } from "../linear/urls";
 
 /**
  * Which evidence links Vestiarion may check, and how (docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-
@@ -23,6 +24,17 @@ const GITHUB_API = `https://${GITHUB_API_HOST}`;
 export const ASANA_HOST = "app.asana.com";
 const ASANA_API = `https://${ASANA_HOST}/api/1.0`;
 const ASANA_API_PATH = /^\/api\/1\.0\/(tasks|attachments)\/[0-9]{1,32}$/;
+/**
+ * Linear's web pages and its API are on two hosts (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN14):
+ * an issue's link on `linear.app` is asked about at Linear's GraphQL API, `api.linear.app/graphql`, with a query built
+ * here from the issue's identifier alone, and the workspace's own Linear connection. The page a person typed is never
+ * requested. Linear finds an identifier in the connection's own Linear workspace, so the issue's own link is asked for
+ * too: the issue answered is the link's only when it is in the Linear workspace the link names (`./check`).
+ */
+export const LINEAR_WEB_HOST = "linear.app";
+export const LINEAR_API_HOST = "api.linear.app";
+const LINEAR_GRAPHQL = `https://${LINEAR_API_HOST}/graphql`;
+const LINEAR_ISSUE_QUERY = "query IssueExists($id: String!) { issue(id: $id) { id url } }";
 
 /** A signed storage link carries a long token; nothing longer is read. */
 const URL_MAX = 4000;
@@ -36,8 +48,8 @@ export const NOT_CHECKED_WORDS: Readonly<Record<NotCheckedReason, string>> = {
   credentials: "A link that carries a user name or a password is never opened.",
   port: "A link to a port other than the web's own is never opened.",
   address: "A link to a private, local or numeric address is never opened.",
-  host: "Vestiarion checks links on GitHub, Asana and its own file storage only, and never opens other sites.",
-  path: "On GitHub, Vestiarion checks pull requests and their comments; on Asana, tasks and attachments; on its own storage, signed links.",
+  host: "Vestiarion checks links on GitHub, Asana, Linear and its own file storage only, and never opens other sites.",
+  path: "On GitHub, Vestiarion checks pull requests and their comments; on Asana, tasks and attachments; on Linear, issues; on its own storage, signed links.",
 };
 
 export type CheckTarget =
@@ -45,7 +57,9 @@ export type CheckTarget =
   | { kind: "github_comment"; href: string; owner: string; repo: string; commentId: number; request: string; repository: string }
   | { kind: "signed_storage"; href: string; host: string; expiresAt: number | null; request: string }
   | { kind: "asana_task"; href: string; taskGid: string; request: string }
-  | { kind: "asana_attachment"; href: string; attachmentGid: string; request: string };
+  | { kind: "asana_attachment"; href: string; attachmentGid: string; request: string }
+  /** Asked with a POST of `body`, a GraphQL query for the issue by its identifier, to `request`; `workspaceKey` is the link's. */
+  | { kind: "linear_issue"; href: string; identifier: string; workspaceKey: string; request: string; body: string };
 
 export type TargetOf = { target: CheckTarget } | { notChecked: NotCheckedReason };
 
@@ -153,6 +167,13 @@ export function checkTargetOf(raw: string, options: { storageHost?: string | nul
     return { notChecked: "path" };
   }
 
+  if (host === LINEAR_WEB_HOST) {
+    const issue = issueRefOf(url.href);
+    if (!issue || issue.workspaceKey === null) return { notChecked: "path" };
+    const body = JSON.stringify({ query: LINEAR_ISSUE_QUERY, variables: { id: issue.identifier } });
+    return { target: { kind: "linear_issue", href: url.href, identifier: issue.identifier, workspaceKey: issue.workspaceKey, request: LINEAR_GRAPHQL, body } };
+  }
+
   const storageHost = options.storageHost ?? null;
   if (storageHost && host === storageHost) {
     const token = url.searchParams.get("token");
@@ -165,8 +186,8 @@ export function checkTargetOf(raw: string, options: { storageHost?: string | nul
 
 /**
  * Whether the server may send a request to this address at all: the last check before any request, for a target and for
- * a redirect alike. Only GitHub's API, under a repository; Asana's API, for one task or one attachment; or the
- * workspace's own storage, signed.
+ * a redirect alike. Only GitHub's API, under a repository; Asana's API, for one task or one attachment; Linear's
+ * GraphQL API; or the workspace's own storage, signed.
  */
 export function requestAllowed(raw: string, options: { storageHost?: string | null } = {}): boolean {
   const parsed = checkedUrl(raw);
@@ -174,6 +195,7 @@ export function requestAllowed(raw: string, options: { storageHost?: string | nu
   const host = parsed.url.hostname.toLowerCase();
   if (host === GITHUB_API_HOST) return parsed.url.pathname.startsWith("/repos/") || parsed.url.pathname.startsWith("/repositories/");
   if (host === ASANA_HOST) return ASANA_API_PATH.test(parsed.url.pathname);
+  if (host === LINEAR_API_HOST) return parsed.url.pathname === "/graphql" && parsed.url.search === "";
   const storageHost = options.storageHost ?? null;
   return Boolean(storageHost) && host === storageHost && SIGNED_PATH.test(parsed.url.pathname);
 }

@@ -1,5 +1,18 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-31: Contractor work accepted from Linear
+
+- A milestone's `verificationMethod` may now be **`linear`**, in `GET /api/v1/milestones` and on its own page: the work was accepted by a person against the milestone's acceptance criteria once its Linear issue was done. Its `verificationDetail` is `{ note, linearIssue, issueId, identifier, completedAt, fingerprint, criteriaSha256, acceptedBy }`; once an acceptance is taken back it also carries `heldReason` and `heldAt`, `verified` is false, `verificationStatus` is `unverified` and `status` is `pending` again. The TypeScript SDK 0.4.1 accepts the value.
+- Five new entries, domain `contractor`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`linear_issue_linked`**, actor `human`: `{ by, milestoneId, linkId, issueId, identifier, teamKey, issueUrl, completed, fingerprint }`.
+  - **`linear_issue_unlinked`**, actor `human`: `{ by, milestoneId, linkId, issueId, identifier, withdrewAcceptance }`.
+  - **`linear_issue_ready`**, actor `system`: `{ milestoneId, linkId, issueId, identifier, completedAt, completedByName, fingerprint, deliverables }`, when a linked issue is done in Linear and the milestone has criteria. It verifies nothing: `deliverables` is a count.
+  - **`linear_work_accepted`**, actor `human`: `{ by, milestoneId, linkId, issueId, identifier, issueUrl, completedAt, completedByName, fingerprint, deliverables, criteriaSha256, payeeLinearMapped }`, when a person accepted the work. `deliverables` lists each `{ kind, label, href }` accepted, `kind` being `attachment`, `link` or `comment_link`; `fingerprint` is the SHA-256 of that set.
+  - **`linear_acceptance_withdrawn`**, actor `system`: `{ milestoneId, linkId, issueId, identifier, reason, afterPayment, acceptedFingerprint, fingerprint, completed, completedAt, stateType }`, when the issue was reopened, canceled, archived or deleted, its deliverables changed, or Linear no longer showed it after the work was accepted. `reason` is `reopened`, `canceled`, `archived`, `deliverable_changed` or `issue_unreachable`. With `afterPayment: false` the milestone lost its verification before any payment; with `afterPayment: true` a payment was already sent, and is not taken back.
+- **`milestone_criteria_set`** is written for a milestone linked to a Linear issue too, with the same fields as for Asana.
+- A new Linear connection's **`accounting_connected`** carries `provider: "linear"` and `consent.version` `linear-2026-10-31`; its `externalOrgId` is the Linear workspace's id, and `externalOrgName` its name.
+- Nothing else in `/api/v1` changes: a milestone is not linked to a Linear issue through the API, and the write API still adds a milestone pending.
+
 ## 2026-10-30: Several bills approved with one confirmation
 
 - A person can now select from 2 to 20 bills on the console's **Approvals** page and approve them with one confirmation. Each bill is still decided and recorded on its own: one **`approval_paid`** entry per bill, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, with every field it had before.

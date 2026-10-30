@@ -5,6 +5,7 @@ export { done, refused, TRY_AGAIN, type CommandOutcome, type Done, type Refused 
 export { addPayableDetails, approvePayable, heldMessage, rejectPayable, returnPayable } from "./payables";
 export { addMilestone, closeMilestoneUnpaid, payMilestoneNow } from "./milestones";
 export { acceptMilestoneWork, checkAsanaTask, linkAsanaTask, setAcceptanceCriteria, unlinkAsanaTask } from "./asana";
+export { acceptLinearWork, checkLinearIssue, linkLinearIssue, setLinearAcceptanceCriteria, unlinkLinearIssue } from "./linear";
 export { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "./agent";
 export { addInvoice } from "./invoices";
 export { importInvoices, type ImportOutcome } from "./imports";

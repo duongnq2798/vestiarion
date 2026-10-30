@@ -407,6 +407,30 @@ describe("a milestone a person verified", () => {
   });
 });
 
+describe("a milestone accepted from Linear (Linear acceptance LN8, LN10, LN16)", () => {
+  const ISSUE = "https://linear.app/fernhill/issue/ENG-123/billing-export";
+  const accepted = entry(81, "08:40:00", "human", "linear_work_accepted", {
+    by: BOB, milestoneId: MILESTONE, issueId: "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c01", identifier: "ENG-123", issueUrl: ISSUE, completedAt: at("08:30:00"),
+    fingerprint: "f".repeat(64), deliverables: [{ kind: "attachment", label: "PR #42", href: "https://github.com/fernhill/app/pull/42" }], criteriaSha256: "c".repeat(64),
+  }, "contractor");
+  const linear = (verification: Record<string, unknown>, entries: EvidenceEntry[]) =>
+    buildEvidenceChain(milestoneInput({ entries: [ADDRESS_GIVEN, ...entries], verification: { verification_method: "linear", verification_source: null, ...verification } }));
+
+  it("shows Linear's word that the issue was done beside the person's acceptance, which is what verifies it", () => {
+    const chain = linear({ verification_status: "verified", verified: true, verification_detail: { linearIssue: ISSUE, identifier: "ENG-123", completedAt: at("08:30:00") } }, [accepted]);
+    const delivered = step(chain, "delivered");
+    expect(delivered.facts[0]).toMatchObject({ kind: "verified", text: "Linear reported the issue done.", link: expect.objectContaining({ href: ISSUE, label: "ENG-123 in Linear", state: "not_opened" }) });
+    expect(delivered.facts[1]).toMatchObject({ kind: "stated", who: "bob@northstar.test", seqs: [81] });
+    expect(delivered.facts[1].notes).toContain("1 deliverable accepted, by their fingerprint ffffffffffff.");
+  });
+
+  it("says an acceptance taken back is missing, with why", () => {
+    const withdrawn = entry(82, "08:50:00", "system", "linear_acceptance_withdrawn", { milestoneId: MILESTONE, reason: "canceled", afterPayment: false }, "contractor");
+    const chain = linear({ verification_status: "unverified", verified: false, verification_detail: { linearIssue: ISSUE, heldReason: "canceled" } }, [accepted, withdrawn]);
+    expect(step(chain, "delivered").facts[0]).toMatchObject({ kind: "missing", text: "The acceptance was taken back before payment: the issue was canceled in Linear.", seqs: [82], warn: true });
+  });
+});
+
 describe("a given link, labelled by whether it can be opened (evidence access E1, E3)", () => {
   const LINK = "https://drive.example.test/handoff";
   const withLinks = (links: Map<string, { state: "open" } | { state: "cannot_open" | "not_checked" | "no_answer"; reason: string }>, input = milestoneInput()) =>

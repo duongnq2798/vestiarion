@@ -61,7 +61,8 @@ export async function sweepAccounting<P extends ConnectingProvider = ConnectingP
   crm?: { providerFor: (id: ProviderId) => CrmProvider | null; sync: (connectionId: string, provider: CrmProvider) => Promise<{ outcome: SyncResult["outcome"] }> };
   /**
    * A work tool's provider, and its runner (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A11): Asana's
-   * tasks linked to milestones are read again, the webhooks' fallback. A deployment without one leaves them alone.
+   * tasks and Linear's issues linked to milestones are read again, the webhooks' fallback (Linear acceptance LN12). A
+   * deployment without one leaves them alone.
    */
   work?: { providerFor: (id: ProviderId) => P | null; sync: (connectionId: string, provider: P) => Promise<{ outcome: string }> };
   now?: () => number;

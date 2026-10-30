@@ -9,6 +9,7 @@ import type { CrmPanelView } from "@/lib/connectors/crm-review";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
 import type { StatusView } from "@/lib/connectors/status";
 import type { GitHubInstallation } from "@/lib/github/installs";
+import type { LinearPanelView } from "@/lib/linear/views";
 import type { SlackPanelView } from "@/lib/slack/panel";
 
 /**
@@ -24,6 +25,7 @@ const { toastMock, actions } = vi.hoisted(() => ({
   toastMock: { success: vi.fn(), info: vi.fn(), error: vi.fn(), loading: vi.fn(), dismiss: vi.fn() },
   actions: {
     asana: { disconnectAsanaAction: vi.fn(), syncAsanaNowAction: vi.fn() },
+    linear: { disconnectLinearAction: vi.fn(), syncLinearNowAction: vi.fn() },
     accounting: { disconnectAccountingAction: vi.fn(), syncAccountingNowAction: vi.fn(), loadAccountingAccountsAction: vi.fn(), chooseAccountingAccountAction: vi.fn() },
     hubspot: { disconnectHubSpotAction: vi.fn(), syncHubSpotNowAction: vi.fn(), setHubSpotReceiptsAction: vi.fn() },
     pipedrive: { disconnectPipedriveAction: vi.fn(), syncPipedriveNowAction: vi.fn(), setPipedriveReceiptsAction: vi.fn() },
@@ -35,6 +37,7 @@ const { toastMock, actions } = vi.hoisted(() => ({
 }));
 vi.mock("@/components/ui/Toaster", () => ({ toast: toastMock }));
 vi.mock("@/app/actions/asana", () => actions.asana);
+vi.mock("@/app/actions/linear", () => actions.linear);
 vi.mock("@/app/actions/accounting", () => actions.accounting);
 vi.mock("@/app/actions/hubspot", () => actions.hubspot);
 vi.mock("@/app/actions/pipedrive", () => actions.pipedrive);
@@ -49,6 +52,7 @@ import AsanaPanel from "@/components/AsanaPanel";
 import ChromeExtensionPanel, { type ConnectionView } from "@/components/ChromeExtensionPanel";
 import GitHubPanel from "@/components/GitHubPanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
+import LinearPanel from "@/components/LinearPanel";
 import PipedrivePanel from "@/components/PipedrivePanel";
 import SlackPanel from "@/components/SlackPanel";
 import ZohoCrmPanel from "@/components/ZohoCrmPanel";
@@ -61,6 +65,16 @@ const asana = (revoked: boolean): AsanaPanelView => ({
   status: status(revoked, "Olivia's Asana"),
   connected: !revoked,
   revoked,
+  counts: { linked: 0, ready: 0, accepted: 0, held: 0 },
+  figures: { manualChecks: 0, disputes: 0, timeToProposal: null, window: "the last 30 days" },
+});
+
+const linear = (revoked: boolean): LinearPanelView => ({
+  state: "connection",
+  status: status(revoked, "the Northstar workspace in Linear"),
+  connected: !revoked,
+  revoked,
+  workspaceName: "Northstar",
   counts: { linked: 0, ready: 0, accepted: 0, held: 0 },
   figures: { manualChecks: 0, disputes: 0, timeToProposal: null, window: "the last 30 days" },
 });
@@ -136,6 +150,14 @@ const CASES: Case[] = [
     message: "Asana is disconnected. Acceptances already recorded stay in Vestiarion.",
     before: <AsanaPanel orgSlug="acme" view={asana(false)} canManage notice={null} />,
     after: <AsanaPanel orgSlug="acme" view={asana(true)} canManage notice={null} />,
+  },
+  {
+    name: "Linear",
+    action: actions.linear.disconnectLinearAction,
+    button: "Disconnect Linear",
+    message: "Linear is disconnected. Acceptances already recorded stay in Vestiarion.",
+    before: <LinearPanel orgSlug="acme" view={linear(false)} canManage notice={null} />,
+    after: <LinearPanel orgSlug="acme" view={linear(true)} canManage notice={null} />,
   },
   books3("xero", "Xero"),
   books3("quickbooks", "QuickBooks"),
@@ -364,6 +386,7 @@ describe("disconnect forms in src/components (disconnect confirmation DC2, DC6)"
     expect(wrapped).toEqual(
       expect.arrayContaining([
         "disconnectAsanaAction",
+        "disconnectLinearAction",
         "disconnectAccountingAction",
         "disconnectHubSpotAction",
         "disconnectPipedriveAction",

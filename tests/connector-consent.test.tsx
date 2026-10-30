@@ -38,7 +38,7 @@ const JOINED: Record<string, readonly string[]> = {
 /** consent.ts's other exports, none of them a gate. */
 const NOT_GATES = ["CONSENT_VERSIONS", "CONSENT_HISTORY", "HOSTED_MODEL_PROVIDER", "namesModelProvider", "CONSENT_CHANGED", "consentStatement", "CONSENT_LABEL"];
 
-const VERSION = /\b(?:xero|quickbooks|hubspot|pipedrive|asana|googlesheets)-\d{4}-\d{2}-\d{2}(?:\.\d+)?\b/;
+const VERSION = /\b(?:xero|quickbooks|hubspot|pipedrive|asana|googlesheets|linear)-\d{4}-\d{2}-\d{2}(?:\.\d+)?\b/;
 
 function files(dir: string, extension: RegExp): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -163,9 +163,9 @@ describe("the model provider a statement names", () => {
   it.each(PROVIDERS)("%s's statement names the hosted provider and its own terms where the agent decides on its facts", (provider) => {
     const naming = consentStatement(provider).filter(namesModelProvider);
     const named = `The agent's model provider (${HOSTED_MODEL_PROVIDER.name}, on the hosted service)`;
-    if (provider === "asana" || provider === "googlesheets") {
-      // A task's facts reach no model: a person accepts the work, and the agent decides the milestone's payment. Nothing
-      // from Google Sheets reaches the agent at all (close pack Sheets GS17).
+    if (provider === "asana" || provider === "linear" || provider === "googlesheets") {
+      // A task's or an issue's facts reach no model: a person accepts the work, and the agent decides the milestone's
+      // payment (Linear acceptance LN13). Nothing from Google Sheets reaches the agent at all (close pack Sheets GS17).
       expect(naming).toEqual([]);
       return;
     }

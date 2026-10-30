@@ -643,6 +643,19 @@ sync. The connection needs migration 0115; before it runs, the Asana card says A
 each webhook's secret are kept encrypted under `VESTIARION_MASTER_KEYS`. See [Accept contractor work from
 Asana](https://www.vestiarion.xyz/docs/guides/asana).
 
+With `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` and `LINEAR_WEBHOOK_SECRET` set, from a Linear OAuth application, an
+owner or admin connects a workspace to their Linear from Settings, after agreeing to what Vestiarion does with its data.
+A person links a milestone to the Linear issue its work is delivered in, writes the acceptance criteria from the
+agreement, and accepts the work once the issue is done; an issue marked done alone never verifies a milestone. Register
+the callback URL `<origin>/api/integrations/linear/callback` exactly; the authorize URL asks for the scope `read` only.
+Turn the application's webhooks on, at `<origin>/api/integrations/linear/webhook`, for Issues, Issue attachments, Issue
+comments and OAuthApp revoked, and set its signing secret as `LINEAR_WEBHOOK_SECRET`: Linear then makes the webhook for
+every Linear workspace that authorizes the application, and a delivery is accepted only under that signature, within 60
+seconds, and only has the issue read again. Without all three, Linear is off and `/api/integrations/linear/*` answers
+404. The connection needs migration 0147; before it runs, the Linear card says Linear is not set up yet. Its tokens are
+kept encrypted under `VESTIARION_MASTER_KEYS`. See [Accept contractor work from
+Linear](https://www.vestiarion.xyz/docs/guides/linear).
+
 With `GOOGLE_SHEETS_CLIENT_ID` and `GOOGLE_SHEETS_CLIENT_SECRET` set, from a Google OAuth client of type Web application,
 an owner or admin connects a workspace to one Google account from Settings, after agreeing to what Vestiarion does with
 its Drive, and an owner, admin or accountant exports a month's close pack to a spreadsheet in that Drive from **Monthly
