@@ -1,15 +1,21 @@
 import { operationById, type DocOperation } from "@/lib/api/openapi";
 import { requestUrl } from "@/lib/docs/samples";
+import { GET as getClosePack } from "@/app/api/v1/close-packs/[month]/route";
 import { GET as getCounterparty } from "@/app/api/v1/counterparties/[id]/route";
 import { GET as listCounterparties, POST as createCounterparty } from "@/app/api/v1/counterparties/route";
 import { GET as getInsights } from "@/app/api/v1/insights/route";
+import { GET as getInvoiceEvidence } from "@/app/api/v1/invoices/[id]/evidence/route";
+import { GET as getInvoiceReceipt } from "@/app/api/v1/invoices/[id]/receipt/route";
 import { GET as listInvoices, POST as createInvoice } from "@/app/api/v1/invoices/route";
 import { GET as verifyLedger } from "@/app/api/v1/ledger/verify/route";
 import { GET as listLedgerEntries } from "@/app/api/v1/ledger/route";
+import { GET as getMilestoneEvidence } from "@/app/api/v1/milestones/[id]/evidence/route";
 import { GET as listMilestones, POST as createMilestone } from "@/app/api/v1/milestones/route";
 import { POST as createPayeeLink } from "@/app/api/v1/payee-links/route";
+import { GET as getPayeeLockEvidence } from "@/app/api/v1/payee-lock/evidence/route";
 import { GET as getStatus } from "@/app/api/v1/status/route";
 import { GET as getTreasury } from "@/app/api/v1/treasury/route";
+import { digestAnswer, isDigested } from "./digests";
 import { argumentName } from "./tools";
 
 /**
@@ -23,6 +29,12 @@ import { argumentName } from "./tools";
  * workspace, validates the arguments and pages the result, exactly as it does
  * over HTTP; this module adds no second read path. Its JSON is returned as it
  * is: an error status becomes a tool error the agent can read and correct.
+ *
+ * The evidence reads are the exception to "as it is": their files carry every
+ * cited entry in full and text from outside, so a success becomes the file's
+ * digest, built from that JSON alone, as text and as `structuredContent`
+ * (docs/superpowers/specs/2026-10-30-mcp-evidence-tools-design.md, MT2). Their
+ * errors, a 404 or the brake's 429 among them, pass through like any other.
  *
  * Neither the key nor an argument is ever logged: a failure is logged by
  * operation id alone.
@@ -56,6 +68,11 @@ const ROUTES: Record<string, Route> = {
   "create-milestone": createMilestone,
   "get-treasury": getTreasury,
   "get-insights": getInsights,
+  "get-invoice-evidence": (request, params) => getInvoiceEvidence(request, { params: Promise.resolve({ id: params.id ?? "" }) }),
+  "get-milestone-evidence": (request, params) => getMilestoneEvidence(request, { params: Promise.resolve({ id: params.id ?? "" }) }),
+  "get-invoice-receipt": (request, params) => getInvoiceReceipt(request, { params: Promise.resolve({ id: params.id ?? "" }) }),
+  "get-payee-lock-evidence": getPayeeLockEvidence,
+  "get-close-pack": (request, params) => getClosePack(request, { params: Promise.resolve({ month: params.month ?? "" }) }),
 };
 
 const FAILED = "The operation failed. Try again.";
@@ -117,6 +134,10 @@ export async function callOperation(
     const body = await response.text();
     if (!response.ok) return { content: text(body), isError: true };
     const parsed: unknown = JSON.parse(body);
+    if (isDigested(operationId)) {
+      const digest = digestAnswer(operationId, parsed);
+      return { content: text(JSON.stringify(digest)), structuredContent: digest };
+    }
     return isRecord(parsed) ? { content: text(body), structuredContent: parsed } : { content: text(body) };
   } catch {
     console.error("mcp tool failed", operationId);

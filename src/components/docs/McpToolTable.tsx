@@ -10,8 +10,9 @@ import { CODE_CLASS, LINK_CLASS } from "./InlineText";
 /**
  * Every tool the MCP server lists: its name and arguments, what it answers
  * (the operation's summary), and the endpoint whose reference page it runs.
- * The table is for people: the full description the agent receives is on
- * that reference page and in `tools/list`. Rendered from `MCP_TOOLS`, which
+ * The table is for people: the full description the agent receives is in
+ * `tools/list`, and is the reference page's but for the evidence reads,
+ * whose tools describe their digest (MCP evidence MT10). Rendered from `MCP_TOOLS`, which
  * is generated from `OPERATIONS`, so the table lists exactly the tools
  * `tools/list` answers with. The Markdown view writes the same table.
  */

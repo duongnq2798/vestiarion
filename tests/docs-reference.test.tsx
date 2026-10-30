@@ -165,12 +165,12 @@ describe("EndpointTable", () => {
 describe("McpToolTable", () => {
   it("lists every MCP tool by name, with its arguments and what it answers, linked to its reference page", () => {
     const markup = html(<McpToolTable />);
-    // Every operation but the evidence reads, which have no tool yet (evidence API EA9).
-    expect(MCP_TOOLS.length).toBe(OPERATIONS.filter((op) => op.mcp !== false).length);
+    // Every operation, the evidence reads included (MCP evidence MT1, MT11).
+    expect(MCP_TOOLS.length).toBe(OPERATIONS.length);
     for (const tool of MCP_TOOLS) {
       const op = operationById(tool.operationId)!;
       expect(markup).toContain(`>${tool.name}</code>`);
-      expect(markup).toContain(`>${tool.title}<`);
+      expect(markup).toContain(`>${tool.title.replaceAll("'", "&#x27;")}<`);
       expect(markup).toContain(`href="/docs/api/${tool.operationId}"`);
       expect(markup).toContain(`>${op.method.toUpperCase()} ${op.path}</code>`);
       for (const argument of Object.keys(tool.inputSchema.shape)) expect(markup, `${tool.name} ${argument}`).toContain(`>${argument}</code>`);

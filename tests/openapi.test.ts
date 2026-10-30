@@ -5,6 +5,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { buildOpenApiDocument, OPERATIONS, operationById } from "@/lib/api/openapi";
 import { ApiErrorSchema } from "@/lib/api/schemas";
+import { DIGESTED_OPERATIONS } from "@/lib/mcp/digests";
 import type { AuthenticatedKey } from "@/lib/platform/api-keys";
 import { GET as getCounterparties } from "@/app/api/v1/counterparties/route";
 import { GET as getCounterparty } from "@/app/api/v1/counterparties/[id]/route";
@@ -164,16 +165,10 @@ describe("the OpenAPI document", () => {
     `);
   });
 
-  it("gives the evidence reads no MCP tool yet, and every other operation one (evidence API EA9)", () => {
-    expect(OPERATIONS.filter((op) => op.mcp === false).map((op) => op.id)).toEqual([
-      "get-invoice-evidence",
-      "get-milestone-evidence",
-      "get-invoice-receipt",
-      "get-payee-lock-evidence",
-      "get-close-pack",
-    ]);
-    expect(OPERATIONS.filter((op) => op.mcp === false).every((op) => op.tag === "Evidence" && op.scope === "read")).toBe(true);
-    expect(OPERATIONS.filter((op) => op.tag === "Evidence").every((op) => op.mcp === false)).toBe(true);
+  it("has an MCP digest for each evidence read, and only for those (MCP evidence MT1)", () => {
+    // A file that carries every entry in full gets a digest before it reaches a model, so a new evidence read needs one.
+    expect(OPERATIONS.filter((op) => op.tag === "Evidence").map((op) => op.id)).toEqual([...DIGESTED_OPERATIONS]);
+    expect(OPERATIONS.filter((op) => op.tag === "Evidence").every((op) => op.scope === "read")).toBe(true);
   });
 
   it.each(OPERATIONS.filter((op) => op.tag === "Evidence").map((op) => [op.id, op.description] as const))(
