@@ -1,7 +1,9 @@
 import { counterpartyFrozen, frozenRefusal, readFrozenPayees } from "../address-change-check";
 import { currentConfig, currentOrgConfig, currentOrgId } from "../context";
 import { db, unwrap } from "../dal";
-import { chainModes, getChainProvider, type Stablecoin } from "../circle";
+import { chainModes, getChainProvider, type ChainProvider, type Stablecoin } from "../circle";
+import { MAX_BATCH_SIZE } from "../circle/batch";
+import { plural } from "../copy";
 import { confirmCounterpartyAddress, sameAddress } from "../counterparty-address";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { listLedgerEntriesForTargets } from "../ledger";
@@ -9,7 +11,7 @@ import { explainPayable, presentReasoning } from "../reasoning-copy";
 import { isTerminalFailure, settleUnknownSend, unknownSend, type UnknownSendAnswer } from "../payments";
 import { MAY_HAVE_BEEN_ACCEPTED } from "../circle/settlement";
 import { PAYMENTS_OFF, PaymentsDisabledError, paymentsHold } from "../payments-switch";
-import { payInvoice, syncOperatingBalance } from "./pay";
+import { payInvoice, payInvoices, syncOperatingBalance, type PayInvoiceInput, type PayInvoiceResult } from "./pay";
 import { invoiceLateFee, readWithLateFee, type LateFee } from "./late-fee";
 import { amountToPay, invoiceDiscount, type InvoiceDiscount } from "./payment-timing";
 import { ContractRefusal, personPaymentThroughContract } from "../treasury/person-payment";
@@ -33,7 +35,7 @@ import { isSoleApprover } from "./sole-approver";
 import { addressGiver, askedVia, firstPaymentRefusal, membersLeftOut, newPayeeSelfMessage, type NewPayeeCheck } from "../new-payee";
 import { firstPaymentCheck, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
 import { addedSince, latestDecision, recordedFacts, type AddedDetails } from "../added-details";
-import { awaitsVerdict, heldForCash } from "../next-step";
+import { awaitsVerdict, heldForCash, VENDOR_DOCUMENT } from "../next-step";
 import { verdictGate } from "../verdicts";
 import { isReclaimable } from "./claim-age";
 import type { Provenance } from "../provenance";
@@ -135,13 +137,20 @@ export type ApprovalErrorCode =
   | "sanctioned_address"
   // A co-sign of a bill one approval pays, or a second co-sign by the same accountant (accountant co-sign CS3).
   | "cosign_not_needed"
-  | "already_cosigned";
+  | "already_cosigned"
+  // A bill a selection does not take, which Approve and pay on its own may (approve many AM2); its text names why.
+  | "approve_alone"
+  // A selection of fewer than 2 bills, more than 20, or one bill twice, refused whole (approve many AM3).
+  | "selection_size";
+
+/** The codes whose texts are written where they are raised, naming a balance, a figure, a chain or a reason. */
+type NamedRefusal = "insufficient_funds" | "needs_second_approver" | "chain_off_network" | "payee_locked" | "approve_alone";
 
 /**
  * Every message except `insufficient_funds` and `needs_second_approver`, whose texts name the balance and the figure,
  * and `chain_off_network`, whose text names the chain.
  */
-const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network" | "payee_locked">, string> = {
+const MESSAGES: Record<Exclude<ApprovalErrorCode, NamedRefusal>, string> = {
   already_decided: "Someone else decided this invoice a moment ago.",
   self_approval: "You created this invoice, so someone else must approve it.",
   beneficiary_approval: "This payable pays your own commission, so someone else must approve it.",
@@ -166,6 +175,7 @@ const MESSAGES: Record<Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_
   sanctioned_address: "This payee's address is on OFAC's sanctions list, so nothing is paid to it.",
   cosign_not_needed: "Only a payment above the figure for two approvals is co-signed.",
   already_cosigned: "You already co-signed it. An owner, admin or approver's Approve and pay pays it.",
+  selection_size: `Select from 2 to ${MAX_BATCH_SIZE} bills to approve together, each once.`,
 };
 
 export class ApprovalError extends Error {
@@ -178,7 +188,7 @@ export class ApprovalError extends Error {
   }
 }
 
-function raise(code: Exclude<ApprovalErrorCode, "insufficient_funds" | "needs_second_approver" | "chain_off_network" | "payee_locked">): never {
+function raise(code: Exclude<ApprovalErrorCode, NamedRefusal>): never {
   throw new ApprovalError(code, MESSAGES[code]);
 }
 
@@ -471,6 +481,12 @@ export interface WaitingPayable {
   payeeFrozen?: boolean;
   /** The last payment attempt, when Circle ended it in a terminal failure (Approve and pay sends a new transfer) or it is still in flight; else null. */
   lastAttempt: LastPaymentAttempt;
+  /**
+   * A payment intent exists for it: some payment was tried, even one neither `paymentSent` nor `lastAttempt` shows, such
+   * as a send Circle refused before giving it an id. Such a bill is approved on its own, never in a selection
+   * (docs/superpowers/specs/2026-10-30-approve-many-design.md AM2). Absent when none was.
+   */
+  paymentTried?: true;
   /** The invoice's early-payment discount, read as `payInvoice` applies it, so the approval dialog can say what will leave; null without one. */
   discount: InvoiceDiscount | null;
   /** Its late fee (late fees LF4, LF5): shown beside what leaves, never part of it; null without one, or before migration 0141. */
@@ -733,6 +749,7 @@ export async function listWaitingPayables(
       documentPayTo: documentPayTo.get(row.id) ?? null,
       ...(frozenPayees.has(row.counterparty_id) ? { payeeFrozen: true } : {}),
       lastAttempt: lastAttemptOf(intent, currencyOf(row.currency)),
+      ...(intent !== null ? { paymentTried: true as const } : {}),
       discount: invoiceDiscount(row),
       ...(invoiceLateFee(row) ? { lateFee: invoiceLateFee(row) } : {}),
       currency: currencyOf(row.currency),
@@ -994,34 +1011,8 @@ export function personPaymentNote(status: string, paidNote: string): string {
 
 /** A EURC payable's USDC value as the agent last weighed it (its latest decision's `usdcValue`), null when it has none (two approvals T2). */
 
-/**
- * `shownAddress` is the counterparty address the approval card showed the
- * person. When given, the approval is refused if it is no longer the
- * counterparty's, and a changed address no one had confirmed is confirmed by
- * this approval (spec 2026-09-30-counterparty-address-edit E4): the person
- * approved a payment to it, having seen it.
- *
- * `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none.
- */
-export async function approveAndPay(
-  input: {
-    actorId: string;
-    invoiceId: string;
-    shownAddress?: string;
-    provenance?: Provenance;
-    forVerdict?: boolean;
-    /**
-     * An accountant's co-sign (docs/superpowers/specs/2026-10-22-accountant-cosign-design.md CS2, CS3): every check an
-     * approval gets, then recorded as one of the two approvals, and never paid, whatever approvals stand. Who may co-sign
-     * is the caller's check.
-     */
-    cosign?: true;
-  },
-  options: {
-    bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
-    gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
-  } = {}
-): Promise<{
+/** What Approve and pay did with one bill: `approveAndPay`'s answer, and each bill's in a selection (approve many AM11). */
+export interface ApprovalOutcome {
   status: "paid" | "matched" | "held" | "approved";
   txRef: string | null;
   note: string;
@@ -1033,7 +1024,115 @@ export async function approveAndPay(
    * payment (payment exceptions E3): no reason for paying a held bill is kept for it (capability and reasons R10).
    */
   checkedFirst?: true;
-}> {
+}
+
+interface ApprovalInput {
+  actorId: string;
+  invoiceId: string;
+  shownAddress?: string;
+  provenance?: Provenance;
+  forVerdict?: boolean;
+  /**
+   * An accountant's co-sign (docs/superpowers/specs/2026-10-22-accountant-cosign-design.md CS2, CS3): every check an
+   * approval gets, then recorded as one of the two approvals, and never paid, whatever approvals stand. Who may co-sign
+   * is the caller's check.
+   */
+  cosign?: true;
+}
+
+interface ApprovalOptions {
+  bridgeFee?: (chain: string, amount: number) => Promise<BridgeFee>;
+  gatewayQuote?: (chain: string, amount: number) => Promise<GatewayQuote | null>;
+}
+
+/**
+ * A bill that passed every check of Approve and pay and was claimed, with the cash it needed brought back from the
+ * reserve, its approvals used and its address confirmed, and nothing sent yet (docs/superpowers/specs/2026-10-30-approve-many-design.md,
+ * "Prepared"): what its transfer is built from, and what `recordApproval` writes once the transfer has a result.
+ */
+interface PreparedApproval {
+  actorId: string;
+  provenance?: Provenance;
+  invoice: LoadedInvoice;
+  /** A transfer that already exists, only reconciled. */
+  alreadySent: boolean;
+  /** That, or a send Circle never answered: the approval checks it first rather than deciding a new payment. */
+  mayExist: boolean;
+  /** The address's first payment, which this person stood behind (new payee check N4). */
+  firstPayment: boolean;
+  soleApprover: boolean;
+  addressGiverApproved: boolean;
+  fewApprovers: boolean;
+  /** Above the figure, the two approvals that pay it, the earlier first (two approvals T7); empty otherwise. */
+  approvals: Array<{ by: string; at: string }>;
+  above: number | null;
+  fromReserveUsdc: number | null;
+  /** The route a new payment to another chain takes, and both routes' fees as recorded (approval payout route P1, P5). */
+  route: CrossChainRoute | null;
+  payout: Record<string, unknown> | null;
+  bank: BankPayoutParams | null;
+  throughContract: SpendingLimitPayment | null;
+  provider: ChainProvider;
+  operatingId: string;
+}
+
+/**
+ * `shownAddress` is the counterparty address the approval card showed the
+ * person. When given, the approval is refused if it is no longer the
+ * counterparty's, and a changed address no one had confirmed is confirmed by
+ * this approval (spec 2026-09-30-counterparty-address-edit E4): the person
+ * approved a payment to it, having seen it.
+ *
+ * `provenance`, when given, names the surface the person acted from (integrations design R3); the console gives none.
+ *
+ * Every check and the claim are `prepareApproval`'s, the record `recordApproval`'s, so that a selection decides each of
+ * its bills exactly as this decides one (approve many AM1, AM5).
+ */
+export async function approveAndPay(input: ApprovalInput, options: ApprovalOptions = {}): Promise<ApprovalOutcome> {
+  const step = await prepareApproval(input, options);
+  if ("finished" in step) return step.finished;
+  const prepared = step.prepared;
+
+  let result: PayInvoiceResult;
+  try {
+    result = await payInvoice(await approvalPayment(prepared), {
+      provider: prepared.provider,
+      operating: { id: prepared.operatingId },
+      // A person's approval is the one caller that may send a payment Circle
+      // ended in a terminal failure again, and only when the failure was
+      // already recorded (`!alreadySent`): that is the approval that ran the
+      // balance check and the address confirmation in `prepareApproval`, with
+      // the card showing Circle's reason. An approval of a transfer that was still
+      // sent or in flight skipped both, so it only reconciles — should Circle
+      // now report a terminal failure, that is recorded, the invoice is held
+      // again, and the next approval sends it. executePayment still reads
+      // Circle before any retry.
+      retryTerminalFailure: !prepared.mayExist,
+    });
+  } catch (err) {
+    // The claim went through, but nothing about the payment itself is known.
+    // Give the invoice back to the waiting queue rather than leave it stuck
+    // as `processing` — the payment's own idempotency key (keyed on the
+    // invoice) protects a retry from paying twice.
+    await giveBackAfterClaim(prepared.invoice, (err as Error).message);
+    throw err;
+  }
+  return recordApproval(prepared, result);
+}
+
+/**
+ * Every check of Approve and pay, through its claim: the cash brought back from the reserve, the approvals used, the
+ * address confirmed and the frozen payee read again. Either a finished answer, the first of two approvals recorded and
+ * nothing sent, or a prepared bill whose transfer the caller sends. A refusal before the claim claims nothing; one after
+ * it gives the bill back first.
+ *
+ * `selection`: decided in a selection (approve many AM4), against the operating wallet's USDC as the selection's funds
+ * check read it, and a bill it does not cover is refused, never covered by cash brought back from the reserve.
+ */
+async function prepareApproval(
+  input: ApprovalInput,
+  options: ApprovalOptions & { selection?: { operatingUsdc: number } } = {}
+): Promise<{ finished: ApprovalOutcome } | { prepared: PreparedApproval }> {
   const orgId = currentOrgId();
   const invoice = await loadWaitingPayable(input.invoiceId);
   let intent = await paymentIntentOf(invoice.id);
@@ -1208,7 +1307,7 @@ export async function approveAndPay(
           ...input.provenance,
         },
       });
-      return { status: "approved", txRef: null, note: "", ...(mayExist ? { checkedFirst: true as const } : {}) };
+      return { finished: { status: "approved", txRef: null, note: "", ...(mayExist ? { checkedFirst: true as const } : {}) } };
     }
     // Another person's approval stands, so this one pays. Nothing of it is stored before the claim: a refusal on the way
     // leaves no approval behind, and the ledger entry is its record (T6).
@@ -1241,9 +1340,14 @@ export async function approveAndPay(
       const short = payoutFundsShort({ route, amount: invoice.amount, operatingUsdc: 0, cctpFeeUsdc: null, gateway: quotes?.gateway ?? null });
       if (short) throw new ApprovalError("insufficient_funds", gatewayShortMessage(short.holds, quotes?.gateway?.feeUsdc ?? null));
     } else {
-      const balance = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
+      // A selection read the balance once for all its bills (approve many AM4).
+      const balance = options.selection ? options.selection.operatingUsdc : provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
       const fee = route === "cctp" ? (quotes?.cctpFeeUsdc ?? null) : null;
       const short = payoutFundsShort({ route: "cctp", amount: invoice.amount, operatingUsdc: balance, cctpFeeUsdc: fee, gateway: null });
+      // A selection never brings cash back from the reserve (AM4): what its balance does not cover is refused.
+      if (short && options.selection) {
+        throw new ApprovalError("insufficient_funds", cashShortMessage({ operatingUsdc: balance, reserveUsdc: null, feeUsdc: fee, what: "invoice" }));
+      }
       if (short) {
         // A CCTP payout brings back a cushion on its fee, which is read again before the burn; one whose fee CCTP did not
         // give needs what no one knows, and is not covered (review finding 2).
@@ -1345,59 +1449,77 @@ export async function approveAndPay(
     throw new ApprovalError("payee_locked", frozenRefusal(invoice.counterpartyName));
   }
 
-  const previous = invoice.status;
+  return {
+    prepared: {
+      actorId: input.actorId,
+      ...(input.provenance ? { provenance: input.provenance } : {}),
+      invoice,
+      alreadySent,
+      mayExist,
+      firstPayment: firstPayment !== null,
+      soleApprover,
+      addressGiverApproved,
+      fewApprovers,
+      approvals,
+      above,
+      fromReserveUsdc,
+      route,
+      payout,
+      bank,
+      throughContract,
+      provider,
+      operatingId: operating.id,
+    },
+  };
+}
 
-  let result;
-  try {
-    result = await payInvoice(
-      {
-        invoiceId: invoice.id,
-        counterpartyId: invoice.counterpartyId,
-        address: invoice.address,
-        amount: invoice.amount,
-        // The same discount rule as the agent's: off the transfer through the
-        // deadline's UTC day. The funds check above stays on the full amount.
-        discount: invoice.discount,
-        currency: invoice.currency,
-        // A person approving a payout to another chain lets its fee be at most the invoice itself (review I2, I4):
-        // a fee read higher at the burn sends nothing.
-        ...(paidAcrossChains(invoice.destinationChain) && !invoice.bankAccount
-          ? { destinationChain: invoice.destinationChain as string, maxBridgeFeeUsdc: invoice.amount, ...(route ? { route } : {}) }
-          : {}),
-        // A vendor paid to its bank (bank payouts B7); a payout already sent is reconciled under its intent's route.
-        ...(invoice.bankAccount ? { bank: bank ?? (await bankRouteFor(invoice)) } : {}),
-        // From the owner's own wallet, only through its contract, from the agent's wallet (wallet treasury W11).
-        ...(throughContract ? { spendingLimit: throughContract } : {}),
-      },
-      // A person's approval is the one caller that may send a payment Circle
-      // ended in a terminal failure again, and only when the failure was
-      // already recorded (`!alreadySent`): that is the approval that ran the
-      // balance check and the address confirmation above, with the card
-      // showing Circle's reason. An approval of a transfer that was still
-      // sent or in flight skipped both, so it only reconciles — should Circle
-      // now report a terminal failure, that is recorded, the invoice is held
-      // again, and the next approval sends it. executePayment still reads
-      // Circle before any retry.
-      { provider, operating: { id: operating.id }, retryTerminalFailure: !mayExist }
-    );
-  } catch (err) {
-    // The claim went through, but nothing about the payment itself is known.
-    // Give the invoice back to the waiting queue rather than leave it stuck
-    // as `processing` — the payment's own idempotency key (keyed on the
-    // invoice) protects a retry from paying twice.
-    await giveBackAfterClaim(invoice, (err as Error).message);
-    throw err;
-  }
+/** The transfer a prepared bill pays: exactly what `payInvoice` is asked for it, alone or in a selection (approve many AM6). */
+async function approvalPayment(prepared: PreparedApproval): Promise<PayInvoiceInput> {
+  const { invoice, route, bank, throughContract } = prepared;
+  return {
+    invoiceId: invoice.id,
+    counterpartyId: invoice.counterpartyId,
+    address: invoice.address,
+    amount: invoice.amount,
+    // The same discount rule as the agent's: off the transfer through the
+    // deadline's UTC day. The funds check stays on the full amount.
+    discount: invoice.discount,
+    currency: invoice.currency,
+    // A person approving a payout to another chain lets its fee be at most the invoice itself (review I2, I4):
+    // a fee read higher at the burn sends nothing.
+    ...(paidAcrossChains(invoice.destinationChain) && !invoice.bankAccount
+      ? { destinationChain: invoice.destinationChain as string, maxBridgeFeeUsdc: invoice.amount, ...(route ? { route } : {}) }
+      : {}),
+    // A vendor paid to its bank (bank payouts B7); a payout already sent is reconciled under its intent's route.
+    ...(invoice.bankAccount ? { bank: bank ?? (await bankRouteFor(invoice)) } : {}),
+    // From the owner's own wallet, only through its contract, from the agent's wallet (wallet treasury W11).
+    ...(throughContract ? { spendingLimit: throughContract } : {}),
+  };
+}
+
+/**
+ * Writes a prepared bill's invoice row and its `approval_paid` entry from what its transfer did, and says what it paid.
+ * `together`, for a bill approved in a selection (approve many AM7): how many bills the person chose in that one
+ * confirmation, and, when its transfer shared a transaction with others, the batch, which its reasoning names too.
+ */
+async function recordApproval(prepared: PreparedApproval, result: PayInvoiceResult, together?: { approvedTogether: number }): Promise<ApprovalOutcome> {
+  const orgId = currentOrgId();
+  const { invoice, alreadySent, mayExist, soleApprover, addressGiverApproved, fewApprovers, approvals, above, fromReserveUsdc, payout, provider } = prepared;
+  const previous = invoice.status;
 
   // A transfer that went out (confirmed, or submitted and awaiting Circle)
   // carried `amountPaid`; one that failed moved nothing.
   const sent = result.status === "paid" || result.status === "matched";
+  // Paid in one Arc transaction with other bills of the selection, as a milestone in a batch says it (AM7).
+  const batch = together ? (result.execution?.batch ?? null) : null;
+  const others = batch && result.status === "paid" ? batch.size - 1 : 0;
+  const paidTogether = others > 0 ? ` [paid in one Arc transaction with ${others} other ${plural(others, "bill", "bills")}]` : "";
   const now = new Date().toISOString();
   const update = await db()
     .from("invoices")
     .update({
       status: result.status,
-      agent_reasoning: `${invoice.agentReasoning ?? ""}${personPaymentNote(result.status, "approved and paid by a person")}${result.note}`,
+      agent_reasoning: `${invoice.agentReasoning ?? ""}${personPaymentNote(result.status, "approved and paid by a person")}${paidTogether}${result.note}`,
       decided_at: now,
       settled_at: result.status === "paid" ? now : null,
       tx_ref: result.txRef,
@@ -1418,7 +1540,7 @@ export async function approveAndPay(
     action: "approval_paid",
     summary: approvalPaidSummary(result.status, invoice.amount, invoice.counterpartyName, result, invoice.currency, soleApprover, approvals.length > 0, addressGiverApproved),
     detail: {
-      by: input.actorId,
+      by: prepared.actorId,
       invoiceId: invoice.id,
       counterpartyId: invoice.counterpartyId,
       amount: invoice.amount,
@@ -1450,13 +1572,16 @@ export async function approveAndPay(
       // The person who gave the address, or asked for it, made its first payment as the workspace's only approver.
       ...(addressGiverApproved ? { addressGiverApproved: true } : {}),
       // The address's first payment, which this person stood behind beside whoever gave the address (new payee check N4).
-      ...(firstPayment ? { firstPayment: true } : {}),
+      ...(prepared.firstPayment ? { firstPayment: true } : {}),
       // Above the figure: the two approvals, the earlier first (two approvals T7).
       ...(approvals.length > 0 ? { approvals: approvals.map((approval) => ({ by: approval.by, at: approval.at })), twoApprovalsAbove: above } : {}),
       ...(fewApprovers ? { fewApprovers: true } : {}),
       // What came back from the reserve first, recorded in its own `cash_brought_back` entry (approval cash R4).
       ...(fromReserveUsdc !== null ? { fromReserveUsdc } : {}),
-      ...input.provenance,
+      // Approved in a selection: the transaction it shared with other bills, and how many the person chose (AM7).
+      ...(batch ? { batch: { key: batch.key, size: batch.size } } : {}),
+      ...(together ? { approvedTogether: together.approvedTogether } : {}),
+      ...prepared.provenance,
     },
   });
 
@@ -1477,6 +1602,210 @@ export async function approveAndPay(
         }
       : {}),
   };
+}
+
+/** One bill of a selection as it was decided (approve many AM5-AM8, AM11), in the order the selection named it. */
+export interface SelectionDecision {
+  invoiceId: string;
+  /** Whom it pays and how much, as loaded; null when it could not be read as a bill waiting for a decision. */
+  bill: { payee: string; amount: number; currency: Stablecoin } | null;
+  /** What Approve and pay did with it, as it says it alone, and the transaction it shared with other bills (AM7). */
+  outcome?: ApprovalOutcome & { batch?: { key: string; size: number } };
+  /**
+   * Why it was not approved, or not recorded: a refusal (`ApprovalError`) before anything was claimed for it (AM2, AM5),
+   * anything else that stopped it while it was decided, or what stopped it after its claim (AM6). Only an
+   * `ApprovalError`'s words are for the person.
+   */
+  error?: Error;
+  /** Paying it goes against the agent's hold, so a reason given for the selection is kept for it (AM9). */
+  overridesHold: boolean;
+}
+
+/**
+ * Approves several bills with one confirmation (docs/superpowers/specs/2026-10-30-approve-many-design.md AM1-AM8), each
+ * decided as Approve and pay decides it alone, in the order given, which is the page's (AM5). Refused whole with an
+ * `ApprovalError`, before anything is claimed: a selection of the wrong size (AM3), a workspace its network holds, no
+ * operating account, or bills the operating wallet does not cover together (AM4). Otherwise one decision per bill.
+ *
+ * The bills that pay a new transfer to an address go to `payInvoices` together, so they share one Arc transaction where
+ * the network and the provider allow it; the rest go alone through `payInvoice`, as alone, one paid through the owner's
+ * wallet contract as soon as it is decided, so the contract checks the next with it counted (AM6). A send that throws
+ * gives back every bill it left without a result. Each is recorded as alone, with the batch and how many bills were
+ * chosen together (AM7). A batch Circle failed holds every member, and one whose answer was lost leaves each submitted,
+ * looked for on Circle by the batch's refId: the payment layer's own rules (AM8, batch payouts R5, R7).
+ */
+export async function approveAndPayMany(
+  input: { actorId: string; items: Array<{ invoiceId: string; shownAddress?: string }>; provenance?: Provenance },
+  options: ApprovalOptions = {}
+): Promise<SelectionDecision[]> {
+  // Refused whole, before anything is read (AM3).
+  const ids = input.items.map((item) => item.invoiceId);
+  if (ids.length < 2 || ids.length > MAX_BATCH_SIZE || new Set(ids).size !== ids.length) raise("selection_size");
+  // A workspace its network holds moves nothing, and may have no provider to read a balance with (mainnet go-live M4).
+  const networkHeld = currentConfig().chain.networkHold;
+  if (networkHeld) throw new ApprovalError("payments_off", networkHeld);
+
+  const decisions: SelectionDecision[] = input.items.map((item) => ({ invoiceId: item.invoiceId, bill: null, overridesHold: false }));
+
+  // What a selection takes, read again on the server whatever the page offered (AM2): anything else is refused by name
+  // and never claimed, and the others are decided.
+  const taken: Array<{ index: number; invoice: LoadedInvoice }> = [];
+  for (const [index, item] of input.items.entries()) {
+    try {
+      const invoice = await loadWaitingPayable(item.invoiceId);
+      decisions[index].bill = { payee: invoice.counterpartyName, amount: invoice.amount, currency: invoice.currency };
+      await refuseOutsideSelection(invoice);
+      taken.push({ index, invoice });
+    } catch (error) {
+      if (!(error instanceof ApprovalError)) throw error;
+      decisions[index].error = error;
+    }
+  }
+  if (taken.length === 0) return decisions;
+
+  // Which of them go against the agent's hold, so the one reason the confirmation asks is kept for each (AM9).
+  const entries = await listLedgerEntriesForTargets({ invoiceIds: taken.map(({ invoice }) => invoice.id) });
+  const now = Date.now();
+  for (const { index, invoice } of taken) decisions[index].overridesHold = goesAgainstHold(invoice, latestDecision(entries, invoice.id)?.detail ?? null, now);
+
+  // Their full amounts against the operating wallet's USDC, read as Approve and pay reads it, before any claim (AM4).
+  const operating = await operatingAccount();
+  if (!operating) raise("no_operating_account");
+  const provider = getChainProvider();
+  const operatingUsdc = provider.mode === "live" ? await syncOperatingBalance(operating.id) : operating.balance;
+  const totalMicro = taken.reduce((sum, { invoice }) => sum + Math.round(invoice.amount * 1_000_000), 0);
+  if (Math.round(operatingUsdc * 1_000_000) < totalMicro) {
+    throw new ApprovalError("insufficient_funds", selectionShortMessage(taken.length, totalMicro / 1_000_000, operatingUsdc));
+  }
+
+  // A send that throws gives back each bill it left without a result, as Approve and pay gives one back, and the error
+  // is that bill's (AM6).
+  const results = new Map<number, PayInvoiceResult>();
+  const giveBack = async (members: Array<{ index: number; bill: PreparedApproval }>, error: unknown) => {
+    for (const { index, bill } of members) {
+      await giveBackAfterClaim(bill.invoice, error instanceof Error ? error.message : String(error));
+      decisions[index].error = error instanceof Error ? error : new Error(String(error));
+    }
+  };
+  // A bill that goes alone, exactly as Approve and pay sends it.
+  const sendAlone = async (member: { index: number; bill: PreparedApproval }) => {
+    try {
+      const payment = await approvalPayment(member.bill);
+      results.set(member.index, await payInvoice(payment, { provider, operating: { id: operating.id }, retryTerminalFailure: !member.bill.mayExist }));
+    } catch (error) {
+      await giveBack([member], error);
+    }
+  };
+
+  // One after another, each through Approve and pay's checks up to its claim; a refusal is that bill's alone (AM5), and so
+  // is anything else that stops one: a bill prepared before it is still paid, its approvals and its claim not thrown away
+  // for another bill's failure (approve many review money-4). One that threw after its own claim was given back by
+  // `prepareApproval`, or is left processing, as alone.
+  const prepared: Array<{ index: number; bill: PreparedApproval }> = [];
+  for (const { index, invoice } of taken) {
+    let step: Awaited<ReturnType<typeof prepareApproval>>;
+    try {
+      step = await prepareApproval(
+        { actorId: input.actorId, invoiceId: invoice.id, shownAddress: input.items[index].shownAddress, provenance: input.provenance },
+        { ...options, selection: { operatingUsdc } }
+      );
+    } catch (error) {
+      decisions[index].error = error instanceof Error ? error : new Error(String(error));
+      continue;
+    }
+    if ("finished" in step) {
+      decisions[index].outcome = step.finished;
+      continue;
+    }
+    const member = { index, bill: step.prepared };
+    prepared.push(member);
+    // Through the owner's wallet contract (wallet treasury W11) a bill is paid as soon as it is decided, before the next
+    // bill's checks: the contract counts what it paid, so the next bill is checked against its daily and 7-day limits with
+    // this one in them, and refused by name before its claim, as approving them one after another refuses it (approve
+    // many review money-3).
+    if (member.bill.throughContract !== null) await sendAlone(member);
+  }
+
+  // Once every bill is decided, the other prepared ones are paid (AM6).
+  const together = prepared.filter(({ bill }) => sharesTransaction(bill));
+  if (together.length > 0) {
+    try {
+      const payments: PayInvoiceInput[] = [];
+      for (const { bill } of together) payments.push(await approvalPayment(bill));
+      const paid = await payInvoices(payments, { provider, operating: { id: operating.id } });
+      for (const [position, { index }] of together.entries()) results.set(index, paid[position]);
+    } catch (error) {
+      await giveBack(together, error);
+    }
+  }
+  for (const member of prepared.filter(({ bill }) => !sharesTransaction(bill) && bill.throughContract === null)) await sendAlone(member);
+
+  // Each recorded as Approve and pay records it, with the transaction it shared and how many were chosen (AM7). A row
+  // not written after its transfer is logged by id, as alone, and the others are still recorded.
+  for (const { index, bill } of prepared) {
+    const result = results.get(index);
+    if (!result) continue;
+    try {
+      const outcome = await recordApproval(bill, result, { approvedTogether: input.items.length });
+      const batch = result.execution?.batch ?? null;
+      decisions[index].outcome = { ...outcome, ...(batch ? { batch: { key: batch.key, size: batch.size } } : {}) };
+    } catch (error) {
+      decisions[index].error = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  return decisions;
+}
+
+/**
+ * What a selection takes beyond Approve and pay's own checks (approve many AM2), read on the server whatever the page
+ * offered: a bill no one else is deciding, not screened high risk, not held for a shadow verdict, paying USDC to an
+ * address on the workspace's own chain, with no payment ever tried for it. A bill outside that is approved on its own.
+ */
+async function refuseOutsideSelection(invoice: LoadedInvoice): Promise<void> {
+  if (invoice.status === "processing" && !isReclaimable(invoice.status, invoice.reviewedAt, Date.now())) raise("already_decided");
+  if (invoice.riskLevel === "high") raise("high_risk");
+  if (invoice.currency !== "USDC") throw approveAlone(`it is in ${invoice.currency}`);
+  if (invoice.bankAccount) throw approveAlone("its vendor is paid to a bank account");
+  const chainProblem = counterpartyChainProblem(getChainProvider().network.id, invoice.destinationChain);
+  if (chainProblem) throw new ApprovalError("chain_off_network", chainProblem);
+  if (paidAcrossChains(invoice.destinationChain)) throw approveAlone("its payee is paid on another chain");
+  // No payment intent at all: not a retry, not a transfer to record, not a send Circle never answered.
+  if ((await paymentIntentOf(invoice.id)) !== null) throw approveAlone("a payment was already tried for it");
+  await refuseUntilVerdict(invoice.id, "approve", { status: invoice.status, transferSent: false });
+}
+
+/** A bill a selection does not take, refused by name: Approve and pay on its own decides it (AM2). */
+function approveAlone(why: string): ApprovalError {
+  return new ApprovalError("approve_alone", `Approve it on its own: ${why}.`);
+}
+
+/**
+ * Whether paying it goes against the agent's own judgement, read as the card's `overridesHold` reads the listing
+ * (capability and reasons R10): flagged, or held on one of its rules; not held for cash, for a verdict, or for its
+ * vendor's document.
+ */
+function goesAgainstHold(invoice: Pick<LoadedInvoice, "status" | "reviewedAt">, detail: Record<string, unknown> | null, now: number): boolean {
+  if (invoice.status === "held" && heldForCash(detail)) return false;
+  if ((invoice.status === "held" || isReclaimable(invoice.status, invoice.reviewedAt, now)) && detail !== null && awaitsVerdict(detail)) return false;
+  const rule = detail?.guardrailBlocked === true && typeof detail.guardrailRule === "string" ? detail.guardrailRule : null;
+  if (rule === VENDOR_DOCUMENT) return false;
+  return invoice.status === "flagged" || rule !== null;
+}
+
+/**
+ * A prepared bill whose transfer goes to `payInvoices` with the others (AM6): a new transfer of USDC to an address on
+ * the workspace's own chain. One paid through the owner's wallet contract (wallet treasury W11) goes alone, as alone.
+ */
+function sharesTransaction(bill: PreparedApproval): boolean {
+  const { invoice } = bill;
+  return !bill.mayExist && bill.throughContract === null && invoice.bankAccount === null && invoice.currency === "USDC" && !paidAcrossChains(invoice.destinationChain);
+}
+
+/** Why a selection is refused whole for funds (AM4): approved one at a time, a bill can bring cash back from the reserve. */
+function selectionShortMessage(count: number, totalUsdc: number, operatingUsdc: number): string {
+  return count === 1
+    ? `This bill comes to ${totalUsdc} USDC; the operating wallet holds ${operatingUsdc} USDC. Approve it on its own, which can bring cash back from the reserve.`
+    : `These ${count} bills come to ${totalUsdc} USDC; the operating wallet holds ${operatingUsdc} USDC. Select fewer, or approve them one at a time, which can bring cash back from the reserve.`;
 }
 
 /** Both routes' figures for a payout to another chain, read now: CCTP's fee, and Gateway's fee with its balance. */

@@ -3,6 +3,7 @@ import { cosignsNow } from "@/lib/approval-policy";
 import { Inbox } from "lucide-react";
 import { dismissChecklistAction } from "@/app/actions/onboarding";
 import ApprovalCard from "@/components/ApprovalCard";
+import { ApprovalSelection } from "@/components/approvals/ApprovalSelection";
 import { ProposalCard } from "@/components/ProposalCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -171,32 +172,37 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
             </div>
           </section>
         )}
-        {waiting.length === 0 ? (
-          <EmptyState icon={<Inbox />} title="Nothing is waiting for a decision." body="When the agent holds or flags a payable, it appears here." />
-        ) : (
-          <div className="space-y-4">
-            {waiting.map((payable) => (
-              <ApprovalCard
-                key={payable.id}
-                orgSlug={slug}
-                payable={payable}
-                canDecide={canDecide}
-                viewerId={user.id}
-                sandbox={paysSimulated(capability)}
-                soleApprover={soleApprover}
-                canEdit={can(membership.role, "records.write")}
-                memberEmails={memberEmails}
-                verdict={verdictFor(payable)}
-                exception={exceptionOf(payable)}
-                viewerEmail={user.email}
-                canCosign={canCosign}
-                cosign={cosignStates?.get(payable.id)}
-                documentRequest={documentRequests.get(payable.id)}
-                documentChecks={documentChecks}
-              />
-            ))}
-          </div>
-        )}
+        {/* Several bills approved with one confirmation (docs/superpowers/specs/2026-10-30-approve-many-design.md): the
+            selection, its bar and its keys, here only (AM13). It stays when the list empties, so the result of the bills
+            it just paid is still read. */}
+        <ApprovalSelection orgSlug={slug} order={waiting.map((payable) => payable.id)} sandbox={paysSimulated(capability)}>
+          {waiting.length === 0 ? (
+            <EmptyState icon={<Inbox />} title="Nothing is waiting for a decision." body="When the agent holds or flags a payable, it appears here." />
+          ) : (
+            <div className="space-y-4">
+              {waiting.map((payable) => (
+                <ApprovalCard
+                  key={payable.id}
+                  orgSlug={slug}
+                  payable={payable}
+                  canDecide={canDecide}
+                  viewerId={user.id}
+                  sandbox={paysSimulated(capability)}
+                  soleApprover={soleApprover}
+                  canEdit={can(membership.role, "records.write")}
+                  memberEmails={memberEmails}
+                  verdict={verdictFor(payable)}
+                  exception={exceptionOf(payable)}
+                  viewerEmail={user.email}
+                  canCosign={canCosign}
+                  cosign={cosignStates?.get(payable.id)}
+                  documentRequest={documentRequests.get(payable.id)}
+                  documentChecks={documentChecks}
+                />
+              ))}
+            </div>
+          )}
+        </ApprovalSelection>
       </ProductShell>
     );
   });

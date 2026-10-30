@@ -55,7 +55,7 @@ The agent looks first too. Each cycle, a payable it is paying, or a verified mil
 
 A payout to another chain cannot be looked up on Circle by its reference, so the agent cannot tell first whether Circle took it. It gets those checks before it is asked for again under the same payment key, and can be held, or decided again and held, while Circle may hold the transfer. Approve and pay in Approvals then asks Circle for it under that key, which Circle takes only once.
 
-A milestone the agent released in one Arc transaction with others is looked for by that transaction's own reference, whatever its error says, since Circle lists the batch, not each milestone. Nothing concludes it was never sent until Circle shows no batch 15 minutes after it was sent.
+A milestone the agent released, or a bill approved with others on **Approvals**, sent in one Arc transaction with others is looked for by that transaction's own reference, whatever its error says, since Circle lists the batch, not each payment in it. Nothing concludes it was never sent until Circle shows no batch 15 minutes after it was sent.
 
 A payout to another chain is different, since Circle cannot list it by the payment's reference:
 

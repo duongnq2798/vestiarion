@@ -14,6 +14,22 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Approve several bills at once.** On **Approvals**, a bill you could pay now in USDC, to an address on the
+  workspace's own chain, with no payment tried for it yet, has a checkbox beside its payee. Tick from 2 to 20 and a bar
+  at the bottom of the screen gives their count and total, with **Clear** and **Approve and pay** and the count. One
+  confirmation lists each bill's payee, address and amount and the **Total**, and asks **Why pay them anyway?** once
+  when any of them goes against the agent's hold. Each bill is still approved as **Approve and pay** approves it alone:
+  every check, its own claim, its own signed `approval_paid` entry and its own receipt. The ones that pay now are sent
+  together, in one Arc transaction where the operating wallet can send them that way, so one confirmation and one
+  transaction pay them all. The operating wallet must hold the total, since a selection never brings cash back from the
+  reserve; with less, nothing is approved and the confirmation says what each holds. A bill the server will not take
+  together (a bank payout, a payout to another chain, EURC, a retry) is refused by name, "Approve it on its own:", and
+  the others are still decided. The result gives one line per bill, paid, submitted, approved or not paid with the
+  reason, and "Paid 2 bills in one Arc transaction." with **View transaction**. Keys on Approvals: `j` and `k` move
+  between the cards, `x` selects, `a` opens the confirmation, `Esc` clears; none pays. The ledger entries gain
+  `approvedTogether` and, for a shared transaction, `batch`. Slack still approves one bill at a time, where an owner
+  lets bills be decided there; Telegram, Discord and the API approve none. No migration: batches use the columns of
+  0057.
 - **AI agents can read evidence, receipts and close packs through MCP.** The MCP server has five new read-only tools,
   `get_invoice_evidence`, `get_milestone_evidence`, `get_invoice_receipt`, `get_payee_lock_evidence` and
   `get_close_pack`, so an agent connected with a workspace API key can answer why a bill or a milestone was paid, what a

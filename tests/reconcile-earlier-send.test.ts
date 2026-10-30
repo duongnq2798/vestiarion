@@ -4,7 +4,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
 import { withOrg } from "@/lib/dal/scope";
-import { existingMilestoneIntents, reconcileApInvoice, reconcileMilestone } from "@/lib/agent/orchestrator";
+import { existingMilestoneIntents, existingPaymentIntents, reconcileApInvoice, reconcileMilestone } from "@/lib/agent/orchestrator";
 import type { BalanceSnapshot, ChainProvider, EarnResult, TransferParams, TransferResult } from "@/lib/circle";
 import { MAY_HAVE_BEEN_ACCEPTED } from "@/lib/circle/settlement";
 import { NO_EARLIER_SEND, paymentIdempotencyKey } from "@/lib/payments";
@@ -160,6 +160,42 @@ describe("reconcileApInvoice over the real payment step — a send never recorde
     expect(row).toMatchObject({ status: "failed", provider_tx_id: null, last_error: NO_EARLIER_SEND });
     expect(outcome.status).toBe("held");
     expect(invoicePatch()).toMatchObject({ status: "held" });
+  });
+});
+
+/**
+ * Bills approved together and sent in one batch whose answer was lost (docs/superpowers/specs/2026-10-30-approve-many-design.md
+ * AM8): each is left `matched`, its intent `failed` with the error and carrying the batch, as `sendBatch` records it. The
+ * AP stage reconciles it as the contractor stage reconciles a milestone of a lost batch (batch payouts R5): looked for by
+ * the batch's refId, every member recorded once found, and nothing sent again.
+ */
+describe("reconcileApInvoice over the real payment step — a bill from a lost batch (approve many AM8)", () => {
+  const OTHER = "018f8ce0-1557-7b54-a931-4d777f6be0b2";
+
+  it("reads the in-flight intent, finds the batch on Circle by its refId, and records the bill and its batch's other bill paid", async () => {
+    const provider = new FakeProvider(confirmed("circle-tx-batch"));
+    const { row, intents, run, invoicePatch } = workspace();
+    const other = intents.insert({
+      source_type: "invoice", source_id: OTHER, idempotency_key: paymentIdempotencyKey("invoice", OTHER),
+      provider: "circle", provider_mode: "live", amount: 60, destination: "0xbeef",
+    });
+    const sentAt = row.updated_at as string;
+    for (const member of [row, other]) {
+      Object.assign(member, { status: "failed", attempt_count: 1, last_error: "socket hang up", updated_at: sentAt, batch_key: "batch-1", batch_size: 2, batch_sent_at: sentAt });
+    }
+
+    const outcome = await run(async () => {
+      const intent = (await existingPaymentIntents(db(), [{ id: INVOICE_ID, status: "matched" }])).get(INVOICE_ID);
+      expect(intent).toEqual({ providerTxId: null, status: "failed", unanswered: true });
+      return reconcileApInvoice(invoice, intent!, { db: db(), provider, operating: { id: ACCOUNT_ID } });
+    });
+
+    expect(provider.lookups.map((lookup) => lookup.refId)).toEqual(["batch-1"]);
+    expect(provider.transfers).toHaveLength(0);
+    expect(row).toMatchObject({ status: "confirmed", provider_tx_id: "circle-tx-batch" });
+    expect(other).toMatchObject({ status: "confirmed", provider_tx_id: "circle-tx-batch" });
+    expect(outcome.status).toBe("paid");
+    expect(invoicePatch()).toMatchObject({ status: "paid", tx_ref: "0xhash" });
   });
 });
 

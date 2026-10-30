@@ -1,5 +1,12 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-10-30: Several bills approved with one confirmation
+
+- A person can now select from 2 to 20 bills on the console's **Approvals** page and approve them with one confirmation. Each bill is still decided and recorded on its own: one **`approval_paid`** entry per bill, listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`, with every field it had before.
+- **`approval_paid`** gains **`approvedTogether`**, a whole number from 2 to 20, on a bill approved that way: how many bills the person chose in that confirmation. It is absent on a bill approved on its own, and on every entry signed before this date. A first of two approvals given that way is not an `approval_paid` and carries nothing new.
+- **`approval_paid`** gains **`batch`**, `{ key, size }`, when the bill's transfer shared one Arc transaction with other bills of the same confirmation, as a `milestone_release` entry's `execution.batch` does: `key` identifies the batch and `size` is how many transfers it carried. Its `txRef` is then the batch's transaction, shared with the other bills in it. When Circle had confirmed that transaction by the time the bills were recorded, each one's `agentReasoning` on `GET /api/v1/invoices` includes ` [paid in one Arc transaction with 1 other bill]`, or how many other bills it paid. A batch Circle failed leaves each bill held, with `batch` on its entry, and its next approval sends a transfer of its own.
+- There is no new endpoint, and nothing in `/api/v1` approves a bill. Slack approves one bill at a time, as before, where an owner lets bills be decided there; Telegram and Discord approve none, and their links open the bill in **Approvals**. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-10-30: Evidence, receipts and close packs as MCP tools
 
 - The [MCP server](/docs/ai-integration/mcp) has five new read-only tools, one for each evidence read: **`get_invoice_evidence`**, **`get_milestone_evidence`**, **`get_invoice_receipt`**, **`get_payee_lock_evidence`** and **`get_close_pack`**. Each takes its operation's parameters (`id`; `from` and `to`; or `month`) and runs that operation with the caller's key, under the same limit per key as the API. The server now lists 18 tools.
