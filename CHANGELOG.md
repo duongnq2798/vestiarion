@@ -112,6 +112,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **A link pasted into a Linear issue is one deliverable.** Linear stores a pasted link as Markdown,
+  `[https://a](https://a)`, and its description was read as plain text, so the milestone's card listed the link twice,
+  once with the Markdown run on its end. Each Markdown link is now read as the place it opens. An issue accepted before
+  this change is read as changed the next time it is read, and waits for a person to accept it again.
 - **The OFAC vendor check says which wallets it compares with each other.** The page at
   [/check-vendor](https://www.vestiarion.xyz/check-vendor) said each wallet address was compared with the rest of your
   list. Only 0x wallets are, so one made to look like another vendor's, or one two vendors share, shows up. A wallet in

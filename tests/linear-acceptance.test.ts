@@ -78,6 +78,20 @@ describe("what an issue delivers, and its fingerprint (LN6)", () => {
     expect(fingerprintOf(deliverablesOf({ ...base, comments: [...base.comments, { id: "c2", body: "v2: https://vercel.example/preview/2", createdAt: null }] }).deliverables)).not.toBe(first);
   });
 
+  it("reads a pasted link as Linear stores it, Markdown, as the one place it opens (Linear acceptance LN6)", () => {
+    // Linear writes a pasted link `[https://a](https://a)`: read as plain text it was one run, `https://a](https://a`.
+    const description = "Deliverable: [https://www.vestiarion.xyz/docs/guides/linear](https://www.vestiarion.xyz/docs/guides/linear)";
+    expect(deliverablesOf({ ...base, description, attachments: [], comments: [] }).deliverables.map((item) => item.href)).toEqual([
+      "https://www.vestiarion.xyz/docs/guides/linear",
+    ]);
+    // A link whose words name another place keeps only where it opens, as does one with a title.
+    const shown = '[https://shown.example/a](https://target.example/b) and [the brief](https://docs.example/brief "Brief")';
+    expect(deliverablesOf({ ...base, description: "", attachments: [], comments: [{ id: "c1", body: shown, createdAt: null }] }).deliverables.map((item) => item.href)).toEqual([
+      "https://docs.example/brief",
+      "https://target.example/b",
+    ]);
+  });
+
   it("keeps the first 50 and counts the rest in the fingerprint by number", () => {
     const description = Array.from({ length: 60 }, (_, n) => `https://files.example/${String(n).padStart(2, "0")}`).join("\n");
     const { deliverables, more } = deliverablesOf({ ...base, description, attachments: [], comments: [] });

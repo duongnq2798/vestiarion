@@ -32,6 +32,19 @@ export function storedBytes(items: readonly Deliverable[]): number {
   return new TextEncoder().encode(JSON.stringify(items)).length + separators;
 }
 
+/** A Markdown link or image, `[text](https://target "title")` or `![alt](https://target)`: the target is group 1. */
+const MARKDOWN_LINK = /!?\[[^\]\n]*\]\((https:\/\/[^\s)]+)(?:\s+"[^"\n]*")?\)/g;
+
+/**
+ * The https links in a description or a comment as Linear stores it, Markdown. A pasted link is written
+ * `[https://a](https://a)`, which read as plain text is one run of characters: `linksIn` alone would keep
+ * `https://a](https://a` as a link no one gave. Each Markdown link becomes its target alone, so the place a person
+ * opens is the one kept and compared, never the words shown for it; bare links are read as before.
+ */
+export function markdownLinksIn(value: string): string[] {
+  return linksIn(value.replace(MARKDOWN_LINK, (_match, target: string) => ` ${target} `));
+}
+
 export function deliverablesOf(input: { description: string; attachments: readonly AttachmentFacts[]; comments: readonly CommentFacts[]; identifier: string }): {
   deliverables: Deliverable[];
   more: number;
@@ -48,9 +61,9 @@ export function deliverablesOf(input: { description: string; attachments: readon
     add({ kind: "attachment", id: attachment.id, label: attachment.title, href: attachment.href, version: attachment.href });
   }
   // Links to the issue itself are not deliverables.
-  for (const href of linksIn(input.description)) if (!linksToIssue(href, input.identifier)) add({ kind: "link", id: href, label: linkLabel(href), href });
+  for (const href of markdownLinksIn(input.description)) if (!linksToIssue(href, input.identifier)) add({ kind: "link", id: href, label: linkLabel(href), href });
   for (const comment of input.comments) {
-    for (const href of linksIn(comment.body)) if (!linksToIssue(href, input.identifier)) add({ kind: "comment_link", id: href, label: linkLabel(href), href });
+    for (const href of markdownLinksIn(comment.body)) if (!linksToIssue(href, input.identifier)) add({ kind: "comment_link", id: href, label: linkLabel(href), href });
   }
   all.sort((a, b) => ORDER[a.kind] - ORDER[b.kind] || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const kept = all.slice(0, MAX_DELIVERABLES);
