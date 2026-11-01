@@ -234,10 +234,13 @@ export async function saveConnection(input: {
   const label = PROVIDER_LABELS[input.provider];
   // A CRM's won deals come in to be planned; an accounting tool's bills to be added (HubSpot connector H19); a work tool's
   // tasks or issues are linked to milestones one at a time (Asana acceptance A2, Linear acceptance LN2); nothing comes in
-  // from an export tool, which close packs are written to (close pack Sheets GS1).
+  // from an export tool, which close packs are written to (close pack Sheets GS1); an intake tool's new files in the
+  // folder chosen come in for review (Google Drive intake GD6).
   const comesIn =
     kind === "export"
       ? "Close packs can be exported to its Google Drive from Monthly close pack"
+      : kind === "intake"
+      ? "Once a folder is chosen in Settings, the files added to it come in for review on Bills & receivables"
       : kind === "work"
       ? `Its ${PROVIDER_WORDS[input.provider].workItem ?? "task"}s can be linked to milestones on Contractors`
       : kind === "crm"

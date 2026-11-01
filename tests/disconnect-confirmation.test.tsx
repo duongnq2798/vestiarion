@@ -376,7 +376,7 @@ describe("disconnect forms in src/components (disconnect confirmation DC2, DC6)"
   it("reads the forms it guards", () => {
     expect(calls.length).toBeGreaterThan(100);
     expect(calls.filter((call) => DISCONNECT.test(call.action)).map((call) => call.file)).toEqual(
-      expect.arrayContaining(["src/components/DiscordPanel.tsx", "src/components/TelegramCard.tsx", "src/components/GoogleSheetsPanel.tsx"])
+      expect.arrayContaining(["src/components/DiscordPanel.tsx", "src/components/TelegramCard.tsx", "src/components/GoogleSheetsPanel.tsx", "src/components/GoogleDrivePanel.tsx"])
     );
     // Every form is put down to the component or hook that holds it, so the pinned list names a holder, not a file.
     expect(calls.filter((call) => !/^(?:[A-Z]\w*|use[A-Z]\w*)$/.test(call.holder)).map((call) => `${call.file}: ${call.action}`)).toEqual([]);

@@ -89,6 +89,8 @@ export const TENANT_TABLES = [
   "document_requests",
   // The Linear issues milestones are linked to (migration 0147, Linear acceptance LN3).
   "linear_issue_links",
+  // The Google Drive folder a workspace reads its new files from (migration 0148, Google Drive intake GD3).
+  "google_drive_folders",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -115,6 +117,8 @@ export const TENANT_RPCS = [
   "zohocrm_connector_ready",
   // Whether migration 0145 has run (close pack Sheets GS2): it reads nothing.
   "googlesheets_connector_ready",
+  // Whether migration 0148 has run (Google Drive intake GD3): it reads nothing.
+  "googledrive_connector_ready",
   // Whether migration 0124 has run (bank payouts B11): it reads nothing.
   "bank_payouts_ready",
   // Whether migration 0125 has run (early-payment offers E7): it reads nothing.

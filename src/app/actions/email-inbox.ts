@@ -19,6 +19,8 @@ export interface InboxActionResult {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TRY_AGAIN = "That did not work. Try again in a moment.";
+/** An emailed invoice and a file from Google Drive both reach this (Google Drive intake GD8). */
+const ALREADY_DECIDED = "This invoice was already decided.";
 
 function formString(formData: FormData, key: string): string {
   const value = formData.get(key);
@@ -30,7 +32,7 @@ export async function addInboxEmailAction(_previous: InboxActionResult, formData
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   const inboxEmailId = formString(formData, "inboxEmailId");
-  if (!UUID.test(inboxEmailId)) return { ok: false, message: "This email was already decided." };
+  if (!UUID.test(inboxEmailId)) return { ok: false, message: ALREADY_DECIDED };
   return inOrg(auth, async () =>
     consoleAnswer(await addFromInbox(consoleActor(auth), { inboxEmailId, goodsReceived: formString(formData, "goodsReceived") === "true" }))
   );
@@ -44,7 +46,7 @@ export async function finishInboxEmailAction(_previous: IntakeActionResult, form
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   const inboxEmailId = formString(formData, "inboxEmailId");
-  if (!UUID.test(inboxEmailId)) return { ok: false, message: "This email was already decided." };
+  if (!UUID.test(inboxEmailId)) return { ok: false, message: ALREADY_DECIDED };
   const parsed = invoiceInputSchema.safeParse({
     direction: "payable",
     counterpartyId: formString(formData, "counterpartyId"),
@@ -72,7 +74,7 @@ export async function dismissInboxEmailAction(_previous: InboxActionResult, form
   const auth = await authorize(formData.get("orgSlug"), "records.write");
   if (!auth.ok) return { ok: false, message: auth.message };
   const inboxEmailId = formString(formData, "inboxEmailId");
-  if (!UUID.test(inboxEmailId)) return { ok: false, message: "This email was already decided." };
+  if (!UUID.test(inboxEmailId)) return { ok: false, message: ALREADY_DECIDED };
   return inOrg(auth, async () => consoleAnswer(await dismissFromInbox(consoleActor(auth), { inboxEmailId })));
 }
 

@@ -19,7 +19,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of use"
-      updated="2026-10-25"
+      updated="2026-11-01"
       intro="These terms cover your use of Vestiarion, an AI agent for bills and payments that pays invoices and contractors in USDC on Arc mainnet and Arc testnet. By using it, you accept them."
     >
       <LegalSection id="networks" title="Arc mainnet and Arc testnet">
@@ -222,6 +222,17 @@ export default function TermsPage() {
           Vestiarion never uses Google data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say.
           Disconnecting revokes the access at Google, unless another workspace uses the same Google account, and deletes the tokens; the spreadsheets
           already exported stay in that Drive.
+        </p>
+        <p>
+          When an owner or admin connects Google Drive to a workspace, they agree, for the workspace, that Vestiarion reads the Drive of the Google account
+          they connect with read-only access, which Google gives to every file that account can see, and reads only the one folder an owner or admin
+          chooses: its files&apos; names, types, sizes and dates and who last changed them, and each file added after the folder was chosen, once, to read
+          it into a draft bill. Vestiarion writes nothing to the Drive. Anyone who can add a file to the folder can put a bill in the review list, so a
+          file there is never by itself a reason to pay: a person in the workspace adds each bill, and the agent then decides it within the
+          workspace&apos;s guardrails; who can add files to the folder stays the workspace&apos;s to decide. Vestiarion never uses Google data to train
+          or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. Disconnecting deletes the tokens and forgets
+          the folder, and revokes the access at Google unless the same Google account is still connected elsewhere in Vestiarion; files already read
+          stay in the review list.
         </p>
       </LegalSection>
 

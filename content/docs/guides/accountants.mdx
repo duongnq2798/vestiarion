@@ -112,7 +112,7 @@ Each item names its workspace, who or what it is about, its amount in its own cu
 | Disputed by the customer | A customer disputes an invoice. Its reminders wait while the dispute is open. | **From customers** |
 | Payment to book | A payment made on Arc waiting for review before it is booked in Xero, or one whose booking failed. | The bookings to review |
 | Receivable overdue | A receivable past its due date and not yet received. | The receivable |
-| Connector problem | Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM or Google Sheets needs reconnecting, or a connector's last sync failed. | **Settings**, at the connector |
+| Connector problem | Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Google Sheets or Google Drive needs reconnecting, or a connector's last sync failed. | **Settings**, at the connector |
 | Limit reached | A limit stopped something: the day's cycles in a sandbox, the agent's spending limit, the payee history checks' daily most or Gateway balance, or the day's invitations. | **Settings**, at **Usage this month** |
 
 With nothing open, the queue says "Nothing needs attention in any of your workspaces."
@@ -212,7 +212,7 @@ The spreadsheet names members by email and payees by name, as the close pack doe
 
 When Google stops accepting the connection, because its access was removed in the Google Account or it went unused for six months, the card says **Google Sheets needs you to reconnect** and an owner or admin chooses **Reconnect Google Sheets**. The accountant console lists it as a **Connector problem** until then.
 
-**Disconnect.** An owner or admin chooses **Disconnect Google Sheets** on the card. Vestiarion revokes its access at Google and deletes the tokens. The spreadsheets already exported stay in that Drive: Vestiarion never deletes one. When another workspace is connected with the same Google account, Vestiarion does not revoke, since that would cut the other workspace off too, and the card says so under **Disconnected from** that account; once none is left, remove Vestiarion from **Third-party apps & services** in that Google Account. When Google does not confirm a revoke, the card says that too: remove Vestiarion there to be sure. Deleting a workspace deletes its tokens without telling Google, so remove Vestiarion there as well.
+**Disconnect.** An owner or admin chooses **Disconnect Google Sheets** on the card. Vestiarion revokes its access at Google and deletes the tokens. The spreadsheets already exported stay in that Drive: Vestiarion never deletes one. When another workspace is connected with the same Google account, Vestiarion does not revoke, since that would cut the other workspace off too, and the card says so under **Disconnected from** that account; once none is left, remove Vestiarion from **Third-party apps & services** in that Google Account. When Google does not confirm a revoke, the card says that too: remove Vestiarion there to be sure. Deleting a workspace deletes its tokens without telling Google, so remove Vestiarion there as well. On a deployment that uses one Google client for Google Sheets and [Google Drive](/docs/guides/google-drive), the revoke also ends Google Drive's access for the same Google account, which then needs reconnecting.
 
 **Before the update.** Until the deployment's operator runs migration 0145, the card says "Google Sheets is not set up on this deployment yet." and the close pack page shows no export button. A deployment with no Google client set up shows no Google Sheets card at all.
 

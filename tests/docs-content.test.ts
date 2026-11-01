@@ -242,6 +242,7 @@ describe("the docs navigation", () => {
       ["guides/xero", "Bring bills in from Xero"],
       ["guides/quickbooks", "Bring bills in from QuickBooks Online"],
       ["guides/zohobooks", "Bring bills in from Zoho Books"],
+      ["guides/google-drive", "Bring bills in from Google Drive"],
       ["guides/hubspot", "Bring deals in from HubSpot"],
       ["guides/pipedrive", "Bring deals in from Pipedrive"],
       ["guides/zohocrm", "Bring deals in from Zoho CRM"],
@@ -253,7 +254,7 @@ describe("the docs navigation", () => {
       ["guides/discord", "Get bills waiting for approval in Discord"],
       ["guides/invoice-capture", "Capture invoices from Chrome"],
     ]);
-    expect([...new Set(groupsOf("Connect your tools"))]).toEqual(["All tools", "Accounting", "Sales and CRM", "Delivered work", "Team chat", "Your browser"]);
+    expect([...new Set(groupsOf("Connect your tools"))]).toEqual(["All tools", "Accounting", "Files", "Sales and CRM", "Delivered work", "Team chat", "Your browser"]);
     expect(pagesOf("Developers").slice(0, 4)).toEqual([
       ["get-started/quickstart", "Developer quickstart"],
       ["get-started/sdk", "TypeScript SDK"],

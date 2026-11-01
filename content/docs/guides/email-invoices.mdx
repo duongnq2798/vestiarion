@@ -29,6 +29,8 @@ Vestiarion reads the first PDF, `.eml` or `.txt` file attached, of at most 4 MB,
   caption="An invoice that arrived by email, read and waiting for a person on Bills & receivables."
 />
 
+When the workspace also reads a [Google Drive folder](/docs/guides/google-drive), the files found there wait in the same list, newest first beside the emails, and it is titled **From email and Google Drive**. **Waiting for review** then counts each, such as "2 by email, 1 from Google Drive". A file is added or dismissed as an email is.
+
 - An email ready to add shows the counterparty it matched, the amount, the due date, the purchase order, and what to check.
 - **Cannot be added as it was read** says why: no counterparty in the workspace matches the vendor, or no amount or due date could be read. A vendor that matches none shows by its name, marked "not in Counterparties". "Fix what is missing with Finish and add."
 - **Could not be read** says why: a scan with no text, a file over 4 MB, or nothing to read. A scanned PDF says "Its PDF has no text to read; it may be a scan. Ask the sender for the invoice as a PDF with text, or type it in with Finish and add."
@@ -48,7 +50,7 @@ An owner or admin chooses:
 - **Edit and add**, on an email ready to add, or **Finish and add**, on one that cannot be added as it was read or could not be read: the invoice form opens with what was read. Choose the counterparty, fix the amount or the due date, tick **Goods or services received** if you have them, and choose **Add invoice**. If you type over an amount that was read, the form names it, for instance "The invoice was read as 1.20: check this amount before you add it." It is always a payable. The `create_invoice` entry names the email as above, and lists the fields you changed from what was read. An amount typed wrong can't be edited afterwards: **Reject** the payable while it waits, and add it again.
 - **Dismiss**: the email leaves the list, and the ledger records `invoice_email_dismissed`.
 
-An email is added once. A second press is told "This email was already decided, or cannot be added as it was read."
+An email is added once. A second press is told "This invoice was already decided, or cannot be added as it was read."
 
 ## What is kept
 

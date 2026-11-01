@@ -4,7 +4,8 @@ import { parseRetryAfter } from "../connectors/backoff";
  * Google over HTTP for Google Sheets (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md GS12): the
  * five addresses, named here once. Every request goes to one of their hosts and nowhere else, over https, follows no
  * redirect, stores nothing and has a timeout. A refusal becomes a `GoogleError` from Google's short reason code, never
- * from its message, so no payee's name, email or token reaches a log.
+ * from its message, so no payee's name, email or token reaches a log. Google Drive's reads go through the same calls
+ * (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD1), their log lines under their own name.
  */
 
 export const GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -20,6 +21,8 @@ export interface GoogleHttp {
   fetchImpl?: typeof fetch;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  /** The name a log line starts with: "google sheets" unless another Google connector makes the call. */
+  logAs?: string;
 }
 
 /**
@@ -34,7 +37,9 @@ export class GoogleError extends Error {
   constructor(
     readonly failure: GoogleFailure,
     message: string,
-    readonly retryAfterMs: number | null = null
+    readonly retryAfterMs: number | null = null,
+    /** Google's own short reason code for a refusal (`appNotAuthorizedToFile`), when it gave one: never its message. */
+    readonly reason: string | null = null
   ) {
     super(message);
     this.name = "GoogleError";
@@ -110,23 +115,24 @@ const NO_DRIVE_PERMISSION = new Set(["insufficientPermissions", "ACCESS_TOKEN_SC
 /**
  * A refused call, by its status and Google's reason code (GS12). `onFile`: the call names one file, so a 404, or a 403
  * `insufficientFilePermissions` (a grant made again may not reach the files of the one before it), is that file `gone`.
- * Reads the body, so it is called once, in place of cancelling it. Logs the call, the status and the reason code.
+ * Reads the body, so it is called once, in place of cancelling it. Logs the call, the status and the reason code, under
+ * `logAs`. The error carries the first reason code, for a caller that tells refusals apart further.
  */
-export async function googleFailure(response: Response, label: string, nowMs: number, onFile = false): Promise<GoogleError> {
+export async function googleFailure(response: Response, label: string, nowMs: number, onFile = false, logAs = "google sheets"): Promise<GoogleError> {
   const status = response.status;
   const reasons = await reasonsOf(response);
   const reason = reasons[0] ?? null;
   const said = `Google ${label}: ${status}${reason ? ` ${reason}` : ""}`;
-  console.error(`google sheets: ${label} answered ${status}${reason ? ` ${reason}` : ""}`);
+  console.error(`${logAs}: ${label} answered ${status}${reason ? ` ${reason}` : ""}`);
   const has = (codes: ReadonlySet<string> | string) => reasons.some((one) => (typeof codes === "string" ? one === codes : codes.has(one)));
-  if (status === 429 || has(RATE_LIMITED)) return new GoogleError("rate_limited", said, parseRetryAfter(response.headers.get("retry-after"), nowMs) ?? DEFAULT_RATE_WAIT_MS);
-  if (status === 401) return new GoogleError("unauthorized", said);
-  if (status === 403 && has("storageQuotaExceeded")) return new GoogleError("drive_full", said);
-  if (status === 403 && has(NO_DRIVE_PERMISSION)) return new GoogleError("reconnect", said);
-  if (onFile && (status === 404 || (status === 403 && has("insufficientFilePermissions")))) return new GoogleError("gone", said);
-  if (status === 403) return new GoogleError("forbidden", said);
-  if (status >= 500) return new GoogleError("unavailable", said);
-  return new GoogleError("bad_response", said);
+  if (status === 429 || has(RATE_LIMITED)) return new GoogleError("rate_limited", said, parseRetryAfter(response.headers.get("retry-after"), nowMs) ?? DEFAULT_RATE_WAIT_MS, reason);
+  if (status === 401) return new GoogleError("unauthorized", said, null, reason);
+  if (status === 403 && has("storageQuotaExceeded")) return new GoogleError("drive_full", said, null, reason);
+  if (status === 403 && has(NO_DRIVE_PERMISSION)) return new GoogleError("reconnect", said, null, reason);
+  if (onFile && (status === 404 || (status === 403 && has("insufficientFilePermissions")))) return new GoogleError("gone", said, null, reason);
+  if (status === 403) return new GoogleError("forbidden", said, null, reason);
+  if (status >= 500) return new GoogleError("unavailable", said, null, reason);
+  return new GoogleError("bad_response", said, null, reason);
 }
 
 export async function jsonOf(response: Response, label: string): Promise<unknown> {
@@ -175,7 +181,7 @@ export async function googleCall(
     try {
       const response = await googleFetch(input.url, input.init, input.label, deps);
       if (response.ok) return response;
-      failure = await googleFailure(response, input.label, now(), input.onFile === true);
+      failure = await googleFailure(response, input.label, now(), input.onFile === true, deps.logAs);
     } catch (error) {
       if (!(error instanceof GoogleError)) throw error;
       failure = error;

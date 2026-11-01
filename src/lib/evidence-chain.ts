@@ -273,6 +273,8 @@ function via(detail: Record<string, unknown>): string {
       return " on GitHub";
     case "email":
       return " from an emailed invoice";
+    case "google_drive":
+      return " from a file in the Google Drive folder";
     case "import":
       return " from an imported list";
     case "xero":
@@ -732,6 +734,8 @@ function billStep(ctx: Context, invoice: EvidenceInvoice): EvidenceStep {
       ? "sent through the API with a workspace key"
       : created.detail.via === "email"
         ? "arrived by email and added on Bills & receivables"
+        : created.detail.via === "google_drive"
+          ? "found in the workspace's Google Drive folder and added on Bills & receivables"
         : created.detail.via === "import"
           ? `imported with Import a list on Bills & receivables${row !== null ? `, from row ${row} of the list` : ""}`
           : created.detail.via === "xero"

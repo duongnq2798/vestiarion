@@ -1,0 +1,101 @@
+Keep your bills in Google Drive? Connect it and choose one folder. Each PDF added to that folder from then on is read into a bill that waits on **Bills & receivables**, in the same review list as the invoices that arrive [by email](/docs/guides/email-invoices). Nothing is added, or paid, by itself: a person adds each bill, and the agent then decides it as any payable, on the workspace's network, Arc testnet or Arc mainnet, under every check it applies.
+
+Anyone who can add a file to the folder can put a bill in the review list: your bookkeeper, a scanner, a vendor you shared it with. So a file in the folder is never by itself a reason to pay.
+
+## Before you start
+
+- **An owner or admin** of the workspace connects Google Drive and chooses the folder. Anyone else sees "An owner or admin can connect Google Drive." Adding the bills found, and **Check Google Drive now**, are for whoever adds invoices: an owner or admin.
+- **A Google account** that can open the folder: the folder's owner, or an account it is shared with. A folder in a shared drive works too.
+- **A folder for new bills.** A new, empty folder is best. The files already in the folder when you choose it are never read, so a bill paid long ago never comes back as a new one.
+
+## 1. Connect Google Drive
+
+Open **Settings**, then **Integrations**. Under **Google Drive**, choose **Connect Google Drive**.
+
+The connect page has the workspace you came from already picked and says what Vestiarion does with your Google Drive, among it:
+
+- Vestiarion asks Google for read-only access. Google's permission lets it see every file the Google account can see, but "Vestiarion reads only the one folder an owner or admin of this workspace chooses, and writes nothing to your Drive."
+- "The files already in the folder when it was chosen are never read."
+- It keeps the folder's id and name and the ids of the files already in it when it was chosen, and for each file read its id and name, who last changed it with their email masked, what was read, the draft bill and the document's hash, never the file itself.
+- A person adds each bill. The workspace's model provider reads each file's text to draft its bill, and sees each bill's facts to decide on it.
+
+Tick **I agree**, then choose **Continue to Google**. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
+
+<Callout kind="important" title="Google warns you first">
+Google has not verified Vestiarion's permission to read Drive yet. Until it does, Google shows a "Google hasn't verified this app" screen before you allow access. To go on, choose **Advanced**, then the link to go to Vestiarion. Until then, Google also lets at most 100 people allow it. The warning goes away once Google verifies the permission.
+</Callout>
+
+Google then asks you to let Vestiarion see and download your Google Drive files, as the account you choose there. Allow it: without that permission nothing is connected, and the card says so.
+
+Back in Settings, the card says "Google Drive is connected. Vestiarion reads only the folder chosen on this card." and **Connected to the Google Drive of** the account, its email masked. The ledger records `accounting_connected`, with `provider: "googledrive"`.
+
+## 2. Choose the folder
+
+Open the folder in Google Drive and copy its address from your browser, such as `https://drive.google.com/drive/folders/1aBcDeFg…`. On the card, under **The folder**, paste it in **The folder's link from Google Drive** and choose **Choose the folder**. The folder's ID alone works too. Vestiarion reads the folder through this connection, never by opening the link.
+
+The answer names the folder and the files it leaves as they were, for example "Vestiarion now reads Bills 2026. Files added to it from now on come in for review on Bills & receivables; the 2 files already in it are left as they are." For an empty folder it names no files. The card then shows **Reading** the folder, linked to it in Google Drive, when it was chosen and how many files were in it then. The ledger records `google_drive_folder_chosen`, with the folder's name and how many files were in it, never their names.
+
+Vestiarion reads the folder once to check it, and refuses one it cannot use:
+
+- "That link is to a file, not a folder. Paste the link of the folder the bills are saved in."
+- "That folder is in the trash in Google Drive. Restore it, or choose another folder."
+- A folder the connected account cannot open is refused: check the link, and that the folder is shared with that account.
+- "That folder holds more than 1,000 files. Choose a new, empty folder, or one with at most 1,000 files."
+
+To read another folder, paste its link and choose **Choose another folder**. It replaces the first, and the files already in it are left as they are too. Choosing the same folder again changes nothing it reads: "Vestiarion reads Bills 2026 again. Files added to it since it was first chosen come in for review on Bills & receivables." The files it left as they were then stay so, and no file added since is skipped.
+
+## 3. What happens to a file
+
+Vestiarion reads the folder every 15 minutes. **Check Google Drive now**, on the card or in the review list, reads it at once, and says what it found: "Found 1 file in Bills 2026. It waits in the review list on Bills & receivables.", or "Checked Bills 2026. No new file." When a read is already running, it says "A read is running already. Look again in a minute." On **Bills & receivables**, when nothing waits, the line under the figures says **Nothing waiting for review** and offers whoever adds invoices **Check Google Drive**, which opens the review list with the button.
+
+Each file added to the folder after you chose it is read once:
+
+- **A PDF, `.eml` or `.txt` file** of at most 4 MB is read the way **From a document** on Bills & receivables reads one. The invoice can be laid out any way and written in any language. It becomes ready to add, or says why it cannot be added as it was read.
+- **A picture or a scan** is not read: "Save it as a PDF with text, or type it in with Finish and add."
+- **A Google Docs file** has nothing to download: "It is a Google Docs file, which has no PDF to read. Download it as PDF into the folder, or type it in with Finish and add."
+- **A shortcut** to a file kept elsewhere: "It is a shortcut to a file kept elsewhere. Put the file itself in the folder, or type it in with Finish and add."
+- **A file over 4 MB**: "It is larger than 4 MB. Save a smaller PDF into the folder, or type it in with Finish and add."
+
+Subfolders are not read. A workspace reads five documents a minute, as everywhere in Vestiarion, and a read starts no new file after 40 seconds: a file over either is read next time, so nothing is lost. A file changed in Drive after it was read is not read again: drop the new version into the folder as a new file, or add it with **From a document**. A file moved into the folder later is new, whatever its dates.
+
+If the workspace has Slack, its channel is told: "New invoice from Google Drive", with the file's name, the amount and the due date, and a **Review in Bills & receivables** button. The ledger records `invoice_drive_file_received`, with the file's name and who last changed it in Drive, their email masked.
+
+## 4. Add it, or dismiss it
+
+On **Bills & receivables**, **Waiting for review** counts the files found, such as "1 from Google Drive", or "2 by email, 1 from Google Drive" when invoices came by email too. It opens the review list beside the page, titled **From Google Drive**, or **From email and Google Drive**, newest first.
+
+Each file shows its name, "From Google Drive", when it was found, what was read, and who last changed it in Google Drive, their email masked: "Anyone who can add files to the folder can put one here: check it is the vendor's invoice." Who saved a file is information for you, never permission.
+
+An owner or admin decides each one as an emailed invoice:
+
+- **Add, goods received** or **Add, not received yet**: the payable is added by you. The ledger's `create_invoice` entry names you, and adds `via: "google_drive"`, the row's `inboxEmailId`, the file's `driveFileId` and the hash of the document. The agent usually decides within a minute.
+- **Edit and add**, on a file ready to add, or **Finish and add**, on one that cannot be added as it was read or could not be read: the invoice form opens with what was read, for you to fix and add.
+- **Dismiss**: the file leaves the list, and the ledger records `invoice_drive_file_dismissed`. Nothing changes in Drive.
+
+When the file asks to be paid to another address than the one on file, the agent holds the payment for a person to check with the vendor, as for any document: a document never changes the address paid. A file is added once. A second press is told "This invoice was already decided, or cannot be added as it was read."
+
+## 5. The Google Drive card
+
+The card in Settings names the account and the folder, says when the folder was last read, such as "Last read 3 minutes ago.", or "Not read yet. Vestiarion reads it within 15 minutes.", and counts:
+
+- **Files read in the last 30 days**: the files found in the folder.
+- **Waiting for review**: the files still to add or dismiss, linked to the review list.
+- **Added as bills in the last 30 days**: the files a person added as bills in that time, whenever they were found.
+
+## Status and errors
+
+- **Google Drive needs you to reconnect**, when access was removed in the Google Account. An owner or admin chooses **Reconnect Google Drive**. The accountant console lists it as a **Connector problem** until then.
+- When the folder is deleted, moved to the trash or no longer shared with the account, the card and the review list say "Google Drive no longer has this folder for the connected account: it was deleted, moved to the trash, or is no longer shared with it. Vestiarion reads it again by itself once that account can open it." Nothing else changes: restore the folder, or share it again, and the files added meanwhile are read at the next read. To read another folder instead, choose it on the card.
+- On a deployment that uses one Google client for Google Sheets and Google Drive, disconnecting Google Sheets ends Google's access for Google Drive too when both are connected with the same Google account. The card then says **Google Drive needs you to reconnect**.
+- When Google slows Vestiarion down: "Google asked Vestiarion to slow down, so the folder was not read in full. It is read again later."
+- "Google Drive is not set up on this deployment yet." until the deployment runs migration 0148. A deployment without Google Drive set up shows no Google Drive card.
+
+## What is read, kept and written
+
+- **Read**: the folder's name, and for each of its files the name, type, size, dates and who last changed it. Each new file's contents are downloaded once to be read.
+- **Kept**: the folder's id and name, and the ids of the files already in it when it was chosen, so those are never read. For each file read, its id and name, who last changed it with their email masked, what was read, the draft bill, and the document's SHA-256 hash, as with **From a document**. The file itself is never kept. Of the Google account, its id and a masked email.
+- **Written**: nothing. Vestiarion never writes, moves, renames or deletes a file in your Drive.
+
+## Disconnect
+
+Choose **Disconnect Google Drive** on the card. Vestiarion deletes its tokens, forgets the folder and ends its access at Google, unless the same Google account is still connected elsewhere in Vestiarion: then the card says so, and you can remove Vestiarion in that Google Account's settings. Files already read stay in the review list on Bills & receivables. The ledger records `accounting_disconnected`.

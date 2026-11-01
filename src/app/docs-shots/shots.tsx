@@ -1617,6 +1617,9 @@ export const DOCS_SHOTS = {
         emails={[
           {
             id: "00000000-0000-4000-8000-0000000000e1",
+            source: "email",
+            fileName: null,
+            lastModifiedBy: null,
             from: "Northwind Billing <billing@northwind.example>",
             subject: "Invoice INV-2207",
             receivedAt: "2026-10-03T16:00:00Z",

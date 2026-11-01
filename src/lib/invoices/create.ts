@@ -76,13 +76,15 @@ export async function createInvoice(input: {
   actorId: string | null;
   invoice: InvoiceInput;
   document: DocumentProvenance | null;
-  via?: "telegram" | "slack" | "email" | "api" | "import" | "chrome" | "payee_link";
+  via?: "telegram" | "slack" | "email" | "google_drive" | "api" | "import" | "chrome" | "payee_link";
   /** The key that sent it, when it came through the API. */
   apiKeyId?: string;
   /** The member's Slack link, when it was added from Slack (Slack design S15). */
   linkId?: string;
-  /** The inbox row it was read from, when it arrived by email (email invoices design E8). */
+  /** The inbox row it was read from, when it arrived by email (email invoices design E8) or from Google Drive (GD10). */
   inboxEmailId?: string;
+  /** The Drive file it was read from, when it was found in the workspace's Google Drive folder (Google Drive intake GD10). */
+  driveFileId?: string;
   /** The bill as written in the business's own currency, when it was converted to USDC in shadow mode (shadow mode S6). */
   original?: OriginalBill;
   /** The list it was imported from, by the SHA-256 of its text, its row there, and the bill's invoice number (import design B12). */
@@ -94,7 +96,7 @@ export async function createInvoice(input: {
   /** The draft the Chrome extension captured, or a payee sent, which a person added from the console (invoice capture design C6). */
   captured?: CapturedDraft;
 }): Promise<{ id: string; counterpartyName: string } | null> {
-  const { id, actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, original, imported, deal, external, captured } = input;
+  const { id, actorId, invoice, document, via, apiKeyId, linkId, inboxEmailId, driveFileId, original, imported, deal, external, captured } = input;
   // The vendor's own number (receipts v2 RV1): as typed or read from a document, else as the import or the captured draft had it.
   const invoiceNumber = invoice.invoiceNumber ?? imported?.invoiceNumber ?? captured?.invoiceNumber ?? null;
   const lookup = await db()
@@ -173,6 +175,7 @@ export async function createInvoice(input: {
       ...(apiKeyId ? { apiKeyId } : {}),
       ...(linkId ? { linkId } : {}),
       ...(inboxEmailId ? { inboxEmailId } : {}),
+      ...(driveFileId ? { driveFileId } : {}),
       ...(original ? { bill: original } : {}),
       ...(imported ? { importFile: imported.file, importRow: imported.row } : {}),
       ...(deal ? { via: "deal", deal } : {}),

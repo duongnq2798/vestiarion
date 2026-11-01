@@ -54,6 +54,8 @@ const CRUD_UPDATE: Record<string, { column: string; expr: string }> = {
   spending_limit_contracts: { column: "circle_contract_id", expr: "coalesce(circle_contract_id, '') || '-changed'" },
   ar_reminders: { column: "tone", expr: "'firm'" },
   inbox_emails: { column: "status", expr: "'dismissed'" },
+  // The Google Drive folder a workspace reads, replaced or forgotten on disconnect (0148).
+  google_drive_folders: { column: "last_error", expr: "'changed'" },
   approval_policies: { column: "two_approvals_above", expr: "coalesce(two_approvals_above, 1) + 1" },
   payment_approvals: { column: "used_at", expr: "now()" },
   shadow_modes: { column: "currency", expr: "'USD'" },

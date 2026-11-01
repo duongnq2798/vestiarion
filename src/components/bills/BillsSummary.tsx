@@ -72,17 +72,24 @@ export interface WaitingItem {
   label: string;
   review?: ReviewPanel;
   href?: string;
+  /**
+   * Nothing waits in it, but a person may fill it now: the review list with Check Google Drive now
+   * (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD16).
+   */
+  quiet?: boolean;
 }
 
 /**
  * What waits for a person to review, in one line, only when something does (B11): bills an accounting tool brought in,
- * payments to book in it, invoices that came by email, won deals to plan. Each opens its existing review.
+ * payments to book in it, invoices that came by email, won deals to plan. Each opens its existing review. A quiet item
+ * alone (a Google Drive folder to check, GD16) shows the line as "Nothing waiting for review", with its way in.
  */
 export function ReviewStrip({ items }: { items: WaitingItem[] }): ReactNode {
   if (items.length === 0) return null;
+  const heading = items.some((item) => !item.quiet) ? "Waiting for review" : "Nothing waiting for review";
   return (
-    <div role="region" aria-label="Waiting for review" className="mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-xl border border-line bg-surface/70 px-4 py-2.5 text-[0.8125rem]">
-      <span className="font-semibold text-ink">Waiting for review</span>
+    <div role="region" aria-label={heading} className="mb-5 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-xl border border-line bg-surface/70 px-4 py-2.5 text-[0.8125rem]">
+      <span className="font-semibold text-ink">{heading}</span>
       <ul className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         {items.map((item) => (
           <li key={item.key}>

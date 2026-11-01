@@ -155,6 +155,16 @@ describe("the summary and Waiting for review", () => {
     expect(markup).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>6 from Xero<\/button>/);
     expect(markup).toContain('href="/o/acme/invoices?tab=receivables#from-hubspot"');
   });
+
+  it("offers the review list quietly when nothing waits but a Google Drive folder can be checked (Google Drive intake GD16)", () => {
+    const quiet = screen({ waiting: [{ key: "email", label: "Check Google Drive", review: "email", quiet: true }] });
+    expect(quiet).toMatch(/role="region" aria-label="Nothing waiting for review"/);
+    expect(text(quiet)).toContain("Nothing waiting for review Check Google Drive");
+    expect(quiet).toMatch(/<button[^>]*aria-haspopup="dialog"[^>]*>Check Google Drive<\/button>/);
+    // Beside something that waits, the line is Waiting for review as before.
+    const beside = screen({ waiting: [{ key: "xero", label: "6 from Xero", review: "xero" }, { key: "email", label: "Check Google Drive", review: "email", quiet: true }] });
+    expect(text(beside)).toContain("Waiting for review 6 from Xero Check Google Drive");
+  });
 });
 
 describe("a tab's list", () => {

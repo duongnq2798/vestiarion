@@ -5,7 +5,7 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear", "googledrive"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 /**
@@ -13,22 +13,25 @@ export type ProviderId = (typeof PROVIDERS)[number];
  * Google's product icons are not used in another product's interface without Google's brand permission, so the Google
  * Sheets card and connect page write its name beside a neutral icon. Linear's logo is not shipped yet
  * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN16): its card uses the icon for work tools until the
- * brand asset is added. `PROVIDER_MARKS` holds the others.
+ * brand asset is added. Google Drive is Google's too, so its card uses a plain folder icon
+ * (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD1). `PROVIDER_MARKS` holds the others.
  */
-export const UNMARKED_PROVIDERS = ["googlesheets", "linear"] as const;
+export const UNMARKED_PROVIDERS = ["googlesheets", "linear", "googledrive"] as const;
 export type MarkedProviderId = Exclude<ProviderId, (typeof UNMARKED_PROVIDERS)[number]>;
 
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books", zohocrm: "Zoho CRM", googlesheets: "Google Sheets", linear: "Linear" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books", zohocrm: "Zoho CRM", googlesheets: "Google Sheets", linear: "Linear", googledrive: "Google Drive" };
 
 /**
  * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
  * bills, a CRM its companies and deals, and a work tool the tasks a contractor's milestone is delivered in
  * (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A1). An export tool brings nothing in: a month's close pack
- * is written to it (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md GS1). The core's words follow it.
+ * is written to it (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md GS1). An intake tool brings in
+ * documents a business drops into it, each read into a bill for a person to review
+ * (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD1). The core's words follow it.
  */
-export type ProviderKind = "accounting" | "crm" | "work" | "export";
-export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting", zohocrm: "crm", googlesheets: "export", linear: "work" };
+export type ProviderKind = "accounting" | "crm" | "work" | "export" | "intake";
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting", zohocrm: "crm", googlesheets: "export", linear: "work", googledrive: "intake" };
 
 /** The kind of a provider named by its id or its label; accounting for a name neither is. */
 export function providerKind(provider: string): ProviderKind {
@@ -164,6 +167,18 @@ export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
     bills: "linked issues",
     approval: "An issue done in Linear is never by itself a reason to pay: a person accepts the work against its criteria.",
     workItem: "issue",
+  },
+  // An intake tool (Google Drive intake GD1): one Google account per workspace, the files added to the one folder it
+  // chose read into bills for a person to add. Google's refresh token lapses after six months unused, and every 15-minute
+  // read uses it, so no idle days.
+  googledrive: {
+    possessive: "Google Drive's",
+    organisation: "Google account",
+    contacts: "no contacts",
+    accounts: "no accounts",
+    idleDays: 0,
+    bills: "new files in its folder",
+    approval: "A file in the Google Drive folder is never by itself a reason to pay: a person adds each bill.",
   },
 };
 
@@ -432,6 +447,7 @@ export type CrmProviderId = "hubspot" | "pipedrive" | "zohocrm";
 
 /**
  * The accounting tools among the providers: those that bring bills in (HubSpot connector H1; Asana acceptance A1; Linear
- * acceptance LN1). Google Sheets brings nothing in (close pack Sheets GS1), so it never reads as one.
+ * acceptance LN1). Google Sheets brings nothing in (close pack Sheets GS1), so it never reads as one; nor does Google
+ * Drive, whose files are read into the review list a person adds them from (Google Drive intake GD1).
  */
-export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana" | "googlesheets" | "linear">;
+export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana" | "googlesheets" | "linear" | "googledrive">;

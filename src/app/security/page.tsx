@@ -124,7 +124,7 @@ export default function SecurityPage() {
           <li>the Circle API key and entity secret a workspace connects;</li>
           <li>each workspace&apos;s Ed25519 ledger signing key;</li>
           <li>each webhook endpoint&apos;s signing secret, and the secret of each webhook Asana sends;</li>
-          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear and Google Sheets;</li>
+          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear, Google Sheets and Google Drive;</li>
           <li>a Slack connection&apos;s bot token and posting address, bound to the workspace and the field;</li>
           <li>a Discord channel webhook&apos;s URL, bound to the workspace and the field;</li>
           <li>
@@ -311,7 +311,7 @@ export default function SecurityPage() {
         <ul>
           <li>
             <strong>Connecting.</strong> Only an owner or admin connects a workspace to Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive,
-            Zoho CRM, Asana, Linear, Google Sheets, Slack or GitHub, and for the first nine only after agreeing to what Vestiarion reads and writes there. The
+            Zoho CRM, Asana, Linear, Google Sheets, Google Drive, Slack or GitHub, and for the first ten only after agreeing to what Vestiarion reads and writes there. The
             OAuth state is
             signed under the master key and expires after 10 minutes, a nonce in an HttpOnly cookie must come back with it, and the callback is
             accepted only for the same signed-in person, whose role is read again.
@@ -331,7 +331,7 @@ export default function SecurityPage() {
             accepted only under its Svix signature, within five minutes, and only start a cycle that reads the payout from BlindPay itself.
           </li>
           <li>
-            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear and Google Sheets are encrypted,
+            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear, Google Sheets and Google Drive are encrypted,
             in a table
             only the platform reads, and are opened only in their own workspace&apos;s scope. They are never shown in the browser, a log, a model&apos;s prompt
             or a webhook.
@@ -346,12 +346,20 @@ export default function SecurityPage() {
             Asana&apos;s webhooks are deleted before its grant is revoked, and revoking Pipedrive&apos;s grant uninstalls the app from the company, as
             Pipedrive documents it. Linear&apos;s notices come from the app&apos;s own webhook, which Linear makes for each workspace that authorizes
             the app and ends when the grant is revoked, so Vestiarion has none to delete. Google&apos;s grant is revoked only when no other workspace is connected with the same Google account, since
-            revoking it ends that account&apos;s access for every workspace.
+            revoking it ends that account&apos;s access for every workspace; disconnecting Google Drive also keeps it while Google Sheets holds the same
+            account through the same Google client. Disconnecting Google Sheets does not look at Google Drive: on a deployment with one Google client
+            for both, it ends Google Drive&apos;s access for the same account too, which then needs reconnecting.
           </li>
           <li>
             <strong>Google Sheets.</strong> Vestiarion asks Google for one permission, drive.file, so it reaches only the spreadsheets it makes. Each
             export writes cells as values, never formulas, reads the tab back, and records the export in the ledger with the tab&apos;s SHA-256. A
             link to a spreadsheet is built from its checked id, never from an address Google returns.
+          </li>
+          <li>
+            <strong>Google Drive.</strong> Vestiarion asks Google for one permission, drive.readonly, which reaches every file the connected account
+            can see, and reads only the one folder an owner or admin chooses. A pasted link is read for the folder&apos;s ID alone, never opened. Every
+            call goes to Google&apos;s own Drive address, built from checked IDs; a file is downloaded only while it stays within 4 MB, is read once and
+            is never kept; and nothing is written to the Drive. A file in the folder is never by itself a reason to pay: a person adds each bill.
           </li>
           <li>
             <strong>Disconnected on the provider&apos;s side.</strong> When someone disconnects QuickBooks Online at Intuit, its Disconnect page asks
@@ -515,7 +523,8 @@ export default function SecurityPage() {
             The agent&apos;s model provider is Anthropic, OpenAI or DeepSeek, whichever this deployment configures. It receives what{" "}
             <LegalLink href="/privacy#services">Privacy</LegalLink> lists: the facts of each decision it is asked about; for each email that reaches a
             workspace&apos;s invoice address, its first PDF, .eml or .txt attachment, or else its text, and nothing for one that is too large, holds
-            only images or comes over the workspace&apos;s rate; each document a member has it read; the text of each PDF a vendor sends for a
+            only images or comes over the workspace&apos;s rate; each PDF, .eml or .txt file of at most 4 MB added to the Google Drive folder a workspace
+            chose; each document a member has it read; the text of each PDF a vendor sends for a
             bill&apos;s missing purchase order or goods receipt, or a member attaches to a bill, while vendor requests are in shadow or on, and
             nothing for an image or a scan; and each plain-text message a linked member sends the Telegram bot. Without a provider, a written
             rule-based policy decides, and nothing is sent.
@@ -542,7 +551,7 @@ export default function SecurityPage() {
             bill&apos;s, or twice for one bill fails CI. The lab does not measure the model&apos;s own judgement.
           </li>
           <li>
-            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear or Google Sheets to
+            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear, Google Sheets or Google Drive to
             train or improve any AI model.
           </li>
         </ul>

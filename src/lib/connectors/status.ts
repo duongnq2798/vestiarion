@@ -56,9 +56,18 @@ function clock(iso: string, nowMs: number): string {
 const EXPORT_RECONNECT = (label: string) =>
   `Google no longer accepts this connection: its access was removed in the Google Account, or it went unused for six months. Reconnect ${label} to export ${providerWords(label).bills} again.`;
 
+/**
+ * An intake tool's grant (Google Drive intake GD13): Google ends it when its access is removed in the Google Account.
+ * Google Drive is the one intake tool, so its words name Google too.
+ */
+const INTAKE_RECONNECT = (label: string) =>
+  `Google no longer accepts this connection: its access was removed in the Google Account. Reconnect ${label} to go on reading the ${providerWords(label).bills}.`;
+
 const reconnectWords = (label: string) =>
   providerKind(label) === "export"
     ? EXPORT_RECONNECT(label)
+    : providerKind(label) === "intake"
+    ? INTAKE_RECONNECT(label)
     : providerKind(label) === "work"
     ? `${label} no longer accepts this connection: the app's access was removed in ${label}. Reconnect ${label} to go on reading the ${providerWords(label).workItem ?? "task"}s linked to milestones.`
     : providerKind(label) === "crm"
@@ -96,7 +105,15 @@ export function connectionStatus(facts: ConnectionFacts, nowMs: number): StatusV
     if (kind === "export") {
       return { tone: "off", title: `Disconnected from ${name}`, detail: [`Spreadsheets already exported stay in that Google Drive. Nothing more is written to ${label}.`], reconnect: false };
     }
-    const kept = kind === "work" ? "Acceptances already recorded stay in Vestiarion." : crm ? "Deals already planned stay in Vestiarion." : "Bills already added stay in Vestiarion.";
+    // An intake tool's files already read stay in the review list, to add or dismiss (Google Drive intake GD2).
+    const kept =
+      kind === "work"
+        ? "Acceptances already recorded stay in Vestiarion."
+        : kind === "intake"
+          ? "Files already read stay in the review list on Bills & receivables."
+          : crm
+            ? "Deals already planned stay in Vestiarion."
+            : "Bills already added stay in Vestiarion.";
     return { tone: "off", title: `Disconnected from ${name}`, detail: [`${kept} Nothing more is read from ${label}.`], reconnect: false };
   }
   if (facts.status === "needs_reconnect") {
@@ -105,7 +122,7 @@ export function connectionStatus(facts: ConnectionFacts, nowMs: number): StatusV
       title: `${label} needs you to reconnect`,
       detail: [
         facts.lastError ??
-          (kind === "work" || kind === "export"
+          (kind === "work" || kind === "export" || kind === "intake"
             ? reconnectWords(label)
             : `${label} no longer accepts this connection. Reconnect ${label} to go on bringing its ${crm ? "deals" : "bills"} in.`),
       ],

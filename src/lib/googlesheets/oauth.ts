@@ -11,21 +11,22 @@ import { NO_ACCOUNT_NAME } from "./views";
  * (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md GS3, GS6, GS13, GS14): the authorize URL with
  * the one Drive scope, the code exchange and the refresh at Google's token endpoint with the client's credentials in the
  * body, the Google account a token acts as, and revocation. Google's refresh answer carries no new refresh token, so the
- * one sent is kept.
+ * one sent is kept. Google Drive connects through the same calls with its own client, its own scope and its own log name
+ * (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD1, GD2).
  */
 
 const DRIVE_FILE = GOOGLE_SHEETS_SCOPES[0];
 
 /**
  * The authorize URL (GS3): offline, so a refresh token comes back; `prompt=consent`, so one comes back on every connect;
- * and `include_granted_scopes=false`, so a sign-in grant is never folded in.
+ * and `include_granted_scopes=false`, so a sign-in grant is never folded in. `scopes`: Google Drive's own (GD2).
  */
-export function authorizeUrl(settings: GoogleSheetsSettings, input: { state: string; redirectUri: string }): string {
+export function authorizeUrl(settings: GoogleSheetsSettings, input: { state: string; redirectUri: string }, scopes: readonly string[] = GOOGLE_SHEETS_SCOPES): string {
   const url = new URL(GOOGLE_AUTHORIZE);
   url.searchParams.set("response_type", "code");
   url.searchParams.set("client_id", settings.clientId);
   url.searchParams.set("redirect_uri", input.redirectUri);
-  url.searchParams.set("scope", GOOGLE_SHEETS_SCOPES.join(" "));
+  url.searchParams.set("scope", scopes.join(" "));
   url.searchParams.set("state", input.state);
   url.searchParams.set("access_type", "offline");
   url.searchParams.set("prompt", "consent");
@@ -74,7 +75,7 @@ export async function exchangeCode(settings: GoogleSheetsSettings, input: { code
   }
   if (response.status >= 500 || response.status === 429) return { ok: false, reason: "unavailable" };
   if (!response.ok) {
-    console.error("google sheets: the code exchange was refused", response.status, await oauthError(response));
+    console.error(`${deps.logAs ?? "google sheets"}: the code exchange was refused`, response.status, await oauthError(response));
     return { ok: false, reason: "refused" };
   }
   let body: unknown;
@@ -87,7 +88,7 @@ export async function exchangeCode(settings: GoogleSheetsSettings, input: { code
     // Without a refresh token the connection would stop within the hour: nothing is kept.
     return { ok: true, tokens: mapTokens(body, now()), authEventId: null };
   } catch {
-    console.error("google sheets: the code exchange answered no refresh token");
+    console.error(`${deps.logAs ?? "google sheets"}: the code exchange answered no refresh token`);
     return { ok: false, reason: "refused" };
   }
 }
@@ -121,7 +122,7 @@ export async function refreshTokens(settings: GoogleSheetsSettings, refreshToken
     const code = await oauthError(response);
     if (code === "invalid_grant" || code === "unauthorized_client" || code === "invalid_client") return { ok: false, reason: "reconnect" };
   }
-  console.error("google sheets: a refresh failed", response.status);
+  console.error(`${deps.logAs ?? "google sheets"}: a refresh failed`, response.status);
   return { ok: false, reason: "unavailable", retryAfterMs: parseRetryAfter(response.headers.get("retry-after"), now()) };
 }
 
@@ -132,7 +133,7 @@ export async function refreshTokens(settings: GoogleSheetsSettings, refreshToken
 export async function revokeToken(refreshToken: string, deps: GoogleHttp = {}): Promise<boolean> {
   try {
     const response = await googleFetch(GOOGLE_REVOKE, oauthForm({ token: refreshToken }), "revocation", deps);
-    if (!response.ok) console.error("google sheets: revocation was refused", response.status);
+    if (!response.ok) console.error(`${deps.logAs ?? "google sheets"}: revocation was refused`, response.status);
     return response.ok;
   } catch {
     return false;
@@ -147,10 +148,10 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}$/;
  * The one Google account a fresh grant reaches (GS3, GS6): a grant without drive.file is refused before any call, and
  * nothing is kept. Then Drive's `about`, which drive.file allows, names the account: its permission id is the
  * connection's external id, and its email, masked, the name, since the name goes into the signed ledger and to webhook
- * endpoints. The full address is never kept.
+ * endpoints. The full address is never kept. `required`: the scope the grant must hold, Google Drive's own for it (GD2).
  */
-export async function googleAccount(tokens: ProviderTokens, deps: GoogleHttp = {}): Promise<ExternalOrganisation[]> {
-  if (!tokens.scopes.includes(DRIVE_FILE)) throw new ConnectRefusal("scopes");
+export async function googleAccount(tokens: ProviderTokens, deps: GoogleHttp = {}, required: string = DRIVE_FILE): Promise<ExternalOrganisation[]> {
+  if (!tokens.scopes.includes(required)) throw new ConnectRefusal("scopes");
   const url = new URL(`${DRIVE_API}/about`);
   url.searchParams.set("fields", "user(displayName,emailAddress,permissionId)");
   const response = await googleCall({ url: url.toString(), init: apiInit(tokens.accessToken, "GET"), label: "about.get", repeatable: true }, deps);

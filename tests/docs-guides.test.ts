@@ -53,6 +53,7 @@ type GuideSlug =
   | "guides/zohocrm"
   | "guides/asana"
   | "guides/linear"
+  | "guides/google-drive"
   | "guides/audit-export"
   | "guides/evidence"
   | "guides/evidence-and-receipts"
@@ -391,6 +392,16 @@ const SHEETS_EXPORT = "src/components/close-pack/SheetsExport.tsx";
 const SHEETS_PANEL = "src/components/GoogleSheetsPanel.tsx";
 const SHEETS_ACTIONS = "src/app/actions/googlesheets.ts";
 const SHEETS_TABLE = "src/lib/googlesheets/table.ts";
+
+/** Bills dropped into a Google Drive folder (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md). */
+const DRIVE_PANEL = "src/components/GoogleDrivePanel.tsx";
+const DRIVE_CHECK = "src/components/GoogleDriveCheck.tsx";
+const DRIVE_CONNECT_PAGE = "src/app/integrations/googledrive/connect/page.tsx";
+const DRIVE_ACTIONS = "src/app/actions/googledrive.ts";
+const DRIVE_READ = "src/lib/googledrive/read.ts";
+const DRIVE_FOLDER = "src/lib/googledrive/folder.ts";
+const DRIVE_VIEWS = "src/lib/googledrive/views.ts";
+const REVIEW_WORDS = "src/lib/email-inbox/words.ts";
 
 /** Invoice capture for Chrome (docs/superpowers/specs/2026-10-15-invoice-capture-design.md): the extension, the consent, the review. */
 const CAPTURE_POPUP = "extensions/chrome-invoice-capture/extension/popup.html";
@@ -2084,7 +2095,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["invoice_inbox_on", INBOX_LIBRARY],
     ["invoice_inbox_changed", INBOX_LIBRARY],
     ["invoice_inbox_off", INBOX_LIBRARY],
-    ["From email", INBOX_EMAILS],
+    ["From email", REVIEW_WORDS],
     ["Cannot be added as it was read", INBOX_EMAILS],
     ["Could not be read", INBOX_EMAILS],
     ["Add, goods received", INBOX_EMAILS],
@@ -2105,7 +2116,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Review in Bills & receivables", INBOX_RECEIVE],
     ["invoice_email_received", INBOX_RECEIVE],
     ["invoice_email_dismissed", INBOX_COMMANDS],
-    ["This email was already decided, or cannot be added as it was read.", INBOX_COMMANDS],
+    ["This invoice was already decided, or cannot be added as it was read.", INBOX_COMMANDS],
     ["INBOUND_EMAIL_DOMAIN", INBOX_SETTINGS],
     ["RESEND_INBOUND_WEBHOOK_SECRET", INBOX_SETTINGS],
     ["RESEND_RECEIVING_API_KEY", INBOX_SETTINGS],
@@ -2762,6 +2773,79 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Disconnect Asana", ASANA_PANEL],
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
     ["Acceptances already recorded stay in Vestiarion's signed ledger.", ACCOUNTING_CONSENT],
+  ],
+  "guides/google-drive": [
+    ["Bills & receivables", APP_NAV],
+    ["Settings", APP_NAV],
+    ["An owner or admin can connect Google Drive.", DRIVE_PANEL],
+    ["Check Google Drive now", DRIVE_CHECK],
+    ["Connect Google Drive", DRIVE_PANEL],
+    ["Vestiarion reads only the one folder an owner or admin of this workspace chooses, and writes nothing to your Drive.", ACCOUNTING_CONSENT],
+    ["The files already in the folder when it was chosen are never read.", ACCOUNTING_CONSENT],
+    ["never the file itself", ACCOUNTING_CONSENT],
+    ["I agree", ACCOUNTING_CONSENT],
+    ["Continue to Google", DRIVE_CONNECT_PAGE],
+    ["Google warns you first", DRIVE_CONNECT_PAGE],
+    ["Google hasn't verified this app", DRIVE_CONNECT_PAGE, "Google hasn&apos;t verified this app"],
+    ["choose **Advanced**, then the link to go to Vestiarion", DRIVE_CONNECT_PAGE, "choose Advanced, then the link to go to Vestiarion"],
+    ["Google Drive is connected. Vestiarion reads only the folder chosen on this card.", DRIVE_PANEL],
+    ["Connected to the Google Drive of", DRIVE_PANEL],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["The folder's link from Google Drive", DRIVE_PANEL, "The folder&apos;s link from Google Drive"],
+    ["Choose the folder", DRIVE_PANEL],
+    ["Vestiarion reads the folder through this connection, never by opening the link.", DRIVE_PANEL],
+    ["Files added to it from now on come in for review on Bills & receivables", DRIVE_ACTIONS],
+    ["Reading", DRIVE_PANEL],
+    ["google_drive_folder_chosen", DRIVE_FOLDER],
+    ["That link is to a file, not a folder. Paste the link of the folder the bills are saved in.", DRIVE_ACTIONS],
+    ["That folder is in the trash in Google Drive. Restore it, or choose another folder.", DRIVE_ACTIONS],
+    ["That folder holds more than 1,000 files. Choose a new, empty folder, or one with at most 1,000 files.", DRIVE_ACTIONS],
+    ["Choose another folder", DRIVE_PANEL],
+    ["Files added to it since it was first chosen come in for review on Bills & receivables", DRIVE_ACTIONS],
+    ["It waits in the review list on Bills & receivables.", DRIVE_ACTIONS, '"It waits" : "They wait"} in the review list on Bills & receivables.'],
+    ["No new file.", DRIVE_ACTIONS],
+    ["A read is running already. Look again in a minute.", DRIVE_ACTIONS],
+    ["Nothing waiting for review", BILLS_SUMMARY],
+    ["Check Google Drive", INVOICES_PAGE, 'label: "Check Google Drive"'],
+    ["From a document", NEW_MENU],
+    ["Save it as a PDF with text, or type it in with Finish and add.", DRIVE_READ],
+    ["It is a Google Docs file, which has no PDF to read. Download it as PDF into the folder, or type it in with Finish and add.", DRIVE_READ],
+    ["It is a shortcut to a file kept elsewhere. Put the file itself in the folder, or type it in with Finish and add.", DRIVE_READ],
+    ["It is larger than 4 MB. Save a smaller PDF into the folder, or type it in with Finish and add.", DRIVE_READ],
+    ["New invoice from Google Drive", DRIVE_READ],
+    ["Review in Bills & receivables", DRIVE_READ],
+    ["invoice_drive_file_received", DRIVE_READ],
+    ["Waiting for review", DRIVE_PANEL],
+    ["2 by email, 1 from Google Drive", REVIEW_WORDS, "by email, ${drive} from Google Drive"],
+    ["From email and Google Drive", REVIEW_WORDS],
+    ["From Google Drive", INBOX_EMAILS],
+    ["Anyone who can add files to the folder can put one here: check it is the vendor's invoice.", INBOX_EMAILS],
+    ["Add, goods received", INBOX_EMAILS],
+    ["Add, not received yet", INBOX_EMAILS],
+    ['via: "google_drive"', "src/lib/commands/invoices.ts"],
+    ["driveFileId", "src/lib/commands/invoices.ts"],
+    ["Edit and add", INBOX_EMAILS],
+    ["Finish and add", INBOX_EMAILS],
+    ["Dismiss", INBOX_EMAILS],
+    ["invoice_drive_file_dismissed", INBOX_COMMANDS],
+    ["This invoice was already decided, or cannot be added as it was read.", INBOX_COMMANDS],
+    ["Last read", DRIVE_VIEWS],
+    ["Not read yet. Vestiarion reads it within 15 minutes.", DRIVE_VIEWS],
+    ["Files read in the last 30 days", DRIVE_PANEL],
+    ["Added as bills in the last 30 days", DRIVE_PANEL],
+    ["Google Drive needs you to reconnect", DRIVE_PANEL],
+    ["Reconnect Google Drive", DRIVE_PANEL],
+    ["Connector problem", TRIAGE],
+    [
+      "Google Drive no longer has this folder for the connected account: it was deleted, moved to the trash, or is no longer shared with it. Vestiarion reads it again by itself once that account can open it.",
+      DRIVE_READ,
+    ],
+    ["Google asked Vestiarion to slow down, so the folder was not read in full. It is read again later.", DRIVE_READ],
+    ["Google Drive is not set up on this deployment yet.", DRIVE_PANEL],
+    ["Disconnect Google Drive", DRIVE_PANEL],
+    ["the same Google account is still connected elsewhere in Vestiarion", DRIVE_ACTIONS, "The same Google account is still connected elsewhere in Vestiarion"],
+    ["Files already read stay in the review list on Bills & receivables.", ACCOUNTING_STATUS],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
   ],
   "guides/linear": [
     ["Connect Linear", LINEAR_PANEL],
@@ -3820,6 +3904,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/zohocrm": 20,
   "guides/asana": 20,
   "guides/linear": 20,
+  "guides/google-drive": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,
   "guides/evidence-and-receipts": 20,

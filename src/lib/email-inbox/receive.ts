@@ -1,10 +1,8 @@
-import { documentPayToOf } from "../invoice-document/provenance";
 import { orgHref } from "../auth/org-paths";
 import { db, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { chatDraftOf } from "../invoice-document/chat-draft";
 import { readInvoiceDraft, type InvoiceDraftRead } from "../invoice-document/draft";
-import { lateFeeFieldsOf } from "../invoice-document/normalize";
 import { DocumentReadError, MAX_DOCUMENT_BYTES, type DocumentInput, type DocumentReadErrorCode } from "../invoice-document/read";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { maskEmail } from "../payment-notices";
@@ -14,7 +12,7 @@ import { mrkdwn } from "../slack/blocks";
 import { workspaceOf } from "../slack/commands";
 import { installFor, webhookUrlOf } from "../slack/installs";
 import { inboxOfCode, type InvoiceInbox } from "./inboxes";
-import type { ShownRead } from "./list";
+import { shownOf } from "./shown";
 import { downloadAttachment, fetchReceivedEmail, type ReceivedAttachment, type ReceivedEmail } from "./resend";
 import { codeOfAddress, type InboxSettings } from "./settings";
 import { billsHref } from "../bills-view";
@@ -105,31 +103,6 @@ async function knownSender(counterpartyId: string | null, from: string): Promise
   return !row.error && !!row.data?.notice_email && row.data.notice_email.trim().toLowerCase() === from;
 }
 
-/** What the inbox shows of a read: the fields, what to check, and whether the sender is known. */
-function shown(read: InvoiceDraftRead, known: boolean): ShownRead {
-  const { draft } = read;
-  return {
-    counterpartyName: read.counterpartyName,
-    vendorName: draft.vendorName,
-    amount: draft.amount,
-    currency: draft.currency,
-    dueDate: draft.dueDate,
-    poReference: draft.poReference,
-    invoiceNumber: draft.invoiceNumber,
-    memo: draft.memo,
-    warnings: read.warnings,
-    modelNote: read.modelNote,
-    reader: read.reader,
-    knownSender: known,
-    counterpartyId: draft.counterpartyId,
-    earlyPayDiscountPct: draft.earlyPayDiscountPct,
-    discountDeadline: draft.discountDeadline,
-    ...lateFeeFieldsOf(draft),
-    document: { kind: read.document.kind, sha256: read.document.sha256 },
-    ...(documentPayToOf(draft) ? { payTo: documentPayToOf(draft) as string } : {}),
-  };
-}
-
 /** The channel's message about an email that arrived: what it holds, and the link to decide it (E9). */
 function slackMessage(status: Status, from: string, read: InvoiceDraftRead | null, reasons: string[], url: string) {
   const who = read?.counterpartyName ?? read?.draft.vendorName ?? from;
@@ -178,7 +151,7 @@ async function readInboxEmail(inbox: InvoiceInbox, rowId: string, emailId: strin
         status = verdict.stored ? "ready" : "needs_details";
         reasons = verdict.reasons;
         draft = verdict.stored;
-        shownRead = shown(read, await knownSender(read.draft.counterpartyId, from));
+        shownRead = shownOf(read, await knownSender(read.draft.counterpartyId, from));
         // The email's own words were read because nothing attached could be: when they do not hold the invoice and a
         // picture is attached, the picture is why, and is said first.
         const image = "text" in chosen.input ? email.attachments.find(attachedImage) : undefined;

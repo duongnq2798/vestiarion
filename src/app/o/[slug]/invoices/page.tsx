@@ -74,6 +74,9 @@ import { needsTwoApprovals } from "@/lib/two-approvals";
 import { inOrg } from "@/lib/dal/scope";
 import { inboxEmailsToDecide } from "@/lib/email-inbox/list";
 import { inboxSettingsFromEnv } from "@/lib/email-inbox/settings";
+import { reviewCountLabel, reviewListTitle } from "@/lib/email-inbox/words";
+import { googleDriveCheckFor } from "@/lib/googledrive/panel";
+import { googleDriveSettingsFromEnv } from "@/lib/googledrive/settings";
 import { connectionFor, NotSetUpError, type Connection } from "@/lib/connectors/connections";
 import { PROVIDER_LABELS, PROVIDERS, type ProviderId } from "@/lib/connectors/provider";
 import { accountingReview, type ReviewView } from "@/lib/connectors/review";
@@ -234,7 +237,7 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
     const entriesRead = invoicesRead.then((invoices) => listLedgerEntriesForTargets({ invoiceIds: invoices.map((invoice) => invoice.id) }));
     const [
       [invoices, counterparties, headEntries, dashboardStats, canWrite, canDecide, canReconcile, schedules, deciding, emailed, fromXero, fromQuickBooks, fromZohoBooks, deals, fromHubSpot, fromPipedrive, fromZohoCrm],
-      [entries, verdicts, dealCosts, dealsCollected, customerSaid, toBook, canBook, captured, book, projectOptions, status],
+      [entries, verdicts, dealCosts, dealsCollected, customerSaid, toBook, canBook, captured, book, projectOptions, driveCheck, status],
     ] = await Promise.all([
       // Every tab: what the figures, the strip and the New forms need (B5).
       Promise.all([
@@ -253,10 +256,12 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         }),
         // A cycle running now is deciding the payables not yet decided: they say so (decision trail R1). Best effort.
         hasRunningCycle().catch(() => false),
-        // The invoices that arrived by email and wait for a person, on a deployment that receives them (email invoices E7).
-        inboxSettingsFromEnv()
+        // The invoices that arrived by email and wait for a person, on a deployment that receives them (email invoices E7),
+        // and the files found in the workspace's Google Drive folder, on one where Google Drive is set up: one list
+        // (Google Drive intake GD8).
+        inboxSettingsFromEnv() || googleDriveSettingsFromEnv()
           ? inboxEmailsToDecide().catch((error: unknown) => {
-              console.error("invoices: emailed invoices not loaded", error instanceof Error ? error.message : error);
+              console.error("invoices: invoices to review not loaded", error instanceof Error ? error.message : error);
               return [];
             })
           : [],
@@ -357,6 +362,9 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         }),
         // The projects a new bill may go in (project budgets P3): for New ▾'s Bill to pay. Best effort: none on failure.
         canWriteRead.then((can) => (can ? readProjectOptions() : null)),
+        // The Google Drive folder the review list offers to check now (Google Drive intake GD7, GD16): null where Google
+        // Drive is off, not connected or has no folder chosen. Best effort: a read that fails offers nothing.
+        googleDriveCheckFor(),
         // What the header says beside the chain modes, read in the workspace's scope as on every page (workspace shell S5).
         shellStatus(),
       ]),
@@ -1089,11 +1097,26 @@ export default async function InvoicesPage({ params, searchParams }: InvoicePage
         ),
       };
     }
-    if (emailed.length > 0) {
-      waitingItems.push({ key: "email", review: "email", label: `${emailed.length} by email` });
+    // The review list (email invoices E7; Google Drive intake GD8): named in Waiting for review when something waits.
+    // With a Google Drive folder to check, its panel is there for whoever adds invoices even when nothing waits, so the
+    // link in Slack's message (`review=email`) still opens it, with Check Google Drive now (GD7, GD16); and the line
+    // offers it quietly ("Check Google Drive"), so a person who just dropped a file in finds the button on this page.
+    const folderToCheck = canWrite ? driveCheck : null;
+    if (emailed.length > 0 || folderToCheck) {
+      const sources = emailed.map((email) => email.source);
+      if (emailed.length > 0) waitingItems.push({ key: "email", review: "email", label: reviewCountLabel(sources) });
+      else waitingItems.push({ key: "email", review: "email", label: "Check Google Drive", quiet: true });
       reviews.email = {
-        title: "From email",
-        node: <InboxEmails orgSlug={slug} emails={emailed} canAdd={canWrite} counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))} />,
+        title: reviewListTitle(sources, folderToCheck !== null),
+        node: (
+          <InboxEmails
+            orgSlug={slug}
+            emails={emailed}
+            canAdd={canWrite}
+            counterparties={counterparties.map(({ id, name, role }) => ({ id, name, role }))}
+            driveCheck={folderToCheck}
+          />
+        ),
       };
     }
     if (captured.available && captured.drafts.length > 0) {
