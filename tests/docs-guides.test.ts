@@ -550,6 +550,19 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Receivable overdue", TRIAGE],
     ["Connector problem", TRIAGE],
     ["Limit reached", TRIAGE],
+    // Verdicts, work to accept, invoices to review and the month to close (all waiting AW7, AW9).
+    ["Waiting for a verdict", TRIAGE],
+    ["Work to accept", TRIAGE],
+    ["Invoice to review", TRIAGE],
+    ["Month to close", TRIAGE],
+    ["The agent decided to pay it, and shadow mode pays nothing until a person agrees. Agree and pay it, or disagree.", "src/lib/accountant/read.ts"],
+    ["It also waits for a verdict in shadow mode.", "src/lib/accountant/read.ts"],
+    ["Someone disagreed with the agent in shadow mode: return or reject it.", "src/lib/accountant/read.ts"],
+    ["Accept it against its criteria.", "src/lib/accountant/read.ts"],
+    ["The close pack has not been downloaded or exported yet.", "src/lib/accountant/read.ts"],
+    ["Do you agree with the agent?", "src/components/VerdictControl.tsx"],
+    ["Contractors", APP_NAV],
+    ["Waiting for review", "src/components/bills/BillsSummary.tsx"],
     ["Too many hand-offs in the last 10 minutes. Try again later.", "src/app/api/accountant/handoff/route.ts"],
     ["handoff_exported", "src/app/api/accountant/handoff/route.ts"],
     ["vestiarion-handoff/1", "src/lib/accountant/handoff.ts"],
@@ -3943,7 +3956,10 @@ describe("the accountant console's header", () => {
 
   it("names bills to co-sign and addresses to confirm among what the queue holds, alike on the page and its pictures (accountant queue AQ8)", () => {
     const page = paragraph(ACCOUNTANT_PAGE);
-    expect(page).toContain("payments waiting for a decision, bills to co-sign, addresses to confirm, payments to book");
+    // And verdicts, work to accept, invoices to review and months to close (all waiting AW7).
+    expect(page).toContain(
+      "payments waiting for a decision or a verdict, bills to co-sign, addresses to confirm, work to accept, invoices to review, payments to book, months to close"
+    );
     for (const twin of ["src/app/docs-shots/accountant/[state]/page.tsx", "src/app/docs-shots/onboarding/[state]/page.tsx"]) expect(paragraph(twin), twin).toBe(page);
   });
 });

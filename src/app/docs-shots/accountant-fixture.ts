@@ -11,6 +11,10 @@ import type { UsageMonthView } from "@/lib/usage/read";
  * on Oct 13, 2026, with what is open in each; one workspace's usage this month and its limits; and the members page of a
  * fourth business inviting its accountant. Every figure goes through the console's own functions. No slug here names a
  * real workspace, so every link and form on the pictures reaches nothing.
+ *
+ * Each workspace also holds one of the kinds of 2026-11-01-accountant-all-waiting-design.md (AW2 to AW5): a verdict in
+ * the client that runs in shadow mode, an emailed invoice and a Google Drive file to review, a Linear milestone ready to
+ * accept, and September, last month on Oct 13, still to close.
  */
 
 export const ACCOUNTANT_NOW = new Date("2026-10-13T09:00:00.000Z");
@@ -41,6 +45,9 @@ const HARBOR = workspace("harbor-bakery", "Harbor Bakery", "accountant", [
   { kind: "to_book", id: "p1", title: "A payment of Oct 11, 2026", detail: "Waiting for review before it is booked in Xero.", amount: [640, "USDC"], since: "2026-10-12T15:20:00.000Z", path: "/invoices?review=book-xero" },
   { kind: "to_book", id: "p2", title: "A payment of Oct 12, 2026", detail: "Waiting for review before it is booked in Xero.", amount: [1175.5, "USDC"], since: "2026-10-13T06:05:00.000Z", path: "/invoices?review=book-xero" },
   { kind: "receivable_overdue", id: "r1", title: "Seaside Cafe Group", detail: "Was due Sep 2, 2026.", amount: [3200, "USDC"], since: "2026-09-02", path: "/invoices?tab=receivables&open=r1" },
+  // An invoice emailed to the workspace's address, and last month not closed yet (all waiting AW3, AW5).
+  { kind: "to_review", id: "e1", title: "Seaside Linen", detail: "Emailed to the workspace's address. Ready to add.", amount: [212.4, "USDC"], since: "2026-10-12T11:00:00.000Z", path: "/invoices?review=email" },
+  { kind: "month_close", id: "2026-09", title: "September 2026", detail: "14 payments. The close pack has not been downloaded or exported yet.", since: "2026-10-01", path: "/evidence/close-pack?month=2026-09" },
 ]);
 
 const LUMEN = workspace("lumen-studio", "Lumen Studio", "accountant", [
@@ -48,9 +55,15 @@ const LUMEN = workspace("lumen-studio", "Lumen Studio", "accountant", [
   { kind: "disputed", id: "q2", title: "Granite Labs", detail: "Disputes an invoice on its statement link. Its reminders wait while the dispute is open.", since: "2026-10-09T11:00:00.000Z", path: "/invoices?tab=receivables#from-customers" },
   { kind: "decision", id: "b2", title: "Pixel Print Co", detail: "Flagged for review. Decide by Oct 17, 2026.", amount: [950, "EURC"], since: "2026-10-11T07:30:00.000Z", path: "/approvals#payable-b2" },
   { kind: "connector", id: "xero", title: "Xero", detail: "Xero needs you to reconnect. Xero no longer accepts this connection: it was disconnected in Xero, or not used for 60 days.", since: "2026-10-12T22:10:00.000Z", path: "/settings#xero" },
+  // A file found in its Google Drive folder, and a contractor's Linear issue completed (all waiting AW3, AW4).
+  { kind: "to_review", id: "g1", title: "Oakline Courier", detail: "Added to the Google Drive folder Lumen bills. Needs details: no due date could be read.", amount: [318, "USDC"], since: "2026-10-13T07:40:00.000Z", path: "/invoices?review=email" },
+  { kind: "accept_work", id: "l1", title: "Kite Labs: Checkout flow", detail: "Completed in Linear (ENG-12). Accept it against its criteria.", amount: [2400, "USDC"], since: "2026-10-11T15:00:00.000Z", path: "/contractors" },
 ]);
 
+// Pine Dental opened its workspace from the accountant's client link, so it runs in shadow mode
+// (docs/superpowers/specs/2026-10-23-accountant-client-links-design.md): the bill the agent decided to pay waits for a verdict (all waiting AW2).
 const PINE = workspace("pine-dental", "Pine Dental", "accountant", [
+  { kind: "verdict", id: "b4", title: "Northgate Dental Supply", detail: "The agent decided to pay it, and shadow mode pays nothing until a person agrees. Agree and pay it, or disagree. Decide by Oct 20, 2026.", amount: [860, "USDC"], since: "2026-10-12T09:30:00.000Z", path: "/approvals#payable-b4" },
   { kind: "limit", id: "agent_budget", title: "Agent spending limit", detail: "500.00 USDC of 500.00 USDC today. Past it, the agent pays nothing on its own: each payment waits in Approvals for a person, held for the limit.", since: "2026-10-13T00:00:00.000Z", path: "/settings#usage" },
 ]);
 

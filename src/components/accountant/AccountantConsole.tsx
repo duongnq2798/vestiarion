@@ -38,11 +38,15 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
 const KIND_TONE: Record<TriageKind, "refused" | "held" | "agent" | "neutral"> = {
   past_decide_by: "refused",
   decision: "held",
+  verdict: "held",
   cosign: "agent",
   confirm_address: "held",
+  accept_work: "agent",
+  to_review: "agent",
   customer_says_paid: "agent",
   disputed: "held",
   to_book: "agent",
+  month_close: "neutral",
   receivable_overdue: "held",
   connector: "refused",
   limit: "refused",
@@ -160,7 +164,8 @@ function QueueItem({ item, now }: { item: TriageItem; now: Date }) {
           </Badge>
           <span className="text-xs text-ink-3">{item.workspace.name}</span>
         </div>
-        <p className="font-medium text-ink">
+        {/* A Google Drive file's name, or its folder's in the detail, can run long with no space in it (all waiting AW3). */}
+        <p className="font-medium break-words text-ink">
           {item.title}
           {item.amount && (
             <span className="ml-2 font-normal tabular-nums text-ink-2">
@@ -168,7 +173,7 @@ function QueueItem({ item, now }: { item: TriageItem; now: Date }) {
             </span>
           )}
         </p>
-        <p className="text-sm text-ink-2">{item.detail}</p>
+        <p className="text-sm break-words text-ink-2">{item.detail}</p>
         <p className={cn("text-xs", item.canAct ? "font-medium text-proof" : "text-ink-3")}>{item.who}</p>
       </div>
       <div className="flex shrink-0 items-center justify-between gap-4 sm:flex-col sm:items-end sm:justify-start">

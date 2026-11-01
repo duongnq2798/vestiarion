@@ -2,10 +2,11 @@ import { can, type OrgRole, type Permission } from "../auth/roles";
 import type { UsageLimit } from "../usage/model";
 
 /**
- * The accountant console's triage queue (docs/superpowers/specs/2026-10-13-accountant-console-design.md A3 to A6, and
- * 2026-10-22-accountant-queue-design.md AQ2 for bills to co-sign and addresses to confirm), as pure functions: what each
- * item is, who can act on it, how old it is, and the order the queue shows. The reading is in `read.ts`; nothing here
- * touches a database.
+ * The accountant console's triage queue (docs/superpowers/specs/2026-10-13-accountant-console-design.md A3 to A6,
+ * 2026-10-22-accountant-queue-design.md AQ2 for bills to co-sign and addresses to confirm, and
+ * 2026-11-01-accountant-all-waiting-design.md AW6, AW7 for verdicts, invoices to review, work to accept and the month to
+ * close), as pure functions: what each item is, who can act on it, how old it is, and the order the queue shows. The
+ * reading is in `read.ts`; nothing here touches a database.
  *
  * Amounts stay with their own item and currency. Nothing here adds money across items, currencies or workspaces: the
  * console counts items, never a balance.
@@ -14,11 +15,15 @@ import type { UsageLimit } from "../usage/model";
 export const TRIAGE_KINDS = [
   "past_decide_by",
   "decision",
+  "verdict",
   "cosign",
   "confirm_address",
+  "accept_work",
+  "to_review",
   "customer_says_paid",
   "disputed",
   "to_book",
+  "month_close",
   "receivable_overdue",
   "connector",
   "limit",
@@ -28,11 +33,16 @@ export type TriageKind = (typeof TRIAGE_KINDS)[number];
 export const KIND_TITLES: Record<TriageKind, { one: string; many: string }> = {
   past_decide_by: { one: "Past its decide-by day", many: "Past their decide-by day" },
   decision: { one: "Payment waiting for a decision", many: "Payments waiting for a decision" },
+  verdict: { one: "Waiting for a verdict", many: "Decisions waiting for a verdict" },
   cosign: { one: "Waiting for your co-sign", many: "Bills waiting for your co-sign" },
   confirm_address: { one: "Address to confirm", many: "Addresses to confirm" },
+  // Counted on a workspace's card as "2 milestones to accept" (all waiting AW7).
+  accept_work: { one: "Work to accept", many: "Milestones to accept" },
+  to_review: { one: "Invoice to review", many: "Invoices to review" },
   customer_says_paid: { one: "Customer says paid", many: "Customers say paid" },
   disputed: { one: "Disputed by the customer", many: "Disputed by customers" },
   to_book: { one: "Payment to book", many: "Payments to book" },
+  month_close: { one: "Month to close", many: "Months to close" },
   receivable_overdue: { one: "Receivable overdue", many: "Receivables overdue" },
   connector: { one: "Connector problem", many: "Connector problems" },
   limit: { one: "Limit reached", many: "Limits reached" },
@@ -42,15 +52,25 @@ export const KIND_TITLES: Record<TriageKind, { one: string; many: string }> = {
  * Which permission acts on each kind; a limit's depends on the limit. A co-sign is an accountant's, and so is confirming
  * an address when the viewer is one: the console lists either only while the workspace's accountants co-sign
  * (docs/superpowers/specs/2026-10-22-accountant-queue-design.md AQ2, AQ4), which these pure functions cannot see.
+ *
+ * The four kinds of 2026-11-01-accountant-all-waiting-design.md (AW2 to AW5) take the permission their own action checks:
+ * a verdict `giveVerdictAction`'s, `approval.decide`; an invoice to review the review list's add and dismiss commands',
+ * `records.write` (`inbox.add`, `inbox.dismiss`, `invoice_draft.confirm`, `invoice_draft.discard`); work to accept
+ * Asana's and Linear's accept commands', `records.write` (`milestone.accept`, `milestone.accept_issue`); and the month to
+ * close the close pack's download's, `workspace.read`, which every member holds.
  */
 const ACTS: Record<Exclude<TriageKind, "limit">, Permission> = {
   past_decide_by: "approval.decide",
   decision: "approval.decide",
+  verdict: "approval.decide",
   cosign: "approval.cosign",
   confirm_address: "approval.decide",
+  accept_work: "records.write",
+  to_review: "records.write",
   customer_says_paid: "receivables.reconcile",
   disputed: "receivables.reconcile",
   to_book: "accounting.book",
+  month_close: "workspace.read",
   receivable_overdue: "receivables.reconcile",
   connector: "integrations.manage",
 };
@@ -67,6 +87,8 @@ const LIMIT_ACTS: Record<UsageLimit["key"], Permission> = {
 const HOLDERS: Partial<Record<Permission, string>> = {
   "approval.decide": "an owner, admin or approver",
   "approval.cosign": "a co-signing accountant",
+  "records.write": "an owner or admin",
+  "workspace.read": "any member",
   "receivables.reconcile": "an owner, admin or accountant",
   "accounting.book": "an owner, admin or accountant",
   "integrations.manage": "an owner or admin",
@@ -79,11 +101,16 @@ const HOLDERS: Partial<Record<Permission, string>> = {
 const DOING: Record<Exclude<TriageKind, "limit">, string> = {
   past_decide_by: "decide it",
   decision: "decide it",
+  verdict: "give a verdict",
   cosign: "co-sign it",
   confirm_address: "confirm it",
+  // A link held for review may not be accepted as it stands: its item says "You can review it" (read.ts, all waiting AW4).
+  accept_work: "check it and accept it",
+  to_review: "review and add it",
   customer_says_paid: "check it and apply the payment or answer",
   disputed: "answer the customer",
   to_book: "review and book it",
+  month_close: "download the close pack",
   receivable_overdue: "follow it up",
   connector: "reconnect it",
 };
@@ -165,9 +192,10 @@ export function ageWords(since: string, now: Date): string {
 }
 
 /**
- * The queue's order: what the viewer can act on first, then by kind (past its day, waiting decisions, bills to co-sign,
- * addresses to confirm, what customers said, bookings, overdue receivables, connectors, limits), then the oldest first,
- * then by workspace and title so the order never depends on the order the workspaces answered in.
+ * The queue's order: what the viewer can act on first, then by kind (past its day, waiting decisions, verdicts, bills to
+ * co-sign, addresses to confirm, work to accept, invoices to review, what customers said, bookings, the month to close,
+ * overdue receivables, connectors, limits: all waiting AW6), then the oldest first, then by workspace and title so the
+ * order never depends on the order the workspaces answered in.
  */
 export function sortTriage(items: readonly TriageItem[]): TriageItem[] {
   const rank = (kind: TriageKind) => TRIAGE_KINDS.indexOf(kind);

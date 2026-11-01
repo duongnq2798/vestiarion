@@ -382,7 +382,8 @@ describe("readPortfolio: what waits for the accountant", () => {
 
     const off = world(INVITED, harbor({ cosignOn: false }));
     expect(harborItems((await off.read()).items).map((item) => item.kind)).toEqual(["decision", "decision"]);
-    expect(off.fake.requests.some((sent) => sent.path === "/rest/v1/payment_approvals" || sent.path === "/rest/v1/payment_intents")).toBe(false);
+    // Last month's close counts its payments with a HEAD request, and reads no co-sign fact (all waiting AW5).
+    expect(off.fake.requests.some((sent) => sent.method !== "HEAD" && (sent.path === "/rest/v1/payment_approvals" || sent.path === "/rest/v1/payment_intents"))).toBe(false);
   });
 
   it("keeps the decision items, and names the part, when the co-sign facts cannot be read", async () => {
@@ -390,7 +391,8 @@ describe("readPortfolio: what waits for the accountant", () => {
     const { read } = world(INVITED, harbor({ failing: "/rest/v1/payment_intents" }));
     const portfolio = await read();
     expect(harborItems(portfolio.items).map((item) => item.kind)).toEqual(["decision", "decision"]);
-    expect(portfolio.workspaces.find((workspace) => workspace.slug === HARBOR.slug)?.unread).toEqual(["bills to co-sign"]);
+    // Last month's close counts the same table's payments, so it is named too (all waiting AW5).
+    expect([...(portfolio.workspaces.find((workspace) => workspace.slug === HARBOR.slug)?.unread ?? [])].sort()).toEqual(["bills to co-sign", "last month's close"]);
   });
 
   it("counts co-signing as off when the setting cannot be read, and names it", async () => {
