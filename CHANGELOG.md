@@ -14,6 +14,31 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A free payout batch check** at [/check-payouts](https://www.vestiarion.xyz/check-payouts). Paste a batch payout,
+  or drop its file: Safe's CSV Airdrop (`token_type,token_address,receiver,amount,id`, or the older three columns), a
+  Disperse list of an address and an amount a line, an exchange's batch withdrawal or any sheet with an address column.
+  Its address, name, amount, token and token type columns are found by their names; in a list without them, the address
+  and amount columns are found by what the rows hold. You can change any match. Every address gets the address
+  checker's rules: hidden characters, letters from another alphabet, its EIP-55 checksum, OFAC's list, and an address
+  that is not a wallet, such as a burn address or a USDC contract. Every address is then compared with every other in
+  the batch: two made to look alike (at least 3 digits shared at each end, or 5 at one) are both a stop, unless a batch
+  that long holds such a pair by chance more than once in 100 batches, when both are a look that says how often chance
+  does it (5,000 addresses hold about two dozen pairs sharing 5 digits at an end). Sharing 4 digits at an end is a
+  look, and so is the same address on two rows, saying when the row may be in the batch twice or one address is given
+  for two payees, and one name with two addresses. Paste the addresses you have paid before, up to 200, and each row
+  is compared with them too. An ENS name is not looked up, and an address that is not an EVM one is not checked; each is a look, saying so.
+  Amounts are read as the bill import reads them, asking how they are written when `1,000` could be read two ways: an
+  amount that is not a number, is zero or below, or has more decimals than its token (6 for USDC and EURC, 18 for a
+  chain's own coin) is to fix, and one at least 100 times the median of the token's other amounts is a look. Each
+  token's amounts are totalled as exact decimals, saying when the batch pays more than one token. A token contract
+  that is USDC or EURC on a chain Vestiarion knows is named, one made to look like it is a stop, and any other is a
+  look, said once with the rows that pay it. Each row gets a verdict, Fix, Stop, Look or Nothing found, never more than
+  that; the rows with a finding are listed in batch order, the digits a lookalike pair shares underlined, and the
+  batch comes back as a CSV with a "Payout check" column. Up to 5,000 rows are checked, the button showing it is busy
+  meanwhile, and an example batch of made-up payees shows nine kinds of finding. It all runs in the browser: nothing
+  pasted is sent anywhere or kept. It is the fifth free tool in the footer's **Free tools** group and the sitemap, its
+  **Try it on your bills** and footer **Get started** credit a workspace opened next to it, and the address checker and
+  the OFAC vendor check link to it. No migration.
 - **Everything waiting, across every workspace, on the accountant console.** The queue now lists four more kinds:
   **Waiting for a verdict**, a bill the agent decided to pay, held in shadow mode until a person agrees or disagrees,
   listed in place of its decision, for an owner, admin or approver, and saying that agreeing pays it; **Invoice to

@@ -71,6 +71,14 @@ export default function CheckAddressPage() {
               The same goes for an invoice whose payment details were changed, or an email that says a supplier has a new wallet. Compare the whole
               address with one you already had, and confirm a new one with the payee by a call or a message to a contact you had before.
             </p>
+            <p className="mt-3 text-sm leading-relaxed text-ink-2">
+              Sending a whole batch? The{" "}
+              <Link href="/check-payouts" className="font-medium text-agent underline underline-offset-4">
+                payout batch check
+              </Link>{" "}
+              runs these rules on every address of a Safe CSV Airdrop file, a Disperse list or a sheet, compares each with every other in the batch,
+              and reads the amounts and tokens.
+            </p>
           </section>
 
           <section aria-labelledby="payee-lock" className="mt-10 rounded-2xl border border-line bg-surface px-5 py-6 sm:px-6">

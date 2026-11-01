@@ -130,15 +130,29 @@ const LAKH_GROUPED = /^\d{1,2}(?:,\d{2})*,\d{3}$/;
 /** The most digits before the decimal mark an invoice's amount holds (`numeric(20, 6)`). */
 const MAX_WHOLE_DIGITS = 14;
 
+/** Whether a number is written below zero: a minus before or after it, or in brackets as accounts write a credit. */
+export function isNegativeAmount(number: string): boolean {
+  return /^-|^\(.*\)$|-$/.test(number.trim());
+}
+
 /**
  * The number, in the list's decimal mark (or the one the cell settles itself when the list has none), as an exact
  * decimal string within the currency's decimals; or the reason it cannot be, to follow the cell in a sentence.
+ * `limits.digits` is the currency's decimals unless given, and `limits.wholeDigits` the 14 an invoice's amount holds:
+ * the payout batch check gives `Infinity` for both, compares a token's own decimals itself, and takes an airdrop of a
+ * token with a large supply at any size (payout check CP6).
  */
-export function readAmount(number: string, listMark: DecimalMark | null, currency: string): AmountRead {
+export function readAmount(
+  number: string,
+  listMark: DecimalMark | null,
+  currency: string,
+  limits: { digits?: number; wholeDigits?: number } = {}
+): AmountRead {
+  const digits = limits.digits ?? currencyDigits(currency);
+  const wholeDigits = limits.wholeDigits ?? MAX_WHOLE_DIGITS;
   const text = number.trim();
   if (text === "") return { ok: false, reason: "is blank" };
-  if (/^-|^\(.*\)$|-$/.test(text)) return { ok: false, reason: "is negative: a credit note is not a bill" };
-  const digits = currencyDigits(currency);
+  if (isNegativeAmount(text)) return { ok: false, reason: "is negative: a credit note is not a bill" };
   const evidence = markEvidence(text, digits);
   let mark = listMark;
   if (mark === null) {
@@ -156,7 +170,7 @@ export function readAmount(number: string, listMark: DecimalMark | null, currenc
     return { ok: false, reason: "is not a number" };
   }
   const integer = whole.split(group).join("");
-  if (integer.replace(/^0+/, "").length > MAX_WHOLE_DIGITS) return { ok: false, reason: "is too large" };
+  if (integer.replace(/^0+/, "").length > wholeDigits) return { ok: false, reason: "is too large" };
   const decimals = fraction.replace(/0+$/, "");
   const code = currency.toUpperCase();
   if (decimals.length > digits) {

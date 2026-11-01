@@ -43,6 +43,12 @@ export const FREE_TOOLS = [
     title: "Bill list check",
     description: "Check a bill list before you pay it: bills you may be about to pay twice, and early-payment discounts and late fees in the next 7 days.",
   },
+  {
+    slug: "check-payouts",
+    path: "/check-payouts",
+    title: "Payout batch check",
+    description: "Check a payout batch before you send it: lookalike, sanctioned or mistyped addresses, rows in it twice, and amounts and tokens to fix.",
+  },
 ] as const satisfies readonly FreeTool[];
 
 export type FreeToolSlug = (typeof FREE_TOOLS)[number]["slug"];

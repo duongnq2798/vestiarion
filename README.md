@@ -551,6 +551,11 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
   scored by the agent's own duplicate rule or by a matching invoice number, the bills of the same amount about a month
   apart, and the early-payment discounts and late fees of the next 7 days; the list comes back as a CSV with a flag
   column.
+- **[Payout batch check](https://www.vestiarion.xyz/check-payouts)** — a free page that reads a batch payout, a Safe
+  CSV Airdrop file, a Disperse list or a sheet, in the browser: every address gets the address checker's rules and is
+  compared with every other in the batch and with the addresses you have paid before, and the amounts and tokens are
+  read and totalled per token as exact decimals; the batch comes back as a CSV with a Fix, Stop, Look or Nothing found
+  verdict on each row.
 
 ### Contracts on Arc testnet
 

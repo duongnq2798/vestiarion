@@ -29,6 +29,8 @@ one-line description. The footer, the sitemap and the tool's start button read i
   `docs/superpowers/specs/2026-10-28-payment-terms-design.md`), its term pages listed after it in the sitemap.
 - The bill list check followed the vendor check: `check-bills`, `/check-bills`, "Bill list check"
   (`2026-10-28-check-bills-design.md`).
+- The payout batch check followed the bill list check: `check-payouts`, `/check-payouts`, "Payout batch check"
+  (`2026-11-02-check-payouts-design.md`).
 
 **TA2. A tool's first touch** (`freeToolFirstTouch`). What the tool's start links keep:
 - `utm_source` the tool's slug, `utm_medium` `free_tool` (`FREE_TOOL_MEDIUM`), `utm_campaign` `free_tools`

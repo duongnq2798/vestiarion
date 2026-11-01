@@ -211,6 +211,14 @@ export function specialAddress(address: string): SpecialAddress | null {
   return SPECIAL.get(address.toLowerCase()) ?? null;
 }
 
+/**
+ * The token contracts among the special addresses (AC4), each once, lowercase, with its name: "USDC on Base". The
+ * payout batch check compares a batch's token contracts with them (payout check CP7).
+ */
+export const TOKEN_CONTRACTS: ReadonlyArray<{ address: string; label: string }> = [...SPECIAL].flatMap(([address, special]) =>
+  special.kind === "token" ? [{ address, label: special.label }] : []
+);
+
 /** At most this many known addresses are read. */
 export const KNOWN_MAX = 200;
 

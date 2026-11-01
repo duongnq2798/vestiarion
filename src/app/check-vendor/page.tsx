@@ -97,6 +97,13 @@ export default function CheckVendorPage() {
               </li>
               <li>It is a first look, not a compliance decision.</li>
               <li>
+                It does not read a payout file&apos;s amounts or tokens. For a batch you are about to send, use the{" "}
+                <Link href="/check-payouts" className="font-medium text-agent underline underline-offset-4">
+                  payout batch check
+                </Link>
+                : every address against OFAC&apos;s list and every other address in the batch, and each amount and token.
+              </li>
+              <li>
                 The list here is OFAC&apos;s of {listDate}. It is refreshed from OFAC&apos;s files by a{" "}
                 <a href={REFRESH_SCRIPT} target="_blank" rel="noopener noreferrer" className="font-medium text-agent underline-offset-4 hover:underline">
                   script in Vestiarion&apos;s open-source code

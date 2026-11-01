@@ -80,7 +80,7 @@ less work in a run, never a run past its limit.
 
 `.github/workflows/synthetic-check.yml` runs `scripts/synthetic-check.mjs` on GitHub's servers, outside Vercel and
 Supabase, so it can see either one fail (`docs/superpowers/specs/2026-10-28-production-check-design.md`). Every 10
-minutes it opens nine public addresses on production with a plain `GET`, following no redirect: the landing, `/open`,
+minutes it opens ten public addresses on production with a plain `GET`, following no redirect: the landing, `/open`,
 `/docs`, every free tool in `FREE_TOOLS`, `/robots.txt`, which must name the sitemap, and `/sitemap.xml`, which must
 list each free tool. Each must answer 200 within its budget, 8 seconds for the landing and `/open`, which read the
 database, and 4 for the rest, and say a text from its source; `/open` must not say a network's numbers could not be
@@ -4672,7 +4672,7 @@ tool's **Try it on your bills** goes to `/onboarding?shadow=1`, and `loginRedire
 the same browser, and even then the landing path `FirstTouch` records is `/onboarding`, not the tool. The tool's start
 links write the first touch themselves instead. `FREE_TOOLS` (`src/lib/free-tools.ts`) is the one list of tools, each a
 slug, a top-level path, a title and a one-line description: today the address checker, the payment terms
-calculator, the OFAC vendor check and the bill list check. The full footer's **Free tools** group (above Legal, so the footer keeps four columns) and the sitemap read
+calculator, the OFAC vendor check, the bill list check and the payout batch check. The full footer's **Free tools** group (above Legal, so the footer keeps four columns) and the sitemap read
 it; the sitemap lists a tool's own pages, such as the payment terms calculator's term pages, right after it. `ToolStartLink` (`src/components/public/ToolCta.tsx`) is every start
 on a tool's page: `ToolCta`, its **Try it on your bills** button, named `<slug>-start` for the analytics click, and the
 full footer's **Get started** when the page passes `SiteFooter` its `tool`. On a click or a middle click, and only when
@@ -4873,6 +4873,41 @@ address checker. A bill list is read and checked in the browser (`BillListChecke
   analytics click, its full footer's **Get started** credits the tool too (`<SiteFooter tool="check-bills" />`), and the
   page says `FREE_TOOL_COUNT_LINE` under its introduction, as the address checker does. Both start links live outside
   the checker's code, which `tests/check-bills-page.test.tsx` holds to making no request and touching no cookie.
+
+**The payout batch check.** `/check-payouts` (`src/app/check-payouts/page.tsx`,
+`docs/superpowers/specs/2026-11-02-check-payouts-design.md`) is a free public page, static and outside `/tools`, like
+the other tools. A batch payout is read and checked in the browser (`PayoutBatchChecker`,
+`src/components/payout-check/`), against the OFAC wallet snapshot the page carries, as the address checker's does:
+there is no form, request, URL parameter or storage.
+- `readPayoutBatch` (`src/lib/payout-check/read.ts`) reads a Disperse list, every non-empty line an address and an
+  amount, as two columns, and anything else with the bill import's `readTable`, after `decodeList`; a line with a
+  second comma is a CSV. `detectPayoutColumns` finds the address, name, amount, token and token type columns by their
+  names (Safe's CSV Airdrop maps as it is), the address among the columns named as one by the most addresses its first
+  rows hold; without names, it finds only the address and the amount, by what the first rows hold. The steps are the
+  bill check's (`src/components/intake/list-steps.tsx`): `StepTrail`, `ColumnChoice`, the bill fields' `ColumnField`
+  now built on it, `AmountsQuestion` when an amount reads two ways (`payoutDecimalMark`, from `decimalMarkOf`), and
+  `afterPaint`, moved there from `BillListChecker`, so **Check N rows** is busy for a frame before up to 5,000 rows
+  hold the page.
+- `checkPayouts` (`src/lib/payout-check/findings.ts`) gives each row's address `checkAddress`, read as the vendor
+  check reads a wallet (`evmPart`), against OFAC's addresses and the addresses paid before (`readKnownAddresses`), and
+  compares every address with every other through buckets of shared end digits (`lookalikeNeighbours`): pairs that
+  `madeToLookAlike` catches are stops, 4 digits at an end (`PARTIAL_MIN`) a look, at most `NEIGHBOURS_KEPT` of each a
+  row. A lookalike pair is a look instead when a batch its size would hold one sharing as many digits by chance
+  (`chancePairs` over `CHANCE_PAIRS_MAX`), as 5,000 addresses hold about two dozen sharing 5 at an end; the same goes
+  against the addresses paid before. The same address on several rows and one name (`vendorKeyOf`) with several
+  addresses are looks. `tokenOf` names a known USDC or EURC contract (`TOKEN_CONTRACTS`, the address checker's special addresses),
+  stops one made to look like it, and looks at any other; outside Safe's form a token cell is read through `evmPart`
+  too. `readPayoutAmount` reads amounts with the import's `readAmount`, the token's decimals and no cap on whole
+  digits; one 100 times the median of the token's others is a look, and `sumDecimals` totals each token exactly.
+  `payoutVerdict` gives each row Fix, Stop, Look or Nothing found.
+- `PayoutCheckResults` shows the counts and the list's date (announced), the totals per token, each token with a
+  finding once, then the rows with a finding in batch order, 200 at a time, the digits a lookalike pair shares marked
+  by the address checker's `Marked`, and the rows with nothing found folded, drawn once opened. `checkedPayoutCsv`
+  (`src/lib/payout-check/csv.ts`) gives the batch back with a "Payout check" column, as `checkedCsv` does.
+- It is `check-payouts` in `FREE_TOOLS`. Its **Try it on your bills** is `ToolCta` (above), `check-payouts-start` for
+  the analytics click, and its full footer's **Get started** credits the tool too (`<SiteFooter tool="check-payouts" />`).
+  The address checker links to it for a whole batch, and the vendor check for amounts and tokens.
+  `tests/check-payouts-page.test.tsx` holds the checker's code to making no request and touching no cookie or storage.
 
 ## Onboarding by role
 

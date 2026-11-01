@@ -26,6 +26,7 @@ PC1. What is checked. Each round opens these public addresses on production, `ht
 | `/payment-terms` | 200 | `Payment terms calculator` (its heading) | | 4 s |
 | `/check-vendor` | 200 | `Check your vendors against OFAC` (its heading, up to the apostrophe) | | 4 s |
 | `/check-bills` | 200 | `Check your bill list for duplicates and deadlines` (its heading) | | 4 s |
+| `/check-payouts` | 200 | `Check a batch payout before you send it` (its heading) | | 4 s |
 | `/robots.txt` | 200 | `Sitemap:` and `/sitemap.xml` (it names the sitemap) | | 4 s |
 | `/sitemap.xml` | 200 | `<urlset` and each free tool's `<path></loc>` (it lists the free tools) | | 4 s |
 
@@ -56,7 +57,7 @@ PC5. When the team is told. A check that fails two rounds running is told once, 
 which lists every check that reached its second failure in the round, each with its reason and the time it started
 failing. A check still failing after that is not told again. A told check that passes is told once more, in that
 round's single "passing again" post, with the time it passed and how long it was down. A check that fails once and then
-passes is never told. So a whole-site outage is one post, not nine.
+passes is never told. So a whole-site outage is one post, not one for each address.
 
 PC6. How it is told. Each post goes to the team's private Discord channel through a channel webhook, only to
 `https://discord.com/api/webhooks/{id}/{token}` rebuilt from the secret as the product's own parser does

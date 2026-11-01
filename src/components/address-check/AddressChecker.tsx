@@ -47,17 +47,22 @@ function Check({ ok, children }: { ok: boolean | null; children: ReactNode }) {
   );
 }
 
-/** One address, its shared ends underlined, and each middle digit that differs from the other's bold on a tint. */
-function Marked({ address, other, leading, trailing }: { address: string; other: string; leading: number; trailing: number }) {
+/**
+ * One address, its shared ends underlined, and each middle digit that differs from the other's bold on a tint, case
+ * ignored, so two checksummed addresses compare as their digits do. The payout batch check marks a lookalike pair with
+ * it too (payout check CP9).
+ */
+export function Marked({ address, other, leading, trailing }: { address: string; other: string; leading: number; trailing: number }) {
   const digits = address.slice(2);
   const end = digits.length - trailing;
+  const others = other.slice(2).toLowerCase();
   return (
     // Small enough on a 375 px phone that all 42 characters stay on one line, the ends side by side.
     <span className="break-all font-mono text-[0.6875rem] leading-6 text-ink-3 sm:text-[0.8125rem]">
       0x
       <span className="font-semibold text-ink underline decoration-agent decoration-2 underline-offset-4">{digits.slice(0, leading)}</span>
       {[...digits.slice(leading, end)].map((digit, index) => (
-        <span key={index} className={digit === other.slice(2)[leading + index] ? undefined : "rounded-md bg-refused-soft font-semibold text-refused"}>
+        <span key={index} className={digit.toLowerCase() === others[leading + index] ? undefined : "rounded-md bg-refused-soft font-semibold text-refused"}>
           {digit}
         </span>
       ))}
