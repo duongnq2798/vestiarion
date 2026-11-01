@@ -40,7 +40,8 @@ export function flagsOf(check: BillCheck): Map<number, string[]> {
   return flags;
 }
 
-function csvCell(value: string, delimiter: string): string {
+/** One cell as the list wrote it: quoted when it holds the delimiter, a quote, a line break, or spaces at an end. */
+export function csvCell(value: string, delimiter: string): string {
   return value.includes(delimiter) || /["\r\n]/.test(value) || value !== value.trim() ? `"${value.replace(/"/g, '""')}"` : value;
 }
 

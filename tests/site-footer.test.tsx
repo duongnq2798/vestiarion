@@ -74,13 +74,14 @@ describe("the full footer's columns", () => {
     ]);
   });
 
-  it("put every free tool, by its title, under Free tools: the address checker, the payment terms calculator, the OFAC vendor check and the bill list check", () => {
+  it("put every free tool, by its title, under Free tools: the address checker, the payment terms calculator, the OFAC vendor check, the bill list check and the payout batch check", () => {
     expect(FOOTER_COLUMNS[3].links).toEqual(FREE_TOOLS.map((tool) => ({ href: tool.path, label: tool.title })));
     expect(FOOTER_COLUMNS[3].links).toEqual([
       { href: "/check-address", label: "Address checker" },
       { href: "/payment-terms", label: "Payment terms calculator" },
       { href: "/check-vendor", label: "OFAC vendor check" },
       { href: "/check-bills", label: "Bill list check" },
+      { href: "/check-payouts", label: "Payout batch check" },
     ]);
   });
 

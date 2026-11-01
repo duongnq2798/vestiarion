@@ -38,12 +38,13 @@ const NOW = new Date("2026-10-28T09:15:00.000Z");
 const CHECK_ADDRESS = freeTool("check-address");
 
 describe("the list of free tools (TA1)", () => {
-  it("holds the address checker, the payment terms calculator, the OFAC vendor check and the bill list check, each with a slug, a path, a title and a one-line description", () => {
+  it("holds the address checker, the payment terms calculator, the OFAC vendor check, the bill list check and the payout batch check, each with a slug, a path, a title and a one-line description", () => {
     expect(FREE_TOOLS.map(({ slug, path: at, title }) => ({ slug, path: at, title }))).toEqual([
       { slug: "check-address", path: "/check-address", title: "Address checker" },
       { slug: "payment-terms", path: "/payment-terms", title: "Payment terms calculator" },
       { slug: "check-vendor", path: "/check-vendor", title: "OFAC vendor check" },
       { slug: "check-bills", path: "/check-bills", title: "Bill list check" },
+      { slug: "check-payouts", path: "/check-payouts", title: "Payout batch check" },
     ]);
     for (const tool of FREE_TOOLS) {
       expect(tool.description, tool.slug).toMatch(/^[A-Z][^\n]{20,160}\.$/);
@@ -86,6 +87,7 @@ describe("the list of free tools (TA1)", () => {
     expect(freeToolCtaId("check-address")).toBe("check-address-start");
     expect(freeToolCtaId("check-vendor")).toBe("check-vendor-start");
     expect(freeToolCtaId("check-bills")).toBe("check-bills-start");
+    expect(freeToolCtaId("check-payouts")).toBe("check-payouts-start");
     for (const tool of FREE_TOOLS) expect(CTA_ID.test(freeToolCtaId(tool.slug)), tool.slug).toBe(true);
   });
 });

@@ -293,7 +293,8 @@ export function listWords(words: readonly string[]): string {
   return words.length <= 1 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
 }
 
-function specialWords(special: SpecialAddress): string {
+/** Why money sent to a special address does not reach a payee, to follow "Do not pay: ". */
+export function specialWords(special: SpecialAddress): string {
   if (special.kind === "zero") return "this is the zero address: anything sent to it is lost.";
   if (special.kind === "burn") return "this is a burn address: anything sent to it is lost.";
   if (special.kind === "system") return "this is Arc's USDC system address, not a wallet.";

@@ -7,10 +7,11 @@ import { DATE_ORDERS, readDate, type DateOrder, type DateOrderQuestion } from "@
 import type { Table } from "@/lib/bill-import/table";
 
 /**
- * What the bill import (docs/superpowers/specs/2026-10-10-import-wizard-design.md) and the free bill list check
- * (docs/superpowers/specs/2026-10-28-check-bills-design.md CB2, CB3) share in their steps: the trail of steps, a field's
- * column, the questions about a list's dates and amounts in its own words, and saving a list made in the browser. One
- * copy, so a change to how a list is asked about reaches both.
+ * What the bill import (docs/superpowers/specs/2026-10-10-import-wizard-design.md), the free bill list check
+ * (docs/superpowers/specs/2026-10-28-check-bills-design.md CB2, CB3) and the free payout batch check
+ * (docs/superpowers/specs/2026-11-02-check-payouts-design.md CP2) share in their steps: the trail of steps, a field's
+ * column, the questions about a list's dates and amounts in its own words, a check run once the page has shown it is
+ * busy, and saving a list made in the browser. One copy, so a change to how a list is asked about reaches each.
  */
 
 /**
@@ -47,40 +48,67 @@ export function download(text: string, file: string) {
   URL.revokeObjectURL(url);
 }
 
+/** How long a check waits for a frame before it runs anyway: a tab in the background draws none (CB2). */
+const FRAME_WAIT_MS = 100;
+
+/**
+ * Runs `work` once the page has painted what changed before it: the browser draws a frame, then the work holds it. A
+ * tab in the background draws no frames, so `work` also runs after FRAME_WAIT_MS without one. It runs once either way.
+ */
+export function afterPaint(work: () => void) {
+  let ran = false;
+  const once = () => {
+    if (ran) return;
+    ran = true;
+    work();
+  };
+  requestAnimationFrame(() => setTimeout(once, 0));
+  setTimeout(once, FRAME_WAIT_MS);
+}
+
 const NONE = "none";
 
-/** A field's column, chosen among the list's by letter and name or none, with the values it reads. */
-export function ColumnField({
+/**
+ * A column, chosen among the list's by letter and name or none, with the values it reads; `noun` names what holds the
+ * columns, "list" or "batch". Long values, such as addresses and payment links, break anywhere rather than widen the
+ * page: the field's one track is as wide as its column, not as its longest value (payout check CP2).
+ */
+export function ColumnChoice({
   id,
-  field,
+  label,
+  optional,
   table,
   hasHeader,
   names,
   column,
   onChoose,
+  noun = "list",
 }: {
   id: string;
-  field: ImportField;
+  label: string;
+  optional: boolean;
   table: Table;
   hasHeader: boolean;
   names: readonly string[];
   column: number | undefined;
   onChoose: (column: number | undefined) => void;
+  noun?: string;
 }) {
   const samples = column === undefined ? [] : sampleValues(table, hasHeader, column);
   return (
     <Field
       id={id}
-      label={FIELD_LABELS[field]}
-      optional={!REQUIRED_FIELDS.includes(field)}
-      description={column === undefined ? "Not in the list." : samples.length > 0 ? `Reads: ${samples.join(" · ")}` : "This column is empty."}
+      label={label}
+      optional={optional}
+      description={column === undefined ? `Not in the ${noun}.` : samples.length > 0 ? `Reads: ${samples.join(" · ")}` : "This column is empty."}
+      className="min-w-0 grid-cols-1 [overflow-wrap:anywhere]"
     >
       <Select value={column === undefined ? NONE : String(column)} onValueChange={(value) => onChoose(value === NONE ? undefined : Number(value))}>
         <SelectTrigger>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={NONE}>Not in the list</SelectItem>
+          <SelectItem value={NONE}>{`Not in the ${noun}`}</SelectItem>
           {names.map((name, index) => (
             <SelectItem key={index} value={String(index)}>
               {columnLetter(index)} · {name}
@@ -90,6 +118,22 @@ export function ColumnField({
       </Select>
     </Field>
   );
+}
+
+/** A bill field's column, chosen among the list's by letter and name or none, with the values it reads. */
+export function ColumnField({
+  field,
+  ...props
+}: {
+  id: string;
+  field: ImportField;
+  table: Table;
+  hasHeader: boolean;
+  names: readonly string[];
+  column: number | undefined;
+  onChoose: (column: number | undefined) => void;
+}) {
+  return <ColumnChoice {...props} label={FIELD_LABELS[field]} optional={!REQUIRED_FIELDS.includes(field)} />;
 }
 
 /** Each way a list can write its dates, offered when the list's dates can be in it. */
@@ -150,7 +194,7 @@ export function DatesQuestion({
   );
 }
 
-/** How the list writes its amounts, asked only when one of them reads two ways, with that amount. */
+/** How the list writes its amounts, asked only when one of them reads two ways, with that amount; `noun` as `ColumnChoice` takes it. */
 export function AmountsQuestion({
   question,
   table,
@@ -158,6 +202,7 @@ export function AmountsQuestion({
   amountColumn,
   value,
   onChange,
+  noun = "list",
 }: {
   question: { ask: boolean; mixed: boolean };
   table: Table;
@@ -165,11 +210,12 @@ export function AmountsQuestion({
   amountColumn: number | undefined;
   value: DecimalMark | null;
   onChange: (mark: DecimalMark) => void;
+  noun?: string;
 }) {
   if (!question.ask) return null;
   return (
     <RadioGroup
-      legend={question.mixed ? "The list writes amounts both ways. Which way is right?" : `Amounts like ${twoWayAmount(table, hasHeader, amountColumn) ?? "1,234"} are written`}
+      legend={question.mixed ? `The ${noun} writes amounts both ways. Which way is right?` : `Amounts like ${twoWayAmount(table, hasHeader, amountColumn) ?? "1,234"} are written`}
       value={value ?? ""}
       onValueChange={(chosen) => onChange(chosen === "," ? "," : ".")}
       options={[
