@@ -109,8 +109,10 @@ describe("sortTriage", () => {
     expect(sorted.map((entry) => entry.title)).toEqual(["book old", "book new", "overdue", "past", "decision"]);
   });
 
-  it("ranks bills to co-sign right after decisions, then addresses to confirm, before what customers said", () => {
-    expect(TRIAGE_KINDS.slice(0, 5)).toEqual(["past_decide_by", "decision", "cosign", "confirm_address", "customer_says_paid"]);
+  it("ranks bills to co-sign right after decisions and verdicts, then addresses to confirm, before what customers said", () => {
+    // A verdict sits between (all waiting AW6); the other kinds keep their order.
+    expect(TRIAGE_KINDS.filter((kind) => kind !== "verdict").slice(0, 4)).toEqual(["past_decide_by", "decision", "cosign", "confirm_address"]);
+    expect(TRIAGE_KINDS.indexOf("customer_says_paid")).toBeGreaterThan(TRIAGE_KINDS.indexOf("confirm_address"));
     const sorted = sortTriage([
       item("customer_says_paid", "2026-09-01", { canAct: true, title: "customer" }),
       item("confirm_address", "2026-09-01", { canAct: true, title: "address" }),

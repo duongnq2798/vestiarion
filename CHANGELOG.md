@@ -14,6 +14,21 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Everything waiting, across every workspace, on the accountant console.** The queue now lists four more kinds:
+  **Waiting for a verdict**, a bill the agent decided to pay, held in shadow mode until a person agrees or disagrees,
+  listed in place of its decision, for an owner, admin or approver, and saying that agreeing pays it; **Invoice to
+  review**, an invoice emailed to the workspace, found in its Google Drive folder, captured in Chrome or sent through a
+  payee's invoice link, waiting to be added or dismissed by an owner or admin, the newest 50 of each list as the review
+  list shows them, named by its supplier or file, never by its sender or subject, with any email address masked;
+  **Work to accept**, a contractor's milestone whose Asana task or Linear issue is ready for acceptance or held for
+  review, for an owner or admin, where Asana or Linear is set up; and **Month to close**, last month in a workspace with
+  payments in it, until anyone downloads its close pack, which every member may do, or an owner, admin or accountant
+  exports it to Google Sheets. A bill past its decide-by day says when it also waits for a verdict, and one someone
+  disagreed with says to return or reject it. Each is read in its own workspace, as the person, from Vestiarion's own
+  records, and named on the workspace's card when it could not be read. Bills brought in from Xero, QuickBooks or Zoho
+  Books are not listed yet: they wait under Waiting for review on Bills & receivables. The new kinds show in the kind
+  filters, the cards' counts ("2 milestones to accept"), the age buckets, **Yours to act on** and the hand-off's open
+  items. No migration.
 - **Bills dropped into a Google Drive folder.** An owner or admin connects Google Drive in Settings, read-only, and
   chooses one folder by pasting its link. Each PDF, `.eml` or `.txt` file of at most 4 MB added to that folder from
   then on is read the way **From a document** reads one, every 15 minutes or at once with **Check Google Drive now**, and

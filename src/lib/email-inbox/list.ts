@@ -64,7 +64,13 @@ export interface InboxEmailView {
   lastModifiedBy: string | null;
 }
 
-const STILL_TO_DECIDE: InboxStatus[] = ["received", "ready", "needs_details", "unreadable"];
+export const STILL_TO_DECIDE: InboxStatus[] = ["received", "ready", "needs_details", "unreadable"];
+
+/**
+ * The most documents the list shows: the newest. The accountant console reads the same window
+ * (docs/superpowers/specs/2026-11-01-accountant-all-waiting-design.md AW3), so each invoice it lists is one this list holds.
+ */
+export const TO_DECIDE_LIMIT = 50;
 
 /**
  * Whether a read failed only for a column migration 0148 adds (Google Drive intake GD3), not there until it runs: then
@@ -87,7 +93,7 @@ interface Row {
   authentication: InboxEmailView["authentication"];
 }
 
-export async function inboxEmailsToDecide(limit = 50): Promise<InboxEmailView[]> {
+export async function inboxEmailsToDecide(limit = TO_DECIDE_LIMIT): Promise<InboxEmailView[]> {
   const read = (columns: string) =>
     db()
       .from("inbox_emails")
