@@ -8,6 +8,7 @@ import GitHubPanel from "@/components/GitHubPanel";
 import AsanaPanel from "@/components/AsanaPanel";
 import LinearPanel from "@/components/LinearPanel";
 import GoogleSheetsPanel from "@/components/GoogleSheetsPanel";
+import GoogleDrivePanel from "@/components/GoogleDrivePanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
 import PipedrivePanel from "@/components/PipedrivePanel";
 import ZohoCrmPanel from "@/components/ZohoCrmPanel";
@@ -69,6 +70,7 @@ import { NotSetUpError } from "@/lib/connectors/connections";
 import { asanaPanelFor } from "@/lib/asana/panel";
 import { linearPanelFor } from "@/lib/linear/panel";
 import { googleSheetsPanelFor } from "@/lib/googlesheets/panel";
+import { googleDrivePanelFor } from "@/lib/googledrive/panel";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
 import { pipedriveSettingsFromEnv } from "@/lib/pipedrive/settings";
 import { pipedriveReady } from "@/lib/pipedrive/store";
@@ -85,6 +87,11 @@ import { readUsageLimits, readUsageMonth } from "@/lib/usage/read";
 import { readReportingCurrency } from "@/lib/reporting-currency";
 
 export const dynamic = "force-dynamic";
+/**
+ * Check Google Drive now, a Server Action of this page, starts no file after 40 seconds, and may still be reading the
+ * one it started (Google Drive intake GD6, GD7). 300, as Bills, counterparties and the report set.
+ */
+export const maxDuration = 300;
 
 export const metadata: Metadata = { title: sectionTitle("settings") };
 
@@ -318,6 +325,14 @@ export default async function SettingsPage({
       return null;
     });
     const googleSheetsOutcome = ((await searchParams) as { googlesheets?: string | string[] }).googlesheets;
+    // Google Drive (Google Drive intake GD16), beside Google Sheets: only on a deployment with its Google client; best
+    // effort, like Sheets'. Before migration 0148 the card says Google Drive is not set up yet. How connecting it went
+    // comes back in `?googledrive=`.
+    const googleDrive = await googleDrivePanelFor().catch((error: unknown) => {
+      console.error("settings: Google Drive status not loaded", error instanceof Error ? error.message : error);
+      return null;
+    });
+    const googleDriveOutcome = ((await searchParams) as { googledrive?: string | string[] }).googledrive;
     // Discord (Discord design DC6): on every deployment, since a channel webhook needs no app; best effort, like Slack's.
     // Before migration 0140 the section says Discord is not set up yet. Never the webhook's URL.
     const discord = await discordPanelView(membership.orgId, access.user.id).catch((error: unknown) => {
@@ -586,6 +601,20 @@ export default async function SettingsPage({
                 view={googleSheets}
                 canManage={canManageIntegrations}
                 notice={typeof googleSheetsOutcome === "string" ? googleSheetsOutcome : null}
+              />
+            ) : null,
+          },
+          {
+            id: "googledrive-title",
+            title: "Google Drive",
+            content: googleDrive ? (
+              <GoogleDrivePanel
+                orgSlug={slug}
+                view={googleDrive}
+                canManage={canManageIntegrations}
+                // Check Google Drive now is for whoever adds the invoices it finds (GD7).
+                canCheck={can(membership.role, "records.write")}
+                notice={typeof googleDriveOutcome === "string" ? googleDriveOutcome : null}
               />
             ) : null,
           },

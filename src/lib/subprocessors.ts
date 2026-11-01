@@ -8,7 +8,7 @@ import { ENS_GATEWAY_HOSTS, ENS_RPC_DEFAULT } from "./ens-hosts";
 import { NETWORKS } from "./network";
 
 /** The day this list was last checked against the code. */
-export const SUBPROCESSORS_AS_OF = "2026-10-31";
+export const SUBPROCESSORS_AS_OF = "2026-11-01";
 
 const hostOf = (url: string) => new URL(url).host;
 
@@ -219,6 +219,14 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     names: ["Google Sheets", "Google Drive"],
     purpose: "written to with the close packs an owner, admin or accountant exports, in spreadsheets Vestiarion makes in the connected account's Google Drive",
     data: "each exported close pack's rows and summary, with members' emails, payees' names and addresses, amounts and signed entries, and the Google account's id and email when it is connected",
+    when: ONLY_IF_CONNECTED,
+  },
+  {
+    name: "Google Drive",
+    privacyEntry: "Google Drive",
+    names: ["Google Drive"],
+    purpose: "read, never written to, for the files added to the one folder a workspace chooses, each read into a bill a person adds or dismisses",
+    data: "the requests that read the chosen folder, list its files and download each new one, and the Google account's id and email when it is connected",
     when: ONLY_IF_CONNECTED,
   },
   {

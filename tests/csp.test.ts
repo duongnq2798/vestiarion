@@ -105,6 +105,8 @@ describe("the policy (CSP1, CSP2)", () => {
     // Each connect route's tool, and where its consent screen is: a new connect route fails here until it is named.
     const consent: Record<string, string[]> = {
       asana: [ASANA_AUTHORIZE],
+      // Google Drive's consent screen is Google's, as Google Sheets' is (Google Drive intake GD2).
+      googledrive: [GOOGLE_AUTHORIZE],
       googlesheets: [GOOGLE_AUTHORIZE],
       hubspot: [HUBSPOT_AUTHORIZE],
       linear: [LINEAR_AUTHORIZE],

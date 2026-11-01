@@ -65,6 +65,11 @@ export async function sweepAccounting<P extends ConnectingProvider = ConnectingP
    * deployment without one leaves them alone.
    */
   work?: { providerFor: (id: ProviderId) => P | null; sync: (connectionId: string, provider: P) => Promise<{ outcome: string }> };
+  /**
+   * An intake tool's provider, and its runner (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD7): the
+   * folder a workspace chose in Google Drive is read for new files. A deployment without one leaves them alone.
+   */
+  intake?: { providerFor: (id: ProviderId) => ConnectingProvider | null; sync: (connectionId: string, provider: ConnectingProvider) => Promise<{ outcome: string }> };
   now?: () => number;
   budgetMs?: number;
 }): Promise<SweepSummary> {
@@ -80,8 +85,9 @@ export async function sweepAccounting<P extends ConnectingProvider = ConnectingP
     if (now() - started > (deps.budgetMs ?? SWEEP_BUDGET_MS)) break;
     const crmProvider = deps.crm?.providerFor(row.provider) ?? null;
     const workProvider = crmProvider ? null : (deps.work?.providerFor(row.provider) ?? null);
-    const provider = crmProvider || workProvider ? null : deps.providerFor(row.provider);
-    if (!provider && !crmProvider && !workProvider) continue;
+    const intakeProvider = crmProvider || workProvider ? null : (deps.intake?.providerFor(row.provider) ?? null);
+    const provider = crmProvider || workProvider || intakeProvider ? null : deps.providerFor(row.provider);
+    if (!provider && !crmProvider && !workProvider && !intakeProvider) continue;
     summary.connections += 1;
     try {
       const result = await withOrg(row.org_id, () =>
@@ -89,7 +95,9 @@ export async function sweepAccounting<P extends ConnectingProvider = ConnectingP
           ? deps.crm.sync(row.connection_id, crmProvider)
           : workProvider && deps.work
             ? deps.work.sync(row.connection_id, workProvider)
-            : syncInScope(row.connection_id, provider as AccountingProvider)
+            : intakeProvider && deps.intake
+              ? deps.intake.sync(row.connection_id, intakeProvider)
+              : syncInScope(row.connection_id, provider as AccountingProvider)
       );
       if (result.outcome === "synced") summary.synced += 1;
       else if (result.outcome === "partial") summary.partial += 1;
@@ -105,7 +113,8 @@ export async function sweepAccounting<P extends ConnectingProvider = ConnectingP
     try {
       await withOrg(grant.orgId, async () => {
         const refreshToken = await refreshTokenOf(grant.orgId, { tokenId: grant.tokenId });
-        const provider = deps.providerFor(grant.provider) ?? deps.crm?.providerFor(grant.provider) ?? deps.work?.providerFor(grant.provider) ?? null;
+        const provider =
+          deps.providerFor(grant.provider) ?? deps.crm?.providerFor(grant.provider) ?? deps.work?.providerFor(grant.provider) ?? deps.intake?.providerFor(grant.provider) ?? null;
         if (refreshToken && provider) await provider.revoke(refreshToken);
         await deleteTokens(grant.orgId, { tokenId: grant.tokenId });
       });

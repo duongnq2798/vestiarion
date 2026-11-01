@@ -1,4 +1,4 @@
-Vestiarion connects to the tools a business already keeps its bills, deals, work and conversations in. Nothing needs replacing: bills, won deals and finished work come in from them, the agent decides under every check, and a few tools get the outcome back. This page sets every integration side by side: what it brings in, what it writes back and who allows that, and what it never does. Each tool's own guide says how to connect it.
+Vestiarion connects to the tools a business already keeps its bills, files, deals, work and conversations in. Nothing needs replacing: bills, won deals and finished work come in from them, the agent decides under every check, and a few tools get the outcome back. This page sets every integration side by side: what it brings in, what it writes back and who allows that, and what it never does. Each tool's own guide says how to connect it.
 
 ## Every integration
 
@@ -9,6 +9,7 @@ An owner or admin connects each one from **Settings**. Connecting one changes no
 | [Xero](/docs/guides/xero) | Bills approved in Xero with an amount due, and their suppliers, for you to review | Each payment made on Arc for a bill from Xero, booked against that bill once an owner, admin or accountant approves it | Reads and writes: every 15 minutes, or at once when you sync |
 | [QuickBooks Online](/docs/guides/quickbooks) | Bills with a balance left to pay, and their vendors, for you to review | Nothing: it writes nothing to QuickBooks | Read-only: every 15 minutes, and sooner when QuickBooks says a bill or vendor changed. Sandbox companies for now, until Intuit completes its assessment of the app |
 | [Zoho Books](/docs/guides/zohobooks) | Open, overdue and partly paid bills, and their vendors, for you to review; drafts stay out | Nothing | Read-only: every 15 minutes |
+| [Google Drive](/docs/guides/google-drive) | Each PDF added to the one folder you choose, read into a bill for you to review beside the invoices that came by email | Nothing: it writes nothing to Google Drive | Read-only, as a Google account: every 15 minutes, or at once when you check |
 | [HubSpot](/docs/guides/hubspot) | Won deals with their customers, to plan their collections | Once an owner or admin allows it: what each planned deal collected and still owes, in deal fields of its own | Reads, and writes once allowed: every 15 minutes |
 | [Pipedrive](/docs/guides/pipedrive) | Won deals with their organizations and persons, to plan their collections | Once allowed, and only for payments on Arc mainnet outside shadow mode: what each planned deal collected | Reads, and writes once allowed: when Pipedrive says a deal changed, and every 15 minutes |
 | [Zoho CRM](/docs/guides/zohocrm) | Won deals with their accounts and contacts, to plan their collections | Nothing | Read-only: every 15 minutes |
@@ -23,7 +24,7 @@ An owner or admin connects each one from **Settings**. Connecting one changes no
 
 ## What no integration does
 
-None of them approves or pays. A bill approved in Xero or open in QuickBooks, a won deal, a completed Asana task or Linear issue, a merged pull request, a message or a captured invoice comes in to be decided: a person adds the bill or plans the deal, the agent decides each payment under every check, and people decide what the checks stop. See [How payments are controlled](/docs/guides/controls).
+None of them approves or pays. A bill approved in Xero or open in QuickBooks, a file in a Google Drive folder, a won deal, a completed Asana task or Linear issue, a merged pull request, a message or a captured invoice comes in to be decided: a person adds the bill or plans the deal, the agent decides each payment under every check, and people decide what the checks stop. See [How payments are controlled](/docs/guides/controls).
 
 The one place outside Vestiarion where a person decides a payment is Slack, when an owner allows it: a payment the agent stopped can be decided from its message, under the same checks, and on Arc mainnet it is approved in Vestiarion only. See [deciding from Slack](/docs/guides/slack). Discord only links to the bill in Approvals: opening its link approves nothing.
 

@@ -2467,8 +2467,9 @@ and `importRow`; the invoice number starts the memo. The list itself is not kept
 `/o/[slug]/invoices` (docs/superpowers/specs/2026-10-12-bills-tabs-design.md) keeps four figures above three tabs:
 Needs you, Due in 7 days, Overdue and Receivables (what customers still owe, never called cash), each a link to the tab
 and filter behind it; **Waiting for review** only when something does (bills from Xero, QuickBooks or Zoho Books,
-payments to book, invoices by email, invoices captured with the Chrome extension, HubSpot, Pipedrive or Zoho CRM won
-deals); then **Bills**,
+payments to book, invoices by email and files from the Google Drive folder, invoices captured with the Chrome
+extension, HubSpot, Pipedrive or Zoho CRM won deals; with a Google Drive folder to check and nothing waiting, the line
+says **Nothing waiting for review** and offers **Check Google Drive**); then **Bills**,
 **Payment plan** and **Receivables**.
 
 - **The address holds the view** (`src/lib/bills-view.ts`). `tab`, `filter`, `q`, `sort`, `page`, `open` (a bill's
@@ -3121,7 +3122,9 @@ admin runs `inbox.add` (the draft used once, put back if the invoice cannot be
 added; `create_invoice` names `via: "email"` and `inboxEmailId`), `inbox.finish`
 (the invoice form started from what was read, for any email ready, needing
 details or unreadable; the entry also lists the fields the person changed) or
-`inbox.dismiss`.
+`inbox.dismiss`. Files found in a workspace's Google Drive folder wait in the same
+list and are decided by the same commands (see "Google Drive: bills dropped into a
+folder").
 
 **A workspace can connect GitHub**
 (docs/superpowers/specs/2026-10-04-github-app-design.md). One GitHub App serves
@@ -3439,9 +3442,9 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   cleared once it ends (`finish_document_parse`, best effort, on every request with that file): a file whose count is
   already 2 is unreadable with no third parse, however often it is sent or attached. Before those functions, it parses
   with nothing counted.
-- **A PDF someone sends in** (`readDocument`: From a document, invoices by email, the Chrome extension, Telegram, Slack
-  and the payee link; docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md). The same pre-scan decides where it
-  is read. A file measured past 16 MB is refused ("This PDF could not be read. Paste the invoice's text instead."),
+- **A PDF someone sends in** (`readDocument`: From a document, invoices by email, files from the Google Drive folder,
+  the Chrome extension, Telegram, Slack and the payee link; docs/superpowers/specs/2026-10-27-request-pdf-bound-design.md).
+  The same pre-scan decides where it is read. A file measured past 16 MB is refused ("This PDF could not be read. Paste the invoice's text instead."),
   even beside a stream the pre-scan cannot measure: it skips such a stream, measures the rest, and refuses the file for
   that stream, or for encryption, only once they are under the budget. A bomb it never measures is not refused there:
   one in a stream it skips, one named only from an object stream it cannot decode, one in an encrypted file's streams,
@@ -3701,8 +3704,9 @@ Intuit app; `QUICKBOOKS_ENVIRONMENT` picks sandbox or production companies), Zoh
 otherwise its card and routes are not there. The Settings card (`AccountingPanel`), the review list (`AccountingBillsReview`), the
 account picker, the launch and connect pages and the server actions (`src/app/actions/accounting.ts`) are one set, given
 the provider. The core's providers are `xero`, `quickbooks` and `zohobooks` (kind `accounting`), `hubspot`, `pipedrive`
-and `zohocrm` (`crm`, below), `asana` and `linear` (`work`) and `googlesheets` (`export`: it brings nothing in, and writes close
-packs out; see "Google Sheets: the close pack exported").
+and `zohocrm` (`crm`, below), `asana` and `linear` (`work`), `googlesheets` (`export`: it brings nothing in, and writes close
+packs out; see "Google Sheets: the close pack exported") and `googledrive` (`intake`: the files added to one folder, read
+into the review list; see "Google Drive: bills dropped into a folder").
 
 - **Schema (migration `0101`).** Four tenant tables, with row-level security, the restrictive guard and composite
   foreign keys to their connection, which the tenant role reads, inserts and updates and never deletes:
@@ -5256,6 +5260,71 @@ it reads nothing back into Vestiarion, decides nothing, pays nothing and calls n
 - **Migration `0145`.** The provider checks of `accounting_connections` and `accounting_tokens` take `googlesheets`,
   each replaced only while it does not yet (a later widening must keep it); `external_links` is left as it is.
   `googlesheets_connector_ready(p_org_id)` answers true for the tenant role and `service_role`, and is in `TENANT_RPCS`.
+
+## Google Drive: bills dropped into a folder
+
+`docs/superpowers/specs/2026-11-01-google-drive-intake-design.md` (GD1 to GD16). A workspace connects one Google account
+and chooses one Drive folder; each file added to it afterwards is read into a draft that waits in the review list on
+Bills & receivables beside the emailed invoices, for a person to add. Nothing is added or paid by itself, and nothing is
+written to Drive. Migration `0148`.
+
+- **A provider on the connector core** (GD1). `googledrive`, label "Google Drive", of a new `ProviderKind`, `intake`;
+  unmarked, as Google Sheets (`UNMARKED_PROVIDERS`), so the card and the connect page use lucide's `Folder`. It is on
+  only with `GOOGLE_DRIVE_CLIENT_ID` and `GOOGLE_DRIVE_CLIENT_SECRET` (the id checked as Sheets checks its own), best
+  from a Google client of its own: Sheets' disconnect revokes the account's whole grant to its client without looking at
+  Drive, so with one shared client it cuts Drive off for the same account; without them there is no card, no Check Google Drive now and both routes
+  answer 404. Its folder, `src/lib/googledrive/`, holds `settings`, `provider` and `connect-deps` (reusing
+  `googlesheets/oauth` and `googlesheets/http` through small optional parameters: the scope list and the log name),
+  `ready`, `link` (the pasted link or id, read for the id, never fetched), `drive` (folder read, listing, download),
+  `session` (the token lease, one refresh on a 401), `store` (`google_drive_folders`), `folder` (choosing),
+  `read` (a folder's read), `workspace` (the sync the sweeper and Check now share, and whether a disconnect may
+  revoke), `views` (pure, browser-safe) and `panel`. The routes are `src/app/api/integrations/googledrive/{connect,callback}`,
+  the page `/integrations/googledrive/connect`, the actions `src/app/actions/googledrive.ts`, the card
+  `GoogleDrivePanel` (`#googledrive` in Settings, beside Google Sheets') and `GoogleDriveCheck`, the Check Google
+  Drive now form both the card and the review list draw.
+- **One scope** (GD2). `https://www.googleapis.com/auth/drive.readonly`, a restricted scope: until Google verifies it,
+  Google shows its unverified-app screen and at most 100 people can grant it, which the connect page and the guide say.
+  A grant without it is refused (`ConnectRefusal("scopes")`). The account is Drive's `about` user, as Sheets'; not
+  exclusive. Consent `googledrive-2026-11-01`.
+- **The folder** (GD4, GD5). One row of `google_drive_folders` per workspace, tenant data under the same RLS and grants
+  as `inbox_emails`, deleted with its connection. Choosing (`integrations.manage`) reads the folder once, lists its
+  files as the baseline (at most 1,000; more is refused) and replaces any folder chosen before; the baseline's files are
+  never read. The same folder chosen again keeps its baseline, who chose it and when, and its last read, so a file added
+  while it could not be read is still read. `google_drive_folder_chosen` records the count, never the ids.
+- **Reading** (GD6, GD7, GD13). The 15-minute sweeper has an `intake` slot (`sweepAccounting`, from the accounting-sync
+  route), and **Check Google Drive now** (`records.write`) runs the same read. A Drive connection is saved with
+  `next_sync_after` null and each read sets it null again, so it is always due; `accounting_connections_due` is not
+  redefined. A file is new when its id is in neither the baseline nor `inbox_emails`; its row is inserted first,
+  ignoring a duplicate on `(org_id, drive_file_id)`. A PDF, `.eml` or `.txt` of at most 4 MB (held while the body
+  streams) goes through `readInvoiceDraft` and `chatDraftOf`; anything else is `unreadable` with what to do. Five
+  documents a minute per workspace (`takeDocumentReadToken`), and no new file after 40 seconds: the rest is read next
+  time. Names from Drive are kept as Postgres takes them (`storableName`: counted in code points, never half of an
+  emoji), and a row the database refuses is logged and skipped, so one file never stops the read.
+  `invoice_drive_file_received` names the file, cut to 120 characters, and who last changed it, masked; the Slack
+  channel is told. A read claims each file only while its folder is still the one chosen (`stillChosen`: the row's id,
+  `folder_id` and `chosen_at`), and writes its last read or error on that choice alone, so a folder chosen, or
+  forgotten, while it runs is never written over. Access removed marks the connection `needs_reconnect`; a folder gone,
+  a rate limit or an outage sets the folder's `last_error` and `last_error_kind`, which the card and the review list
+  show; a gone folder is read again by itself once the account can open it. Settings and Bills & receivables set
+  `maxDuration = 300` for the action.
+- **The review list** (GD8, GD10). `inbox_emails` gains `source` (`email` or `google_drive`), `drive_file_id` and
+  `file_name`; who last changed a Drive file, masked, is kept in `from_address`. `InboxEmails` draws a Drive row by
+  its file, "From Google Drive", when it was found and its last modifier, with the same Add, Finish and Dismiss;
+  `src/lib/email-inbox/words.ts` titles and counts the list by source. The page loads the list when invoices by email
+  or Google Drive is on, and with a folder to check registers the review panel even when nothing waits, so Slack's
+  `review=email` link still opens it, and offers it quietly in the line under the figures (**Check Google Drive**). `create_invoice` names `via: "google_drive"`, `inboxEmailId` and
+  `driveFileId`; a Drive dismissal is `invoice_drive_file_dismissed`. Before `0148` runs, the list and the commands
+  read without the new columns (42703, PGRST204), so emails keep working.
+- **Disconnecting** (GD2). Tokens deleted, the connection revoked, the folder forgotten; Google's revoke is sent only
+  when no other workspace has the same Google account connected and, where Sheets uses the same OAuth client, no Sheets
+  connection holds it. The answer stays on the card. The files already read stay in the review list. Sheets' own
+  disconnect is unchanged and does not look at Drive.
+- **Figures** (GD15). Files read and bills added in 30 days, and files waiting now, counted from the Drive rows of
+  `inbox_emails`; `/docs-shots/googledrive/<state>` (`settings`, `folder`, `review`) draws the card and the review
+  list with sample data (`src/app/docs-shots/googledrive-fixture.ts`).
+- **Migration `0148`.** The provider checks take `googledrive`, keeping every value through `linear`, each replaced
+  only while it lacks it; `googledrive_connector_ready(p_org_id)` answers true once it has run. Before then the card
+  says Google Drive is not set up and no one is sent to Google.
 
 ## Usage metering
 

@@ -14,6 +14,25 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Bills dropped into a Google Drive folder.** An owner or admin connects Google Drive in Settings, read-only, and
+  chooses one folder by pasting its link. Each PDF, `.eml` or `.txt` file of at most 4 MB added to that folder from
+  then on is read the way **From a document** reads one, every 15 minutes or at once with **Check Google Drive now**, and
+  waits in the review list on Bills & receivables beside the invoices that came by email, named by its file, when it
+  was found and who last changed it in Drive, their email masked. A person adds or dismisses each one with the same
+  buttons, roles and one-use guard as an emailed invoice: a file in the folder is never by itself a reason to pay. The
+  files already in the folder when it is chosen are never read, so an old paid bill never comes back; a folder with
+  more than 1,000 files is refused; the same folder chosen again keeps them, and reads every file added since. A folder
+  that Google stops showing is read again by itself once it can be opened. Pictures, scans, Google Docs files, shortcuts and files over 4 MB wait with what to
+  do instead; subfolders are not read; a file is read once. The Google Drive card shows the folder, when it was last
+  read and what stopped a read, the files read and the bills added in 30 days, and those waiting now. Disconnecting
+  forgets the folder and keeps the files already read; Google's access is revoked unless the same Google account is
+  still connected elsewhere. Google shows its "Google hasn't verified this app" screen until Google verifies the
+  read-only Drive permission, which the connect page and the guide say. Words both sources reach now say "invoice".
+  New ledger actions `google_drive_folder_chosen`, `invoice_drive_file_received` and
+  `invoice_drive_file_dismissed`, and `create_invoice` with `via: "google_drive"`. Needs `GOOGLE_DRIVE_CLIENT_ID`,
+  `GOOGLE_DRIVE_CLIENT_SECRET`, from its own Google client (with Google Sheets' client, disconnecting Google Sheets
+  revokes the grant Google Drive uses too, for the same Google account), and migration `0148`; until it runs, the
+  Google Drive card says Google Drive is not set up yet.
 - **Accept contractor work from Linear.** An owner or admin connects Linear in Settings, read-only. On Contractors, a
   milestone is linked to the Linear issue its work is delivered in, by pasting the issue's link or its ID (such as
   `ENG-123`), and holds the acceptance criteria from the agreement, written in Vestiarion. When the issue is done in

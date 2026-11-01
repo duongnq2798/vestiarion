@@ -157,6 +157,8 @@ describe("0023 is idempotent", () => {
         { tbl: "fx_rates", col: "recorded_by", action: "n" },
         { tbl: "gateway_signers", col: "created_by", action: "n" },
         { tbl: "github_installations", col: "connected_by", action: "n" },
+        // Who chose the workspace's Google Drive folder (0148): the folder stays, without the person.
+        { tbl: "google_drive_folders", col: "chosen_by", action: "n" },
         { tbl: "inbox_emails", col: "decided_by", action: "n" },
         { tbl: "invitations", col: "invited_by", action: "c" },
         // Who captured a draft with the Chrome extension and who decided it (0121).

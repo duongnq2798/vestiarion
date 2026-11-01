@@ -20,7 +20,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy"
-      updated="2026-10-28"
+      updated="2026-11-01"
       intro="Vestiarion is an AI agent for bills and payments on Arc mainnet and Arc testnet. This page describes what the service stores and sends, as its code does it today. The code is public, so every statement here can be checked against it."
     >
       <LegalSection id="signing-in" title="Signing in">
@@ -252,10 +252,11 @@ export default function PrivacyPage() {
                 performance score, and, when the agent bought it before a first payment, how many workspaces here have paid its address, how often, and when first and last;
               </li>
               <li>
-                for an invoice document a member chooses to read (a PDF, an email or pasted text), and for each email that reaches a workspace&apos;s
-                invoice address, its first PDF, .eml or .txt attachment, or else its text: the document&apos;s text, up to 20,000 characters, to read
+                for an invoice document a member chooses to read (a PDF, an email or pasted text), for each email that reaches a workspace&apos;s
+                invoice address, its first PDF, .eml or .txt attachment, or else its text, and for each PDF, .eml or .txt file of at most 4 MB added
+                to the Google Drive folder a workspace chose: the document&apos;s text, up to 20,000 characters, to read
                 its vendor, amounts, dates, terms and payment address into the invoice form. Nothing is sent for an email that is too large, holds
-                only images, or comes while the workspace is over its rate of documents read. The document itself is not kept;
+                only images, or comes while the workspace is over its rate of documents read, nor for a file of another type. The document itself is not kept;
               </li>
               <li>
                 for each PDF a vendor sends for a bill&apos;s missing purchase order or goods receipt, or a member attaches to a bill, while vendor
@@ -312,7 +313,8 @@ export default function PrivacyPage() {
           <li>
             <strong>Slack</strong>, for a workspace an owner or admin connects to a Slack channel, receives what the app posts to that channel and its
             answers to members: the workspace&apos;s name, the agent&apos;s decisions with the counterparties&apos; names, the amounts, the reasons and links
-            to the transactions and to the app, who decided a payment from Slack, and the answers to a member&apos;s questions. When a workspace
+            to the transactions and to the app, who decided a payment from Slack, and the answers to a member&apos;s questions. For a file found in a
+            workspace&apos;s Google Drive folder, the post names the file, its amount and its due date as read. When a workspace
             with invoices by email gets an email at its invoice address that cannot be read, or in which no vendor is found, the post names the
             sender&apos;s email address; Slack receives no other email address, no key, and no wallet address in full: one is shortened to its first
             and last four characters. The app reads no message in Slack
@@ -501,6 +503,21 @@ export default function PrivacyPage() {
             log, a model&apos;s prompt or a webhook. Nothing read from Google reaches the agent or a model, and Vestiarion never shares a
             spreadsheet. Disconnecting revokes the access at Google, unless another workspace is connected with the same Google account, and deletes
             the tokens; the spreadsheets already exported stay in that Drive.
+          </li>
+          <li>
+            <strong>Google Drive</strong>, for a workspace an owner or admin connects to a Google account after agreeing to it, is read from, as that
+            account, with read-only access, and never written to. Google&apos;s read-only Drive permission lets Vestiarion see every file the account
+            can see; Vestiarion reads only the one folder an owner or admin of the workspace chooses: its name, and for each file in it, not in its
+            subfolders, the file&apos;s ID, name, type, size and dates and who last changed it, with their name and email. Each file added after the
+            folder was chosen is read once: a PDF, .eml or .txt file of at most 4 MB is downloaded and read the way an invoice uploaded to the invoice
+            form is; the files already in the folder when it was chosen are never read. Vestiarion keeps the folder&apos;s ID and name, the IDs of the
+            files already in it when it was chosen, and for each file read its ID and name, who last changed it with their email mostly hidden, what was
+            read, the draft bill and the document&apos;s hash, never the file itself. It reads the Google account&apos;s id and email once when it is
+            connected, keeping the id and a masked email. Google&apos;s tokens are kept encrypted, readable only by the server and never shown in the
+            browser, a log, a model&apos;s prompt or a webhook. A file in the folder is never by itself a reason to pay: a person adds each bill.
+            Vestiarion never uses Google data to train or improve any AI model, and never passes it to anyone else without the workspace&apos;s say.
+            Disconnecting deletes the tokens and forgets the folder, and revokes the access at Google unless the same Google account is still connected
+            elsewhere in Vestiarion; the files already read stay in the review list.
           </li>
           <li>
             <strong>Google Analytics</strong> receives page views on every page, signed-in pages included, and which button you chose to get

@@ -31,6 +31,7 @@ vi.mock("@/lib/asana/settings", async (original) => ({ ...(await original<typeof
 vi.mock("@/lib/zohocrm/settings", async (original) => ({ ...(await original<typeof import("@/lib/zohocrm/settings")>()), zohoCrmSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/googlesheets/settings", async (original) => ({ ...(await original<typeof import("@/lib/googlesheets/settings")>()), googleSheetsSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/linear/settings", async (original) => ({ ...(await original<typeof import("@/lib/linear/settings")>()), linearSettingsFromEnv: () => ({}) }));
+vi.mock("@/lib/googledrive/settings", async (original) => ({ ...(await original<typeof import("@/lib/googledrive/settings")>()), googleDriveSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/connectors/token-store", () => ({ pendingChoice: vi.fn(async () => pending.value) }));
 vi.mock("@/lib/dal/scope", () => ({ withOrg: (_org: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/components/vx/SiteChrome", () => ({ SiteHeader: () => null, SiteFooter: () => null }));
@@ -51,6 +52,7 @@ import AsanaConnectPage from "@/app/integrations/asana/connect/page";
 import ZohoCrmConnectPage from "@/app/integrations/zohocrm/connect/page";
 import GoogleSheetsConnectPage from "@/app/integrations/googlesheets/connect/page";
 import LinearConnectPage from "@/app/integrations/linear/connect/page";
+import GoogleDriveConnectPage from "@/app/integrations/googledrive/connect/page";
 import { CONSENT_CHANGED, CONSENT_VERSIONS, consentStatement, HOSTED_MODEL_PROVIDER, namesModelProvider } from "@/lib/connectors/consent";
 import type { ProviderId } from "@/lib/connectors/provider";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
@@ -246,12 +248,13 @@ const anyConnectPage = async (provider: ProviderId, query: Record<string, string
   if (provider === "zohocrm") return renderToStaticMarkup(await ZohoCrmConnectPage({ searchParams }));
   if (provider === "googlesheets") return renderToStaticMarkup(await GoogleSheetsConnectPage({ searchParams }));
   if (provider === "linear") return renderToStaticMarkup(await LinearConnectPage({ searchParams }));
+  if (provider === "googledrive") return renderToStaticMarkup(await GoogleDriveConnectPage({ searchParams }));
   return connectPage(provider, query);
 };
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear"] as const)("the %s connect page's statement", (provider) => {
+describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear", "googledrive"] as const)("the %s connect page's statement", (provider) => {
   it("posts the version it shows, inside the form", async () => {
     memberships.value = [workspace("acme")];
     const form = (await anyConnectPage(provider)).match(/<form[^>]*>[^]*?<\/form>/)?.[0] ?? "";
@@ -322,6 +325,61 @@ describe("the Google Sheets connect page (close pack Sheets GS2, GS3, GS18)", ()
     const words = text(await anyConnectPage("googlesheets"));
     expect(words).toContain("Only an owner or admin connects Google Sheets");
     expect(words).toContain("Ask an owner or admin of your workspace to connect Google Sheets, or sign in with the account that is one.");
+    expect(words).not.toContain("Continue to Google");
+  });
+});
+
+describe("the Google Drive connect page (Google Drive intake GD1, GD2, GD16)", () => {
+  const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/\s+/g, " ");
+
+  it("names Google Drive in words beside a plain folder icon, says what it asks Google for, and goes to Google", async () => {
+    memberships.value = [workspace("acme")];
+    const markup = await anyConnectPage("googledrive");
+    const words = text(markup);
+    expect(markup).toMatch(/<h1[^>]*>[^]*?<svg[^>]*lucide-folder\b[^]*?Connect Google Drive[^]*?<\/h1>/);
+    // No Google mark without Google's permission (GD1).
+    expect(markup).not.toContain("/brands/");
+    expect(words).toContain(
+      "Bring bills in from one Google Drive folder. Each PDF added to it is read into a bill that waits on Bills & receivables until a person adds it. Vestiarion asks Google for one permission: to read your Drive. It reads only the folder you choose, and writes nothing."
+    );
+    expect(words).toContain("What Vestiarion does with your Google Drive");
+    for (const line of consentStatement("googledrive")) expect(words).toContain(line);
+    expect(words).toContain(
+      "Google asks you to allow access as yourself: Vestiarion reads the folder with the access of the Google account you choose there, so the folder must be that account's, or shared with it."
+    );
+    expect(words).toContain("Connecting records your agreement, with its date, on the connection and in the workspace's signed ledger.");
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>[^]*?Continue to Google<\/button>/);
+    expect(markup).toContain('action="/api/integrations/googledrive/connect"');
+  });
+
+  it("says plainly that Google shows its unverified-app screen, and lets at most 100 people allow it, until it verifies the permission (GD16)", async () => {
+    memberships.value = [workspace("acme")];
+    const words = text(await anyConnectPage("googledrive"));
+    expect(words).toContain("Google warns you first");
+    expect(words).toContain(
+      `Google has not verified Vestiarion's permission to read Drive yet, so it shows a "Google hasn't verified this app" screen before you allow it. To go on, choose Advanced, then the link to go to Vestiarion. Until then, Google also lets at most 100 people allow it. The warning goes once Google verifies the permission.`
+    );
+  });
+
+  it("says why the connect route sent the person back", async () => {
+    memberships.value = [workspace("acme")];
+    expect(text(await anyConnectPage("googledrive", { error: "forbidden" }))).toContain("Only an owner or admin of a workspace connects Google Drive to it.");
+    expect(text(await anyConnectPage("googledrive", { error: "not_set_up" }))).toContain("Google Drive is not set up on this deployment yet.");
+    expect(text(await anyConnectPage("googledrive", { consent: "missing" }))).toContain("Tick I agree to connect Google Drive.");
+  });
+
+  it("picks the workspace the Settings card named, among several", async () => {
+    memberships.value = [workspace("acme"), workspace("beta", "admin")];
+    const radios = inputs(await anyConnectPage("googledrive", { org: "beta" })).filter((input) => input.type === "radio");
+    expect(radios.map((radio) => radio.value)).toEqual(["acme", "beta"]);
+    expect(radios.filter((radio) => "checked" in radio).map((radio) => radio.value)).toEqual(["beta"]);
+  });
+
+  it("tells a person who manages no workspace's integrations who can connect it", async () => {
+    memberships.value = [workspace("acme", "accountant")];
+    const words = text(await anyConnectPage("googledrive"));
+    expect(words).toContain("Only an owner or admin connects Google Drive");
+    expect(words).toContain("Ask an owner or admin of your workspace to connect Google Drive, or sign in with the account that is one.");
     expect(words).not.toContain("Continue to Google");
   });
 });

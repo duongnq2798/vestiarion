@@ -129,6 +129,7 @@ export const TENANT_TABLES = [
   "address_change_checks",
   "document_requests",
   "linear_issue_links",
+  "google_drive_folders",
 ] as const;
 
 export interface SeededRows {
@@ -427,6 +428,20 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     `insert into linear_issue_links (org_id, milestone_id, connection_id, issue_id, identifier, issue_title)
      select $1, m.id, $2, gen_random_uuid()::text, $3, 'Billing export' from milestones m where m.org_id = $1 and m.title = $4`,
     [orgId, linearConnectionId, `ENG-${crypto.randomInt(1, 999_999)}`, `m-${tag}`]
+  );
+  // A Google Drive connection, the folder it reads, and a file read from it into the review list (0148).
+  const driveConnectionId = await one(
+    `insert into accounting_connections (org_id, provider, external_org_id, consent_version, consented_at, window_from)
+     values ($1, 'googledrive', $2, 'googledrive-2026-11-01', now(), '2026-08-02') returning id`,
+    [orgId, `0762347118521${crypto.randomInt(1_000_000, 9_999_999)}`]
+  );
+  await db.query(
+    "insert into google_drive_folders (org_id, connection_id, folder_id, folder_name, baseline) values ($1, $2, $3, 'Bills', '{1AbCdEfGhIjKlMnOpQrStUvWxYz012345}')",
+    [orgId, driveConnectionId, `1Fo1der${tag}AbCdEfGhIjKlMnOpQrStUv`]
+  );
+  await db.query(
+    "insert into inbox_emails (org_id, source, drive_file_id, file_name, status) values ($1, 'google_drive', $2, 'northwind-inv-2207.pdf', 'ready')",
+    [orgId, `1Fi1e${tag}AbCdEfGhIjKlMnOpQrStUvWx`]
   );
   // A member's checklist mark: Approvals opened while a bill waited there (0114).
   await db.query("insert into onboarding_marks (org_id, user_id, mark) values ($1, $2, 'approvals_opened')", [orgId, approver]);

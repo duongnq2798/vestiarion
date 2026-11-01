@@ -2,6 +2,7 @@
 
 import { MailCheck, X } from "lucide-react";
 import { addInboxEmailAction, dismissInboxEmailAction, finishInboxEmailAction, type InboxActionResult } from "@/app/actions/email-inbox";
+import { GoogleDriveCheck } from "@/components/GoogleDriveCheck";
 import InvoiceIntake, { type IntakeCounterparty } from "@/components/intake/InvoiceIntake";
 import { Card } from "@/components/ui/Card";
 import { Disclosure } from "@/components/ui/Disclosure";
@@ -10,6 +11,8 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
 import type { InboxEmailView } from "@/lib/email-inbox/list";
+import { reviewListTitle, reviewListWhere } from "@/lib/email-inbox/words";
+import type { GoogleDriveCheckView } from "@/lib/googledrive/views";
 import { lateFeeFieldsOf } from "@/lib/invoice-document/normalize";
 
 const INITIAL: InboxActionResult = { ok: false, message: "" };
@@ -29,6 +32,15 @@ function senderChecks(email: InboxEmailView): string {
   const failed = (["spf", "dkim", "dmarc"] as const).filter((check) => auth[check] !== "pass").map((check) => check.toUpperCase());
   if (failed.length === 0) return "SPF, DKIM and DMARC pass for this sender.";
   return `The sender did not pass ${failed.length === 1 ? failed[0] : `${failed.slice(0, -1).join(", ")} and ${failed.at(-1)}`}: check it came from the vendor.`;
+}
+
+/**
+ * Who last changed a file in Google Drive, their email masked, in one sentence: information, never authority (Google
+ * Drive intake GD8, GD9). Anyone who can add a file to the folder can put one in the list.
+ */
+function driveChanger(row: InboxEmailView): string {
+  const who = row.lastModifiedBy ? `Last changed in Google Drive by ${row.lastModifiedBy}.` : "Google Drive did not say who last changed it.";
+  return `${who} Anyone who can add files to the folder can put one here: check it is the vendor's invoice.`;
 }
 
 function Decide({ orgSlug, email }: { orgSlug: string; email: InboxEmailView }) {
@@ -107,16 +119,27 @@ function FinishForm({ orgSlug, email, counterparties }: { orgSlug: string; email
 
 function EmailCard({ orgSlug, email, canAdd, counterparties }: { orgSlug: string; email: InboxEmailView; canAdd: boolean; counterparties: IntakeCounterparty[] }) {
   const read = email.read;
+  // A file found in the workspace's Google Drive folder, decided as an email is (Google Drive intake GD8).
+  const drive = email.source === "google_drive";
   // The counterparty the invoice matched. A vendor name read but matched to none is said as such, never as one.
   const who = read?.counterpartyName ?? null;
   const unmatchedVendor = who ? null : (read?.vendorName ?? null);
   return (
     <Card className="space-y-3 p-4 sm:p-5">
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-ink">{email.subject || "(no subject)"}</p>
-        <p className="text-xs text-ink-3">
-          From {email.from ?? "an unknown sender"} · {receivedOn(email.receivedAt)}
-        </p>
+        {drive ? (
+          <>
+            <p className="break-words text-sm font-semibold text-ink">{email.fileName || "Untitled file"}</p>
+            <p className="text-xs text-ink-3">From Google Drive · found {receivedOn(email.receivedAt)}</p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-semibold text-ink">{email.subject || "(no subject)"}</p>
+            <p className="text-xs text-ink-3">
+              From {email.from ?? "an unknown sender"} · {receivedOn(email.receivedAt)}
+            </p>
+          </>
+        )}
       </div>
       {email.status === "received" && <p className="text-sm text-ink-2">Reading…</p>}
       {read && email.status !== "unreadable" && (
@@ -165,14 +188,19 @@ function EmailCard({ orgSlug, email, canAdd, counterparties }: { orgSlug: string
       )}
       {email.status === "unreadable" && (
         <p className="text-sm text-ink-2">
-          <span className="font-medium text-ink">Could not be read:</span> {email.reasons[0] ?? "the email could not be read."}
+          <span className="font-medium text-ink">Could not be read:</span> {email.reasons[0] ?? (drive ? "the file could not be read." : "the email could not be read.")}
         </p>
       )}
-      {email.status !== "received" && email.status !== "unreadable" && (
-        <p className="text-xs text-ink-3">
-          {senderChecks(email)}
-          {read?.knownSender && who ? ` It is the billing email ${who} has on file.` : ""}
-        </p>
+      {drive ? (
+        <p className="text-xs text-ink-3">{driveChanger(email)}</p>
+      ) : (
+        email.status !== "received" &&
+        email.status !== "unreadable" && (
+          <p className="text-xs text-ink-3">
+            {senderChecks(email)}
+            {read?.knownSender && who ? ` It is the billing email ${who} has on file.` : ""}
+          </p>
+        )
       )}
       {canAdd ? (
         <>
@@ -187,27 +215,54 @@ function EmailCard({ orgSlug, email, canAdd, counterparties }: { orgSlug: string
 }
 
 /**
- * The invoices that arrived by email and wait for a person, on Bills & receivables
- * (docs/superpowers/specs/2026-10-03-email-invoices-design.md E6, E7): what was read, the sender's checks, and for an
- * owner or admin Add (with the goods received or not) and Dismiss. Nothing here is added by itself. Renders nothing
- * when nothing waits.
+ * The invoices that wait for a person on Bills & receivables (docs/superpowers/specs/2026-10-03-email-invoices-design.md
+ * E6, E7): what was read, the sender's checks, and for an owner or admin Add (with the goods received or not) and
+ * Dismiss. Beside the emails, newest first, the files found in the workspace's Google Drive folder
+ * (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD8): each named by its file, when it was found and
+ * who last changed it in Drive, decided the same way; and, for whoever adds them, Check Google Drive now once a folder is
+ * chosen (GD7, GD16). Nothing here is added by itself. Renders nothing when nothing waits and there is no folder to check.
  */
 export default function InboxEmails({
   orgSlug,
   emails,
   canAdd,
   counterparties,
+  driveCheck = null,
 }: {
   orgSlug: string;
   emails: InboxEmailView[];
   canAdd: boolean;
   /** The workspace's counterparties, for the form that finishes an email. */
   counterparties: IntakeCounterparty[];
+  /**
+   * The Google Drive folder Check Google Drive now reads, when one is chosen and this viewer adds invoices, with what the
+   * card says when the folder is gone (GD13).
+   */
+  driveCheck?: GoogleDriveCheckView | null;
 }) {
-  if (emails.length === 0) return null;
+  if (emails.length === 0 && !driveCheck) return null;
+  const sources = emails.map((email) => email.source);
+  const title = reviewListTitle(sources, driveCheck !== null);
   return (
     <section aria-labelledby="email-inbox-title" id="email-inbox" className="mb-8">
-      <SectionHeader id="email-inbox-title" title="From email" meta={`${emails.length} to decide · sent to this workspace's invoice address`} />
+      <SectionHeader
+        id="email-inbox-title"
+        title={title}
+        meta={emails.length > 0 ? `${emails.length} to decide · ${reviewListWhere(sources)}` : "Nothing to decide"}
+      />
+      {driveCheck && (
+        <div className="mb-4 space-y-2">
+          {driveCheck.problem ? (
+            // The folder is gone (GD13): said as the card says it, never that it is read every 15 minutes.
+            <p className="break-words text-sm text-refused">{driveCheck.problem}</p>
+          ) : (
+            <p className="break-words text-sm text-ink-2">
+              Vestiarion reads <span className="font-medium text-ink">{driveCheck.folderName}</span> in Google Drive every 15 minutes.
+            </p>
+          )}
+          <GoogleDriveCheck orgSlug={orgSlug} />
+        </div>
+      )}
       <div className="space-y-3">
         {emails.map((email) => (
           <EmailCard key={email.id} orgSlug={orgSlug} email={email} canAdd={canAdd} counterparties={counterparties} />

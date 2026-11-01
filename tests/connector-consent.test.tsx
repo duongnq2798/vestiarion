@@ -38,7 +38,7 @@ const JOINED: Record<string, readonly string[]> = {
 /** consent.ts's other exports, none of them a gate. */
 const NOT_GATES = ["CONSENT_VERSIONS", "CONSENT_HISTORY", "HOSTED_MODEL_PROVIDER", "namesModelProvider", "CONSENT_CHANGED", "consentStatement", "CONSENT_LABEL"];
 
-const VERSION = /\b(?:xero|quickbooks|hubspot|pipedrive|asana|googlesheets|linear)-\d{4}-\d{2}-\d{2}(?:\.\d+)?\b/;
+const VERSION = /\b(?:xero|quickbooks|hubspot|pipedrive|asana|googlesheets|linear|googledrive)-\d{4}-\d{2}-\d{2}(?:\.\d+)?\b/;
 
 function files(dir: string, extension: RegExp): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

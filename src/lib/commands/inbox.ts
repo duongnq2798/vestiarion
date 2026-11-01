@@ -1,5 +1,5 @@
 import { db, unwrap } from "../dal";
-import type { ShownRead } from "../email-inbox/list";
+import { before0148, type ShownRead } from "../email-inbox/list";
 import { invoiceOfDraft, type StoredChatDraft } from "../invoice-document/chat-draft";
 import { changedFields, isReader, submittedLateFee, type DocumentProvenance, type Submitted } from "../invoice-document/provenance";
 import type { InvoiceInput } from "../invoices/create";
@@ -10,13 +10,39 @@ import { done, refused, TRY_AGAIN, type CommandOutcome } from "./outcome";
 import { gate } from "./policy";
 
 /**
- * A person's decision on an invoice that arrived by email (email invoices design E7, E8): added as a payable, or
+ * A person's decision on an invoice in the review list (email invoices design E7, E8): added as a payable, or
  * dismissed. Adding is a records write, an owner's or admin's, as adding any invoice is. The draft is used once: its
  * row moves from `ready` to `added` in one guarded update before anything is written, and is put back if the invoice
- * could not be added after all. Runs inside the workspace's scope.
+ * could not be added after all. Runs inside the workspace's scope. A file from the workspace's Google Drive folder is
+ * decided the same way, with the same roles (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD8): its
+ * entry names Google Drive and the file (GD10, GD11), and the words both reach say invoice.
  */
 
 const STILL_TO_DECIDE = ["received", "ready", "needs_details", "unreadable"];
+
+/** Where a row came from, as the claim answers it (0148); a row read before 0148 has no source, and is an email. */
+interface Source {
+  source?: "email" | "google_drive" | null;
+  drive_file_id?: string | null;
+}
+
+/** The columns 0148 adds, asked for beside the ones each step reads. */
+const SOURCE_COLUMNS = ", source, drive_file_id";
+
+/**
+ * A step's write or read, sent again without 0148's columns when the database has no such column yet: before 0148 runs,
+ * every row is an email, and an emailed invoice is decided as it always was. A statement that names a missing column
+ * fails whole, so a guarded update sent again is still applied once.
+ */
+async function withSource<R extends { error: { code?: string; message: string } | null }>(send: (columns: string) => PromiseLike<R>): Promise<R> {
+  const first = await send(SOURCE_COLUMNS);
+  return before0148(first.error) ? send("") : first;
+}
+
+/** What `create_invoice` names of the row (E8, GD10): the row, and the Drive file for a file from Google Drive. */
+function receivedOf(inboxEmailId: string, row: Source): { inboxEmailId: string; driveFileId?: string } {
+  return row.source === "google_drive" && row.drive_file_id ? { inboxEmailId, driveFileId: row.drive_file_id } : { inboxEmailId };
+}
 
 export async function addFromInbox(
   actor: Actor,
@@ -25,24 +51,28 @@ export async function addFromInbox(
   const refusal = gate(actor, "inbox.add");
   if (refusal) return refusal;
   let stored: StoredChatDraft | null;
+  let source: Source = {};
   try {
     const rows = unwrap(
-      await db()
-        .from("inbox_emails")
-        .update({ status: "added", decided_by: actor.userId, decided_at: new Date().toISOString() })
-        .eq("id", input.inboxEmailId)
-        .eq("status", "ready")
-        .select("draft")
-    ) as Array<{ draft: StoredChatDraft | null }>;
+      await withSource((columns) =>
+        db()
+          .from("inbox_emails")
+          .update({ status: "added", decided_by: actor.userId, decided_at: new Date().toISOString() })
+          .eq("id", input.inboxEmailId)
+          .eq("status", "ready")
+          .select(`draft${columns}`)
+      )
+    ) as Array<{ draft: StoredChatDraft | null } & Source>;
     stored = rows[0]?.draft ?? null;
+    source = rows[0] ?? {};
   } catch (error) {
     console.error("adding an emailed invoice failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
     return refused("failed", TRY_AGAIN);
   }
-  if (!stored) return refused("not_ready", "This email was already decided, or cannot be added as it was read.");
+  if (!stored) return refused("not_ready", "This invoice was already decided, or cannot be added as it was read.");
 
   const invoice = invoiceOfDraft(stored, input.goodsReceived);
-  const added = invoice ? await addInvoice(actor, { invoice, document: { ...stored.document, changed: [] }, received: { inboxEmailId: input.inboxEmailId } }) : null;
+  const added = invoice ? await addInvoice(actor, { invoice, document: { ...stored.document, changed: [] }, received: receivedOf(input.inboxEmailId, source) }) : null;
   if (!invoice || !added?.ok) {
     // Put it back, for someone to add once the reason is fixed, or to dismiss.
     await db().from("inbox_emails").update({ status: "ready", decided_by: null, decided_at: null }).eq("id", input.inboxEmailId).eq("status", "added");
@@ -55,10 +85,10 @@ export async function addFromInbox(
   return done(`Added a payable for ${added.counterpartyName}. The agent usually decides within a minute.`, { invoiceId: added.invoiceId });
 }
 
-/** An email a person can finish by hand: read and ready, read with a detail missing, or not read at all. */
+/** An invoice a person can finish by hand: read and ready, read with a detail missing, or not read at all. */
 const FINISHABLE = ["ready", "needs_details", "unreadable"];
 
-interface FinishableRow {
+interface FinishableRow extends Source {
   status: string;
   read: ShownRead | null;
   draft: StoredChatDraft | null;
@@ -105,10 +135,10 @@ export async function finishFromInbox(
 ): Promise<CommandOutcome<{ invoiceId: string }>> {
   const refusal = gate(actor, "inbox.finish");
   if (refusal) return refusal;
-  if (input.invoice.direction !== "payable") return refused("invalid", "An invoice that arrives by email is a payable.");
+  if (input.invoice.direction !== "payable") return refused("invalid", "An invoice in the review list is a payable.");
   let row: FinishableRow | null;
   try {
-    const found = await db().from("inbox_emails").select("status, read, draft").eq("id", input.inboxEmailId).maybeSingle<FinishableRow>();
+    const found = await withSource((columns) => db().from("inbox_emails").select(`status, read, draft${columns}`).eq("id", input.inboxEmailId).maybeSingle<FinishableRow>());
     if (found.error) throw new Error(found.error.message);
     row = found.data && FINISHABLE.includes(found.data.status) ? found.data : null;
     if (row) {
@@ -126,9 +156,9 @@ export async function finishFromInbox(
     console.error("finishing an emailed invoice failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
     return refused("failed", TRY_AGAIN);
   }
-  if (!row) return refused("not_found", "This email was already decided.");
+  if (!row) return refused("not_found", "This invoice was already decided.");
 
-  const added = await addInvoice(actor, { invoice: input.invoice, document: finishedProvenance(row, input.invoice), received: { inboxEmailId: input.inboxEmailId } });
+  const added = await addInvoice(actor, { invoice: input.invoice, document: finishedProvenance(row, input.invoice), received: receivedOf(input.inboxEmailId, row) });
   if (!added.ok) {
     // Put it back as it was, for someone to finish once the reason is fixed, or to dismiss.
     await db().from("inbox_emails").update({ status: row.status, decided_by: null, decided_at: null }).eq("id", input.inboxEmailId).eq("status", "added");
@@ -139,29 +169,49 @@ export async function finishFromInbox(
   return done(`Added a payable for ${added.counterpartyName}. The agent usually decides within a minute.`, { invoiceId: added.invoiceId });
 }
 
+/**
+ * Dismisses an invoice still to decide. An email's dismissal is `invoice_email_dismissed`, as it always was; a file from
+ * Google Drive's is `invoice_drive_file_dismissed`, naming the file (GD11).
+ */
 export async function dismissFromInbox(actor: Actor, input: { inboxEmailId: string }): Promise<CommandOutcome> {
   const refusal = gate(actor, "inbox.dismiss");
   if (refusal) return refusal;
+  let row: Source;
   try {
     const rows = unwrap(
-      await db()
-        .from("inbox_emails")
-        .update({ status: "dismissed", decided_by: actor.userId, decided_at: new Date().toISOString() })
-        .eq("id", input.inboxEmailId)
-        .in("status", STILL_TO_DECIDE)
-        .select("id")
-    ) as Array<{ id: string }>;
-    if (rows.length === 0) return refused("not_found", "This email was already decided.");
+      await withSource((columns) =>
+        db()
+          .from("inbox_emails")
+          .update({ status: "dismissed", decided_by: actor.userId, decided_at: new Date().toISOString() })
+          .eq("id", input.inboxEmailId)
+          .in("status", STILL_TO_DECIDE)
+          .select(`id${columns}`)
+      )
+    ) as Array<{ id: string } & Source>;
+    if (rows.length === 0) return refused("not_found", "This invoice was already decided.");
+    row = rows[0];
   } catch (error) {
     console.error("dismissing an emailed invoice failed", actor.orgId, error instanceof Error ? error.message : "unknown error");
     return refused("failed", TRY_AGAIN);
   }
-  await appendLedgerEntryBestEffort(actor.orgId, {
-    actor: "human",
-    domain: "ap",
-    action: "invoice_email_dismissed",
-    summary: "Dismissed an email that arrived at the invoice address",
-    detail: { by: actor.userId, inboxEmailId: input.inboxEmailId },
-  });
+  const fromDrive = row.source === "google_drive" && !!row.drive_file_id;
+  await appendLedgerEntryBestEffort(
+    actor.orgId,
+    fromDrive
+      ? {
+          actor: "human",
+          domain: "ap",
+          action: "invoice_drive_file_dismissed",
+          summary: "Dismissed a file from the Google Drive folder",
+          detail: { by: actor.userId, inboxEmailId: input.inboxEmailId, driveFileId: row.drive_file_id },
+        }
+      : {
+          actor: "human",
+          domain: "ap",
+          action: "invoice_email_dismissed",
+          summary: "Dismissed an email that arrived at the invoice address",
+          detail: { by: actor.userId, inboxEmailId: input.inboxEmailId },
+        }
+  );
   return done("Dismissed.");
 }

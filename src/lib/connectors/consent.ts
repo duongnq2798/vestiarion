@@ -24,6 +24,7 @@ export const CONSENT_VERSIONS: Record<ProviderId, string> = {
   zohocrm: "zohocrm-2026-10-16",
   googlesheets: "googlesheets-2026-10-25",
   linear: "linear-2026-10-31",
+  googledrive: "googledrive-2026-11-01",
 };
 
 /**
@@ -41,6 +42,7 @@ export const CONSENT_HISTORY: Record<ProviderId, readonly string[]> = {
   zohocrm: ["zohocrm-2026-10-16"],
   googlesheets: ["googlesheets-2026-10-25"],
   linear: ["linear-2026-10-31"],
+  googledrive: ["googledrive-2026-11-01"],
 };
 
 /**
@@ -166,6 +168,21 @@ const GOOGLE_SHEETS_STATEMENT: readonly string[] = [
   "Disconnecting revokes Vestiarion's access at Google, unless another workspace is connected with the same Google account, and deletes the tokens. Spreadsheets already exported stay in that Drive.",
 ];
 
+/**
+ * Google Drive's statement (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD2, GD5, GD6, GD9, GD14):
+ * the read-only Drive permission and how far Google lets it reach, the one folder read, what happens to a file and what
+ * is kept, that a person adds every bill, the model provider that reads a file's text and decides the bills, and what
+ * disconnecting does with a grant the same Google account holds elsewhere.
+ */
+const GOOGLE_DRIVE_STATEMENT: readonly string[] = [
+  "Vestiarion asks Google for read-only access to your Google Drive (Google's drive.readonly permission). Google's permission lets it see every file the Google account you connect can see. Vestiarion reads only the one folder an owner or admin of this workspace chooses, and writes nothing to your Drive.",
+  "Every 15 minutes, and when someone presses Check Google Drive now, it lists the files in that folder, not in its subfolders. Each file added after the folder was chosen is read once: a PDF, .eml or .txt file of at most 4 MB is downloaded and read into a draft bill. The files already in the folder when it was chosen are never read.",
+  "It keeps the folder's id and name, and the ids of the files already in it when it was chosen, so those are never read. For each file read, it keeps its id and name, who last changed it in Drive with their email masked, what was read, the draft bill and the document's SHA-256, never the file itself. It reads the Google account's id and email address once, when you connect, and keeps the id and a masked email.",
+  `A person here adds each bill: a file in the folder is never by itself a reason to pay. The bills added are shown to this workspace's members and to its agent. ${MODEL_PROVIDER} sees each bill's facts to decide on it, under that provider's own API terms. The same provider reads each file's text first, to draft its bill.`,
+  "Vestiarion never uses Google data to train or improve any AI model, and never passes it to anyone else without your workspace's say.",
+  "Disconnecting deletes the tokens and forgets the folder, and revokes Vestiarion's access at Google unless the same Google account is still connected elsewhere in Vestiarion. Files already read stay in the review list on Bills & receivables.",
+];
+
 export function consentStatement(provider: ProviderId): string[] {
   const label = PROVIDER_LABELS[provider];
   if (provider === "hubspot") return CRM_STATEMENT(label);
@@ -174,6 +191,7 @@ export function consentStatement(provider: ProviderId): string[] {
   if (provider === "asana") return WORK_STATEMENT(label);
   if (provider === "googlesheets") return [...GOOGLE_SHEETS_STATEMENT];
   if (provider === "linear") return [...LINEAR_STATEMENT];
+  if (provider === "googledrive") return [...GOOGLE_DRIVE_STATEMENT];
   return [
     WHAT_IS_READ[provider],
     `The bills you add are shown to this workspace's members and to its agent. ${MODEL_PROVIDER} sees each bill's facts to decide on it, under that provider's own API terms.`,

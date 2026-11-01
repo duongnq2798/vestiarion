@@ -17,8 +17,11 @@ export async function addInvoice(
   input: {
     invoice: InvoiceInput;
     document: DocumentProvenance | null;
-    /** The inbox row it was read from, when it arrived by email (email invoices design E8). */
-    received?: { inboxEmailId: string };
+    /**
+     * The review list's row it was read from, when it arrived by email (email invoices design E8), with the Drive file's
+     * id when it was a file in the workspace's Google Drive folder (Google Drive intake GD10).
+     */
+    received?: { inboxEmailId: string; driveFileId?: string };
     /** The bill in the business's own currency, converted to USDC in shadow mode (shadow mode S6). */
     original?: OriginalBill;
     /** The bill list it was imported from, and its row there (import design B12). */
@@ -43,8 +46,13 @@ export async function addInvoice(
       // The entry names the bot exactly as it always has (Telegram bot design R10); Slack's names its link too (S15).
       ...(actor.surface.kind === "telegram" ? { via: "telegram" as const } : {}),
       ...(actor.surface.kind === "slack" ? { via: "slack" as const, linkId: actor.surface.linkId } : {}),
-      // An invoice that arrived by email names the email, whoever added it and wherever from.
-      ...(input.received ? { via: "email" as const, inboxEmailId: input.received.inboxEmailId } : {}),
+      // An invoice that arrived by email names the email, whoever added it and wherever from; one found in the Google
+      // Drive folder names the row and the file (Google Drive intake GD10).
+      ...(input.received
+        ? input.received.driveFileId
+          ? { via: "google_drive" as const, inboxEmailId: input.received.inboxEmailId, driveFileId: input.received.driveFileId }
+          : { via: "email" as const, inboxEmailId: input.received.inboxEmailId }
+        : {}),
       ...(input.original ? { original: input.original } : {}),
       // A row of a bill list a person imported, with the list's hash and its row (import design B12).
       ...(input.imported ? { via: "import" as const, imported: input.imported } : {}),

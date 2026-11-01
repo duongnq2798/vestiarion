@@ -1,5 +1,15 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-11-01: Bills from a Google Drive folder
+
+- Three new entries, domain `ap`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:
+  - **`google_drive_folder_chosen`**, actor `human`: `{ by, folderId, folderName, baseline }`, when an owner or admin chose the Google Drive folder the workspace reads, in place of any chosen before. `baseline` is how many files were in the folder then, which are never read; their names and ids are not in the entry. The same folder chosen again is recorded again with the `baseline` it kept from its first choice.
+  - **`invoice_drive_file_received`**, actor `system`: `{ inboxEmailId, driveFileId, fileName, lastModifiedBy, read, document }`, when a file added to the folder after it was chosen was read. `fileName` is the file's name, cut to 120 characters; `lastModifiedBy` is the email of whoever last changed the file in Drive with most of its name hidden, or `null` when Drive did not say; `read` is `ready`, `needs_details` or `unreadable`; and `document` is the document's `kind` and `sha256`, or `null` for a file that was not read, such as a picture or a Google Docs file.
+  - **`invoice_drive_file_dismissed`**, actor `human`: `{ by, inboxEmailId, driveFileId }`, when a member dismissed the file in the review list. An emailed invoice's dismissal is still `invoice_email_dismissed`.
+- `create_invoice` entries gain `via: "google_drive"`, with `inboxEmailId` (the row in the review list, under the name emailed invoices already use) and `driveFileId`, when a member added the payable from a file found in the folder. Such an entry carries `document` as one added from a document does, `changed` included. Nothing found in the folder is added without a person.
+- A new Google Drive connection's **`accounting_connected`** carries `provider: "googledrive"` and `consent.version` `googledrive-2026-11-01`; its `externalOrgId` is the Google account's Drive permission ID, and `externalOrgName` its email with most of its name hidden. Disconnecting signs `accounting_disconnected`, as for every connector.
+- Nothing else in `/api/v1` changes: a folder is chosen, and its files added or dismissed, in the console only.
+
 ## 2026-10-31: Contractor work accepted from Linear
 
 - A milestone's `verificationMethod` may now be **`linear`**, in `GET /api/v1/milestones` and on its own page: the work was accepted by a person against the milestone's acceptance criteria once its Linear issue was done. Its `verificationDetail` is `{ note, linearIssue, issueId, identifier, completedAt, fingerprint, criteriaSha256, acceptedBy }`; once an acceptance is taken back it also carries `heldReason` and `heldAt`, `verified` is false, `verificationStatus` is `unverified` and `status` is `pending` again. The TypeScript SDK 0.4.1 accepts the value.

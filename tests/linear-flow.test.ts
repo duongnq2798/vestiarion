@@ -398,7 +398,9 @@ function world(options: { payeeEmail?: string | null; ownerLinearIsPayee?: boole
 
   const tokens = new Map<string, StoredTokens>();
   const holders = new Map<string, string | null>();
-  const tokenOf = (connectionId: string) => tokens.get(connectionId) ?? { id: `token-${connectionId}`, version: 1, accessToken: "lin_oauth_access_1", refreshToken: "lin_refresh_1", expiresAt: NOW + 3_600_000, scopes: ["read"] };
+  // The lease checks expiry against the real clock (src/lib/connectors/tokens.ts), so the first token is good for an hour
+  // from whenever the test runs, not from NOW.
+  const tokenOf = (connectionId: string) => tokens.get(connectionId) ?? { id: `token-${connectionId}`, version: 1, accessToken: "lin_oauth_access_1", refreshToken: "lin_refresh_1", expiresAt: Date.now() + 3_600_000, scopes: ["read"] };
   tokenRow.current = {
     store: (connectionId) => ({
       read: async () => ({ ...tokenOf(connectionId) }),

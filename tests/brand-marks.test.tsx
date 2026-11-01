@@ -238,9 +238,10 @@ describe("a brand mark", () => {
   });
 
   it("gives each connector its own mark, and Intuit's name alone no mark: no place stands for Intuit itself", () => {
-    // Google Sheets has no mark: Google's product icons need Google's brand permission (close pack Sheets GS18). Nor has
-    // Linear yet: its logo is not shipped until the brand asset is added (Linear acceptance LN16).
-    const MARKED = PROVIDERS.filter((provider) => provider !== "googlesheets" && provider !== "linear");
+    // Google Sheets has no mark: Google's product icons need Google's brand permission (close pack Sheets GS18), nor has
+    // Google Drive (Google Drive intake GD1). Nor has Linear yet: its logo is not shipped until the brand asset is added
+    // (Linear acceptance LN16).
+    const MARKED = PROVIDERS.filter((provider) => provider !== "googlesheets" && provider !== "linear" && provider !== "googledrive");
     expect(Object.keys(PROVIDER_MARKS).sort()).toEqual([...MARKED].sort());
     expect(PROVIDER_MARKS).toEqual({
       xero: "xero",

@@ -668,6 +668,21 @@ answers 404. The connection needs migration 0145; before it runs, the Google She
 yet. Its tokens are kept encrypted under `VESTIARION_MASTER_KEYS`. See [Export the close pack to Google
 Sheets](https://www.vestiarion.xyz/docs/guides/accountants#export-the-close-pack-to-google-sheets).
 
+With `GOOGLE_DRIVE_CLIENT_ID` and `GOOGLE_DRIVE_CLIENT_SECRET` set, from a Google OAuth client of type Web application
+(give Google Drive its own client, not Google Sheets': disconnecting Google Sheets revokes the Google account's whole
+grant to its client, so with one shared client it would cut off Google Drive for the same account; Google Drive's own
+disconnect keeps the grant while Google Sheets holds that account), an owner or admin connects a workspace to one
+Google account from Settings, after agreeing to what Vestiarion does with its Drive, and chooses one folder; each PDF
+added to it afterwards is read into a bill that waits on Bills & receivables for a person to add, every 15 minutes or
+on **Check Google Drive now**. In the Google Cloud project, enable the Google Drive API, add the one scope
+`https://www.googleapis.com/auth/drive.readonly`, and register the redirect URI
+`<origin>/api/integrations/googledrive/callback` exactly. That scope is restricted: until
+Google completes its restricted-scope verification, Google shows its "Google hasn't verified this app" screen to whoever
+grants it, and at most 100 people can. The client id must read like `1234567890-abc123.apps.googleusercontent.com`, or
+Google Drive stays off and `/api/integrations/googledrive/*` answers 404. The connection needs migration 0148; before it
+runs, the Google Drive card says Google Drive is not set up yet. Its tokens are kept encrypted under
+`VESTIARION_MASTER_KEYS`. See [Bring bills in from Google Drive](https://www.vestiarion.xyz/docs/guides/google-drive).
+
 ### Measurement provenance
 
 Every newly executed payment intent records its target, transaction reference, chain, provider
