@@ -162,7 +162,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   period's address changes, or the month's payments per token. `vestiarion evidence verify` and `vestiarion close-pack
   verify` check such a file offline with the SDK's `verifyEvidence`, against the public key from the Audit log page or
   the keys the file carries, and answer VALID, BROKEN or NOT CHECKED, exiting `0` only when valid. They read a file
-  saved by Windows PowerShell's `>` and a whole API answer too. The CLI now needs `@vestiarion/sdk` 0.4.1. No
+  in UTF-16 and a whole API answer too. Every command now refuses an option given twice, where the last one used to win
+  unseen. The CLI now needs `@vestiarion/sdk` 0.4.1. No
   migration. [Guide](https://www.vestiarion.xyz/docs/get-started/cli#evidence-and-close-packs).
 
 ### Changed

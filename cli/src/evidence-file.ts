@@ -1,5 +1,5 @@
 import { createPublicKey } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { EVIDENCE_FORMATS, verifyEvidence, type EvidenceFormat, type EvidenceVerification } from "@vestiarion/sdk";
 import { keyId, PEM_BLOCK, spkiPem } from "./ledger-export.js";
@@ -99,6 +99,8 @@ export interface FileCheck {
   answer: Record<string, unknown>;
 }
 
+const MAX_FILE_BYTES = 256 * 1024 * 1024;
+
 /** A verdict reached before `verifyEvidence` could run: the file, or a key, could not be read. */
 class NotChecked extends Error {}
 
@@ -113,14 +115,21 @@ function notChecked(reason: string): never {
 function readDocument(cwd: string, file: string, expected: EvidenceFormat | undefined): { document: Document; unwrapped: boolean } {
   let bytes: Buffer;
   try {
-    bytes = readFileSync(path.resolve(cwd, file));
+    const where = path.resolve(cwd, file);
+    // Far more than any evidence file: a close pack the API answers is at most 4 MB, one downloaded at most 2,000 rows.
+    if (statSync(where).size > MAX_FILE_BYTES) notChecked(`${file} is over ${MAX_FILE_BYTES / 1024 / 1024} MB, more than any evidence file`);
+    bytes = readFileSync(where);
   } catch (error) {
+    if (error instanceof NotChecked) throw error;
     notChecked(`${file} could not be read (${(error as Error).message})`);
   }
   let source: string;
   if (bytes[0] === 0xff && bytes[1] === 0xfe) source = bytes.subarray(2).toString("utf16le");
-  else if (bytes[0] === 0xfe && bytes[1] === 0xff) source = Buffer.from(bytes.subarray(2)).swap16().toString("utf16le");
-  else source = bytes.toString("utf8");
+  else if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    // Big-endian UTF-16 is swapped two bytes at a time; an odd byte left over is not UTF-16.
+    if (bytes.length % 2 !== 0) notChecked(`${file} could not be read as UTF-16: it has an odd number of bytes`);
+    source = Buffer.from(bytes.subarray(2)).swap16().toString("utf16le");
+  } else source = bytes.toString("utf8");
   if (source.charCodeAt(0) === 0xfeff) source = source.slice(1);
   let parsed: unknown;
   try {
@@ -171,9 +180,103 @@ function readKeys(cwd: string, files: string[]): Record<string, string> {
   return keys;
 }
 
+/**
+ * Keys the file files under an id that is not theirs. The SDK never uses such a key (it counts a key only under its true
+ * id), but a file the workspace made never holds one, so the CLI names each as a problem.
+ */
+function misfiledKeys(document: Fields): string[] {
+  const problems: string[] = [];
+  for (const key of Array.isArray(document.keys) ? document.keys.filter(isFields) : []) {
+    if (typeof key.id !== "string" || typeof key.publicKeyPem !== "string") continue;
+    let trueId: string;
+    try {
+      trueId = keyId(createPublicKey(key.publicKeyPem));
+    } catch {
+      continue; // A key that cannot be read is the SDK's to name.
+    }
+    if (trueId !== key.id) problems.push(`The file files a key under ${plain(key.id)}, but that key's id is ${trueId}.`);
+  }
+  return problems;
+}
+
+/**
+ * The ids of the keys that signed the entries that verified. An entry verifies only under its key's true id, so these,
+ * not the ids the file lists, are the ones to compare with the Audit log. `unnamed` counts verified entries that name no
+ * key (written before entries carried one).
+ */
+function signers(document: Fields, result: EvidenceVerification): { ids: string[]; unnamed: number } {
+  const named = new Map<number, unknown>();
+  for (const entry of Array.isArray(document.entries) ? document.entries.filter(isFields) : []) {
+    if (typeof entry.seq === "number" && !named.has(entry.seq)) named.set(entry.seq, entry.signing_key_id);
+  }
+  const ids = new Set<string>();
+  let unnamed = 0;
+  for (const { seq, check } of result.entries) {
+    if (check.ok !== true) continue;
+    const id = named.get(seq);
+    if (typeof id === "string" && id !== "") ids.add(plain(id));
+    else unnamed += 1;
+  }
+  return { ids: [...ids].sort(), unnamed };
+}
+
 const WORDS: Record<Verdict, string> = { valid: "VALID", broken: "BROKEN", not_checked: "NOT CHECKED" };
 const LIMITS =
   "Not checked offline: whether the words follow from the entries, whether the file carries every entry of its period, and anything on chain.";
+const OWN_WORDS = "Only the entries are signed: the file's own words around them, such as its name for what it is of, are not.";
+const SHOWN = 10;
+
+/** NOT CHECKED before any entry was: the same `--json` shape as every other answer, with nothing counted. */
+function unread(file: string, reason: string, pins: string[]): FileCheck {
+  const counts = { cited: 0, carried: 0, verified: 0, failed: 0, unchecked: 0 };
+  return {
+    verdict: "not_checked",
+    lines: [`NOT CHECKED: ${reason}`],
+    answer: { verdict: "not_checked", file, reason, unwrapped: false, keySource: pins.length > 0 ? "--public-key" : "file", signedBy: [], ok: null, format: null, keys: null, entries: [], counts, problems: [reason] },
+  };
+}
+
+/**
+ * The problems as lines: one per entry's problem would repeat the same reason for every entry of a month, so entries with
+ * the same reason share a line, naming the first ten.
+ */
+function problemLines(problems: string[]): string[] {
+  const grouped = new Map<string, number[]>();
+  const lines: Array<string | { reason: string }> = [];
+  for (const problem of problems.map(plain)) {
+    const match = /^Entry #(\d+) (does not verify|could not be checked): (.*)$/.exec(problem);
+    if (!match) {
+      lines.push(problem);
+      continue;
+    }
+    const reason = `${match[2]}: ${match[3]}`;
+    if (!grouped.has(reason)) {
+      grouped.set(reason, []);
+      lines.push({ reason });
+    }
+    grouped.get(reason)!.push(Number(match[1]));
+  }
+  return lines.map((line) => {
+    if (typeof line === "string") return `- ${line}`;
+    const seqs = grouped.get(line.reason)!;
+    if (seqs.length === 1) return `- Entry #${seqs[0]} ${line.reason}`;
+    const named = seqs.slice(0, SHOWN).map((seq) => `#${seq}`).join(", ");
+    return `- Entries ${named}${seqs.length > SHOWN ? ` and ${seqs.length - SHOWN} more` : ""} ${line.reason}`;
+  });
+}
+
+/** The keys the entries no key could check name, beside the keys given, so a wrong key is plain to see. */
+function wantedKeys(document: Fields, result: EvidenceVerification, keys: Record<string, string> | undefined): string | null {
+  const unchecked = new Set(result.entries.filter(({ check }) => check.ok === null).map(({ seq }) => seq));
+  if (unchecked.size === 0) return null;
+  const named = new Set<string>();
+  for (const entry of Array.isArray(document.entries) ? document.entries.filter(isFields) : []) {
+    if (typeof entry.seq === "number" && unchecked.has(entry.seq) && typeof entry.signing_key_id === "string") named.add(plain(entry.signing_key_id));
+  }
+  if (named.size === 0) return null;
+  const given = keys ? Object.keys(keys) : [];
+  return `The entries not checked name key${named.size === 1 ? "" : "s"} ${[...named].sort().join(", ")}; ${keys ? `the keys given are ${given.join(", ")}` : "the file carries no readable key by that id"}.`;
+}
 
 /**
  * Checks one evidence file offline (CE6, CE7). Paths are read from `cwd` and named as given. `expected` pins the format,
@@ -188,7 +291,8 @@ export async function checkEvidenceFile(cwd: string, file: string, pins: string[
     if (pins.length > 0) keys = readKeys(cwd, pins);
   } catch (error) {
     if (!(error instanceof NotChecked)) throw error;
-    return { verdict: "not_checked", lines: [`NOT CHECKED: ${error.message}`], answer: { verdict: "not_checked", file, reason: error.message } };
+    // A parse error quotes the file, control characters included (CE8).
+    return unread(file, plain(error.message), pins);
   }
 
   let result: EvidenceVerification;
@@ -196,33 +300,42 @@ export async function checkEvidenceFile(cwd: string, file: string, pins: string[
     result = await verifyEvidence(document, keys ? { keys, format: document.format } : { format: document.format });
   } catch (error) {
     // verifyEvidence throws a TypeError for what is not a document of its format; the file has been read as one, so this is rare.
-    const reason = `${file} could not be checked (${(error as Error).message})`;
-    return { verdict: "not_checked", lines: [`NOT CHECKED: ${reason}`], answer: { verdict: "not_checked", file, reason } };
+    return unread(file, plain(`${file} could not be checked (${(error as Error).message})`), pins);
   }
 
-  const verdict: Verdict = result.ok === true ? "valid" : result.ok === false ? "broken" : "not_checked";
-  const keyIds = keys ? Object.keys(keys) : keyIdsOf(document);
-  const keySource = keys ? "--public-key" : "file";
+  const misfiled = misfiledKeys(document);
+  const verdict: Verdict = result.ok === false || misfiled.length > 0 ? "broken" : result.ok === true ? "valid" : "not_checked";
+  const signedBy = signers(document, result);
   const { counts } = result;
+  const signed =
+    signedBy.ids.length > 0
+      ? `Signed by key${signedBy.ids.length === 1 ? "" : "s"} ${signedBy.ids.join(", ")}${signedBy.unnamed > 0 ? `, and ${signedBy.unnamed} entr${signedBy.unnamed === 1 ? "y names" : "ies name"} no key` : ""}`
+      : counts.verified > 0
+        ? "Signed by keys the entries do not name"
+        : "No entry verified, so no signing key is named";
   const lines = [
     `${WORDS[verdict]}: ${describe(document)}`,
     `Entries: ${counts.carried} carried, ${counts.verified} verified, ${counts.failed} failed, ${counts.unchecked} not checked; ${counts.cited} cited`,
-    `Key id${keyIds.length === 1 ? "" : "s"}: ${keyIds.join(", ") || "none"} (${keys ? "from --public-key" : "from the file itself"})`,
+    `${signed}; checked with ${keys ? "the keys from --public-key" : "the keys the file carries"}`,
   ];
+  const wanted = wantedKeys(document, result, keys);
+  if (wanted) lines.push(wanted);
+  lines.push(counts.carried === 0 ? "The file carries no signed entry, so nothing in it is signed." : OWN_WORDS);
   if (unwrapped) lines.push("The file is an API answer: its data was checked.");
   if (document.format === CLOSE_PACK) {
+    // The totals and the head are the file's own words: no signature covers them, only the rows' entries are signed.
     const totals = isFields(document.totals) ? document.totals : {};
-    lines.push(`Payments on chain: ${totalsLine(totals.onChain)}`);
     const head = isFields(document.ledgerHead) ? document.ledgerHead : null;
     lines.push(
-      head
-        ? `Ledger head when read: #${plain(String(head.seq))} ${plain(head.hash)}. To show the pack leaves no entry out, compare its entries' seq and hash with an audit export checked by \`vestiarion ledger verify\`.`
-        : "Ledger head when read: none, the ledger was empty."
+      `The file states, outside the signatures: on chain, ${totalsLine(totals.onChain)}; the ledger's head when read, ${head ? `#${plain(String(head.seq))} ${plain(head.hash)}` : "none"}.`,
+      "To show the pack leaves no entry out, compare its entries' seq and hash with an audit export checked by `vestiarion ledger verify`."
     );
   }
-  for (const problem of result.problems) lines.push(`- ${plain(problem)}`);
-  lines.push(LIMITS);
-  return { verdict, lines, answer: { verdict, file, unwrapped, keySource, keyIds, ...result } };
+  const problems = [...result.problems, ...misfiled];
+  lines.push(...problemLines(problems), LIMITS);
+  const ok = verdict === "valid" ? true : verdict === "broken" ? false : null;
+  // --json: the SDK's answer, with the CLI's own check of the file's keys folded into ok and problems.
+  return { verdict, lines, answer: { verdict, file, unwrapped, keySource: keys ? "--public-key" : "file", signedBy: signedBy.ids, ...result, ok, problems } };
 }
 
 /** Where a file goes, from `--out` or the download's name, relative to `cwd`; `-` is stdout. */

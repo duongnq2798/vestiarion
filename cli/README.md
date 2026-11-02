@@ -126,9 +126,10 @@ vestiarion evidence export --payee-lock --from 2026-10-01 --to 2026-10-31    # e
 vestiarion close-pack export 2026-10                                         # every payment settled in October
 ```
 
-- **The download's file, under its name.** The file is the text the workspace's **Download** gives, saved in the current
-  directory as the workspace names it, such as `vestiarion-close-pack-acme-2026-10.json`. `--out <file>` names another;
-  `--out -` prints it.
+- **The download's file, under its name.** The file is the one the workspace's **Download** gives, naming members by
+  user id, saved in the current directory as the workspace names it, such as `vestiarion-close-pack-acme-2026-10.json`.
+  `--out <file>` names another; `--out -` prints it, every character outside ASCII as a JSON escape, so a shell's `>`,
+  even Windows PowerShell 5.1's, which re-encodes what it captures, cannot change a signed name.
 - **Nothing is replaced.** A file that is already there is kept unless you pass `--force`.
 - **A receipt not ready yet** is saved too, and says why, such as `not_paid`. With `--json`, read `ready`.
 - **A limit of their own.** The evidence reads take 10 at once per key, then one every 6 seconds; past it the CLI waits
@@ -143,8 +144,9 @@ vestiarion close-pack verify vestiarion-close-pack-acme-2026-10.json --public-ke
 
 It is the SDK's `verifyEvidence`: every entry the file carries is checked (its body hash, Ed25519 signature and chain
 hash), every entry a fact cites must be carried, and entries in a row must link. It answers `VALID`, `BROKEN` or `NOT
-CHECKED`, and exits `0` only when `VALID`. `close-pack verify` takes a close pack only, and prints its totals and the
-ledger head it was read at. Without `--public-key`, the file vouches for itself: compare its key ids with the Audit log.
+CHECKED`, and exits `0` only when `VALID`, naming the keys that signed the entries. `close-pack verify` takes a close pack
+only, and prints its totals and the ledger head it was read at, as the file states them: no signature covers those.
+Without `--public-key`, the file vouches for itself: compare the signing key's id with the Audit log.
 
 An offline check cannot say that the facts' words follow from the entries, that the file carries every entry of its
 period, or anything on chain. To show a close pack leaves no entry out, compare its entries with an audit export
@@ -152,13 +154,14 @@ checked by `vestiarion ledger verify`.
 
 ## Output and exit codes
 
-Text is for reading. `--json` prints the API's answer as it came, `{ "data": … }` and, for a list, `"page"`, for `jq` and
+Text is for reading. `--json` prints the API's answer as it came (an export prints what it saved, a check its verdict),
+`{ "data": … }` and, for a list, `"page"`, for `jq` and
 scripts. An error goes to stderr, as `{ "error": { "message", "exitCode" } }` with `--json`.
 
 | Exit code | Meaning |
 | --- | --- |
 | `0` | Done. |
-| `1` | A usage error: an unknown command or option, a missing argument or value. |
+| `1` | A usage error: an unknown command or option, a missing argument or value, an option given twice, or an export's file that is already there. |
 | `2` | The API answered with an error, a check did not pass, or a write was not confirmed. |
 | `3` | No key, a key not shaped like one, or a key the API refused (`401` or `403`). |
 

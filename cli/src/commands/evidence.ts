@@ -1,4 +1,5 @@
-import { existsSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { closeSync, existsSync, openSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Command, Context, OptionSpec } from "../command.js";
 import { CliError, EXIT, usageError } from "../errors.js";
@@ -14,7 +15,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH = /^\d{4}-\d{2}$/;
 
 const FILE_OPTIONS: Record<string, OptionSpec> = {
-  out: { type: "string", value: "<file>", help: "Save it here instead, or - to print it (default: the name the workspace's download gives it)" },
+  out: { type: "string", value: "<file>", help: "Save it here instead, or - to print it (default: the name the workspace gives its download)" },
   force: { type: "boolean", help: "Replace a file that is already there" },
 };
 
@@ -26,15 +27,32 @@ type Fields = Record<string, unknown>;
 const fields = (value: unknown): Fields => (typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Fields) : {});
 const quoted = (file: string) => (/\s/.test(file) ? `"${file}"` : file);
 
-/** Refuses `--out` naming a file that is there before anything is sent, so no evidence read is spent on it (CE3). */
+/**
+ * Refuses an `--out` that cannot be written before anything is sent, so no evidence read is spent on it (CE3): a folder,
+ * a file in a folder that is not there, or a file that is there without --force.
+ */
 function plannedOut(ctx: Context): string | undefined {
   const out = ctx.string("out");
   if (out === undefined) return undefined;
-  if (out.trim() === "") throw usageError("--out names a file, or - to print the document.");
-  if (out !== "-" && ctx.values.force !== true && existsSync(path.resolve(ctx.io.cwd, out))) {
-    throw usageError(`${out} is already there. Pass --force to replace it, or --out to name another file.`);
+  if (out.trim() === "" || /[\\/]$/.test(out)) throw usageError("--out names a file, or - to print the document.");
+  if (out === "-") return out;
+  const target = path.resolve(ctx.io.cwd, out);
+  const folder = path.dirname(target);
+  if (!existsSync(folder) || !statSync(folder).isDirectory()) throw usageError(`${path.dirname(out)} is not a folder that is there, so ${out} cannot be saved.`);
+  if (existsSync(target)) {
+    if (statSync(target).isDirectory()) throw usageError(`${out} is a folder. Name a file in it, such as ${path.join(out, "evidence.json")}.`);
+    if (ctx.values.force !== true) throw usageError(`${out} is already there. Pass --force to replace it, or --out to name another file.`);
   }
   return out;
+}
+
+/**
+ * The document as printed by `--out -`: every character outside ASCII written as a JSON escape. It parses to the same
+ * document, so it verifies, and a shell that re-encodes what it captures, as Windows PowerShell 5.1's `>` does through
+ * the console's code page, cannot change it.
+ */
+function asciiJson(content: string): string {
+  return content.replace(/[^\x00-\x7f]/g, (char) => `${String.fromCharCode(92)}u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 
 /** What the file holds, in one line, by format (CE5). */
@@ -75,20 +93,49 @@ function jsonParts(document: Document): Fields {
   return { month: document.month, cut: document.cut, unread: document.unread, totals: document.totals };
 }
 
+/** The target was already there, and --force was not passed. */
+class Taken extends Error {}
+
+/**
+ * Writes `content` to `target` whole or not at all (CE3). It goes to a new file beside the target first, then is renamed
+ * onto it, so a failed write leaves neither a short file nor, with --force, a truncated one. Without --force the target's
+ * name is claimed first with `wx`, so a file that is there, or one made meanwhile, is never replaced.
+ */
+function writeWhole(target: string, content: string, force: boolean): void {
+  const temp = `${target}.${randomBytes(4).toString("hex")}.tmp`;
+  let claimed = false;
+  try {
+    if (!force) {
+      try {
+        closeSync(openSync(target, "wx"));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") throw new Taken();
+        throw error;
+      }
+      claimed = true;
+    }
+    writeFileSync(temp, content, { flag: "wx" });
+    renameSync(temp, target);
+  } catch (error) {
+    rmSync(temp, { force: true });
+    if (claimed) rmSync(target, { force: true });
+    throw error;
+  }
+}
+
 /** Writes the document as the workspace's download does, and says what it holds (CE2, CE3, CE5). */
 function save(ctx: Context, document: Document, out: string | undefined, verify: string): number {
   const content = JSON.stringify(document, null, 2);
   const target = outputPath(ctx.io.cwd, out, document);
   if (target === "-") {
-    ctx.out(`${content}\n`);
+    ctx.out(`${asciiJson(content)}\n`);
     return EXIT.OK;
   }
   try {
-    // wx: a new file only, so an existing one is never replaced without --force.
-    writeFileSync(target, content, { flag: ctx.values.force === true ? "w" : "wx" });
+    writeWhole(target, content, ctx.values.force === true);
   } catch (error) {
     const named = path.relative(ctx.io.cwd, target) || target;
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw usageError(`${named} is already there. Pass --force to replace it, or --out to name another file.`);
+    if (error instanceof Taken) throw usageError(`${named} is already there. Pass --force to replace it, or --out to name another file.`);
     throw new CliError(EXIT.FAILED, `${named} could not be written (${(error as Error).message}).`);
   }
   const relative = path.relative(ctx.io.cwd, target);
@@ -119,7 +166,7 @@ async function verifyRun(ctx: Context, expected?: "vestiarion-close-pack/1"): Pr
 const VERIFY_DESCRIPTION = [
   "Needs no key and no network. It is the SDK's verifyEvidence: every entry the file carries is checked (its body hash, its Ed25519 signature and its chain hash), every entry a fact cites must be carried, two entries in a row must link, and every copy of an entry's hash must be the entry's.",
   "Exits 0 when VALID, and 2 when BROKEN or NOT CHECKED.",
-  "Without --public-key the file vouches for itself: compare the key ids it prints with the workspace's Audit log page, or pass the public key you trust. Across a key rotation, pass every key: repeat --public-key, or put the PEM blocks in one file.",
+  "It names the keys that signed the entries. Without --public-key the file vouches for itself: compare the signing key's id with the workspace's Audit log page, or pass the public key you trust. Across a key rotation, pass every key: repeat --public-key, or put the PEM blocks in one file.",
 ];
 
 export const EVIDENCE_COMMANDS: Command[] = [
@@ -128,7 +175,7 @@ export const EVIDENCE_COMMANDS: Command[] = [
     summary: "Save a payment's evidence, a bill's receipt or the payee lock's evidence as a signed file",
     description: [
       "One of: --bill, GET /api/v1/invoices/{id}/evidence; --milestone, GET /api/v1/milestones/{id}/evidence; --receipt, GET /api/v1/invoices/{id}/receipt; --payee-lock, GET /api/v1/payee-lock/evidence.",
-      "The file is the one the workspace's Download gives, members named by user id, under the same name. A file that is already there is kept unless you pass --force. Check it offline with `vestiarion evidence verify`.",
+      "The file is the one the workspace's Download gives, members named by user id, under the same name; a receipt, which has no download, is named the same way. A file that is already there is kept unless you pass --force. --out - prints it with every character outside ASCII escaped, so a shell's > cannot change it. Check it offline with `vestiarion evidence verify`.",
       "The evidence reads have a limit of their own, 10 at once per key and then one every 6 seconds: past it, the CLI waits as the API asks.",
     ],
     options: {
@@ -147,7 +194,7 @@ export const EVIDENCE_COMMANDS: Command[] = [
     ],
     async run(ctx) {
       const chosen = SUBJECTS.filter((name) => ctx.values[name] !== undefined && ctx.values[name] !== false);
-      if (chosen.length !== 1) throw usageError("Pass one of --bill, --milestone, --receipt and --payee-lock.");
+      if (chosen.length !== 1) throw usageError("Pass exactly one of --bill, --milestone, --receipt and --payee-lock.");
       const subject = chosen[0];
       const from = ctx.string("from");
       const to = ctx.string("to");

@@ -151,8 +151,8 @@ vestiarion evidence export --payee-lock --from 2026-10-01 --to 2026-10-31
 vestiarion close-pack export 2026-10
 ```
 
-- **The download's file, under its name.** The file holds the same text as the workspace's **Download** button, and is saved in the current directory under the same name, such as `vestiarion-close-pack-your-workspace-2026-10.json`. A month that has not ended reads so far, and its name ends in `-so-far`. A receipt has no download, so its file is `vestiarion-receipt-your-workspace-` and the bill id's first part.
-- **Where it goes.** `--out <file>` names another file. `--out -` prints the document and saves nothing.
+- **The download's file, under its name.** The file is the one the workspace's **Download** button gives, written the same way, with one difference: it names members by user id where the download names them by email. It is saved in the current directory under the download's name, such as `vestiarion-close-pack-your-workspace-2026-10.json`. A month that has not ended reads so far, and its name ends in `-so-far`. A receipt has no download, so its file is `vestiarion-receipt-your-workspace-` and the bill id's first part.
+- **Where it goes.** `--out <file>` names another file, in a folder that is there; a folder, or a folder that is not there, is refused before anything is read. `--out -` prints the document and saves nothing. It prints every character outside ASCII as a JSON escape, so the document reads the same and a shell's `>` cannot change it.
 - **Nothing is replaced.** A file that is already there is kept unless you pass `--force`. When `--out` names one, the CLI says so before it reads anything.
 - **What it prints.** The file's name and size, what it holds (the bill and its status, whether a receipt is ready, the period's address changes, or the month's payments per token), its network, how many signed entries it carries and the key ids. `--json` prints the same as fields, for a script.
 - **A receipt not ready yet** is saved too, with its reason, such as `not_paid` or `simulated`. The command still exits `0`: read `ready` with `--json`.
@@ -167,9 +167,9 @@ vestiarion close-pack verify vestiarion-close-pack-your-workspace-2026-10.json -
 
 - **It is the SDK's `verifyEvidence`.** Every entry the file carries is checked: its body hash, its Ed25519 signature and its chain hash. Every entry a fact cites must be in the file, two entries whose numbers follow each other must link, and every copy of an entry's hash must be the entry's. The file's own `check` fields are never read.
 - **Three answers.** **VALID** exits `0`. **BROKEN** exits `2` and lists what does not hold, such as an entry whose content no longer matches its signature. **NOT CHECKED** exits `2` too: some entry was signed by a key you did not pass, or the file or a key could not be read.
-- **Whose keys.** Without `--public-key`, the file is checked with the keys it carries, and the answer says so. That proves the entries were not changed after those keys signed them, not that the keys are the workspace's: compare the key ids it prints with the Audit log. After a key rotation, pass every key: repeat `--public-key`, or put the PEM blocks in one file. A private key, or a key that is not Ed25519, is refused.
-- **A close pack only.** `close-pack verify` refuses any other file. It also prints the month's payments per token and the ledger head the pack was read at.
-- **Files saved another way.** A file saved by Windows PowerShell's `>`, which writes UTF-16, is read as it is, and so is a whole API answer, `{ "data": ... }`, saved with `curl`.
+- **Whose keys.** The answer names the keys that signed the entries, such as "Signed by key 9b03458d9a617871", read from the entries that verified, never from the list of keys the file carries. Without `--public-key`, the file is checked with the keys it carries, and the answer says so. That proves the entries were not changed after those keys signed them, not that the keys are the workspace's: compare the signing key's id with the Audit log. After a key rotation, pass every key: repeat `--public-key`, or put the PEM blocks in one file. A private key, or a key that is not Ed25519, is refused. A file that lists a key under an id that is not that key's is **BROKEN**: the workspace never makes one. When some entry's key was not given, the answer names the key those entries ask for beside the ones given, and lists the entries on one line.
+- **A close pack only.** `close-pack verify` refuses any other file. It also prints the month's payments per token and the ledger head the pack was read at, as what the file states: no signature covers them. The rows' entries are what is signed.
+- **Files saved another way.** A whole API answer, `{ "data": ... }`, saved with `curl`, is read as its data, and a file in UTF-16, as Windows PowerShell 5.1's `>` writes it, is read too. A document saved from `--out -` with `>` checks as it should: PowerShell 5.1 re-encodes what it captures through the console's code page, which would change a name such as "Café", but `--out -` prints only ASCII. Another program's copy may not, so save with `--out` when you can.
 
 <Callout kind="note" title="What an offline check cannot say">
 It cannot say that the facts' words follow from the entries: that is the server's reading. It cannot say that the file carries every entry of its period. To show a close pack leaves nothing out, compare its entries' `seq` and `hash` with an [audit export](/docs/guides/audit-export) checked by `vestiarion ledger verify`. And it says nothing about the chain: open the transaction on the explorer.
@@ -177,12 +177,12 @@ It cannot say that the facts' words follow from the entries: that is the server'
 
 ## Output and exit codes
 
-Text is for reading. `--json` prints the API's answer as it came: `data`, and `page` for a list, ready for `jq`. `whoami --json` prints the workspace, its network, the key's prefix and source, and the base URL. An error goes to stderr, as JSON with `--json`.
+Text is for reading. `--json` prints the API's answer as it came: `data`, and `page` for a list, ready for `jq`. The exports and checks are the exception: `--json` prints what was saved, or the verdict, as their sections say. `whoami --json` prints the workspace, its network, the key's prefix and source, and the base URL. An error goes to stderr, as JSON with `--json`.
 
 | Exit code | Meaning |
 | --- | --- |
 | `0` | Done. |
-| `1` | A usage error: an unknown command or option, or a missing argument or value. |
+| `1` | A usage error: an unknown command or option, a missing argument or value, an option given twice, or an export's file that is already there. |
 | `2` | The API answered with an error, a check did not pass, or a write was not confirmed. |
 | `3` | No key, a key not shaped like one, or a key the API refused with `401` or `403`. |
 

@@ -42,8 +42,9 @@ Code comments and test names cite the ids, for example "(CLI evidence CE3)".
 
 **CE2. The file is the download's text.**
 - An export writes the answer's `data` as `JSON.stringify(data, null, 2)`, with no newline after it. That is the text the
-  workspace's **Download evidence** and **Download signed JSON** serve, so a file from the CLI and one from the workspace
-  differ only in what changed between the two reads (`exportedAt`, at least).
+  workspace's **Download evidence** and **Download signed JSON** serve, built by the same builders. A file from the CLI
+  and one from the workspace differ in what changed between the two reads (`exportedAt`, at least), and in how members
+  are named: by user id through the API (EA3), by email in the workspace's download.
 - Nothing in the document is changed, added or left out.
 
 **CE3. Where the file goes.**
@@ -54,16 +55,25 @@ Code comments and test names cite the ids, for example "(CLI evidence CE3)".
   - a receipt has no download, so: `vestiarion-receipt-<slug>-<id's first 8>.json`.
 - The slug comes from the document, and is cut to `a-z`, `0-9` and `-`, 40 characters at most, as the server's name
   functions cut it. Nothing else from the document reaches a path, so a slug like `../x` cannot leave the directory.
-- `--out <file>` names the file instead. `--out -` writes the document to stdout and nothing else.
+- `--out <file>` names the file instead. `--out -` writes the document to stdout and nothing else, every character
+  outside ASCII as a JSON escape: it parses to the same document, so it verifies, and a shell that re-encodes what it
+  captures, as Windows PowerShell 5.1's `>` does through the console's code page, cannot change a signed name (review,
+  2026-11-02). A file saved with `--out` keeps the download's UTF-8 text.
+- Before anything is sent, `--out` is refused (exit 1) when it ends in a slash, names a folder, or names a file in a
+  folder that is not there, so no evidence read is spent on a file that cannot be written.
 - A file that exists is never overwritten, unless `--force` is passed. When `--out` names one that exists, the CLI says
-  so before it sends anything, so no evidence read is spent. A default name is known only from the answer, so that file
-  is checked after the read.
-- The file is created only when the answer is complete (write to a new file, `wx`): an error leaves no partial file.
+  so before it sends anything. A default name is known only from the answer, so that file is checked after the read.
+- The file is written whole or not at all: to a new file beside the target, then renamed onto it. Without `--force` the
+  target's name is claimed first with `wx`, so a file made meanwhile is not replaced either. A failed write leaves
+  neither a short file nor, with `--force`, a truncated one.
 
 **CE4. Arguments are checked before anything is sent.**
 - `<YYYY-MM>` and `--from`, `--to` must have the shape `YYYY-MM` and `YYYY-MM-DD`, else a usage error (exit 1). The API
   judges the rest (a month to come, a `from` after `to`), answering `400`, which ends in exit 2 with its message.
-- An id is passed as it is; the API answers a malformed or unknown one `404` without spending a read (EA5).
+- An id is passed as it is. The API answers one that is not a UUID `404` without spending a read (EA5); an unknown UUID
+  spends one read, then answers `404`.
+- A string option given twice, such as `--bill a --bill b`, is refused for every command: `node:util` would keep the
+  last one unseen (review, 2026-11-02).
 
 **CE5. What an export prints.**
 - Text: the file's path and size, then one line on what it holds, then how to check it:
@@ -79,15 +89,18 @@ Code comments and test names cite the ids, for example "(CLI evidence CE3)".
   reads `ready` with `--json`.
 
 **CE6. How a file is read for checking.**
-- UTF-8, with or without a byte-order mark, or UTF-16 with its byte-order mark, which is what Windows PowerShell 5.1's
-  `>` writes when someone saves `--out -` that way.
+- UTF-8, with or without a byte-order mark, or UTF-16 with its byte-order mark, as Windows PowerShell 5.1's `>` writes
+  what `--out -` prints (CE3). A file over 256 MB, far more than any evidence file, is **NOT CHECKED** before it is read.
 - A whole API answer, an object whose only field is `data`, is read as its `data`, and the answer says so. The SDK
   refuses one (it cannot tell a caller's mistake from intent); a file saved with `curl` is unambiguous.
 - Keys: each `--public-key` file's PEM blocks, repeatable, each filed under its key id (the first 16 hex characters of
   SHA-256 over its SPKI DER, as the ledger names keys). A private key is refused: Node derives a public key from it,
   which would make a pasted private key look as if it worked. A key that is not Ed25519 is refused: it cannot have
   signed an entry. Without `--public-key`, the document's own keys check it, and the answer says so.
-- The check is the SDK's `verifyEvidence(document, { keys, format })`, nothing added to it and nothing taken away.
+- The check is the SDK's `verifyEvidence(document, { keys, format })`. The CLI adds one check of its own: each key the
+  file carries must be filed under its true id. The SDK never uses a key filed under another id, but a file the
+  workspace made never holds one, so such a key is a problem and the answer is **BROKEN** (review, 2026-11-02).
+- A big-endian UTF-16 file with an odd byte is **NOT CHECKED**, with its reason, never an unhandled error.
 
 **CE7. What a check prints, and its exit code.**
 - `ok: true` is **VALID**, exit 0. `ok: false` is **BROKEN**, exit 2. `ok: null` is **NOT CHECKED**, exit 2. A file that
@@ -95,16 +108,29 @@ Code comments and test names cite the ids, for example "(CLI evidence CE3)".
   **NOT CHECKED**, exit 2, with the reason. This is `vestiarion ledger verify`'s scheme.
 - The first line names what was checked: the format, the workspace's slug, and the subject (a bill or milestone's
   title, a receipt's invoice id, a payee lock period, a close pack's month).
-- Then the counts (`carried`, `verified`, `failed`, `unchecked`, `cited`), the key ids and where they came from, and
-  every one of `problems`, one a line.
+- Then the counts (`carried`, `verified`, `failed`, `unchecked`, `cited`), and `problems`. Entries with the same reason
+  share one line, naming the first ten, so a month signed by a key not given reads as one line, not hundreds. When
+  entries could not be checked, a line names the key they ask for beside the keys given.
+- A line says that only the entries are signed: the file's own words around them, its name for the subject included,
+  are not. The first line's subject is what the file calls itself.
+- **Signed by.** The ids of the keys that signed the entries that verified, read from those entries. An entry verifies
+  only under its key's true id, so these are the ids to compare with the Audit log. The ids the file lists are never
+  printed as if they had signed: a file that carries the workspace's key beside another, with its entries signed by
+  the other, names the other (review, 2026-11-02). Then whose keys checked it: `--public-key`'s, or the file's.
+- A file that carries no signed entry says that nothing in it is signed.
+- A close pack's totals and ledger head are the file's own words, which no signature covers: a check prints them
+  as "The file states, outside the signatures", then how to tie the pack to the whole ledger: compare its entries with an
+  audit export checked by `vestiarion ledger verify`.
 - Then what an offline check cannot say: that the words follow from the entries, that the file carries every entry of
-  its period, and anything on chain. `close-pack verify` adds the ledger head the pack was read at and how to tie it to
-  the whole ledger: compare it with an audit export checked by `vestiarion ledger verify`.
-- `--json`: the SDK's `EvidenceVerification`, plus `verdict`, `file`, `keyIds`, `keySource`, `unwrapped`.
+  its period, and anything on chain.
+- `--json`: the SDK's `EvidenceVerification`, with the CLI's key check folded into `ok` and `problems`, plus `verdict`,
+  `file`, `signedBy`, `keySource`, `unwrapped`. A file that could not be read answers the same shape, `ok: null`, every
+  count 0 and its `reason` as the one problem, so a script reads `.counts` and `.problems` whatever the verdict.
 
 **CE8. Text from outside is printed as text.** A vendor's name, a title or an invoice number came from outside. In text
 output, control characters (C0, DEL and C1, which hold terminal escape sequences) are taken out of every such string
-before it is printed. `--json` prints JSON, which escapes them.
+before it is printed, and so are the reasons a file could not be read: a JSON parse error quotes the file. `ledger
+verify`'s lines get the same treatment. `--json` prints JSON, which escapes them.
 
 **CE9. The SDK range, the lock and the version.**
 - `cli/package.json` and the root `devDependencies` name `@vestiarion/sdk` `^0.4.1`, together

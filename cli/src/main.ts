@@ -14,7 +14,7 @@ export const GLOBAL_OPTIONS: Record<string, OptionSpec> = {
   "api-key": { type: "string", value: "<key>", help: "The API key for this run; a flag stays in your shell history, so prefer VESTIARION_API_KEY or login" },
   profile: { type: "string", value: "<name>", help: "The saved profile to use (default: VESTIARION_PROFILE, else default)" },
   "base-url": { type: "string", value: "<url>", help: "The API's origin (default: VESTIARION_BASE_URL, else https://www.vestiarion.xyz)" },
-  json: { type: "boolean", help: "Print the API's answer as JSON, for scripts" },
+  json: { type: "boolean", help: "Print the answer as JSON, for scripts" },
   help: { type: "boolean", short: "h", help: "Show help" },
   version: { type: "boolean", short: "v", help: "Print the CLI's version" },
 };
@@ -190,12 +190,17 @@ export async function run(argv: string[], io: Io): Promise<number> {
       throw usageError(`There is no command "${tried}". Run \`vestiarion --help\` for the commands.`);
     }
 
-    let parsed: { values: Values; positionals: string[] };
+    const options = { ...GLOBAL_OPTIONS, ...command.options };
+    let parsed: { values: Values; positionals: string[]; tokens: Array<{ kind: string; name?: string }> };
     try {
-      parsed = parseArgs({ args: argv, options: parseOptions({ ...GLOBAL_OPTIONS, ...command.options }), strict: true, allowPositionals: true }) as typeof parsed;
+      parsed = parseArgs({ args: argv, options: parseOptions(options), strict: true, allowPositionals: true, tokens: true }) as typeof parsed;
     } catch (error) {
       throw usageError(`${parseMessage(error)} Run \`vestiarion ${command.path.join(" ")} --help\` for its options.`);
     }
+    // node:util keeps the last of a value given twice; one that is not repeatable is refused, so none is dropped unseen.
+    const given = parsed.tokens.filter((token) => token.kind === "option" && token.name !== undefined).map((token) => token.name as string);
+    const twice = given.find((name, index) => options[name]?.type === "string" && !options[name].multiple && given.indexOf(name) !== index);
+    if (twice) throw usageError(`--${twice} was given more than once. Give it once.`);
     if (parsed.values.help === true) {
       io.stdout(commandHelp(command));
       return EXIT.OK;

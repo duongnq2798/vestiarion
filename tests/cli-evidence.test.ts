@@ -1,7 +1,8 @@
-import { generateKeyPairSync } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { canonicalJson } from "../sdk/src/canonical-json";
 import { harness, KEY, recorded, type Harness } from "./support/cli-harness";
 
 /**
@@ -35,6 +36,21 @@ function put(h: Harness, name: string, content: string | Buffer): string {
   return name;
 }
 const ed25519Pem = () => generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString();
+const sha256 = (data: string | Buffer) => createHash("sha256").update(data).digest("hex");
+
+/**
+ * Signs one entry again, as the ledger signs, with a new key, and returns that key as a file's key. The entry must be its
+ * file's last by seq, so no other entry's prev_hash names it.
+ */
+function resign(entry: Record<string, unknown>): { id: string; publicKeyPem: string } {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const id = sha256(publicKey.export({ type: "spki", format: "der" })).slice(0, 16);
+  entry.body_hash = sha256(Buffer.from(canonicalJson({ actor: entry.actor, domain: entry.domain, action: entry.action, summary: entry.summary, detail: entry.detail }), "utf8"));
+  entry.signature = sign(null, Buffer.from(String(entry.body_hash), "hex"), privateKey).toString("hex");
+  entry.signing_key_id = id;
+  entry.hash = sha256(`${String(entry.prev_hash)}${String(entry.body_hash)}${String(entry.signature)}`);
+  return { id, publicKeyPem: publicKey.export({ type: "spki", format: "pem" }).toString() };
+}
 
 describe("evidence export and close-pack export (CLI evidence CE1-CE5)", () => {
   it.each([
@@ -106,7 +122,9 @@ describe("evidence export and close-pack export (CLI evidence CE1-CE5)", () => {
     expect(files(named)).toEqual(["bill.json"]);
     const printed = exporter();
     expect(await printed.run("close-pack", "export", "2026-10", "--out", "-")).toBe(0);
-    expect(printed.stdout).toBe(`${JSON.stringify(recorded("get-close-pack").data, null, 2)}\n`);
+    expect(JSON.parse(printed.stdout)).toEqual(recorded("get-close-pack").data);
+    expect(printed.stdout).not.toMatch(/[^\x00-\x7f]/);
+    expect(printed.stdout.endsWith("}\n")).toBe(true);
     expect(files(printed)).toEqual([]);
   });
 
@@ -119,6 +137,29 @@ describe("evidence export and close-pack export (CLI evidence CE1-CE5)", () => {
     expect(readFileSync(fileIn(h, "bill.json"), "utf8")).toBe("mine");
     expect(await h.run("evidence", "export", "--bill", BILL, "--out", "bill.json", "--force")).toBe(0);
     expect(readFileSync(fileIn(h, "bill.json"), "utf8")).toContain('"format": "vestiarion-evidence/1"');
+  });
+
+  it("refuses an --out it cannot write before anything is sent: a missing folder, a folder, a trailing slash (exit 1)", async () => {
+    const h = exporter();
+    mkdirSync(fileIn(h, "packs"));
+    for (const [out, message] of [
+      [path.join("no-such-folder", "bill.json"), /is not a folder that is there/],
+      ["packs", /packs is a folder\. Name a file in it/],
+      ["packs/", /--out names a file/],
+    ] as const) {
+      expect(await h.run("evidence", "export", "--bill", BILL, "--out", out, "--force")).toBe(1);
+      expect(h.stderr).toMatch(message);
+    }
+    expect(h.sent).toEqual([]);
+    expect(files(h)).toEqual([]);
+  });
+
+  it("writes a file whole: --force replaces it through a new file, leaving no temporary one", async () => {
+    const h = exporter();
+    put(h, "bill.json", "mine");
+    expect(await h.run("evidence", "export", "--bill", BILL, "--out", "bill.json", "--force")).toBe(0);
+    expect(readdirSync(h.home).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+    expect(readFileSync(fileIn(h, "bill.json"), "utf8")).toBe(JSON.stringify(recorded("get-invoice-evidence").data, null, 2));
   });
 
   it("checks the download's name only once it is known, and keeps the file there (exit 1)", async () => {
@@ -135,7 +176,38 @@ describe("evidence export and close-pack export (CLI evidence CE1-CE5)", () => {
     const h = exporter({ [`GET /api/v1/invoices/${BILL}/evidence`]: answer(hostile) });
     expect(await h.run("evidence", "export", "--bill", BILL)).toBe(0);
     expect(files(h)).toEqual(["vestiarion-evidence-evilx-invoice-7d1e4c2a.json"]);
-    expect(existsSync(path.join(h.home, "..", "..", "evil"))).toBe(false);
+  });
+
+  it("ends an API refusal, such as a month to come, in exit 2 with the API's message", async () => {
+    const h = exporter({ "GET /api/v1/close-packs/2099-01": { status: 400, body: { error: { code: "invalid_request", message: "month must be YYYY-MM, and not a month still to come" } } } });
+    expect(await h.run("close-pack", "export", "2099-01")).toBe(2);
+    expect(h.stderr).toContain("month must be YYYY-MM, and not a month still to come (HTTP 400 invalid_request)");
+    expect(files(h)).toEqual([]);
+  });
+
+  it("prints --out - as ASCII, so a shell that re-encodes it, as PowerShell 5.1's > does, cannot change a signed name", async () => {
+    const doc = example("get-invoice-evidence");
+    const last = doc.entries.reduce((a, b) => (Number(a.seq) > Number(b.seq) ? a : b));
+    last.summary = `Paid Imprimerie Caf${String.fromCharCode(0xe9)} ${String.fromCharCode(0x2014)} Lumi${String.fromCharCode(0xe8)}re`;
+    doc.keys.push(resign(last));
+    const h = exporter({ [`GET /api/v1/invoices/${BILL}/evidence`]: answer(doc) });
+    expect(await h.run("evidence", "export", "--bill", BILL, "--out", "-", "--json")).toBe(0);
+    expect(h.stdout).not.toMatch(/[^\x00-\x7f]/);
+    expect(JSON.parse(h.stdout)).toEqual(doc);
+    // What Windows PowerShell 5.1's > writes: UTF-16 with a byte-order mark.
+    put(h, "captured.json", Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(h.stdout, "utf16le")]));
+    const before = h.stdout.length;
+    expect(await h.run("evidence", "verify", "captured.json")).toBe(0);
+    expect(h.stdout.slice(before)).toMatch(/^VALID: /);
+    // Saved with --out, the file keeps the download's UTF-8 text.
+    expect(await h.run("evidence", "export", "--bill", BILL, "--out", "saved.json")).toBe(0);
+    expect(readFileSync(fileIn(h, "saved.json"), "utf8")).toContain(`Imprimerie Caf${String.fromCharCode(0xe9)}`);
+  });
+
+  it("says what a payee lock's file holds", async () => {
+    const h = exporter();
+    expect(await h.run("evidence", "export", "--payee-lock", "--from", "2026-10-01", "--to", "2026-10-31")).toBe(0);
+    expect(h.stdout).toContain("the payee lock's evidence for 2026-10-01 to 2026-10-31 (northstar-studio): 1 address change");
   });
 
   it("writes no file when the API answers an error (exit 2), with its message", async () => {
@@ -146,8 +218,8 @@ describe("evidence export and close-pack export (CLI evidence CE1-CE5)", () => {
   });
 
   it.each([
-    [["evidence", "export"], /Pass one of --bill, --milestone, --receipt and --payee-lock/],
-    [["evidence", "export", "--bill", BILL, "--payee-lock"], /Pass one of/],
+    [["evidence", "export"], /Pass exactly one of --bill, --milestone, --receipt and --payee-lock/],
+    [["evidence", "export", "--bill", BILL, "--payee-lock"], /Pass exactly one of/],
     [["evidence", "export", "--bill", BILL, "--from", "2026-10-01"], /--from and --to go with --payee-lock/],
     [["evidence", "export", "--payee-lock", "--from", "Oct 1"], /--from is a day, as YYYY-MM-DD/],
     [["evidence", "export", "--payee-lock", "--to", "2026-10"], /--to is a day/],
@@ -156,6 +228,7 @@ describe("evidence export and close-pack export (CLI evidence CE1-CE5)", () => {
     [["close-pack", "export", "2026-1"], /<YYYY-MM> is a month/],
     [["close-pack", "export", "October"], /<YYYY-MM> is a month/],
     [["close-pack", "export"], /takes <YYYY-MM>/],
+    [["evidence", "export", "--bill", "first", "--bill", BILL], /--bill was given more than once/],
   ])("refuses %j as a usage error (exit 1), sending nothing (CE4)", async (argv, message) => {
     const h = exporter();
     expect(await h.run(...argv)).toBe(1);
@@ -190,15 +263,36 @@ describe("evidence verify and close-pack verify (CE6, CE7)", () => {
       const h = withFiles();
       expect(await h.run("evidence", "verify", `${name}.json`, "--public-key", "key.pem")).toBe(0);
       expect(h.stdout).toMatch(/^VALID: the /);
-      expect(h.stdout).toContain("Key id: 36e3209ae2e6a600 (from --public-key)");
+      expect(h.stdout).toContain("Signed by key 36e3209ae2e6a600; checked with the keys from --public-key");
       expect(h.stdout).not.toContain("Checked with the keys the document carries");
       const own = withFiles();
       expect(await own.run("evidence", "verify", `${name}.json`)).toBe(0);
-      expect(own.stdout).toContain("(from the file itself)");
+      expect(own.stdout).toContain("Signed by key 36e3209ae2e6a600; checked with the keys the file carries");
       expect(own.stdout).toContain("Checked with the keys the document carries");
       expect([...h.sent, ...own.sent]).toEqual([]);
     }
   );
+
+  it("gives the same answer for a file minified, or indented by an editor, and says only the entries are signed", async () => {
+    const h = withFiles();
+    const data = recorded("get-close-pack").data;
+    put(h, "minified.json", JSON.stringify(data));
+    put(h, "indented.json", JSON.stringify(data, null, 4).replace(/\n/g, "\r\n"));
+    for (const file of ["minified.json", "indented.json"]) {
+      expect(await h.run("close-pack", "verify", file, "--public-key", "key.pem")).toBe(0);
+    }
+    expect(h.stdout).toContain("Only the entries are signed: the file's own words around them, such as its name for what it is of, are not.");
+  });
+
+  it("names the key the entries ask for beside the one given, on one line for all the entries it leaves unchecked", async () => {
+    const h = withFiles();
+    put(h, "other.pem", ed25519Pem());
+    expect(await h.run("close-pack", "verify", "get-close-pack.json", "--public-key", "other.pem")).toBe(2);
+    expect(h.stdout).toMatch(/^NOT CHECKED: the close pack/);
+    expect(h.stdout).toMatch(/The entries not checked name key 36e3209ae2e6a600; the keys given are [0-9a-f]{16}\./);
+    expect(h.stdout).toMatch(/- Entries #\d+(, #\d+){9} and 1 more could not be checked: The key that signed this entry is not known here\./);
+    expect(h.stdout.match(/could not be checked/g)).toHaveLength(1);
+  });
 
   it("checks what an export saved: the round trip is VALID", async () => {
     const h = exporter();
@@ -208,14 +302,75 @@ describe("evidence verify and close-pack verify (CE6, CE7)", () => {
     expect(h.stdout.slice(before)).toMatch(/^VALID: the close pack of October 2026 so far \(northstar-studio\)/);
   });
 
-  it("prints a close pack's totals and ledger head, and how to tie it to the whole ledger", async () => {
+  it("prints a close pack's totals and ledger head as the file's own words, and how to tie it to the whole ledger", async () => {
     const h = withFiles();
     expect(await h.run("close-pack", "verify", "get-close-pack.json", "--public-key", "key.pem")).toBe(0);
     expect(h.stdout).toContain("Entries: 11 carried, 11 verified, 0 failed, 0 not checked; 11 cited");
-    expect(h.stdout).toContain("Payments on chain: 2 payments, 2050.000000 USDC");
-    expect(h.stdout).toContain("Ledger head when read: #5618 d24bfd6b");
+    expect(h.stdout).toContain("The file states, outside the signatures: on chain, 2 payments, 2050.000000 USDC; the ledger's head when read, #5618 d24bfd6b");
     expect(h.stdout).toContain("vestiarion ledger verify");
     expect(h.stdout).toContain("Not checked offline:");
+  });
+
+  it("says a file with no signed entry has nothing signed, whatever totals it states", async () => {
+    const h = withFiles();
+    const empty = { ...example("get-close-pack"), rows: [], notSettled: [], escrow: [], entries: [], totals: { onChain: [{ token: "USDC", payments: 99, amount: "1000000.000000", routeFeesUsdc: "0.000000" }] } };
+    put(h, "empty.json", JSON.stringify(empty));
+    expect(await h.run("close-pack", "verify", "empty.json", "--public-key", "key.pem")).toBe(0);
+    expect(h.stdout).toContain("The file carries no signed entry, so nothing in it is signed.");
+    expect(h.stdout).toContain("The file states, outside the signatures: on chain, 99 payments, 1000000.000000 USDC");
+  });
+
+  it("names the key that signed each entry, not the ids the file lists (CE6)", async () => {
+    const h = withFiles();
+    // Re-signed with another key, which the file carries beside the workspace's: the entries still verify, by that key.
+    const doc = example("get-invoice-receipt");
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+    const pem = publicKey.export({ type: "spki", format: "pem" }).toString();
+    const otherId = createHash("sha256").update(publicKey.export({ type: "spki", format: "der" })).digest("hex").slice(0, 16);
+    const hex = (text: string) => createHash("sha256").update(text).digest("hex");
+    for (const entry of doc.entries) {
+      entry.signature = sign(null, Buffer.from(String(entry.body_hash), "hex"), privateKey).toString("hex");
+      entry.signing_key_id = otherId;
+      entry.hash = hex(`${String(entry.prev_hash)}${String(entry.body_hash)}${String(entry.signature)}`);
+    }
+    // The receipt names its recording entry by hash: that copy follows the entry.
+    const records = doc.records as { seq: number; hash: string };
+    records.hash = String(doc.entries.find((entry) => entry.seq === records.seq)?.hash);
+    doc.keys.push({ id: otherId, publicKeyPem: pem });
+    put(h, "resigned.json", JSON.stringify(doc));
+    expect(await h.run("evidence", "verify", "resigned.json")).toBe(0);
+    expect(h.stdout).toContain(`Signed by key ${otherId}; checked with the keys the file carries`);
+    expect(h.stdout).not.toContain("36e3209ae2e6a600");
+    // Against the workspace's key, it is not the workspace's.
+    expect(await h.run("evidence", "verify", "resigned.json", "--public-key", "key.pem")).toBe(2);
+  });
+
+  it("finds a key filed under another key's id BROKEN, though the SDK never uses it", async () => {
+    const h = withFiles();
+    const doc = example("get-invoice-receipt");
+    doc.keys.push({ id: "0123456789abcdef", publicKeyPem: ed25519Pem() });
+    put(h, "misfiled.json", JSON.stringify(doc));
+    expect(await h.run("evidence", "verify", "misfiled.json", "--json")).toBe(2);
+    const answer = JSON.parse(h.stdout);
+    expect(answer).toMatchObject({ verdict: "broken", ok: false });
+    expect(answer.problems.at(-1)).toMatch(/^The file files a key under 0123456789abcdef, but that key's id is [0-9a-f]{16}\.$/);
+  });
+
+  it("never prints the control characters a file holds, a JSON error quoting them included (CE8)", async () => {
+    const h = withFiles();
+    put(h, "esc.json", `x\r${ESC}[2K${ESC}[32mVALID${ESC}[8m`);
+    put(h, "export.json", `x\r${ESC}[2K${ESC}[32mVALID${ESC}[8m`);
+    expect(await h.run("evidence", "verify", "esc.json")).toBe(2);
+    expect(await h.run("ledger", "verify", "export.json")).toBe(2);
+    expect(h.stdout).toMatch(/^NOT CHECKED: esc\.json could not be read as JSON/);
+    expect(h.stdout).not.toMatch(/[\x00-\x09\x0b-\x1f\x7f-\x9f]/);
+  });
+
+  it("finds a big-endian UTF-16 file with an odd byte NOT CHECKED, with a verdict", async () => {
+    const h = withFiles();
+    put(h, "odd.json", Buffer.from([0xfe, 0xff, 0x00, 0x7b, 0x00]));
+    expect(await h.run("evidence", "verify", "odd.json", "--json")).toBe(2);
+    expect(JSON.parse(h.stdout)).toMatchObject({ verdict: "not_checked", reason: "odd.json could not be read as UTF-16: it has an odd number of bytes" });
   });
 
   it("finds a changed entry BROKEN (exit 2), naming it", async () => {
@@ -250,7 +405,7 @@ describe("evidence verify and close-pack verify (CE6, CE7)", () => {
     const bundle = withFiles();
     put(bundle, "both.pem", `${ed25519Pem()}\n${example("get-close-pack").keys[0].publicKeyPem}`);
     expect(await bundle.run("evidence", "verify", "get-invoice-receipt.json", "--public-key", "both.pem")).toBe(0);
-    expect(bundle.stdout).toMatch(/Key ids: [0-9a-f]{16}, [0-9a-f]{16} \(from --public-key\)/);
+    expect(bundle.stdout).toContain("Signed by key 36e3209ae2e6a600; checked with the keys from --public-key");
   });
 
   it.each([
@@ -309,7 +464,7 @@ describe("evidence verify and close-pack verify (CE6, CE7)", () => {
       file: "get-invoice-evidence.json",
       unwrapped: false,
       keySource: "--public-key",
-      keyIds: ["36e3209ae2e6a600"],
+      signedBy: ["36e3209ae2e6a600"],
       ok: true,
       format: "vestiarion-evidence/1",
       keys: "given",
@@ -318,6 +473,7 @@ describe("evidence verify and close-pack verify (CE6, CE7)", () => {
     });
     const missing = withFiles();
     expect(await missing.run("evidence", "verify", "nope.json", "--json")).toBe(2);
-    expect(JSON.parse(missing.stdout)).toMatchObject({ verdict: "not_checked", file: "nope.json" });
+    expect(JSON.parse(missing.stdout)).toMatchObject({ verdict: "not_checked", file: "nope.json", ok: null, counts: { carried: 0, failed: 0 }, signedBy: [], keySource: "file" });
+    expect(JSON.parse(missing.stdout).problems).toEqual([JSON.parse(missing.stdout).reason]);
   });
 });

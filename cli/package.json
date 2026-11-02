@@ -1,7 +1,7 @@
 {
   "name": "@vestiarion/cli",
   "version": "0.2.0",
-  "description": "The Vestiarion API from a terminal: a workspace's status, bills, invoices, counterparties, milestones and the agent's decisions, plus offline checks of audit exports and webhook signatures.",
+  "description": "The Vestiarion API from a terminal: a workspace's status, bills, invoices, counterparties, milestones and the agent's decisions, evidence, receipts and monthly close packs saved as signed files, plus offline checks of those files, audit exports and webhook signatures.",
   "license": "MIT",
   "type": "module",
   "engines": { "node": ">=20" },
