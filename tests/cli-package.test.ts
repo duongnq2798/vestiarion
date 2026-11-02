@@ -121,7 +121,8 @@ describe("the tarball npm publishes", () => {
     for (const [file, text] of expected) expect(lf(files.get(file)?.toString("utf8")), file).toBe(lf(text));
     expect(JSON.parse(files.get("package/package.json")!.toString("utf8"))).toEqual(pkg);
     expect(files.get("package/dist/bin.js")!.toString("utf8").startsWith("#!/usr/bin/env node\n")).toBe(true);
-  });
+    // A type-checked build of cli/ in memory: about 5 seconds when the whole suite runs at once.
+  }, 30_000);
 
   it("runs from the unpacked tarball beside the SDK's: help, version, an auth error without a key, and an offline check", () => {
     const home = mkdtempSync(path.join(tmpdir(), "vestiarion-cli-bin-"));
