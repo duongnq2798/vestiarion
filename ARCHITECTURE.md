@@ -4572,7 +4572,7 @@ first; 0.1.0's README, inside its immutable tarball, names the site's URL.
 The CLI lives in `cli/` (`@vestiarion/cli`, whose `bin` is `vestiarion`). It is ESM for Node 20 or later, parses its
 arguments with `node:util` `parseArgs`, and depends on `@vestiarion/sdk` and nothing else. The root `devDependencies`
 name the same SDK range as `cli/package.json`, so the CLI is type-checked, linted and tested against the SDK as npm
-serves it, not against `sdk/src`. It is held to the code in four ways:
+serves it, not against `sdk/src`. It is held to the code in five ways:
 
 - Each command names the operations it calls in its help (`cli/src/commands/`). `tests/cli.test.ts` holds every one to
   an operation of the OpenAPI document, and runs each command against the recorded answers in
@@ -4584,6 +4584,10 @@ serves it, not against `sdk/src`. It is held to the code in four ways:
 - `vestiarion ledger verify` checks an audit export with the SDK's `verifyLedgerEntry` (`cli/src/ledger-export.ts`).
   `tests/cli-ledger-verify.test.ts` runs it and `public/tools/verify-ledger-export.mjs` on the same exports, and
   requires the same words and verdict.
+- `vestiarion evidence verify` and `vestiarion close-pack verify` check a file with the SDK's `verifyEvidence`, and the
+  two exports save the API's answer under the download's name (`cli/src/evidence-file.ts`, `cli/src/commands/evidence.ts`).
+  `tests/cli-evidence.test.ts` runs each against the evidence reads' built examples, which verify with the key they
+  carry: the request, the file's text and name, the overwrite rules, and every verdict.
 - `npm run cli:pack` builds it into `public/cli/vestiarion-cli-<version>.tgz`, committed and never repacked, as the
   SDK's is. `tests/cli-package.test.ts` holds that tarball to a fresh build, runs its `bin` unpacked beside the SDK's
   tarball, and runs `npx` against it.

@@ -19,7 +19,7 @@ export interface ExportCheck {
 
 const FORMAT = "vestiarion-ledger-export/1";
 const GENESIS = "0".repeat(64);
-const PEM_BLOCK = /-----BEGIN [A-Z0-9 ]+-----[\s\S]*?-----END [A-Z0-9 ]+-----/g;
+export const PEM_BLOCK = /-----BEGIN [A-Z0-9 ]+-----[\s\S]*?-----END [A-Z0-9 ]+-----/g;
 const REQUIRED_STRING_FIELDS = ["actor", "domain", "action", "summary", "body_hash", "signature", "prev_hash", "hash"];
 const HEX_PAIRS = /^([0-9a-f]{2})*$/i;
 
@@ -33,11 +33,11 @@ function stop(verdict: Verdict, line: string): never {
 }
 
 /** First 16 hex characters of SHA-256 over the key's SPKI DER form. */
-function keyId(key: KeyObject): string {
+export function keyId(key: KeyObject): string {
   return createHash("sha256").update(key.export({ type: "spki", format: "der" })).digest("hex").slice(0, 16);
 }
 
-const spkiPem = (key: KeyObject) => key.export({ type: "spki", format: "pem" }).toString();
+export const spkiPem = (key: KeyObject) => key.export({ type: "spki", format: "pem" }).toString();
 
 type ExportEntry = Record<string, unknown>;
 

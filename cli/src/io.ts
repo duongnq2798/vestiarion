@@ -11,6 +11,8 @@ export interface Io {
   env: Record<string, string | undefined>;
   platform: NodeJS.Platform;
   homedir: string;
+  /** The directory a relative path, such as an export's file, is read from or written to. */
+  cwd: string;
   stdout(text: string): void;
   stderr(text: string): void;
   /** Whether a person can answer a prompt: stdin is a terminal. */
@@ -90,6 +92,7 @@ export function nodeIo(): Io {
     env: process.env,
     platform: process.platform,
     homedir: homedir(),
+    cwd: process.cwd(),
     stdout: (text) => void process.stdout.write(text),
     stderr: (text) => void process.stderr.write(text),
     stdinIsTTY: process.stdin.isTTY === true,

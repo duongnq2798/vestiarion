@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { verifyWebhook, WEBHOOK_TOLERANCE_SECONDS, WebhookVerificationError } from "@vestiarion/sdk";
 import type { Command } from "../command.js";
 import { EXIT, usageError } from "../errors.js";
+import { plain } from "../evidence-file.js";
 import { checkLedgerExport } from "../ledger-export.js";
 
 export const VERIFY_COMMANDS: Command[] = [
@@ -22,7 +23,8 @@ export const VERIFY_COMMANDS: Command[] = [
     async run(ctx) {
       const pins = (ctx.values["public-key"] as string[] | undefined) ?? [];
       const result = await checkLedgerExport(ctx.args[0], pins);
-      ctx.print(result, (answer) => `${answer.lines.join("\n")}\n`);
+      // A parse error quotes the file, control characters included: they are taken out before a terminal sees them.
+      ctx.print(result, (answer) => `${answer.lines.map(plain).join("\n")}\n`);
       return result.verdict === "valid" ? EXIT.OK : EXIT.FAILED;
     },
   },

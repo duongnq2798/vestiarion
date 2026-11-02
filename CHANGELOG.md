@@ -154,6 +154,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   opens the landing page, the open numbers, the docs, the four free tools, robots.txt and the sitemap. When one fails
   two checks running, the team is told on a private Discord channel, and told again once it works. The check reads
   public pages only and is not counted as a visit. No migration.
+- **Evidence and close packs from a terminal (`@vestiarion/cli` 0.2.0).** `vestiarion evidence export` saves a bill's
+  or a milestone's evidence, a paid bill's receipt, or the payee lock's evidence for a period, and `vestiarion
+  close-pack export 2026-10` saves a month's close pack. Each file is the text the workspace's **Download** gives, with
+  members named by user id, under the same name in the current directory; a file already there is kept unless you pass
+  `--force`. It prints what the file holds: the bill and its status, whether a receipt is ready and why not, the
+  period's address changes, or the month's payments per token. `vestiarion evidence verify` and `vestiarion close-pack
+  verify` check such a file offline with the SDK's `verifyEvidence`, against the public key from the Audit log page or
+  the keys the file carries, and answer VALID, BROKEN or NOT CHECKED, exiting `0` only when valid. They read a file
+  in UTF-16 and a whole API answer too. Every command now refuses an option given twice, where the last one used to win
+  unseen. The CLI now needs `@vestiarion/sdk` 0.4.1. No
+  migration. [Guide](https://www.vestiarion.xyz/docs/get-started/cli#evidence-and-close-packs).
 
 ### Changed
 

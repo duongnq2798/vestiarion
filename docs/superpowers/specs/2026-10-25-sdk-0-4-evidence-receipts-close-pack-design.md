@@ -314,6 +314,8 @@ not a new subpath): `verifyEvidence(document, { keys?, format? })`.
 - After the partner publishes 0.4.0 to npm, a later PR moves both ranges to `^0.4.0` together, runs `npm install` on
   Windows for the lock, and may then add CLI commands (`vestiarion evidence verify <file>`). RELEASING already says the
   SDK version the CLI needs must be on npm first.
+- Done on 2026-11-02 by CLI 0.2.0 (`docs/superpowers/specs/2026-11-02-cli-evidence-close-pack-design.md`): both ranges
+  are `^0.4.1`, and `vestiarion evidence` and `vestiarion close-pack` export and verify these files.
 - If wrong: the CLI breaks for every user the moment the lock or a range moves to an SDK not on npm. Nothing moves.
 
 **EA15. Postman and the reference.**
