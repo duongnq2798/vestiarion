@@ -37,6 +37,8 @@ export interface HarnessOptions {
   typed?: string;
   /** Answers by `METHOD /path`. A request with no route answers 404, and a route throwing is a network failure. */
   routes?: Record<string, Route>;
+  /** The directory relative paths are taken from; the temporary home unless given. */
+  cwd?: string;
 }
 
 /** The CLI's `run` with a recorded network, a temporary home and no terminal unless asked for. */
@@ -60,6 +62,7 @@ export function harness(options: HarnessOptions = {}) {
     env: { XDG_CONFIG_HOME: path.join(home, "xdg"), APPDATA: path.join(home, "roaming"), ...options.env },
     platform: options.platform ?? "linux",
     homedir: home,
+    cwd: options.cwd ?? home,
     stdout: (text) => void (stdout += text),
     stderr: (text) => void (stderr += text),
     stdinIsTTY: options.tty ?? false,

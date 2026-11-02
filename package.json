@@ -101,7 +101,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vestiarion/sdk": "^0.3.2",
+    "@vestiarion/sdk": "^0.4.1",
     "@vitest/coverage-v8": "^5.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",

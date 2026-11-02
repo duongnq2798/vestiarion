@@ -224,7 +224,7 @@ and is versioned on its own, the same way as the SDK: `cli/package.json` and `VE
    For the first version: `npm publish public/cli/vestiarion-cli-0.1.0.tgz --access public`. Check it with
    `npm view @vestiarion/cli version`; the registry can take a few minutes to show a new version.
 
-The CLI depends on `@vestiarion/sdk` by a range (`^0.3.2` for 0.1.0), so the SDK version it needs must be on npm before
-the CLI is published. The root `devDependencies` name the same range, and `tests/cli-package.test.ts` holds the two
+The CLI depends on `@vestiarion/sdk` by a range (`^0.3.2` for 0.1.0, `^0.4.1` for 0.2.0), so the SDK version it needs
+must be on npm before the CLI is published. The root `devDependencies` name the same range, and `tests/cli-package.test.ts` holds the two
 equal. A CLI version may be tagged `cli-vX.Y.Z` on the commit whose tarball was published; the release workflow
 refuses such tags, as it refuses `sdk-v` ones.

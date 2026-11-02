@@ -3,7 +3,8 @@ The `vestiarion` command is this API from a terminal. With it you can:
 - read a workspace's status, bills, invoices, counterparties, milestones and treasury;
 - read the agent's decisions, with its reasoning;
 - add records, after it shows what it will send and asks;
-- check an audit export and a webhook delivery's signature, offline.
+- save a payment's evidence, a bill's receipt, the payee lock's evidence and a month's close pack as signed files;
+- check those files, an audit export and a webhook delivery's signature, offline.
 
 It is built on the [TypeScript SDK](/docs/get-started/sdk) and needs Node 20 or later.
 
@@ -23,7 +24,7 @@ npx @vestiarion/cli --help
 The package is [@vestiarion/cli on npm](https://www.npmjs.com/package/@vestiarion/cli). This site serves the same package, byte for byte:
 
 ```bash
-npm install --global https://www.vestiarion.xyz/cli/vestiarion-cli-0.1.0.tgz
+npm install --global https://www.vestiarion.xyz/cli/vestiarion-cli-0.2.0.tgz
 ```
 
 ## Log in
@@ -90,7 +91,13 @@ Each command calls one or two [API operations](/docs/api), and nothing the API d
 | `vestiarion ledger check` | [Verify the ledger](/docs/api/verify-ledger) |
 | `vestiarion treasury` | [Get the treasury](/docs/api/get-treasury) |
 | `vestiarion insights` | [Get insights](/docs/api/get-insights) |
+| `vestiarion evidence export --bill` | [Get a payable's evidence](/docs/api/get-invoice-evidence) |
+| `vestiarion evidence export --milestone` | [Get a milestone's evidence](/docs/api/get-milestone-evidence) |
+| `vestiarion evidence export --receipt` | [Get a payable's receipt](/docs/api/get-invoice-receipt) |
+| `vestiarion evidence export --payee-lock` | [Get the payee lock's evidence](/docs/api/get-payee-lock-evidence) |
+| `vestiarion close-pack export` | [Get a monthly close pack](/docs/api/get-close-pack) |
 | `vestiarion ledger verify` | None: an audit export, checked offline |
+| `vestiarion evidence verify`, `vestiarion close-pack verify` | None: an evidence file or a close pack, checked offline |
 | `vestiarion webhooks verify` | None: a delivery, checked offline |
 
 Every command has `--help`, with its options and an example:
@@ -132,6 +139,42 @@ The agent decides a bill added from the CLI as it decides one typed into the con
 - **Reruns are safe with your own id.** `--idempotency-key` is sent as the `Idempotency-Key`, so running the same command again cannot add the record twice. Without it, each run sends a new key.
 - **A payee link takes no key.** Its link is printed once: the API keeps only its hash.
 
+## Evidence and close packs
+
+A read key saves the signed files the workspace's pages download: a payment's [evidence](/docs/guides/evidence), a paid bill's [receipt](/docs/guides/evidence-and-receipts#7-share-a-receipt), the [payee lock's evidence](/docs/guides/evidence-and-receipts) and a month's [close pack](/docs/guides/accountants). Each names members by user id, never by email.
+
+```bash
+vestiarion evidence export --bill 9440f32c-000d-4a63-97f1-4eb6bf78439f
+vestiarion evidence export --milestone 26d6ffed-356d-474a-8d42-89bc942f6b4e
+vestiarion evidence export --receipt 9440f32c-000d-4a63-97f1-4eb6bf78439f
+vestiarion evidence export --payee-lock --from 2026-10-01 --to 2026-10-31
+vestiarion close-pack export 2026-10
+```
+
+- **The download's file, under its name.** The file holds the same text as the workspace's **Download** button, and is saved in the current directory under the same name, such as `vestiarion-close-pack-your-workspace-2026-10.json`. A month that has not ended reads so far, and its name ends in `-so-far`. A receipt has no download, so its file is `vestiarion-receipt-your-workspace-` and the bill id's first part.
+- **Where it goes.** `--out <file>` names another file. `--out -` prints the document and saves nothing.
+- **Nothing is replaced.** A file that is already there is kept unless you pass `--force`. When `--out` names one, the CLI says so before it reads anything.
+- **What it prints.** The file's name and size, what it holds (the bill and its status, whether a receipt is ready, the period's address changes, or the month's payments per token), its network, how many signed entries it carries and the key ids. `--json` prints the same as fields, for a script.
+- **A receipt not ready yet** is saved too, with its reason, such as `not_paid` or `simulated`. The command still exits `0`: read `ready` with `--json`.
+- **Its limits are the API's.** The evidence reads take 10 at once per key, then one every 6 seconds, and the CLI waits when the API asks it to. A close pack over 4 MB is too large for the API: download that month from the workspace. Reading a close pack records nothing in the ledger.
+
+Check any of these files offline, with the public key from the workspace's **Audit log** page:
+
+```bash
+vestiarion evidence verify vestiarion-evidence-your-workspace-invoice-9440f32c.json --public-key workspace-key.pem
+vestiarion close-pack verify vestiarion-close-pack-your-workspace-2026-10.json --public-key workspace-key.pem
+```
+
+- **It is the SDK's `verifyEvidence`.** Every entry the file carries is checked: its body hash, its Ed25519 signature and its chain hash. Every entry a fact cites must be in the file, two entries whose numbers follow each other must link, and every copy of an entry's hash must be the entry's. The file's own `check` fields are never read.
+- **Three answers.** **VALID** exits `0`. **BROKEN** exits `2` and lists what does not hold, such as an entry whose content no longer matches its signature. **NOT CHECKED** exits `2` too: some entry was signed by a key you did not pass, or the file or a key could not be read.
+- **Whose keys.** Without `--public-key`, the file is checked with the keys it carries, and the answer says so. That proves the entries were not changed after those keys signed them, not that the keys are the workspace's: compare the key ids it prints with the Audit log. After a key rotation, pass every key: repeat `--public-key`, or put the PEM blocks in one file. A private key, or a key that is not Ed25519, is refused.
+- **A close pack only.** `close-pack verify` refuses any other file. It also prints the month's payments per token and the ledger head the pack was read at.
+- **Files saved another way.** A file saved by Windows PowerShell's `>`, which writes UTF-16, is read as it is, and so is a whole API answer, `{ "data": ... }`, saved with `curl`.
+
+<Callout kind="note" title="What an offline check cannot say">
+It cannot say that the facts' words follow from the entries: that is the server's reading. It cannot say that the file carries every entry of its period. To show a close pack leaves nothing out, compare its entries' `seq` and `hash` with an [audit export](/docs/guides/audit-export) checked by `vestiarion ledger verify`. And it says nothing about the chain: open the transaction on the explorer.
+</Callout>
+
 ## Output and exit codes
 
 Text is for reading. `--json` prints the API's answer as it came: `data`, and `page` for a list, ready for `jq`. `whoami --json` prints the workspace, its network, the key's prefix and source, and the base URL. An error goes to stderr, as JSON with `--json`.
@@ -147,7 +190,7 @@ The API's own error message is printed as it is, with its status and [code](/doc
 
 ## Offline checks
 
-Neither needs a key or a network.
+Neither needs a key or a network, and neither do `evidence verify` and `close-pack verify` (see [Evidence and close packs](#evidence-and-close-packs)).
 
 `vestiarion ledger verify` checks an [audit export](/docs/guides/audit-export):
 

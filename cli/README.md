@@ -5,7 +5,8 @@ The [Vestiarion](https://www.vestiarion.xyz) API from a terminal:
 - a workspace's status, bills, invoices, counterparties, milestones and treasury;
 - the agent's decisions, with its reasoning;
 - adding records, after showing what will be sent and asking first;
-- offline checks of an audit export and of a webhook delivery's signature.
+- a payment's evidence, a bill's receipt, the payee lock's evidence and a month's close pack, saved as signed files;
+- offline checks of those files, of an audit export and of a webhook delivery's signature.
 
 It runs on Node 20 or later and uses [`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk), and nothing
 else.
@@ -18,7 +19,7 @@ vestiarion --help
 ```
 
 Or run it without installing: `npx @vestiarion/cli --help`. Each version is also served as a tarball, such as
-`https://www.vestiarion.xyz/cli/vestiarion-cli-0.1.0.tgz`, which `npm install --global` and `npx` take as they are.
+`https://www.vestiarion.xyz/cli/vestiarion-cli-0.2.0.tgz`, which `npm install --global` and `npx` take as they are.
 
 ## Log in
 
@@ -70,7 +71,12 @@ The CLI never prints a key. It shows a key by its prefix, `vxk_<prefix>_…`, as
 | `vestiarion ledger check` | `GET /api/v1/ledger/verify` |
 | `vestiarion treasury` | `GET /api/v1/treasury` |
 | `vestiarion insights` | `GET /api/v1/insights` |
+| `vestiarion evidence export --bill <id>` / `--milestone <id>` | `GET /api/v1/invoices/{id}/evidence`, `GET /api/v1/milestones/{id}/evidence` |
+| `vestiarion evidence export --receipt <bill-id>` | `GET /api/v1/invoices/{id}/receipt` |
+| `vestiarion evidence export --payee-lock` | `GET /api/v1/payee-lock/evidence` |
+| `vestiarion close-pack export <YYYY-MM>` | `GET /api/v1/close-packs/{month}` |
 | `vestiarion ledger verify <export.json>` | None: offline |
+| `vestiarion evidence verify <file>`, `vestiarion close-pack verify <file>` | None: offline |
 | `vestiarion webhooks verify` | None: offline |
 
 `vestiarion <command> --help` lists a command's options. A few examples:
@@ -108,6 +114,42 @@ vestiarion milestones add --contractor <id> --title "CSV export for EURC" --amou
 - **Reruns are safe with your own id.** `--idempotency-key` sends it as the `Idempotency-Key`, so running the same
   command again cannot add the record twice. Without it, each run sends a new key.
 
+## Evidence and close packs
+
+A read key saves the signed files the workspace's pages download, with members named by user id:
+
+```bash
+vestiarion evidence export --bill 9440f32c-000d-4a63-97f1-4eb6bf78439f      # why a bill was paid, or why not yet
+vestiarion evidence export --milestone <id>                                  # a contractor milestone's
+vestiarion evidence export --receipt 9440f32c-000d-4a63-97f1-4eb6bf78439f   # a paid bill's receipt
+vestiarion evidence export --payee-lock --from 2026-10-01 --to 2026-10-31    # every payout address change
+vestiarion close-pack export 2026-10                                         # every payment settled in October
+```
+
+- **The download's file, under its name.** The file is the text the workspace's **Download** gives, saved in the current
+  directory as the workspace names it, such as `vestiarion-close-pack-acme-2026-10.json`. `--out <file>` names another;
+  `--out -` prints it.
+- **Nothing is replaced.** A file that is already there is kept unless you pass `--force`.
+- **A receipt not ready yet** is saved too, and says why, such as `not_paid`. With `--json`, read `ready`.
+- **A limit of their own.** The evidence reads take 10 at once per key, then one every 6 seconds; past it the CLI waits
+  as the API asks. A month whose close pack is over 4 MB is downloaded from the workspace instead.
+
+Check any of them offline, with the public key from the workspace's **Audit log** page:
+
+```bash
+vestiarion evidence verify vestiarion-evidence-acme-invoice-9440f32c.json --public-key ledger-key.pem
+vestiarion close-pack verify vestiarion-close-pack-acme-2026-10.json --public-key ledger-key.pem
+```
+
+It is the SDK's `verifyEvidence`: every entry the file carries is checked (its body hash, Ed25519 signature and chain
+hash), every entry a fact cites must be carried, and entries in a row must link. It answers `VALID`, `BROKEN` or `NOT
+CHECKED`, and exits `0` only when `VALID`. `close-pack verify` takes a close pack only, and prints its totals and the
+ledger head it was read at. Without `--public-key`, the file vouches for itself: compare its key ids with the Audit log.
+
+An offline check cannot say that the facts' words follow from the entries, that the file carries every entry of its
+period, or anything on chain. To show a close pack leaves no entry out, compare its entries with an audit export
+checked by `vestiarion ledger verify`.
+
 ## Output and exit codes
 
 Text is for reading. `--json` prints the API's answer as it came, `{ "data": … }` and, for a list, `"page"`, for `jq` and
@@ -124,7 +166,7 @@ The API's own error message is printed as it is, with its status and code.
 
 ## Offline checks
 
-Neither needs a key or a network.
+Neither these nor `evidence verify` and `close-pack verify` need a key or a network.
 
 ```bash
 vestiarion ledger verify vestiarion-acme-ledger-1042.json --public-key ledger-key.pem

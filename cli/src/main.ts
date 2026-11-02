@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { redactKeys } from "./auth.js";
 import { Context, type Command, type OptionSpec, type Values } from "./command.js";
 import { ACCOUNT_COMMANDS } from "./commands/account.js";
+import { EVIDENCE_COMMANDS } from "./commands/evidence.js";
 import { RECORD_COMMANDS } from "./commands/records.js";
 import { VERIFY_COMMANDS } from "./commands/verify.js";
 import { CliError, EXIT, usageError } from "./errors.js";
@@ -18,7 +19,7 @@ export const GLOBAL_OPTIONS: Record<string, OptionSpec> = {
   version: { type: "boolean", short: "v", help: "Print the CLI's version" },
 };
 
-export const COMMANDS: Command[] = [...ACCOUNT_COMMANDS, ...RECORD_COMMANDS, ...VERIFY_COMMANDS];
+export const COMMANDS: Command[] = [...ACCOUNT_COMMANDS, ...RECORD_COMMANDS, ...VERIFY_COMMANDS, ...EVIDENCE_COMMANDS];
 
 /** The help's sections: each group of commands with a line about it. */
 const GROUPS: Array<{ title: string; names: Array<[string, string]> }> = [
@@ -49,6 +50,13 @@ const GROUPS: Array<{ title: string; names: Array<[string, string]> }> = [
     names: [
       ["ledger", "The signed audit chain: list, check, and verify an export offline"],
       ["webhooks", "Verify a delivery's signature offline"],
+    ],
+  },
+  {
+    title: "Evidence and close packs",
+    names: [
+      ["evidence", "Save a payment's evidence, a receipt or the payee lock's as a signed file, and verify one offline"],
+      ["close-pack", "Save a month's close pack as a signed file, and verify one offline"],
     ],
   },
 ];
