@@ -7,6 +7,7 @@ import type {
 	IWebhookResponseData,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { LEDGER_DOMAIN_OPTIONS } from '../Vestiarion/constants';
 import { checkSignature } from './signature';
 
 /**
@@ -14,16 +15,6 @@ import { checkSignature } from './signature';
  * delivery a workspace's webhook endpoint sends, one per ledger entry, after checking its Vestiarion-Signature. The API
  * cannot add a webhook endpoint, so an owner or an admin adds this node's URL in the workspace's Settings by hand.
  */
-
-const LEDGER_DOMAINS = ['ap', 'ar', 'contractor', 'treasury', 'compliance', 'system'];
-const DOMAIN_NAMES: Record<string, string> = {
-	ap: 'Bills (ap)',
-	ar: 'Receivables (ar)',
-	contractor: 'Contractor Milestones (contractor)',
-	treasury: 'Treasury (treasury)',
-	compliance: 'Screening and Payees (compliance)',
-	system: 'Workspace (system)',
-};
 
 export class VestiarionTrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -42,7 +33,7 @@ export class VestiarionTrigger implements INodeType {
 		properties: [
 			{
 				displayName:
-					'Add this node\'s Production URL as a webhook endpoint in Vestiarion: an owner or an admin does it on the workspace\'s Settings page, under Webhooks. Put the signing secret it shows into the credential\'s Webhook Signing Secret. To try it, add the Test URL instead, choose Listen for Test Event here, then Send test in Settings.',
+					'An owner or an admin adds this node\'s Production URL as a webhook endpoint in Vestiarion, under Settings > Webhooks. It must be public HTTPS on port 443. Put the signing secret Settings shows once into the credential, then publish this workflow. To try it first, add the Test URL, choose Listen for Test Event, and use Send test in Settings: a test delivery has no entry. Then remove that endpoint and add the Production URL, with its new secret. A delivery whose signature fails, or that your options leave out, starts nothing and shows nothing here.',
 				name: 'setup',
 				type: 'notice',
 				default: '',
@@ -61,7 +52,7 @@ export class VestiarionTrigger implements INodeType {
 				displayName: 'Domains',
 				name: 'domains',
 				type: 'multiOptions',
-				options: LEDGER_DOMAINS.map((value) => ({ name: DOMAIN_NAMES[value], value })),
+				options: LEDGER_DOMAIN_OPTIONS,
 				default: [],
 				description: 'Only entries in these domains. Leave it empty for every domain.',
 			},
@@ -109,12 +100,19 @@ export class VestiarionTrigger implements INodeType {
 		}
 
 		const request = this.getRequestObject();
-		if (!request.rawBody) await request.readRawBody();
+		const response = this.getResponseObject();
+		// A body n8n already read another way, such as a form upload, cannot be read raw: it is no delivery, and is answered
+		// 400 rather than recorded as a failed run.
+		try {
+			if (!request.rawBody) await request.readRawBody();
+		} catch {
+			response.status(400).json({ error: 'The body could not be read as it arrived.' }).end();
+			return { noWebhookResponse: true };
+		}
 		const rawBody = request.rawBody ? request.rawBody.toString('utf8') : '';
 		const headers = this.getHeaderData() as IDataObject;
 		const header = typeof headers['vestiarion-signature'] === 'string' ? headers['vestiarion-signature'] : undefined;
 		const check = checkSignature(secret, rawBody, header, Date.now());
-		const response = this.getResponseObject();
 		if (!check.ok) {
 			response.status(401).json({ error: check.reason }).end();
 			return { noWebhookResponse: true };

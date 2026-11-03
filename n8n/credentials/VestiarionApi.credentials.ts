@@ -36,7 +36,8 @@ export class VestiarionApi implements ICredentialType {
 			name: 'baseUrl',
 			type: 'string',
 			default: 'https://www.vestiarion.xyz',
-			description: 'The API\'s origin. Change it only for your own deployment.',
+			required: true,
+			description: 'The API\'s origin, over https. Change it only for your own deployment; plain http works only for localhost.',
 		},
 		{
 			displayName: 'Webhook Signing Secret',

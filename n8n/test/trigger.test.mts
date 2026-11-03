@@ -37,7 +37,7 @@ interface Reply {
 }
 
 /** An IWebhookFunctions for one delivery: the raw body as it arrived, its headers, the node's parameters. */
-function webhookContext(raw: string, headers: IDataObject, parameters: IDataObject = {}, credentials: IDataObject = CREDENTIALS) {
+function webhookContext(raw: string, headers: IDataObject, parameters: IDataObject = {}, credentials: IDataObject = CREDENTIALS, unreadable = false) {
 	const reply: Reply = {};
 	const response = {
 		status(code: number) {
@@ -56,7 +56,10 @@ function webhookContext(raw: string, headers: IDataObject, parameters: IDataObje
 	const context = {
 		getCredentials: async () => credentials,
 		getNode: () => NODE,
-		getRequestObject: () => ({ rawBody: Buffer.from(raw, 'utf8'), readRawBody: async () => undefined }),
+		getRequestObject: () =>
+			unreadable
+				? { rawBody: undefined, readRawBody: async () => Promise.reject(new Error('The request body is not readable')) }
+				: { rawBody: Buffer.from(raw, 'utf8'), readRawBody: async () => undefined },
 		getHeaderData: () => headers,
 		getResponseObject: () => response,
 		getNodeParameter: (name: string, fallback?: unknown) => (name in values ? values[name] : fallback),
@@ -105,6 +108,13 @@ describe('the webhook', () => {
 		expect(reply.status).toBeUndefined();
 	});
 
+	it('checks the raw bytes: a body signed and sent pretty-printed starts the workflow as it came', async () => {
+		// Re-serialising it would give compact JSON, whose signature differs: only the bytes as they arrived verify.
+		const raw = JSON.stringify(delivery(), null, 2);
+		const { context } = webhookContext(raw, signed(raw));
+		expect(await node.webhook.call(context)).toEqual({ workflowData: [[{ json: delivery() }]] });
+	});
+
 	it('checks the raw bytes: a body re-serialised after it was signed is refused with 401', async () => {
 		const raw = JSON.stringify(delivery(), null, 2);
 		const { context, reply } = webhookContext(JSON.stringify(delivery()), signed(raw));
@@ -119,6 +129,12 @@ describe('the webhook', () => {
 		expect(reply.status).toBe(401);
 	});
 
+	it('answers 400 to a body n8n cannot read raw, such as a form upload, rather than failing a run', async () => {
+		const { context, reply } = webhookContext('', {}, {}, CREDENTIALS, true);
+		expect(await node.webhook.call(context)).toEqual({ noWebhookResponse: true });
+		expect(reply).toEqual({ status: 400, body: { error: 'The body could not be read as it arrived.' } });
+	});
+
 	it('fails loudly when the credential has no signing secret, rather than taking every delivery', async () => {
 		const raw = JSON.stringify(delivery());
 		const { context } = webhookContext(raw, signed(raw), {}, { ...CREDENTIALS, webhookSecret: ' ' });
@@ -128,7 +144,7 @@ describe('the webhook', () => {
 	it.each([
 		['a person\'s entry, with Agent Decisions', delivery({ entry: entry({ actor: 'human' }) }), {}],
 		['another domain', delivery({ entry: entry({ domain: 'treasury' }) }), { domains: ['ap'] }],
-		['another action', delivery({ entry: entry({ action: 'ap_hold' }) }), { actions: 'ap_pay, ap_flag' }],
+		['another action', delivery({ entry: entry({ action: 'ap_hold' }) }), { actions: 'ap_pay, ap_flag_fraud' }],
 		['a test delivery, with Include Test Deliveries off', { id: 'x', type: 'webhook.test', createdAt: '2026-11-03T08:00:00Z', workspace: { slug: 'acme' } }, { includeTests: false }],
 		['an event type it does not know', delivery({ type: 'ledger.rewritten' }), { events: 'all' }],
 	])('answers 200 to %s, so Vestiarion does not retry, and starts nothing', async (_, body, parameters) => {

@@ -6,7 +6,7 @@ import type {
 	ILoadOptionsFunctions,
 	JsonObject,
 } from 'n8n-workflow';
-import { NodeApiError } from 'n8n-workflow';
+import { NodeApiError, NodeOperationError } from 'n8n-workflow';
 
 /** The most a list page holds, as the API allows. */
 export const PAGE_SIZE_MAX = 200;
@@ -18,11 +18,26 @@ export interface Page {
 	page: { nextCursor: string | null; hasMore: boolean; count: number };
 }
 
-/** The API's origin from the credential, without a trailing slash. */
+/**
+ * The API's origin from the credential, without a trailing slash. Plain http is refused, except to this machine, so the
+ * key never crosses a network in the clear (n8n N4).
+ */
 async function baseUrl(context: Context): Promise<string> {
 	const credentials = await context.getCredentials('vestiarionApi');
-	const url = typeof credentials.baseUrl === 'string' && credentials.baseUrl.trim() !== '' ? credentials.baseUrl.trim() : 'https://www.vestiarion.xyz';
-	return url.replace(/\/+$/, '');
+	const url = (typeof credentials.baseUrl === 'string' && credentials.baseUrl.trim() !== '' ? credentials.baseUrl.trim() : 'https://www.vestiarion.xyz').replace(/\/+$/, '');
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	} catch {
+		throw new NodeOperationError(context.getNode(), `The credential's Base URL is not a URL: ${url}`);
+	}
+	const local = ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+	if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && local)) {
+		throw new NodeOperationError(context.getNode(), 'The credential\'s Base URL must be https, so the API key is never sent in the clear', {
+			description: 'Plain http is accepted only for localhost, for your own deployment on this machine.',
+		});
+	}
+	return url;
 }
 
 /**
@@ -94,9 +109,21 @@ export async function vestiarionList(
 	return options.returnAll ? records : records.slice(0, options.limit);
 }
 
-/** `2026-10-31T00:00:00.000+02:00` as `2026-10-31`: a day as the API takes one. Null when it is not a day. */
-export function dayOf(value: unknown): string | null {
-	if (typeof value !== 'string') return null;
-	const day = value.trim().slice(0, 10);
+/**
+ * A day as the API takes one, `YYYY-MM-DD`, from what a date field gives: a string such as
+ * `2026-10-31T00:00:00.000+02:00`, a Luxon DateTime, as an expression like `{{ $now.plus({ days: 30 }) }}` gives, in its
+ * own zone, or a JavaScript Date, read in the workflow's time zone. Null when it is not a day.
+ */
+export function dayOf(value: unknown, timeZone: string): string | null {
+	let text: unknown = value;
+	if (value instanceof Date) {
+		if (Number.isNaN(value.getTime())) return null;
+		// en-CA writes a date as YYYY-MM-DD.
+		text = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(value);
+	} else if (typeof value === 'object' && value !== null && typeof (value as { toISODate?: unknown }).toISODate === 'function') {
+		text = (value as { toISODate: () => string | null }).toISODate();
+	}
+	if (typeof text !== 'string') return null;
+	const day = text.trim().slice(0, 10);
 	return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : null;
 }

@@ -11,7 +11,7 @@ import path from "node:path";
  *   npm run n8n:pack
  *
  * A version already packed is never packed again: its bytes may already be on npm, or in someone's n8n.
- * n8n/test/package.test.ts fails while the committed tarball is not what n8n/ builds.
+ * n8n/test/package.test.mts fails while the committed tarball is not what n8n/ builds.
  */
 const root = path.resolve(import.meta.dirname, "..");
 const pkgDir = path.join(root, "n8n");

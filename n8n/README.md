@@ -22,7 +22,7 @@ One **Vestiarion API** credential:
 | Field | What to put |
 | --- | --- |
 | API Key | A workspace API key, from the workspace's Settings page, under **API keys**. Adding bills needs one that can also add records. |
-| Base URL | `https://www.vestiarion.xyz`, unless you run your own deployment. |
+| Base URL | `https://www.vestiarion.xyz`, unless you run your own deployment. It must be https; plain http works only for localhost. |
 | Webhook Signing Secret | For the trigger only: the secret Settings shows once when you add the webhook endpoint, `whsec_` included. |
 
 n8n tests the credential with `GET /api/v1/status`. The key is sent as `Authorization: Bearer`, and the signing secret is
@@ -40,7 +40,11 @@ never sent anywhere.
 | Workspace | Get Status | `GET /api/v1/status` |
 
 A bill is decided by the agent as one typed into Vestiarion's console, with every guardrail. Give an **Idempotency Key**,
-such as the invoice's ID in the tool it comes from, so a rerun cannot add it twice.
+such as the invoice's ID in the tool it comes from, so a rerun within 24 hours adds it once.
+
+Each Get Many has **Simplify**, on by default: a bill, a counterparty or a decision without the fields a workflow rarely
+maps, hashes and signatures included. Decision: Get Many reads oldest first; for a scheduled read, pass the highest `seq`
+handled as **After Seq**, and the last `cursor` as **After Cursor**.
 
 ## The trigger
 

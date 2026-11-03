@@ -9,6 +9,7 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import { COUNTERPARTY_ROLE_OPTIONS, INVOICE_STATUS_OPTIONS, LEDGER_DOMAIN_OPTIONS, RISK_LEVEL_OPTIONS } from './constants';
 import { dayOf, vestiarionList, vestiarionRequest } from './GenericFunctions';
 
 /**
@@ -17,13 +18,17 @@ import { dayOf, vestiarionList, vestiarionRequest } from './GenericFunctions';
  * API key. It never approves or pays: no key can.
  */
 
-const INVOICE_STATUSES = ['pending', 'matched', 'scheduled', 'paid', 'held', 'flagged', 'awaiting_info', 'received', 'rejected'];
-const COUNTERPARTY_ROLES = ['vendor', 'client', 'contractor'];
-const COUNTERPARTY_RISK_LEVELS = ['unscreened', 'clear', 'medium', 'high'];
-const LEDGER_DOMAINS = ['ap', 'ar', 'contractor', 'treasury', 'compliance', 'system'];
 const UUID = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 
-const options = (values: string[]) => values.map((value) => ({ name: value.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()), value }));
+/** The Simplify switch every Get Many has, as n8n's UX guidelines ask of answers over ten fields. */
+const simplifyField = (resource: string): INodeTypeDescription['properties'][number] => ({
+	displayName: 'Simplify',
+	name: 'simplify',
+	type: 'boolean',
+	displayOptions: { show: { resource: [resource], operation: ['getAll'] } },
+	default: true,
+	description: 'Whether to return a simplified version of the response instead of the raw data',
+});
 
 /** The paging fields every Get Many takes. */
 const pageFields = (resource: string, operation = 'getAll'): INodeTypeDescription['properties'] => [
@@ -46,7 +51,7 @@ const pageFields = (resource: string, operation = 'getAll'): INodeTypeDescriptio
 	},
 ];
 
-const counterpartyLocator = (resource: string, operation: string, description: string): INodeTypeDescription['properties'][number] => ({
+const counterpartyLocator = (resource: string, operation: string, description: string, searchListMethod: string): INodeTypeDescription['properties'][number] => ({
 	displayName: 'Counterparty',
 	name: 'counterparty',
 	type: 'resourceLocator',
@@ -59,7 +64,7 @@ const counterpartyLocator = (resource: string, operation: string, description: s
 			displayName: 'From List',
 			name: 'list',
 			type: 'list',
-			typeOptions: { searchListMethod: 'searchCounterparties', searchable: true },
+			typeOptions: { searchListMethod, searchable: true },
 		},
 		{
 			displayName: 'By ID',
@@ -139,7 +144,7 @@ export class Vestiarion implements INodeType {
 						name: 'Get Many',
 						value: 'getAll',
 						action: 'Get many decisions',
-						description: 'List the ledger entries the agent signed, oldest first, with its reasoning',
+						description: 'List the ledger entries the agent signed, oldest first, with its reasoning. For decisions as they happen, use the Vestiarion Trigger.',
 					},
 				],
 				default: 'getAll',
@@ -162,7 +167,7 @@ export class Vestiarion implements INodeType {
 			},
 
 			// Bill: Create
-			counterpartyLocator('bill', 'create', 'The vendor the bill is from'),
+			counterpartyLocator('bill', 'create', 'The vendor or contractor the bill is from', 'searchPayees'),
 			{
 				displayName: 'Amount',
 				name: 'amount',
@@ -229,7 +234,7 @@ export class Vestiarion implements INodeType {
 						type: 'string',
 						default: '',
 						placeholder: 'billing-inv-2026-0042',
-						description: 'Your own record\'s ID, such as the invoice\'s ID in the tool it comes from, so a rerun cannot add the bill twice',
+						description: 'Your own record\'s ID, such as the invoice\'s ID in the tool it comes from, so a rerun within 24 hours adds the bill once. Up to 255 characters, with no spaces. The API keeps a key for 24 hours.',
 					},
 					{
 						displayName: 'Memo',
@@ -259,12 +264,13 @@ export class Vestiarion implements INodeType {
 				displayOptions: { show: { resource: ['bill'], operation: ['getAll'] } },
 				options: [
 					{ displayName: 'Counterparty ID', name: 'counterpartyId', type: 'string', default: '', description: 'Only bills from this counterparty' },
-					{ displayName: 'Status', name: 'status', type: 'options', options: options(INVOICE_STATUSES), default: 'held', description: 'Only bills in this status' },
+					{ displayName: 'Status', name: 'status', type: 'options', options: INVOICE_STATUS_OPTIONS, default: 'held', description: 'Only bills in this status' },
 				],
 			},
+			simplifyField('bill'),
 
 			// Counterparty: Get, Get Many
-			counterpartyLocator('counterparty', 'get', 'The counterparty to get'),
+			counterpartyLocator('counterparty', 'get', 'The counterparty to get', 'searchCounterparties'),
 			...pageFields('counterparty'),
 			{
 				displayName: 'Filters',
@@ -274,10 +280,11 @@ export class Vestiarion implements INodeType {
 				default: {},
 				displayOptions: { show: { resource: ['counterparty'], operation: ['getAll'] } },
 				options: [
-					{ displayName: 'Risk Level', name: 'riskLevel', type: 'options', options: options(COUNTERPARTY_RISK_LEVELS), default: 'high' },
-					{ displayName: 'Role', name: 'role', type: 'options', options: options(COUNTERPARTY_ROLES), default: 'vendor' },
+					{ displayName: 'Risk Level', name: 'riskLevel', type: 'options', options: RISK_LEVEL_OPTIONS, default: 'high' },
+					{ displayName: 'Role', name: 'role', type: 'options', options: COUNTERPARTY_ROLE_OPTIONS, default: 'vendor' },
 				],
 			},
+			simplifyField('counterparty'),
 
 			// Decision: Get Many
 			...pageFields('decision'),
@@ -294,30 +301,32 @@ export class Vestiarion implements INodeType {
 						name: 'cursor',
 						type: 'string',
 						default: '',
-						description: 'Continue from a cursor an earlier read gave, as the last item\'s cursor field. Entries come oldest first.',
+						description: 'Start from a cursor an earlier read gave, its last item\'s cursor field, rather than from the first entry. It can be empty: a read that fits on one page has none.',
 					},
-					{ displayName: 'Domain', name: 'domain', type: 'options', options: options(LEDGER_DOMAINS), default: 'ap', description: 'Only decisions in this domain: ap is bills' },
+					{
+						displayName: 'After Seq',
+						name: 'afterSeq',
+						type: 'number',
+						typeOptions: { minValue: 0 },
+						default: 0,
+						description: 'Leave out entries up to this seq, such as the highest one an earlier run handled, so a scheduled read returns only what is new. 0 leaves none out.',
+					},
+					{ displayName: 'Domain', name: 'domain', type: 'options', options: LEDGER_DOMAIN_OPTIONS, default: 'ap', description: 'Only decisions in this domain' },
 				],
 			},
+			simplifyField('decision'),
 		],
 	};
 
 	methods = {
 		listSearch: {
-			/** Counterparties by name, page by page as the API pages them; the search filters each page. */
+			/** Every counterparty by name, page by page as the API pages them; the search filters each page. */
 			async searchCounterparties(this: ILoadOptionsFunctions, filter?: string, paginationToken?: string): Promise<INodeListSearchResult> {
-				const answer = await vestiarionRequest.call(this, 'GET', '/api/v1/counterparties', {
-					qs: { limit: 200, ...(paginationToken ? { cursor: paginationToken } : {}) },
-				});
-				const wanted = (filter ?? '').trim().toLowerCase();
-				const records = (Array.isArray(answer.data) ? answer.data : []) as IDataObject[];
-				const page = (answer.page ?? {}) as IDataObject;
-				return {
-					results: records
-						.filter((record) => wanted === '' || String(record.name).toLowerCase().includes(wanted))
-						.map((record) => ({ name: `${String(record.name)} (${String(record.role)})`, value: String(record.id) })),
-					paginationToken: page.hasMore === true && typeof page.nextCursor === 'string' ? page.nextCursor : undefined,
-				};
+				return searchPage.call(this, filter, paginationToken, () => true);
+			},
+			/** The counterparties a bill can be from: vendors and contractors, not clients. */
+			async searchPayees(this: ILoadOptionsFunctions, filter?: string, paginationToken?: string): Promise<INodeListSearchResult> {
+				return searchPage.call(this, filter, paginationToken, (record) => record.role !== 'client');
 			},
 		},
 	};
@@ -336,16 +345,19 @@ export class Vestiarion implements INodeType {
 				} else if (resource === 'bill' && operation === 'getAll') {
 					const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
 					results = await vestiarionList.call(this, '/api/v1/invoices', { direction: 'payable', ...pick(filters, ['status', 'counterpartyId']) }, page(this, i));
+					if (this.getNodeParameter('simplify', i, true) === true) results = results.map(simpleBill);
 				} else if (resource === 'counterparty' && operation === 'get') {
-					const id = this.getNodeParameter('counterparty', i, '', { extractValue: true }) as string;
+					const id = String(this.getNodeParameter('counterparty', i, '', { extractValue: true }) ?? '').trim();
 					const answer = await vestiarionRequest.call(this, 'GET', `/api/v1/counterparties/${encodeURIComponent(id)}`, { itemIndex: i });
 					results = [answer.data as IDataObject];
 				} else if (resource === 'counterparty' && operation === 'getAll') {
 					const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
 					results = await vestiarionList.call(this, '/api/v1/counterparties', pick(filters, ['role', 'riskLevel']), page(this, i));
+					if (this.getNodeParameter('simplify', i, true) === true) results = results.map(simpleCounterparty);
 				} else if (resource === 'decision' && operation === 'getAll') {
 					const extra = this.getNodeParameter('options', i, {}) as IDataObject;
 					results = await decisions.call(this, i, extra);
+					if (this.getNodeParameter('simplify', i, true) === true) results = results.map(simpleDecision);
 				} else if (resource === 'workspace' && operation === 'getStatus') {
 					const answer = await vestiarionRequest.call(this, 'GET', '/api/v1/status', { itemIndex: i });
 					results = [answer.data as IDataObject];
@@ -381,21 +393,27 @@ function pick(source: IDataObject, keys: string[]): IDataObject {
 
 /** POST /api/v1/invoices as a payable, with its Idempotency-Key when one is given. */
 async function createBill(this: IExecuteFunctions, i: number): Promise<IDataObject> {
-	const counterpartyId = (this.getNodeParameter('counterparty', i, '', { extractValue: true }) as string).trim();
+	const counterpartyId = String(this.getNodeParameter('counterparty', i, '', { extractValue: true }) ?? '').trim();
+	const timeZone = this.getTimezone();
 	const amount = String(this.getNodeParameter('amount', i, '')).trim();
-	const dueDate = dayOf(this.getNodeParameter('dueDate', i, ''));
+	const dueDate = dayOf(this.getNodeParameter('dueDate', i, ''), timeZone);
 	const currency = this.getNodeParameter('currency', i, 'USDC') as string;
 	const extra = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
 	if (counterpartyId === '') throw new NodeOperationError(this.getNode(), 'Choose the counterparty the bill is from', { itemIndex: i });
 	if (amount === '') throw new NodeOperationError(this.getNode(), 'Give the bill\'s amount, such as 1250.50', { itemIndex: i });
-	if (!dueDate) throw new NodeOperationError(this.getNode(), 'Give the bill\'s due date', { itemIndex: i });
+	if (!dueDate) {
+		throw new NodeOperationError(this.getNode(), 'Give the bill\'s due date as a date, such as 2026-11-30', {
+			itemIndex: i,
+			description: `The field holds ${shown(this.getNodeParameter('dueDate', i, ''))}, which is not a date.`,
+		});
+	}
 
 	const body: IDataObject = { direction: 'payable', counterpartyId, amount, currency, dueDate };
 	if (typeof extra.poReference === 'string' && extra.poReference.trim() !== '') body.poReference = extra.poReference.trim();
 	if (typeof extra.memo === 'string' && extra.memo.trim() !== '') body.memo = extra.memo.trim();
 	if (extra.goodsReceived !== undefined) body.goodsReceived = extra.goodsReceived === true;
 	const percent = typeof extra.discountPercent === 'number' && extra.discountPercent > 0 ? extra.discountPercent : null;
-	const deadline = dayOf(extra.discountDeadline);
+	const deadline = dayOf(extra.discountDeadline, timeZone);
 	if ((percent === null) !== (deadline === null)) {
 		throw new NodeOperationError(this.getNode(), 'An early-payment discount needs both its percent and its deadline', { itemIndex: i });
 	}
@@ -417,17 +435,100 @@ async function decisions(this: IExecuteFunctions, i: number, extra: IDataObject)
 	const seen = new Set<string>();
 	let cursor = typeof extra.cursor === 'string' && extra.cursor.trim() !== '' ? extra.cursor.trim() : undefined;
 	const qs: IDataObject = { actor: 'agent', ...(typeof extra.domain === 'string' && extra.domain !== '' ? { domain: extra.domain } : {}) };
+	const afterSeq = typeof extra.afterSeq === 'number' && Number.isFinite(extra.afterSeq) ? extra.afterSeq : 0;
 	for (;;) {
 		const wanted = returnAll ? 200 : Math.min(200, limit - records.length);
 		const answer = await vestiarionRequest.call(this, 'GET', '/api/v1/ledger', { qs: { ...qs, limit: wanted, ...(cursor ? { cursor } : {}) }, itemIndex: i });
 		const pageInfo = (answer.page ?? {}) as IDataObject;
 		const next = typeof pageInfo.nextCursor === 'string' ? pageInfo.nextCursor : null;
 		// The ledger's cursor is a watermark: reading from it again returns nothing before it, so each entry carries it.
-		for (const entry of (Array.isArray(answer.data) ? answer.data : []) as IDataObject[]) records.push({ ...entry, cursor: next ?? cursor ?? null });
+		for (const entry of (Array.isArray(answer.data) ? answer.data : []) as IDataObject[]) {
+			if (afterSeq > 0 && typeof entry.seq === 'number' && entry.seq <= afterSeq) continue;
+			records.push({ ...entry, cursor: next ?? cursor ?? null });
+		}
 		if (pageInfo.hasMore !== true || !next || seen.has(next)) break;
 		if (!returnAll && records.length >= limit) break;
 		seen.add(next);
 		cursor = next;
 	}
 	return returnAll ? records : records.slice(0, limit);
+}
+
+/** One page of the counterparty picker: the API's page, filtered by the search and `keep`. */
+async function searchPage(
+	this: ILoadOptionsFunctions,
+	filter: string | undefined,
+	paginationToken: string | undefined,
+	keep: (record: IDataObject) => boolean,
+): Promise<INodeListSearchResult> {
+	const answer = await vestiarionRequest.call(this, 'GET', '/api/v1/counterparties', {
+		qs: { limit: 200, ...(paginationToken ? { cursor: paginationToken } : {}) },
+	});
+	const wanted = (filter ?? '').trim().toLowerCase();
+	const records = (Array.isArray(answer.data) ? answer.data : []) as IDataObject[];
+	const page = (answer.page ?? {}) as IDataObject;
+	return {
+		results: records
+			.filter((record) => keep(record) && (wanted === '' || String(record.name).toLowerCase().includes(wanted)))
+			.map((record) => ({ name: `${String(record.name)} (${String(record.role)})`, value: String(record.id) })),
+		paginationToken: page.hasMore === true && typeof page.nextCursor === 'string' ? page.nextCursor : undefined,
+	};
+}
+
+/** A value as a person can read it in an error, short. */
+function shown(value: unknown): string {
+	const text = typeof value === 'string' ? JSON.stringify(value) : value === null || value === undefined ? 'nothing' : JSON.stringify(value) ?? String(value);
+	return text.length > 60 ? `${text.slice(0, 57)}...` : text;
+}
+
+const object = (value: unknown): IDataObject => (typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as IDataObject) : {});
+
+/** A bill's fields a workflow most often maps, from its twenty. */
+function simpleBill(bill: IDataObject): IDataObject {
+	const counterparty = object(bill.counterparty);
+	return {
+		id: bill.id,
+		status: bill.status,
+		amount: bill.amount,
+		currency: bill.currency,
+		dueDate: bill.dueDate,
+		counterpartyId: counterparty.id ?? null,
+		counterparty: counterparty.name ?? null,
+		poReference: bill.poReference,
+		goodsReceived: bill.goodsReceived,
+		agentReasoning: bill.agentReasoning,
+		decidedAt: bill.decidedAt,
+		settledAt: bill.settledAt,
+		txHash: bill.txHash,
+	};
+}
+
+function simpleCounterparty(counterparty: IDataObject): IDataObject {
+	return {
+		id: counterparty.id,
+		name: counterparty.name,
+		role: counterparty.role,
+		address: counterparty.address,
+		chain: counterparty.chain,
+		riskLevel: counterparty.riskLevel,
+		paymentLimit: counterparty.paymentLimit,
+		lastScreenedAt: counterparty.lastScreenedAt,
+	};
+}
+
+/** A decision without its hashes and signature: what it was, about what, and why. */
+function simpleDecision(entry: IDataObject): IDataObject {
+	const detail = object(entry.detail);
+	const decision = object(detail.decision);
+	return {
+		seq: entry.seq,
+		ts: entry.ts,
+		domain: entry.domain,
+		action: entry.action,
+		summary: entry.summary,
+		reasoning: typeof decision.reasoning === 'string' ? decision.reasoning : null,
+		invoiceId: detail.invoiceId ?? null,
+		milestoneId: detail.milestoneId ?? null,
+		cursor: entry.cursor,
+	};
 }

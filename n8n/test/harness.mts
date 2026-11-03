@@ -38,7 +38,7 @@ export function api(routes: Record<string, Route>) {
 }
 
 /** An IExecuteFunctions for one run: each item's parameters, by name. */
-export function executeContext(items: Array<Record<string, unknown>>, transport: ReturnType<typeof api>, options: { continueOnFail?: boolean } = {}) {
+export function executeContext(items: Array<Record<string, unknown>>, transport: ReturnType<typeof api>, options: { continueOnFail?: boolean; credentials?: Record<string, unknown> } = {}) {
 	return {
 		getInputData: () => items.map(() => ({ json: {} })),
 		getNodeParameter(name: string, index: number, fallback?: unknown, extra?: { extractValue?: boolean }) {
@@ -46,8 +46,9 @@ export function executeContext(items: Array<Record<string, unknown>>, transport:
 			if (extra?.extractValue && typeof value === 'object' && value !== null && 'value' in value) return (value as { value: unknown }).value;
 			return value;
 		},
-		getCredentials: async () => CREDENTIALS,
+		getCredentials: async () => options.credentials ?? CREDENTIALS,
 		getNode: () => NODE,
+		getTimezone: () => 'Asia/Ho_Chi_Minh',
 		continueOnFail: () => options.continueOnFail === true,
 		helpers: { httpRequestWithAuthentication: transport.httpRequestWithAuthentication },
 	};
