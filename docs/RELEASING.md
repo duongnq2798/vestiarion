@@ -262,4 +262,6 @@ on npmjs.com: the package's **Settings**, then **Trusted Publisher**, then **Git
 
 A self-hosted n8n installs the package by name, under **Settings** > **Community nodes**. n8n Cloud lists only verified
 nodes: a version published this way is submitted at https://creators.n8n.io/nodes, whose review takes up to four weeks.
-0.1.0 was published from a laptop, without provenance, so 0.1.1 is the first version that can be submitted.
+0.1.0 was published from a laptop, without provenance, so 0.1.1 is the first version that can be submitted. The
+Creator Portal confirms ownership with a one-time code sent to the package's `author.email`, so that address must
+receive mail: 0.1.2 fixed one that did not.
