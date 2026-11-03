@@ -42,6 +42,7 @@ export const GUIDE_VIDEOS: readonly GuideVideo[] = [
   { guide: "guides/evidence", title: "Evidence and the audit export", duration: "0:56", also: ["guides/audit-export"] },
   { guide: "guides/xero", title: "Bills from Xero, decided by the agent", duration: "1:52" },
   { guide: "guides/hubspot", title: "A deal from HubSpot, collected on Arc", duration: "1:55" },
+  { guide: "get-started/n8n", title: "The Vestiarion nodes in n8n", duration: "4:23" },
 ];
 
 /**

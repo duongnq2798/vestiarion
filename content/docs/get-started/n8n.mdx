@@ -6,6 +6,48 @@ The Vestiarion nodes connect a workspace to [n8n](https://n8n.io), the workflow 
 
 They are one package, [@vestiarion/n8n-nodes-vestiarion on npm](https://www.npmjs.com/package/@vestiarion/n8n-nodes-vestiarion), and they call this [API](/docs/api) with a workspace API key. They work the same on Arc testnet and on Arc mainnet.
 
+## Watch it
+
+Under four and a half minutes, in one take with no sound: the nodes installed from npm, a credential tested, a bill added, the agent's decisions read, the node as an AI agent's tool, and the trigger's filters. The sections below go through each part in full.
+
+<Video
+  src="/docs/videos/n8n-flow.mp4"
+  poster="/docs/videos/n8n-flow-poster.jpg"
+  title="The Vestiarion nodes in n8n"
+  duration="4:23"
+  caption="The live product on Arc testnet, with demo data in the team's own workspace, through version 0.1.2 of the nodes in a local n8n 2.45.7. One take with no cuts and no sound. Recorded Nov 3, 2026."
+>
+
+The Vestiarion nodes in n8n, in one take.
+
+In n8n, open Settings, then Community nodes, and install @vestiarion/n8n-nodes-vestiarion. It is listed at version 0.1.2, with its two nodes.
+
+Create a workflow with a manual trigger, and add the Vestiarion node with Bill, then Create.
+
+Create a new Vestiarion API credential from the node. The workspace API key is pasted in, and shows masked. The Base URL stays https://www.vestiarion.xyz.
+
+n8n tests the credential when it is saved: Connection tested successfully.
+
+Pick the counterparty from the workspace's list of vendors and contractors, then an amount of 12.50 USDC and a due date 30 days ahead. There is no PO reference, so the agent will ask for the missing detail rather than pay.
+
+Execute the step. The output is the bill the API added, pending, for the agent to decide.
+
+Add a second Vestiarion node: Decision, then Get Many, with a limit of 3 and Simplify on.
+
+Execute it. The output is the agent's signed decisions, each with its seq, time, action, summary and the cursor to continue from.
+
+In a new workflow, a chat trigger and an AI Agent on the Anthropic Chat Model, with the Vestiarion node as its tool: Decision, then Get Many.
+
+Ask in the chat what the Vestiarion agent has decided, and why. The AI agent calls the Vestiarion tool, and answers from the decisions it read.
+
+Last, the Vestiarion Trigger: its setup notice, then Events on Agent Decisions, Domains on Bills, and Actions ap_hold and ap_flag_fraud. It is not activated here.
+
+vestiarion.xyz/docs/get-started/n8n
+
+</Video>
+
+The same video is [on YouTube](https://youtu.be/tQ4IKHBVGZA).
+
 ## Install
 
 In a self-hosted n8n, a user with the owner or admin role installs it:

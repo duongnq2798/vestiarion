@@ -93,7 +93,7 @@ describe("the guides' videos", () => {
   it("are in the guides GUIDE_VIDEOS names, one each with its title and length, and nowhere else", () => {
     const byFile = (a: string[], b: string[]) => a[0].localeCompare(b[0]);
     expect(USES.map((use) => [use.file, use.src!, use.title!, use.duration!]).sort(byFile)).toEqual(
-      GUIDE_VIDEOS.map((video) => [`${video.guide}.mdx`, `${VIDEO_DIR}${video.guide.replace(/^guides\//, "")}-flow.mp4`, video.title, video.duration]).sort(byFile)
+      GUIDE_VIDEOS.map((video) => [`${video.guide}.mdx`, `${VIDEO_DIR}${video.guide.replace(/^.*\//, "")}-flow.mp4`, video.title, video.duration]).sort(byFile)
     );
     // Every `<Video` is one the list above read: none is self-closing, without its transcript.
     const opened = MDX.flatMap((file) => [...readFileSync(file, "utf8").matchAll(/<Video\b/g)]);
