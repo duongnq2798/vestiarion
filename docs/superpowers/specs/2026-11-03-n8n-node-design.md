@@ -201,3 +201,25 @@ Code comments and test names cite the ids, for example "(n8n N4)".
   - The six deliveries above gave the same answers.
 - At start, n8n 2.45 warns that `N8N_UNVERIFIED_PACKAGES_ENABLED` will default to `false` in a future version. The
   docs tell a self-hosted owner to set it to `true` to install this package until it is verified.
+
+## Verification (2026-11-03, 0.1.1)
+
+n8n Cloud installs only nodes n8n has verified. The checks behind it are in `@n8n/scan-community-package` 0.41.1:
+- **Provenance.** The version's `dist.attestations.provenance` must be an SLSA v1 attestation.
+- **The attested source.** The scanner downloads the commit the attestation names from GitHub. It finds the
+  `package.json` whose name is the package's, `**/package.json`, so a package in a subfolder such as `n8n/` is found.
+  It then lints that folder's `package.json`, `nodes/` and `credentials/` with n8n's rules, and lints the tarball's
+  built `.js`.
+
+0.1.0 was published from a laptop, so it has no attestation and cannot pass. 0.1.1 changes only the README, adding
+Usage, Resources and a version history, as n8n's guidelines ask. It is published by `.github/workflows/n8n-publish.yml`:
+- It is run by hand, on `main` only.
+- A check job refuses a version that is not `n8n/package.json`'s, has no committed tarball, or is already on npm. Then
+  it lints, builds and tests.
+- A publish job with `id-token: write` hands npm the checked tarball with `--provenance`, running no code from the
+  repository.
+- npm accepts it by trusted publishing (OIDC), which an owner sets up once for the package on npmjs.com. No token is
+  stored.
+
+The submission at creators.n8n.io is the owner's.
+

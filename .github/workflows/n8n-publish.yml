@@ -1,0 +1,133 @@
+name: Publish the n8n nodes
+
+# Publishes n8n/'s committed tarball, public/n8n/vestiarion-n8n-nodes-vestiarion-<version>.tgz, to npm with provenance
+# (docs/RELEASING.md, "The n8n nodes"). n8n verifies a community package only when npm holds a provenance attestation
+# from a public repository's GitHub Actions run, and its scanner lints the source at the attested commit. Run by hand,
+# on main:
+#
+#   gh workflow run n8n-publish.yml -f version=0.1.1 -f dry_run=true    # check, publish nothing
+#   gh workflow run n8n-publish.yml -f version=0.1.1                     # check, then publish
+#
+# npm takes the publish from this workflow by trusted publishing (OIDC): an owner of the package names this repository
+# and this file under the package's Settings > Trusted Publisher on npmjs.com. No npm token is stored anywhere. The first
+# job reads and checks; only the second can publish, and it runs no code from the repository: it hands npm the tarball
+# the first job checked.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The version to publish: n8n/package.json's, not yet on npm"
+        required: true
+        type: string
+      dry_run:
+        description: "Check everything and publish nothing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One publish at a time, and never cancelled halfway.
+concurrency:
+  group: n8n-publish
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  check:
+    name: Check the package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run this workflow on main: provenance names the commit, and n8n's scanner lints the source there."
+          exit 1
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: n8n/package-lock.json
+
+      - name: The version is n8n/package.json's, and not on npm yet
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must be X.Y.Z, such as 0.1.1."
+            exit 1
+          fi
+          declared=$(node -p "require('./n8n/package.json').version")
+          if [ "$declared" != "$VERSION" ]; then
+            echo "::error::n8n/package.json is $declared, not $VERSION."
+            exit 1
+          fi
+          if [ ! -f "public/n8n/vestiarion-n8n-nodes-vestiarion-$VERSION.tgz" ]; then
+            echo "::error::public/n8n/vestiarion-n8n-nodes-vestiarion-$VERSION.tgz is not committed: run npm run n8n:pack."
+            exit 1
+          fi
+          if npm view "@vestiarion/n8n-nodes-vestiarion@$VERSION" version > /dev/null 2>&1; then
+            echo "::error::@vestiarion/n8n-nodes-vestiarion@$VERSION is already on npm. A version is published once."
+            exit 1
+          fi
+
+      - name: Install
+        working-directory: n8n
+        run: npm ci --no-audit --no-fund
+
+      # The same checks as CI's n8n job: n8n's own lint, the build, and the tests, which hold the committed tarball to
+      # the build.
+      - name: Lint
+        working-directory: n8n
+        run: npm run lint
+
+      - name: Build
+        working-directory: n8n
+        run: npm run build
+
+      - name: Test
+        working-directory: n8n
+        run: npm run test
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: n8n-tarball
+          path: public/n8n/vestiarion-n8n-nodes-vestiarion-${{ inputs.version }}.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to npm with provenance
+    needs: check
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The OIDC token npm's trusted publishing and the provenance attestation are made from.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: n8n-tarball
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - name: npm with trusted publishing
+        run: npm install --global npm@11.21.1 && npm --version
+
+      - name: Publish
+        env:
+          VERSION: ${{ inputs.version }}
+        run: npm publish "vestiarion-n8n-nodes-vestiarion-$VERSION.tgz" --access public --provenance
