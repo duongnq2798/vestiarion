@@ -26,7 +26,7 @@ describe('the credential', () => {
 });
 
 describe('Bill: Create', () => {
-	const base = { resource: 'bill', operation: 'create', counterparty: COUNTERPARTY, amount: '1250.50', dueDate: '2026-11-30T00:00:00', currency: 'USDC' };
+	const base = { resource: 'bill', operation: 'create', counterparty: COUNTERPARTY, amount: '1250.50', dueDate: '2026-11-30T00:00:00' };
 
 	it('adds a payable with POST /api/v1/invoices and outputs the bill the API added', async () => {
 		const transport = api({ 'POST /api/v1/invoices': ok('create-invoice', 201) });
@@ -38,6 +38,20 @@ describe('Bill: Create', () => {
 		expect(request.body).toEqual({ direction: 'payable', counterpartyId: COUNTERPARTY.value, amount: '1250.50', currency: 'USDC', dueDate: '2026-11-30', poReference: 'PO-4012', goodsReceived: true, memo: 'Print run' });
 		expect(request.headers).toMatchObject({ 'Idempotency-Key': 'inv-42' });
 		expect(items).toEqual([{ json: example('create-invoice').data, pairedItem: { item: 0 } }]);
+	});
+
+	it('takes the currency from Additional Fields, USDC when it is not set', async () => {
+		const transport = api({ 'POST /api/v1/invoices': ok('create-invoice', 201) });
+		await run(
+			executeContext(
+				[{ ...base, additionalFields: { currency: 'EURC' } }, { ...base, additionalFields: {} }, { ...base, additionalFields: { currency: ' eurc ' } }],
+				transport,
+			),
+		);
+		// A value the API does not take goes as given, for its 400 to name: never a USDC bill instead.
+		expect(transport.sent.map((sent) => (sent.request.body as IDataObject).currency)).toEqual(['EURC', 'USDC', 'eurc']);
+		const create = node.description.properties.filter((property) => property.displayOptions?.show?.operation?.includes('create'));
+		expect(create.some((property) => property.name === 'currency')).toBe(false);
 	});
 
 	it('sends no Idempotency-Key unless one is given, and an early-payment discount as percent and deadline', async () => {

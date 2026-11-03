@@ -176,7 +176,10 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   published from GitHub Actions with npm provenance, so n8n can verify it for n8n Cloud; 0.1.2 gives it an author email
   that receives mail, where n8n's Creator Portal sends its ownership code. The guide opens with a walkthrough of
   under four and a half minutes, in one take: the nodes installed, a credential tested, a bill added, the decisions
-  read and the node as an AI agent's tool. It is also on [YouTube](https://youtu.be/tQ4IKHBVGZA).
+  read and the node as an AI agent's tool. It is also on [YouTube](https://youtu.be/tQ4IKHBVGZA). 0.1.3 follows n8n's
+  review: the trigger's Domains, Actions and Include Test Deliveries sit in an Options collection, Bill > Create's
+  Currency in Additional Fields, and the trigger's setup steps in the package README rather than a notice on the node.
+  A workflow saved with 0.1.2 needs those fields set again.
   [Guide](https://www.vestiarion.xyz/docs/get-started/n8n).
 
 ### Changed

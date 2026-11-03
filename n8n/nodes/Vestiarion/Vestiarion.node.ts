@@ -188,17 +188,6 @@ export class Vestiarion implements INodeType {
 				displayOptions: { show: { resource: ['bill'], operation: ['create'] } },
 			},
 			{
-				displayName: 'Currency',
-				name: 'currency',
-				type: 'options',
-				options: [
-					{ name: 'USDC', value: 'USDC' },
-					{ name: 'EURC', value: 'EURC' },
-				],
-				default: 'USDC',
-				displayOptions: { show: { resource: ['bill'], operation: ['create'] } },
-			},
-			{
 				displayName: 'Additional Fields',
 				name: 'additionalFields',
 				type: 'collection',
@@ -206,6 +195,17 @@ export class Vestiarion implements INodeType {
 				default: {},
 				displayOptions: { show: { resource: ['bill'], operation: ['create'] } },
 				options: [
+					{
+						displayName: 'Currency',
+						name: 'currency',
+						type: 'options',
+						options: [
+							{ name: 'EURC', value: 'EURC' },
+							{ name: 'USDC', value: 'USDC' },
+						],
+						default: 'USDC',
+						description: 'The currency the bill is in. Without this field, USDC.',
+					},
 					{
 						displayName: 'Early-Payment Discount Deadline',
 						name: 'discountDeadline',
@@ -397,8 +397,9 @@ async function createBill(this: IExecuteFunctions, i: number): Promise<IDataObje
 	const timeZone = this.getTimezone();
 	const amount = String(this.getNodeParameter('amount', i, '')).trim();
 	const dueDate = dayOf(this.getNodeParameter('dueDate', i, ''), timeZone);
-	const currency = this.getNodeParameter('currency', i, 'USDC') as string;
 	const extra = this.getNodeParameter('additionalFields', i, {}) as IDataObject;
+	// Not set is USDC. Anything else goes as given, so the API's 400 names a wrong one rather than a USDC bill.
+	const currency = String(extra.currency ?? '').trim() || 'USDC';
 	if (counterpartyId === '') throw new NodeOperationError(this.getNode(), 'Choose the counterparty the bill is from', { itemIndex: i });
 	if (amount === '') throw new NodeOperationError(this.getNode(), 'Give the bill\'s amount, such as 1250.50', { itemIndex: i });
 	if (!dueDate) {
