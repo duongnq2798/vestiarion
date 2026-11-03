@@ -85,6 +85,7 @@ Built and tested against n8n 2.45 (`n8n-workflow` 2.45.4). Node 24 or later, as 
 
 ## Version history
 
+- **0.1.2**: the package's author email is one that receives mail, which n8n's Creator Portal writes to.
 - **0.1.1**: the first version published from GitHub Actions with npm provenance, for n8n's verified listing. This
   README gains Usage, Resources and this history. The nodes are unchanged.
 - **0.1.0**: the Vestiarion node and the Vestiarion Trigger.
