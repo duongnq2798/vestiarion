@@ -174,7 +174,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   or Every Ledger Entry, by domain and action) `200`, so it is not sent again. The webhook endpoint is added by hand in
   Settings, and must be public HTTPS. No migration, no API change. 0.1.1, the same nodes with a fuller README, is
   published from GitHub Actions with npm provenance, so n8n can verify it for n8n Cloud; 0.1.2 gives it an author email
-  that receives mail, where n8n's Creator Portal sends its ownership code.
+  that receives mail, where n8n's Creator Portal sends its ownership code. The guide opens with a walkthrough of
+  under four and a half minutes, in one take: the nodes installed, a credential tested, a bill added, the decisions
+  read and the node as an AI agent's tool. It is also on [YouTube](https://youtu.be/tQ4IKHBVGZA).
   [Guide](https://www.vestiarion.xyz/docs/get-started/n8n).
 
 ### Changed
