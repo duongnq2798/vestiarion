@@ -1,0 +1,158 @@
+The Vestiarion nodes connect a workspace to [n8n](https://n8n.io), the workflow tool. They do three things:
+
+- **Add bills from your other tools.** A form, an inbox, a spreadsheet row or an accounting tool becomes a bill for the agent to decide.
+- **Read what the agent decided.** Bills, counterparties, the workspace's status, and the agent's decisions with its reasoning.
+- **Start a workflow on each decision.** The Vestiarion Trigger receives the signed ledger entry the moment the agent writes it, and checks its signature before anything runs.
+
+They are one package, [@vestiarion/n8n-nodes-vestiarion on npm](https://www.npmjs.com/package/@vestiarion/n8n-nodes-vestiarion), and they call this [API](/docs/api) with a workspace API key. They work the same on Arc testnet and on Arc mainnet.
+
+## Install
+
+In a self-hosted n8n, a user with the owner or admin role installs it:
+
+1. Open **Settings**, then **Community nodes**.
+2. Choose **Install**, and enter `@vestiarion/n8n-nodes-vestiarion`.
+3. Tick that you understand the risks of installing community nodes, and choose **Install**.
+
+The nodes then appear in the nodes panel: search for **Vestiarion**. They are built and tested against n8n 2.45.
+
+n8n installs community packages it has not verified only while `N8N_UNVERIFIED_PACKAGES_ENABLED` is `true`. That is the default today, and n8n has said it will change to `false` in a future version: set it to `true` in the instance's environment to keep installing this package.
+
+n8n Cloud lists only community nodes n8n has verified. This package is not verified yet, so on n8n Cloud, use the [HTTP Request node](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/) with the [API](/docs/api) for now.
+
+The site serves the same package, byte for byte: [vestiarion-n8n-nodes-vestiarion-0.1.0.tgz](https://www.vestiarion.xyz/n8n/vestiarion-n8n-nodes-vestiarion-0.1.0.tgz).
+
+## Credentials
+
+Create one **Vestiarion API** credential. It has three fields:
+
+| Field | What to put |
+| --- | --- |
+| **API Key** | A [workspace API key](/docs/get-started/authentication). An owner or an admin creates one on the workspace's Settings page, under **API keys**. Adding bills needs one that can also add records; reading needs only a read-only one. |
+| **Base URL** | `https://www.vestiarion.xyz`. Change it only for your own deployment. It must be https: the node refuses plain http, except to `localhost`, so the key never crosses a network in the clear. |
+| **Webhook Signing Secret** | For the Vestiarion Trigger only: the signing secret Settings shows once when you add the webhook endpoint, `whsec_` included. Leave it empty if you use only the Vestiarion node. |
+
+n8n tests the credential with one read, `GET /api/v1/status`, and says whether the key works. The key is sent as `Authorization: Bearer`, never in a URL. The signing secret is never sent anywhere: the trigger uses it to check signatures.
+
+## The Vestiarion node
+
+Each operation calls one [API operation](/docs/api), and nothing the API does not have.
+
+| Resource | Operation | API operation |
+| --- | --- | --- |
+| Bill | Create | [Add an invoice](/docs/api/create-invoice), as a payable |
+| Bill | Get Many | [List invoices](/docs/api/list-invoices), payables only |
+| Counterparty | Get | [Get a counterparty](/docs/api/get-counterparty) |
+| Counterparty | Get Many | [List counterparties](/docs/api/list-counterparties) |
+| Decision | Get Many | [List ledger entries](/docs/api/list-ledger-entries) the agent wrote |
+| Workspace | Get Status | [Get workspace status](/docs/api/get-status) |
+
+No operation approves, rejects or pays: no key can. The node can also be a tool of an n8n AI agent, with the same operations.
+
+### Create a bill
+
+- **Counterparty**: the vendor or contractor the bill is from. Pick it from the list, which searches the workspace's vendors and contractors by name, or give its ID.
+- **Amount**: as text, such as `1250.50`, so it stays exact. At most 6 decimal places.
+- **Due Date**: the day the bill is due. A date from the picker, a date as text, or an expression such as `{{ $now.plus({ days: 30 }) }}`, read in the workflow's time zone.
+- **Currency**: USDC, the default, or EURC.
+- **Additional Fields**:
+  - **PO Reference** and **Goods Received**. Without both, the agent asks for the missing detail instead of paying.
+  - **Memo**, up to 280 characters.
+  - **Early-Payment Discount Percent** and **Deadline**, both or neither.
+  - **Idempotency Key**: your own record's ID, such as the invoice's ID in the tool it comes from. It is sent as the `Idempotency-Key`, so running the same item again within 24 hours adds the bill once: the API keeps a key for 24 hours. Up to 255 characters, with no spaces. Without it, a rerun, or n8n's **Retry On Fail**, adds another bill. A sync that can read the same invoice again days later needs its own record of what it has added, such as a column in the sheet it reads.
+
+The node outputs the bill as the API added it, with its `id` and `status`.
+
+<Callout kind="important" title="An added bill is decided by the agent">
+The agent decides a bill added from n8n as it decides one typed into the console, with every guardrail, usually within a minute. Within its limits it may pay it, on the workspace's network. That is the agent's decision under the workspace's rules; the node itself never approves or pays.
+</Callout>
+
+### Read the agent's decisions
+
+**Decision: Get Many** reads the entries the agent signed into the ledger, oldest first, with the reasoning each one records. **Domain** keeps one domain, such as Bills. With **Simplify** on, the default, each decision is its `seq`, `ts`, `domain`, `action`, `summary`, `reasoning`, `invoiceId` or `milestoneId`, and `cursor`; turn it off for the whole signed entry, hashes and signature included.
+
+To read on a schedule, two options keep each run to what is new:
+
+- **After Seq** leaves out every entry up to that `seq`. Store the highest `seq` a run handled, and pass it next time.
+- **After Cursor** starts the read there rather than at the first entry, so a long ledger is not read again. Each entry carries `cursor` for this. A read from a cursor returns its last page again, as the [ledger's API](/docs/api/list-ledger-entries) says, and a read that fits on one page has no cursor at all, `null`: After Seq still leaves out what you have seen.
+
+For decisions as they happen, use the trigger.
+
+### Errors
+
+An API error stops the node with the API's own message, such as "This key cannot do that." for a read-only key adding a bill, and its status and [code](/docs/get-started/errors), such as `HTTP 403 forbidden`. A `429` adds when to retry. With the node's **On Error** setting at **Continue**, each failed item outputs `{ "error": "..." }`, and the rest go on.
+
+## The Vestiarion Trigger
+
+The trigger starts a workflow on each [webhook delivery](/docs/webhooks) the workspace sends: one for each entry signed into its ledger.
+
+### Set it up
+
+1. Add a **Vestiarion Trigger** to a workflow, with the credential, and copy its **Production URL**.
+2. In Vestiarion, an owner or an admin opens **Settings**, then **Webhooks**, and adds an endpoint with that URL.
+3. Settings shows the endpoint's signing secret once. Copy it into the credential's **Webhook Signing Secret**.
+4. Publish the workflow in n8n, so the Production URL is live.
+
+The API cannot add a webhook endpoint, so step 2 is done by hand, once. Removing the trigger from n8n leaves the endpoint in Settings: delete it there.
+
+Settings takes only an HTTPS URL, on port 443, at a public address. So a self-hosted n8n needs a public HTTPS address in front of it, set as its `N8N_WEBHOOK_URL` as [n8n's docs](https://docs.n8n.io/hosting/configuration/configuration-examples/webhook-url/) describe: its default `http://localhost:5678` cannot receive deliveries. Where n8n cannot be reached from the internet, use a Schedule Trigger with **Decision: Get Many** and its cursor instead.
+
+To try it before you publish, add the trigger's **Test URL** as the endpoint instead. Choose **Listen for test event** in n8n, then **Send test** beside the endpoint in Settings, within two minutes. Settings cannot change an endpoint's URL, so afterwards remove that endpoint and add the Production URL as a new one. The new endpoint has a new signing secret: put it in the credential. Do not leave the Test URL's endpoint in place: every delivery fails while n8n is not listening, and an endpoint that fails 20 times in a row is [disabled](/docs/webhooks/retries).
+
+### Choose what starts the workflow
+
+| Option | What it keeps |
+| --- | --- |
+| **Events** | **Agent Decisions**, the default: entries the agent signed, such as `ap_pay`, `ap_schedule`, `ap_hold`, `ap_flag_fraud` and `ap_request_info` for bills. Or **Every Ledger Entry**: people's and the system's too. |
+| **Domains** | Only these domains: bills (`ap`), receivables (`ar`), contractor milestones, treasury, screening and payees (`compliance`), the workspace (`system`). Empty keeps all. |
+| **Actions** | Only these actions, separated by commas, such as `ap_hold, ap_flag_fraud`. Empty keeps all. |
+| **Include Test Deliveries** | On by default, so **Send test** starts the workflow. A test delivery has no `entry`. |
+
+### What it checks
+
+Before anything runs, the trigger checks the delivery's `Vestiarion-Signature` against its raw body with the signing secret, as [Verifying signatures](/docs/webhooks/verify) describes:
+
+- A signature that does not match, is missing, or is more than 300 seconds from now is answered `401`, and nothing runs. After repeated failures, Vestiarion [disables the endpoint](/docs/webhooks/retries).
+- A credential with no signing secret fails the run with "The credential has no Webhook Signing Secret". The trigger never takes an unsigned delivery.
+- A signed delivery your options leave out is answered `200`, so Vestiarion does not send it again, and nothing runs.
+
+### What it outputs
+
+One item, the delivery as it was signed. Shortened here, `detail` especially:
+
+```json
+{
+  "id": "3fa1e2b0-...",
+  "type": "ledger.appended",
+  "createdAt": "2026-11-03T08:00:00.370366+00:00",
+  "workspace": { "slug": "your-workspace" },
+  "entry": {
+    "seq": 9042,
+    "ts": "2026-11-03T08:00:00.370366+00:00",
+    "actor": "agent",
+    "domain": "ap",
+    "action": "ap_hold",
+    "summary": "HOLD invoice from Harbor Print Co. for 1250.5 USDC",
+    "detail": { "invoiceId": "...", "decision": { "action": "hold", "reasoning": "..." } },
+    "bodyHash": "...",
+    "prevHash": "...",
+    "hash": "...",
+    "signature": "...",
+    "signingKeyId": "9b03458d9a617871"
+  }
+}
+```
+
+The [payload](/docs/webhooks/payload) page describes every field. A delivery can arrive more than once, with the same `id`, as [Delivery guarantees](/docs/webhooks/guarantees) explains: if a repeat would matter, such as a message sent twice, skip an `id` you have handled.
+
+## Two workflows to start from
+
+**Tell the team when the agent holds a bill.** Vestiarion Trigger, with Events **Agent Decisions**, Domains `ap` and Actions `ap_hold, ap_flag_fraud`. Then a Slack or Telegram node, with a message such as `{{ $json.entry.summary }}: {{ $json.entry.detail.decision.reasoning }}`. Vestiarion's own [Slack](/docs/guides/slack) and [Telegram](/docs/guides/telegram) notices already cover this, with a link to review the bill in Vestiarion; use n8n when the message goes somewhere else, such as a ticket.
+
+**Add bills from a spreadsheet.** A Google Sheets Trigger on new rows, then Vestiarion: Bill: Create, with the counterparty's ID, the amount and the due date from the row, and **Idempotency Key** set to the row's invoice number. A row read twice adds one bill.
+
+## What it does not do
+
+- It never approves, rejects or pays a bill, and adds only bills.
+- It does not add or remove the webhook endpoint in Vestiarion: Settings does.
+- It sends no telemetry. The key goes only to the Base URL, and the signing secret goes nowhere.

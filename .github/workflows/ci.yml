@@ -89,3 +89,44 @@ jobs:
             tail -n 80 verify.log 2>/dev/null || echo "(no log was produced)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The n8n node package (docs/superpowers/specs/2026-11-03-n8n-node-design.md N10) keeps its own dependencies: n8n's
+  # tooling is about 560 MB, so the root never installs it. Here it gets a job of its own, beside verify. Its lock is
+  # installed with "npm ci", scripts included: n8n-workflow loads isolated-vm, which builds on the runner.
+  n8n:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: n8n
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: n8n/package-lock.json
+
+      - name: Install
+        run: set -o pipefail && npm ci --no-audit --no-fund 2>&1 | tee -a ../n8n.log
+
+      # n8n's own lint for community nodes, the rules its package scanner applies.
+      - name: Lint
+        run: set -o pipefail && npm run lint 2>&1 | tee -a ../n8n.log
+
+      - name: Build
+        run: set -o pipefail && npm run build 2>&1 | tee -a ../n8n.log
+
+      # Includes the check that public/n8n/'s committed tarball is this build.
+      - name: Test
+        run: set -o pipefail && npm run test 2>&1 | tee -a ../n8n.log
+
+      - name: Explain the failure
+        if: failure()
+        working-directory: .
+        run: |
+          if [ -s n8n.log ]; then
+            head -n 30 n8n.log | while IFS= read -r line; do
+              printf '::error::%s\n' "$line"
+            done
+          fi

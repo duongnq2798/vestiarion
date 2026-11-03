@@ -1,0 +1,20 @@
+{
+	"node": "@vestiarion/n8n-nodes-vestiarion.vestiarion",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": [
+		"Finance & Accounting"
+	],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://www.vestiarion.xyz/docs/get-started/n8n#credentials"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://www.vestiarion.xyz/docs/get-started/n8n"
+			}
+		]
+	}
+}
