@@ -13,7 +13,8 @@ import { checkSignature } from './signature';
 /**
  * The Vestiarion Trigger (docs/superpowers/specs/2026-11-03-n8n-node-design.md): starts a workflow on each signed
  * delivery a workspace's webhook endpoint sends, one per ledger entry, after checking its Vestiarion-Signature. The API
- * cannot add a webhook endpoint, so an owner or an admin adds this node's URL in the workspace's Settings by hand.
+ * cannot add a webhook endpoint, so an owner or an admin adds this node's URL in the workspace's Settings by hand, as
+ * the README says.
  */
 
 export class VestiarionTrigger implements INodeType {
@@ -32,13 +33,6 @@ export class VestiarionTrigger implements INodeType {
 		webhooks: [{ name: 'default', httpMethod: 'POST', responseMode: 'onReceived', path: 'webhook' }],
 		properties: [
 			{
-				displayName:
-					'An owner or an admin adds this node\'s Production URL as a webhook endpoint in Vestiarion, under Settings > Webhooks. It must be public HTTPS on port 443. Put the signing secret Settings shows once into the credential, then publish this workflow. To try it first, add the Test URL, choose Listen for Test Event, and use Send test in Settings: a test delivery has no entry. Then remove that endpoint and add the Production URL, with its new secret. A delivery whose signature fails, or that your options leave out, starts nothing and shows nothing here.',
-				name: 'setup',
-				type: 'notice',
-				default: '',
-			},
-			{
 				displayName: 'Events',
 				name: 'events',
 				type: 'options',
@@ -49,33 +43,42 @@ export class VestiarionTrigger implements INodeType {
 				default: 'agent',
 			},
 			{
-				displayName: 'Domains',
-				name: 'domains',
-				type: 'multiOptions',
-				options: LEDGER_DOMAIN_OPTIONS,
-				default: [],
-				description: 'Only entries in these domains. Leave it empty for every domain.',
-			},
-			{
-				displayName: 'Actions',
-				name: 'actions',
-				type: 'string',
-				default: '',
-				placeholder: 'ap_pay, ap_hold',
-				description: 'Only entries with one of these actions, separated by commas. Leave it empty for every action.',
-			},
-			{
-				displayName: 'Include Test Deliveries',
-				name: 'includeTests',
-				type: 'boolean',
-				default: true,
-				description: 'Whether a delivery sent with Send test in Settings starts the workflow. It carries no entry.',
+				displayName: 'Options',
+				name: 'options',
+				type: 'collection',
+				placeholder: 'Add Option',
+				default: {},
+				options: [
+					{
+						displayName: 'Actions',
+						name: 'actions',
+						type: 'string',
+						default: '',
+						placeholder: 'ap_pay, ap_hold',
+						description: 'Only entries with one of these actions, separated by commas. Leave it empty for every action.',
+					},
+					{
+						displayName: 'Domains',
+						name: 'domains',
+						type: 'multiOptions',
+						options: LEDGER_DOMAIN_OPTIONS,
+						default: [],
+						description: 'Only entries in these domains. Leave it empty for every domain.',
+					},
+					{
+						displayName: 'Include Test Deliveries',
+						name: 'includeTests',
+						type: 'boolean',
+						default: true,
+						description: 'Whether a delivery sent with Send test in Settings starts the workflow. It carries no entry. Without this option, it does.',
+					},
+				],
 			},
 		],
 	};
 
 	// The API has no endpoint to add or remove a webhook endpoint: Settings does it, by hand. So each of these answers
-	// that the endpoint is there and does nothing; the node's notice says how to add it.
+	// that the endpoint is there and does nothing; the README and the docs say how to add it.
 	webhookMethods = {
 		default: {
 			async checkExists(this: IHookFunctions): Promise<boolean> {
@@ -136,13 +139,16 @@ export class VestiarionTrigger implements INodeType {
 
 /** Whether a signed delivery passes the node's filters. */
 function wanted(context: IWebhookFunctions, delivery: IDataObject): boolean {
-	if (delivery.type === 'webhook.test') return context.getNodeParameter('includeTests', true) === true;
+	const options = context.getNodeParameter('options', {}) as IDataObject;
+	if (delivery.type === 'webhook.test') return options.includeTests !== false && options.includeTests !== 'false';
 	if (delivery.type !== 'ledger.appended') return false;
 	const entry = (typeof delivery.entry === 'object' && delivery.entry !== null ? delivery.entry : {}) as IDataObject;
 	if (context.getNodeParameter('events', 'agent') === 'agent' && entry.actor !== 'agent') return false;
-	const domains = context.getNodeParameter('domains', []) as string[];
+	const domains = (Array.isArray(options.domains) ? options.domains : String(options.domains ?? '').split(','))
+		.map((domain) => String(domain).trim())
+		.filter(Boolean);
 	if (domains.length > 0 && !domains.includes(String(entry.domain))) return false;
-	const actions = String(context.getNodeParameter('actions', ''))
+	const actions = String(options.actions ?? '')
 		.split(',')
 		.map((action) => action.trim())
 		.filter(Boolean);

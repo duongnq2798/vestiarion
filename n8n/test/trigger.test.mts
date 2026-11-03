@@ -52,7 +52,10 @@ function webhookContext(raw: string, headers: IDataObject, parameters: IDataObje
 			return response;
 		},
 	};
-	const values: IDataObject = { events: 'agent', domains: [], actions: '', includeTests: true, ...parameters };
+	// Events is the node's one top-level option; the filters sit in its Options collection (n8n review, 2026-11-03).
+	// `noOptions` leaves the collection out altogether, as n8n can.
+	const { events = 'agent', noOptions, ...options } = parameters;
+	const values: IDataObject = noOptions === true ? { events } : { events, options };
 	const context = {
 		getCredentials: async () => credentials,
 		getNode: () => NODE,
@@ -146,6 +149,8 @@ describe('the webhook', () => {
 		['another domain', delivery({ entry: entry({ domain: 'treasury' }) }), { domains: ['ap'] }],
 		['another action', delivery({ entry: entry({ action: 'ap_hold' }) }), { actions: 'ap_pay, ap_flag_fraud' }],
 		['a test delivery, with Include Test Deliveries off', { id: 'x', type: 'webhook.test', createdAt: '2026-11-03T08:00:00Z', workspace: { slug: 'acme' } }, { includeTests: false }],
+		['a test delivery, with Include Test Deliveries "false" from an expression', { id: 'x', type: 'webhook.test', createdAt: '2026-11-03T08:00:00Z', workspace: { slug: 'acme' } }, { includeTests: 'false' }],
+		['another domain, with Domains "ap, ar" from an expression', delivery({ entry: entry({ domain: 'treasury' }) }), { domains: 'ap, ar' }],
 		['an event type it does not know', delivery({ type: 'ledger.rewritten' }), { events: 'all' }],
 	])('answers 200 to %s, so Vestiarion does not retry, and starts nothing', async (_, body, parameters) => {
 		const raw = JSON.stringify(body);
@@ -158,10 +163,40 @@ describe('the webhook', () => {
 		['every entry, a person\'s included', delivery({ entry: entry({ actor: 'human' }) }), { events: 'all' }],
 		['a domain and an action it lists', delivery({ entry: entry({ action: 'ap_hold' }) }), { domains: ['ap', 'ar'], actions: 'ap_pay,ap_hold' }],
 		['a test delivery', { id: 'x', type: 'webhook.test', createdAt: '2026-11-03T08:00:00Z', workspace: { slug: 'acme' } }, {}],
+		['any domain and action, with Domains empty and Actions blank', delivery({ entry: entry({ domain: 'treasury', action: 'ap_hold' }) }), { domains: [], actions: ' , ' }],
+		['a domain Domains "ap, ar" from an expression lists', delivery(), { domains: 'ap, ar' }],
 	])('starts the workflow on %s', async (_, body, parameters) => {
 		const raw = JSON.stringify(body);
 		const { context } = webhookContext(raw, signed(raw), parameters);
 		expect(await node.webhook.call(context)).toEqual({ workflowData: [[{ json: body }]] });
+	});
+
+	it('starts the workflow on a test delivery and on any agent entry when the node has no Options at all', async () => {
+		const body = { id: 'x', type: 'webhook.test', createdAt: '2026-11-03T08:00:00Z', workspace: { slug: 'acme' } };
+		const raw = JSON.stringify(body);
+		const { context } = webhookContext(raw, signed(raw), { noOptions: true });
+		expect(await node.webhook.call(context)).toEqual({ workflowData: [[{ json: body }]] });
+		const decision = delivery({ entry: entry({ domain: 'treasury' }) });
+		const rawDecision = JSON.stringify(decision);
+		expect(await node.webhook.call(webhookContext(rawDecision, signed(rawDecision), { noOptions: true }).context)).toEqual({
+			workflowData: [[{ json: decision }]],
+		});
+	});
+
+	it('starts the workflow on a test delivery when Options leaves Include Test Deliveries unset', async () => {
+		const body = { id: 'x', type: 'webhook.test', createdAt: '2026-11-03T08:00:00Z', workspace: { slug: 'acme' } };
+		const raw = JSON.stringify(body);
+		const { context } = webhookContext(raw, signed(raw), { domains: ['ap'] });
+		expect(await node.webhook.call(context)).toEqual({ workflowData: [[{ json: body }]] });
+	});
+
+	it('keeps its filters in an Options collection and has no setup notice: the README holds the setup', () => {
+		const names = node.description.properties.map((property) => property.name);
+		expect(names).toEqual(['events', 'options']);
+		const options = node.description.properties.find((property) => property.name === 'options')!;
+		expect(options.type).toBe('collection');
+		expect((options.options ?? []).map((option) => (option as { name: string }).name)).toEqual(['actions', 'domains', 'includeTests']);
+		expect(node.description.properties.some((property) => property.type === 'notice')).toBe(false);
 	});
 
 	it('has the lifecycle n8n asks for, and adds nothing anywhere: the endpoint is added in Settings', async () => {

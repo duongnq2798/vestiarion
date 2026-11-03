@@ -48,6 +48,8 @@ vestiarion.xyz/docs/get-started/n8n
 
 The same video is [on YouTube](https://youtu.be/tQ4IKHBVGZA).
 
+It was recorded on 0.1.2. Since 0.1.3, Bill > Create's Currency is under **Additional Fields**, the trigger's Domains, Actions and Include Test Deliveries are under **Options**, and the trigger shows no setup notice: [Set it up](#set-it-up) has every step. A workflow saved with 0.1.2 needs those fields set again.
+
 ## Install
 
 In a self-hosted n8n, a user with the owner or admin role installs it:
@@ -62,7 +64,7 @@ n8n installs community packages it has not verified only while `N8N_UNVERIFIED_P
 
 n8n Cloud lists only community nodes n8n has verified. This package is not verified yet, so on n8n Cloud, use the [HTTP Request node](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/) with the [API](/docs/api) for now.
 
-The site serves the same package, byte for byte: [vestiarion-n8n-nodes-vestiarion-0.1.2.tgz](https://www.vestiarion.xyz/n8n/vestiarion-n8n-nodes-vestiarion-0.1.2.tgz).
+The site serves the same package, byte for byte: [vestiarion-n8n-nodes-vestiarion-0.1.3.tgz](https://www.vestiarion.xyz/n8n/vestiarion-n8n-nodes-vestiarion-0.1.3.tgz).
 
 ## Credentials
 
@@ -96,8 +98,8 @@ No operation approves, rejects or pays: no key can. The node can also be a tool 
 - **Counterparty**: the vendor or contractor the bill is from. Pick it from the list, which searches the workspace's vendors and contractors by name, or give its ID.
 - **Amount**: as text, such as `1250.50`, so it stays exact. At most 6 decimal places.
 - **Due Date**: the day the bill is due. A date from the picker, a date as text, or an expression such as `{{ $now.plus({ days: 30 }) }}`, read in the workflow's time zone.
-- **Currency**: USDC, the default, or EURC.
 - **Additional Fields**:
+  - **Currency**: USDC, the default when it is not set, or EURC.
   - **PO Reference** and **Goods Received**. Without both, the agent asks for the missing detail instead of paying.
   - **Memo**, up to 280 characters.
   - **Early-Payment Discount Percent** and **Deadline**, both or neither.
@@ -139,16 +141,18 @@ The API cannot add a webhook endpoint, so step 2 is done by hand, once. Removing
 
 Settings takes only an HTTPS URL, on port 443, at a public address. So a self-hosted n8n needs a public HTTPS address in front of it, set as its `N8N_WEBHOOK_URL` as [n8n's docs](https://docs.n8n.io/hosting/configuration/configuration-examples/webhook-url/) describe: its default `http://localhost:5678` cannot receive deliveries. Where n8n cannot be reached from the internet, use a Schedule Trigger with **Decision: Get Many** and its cursor instead.
 
-To try it before you publish, add the trigger's **Test URL** as the endpoint instead. Choose **Listen for test event** in n8n, then **Send test** beside the endpoint in Settings, within two minutes. Settings cannot change an endpoint's URL, so afterwards remove that endpoint and add the Production URL as a new one. The new endpoint has a new signing secret: put it in the credential. Do not leave the Test URL's endpoint in place: every delivery fails while n8n is not listening, and an endpoint that fails 20 times in a row is [disabled](/docs/webhooks/retries).
+To try it before you publish, add the trigger's **Test URL** as the endpoint instead, and copy its signing secret into the credential. Choose **Listen for test event** in n8n, then **Send test** beside the endpoint in Settings, within two minutes. Settings cannot change an endpoint's URL, so afterwards remove that endpoint and add the Production URL as a new one. The new endpoint has a new signing secret: put it in the credential. Do not leave the Test URL's endpoint in place: every delivery fails while n8n is not listening, and an endpoint that fails 20 times in a row is [disabled](/docs/webhooks/retries).
 
 ### Choose what starts the workflow
 
-| Option | What it keeps |
+**Events** is the one field always shown. The others are under **Options**, each left out until you add it.
+
+| Field | What it keeps |
 | --- | --- |
 | **Events** | **Agent Decisions**, the default: entries the agent signed, such as `ap_pay`, `ap_schedule`, `ap_hold`, `ap_flag_fraud` and `ap_request_info` for bills. Or **Every Ledger Entry**: people's and the system's too. |
-| **Domains** | Only these domains: bills (`ap`), receivables (`ar`), contractor milestones, treasury, screening and payees (`compliance`), the workspace (`system`). Empty keeps all. |
-| **Actions** | Only these actions, separated by commas, such as `ap_hold, ap_flag_fraud`. Empty keeps all. |
-| **Include Test Deliveries** | On by default, so **Send test** starts the workflow. A test delivery has no `entry`. |
+| **Options**, **Domains** | Only these domains: bills (`ap`), receivables (`ar`), contractor milestones, treasury, screening and payees (`compliance`), the workspace (`system`). Left out, all. |
+| **Options**, **Actions** | Only these actions, separated by commas, such as `ap_hold, ap_flag_fraud`. Left out, all. |
+| **Options**, **Include Test Deliveries** | On unless you add it and turn it off, so **Send test** starts the workflow. A test delivery has no `entry`. |
 
 ### What it checks
 
@@ -189,7 +193,7 @@ The [payload](/docs/webhooks/payload) page describes every field. A delivery can
 
 ## Two workflows to start from
 
-**Tell the team when the agent holds a bill.** Vestiarion Trigger, with Events **Agent Decisions**, Domains `ap` and Actions `ap_hold, ap_flag_fraud`. Then a Slack or Telegram node, with a message such as `{{ $json.entry.summary }}: {{ $json.entry.detail.decision.reasoning }}`. Vestiarion's own [Slack](/docs/guides/slack) and [Telegram](/docs/guides/telegram) notices already cover this, with a link to review the bill in Vestiarion; use n8n when the message goes somewhere else, such as a ticket.
+**Tell the team when the agent holds a bill.** Vestiarion Trigger, with Events **Agent Decisions** and, under Options, Domains **Bills** and Actions `ap_hold, ap_flag_fraud`. Then a Slack or Telegram node, with a message such as `{{ $json.entry.summary }}: {{ $json.entry.detail.decision.reasoning }}`. Vestiarion's own [Slack](/docs/guides/slack) and [Telegram](/docs/guides/telegram) notices already cover this, with a link to review the bill in Vestiarion; use n8n when the message goes somewhere else, such as a ticket.
 
 **Add bills from a spreadsheet.** A Google Sheets Trigger on new rows, then Vestiarion: Bill: Create, with the counterparty's ID, the amount and the due date from the row, and **Idempotency Key** set to the row's invoice number. A row read twice adds one bill.
 

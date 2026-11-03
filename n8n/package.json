@@ -1,6 +1,6 @@
 {
   "name": "@vestiarion/n8n-nodes-vestiarion",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Vestiarion in n8n: add bills for the agent to decide, read its decisions, and start a workflow on each signed ledger entry it writes.",
   "license": "MIT",
   "homepage": "https://www.vestiarion.xyz/docs/get-started/n8n",

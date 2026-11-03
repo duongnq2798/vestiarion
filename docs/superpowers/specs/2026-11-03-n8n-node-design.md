@@ -111,7 +111,8 @@ Code comments and test names cite the ids, for example "(n8n N4)".
 **N7. Adding the endpoint by hand.**
 - The API has no endpoint to add a webhook endpoint (`content/docs/get-started/cli.mdx`: "The API does not list webhook
   endpoints"). So an owner or an admin adds the node's Production URL in the workspace's Settings, under Webhooks, and
-  pastes the signing secret into the credential. The node's notice says so.
+  pastes the signing secret into the credential. The package README says so (n8n review, 0.1.3; it was a notice on
+  the node before).
 - n8n's lint requires `checkExists`, `create` and `delete`. Each answers `true` and does nothing, with a comment saying
   why.
 - To try the trigger: add the Test URL, choose **Listen for test event**, then **Send test** in Settings. Settings
@@ -223,3 +224,16 @@ Usage, Resources and a version history, as n8n's guidelines ask. It is published
 
 The submission at creators.n8n.io is the owner's.
 
+## n8n's manual review (2026-11-03, 0.1.3)
+
+The first manual review asked for two changes, both made in 0.1.3:
+- **Optional fields in a collection** (medium). The trigger's Domains, Actions and Include Test Deliveries move into an
+  **Options** collection; Events, which always has a value, stays on top. Bill > Create's Currency moves into
+  **Additional Fields**, USDC when it is not set. A test delivery still starts the workflow unless the option is added
+  and turned off. This replaces N6's and N3's layout; their behaviour is unchanged.
+- **The setup notice moves to the README** (low). The trigger shows no notice. The package README's "The trigger"
+  section holds every step it held: the Production URL, the signing secret, publishing, and the Test URL flow with the
+  swap to a new endpoint and its new secret. This replaces N7's notice.
+
+The node stays at version 1: nobody had installed the package (the portal counted 0 installs), so no saved workflow
+needs a migration. The README's version history says a 0.1.2 workflow needs the moved fields set again.
