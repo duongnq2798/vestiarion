@@ -241,13 +241,25 @@ versioned on its own, in `n8n/package.json`.
    into `public/n8n/vestiarion-n8n-nodes-vestiarion-<version>.tgz`, and refuses a version already packed. Commit the
    tarball in the same pull request; `n8n/test/package.test.mts`, which the CI job `n8n` runs, fails until the committed
    tarball is what `n8n/` builds.
-3. Once it is merged, an owner of the npm organization publishes that file, from the repository root on `main`:
+3. Once it is merged, publish it from GitHub Actions, never from a laptop: n8n verifies only a version npm holds a
+   provenance attestation for, from this public repository's run. Check first, then publish:
 
    ```bash
-   npm publish public/n8n/vestiarion-n8n-nodes-vestiarion-<version>.tgz --access public
+   gh workflow run n8n-publish.yml -f version=<version> -f dry_run=true
+   gh workflow run n8n-publish.yml -f version=<version>
    ```
 
-A self-hosted n8n then installs it by name, under **Settings** > **Community nodes**. n8n Cloud lists only verified
-nodes, and n8n verifies only a package published from GitHub Actions with npm provenance: that needs a publish
-workflow and an npm trusted publisher for the package, set up by an owner, before the package is submitted at
-https://creators.n8n.io/nodes.
+   The workflow (`.github/workflows/n8n-publish.yml`) runs on `main` only. It refuses a version that is not
+   `n8n/package.json`'s, has no committed tarball, or is on npm already. Then it lints, builds and tests the package, and
+   publishes the committed tarball with `--provenance`, from a job that runs no code from the repository.
+4. Check the attestation: `npm view @vestiarion/n8n-nodes-vestiarion@<version> dist.attestations` names
+   `https://slsa.dev/provenance/v1`, and `npx @n8n/scan-community-package @vestiarion/n8n-nodes-vestiarion@<version>`
+   passes.
+
+npm accepts the workflow's publish by trusted publishing, with no token stored. Once, an owner of the package sets it up
+on npmjs.com: the package's **Settings**, then **Trusted Publisher**, then **GitHub Actions**, with the user
+`duongnq2798`, the repository `vestiarion` and the workflow `n8n-publish.yml`.
+
+A self-hosted n8n installs the package by name, under **Settings** > **Community nodes**. n8n Cloud lists only verified
+nodes: a version published this way is submitted at https://creators.n8n.io/nodes, whose review takes up to four weeks.
+0.1.0 was published from a laptop, without provenance, so 0.1.1 is the first version that can be submitted.

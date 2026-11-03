@@ -56,9 +56,38 @@ handled as **After Seq**, and the last `cursor` as **After Cursor**.
 A delivery whose signature does not match, or is more than 300 seconds old, is answered `401` and starts nothing. One the
 trigger's filters leave out is answered `200`, so Vestiarion does not send it again.
 
+## Usage
+
+**Tell the team when the agent holds a bill.**
+1. Add a Vestiarion Trigger with Events **Agent Decisions**, Domains **Bills** and Actions `ap_hold, ap_flag_fraud`.
+2. Connect a Slack, Telegram or email node, with a message such as
+   `{{ $json.entry.summary }}: {{ $json.entry.detail.decision.reasoning }}`.
+
+**Add bills from a spreadsheet.**
+1. Add a Google Sheets Trigger on new rows.
+2. Connect Vestiarion: **Bill** > **Create**, with the counterparty's ID, the amount and the due date from the row.
+3. Set **Idempotency Key** to the row's invoice number, so a row read twice within a day adds one bill.
+
+**Read the agent's decisions on a schedule.**
+1. Add a Schedule Trigger.
+2. Connect Vestiarion: **Decision** > **Get Many**, with **After Seq** set to the highest `seq` the last run handled.
+
+## Resources
+
+- [The guide](https://www.vestiarion.xyz/docs/get-started/n8n): install, credentials, every operation and the trigger.
+- [The API reference](https://www.vestiarion.xyz/docs/api) and [webhook payloads](https://www.vestiarion.xyz/docs/webhooks/payload).
+- [n8n's community nodes documentation](https://docs.n8n.io/integrations/community-nodes/).
+- [Source and issues](https://github.com/duongnq2798/vestiarion/tree/main/n8n).
+
 ## Compatibility
 
 Built and tested against n8n 2.45 (`n8n-workflow` 2.45.4). Node 24 or later, as n8n needs.
+
+## Version history
+
+- **0.1.1**: the first version published from GitHub Actions with npm provenance, for n8n's verified listing. This
+  README gains Usage, Resources and this history. The nodes are unchanged.
+- **0.1.0**: the Vestiarion node and the Vestiarion Trigger.
 
 ## Licence
 
