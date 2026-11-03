@@ -1,0 +1,57 @@
+{
+  "name": "@vestiarion/n8n-nodes-vestiarion",
+  "version": "0.1.0",
+  "description": "Vestiarion in n8n: add bills for the agent to decide, read its decisions, and start a workflow on each signed ledger entry it writes.",
+  "license": "MIT",
+  "homepage": "https://www.vestiarion.xyz/docs/get-started/n8n",
+  "keywords": [
+    "n8n-community-node-package",
+    "vestiarion",
+    "accounts-payable",
+    "bills",
+    "usdc",
+    "arc"
+  ],
+  "author": {
+    "name": "Vestiarion",
+    "email": "no-reply@vestiarion.xyz"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/duongnq2798/vestiarion.git",
+    "directory": "n8n"
+  },
+  "scripts": {
+    "build": "n8n-node build",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "test": "vitest run",
+    "verify": "npm run lint && npm run build && npm run test"
+  },
+  "files": [
+    "dist",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [
+      "dist/credentials/VestiarionApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/Vestiarion/Vestiarion.node.js",
+      "dist/nodes/VestiarionTrigger/VestiarionTrigger.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "0.54.6",
+    "eslint": "9.39.4",
+    "n8n-workflow": "2.45.4",
+    "prettier": "3.8.3",
+    "typescript": "5.9.3",
+    "vitest": "5.0.1"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}

@@ -165,6 +165,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   in UTF-16 and a whole API answer too. Every command now refuses an option given twice, where the last one used to win
   unseen. The CLI now needs `@vestiarion/sdk` 0.4.1. No
   migration. [Guide](https://www.vestiarion.xyz/docs/get-started/cli#evidence-and-close-packs).
+- **n8n nodes (`@vestiarion/n8n-nodes-vestiarion` 0.1.0).** A self-hosted n8n installs them under **Settings** >
+  **Community nodes**. The **Vestiarion** node adds a bill for the agent to decide (the counterparty picked from a
+  searchable list, an idempotency key so a rerun adds it once) and reads bills, counterparties, the agent's decisions with
+  a cursor to resume from, and the workspace's status. It can be an n8n AI agent's tool, and never approves or pays.
+  The **Vestiarion Trigger** starts a workflow on each webhook delivery after checking its `Vestiarion-Signature`
+  against the raw body: a bad or old signature is answered `401`, and a delivery its filters leave out (Agent Decisions
+  or Every Ledger Entry, by domain and action) `200`, so it is not sent again. The webhook endpoint is added by hand in
+  Settings, and must be public HTTPS. No migration, no API change.
+  [Guide](https://www.vestiarion.xyz/docs/get-started/n8n).
 
 ### Changed
 

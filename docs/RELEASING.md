@@ -28,7 +28,8 @@ The product's version is its git tag, [SemVer 2.0.0](https://semver.org/spec/v2.
   alone; the tag is the source of truth.
 - Migrations are numbered files (`supabase/migrations/0106_…`), not versions. A release says which migrations it
   contains.
-- The TypeScript SDK and the CLI each have their own line; see [The SDK](#the-sdk) and [The CLI](#the-cli).
+- The TypeScript SDK, the CLI and the n8n node package each have their own line; see [The SDK](#the-sdk),
+  [The CLI](#the-cli) and [The n8n nodes](#the-n8n-nodes).
 
 **Where it starts.** The first release is `v0.1.0-beta.1`: the product is live, with real users on Arc testnet and an
 Arc mainnet path that has settled real USDC, so it is past an alpha; it changes every day and its contracts are not
@@ -228,3 +229,25 @@ The CLI depends on `@vestiarion/sdk` by a range (`^0.3.2` for 0.1.0, `^0.4.1` fo
 must be on npm before the CLI is published. The root `devDependencies` name the same range, and `tests/cli-package.test.ts` holds the two
 equal. A CLI version may be tagged `cli-vX.Y.Z` on the commit whose tarball was published; the release workflow
 refuses such tags, as it refuses `sdk-v` ones.
+
+## The n8n nodes
+
+[`@vestiarion/n8n-nodes-vestiarion`](https://www.npmjs.com/package/@vestiarion/n8n-nodes-vestiarion), the Vestiarion
+node and trigger for n8n, lives in [`n8n/`](../n8n) with its own dependencies and lock, in n8n's starter layout. It is
+versioned on its own, in `n8n/package.json`.
+
+1. Change `n8n/`, raise its version, and say what changed in `CHANGELOG.md`.
+2. Run `npm ci --prefix n8n` once, then `npm run n8n:pack`. It builds the package with n8n's own tooling and packs it
+   into `public/n8n/vestiarion-n8n-nodes-vestiarion-<version>.tgz`, and refuses a version already packed. Commit the
+   tarball in the same pull request; `n8n/test/package.test.mts`, which the CI job `n8n` runs, fails until the committed
+   tarball is what `n8n/` builds.
+3. Once it is merged, an owner of the npm organization publishes that file, from the repository root on `main`:
+
+   ```bash
+   npm publish public/n8n/vestiarion-n8n-nodes-vestiarion-<version>.tgz --access public
+   ```
+
+A self-hosted n8n then installs it by name, under **Settings** > **Community nodes**. n8n Cloud lists only verified
+nodes, and n8n verifies only a package published from GitHub Actions with npm provenance: that needs a publish
+workflow and an npm trusted publisher for the package, set up by an owner, before the package is submitted at
+https://creators.n8n.io/nodes.

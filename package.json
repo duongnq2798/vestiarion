@@ -45,7 +45,8 @@
     "sdk:pack": "tsx scripts/sdk-pack.ts",
     "postman:build": "tsx scripts/postman-build.ts",
     "cli:build": "tsc -p cli/tsconfig.json",
-    "cli:pack": "tsx scripts/cli-pack.ts"
+    "cli:pack": "tsx scripts/cli-pack.ts",
+    "n8n:pack": "tsx scripts/n8n-pack.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",

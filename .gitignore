@@ -51,6 +51,11 @@ sdk/dist/
 # The CLI's build output: npm run cli:pack compiles into it, and packs it into public/cli/.
 cli/dist/
 
+# The n8n node package keeps its own dependencies and build (npm ci --prefix n8n; npm run n8n:pack packs it into public/n8n/).
+n8n/node_modules/
+n8n/dist/
+n8n/tsconfig.tsbuildinfo
+
 # The MCP Registry publisher (docs/distribution/mcp-registry.md) is installed outside the repository; never commit a
 # copy of it, its archive, or the token files older versions wrote to the folder they ran in.
 mcp-publisher

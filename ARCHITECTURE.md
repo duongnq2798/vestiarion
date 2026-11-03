@@ -4598,6 +4598,15 @@ An owner of the `@vestiarion` npm organization publishes the CLI from that file,
 npm publish public/cli/vestiarion-cli-<version>.tgz --access public
 ```
 
+The n8n node package lives in `n8n/` (`@vestiarion/n8n-nodes-vestiarion`), in n8n's starter layout: `credentials/`,
+`nodes/Vestiarion/` (the action node) and `nodes/VestiarionTrigger/` (the webhook trigger). It is CommonJS, built and
+linted with n8n's own `@n8n/node-cli` in strict mode, and has no runtime dependency: `n8n-workflow` is a peer, and the
+trigger checks `Vestiarion-Signature` with `node:crypto`. Its tooling is about 560 MB, so it keeps its own lock, the root's
+typecheck, lint and tests leave `n8n/` out, and the CI job `n8n` installs, lints, builds and tests it beside `verify`.
+`n8n/test/` (vitest, `.mts` so n8n's lint, which covers `**/*.ts`, leaves it alone) runs every operation against the
+API's recorded examples, signs deliveries with the app's own `signWebhook`, and holds the committed
+`public/n8n/` tarball to the build. Spec: `docs/superpowers/specs/2026-11-03-n8n-node-design.md`.
+
 The Postman collections are rendered from the OpenAPI document by `npm run postman:build` (`scripts/lib/postman.ts`)
 into `public/postman/`: "Vestiarion: Getting Started", five requests from a key to a first write; "Vestiarion API
 reference", every operation in a folder per tag, with a saved example of its success and of each documented error; and

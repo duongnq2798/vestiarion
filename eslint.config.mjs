@@ -90,6 +90,8 @@ const eslintConfig = defineConfig([
     "sdk/dist/**",
     // The CLI's build output, packed into public/cli/.
     "cli/dist/**",
+    // The n8n node package: its own dependencies and n8n's own lint (npm run --prefix n8n verify).
+    "n8n/**",
   ]),
 ]);
 
