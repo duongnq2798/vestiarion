@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.15] - 2026-11-04
+
 ### Added
 
 - **A free payout batch check** at [/check-payouts](https://www.vestiarion.xyz/check-payouts). Paste a batch payout,
@@ -151,7 +153,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   refused on Arc mainnet. Needs migration 0146.
 
 - **Production is checked every 10 minutes.** From GitHub's servers, outside Vestiarion's hosting and database, a check
-  opens the landing page, the open numbers, the docs, the four free tools, robots.txt and the sitemap. When one fails
+  opens the landing page, the open numbers, the docs, the five free tools, robots.txt and the sitemap. When one fails
   two checks running, the team is told on a private Discord channel, and told again once it works. The check reads
   public pages only and is not counted as a visit. No migration.
 - **Evidence and close packs from a terminal (`@vestiarion/cli` 0.2.0).** `vestiarion evidence export` saves a bill's
@@ -1860,7 +1862,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.14...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.15...HEAD
+[0.1.0-beta.15]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.15
 [0.1.0-beta.14]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.14
 [0.1.0-beta.13]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.13
 [0.1.0-beta.12]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.12
