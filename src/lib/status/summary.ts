@@ -1,5 +1,5 @@
 import { FREE_TOOLS } from "@/lib/free-tools";
-import type { StatusFile, StatusResult } from "./file";
+import type { StatusFile } from "./file";
 
 /**
  * What the status page says, worked out from the status file and the time it was read
@@ -34,6 +34,8 @@ export interface RoundCount {
   /** Rounds that ran this check in the window. */
   rounds: number;
   passed: number;
+  /** The monitor's slots of `everyMinutes` in the window with at least one of those rounds, never more than it makes. */
+  slots: number;
 }
 
 /** One hour of the last 24, oldest first: whether the check passed every round of it, failed one, or never ran. */
@@ -60,6 +62,8 @@ export interface Incident {
   since: string;
   /** The round it passed again, or null while it still fails. */
   until: string | null;
+  /** It was already failing in the oldest round the file keeps, so it may have started earlier. */
+  startedEarlier: boolean;
   failedRounds: number;
   reason: string;
 }
@@ -76,21 +80,17 @@ export interface StatusSummary {
   everyMinutes: number;
   headline: Headline;
   checks: CheckSummary[];
-  /** Rounds that ran in the last 24 hours and 7 days, against what a round every `everyMinutes` makes. */
+  /** Slots with a round in the last 24 hours and 7 days, against what a round every `everyMinutes` makes. */
   coverage: { day: number; week: number; dayExpected: number; weekExpected: number };
   /** Newest first, from the last 7 days. */
   incidents: Incident[];
 }
 
-const count = (results: readonly StatusResult[]): RoundCount => ({ rounds: results.length, passed: results.filter((result) => result[0] === 1).length });
-
-/** The share of rounds a check passed, to one decimal place, never rounded up to 100% while a round failed. */
-export function share({ rounds, passed }: RoundCount): string | null {
-  if (rounds === 0) return null;
-  if (passed === rounds) return "100%";
-  const tenths = Math.floor((passed / rounds) * 1000) / 10;
-  return `${Math.min(tenths, 99.9).toFixed(1)}%`;
-}
+/**
+ * The slots of `everyMinutes` the rounds fall in. A run can start just after the last ended and make a round a few
+ * minutes after its last, so rounds alone can count more than a round every `everyMinutes` makes.
+ */
+const slotsOf = (times: readonly number[], everyMinutes: number) => new Set(times.map((time) => Math.floor(time / (everyMinutes * MINUTE)))).size;
 
 /** The status file's state at `now` (SP6). */
 export function summarize(file: StatusFile, now: Date): StatusSummary {
@@ -105,7 +105,14 @@ export function summarize(file: StatusFile, now: Date): StatusSummary {
     const ran = rounds.filter((round) => round.results[path] !== undefined);
     const lastRound = ran[ran.length - 1];
     const lastResult = lastRound?.results[path];
-    const within = (from: number) => ran.filter((round) => Date.parse(round.at) > from).map((round) => round.results[path]);
+    const within = (from: number): RoundCount => {
+      const kept = ran.filter((round) => Date.parse(round.at) > from);
+      return {
+        rounds: kept.length,
+        passed: kept.filter((round) => round.results[path][0] === 1).length,
+        slots: slotsOf(kept.map((round) => Date.parse(round.at)), file.everyMinutes),
+      };
+    };
     const hours: HourCell[] = Array.from({ length: 24 }, (_, index) => {
       const start = firstHour + index * HOUR;
       const results = ran.filter((round) => {
@@ -119,8 +126,8 @@ export function summarize(file: StatusFile, now: Date): StatusSummary {
       path,
       name: checkName(path),
       last: lastRound && lastResult ? { at: lastRound.at, ok: lastResult[0] === 1, ms: lastResult[1], reason: lastResult[0] === 0 ? lastResult[2] : null } : null,
-      day: count(within(dayFrom)),
-      week: count(within(weekFrom)),
+      day: within(dayFrom),
+      week: within(weekFrom),
       hours,
     };
   });
@@ -128,19 +135,26 @@ export function summarize(file: StatusFile, now: Date): StatusSummary {
   const incidents: Incident[] = [];
   for (const { path } of file.checks) {
     // Widened by hand: TypeScript narrows a `let` set to null and changed only inside the loop to `never` there.
-    let run = null as { since: string; failed: number; reason: string } | null;
+    let run = null as { since: string; failed: number; reason: string; startedEarlier: boolean } | null;
+    let first = true;
+    const close = (until: string | null) => {
+      if (run && run.failed >= INCIDENT_FAILS) {
+        incidents.push({ path, name: checkName(path), since: run.since, until, startedEarlier: run.startedEarlier, failedRounds: run.failed, reason: run.reason });
+      }
+      run = null;
+    };
     for (const round of rounds) {
       const result = round.results[path];
       if (result === undefined) continue;
       if (result[0] === 0) {
         if (run) run.failed += 1;
-        else run = { since: round.at, failed: 1, reason: result[2] };
-        continue;
+        else run = { since: round.at, failed: 1, reason: result[2], startedEarlier: first };
+      } else {
+        close(round.at);
       }
-      if (run && run.failed >= INCIDENT_FAILS) incidents.push({ path, name: checkName(path), since: run.since, until: round.at, failedRounds: run.failed, reason: run.reason });
-      run = null;
+      first = false;
     }
-    if (run && run.failed >= INCIDENT_FAILS) incidents.push({ path, name: checkName(path), since: run.since, until: null, failedRounds: run.failed, reason: run.reason });
+    close(null);
   }
   incidents.sort((a, b) => Date.parse(b.since) - Date.parse(a.since));
 
@@ -162,8 +176,8 @@ export function summarize(file: StatusFile, now: Date): StatusSummary {
     headline,
     checks,
     coverage: {
-      day: rounds.filter((round) => Date.parse(round.at) > dayFrom).length,
-      week: rounds.filter((round) => Date.parse(round.at) > weekFrom).length,
+      day: slotsOf(rounds.map((round) => Date.parse(round.at)).filter((time) => time > dayFrom), file.everyMinutes),
+      week: slotsOf(rounds.map((round) => Date.parse(round.at)).filter((time) => time > weekFrom), file.everyMinutes),
       dayExpected: perDay,
       weekExpected: perDay * 7,
     },

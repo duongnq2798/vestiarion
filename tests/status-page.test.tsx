@@ -1,9 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import StatusPage, { metadata, revalidate } from "@/app/status/page";
+import { connection } from "next/server";
+import StatusPage, { metadata } from "@/app/status/page";
 import { parseStatusFile, readStatusFile, STATUS_BRANCH_URL, STATUS_FILE_URL, type StatusFile } from "@/lib/status/file";
-import { checkName, INCIDENT_FAILS, PAUSED_AFTER_MINUTES, share, summarize } from "@/lib/status/summary";
+import { checkName, INCIDENT_FAILS, PAUSED_AFTER_MINUTES, summarize } from "@/lib/status/summary";
+import { ISSUES_URL } from "@/lib/site-links";
 import { CHECKS, STATUS_REASON_MAX, TIMEOUT_MS, statusFile, statusRound } from "../scripts/synthetic-check.mjs";
+
+// Outside a request, Next's connection() has none to wait for.
+vi.mock("next/server", async (importOriginal) => ({ ...(await importOriginal<typeof import("next/server")>()), connection: vi.fn(async () => undefined) }));
 
 vi.mock("@/lib/status/file", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/status/file")>();
@@ -79,26 +84,37 @@ describe("the status file (SP7)", () => {
     expect(parseStatusFile([])).toBeNull();
   });
 
-  it("is read from GitHub's raw host, kept 60 seconds, and an answer that is not a file counts as unread", async () => {
+  it("is read from GitHub's raw host, kept 60 seconds: missing before the first round, unreadable for anything else", async () => {
     const good = JSON.stringify(statusFile({ origin: "https://www.vestiarion.xyz", everyMinutes: 10, checks: CHECKS, rounds: rounds(minutesAgo(10), NOW) }));
     const calls: Array<[string, RequestInit | undefined]> = [];
     const answering = (response: () => Response): typeof fetch => async (input, init) => {
       calls.push([String(input), init]);
       return response();
     };
-    expect(await readStatusFile(answering(() => new Response(good)))).not.toBeNull();
+    expect((await readStatusFile(answering(() => new Response(good)))).state).toBe("read");
     expect(calls[0][0]).toBe(STATUS_FILE_URL);
-    expect(STATUS_FILE_URL).toBe("https://raw.githubusercontent.com/duongnq2798/vestiarion/status/status.json");
-    expect((calls[0][1] as { next?: { revalidate?: number } }).next).toEqual({ revalidate: 60 });
-    expect(await readStatusFile(answering(() => new Response("not found", { status: 404 })))).toBeNull();
-    expect(await readStatusFile(answering(() => new Response("{not json")))).toBeNull();
+    expect(STATUS_FILE_URL).toBe("https://raw.githubusercontent.com/duongnq2798/vestiarion/refs/heads/status/status.json");
+    // Read on each visit, never a copy kept here that a quiet spell would leave old.
+    expect((calls[0][1] as RequestInit).cache).toBe("no-store");
+    expect(await readStatusFile(answering(() => new Response("404: Not Found", { status: 404 })))).toEqual({ state: "missing" });
+    expect(await readStatusFile(answering(() => new Response("", { status: 503 })))).toEqual({ state: "unreadable" });
+    expect(await readStatusFile(answering(() => new Response("{not json")))).toEqual({ state: "unreadable" });
+    expect(await readStatusFile(answering(() => new Response(JSON.stringify({ version: 2 }))))).toEqual({ state: "unreadable" });
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
     expect(
       await readStatusFile(async () => {
         throw new TypeError("fetch failed");
       })
-    ).toBeNull();
+    ).toEqual({ state: "unreadable" });
     error.mockRestore();
+  });
+
+  it("stays under the read's limit for a week of every page failing with the longest reason", () => {
+    const reason = "x".repeat(STATUS_REASON_MAX);
+    const kept = rounds(new Date(NOW.getTime() - 7 * 24 * 60 * MINUTE + MINUTE), NOW, () => Object.fromEntries(PATHS.map((path) => [path, reason])));
+    const size = JSON.stringify(statusFile({ origin: "https://www.vestiarion.xyz", everyMinutes: 10, checks: CHECKS, rounds: kept })).length;
+    expect(kept).toHaveLength(1008);
+    expect(size).toBeLessThan(2_000_000);
   });
 });
 
@@ -154,14 +170,22 @@ describe("what the page says (SP6)", () => {
     });
     const summary = summarize(file(kept), NOW);
     expect(summary.coverage).toEqual({ day: 144 - 18, week: 1008 - 18, dayExpected: 144, weekExpected: 1008 });
-    expect(summary.checks[0].day).toEqual({ rounds: 126, passed: 126 });
+    expect(summary.checks[0].day).toEqual({ rounds: 126, passed: 126, slots: 126 });
   });
 
-  it("gives each check's share of passed rounds, never rounded up to 100% while a round failed", () => {
-    expect(share({ rounds: 0, passed: 0 })).toBeNull();
-    expect(share({ rounds: 144, passed: 144 })).toBe("100%");
-    expect(share({ rounds: 1008, passed: 1007 })).toBe("99.9%");
-    expect(share({ rounds: 3, passed: 2 })).toBe("66.6%");
+  it("counts the monitor's 10-minute slots, so a run starting just after the last never counts more than it should", () => {
+    // Two rounds a few minutes apart in each of the last 3 slots, as when a run ends and the next starts at once.
+    const kept = [0, 10, 20].flatMap((ago) => [statusRound(results(), minutesAgo(ago + 1)), statusRound(results(), minutesAgo(ago + 3))]);
+    const summary = summarize(file(kept.sort((a, b) => Date.parse(a.at) - Date.parse(b.at))), NOW);
+    expect(summary.coverage.day).toBe(3);
+    expect(summary.checks[0].day).toEqual({ rounds: 6, passed: 6, slots: 3 });
+  });
+
+  it("says an incident already failing in the oldest result kept may have started earlier", () => {
+    const summary = summarize(file(rounds(minutesAgo(60), NOW, (at) => (at <= minutesAgo(40) ? { "/docs": "answered 500, expected 200" } : {}))), NOW);
+    expect(summary.incidents).toEqual([
+      { path: "/docs", name: "Docs", since: minutesAgo(60).toISOString(), until: minutesAgo(30).toISOString(), startedEarlier: true, failedRounds: 3, reason: "answered 500, expected 200" },
+    ]);
   });
 
   it("shows the last 24 hours an hour a cell: passed, failed in a round, or not checked", () => {
@@ -189,8 +213,8 @@ describe("what the page says (SP6)", () => {
     };
     const summary = summarize(file(rounds(minutesAgo(5 * 60), NOW, failing)), NOW);
     expect(summary.incidents).toEqual([
-      { path: "/open", name: "Open numbers", since: "2026-11-04T11:55:00.000Z", until: null, failedRounds: 2, reason: "answered 503, expected 200" },
-      { path: "/docs", name: "Docs", since: "2026-11-04T09:05:00.000Z", until: "2026-11-04T09:35:00.000Z", failedRounds: 3, reason: "answered 500, expected 200" },
+      { path: "/open", name: "Open numbers", since: "2026-11-04T11:55:00.000Z", until: null, startedEarlier: false, failedRounds: 2, reason: "answered 503, expected 200" },
+      { path: "/docs", name: "Docs", since: "2026-11-04T09:05:00.000Z", until: "2026-11-04T09:35:00.000Z", startedEarlier: false, failedRounds: 3, reason: "answered 500, expected 200" },
     ]);
   });
 });
@@ -205,8 +229,8 @@ describe("the page (SP6)", () => {
     vi.mocked(readStatusFile).mockReset();
   });
 
-  const render = async (status: StatusFile | null) => {
-    vi.mocked(readStatusFile).mockResolvedValue(status);
+  const render = async (status: StatusFile | "missing" | "unreadable") => {
+    vi.mocked(readStatusFile).mockResolvedValue(typeof status === "string" ? { state: status } : { state: "read", file: status });
     return renderToStaticMarkup(await StatusPage());
   };
 
@@ -216,51 +240,73 @@ describe("the page (SP6)", () => {
     expect(CHECKS.filter((check) => check.budgetMs !== 8000).every((check) => check.budgetMs === 4000)).toBe(true);
   });
 
-  it("is public, at /status, and kept a minute", () => {
+  it("is public, at /status, and rendered for each visit", async () => {
     expect(metadata.alternates?.canonical).toBe("/status");
     expect(metadata.title).toBe("Status");
-    expect(revalidate).toBe(60);
+    await render("missing");
+    expect(connection).toHaveBeenCalled();
   });
 
-  it("says every check passes, with each check's last result, its share of rounds and its hours, and no incident", async () => {
+  it("says every page is up, with each page's last result, its times checked and missed, its hours, and no incident", async () => {
     const markup = await render(file(rounds(minutesAgo(65), minutesAgo(5))));
     const words = text(markup);
-    expect(words).toContain("All 10 checks passing");
-    expect(words).toContain("All 10 checks passed in the last round.");
-    expect(words).toContain("The last round ran at Nov 4, 2026, 12:00 UTC.");
-    expect(words).toContain("Rounds that ran: 7 of the 144 in the last 24 hours, and 7 of the 1,008 in the last 7 days, at one every 10 minutes.");
-    expect(words).toContain("Landing page / Passing 120 ms at 12:00 UTC");
-    expect(words).toContain("Passed 100% of the last 24 hours' rounds (7), 100% of the last 7 days' (7).");
-    expect(words).toContain("Last 24 hours, hour by hour: 2 passed every round, 0 had a failed round, 22 not checked.");
+    expect(words).toContain("All 10 pages up");
+    expect(words).toContain("All 10 pages were up at the last check. Last checked Nov 4, 2026, 12:00 UTC.");
+    expect(words).toContain("In the last 24 hours the monitor ran 7 of the 144 times it should have, and 7 of 1,008 in the last 7 days.");
+    expect(words).toContain("This page read the results Nov 4, 2026, 12:05 UTC.");
+    expect(words).toContain("Landing page / Up 120 ms at 12:00 UTC");
+    expect(words).toContain("Last 24 hours: up 7 of 7 times checked, 137 missed. Last 7 days: up 7 of 7 times checked, 1,001 missed.");
+    expect(words).toContain("Last 24 hours, by the hour: 2 hours up every check, none with a failure, 22 hours not checked.");
+    expect(words).toContain("Last 24 hours, by the hour: Up every check A failure Not checked");
     expect(words).toContain("No incident in the last 7 days.");
+    expect(words).toContain("the same results are on GitHub at github.com/duongnq2798/vestiarion/tree/status.");
     expect(markup).toContain(`href="${STATUS_BRANCH_URL}"`);
     expect(markup).toContain(`href="${STATUS_FILE_URL}"`);
+    expect(markup).toContain(`href="${ISSUES_URL}"`);
     expect((markup.match(/title="[^"]*: not checked"/g) ?? []).length).toBe(22 * 10);
+    // Never "checks" on their own, which on a bills product reads as payments.
+    expect(words).not.toMatch(/\b\d+ (of \d+ )?checks\b/);
   });
 
-  it("names a failing check, its reason, and the incident", async () => {
+  it("names a failing page first, with its reason, the incident and where to report a problem", async () => {
     const markup = await render(file(rounds(minutesAgo(60), NOW, (at) => (at >= minutesAgo(10) ? { "/open": "answered 500, expected 200" } : {}))));
     const words = text(markup);
-    expect(words).toContain("1 of 10 checks failing");
-    expect(words).toContain("1 check failed in the last round: Open numbers.");
-    expect(words).toContain("Open numbers /open Failing at 12:05 UTC answered 500, expected 200");
+    expect(words).toContain("1 of 10 pages failing");
+    expect(words).toContain("1 of 10 pages failed at the last check: Open numbers.");
+    expect(words).toContain("The team gets an alert when a page fails twice in a row. Something wrong that this page does not show? Tell us on GitHub Issues.");
+    expect(words).toContain("Each page Last 24 hours, by the hour: Up every check A failure Not checked Open numbers /open Failing at 12:05 UTC answered 500, expected 200");
+    expect(words).toContain("Last 24 hours, by the hour: 0 hours up every check, 2 hours with a failure (11:00 to 12:00 UTC, 12:00 to 13:00 UTC), 22 hours not checked.");
     expect(words).toContain("Open numbers /open Still failing");
-    expect(words).toContain("From Nov 4, 2026, 11:55 UTC, 2 failed rounds so far. First reason: answered 500, expected 200.");
+    expect(words).toContain("From Nov 4, 2026, 11:55 UTC, failed 2 times in a row so far. First reason: answered 500, expected 200.");
   });
 
-  it("says when the checks paused, and that hours with no round are not checked, never passing", async () => {
-    const words = text(await render(file(rounds(minutesAgo(180), minutesAgo(40)))));
-    expect(words).toContain("Checks paused since 11:25 UTC");
-    expect(words).toContain("No round has run since Nov 4, 2026, 11:25 UTC.");
-    expect(words).toContain("GitHub starts the check's runs once an hour and sometimes late");
-    expect(words).toContain("An hour with no round shows as not checked, never as passing");
+  it("says when monitoring paused, shows the last results as they were then, and an ongoing incident as failing when it paused", async () => {
+    const markup = await render(file(rounds(minutesAgo(180), minutesAgo(40), (at) => (at >= minutesAgo(50) ? { "/docs": "answered 500, expected 200" } : {}))));
+    const words = text(markup);
+    expect(words).toContain("Monitoring paused since Nov 4, 2026, 11:25 UTC");
+    expect(words).toContain("Monitoring paused: nothing checked since Nov 4, 2026, 11:25 UTC.");
+    expect(words).toContain("That does not mean Vestiarion is down. Below are the results of the last check, when 1 page failed: Docs.");
+    expect(words).toContain("Landing page / Up at 11:25 UTC");
+    expect(words).toContain("Docs /docs Failed at 11:25 UTC answered 500, expected 200");
+    expect(words).not.toContain("Still failing");
+    expect(words).toContain("Docs /docs Failing when monitoring paused");
+    expect(words).toContain("Those hours show as not checked, never as up.");
+  });
+
+  it("says there are no results yet before the first round is published, and hides the pages", async () => {
+    for (const status of ["missing", file([])] as const) {
+      const words = text(await render(status));
+      expect(words).toContain("No results yet.");
+      expect(words).toContain("The monitor has not published any results yet.");
+      expect(words).not.toContain("Each page");
+    }
   });
 
   it("still answers when the file cannot be read, and links the branch", async () => {
-    const markup = await render(null);
+    const markup = await render("unreadable");
     const words = text(markup);
-    expect(words).toContain("The status could not be read right now.");
-    expect(words).toContain("That says nothing about the site itself.");
+    expect(words).toContain("The results could not be read right now.");
+    expect(words).toContain("That does not mean Vestiarion is down.");
     expect(markup).toContain(`href="${STATUS_BRANCH_URL}"`);
     expect(words).toContain("It does not check the API, which needs a key");
   });

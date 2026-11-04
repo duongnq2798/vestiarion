@@ -9,14 +9,15 @@ import { GITHUB_URL } from "@/lib/site-links";
 /** The branch the check replaces after every round. */
 export const STATUS_BRANCH = "status";
 
-/** Where the page reads the file: GitHub's raw file host, which keeps it up to 5 minutes (SP6). */
-export const STATUS_FILE_URL = `https://raw.githubusercontent.com/duongnq2798/vestiarion/${STATUS_BRANCH}/status.json`;
+/** Where the page reads the file: GitHub's raw file host, which keeps it up to 5 minutes (SP6). By the branch's full
+ * ref, so a tag of the same name could never stand in for it. */
+export const STATUS_FILE_URL = `https://raw.githubusercontent.com/duongnq2798/vestiarion/refs/heads/${STATUS_BRANCH}/status.json`;
 
 /** The branch on GitHub, whose README shows the same state while vestiarion.xyz does not answer (SP1). */
 export const STATUS_BRANCH_URL = `${GITHUB_URL}/tree/${STATUS_BRANCH}`;
 
 /** The longest reason the check keeps for a failure (`STATUS_REASON_MAX` in the script). */
-export const STATUS_REASON_MAX = 200;
+export const STATUS_REASON_MAX = 120;
 
 /** `[1, ms]` for a pass; `[0, ms, reason]` for a failure, the reason as the job log gives it. */
 export type StatusResult = readonly [1, number] | readonly [0, number, string];
@@ -87,20 +88,30 @@ export function parseStatusFile(value: unknown): StatusFile | null {
   return { version: 1, source, origin, everyMinutes: everyMinutes as number, updatedAt, checks: keptChecks, rounds: keptRounds };
 }
 
-/** Kept 60 seconds, and a read that cannot finish in 5 seconds counts as unread (SP6). */
+/** A read that cannot finish in 5 seconds counts as unread (SP6). */
 const READ_DEADLINE_MS = 5_000;
-const FILE_MAX = 2_000_000;
+/** A week of every page failing with the longest reason is about 1.6 MB (SP2); anything past this is not the check's. */
+const FILE_MAX = 3_000_000;
 
-/** The published file, or null when GitHub did not answer, or answered with something that is not one (SP6). */
-export async function readStatusFile(fetchImpl: typeof fetch = fetch): Promise<StatusFile | null> {
+/**
+ * The published file (SP6): `missing` while GitHub answers 404, before the check's first published round, and
+ * `unreadable` when GitHub did not answer, or answered with something that is not a file the check writes.
+ */
+export type StatusRead = { state: "read"; file: StatusFile } | { state: "missing" } | { state: "unreadable" };
+
+export async function readStatusFile(fetchImpl: typeof fetch = fetch): Promise<StatusRead> {
   try {
-    const response = await fetchImpl(STATUS_FILE_URL, { next: { revalidate: 60 }, signal: AbortSignal.timeout(READ_DEADLINE_MS) });
-    if (!response.ok) return null;
+    // Read on each visit: a copy kept here and served stale after a quiet spell would make the page call a running
+    // monitor paused. GitHub's own cache keeps the file up to 5 minutes.
+    const response = await fetchImpl(STATUS_FILE_URL, { cache: "no-store", signal: AbortSignal.timeout(READ_DEADLINE_MS) });
+    if (response.status === 404) return { state: "missing" };
+    if (!response.ok) return { state: "unreadable" };
     const text = await response.text();
-    if (text.length > FILE_MAX) return null;
-    return parseStatusFile(JSON.parse(text));
+    if (text.length > FILE_MAX) return { state: "unreadable" };
+    const file = parseStatusFile(JSON.parse(text));
+    return file ? { state: "read", file } : { state: "unreadable" };
   } catch (error) {
     console.error("status: the status file could not be read", error instanceof Error ? error.name : "unknown error");
-    return null;
+    return { state: "unreadable" };
   }
 }

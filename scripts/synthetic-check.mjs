@@ -356,11 +356,9 @@ export const STATUS_BRANCH = "status";
 export const HISTORY_DAYS = 7;
 const HISTORY_MS = HISTORY_DAYS * 24 * 60 * 60_000;
 /** A failure's reason, as far as the status file keeps it (SP2). */
-export const STATUS_REASON_MAX = 200;
+export const STATUS_REASON_MAX = 120;
 /** What the status file is, in its own words (SP2). */
 export const STATUS_SOURCE = "Vestiarion's production check, run from GitHub's servers outside Vercel and Supabase.";
-/** Where the status page lives, which the branch's README links. */
-export const STATUS_PAGE = `${PRODUCTION_ORIGIN}/status`;
 /** The branch's own Vercel settings: no deployment, ever (SP1). */
 export const STATUS_VERCEL_JSON = `${JSON.stringify({ git: { deploymentEnabled: false } })}\n`;
 const GITHUB_API = "https://api.github.com";
@@ -456,38 +454,61 @@ export function parseStatusRounds(text) {
   });
 }
 
-/** A text as one Markdown table cell: no line break, and nothing GitHub reads as a column, a tag or code. */
-const cell = (text) => String(text).replace(/[\r\n]+/g, " ").replace(/[|`<>&]/g, (character) => `&#${character.charCodeAt(0)};`);
+/**
+ * A text as one Markdown table cell: no line break, and nothing GitHub reads as a column, a tag, code, a link, an image
+ * or emphasis, so a reason that quotes a redirect's target shows as text.
+ */
+const cell = (text) =>
+  String(text)
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[|`<>&[\]()!*_~\\]/g, (character) => `&#${character.charCodeAt(0)};`);
+
+/** A last round older than this means the monitor paused (the status page's PAUSED_AFTER_MINUTES, SP6). */
+export const PAUSED_AFTER_MINUTES = 25;
 
 /**
- * The branch's README (SP1): the last round as a table, so GitHub shows the state while the site does not answer.
+ * The branch's README (SP1): the last round as a table, for someone who reaches GitHub while the site does not answer.
+ * It speaks of a monitor and pages, as the status page does.
  *
  * @param {StatusFile} file
+ * @param {string} [repository]
  * @returns {string}
  */
-export function statusReadme(file) {
+export function statusReadme(file, repository = "duongnq2798/vestiarion") {
   const last = file.rounds[file.rounds.length - 1];
   const dayAgo = Date.parse(file.updatedAt) - 24 * 60 * 60_000;
-  const lines = ["# Vestiarion production status", "", `${STATUS_SOURCE} The page: ${STATUS_PAGE}`, ""];
+  const github = `https://github.com/${repository}`;
+  const lines = [
+    "# Vestiarion status",
+    "",
+    `What Vestiarion's public pages answered at the last check, by a monitor on GitHub's servers, outside Vestiarion's own hosting, about every ${file.everyMinutes} minutes. The full page: ${file.origin}/status`,
+    "",
+  ];
   if (!last) {
-    lines.push("No round has run yet.");
+    lines.push("No results yet.");
   } else {
-    const passed = file.checks.filter((check) => last.results[check.path]?.[0] === 1).length;
-    lines.push(`Last round: ${last.at.slice(0, 16).replace("T", " ")} UTC, ${passed} of ${file.checks.length} ${checksWord(file.checks.length)} passed.`, "");
-    lines.push("| Address | Last round | Time | Last 24 hours |", "| --- | --- | --- | --- |");
+    const up = file.checks.filter((check) => last.results[check.path]?.[0] === 1).length;
+    lines.push(
+      `Last checked: ${last.at.slice(0, 16).replace("T", " ")} UTC. ${up} of ${file.checks.length} pages up.`,
+      "",
+      `If that time is more than ${PAUSED_AFTER_MINUTES} minutes old, monitoring paused, since GitHub sometimes starts the monitor late. That says nothing about the site itself.`,
+      ""
+    );
+    lines.push("| Page | Last check | Time | Last 24 hours |", "| --- | --- | --- | --- |");
     for (const { path } of file.checks) {
       const result = last.results[path];
       const rounds = file.rounds.filter((round) => Date.parse(round.at) > dayAgo && round.results[path] !== undefined);
-      const passes = rounds.filter((round) => round.results[path][0] === 1).length;
-      const verdict = result === undefined ? "Not checked" : result[0] === 1 ? "Passed" : `Failed: ${result[2]}`;
-      lines.push(`| \`${path}\` | ${cell(verdict)} | ${result === undefined ? "" : `${result[1]} ms`} | ${passes} of ${rounds.length} rounds passed |`);
+      const ups = rounds.filter((round) => round.results[path][0] === 1).length;
+      const verdict = result === undefined ? "Not checked" : result[0] === 1 ? "Up" : `Failed: ${result[2]}`;
+      const time = result === undefined ? "" : `${result[1].toLocaleString("en-US")} ms`;
+      lines.push(`| [${path}](${file.origin}${path}) | ${cell(verdict)} | ${time} | up ${ups} of ${rounds.length} times checked |`);
     }
   }
   lines.push(
     "",
-    `This branch holds one commit, replaced after every round. \`status.json\` holds every round of the last ${HISTORY_DAYS} days.`,
-    "How the checks work: `docs/superpowers/specs/2026-10-28-production-check-design.md` and",
-    "`docs/superpowers/specs/2026-11-04-status-page-design.md` on `main`.",
+    `Something wrong? Tell us on GitHub Issues: ${github}/issues`,
+    "",
+    `\`status.json\` holds every check of the last ${HISTORY_DAYS} days. This branch holds one commit, replaced after every check. How the monitor works: ${github}/blob/main/docs/superpowers/specs/2026-11-04-status-page-design.md`,
     ""
   );
   return lines.join("\n");
@@ -543,7 +564,7 @@ export async function publishStatus({ token, repository, file, fetchImpl = fetch
   const git = `/repos/${repository}/git`;
   const files = [
     { path: "status.json", content: `${JSON.stringify(file)}\n` },
-    { path: "README.md", content: statusReadme(file) },
+    { path: "README.md", content: statusReadme(file, repository) },
     { path: "vercel.json", content: STATUS_VERCEL_JSON },
   ];
   const tree = await github(fetchImpl, token, "POST", `${git}/trees`, {
@@ -563,16 +584,21 @@ export async function publishStatus({ token, repository, file, fetchImpl = fetch
 }
 
 /**
- * The rounds the branch holds, read when a run starts (SP4): `read`, `none` when the branch or its file does not exist
- * yet, `unreachable` when GitHub did not answer it, so the history is still unknown, and `unreadable` when the file is
- * not one this script writes.
+ * The rounds the branch holds, read when a run starts (SP4): `read`; `none` when the branch does not exist yet;
+ * `unreachable` when GitHub did not answer, or said the file is missing from a branch that exists, so the history is
+ * still unknown; and `unreadable` when the file is not one this script writes.
  *
  * @param {{ token: string, repository: string, fetchImpl?: typeof fetch }} input
  * @returns {Promise<{ state: "read" | "none" | "unreachable" | "unreadable", rounds: StatusRound[] }>}
  */
 export async function readPublished({ token, repository, fetchImpl = fetch }) {
-  const answer = await github(fetchImpl, token, "GET", `/repos/${repository}/contents/status.json?ref=${STATUS_BRANCH}`, undefined, "application/vnd.github.raw+json");
-  if (answer.status === 404) return { state: "none", rounds: [] };
+  const answer = await github(fetchImpl, token, "GET", `/repos/${repository}/contents/status.json?ref=refs/heads/${STATUS_BRANCH}`, undefined, "application/vnd.github.raw+json");
+  if (answer.status === 404) {
+    // Only the branch itself being missing means no history: a 404 for the file of a branch that exists is not trusted
+    // to erase 7 days.
+    const ref = await github(fetchImpl, token, "GET", `/repos/${repository}/git/ref/heads/${STATUS_BRANCH}`);
+    return { state: ref.status === 404 ? "none" : "unreachable", rounds: [] };
+  }
   if (!answer.ok) return { state: "unreachable", rounds: [] };
   try {
     return { state: "read", rounds: parseStatusRounds(answer.body ?? "") };
@@ -581,9 +607,14 @@ export async function readPublished({ token, repository, fetchImpl = fetch }) {
   }
 }
 
+/** Reads of the history GitHub may leave unanswered, the first included, before the history starts again (SP4). */
+export const HISTORY_READS = 6;
+
 /**
  * Keeps the published history and publishes each round (SP3, SP4). The history is read from the branch first; until
  * GitHub answers that read, rounds wait here unpublished, so a read that failed never replaces 7 days with one round.
+ * After HISTORY_READS unanswered reads, about an hour of rounds, the history starts again from the rounds waiting, so a
+ * branch GitHub can no longer read does not keep the status page paused.
  *
  * @param {{ token: string, repository: string, origin: string, everyMinutes: number, fetchImpl: typeof fetch,
  *   log: (line: string) => void }} input
@@ -593,10 +624,17 @@ export function statusPublisher({ token, repository, origin, everyMinutes, fetch
   let history = null;
   /** @type {StatusRound[]} */
   let waiting = [];
+  let unanswered = 0;
 
   async function learn() {
     const published = await readPublished({ token, repository, fetchImpl });
-    if (published.state === "unreachable") return false;
+    if (published.state === "unreachable") {
+      unanswered += 1;
+      if (unanswered < HISTORY_READS) return false;
+      log(`::warning::GitHub left ${unanswered} reads of the published status unanswered: its history starts again from this run.`);
+      history = [];
+      return true;
+    }
     if (published.state === "unreadable") log("::warning::The published status is not a file this script writes: its history starts again from this run.");
     else log(`Read ${published.rounds.length} published ${published.rounds.length === 1 ? "round" : "rounds"} back from the ${STATUS_BRANCH} branch.`);
     history = published.rounds;

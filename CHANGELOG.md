@@ -15,19 +15,24 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 ### Added
 
 - **A public status page** at [/status](https://www.vestiarion.xyz/status). It shows whether Vestiarion's public pages
-  answer, as the production check finds them from GitHub's servers, outside Vercel and Supabase, about every 10
-  minutes: the landing page, the open numbers, the docs, the five free tools, robots.txt and the sitemap. The headline
-  says all checks passing, which ones failed in the last round, or that the checks are paused when the last round is
-  more than 25 minutes old, since GitHub starts the check's runs once an hour and sometimes late. Each check gives its
-  last result and time, its share of passed rounds in the last 24 hours and 7 days, and an hour-by-hour strip of the
-  last 24 hours, where an hour with no round shows as not checked, never as passing. The page counts the rounds that
-  ran against the 144 a day a round every 10 minutes makes, and lists each incident of the last 7 days: a check that
-  failed two rounds running, the rule the team is told by. It says what it does not check: the API, signed-in pages,
-  the agent's cycles, payments, Circle or Arc. After each round the check publishes the last 7 days of rounds to the
-  repository's [`status` branch](https://github.com/duongnq2798/vestiarion/tree/status), one commit replaced every
-  round, with a README that shows the same state on GitHub while the site does not answer; the page reads that file,
-  kept a minute, and nothing from Vestiarion's database. The check's job gains `contents: write` for that branch alone,
-  and the token never reaches the log. It is in the sitemap and the footer's Resources group. No migration.
+  are up, as the production check finds them from GitHub's servers, outside Vercel and Supabase, about every 10
+  minutes: the landing page, the open numbers, the docs, the five free tools, robots.txt and the sitemap. It speaks of
+  a monitor that checks pages. The headline says all pages up, which ones failed at the last check, or that monitoring
+  paused when the last check is more than 25 minutes old: GitHub is set to start the monitor every hour, and has
+  started it hours late. While paused, each page shows its last result as it was then, never as its state now. Each
+  page gives its last result and time, how many times it was up of the times checked in the last 24 hours and 7 days,
+  with the checks missed, and an hour-by-hour strip of the last 24 hours, where an hour with no check shows as not
+  checked, never as up, with a legend and shapes as well as colours. Pages that failed come first. The page counts the
+  10-minute slots that had a check against the 144 a day, lists the incidents of the last 7 days (a page that failed
+  twice in a row, the rule the team is told by), says what it does not check (the API, signed-in pages, the agent's
+  work, payments, Circle or Arc) and links GitHub Issues. Before the first results are published it says so. After each
+  round the check publishes the last 7 days of rounds to the repository's
+  [`status` branch](https://github.com/duongnq2798/vestiarion/tree/status), one commit replaced every round, with a
+  README that shows the same state on GitHub while the site does not answer. The page is rendered for each visit and
+  reads that file from GitHub, nothing from Vestiarion's database. The check's job gains `contents: write`, which it
+  uses for that branch alone; since that permission is the repository's, the token goes only to the script's own step,
+  which now fetches the script with `curl` instead of `actions/checkout`, and the job's cache actions are pinned to a
+  commit. The token never reaches the log. The page is in the sitemap and the footer's Resources group. No migration.
 
 ## [0.1.0-beta.15] - 2026-11-04
 

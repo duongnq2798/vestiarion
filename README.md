@@ -531,8 +531,8 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
   and what people decided, per network, customers apart from us, read from production on every load. Figures change
   daily, so this README links there instead of copying them.
 - **[Status](https://www.vestiarion.xyz/status)** — whether the public pages answer, from the production check that
-  opens them about every 10 minutes from GitHub's servers, outside Vercel and Supabase: the last round, each check's
-  last 24 hours and 7 days, and every incident. The same results are on the
+  opens them about every 10 minutes from GitHub's servers, outside Vercel and Supabase: the last check, each page's
+  last 24 hours and 7 days, and the incidents of the last 7 days. The same results are on the
   [`status` branch](https://github.com/duongnq2798/vestiarion/tree/status), which the check replaces after every round.
 - **The ledger** — every workspace's `/audit` verifies its whole chain in one click; exports and webhooks carry the
   same signed entries.

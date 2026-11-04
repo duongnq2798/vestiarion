@@ -144,7 +144,7 @@ Two independent upgrades from there, in either order:
 | `npm run arc:proof` | Standalone: two wallets, a faucet check, one real transfer |
 | `npm run telegram:setup -- <https origin>` | Registers the Telegram bot's webhook and command menu, once the three `TELEGRAM_*` variables are set (see `.env.example`) |
 | `npm run docs:screenshots` | Rebuilds the user guides’ step screenshots in `public/docs/guides/` with local headless Edge. Run it after changing a screen a guide shows (Go live, the counterparty or invoice form, a decision or approval card, the audit log), then look at each PNG before committing |
-| `node scripts/synthetic-check.mjs` | One round of the production check (see [Running on a real clock](#running-on-a-real-clock)) against `SYNTHETIC_ORIGIN`, or production when it is unset: each page's status, time and, when it fails, why. Reads public pages only, and needs Node alone, no install |
+| `node scripts/synthetic-check.mjs` | One round of the production check (see [Running on a real clock](#running-on-a-real-clock)) against `SYNTHETIC_ORIGIN`, or production when it is unset: each page's status, time and, when it fails, why. Reads public pages only, and needs Node alone, no install; with `--publish-status`, as the workflow runs it, it also writes the repository's `status` branch |
 
 These scripts work on the database, as its operator. To work with one workspace through its API instead, from any
 machine, use the [`vestiarion` command](https://www.vestiarion.xyz/docs/get-started/cli) with a key from that workspace
@@ -476,9 +476,12 @@ round is saved, and yours starts at once. If yours started at once instead of wa
 `SYNTHETIC_ORIGIN`, none was going and yours already has the secret: cancel nothing. It needs no token of the app's and
 no database change. After each round it publishes the last 7 days of rounds to the repository's `status` branch, one
 commit replaced every round, with the job's own `GITHUB_TOKEN`: the job's one write permission, `contents: write`.
-The branch holds a `vercel.json` that turns its deployments off. The status page, `/status`, reads that branch's
-`status.json` from GitHub (`STATUS_FILE_URL` in `src/lib/status/file.ts`), so a fork that wants its own results there
-names its own repository in that constant. Each page must say a text from the app's own copy (`CHECKS` in the script), so change those too if
+The branch holds a `vercel.json` that turns its deployments off. That permission is the repository's: protect your
+fork's `main` before the job runs with it, since an unprotected `main` would let the token push there. The job fetches
+the script with `curl` from the public repository, so a private fork needs another way to fetch it. The status page,
+`/status`, reads that branch's `status.json` from GitHub: a fork that wants its own results there names its own
+repository in `STATUS_FILE_URL` (`src/lib/status/file.ts`) and `GITHUB_URL` (`src/lib/site-links.ts`). Each page
+must say a text from the app's own copy (`CHECKS` in the script), so change those too if
 you change that copy: CI fails a copy edit made without its check. A run keeps the script of the commit it was queued
 at, so a change to it reaches the checks from the first run queued after it is on main, up to about 7 hours later, or
 at once after the same steps. Until then the running checks look for the old text, or for a free tool's old address if

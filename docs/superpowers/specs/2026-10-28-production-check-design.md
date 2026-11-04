@@ -82,7 +82,8 @@ not a Discord URL, or Discord refused it), or an unreadable state file. Failing 
 emails its actor about a broken monitor, never once per failing page.
 
 PC10. Reads only. Plain `GET`s of public pages with the header `User-Agent: vestiarion-synthetic-check
-(+https://github.com/duongnq2798/vestiarion)`, which Vercel's logs can filter on; no cookie, no token, no write. It
+(+https://github.com/duongnq2798/vestiarion)`, which Vercel's logs can filter on; no cookie, no token, no write to
+production. Since Nov 4 the job also writes the repository's `status` branch with its own token (status page SP3, SP5). It
 runs no JavaScript, and the only analytics in the app is Google Analytics in the browser, so no probe counts as a
 visit. Database load: the landing and `/open` are each opened about 144 times a day. Their reads are kept a minute on
 each Vercel instance, so with 10 minutes between rounds a landing load usually finds them gone and makes 11 to 16

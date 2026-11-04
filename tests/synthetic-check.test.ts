@@ -13,6 +13,8 @@ import { DISCORD_CONTENT_MAX } from "@/lib/discord/api";
 import { parseDiscordWebhookUrl } from "@/lib/discord/webhook-url";
 import { FREE_TOOLS } from "@/lib/free-tools";
 import { PRODUCTION_ORIGIN as APP_ORIGIN } from "@/lib/public-origin";
+import { STATUS_REASON_MAX as APP_REASON_MAX } from "@/lib/status/file";
+import { PAUSED_AFTER_MINUTES as APP_PAUSED_AFTER_MINUTES } from "@/lib/status/summary";
 import {
   CHECKS,
   EMPTY_STATE,
@@ -20,6 +22,8 @@ import {
   TIMEOUT_MS,
   USER_AGENT,
   HISTORY_DAYS,
+  HISTORY_READS,
+  PAUSED_AFTER_MINUTES,
   STATUS_BRANCH,
   STATUS_REASON_MAX,
   STATUS_SOURCE,
@@ -714,8 +718,11 @@ function withGithub({ published = null as string | null, answer = ((() => null) 
     const refused = answer(call);
     if (refused) return refused;
     const repo = "/repos/duongnq2798/vestiarion";
-    if (call.method === "GET" && call.path === `${repo}/contents/status.json?ref=status`) {
+    if (call.method === "GET" && call.path === `${repo}/contents/status.json?ref=refs/heads/status`) {
       return file === null ? new Response("{}", { status: 404 }) : new Response(file, { status: 200 });
+    }
+    if (call.method === "GET" && call.path === `${repo}/git/ref/heads/status`) {
+      return branch === null ? new Response("{}", { status: 404 }) : Response.json({ ref: "refs/heads/status", object: { sha: branch } }, { status: 200 });
     }
     if (call.method === "POST" && call.path === `${repo}/git/trees`) {
       const sha = String(trees.size + 1).padStart(40, "a");
@@ -747,8 +754,13 @@ function withGithub({ published = null as string | null, answer = ((() => null) 
 
 const DAY_MS = 24 * 60 * 60_000;
 
+/** The commit actions/cache's v4 tag named when the workflow was pinned to it. */
+const CACHE_COMMIT = "0057852bfaa89a56745cba8c7296529d2fc39830";
+
 describe("the status branch (status page SP1-SP5)", () => {
-  it("keeps a round as [1, ms] for a pass and [0, ms, reason] for a failure, the reason clipped", () => {
+  it("keeps a round as [1, ms] for a pass and [0, ms, reason] for a failure, the reason clipped as the page reads it", () => {
+    expect(STATUS_REASON_MAX).toBe(120);
+    expect(APP_REASON_MAX).toBe(STATUS_REASON_MAX);
     const long = "x".repeat(STATUS_REASON_MAX + 50);
     expect(statusRound([pass("/", 4697), fail("/open", "answered 500, expected 200", 812), fail("/docs", long)], at(10, 0))).toEqual({
       at: "2026-10-28T10:00:00.000Z",
@@ -778,13 +790,18 @@ describe("the status branch (status page SP1-SP5)", () => {
       rounds,
     });
     const readme = statusReadme(file);
-    expect(readme).toContain("# Vestiarion production status");
-    expect(readme).toContain("The page: https://www.vestiarion.xyz/status");
-    expect(readme).toContain("Last round: 2026-10-28 10:00 UTC, 1 of 2 checks passed.");
-    expect(readme).toContain("| `/` | Passed | 100 ms | 2 of 2 rounds passed |");
+    expect(readme).toContain("# Vestiarion status");
+    expect(readme).toContain("by a monitor on GitHub's servers, outside Vestiarion's own hosting, about every 10 minutes. The full page: https://www.vestiarion.xyz/status");
+    expect(readme).toContain("Last checked: 2026-10-28 10:00 UTC. 1 of 2 pages up.");
+    expect(readme).toContain(`If that time is more than ${PAUSED_AFTER_MINUTES} minutes old, monitoring paused`);
+    expect(readme).toContain("| [/](https://www.vestiarion.xyz/) | Up | 100 ms | up 2 of 2 times checked |");
     // A reason never breaks the table or becomes a tag.
-    expect(readme).toContain("| `/open` | Failed: missing \"a &#124; b\" &#60;b&#62; | 200 ms | 1 of 2 rounds passed |");
-    expect(statusReadme(statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS, rounds: [] }))).toContain("No round has run yet.");
+    expect(readme).toContain("| [/open](https://www.vestiarion.xyz/open) | Failed: missing \"a &#124; b\" &#60;b&#62; | 200 ms | up 1 of 2 times checked |");
+    expect(readme).toContain("Something wrong? Tell us on GitHub Issues: https://github.com/duongnq2798/vestiarion/issues");
+    expect(statusReadme(file, "someone/fork")).toContain("https://github.com/someone/fork/issues");
+    expect(statusReadme(statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS, rounds: [] }))).toContain("No results yet.");
+    // The page and the README call a check paused after the same time.
+    expect(PAUSED_AFTER_MINUTES).toBe(APP_PAUSED_AFTER_MINUTES);
     expect(JSON.parse(STATUS_VERCEL_JSON)).toEqual({ git: { deploymentEnabled: false } });
   });
 
@@ -863,6 +880,15 @@ describe("the status branch (status page SP1-SP5)", () => {
     const reader = withGithub({ published: good });
     await ask(reader.fetchImpl);
     expect(reader.calls[0].headers.accept).toBe("application/vnd.github.raw+json");
+    // A 404 for the file of a branch that exists is not trusted to erase the history.
+    const flaky = withGithub({ published: good, answer: (call) => (call.path.includes("/contents/") ? new Response("{}", { status: 404 }) : null) });
+    expect(await ask(flaky.fetchImpl)).toEqual({ state: "unreachable", rounds: [] });
+    expect(flaky.calls.map((call) => call.path)).toEqual(["/repos/duongnq2798/vestiarion/contents/status.json?ref=refs/heads/status", "/repos/duongnq2798/vestiarion/git/ref/heads/status"]);
+  });
+
+  it("keeps the README a table of text: no link, image or emphasis from a reason", () => {
+    const file = statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS.slice(0, 1), rounds: [statusRound([fail("/", "answered 302 (redirected to ![x](https://evil.example/a_b*c)), expected 200")], at(10, 0))] });
+    expect(statusReadme(file)).toContain("| [/](https://www.vestiarion.xyz/) | Failed: answered 302 &#40;redirected to &#33;&#91;x&#93;&#40;https://evil.example/a&#95;b&#42;c&#41;&#41;, expected 200 |");
   });
 
   describe("the command with --publish-status", () => {
@@ -913,6 +939,20 @@ describe("the status branch (status page SP1-SP5)", () => {
       expect(JSON.parse(github.published() ?? "{}").rounds).toHaveLength(3);
     });
 
+    it(`starts the history again after ${HISTORY_READS} unanswered reads, so a branch GitHub cannot read never keeps the page paused`, async () => {
+      const production = await serve();
+      const github = withGithub({ answer: (call) => (call.method === "GET" ? new Response("{}", { status: 502 }) : null) });
+      const time = fakeTime();
+      const { log, text } = logger();
+      const code = await main(["--loop", "--minutes", "60", "--every", "10", "--publish-status"], { env: env(production.origin), fetchImpl: github.fetchImpl, log, clock: time.clock, sleep: time.sleep });
+      expect(code).toBe(0);
+      // The read when the run starts and 4 more wait; the 6th unanswered read starts the history from the 5 rounds waiting.
+      expect(text()).toContain("(4 waiting)");
+      expect(text()).toContain(`::warning::GitHub left ${HISTORY_READS} reads of the published status unanswered: its history starts again from this run.`);
+      expect(text()).toContain("Published the status to the status branch: 5 rounds.");
+      expect(text()).toContain("Published the status to the status branch: 6 rounds.");
+    });
+
     it("warns and goes on when GitHub refuses a round, and never fails the run for it", async () => {
       const production = await serve();
       const github = withGithub({ answer: (call) => (call.method === "POST" ? new Response("{}", { status: 403 }) : null) });
@@ -960,13 +1000,19 @@ describe(".github/workflows/synthetic-check.yml (PC4, PC11, PC12)", () => {
   it("restores the newest state and saves this run's under its own key, even after a failure or a cancel", () => {
     const statePath = /--state (\S+) --publish-status\n/.exec(WORKFLOW)?.[1];
     expect(statePath).toBe(".synthetic-state.json");
-    expect(WORKFLOW).toContain("uses: actions/cache/restore@v4");
-    expect(WORKFLOW).toContain("uses: actions/cache/save@v4");
+    expect(WORKFLOW).toContain(`uses: actions/cache/restore@${CACHE_COMMIT} # v4\n`);
+    expect(WORKFLOW).toContain(`uses: actions/cache/save@${CACHE_COMMIT} # v4\n`);
     expect([...WORKFLOW.matchAll(/^ {10}path: (\S+)$/gm)].map((match) => match[1])).toEqual([statePath, statePath]);
     const keys = [...WORKFLOW.matchAll(/^ {10}key: (.+)$/gm)].map((match) => match[1]);
     expect(keys).toEqual(["synthetic-state-${{ github.run_id }}-${{ github.run_attempt }}", "synthetic-state-${{ github.run_id }}-${{ github.run_attempt }}"]);
     expect(WORKFLOW).toContain("restore-keys: synthetic-state-\n");
-    expect(WORKFLOW).toMatch(/- name: Save the state for the next run\n {8}if: always\(\)\n {8}uses: actions\/cache\/save@v4/);
+    expect(WORKFLOW).toMatch(/- name: Save the state for the next run\n {8}if: always\(\)\n {8}uses: actions\/cache\/save@[0-9a-f]{40} # v4/);
+  });
+
+  it("runs no action by a tag that could move: each one is pinned to a commit, and none is given the token", () => {
+    const uses = [...WORKFLOW.matchAll(/^\s+(?:- )?uses: (\S+)/gm)].map((match) => match[1]);
+    expect(uses).toEqual([`actions/cache/restore@${CACHE_COMMIT}`, `actions/cache/save@${CACHE_COMMIT}`]);
+    expect(WORKFLOW).not.toMatch(/^\s+token:/m);
   });
 
   it("holds one secret, the Discord webhook, and the job's own token, which may write contents for the status branch alone", () => {
@@ -983,7 +1029,13 @@ describe(".github/workflows/synthetic-check.yml (PC4, PC11, PC12)", () => {
   it("publishes to the status branch alone, and names no other ref", () => {
     const script = read("scripts/synthetic-check.mjs");
     expect(STATUS_BRANCH).toBe("status");
-    expect([...script.matchAll(/refs\/[^`"'\s,)]*/g)].map((match) => match[0])).toEqual(["refs/heads/status", "refs/heads/${STATUS_BRANCH}", "refs/heads/${STATUS_BRANCH}"]);
+    // The README's comment, the move, the make, and the history's read, which names the branch by its full ref.
+    expect([...script.matchAll(/refs\/[^`"'\s,)]*/g)].map((match) => match[0])).toEqual([
+      "refs/heads/status",
+      "refs/heads/${STATUS_BRANCH}",
+      "refs/heads/${STATUS_BRANCH}",
+      "refs/heads/${STATUS_BRANCH}",
+    ]);
     expect(script).not.toMatch(/refs\/(tags|heads\/main)/);
   });
 
@@ -992,9 +1044,11 @@ describe(".github/workflows/synthetic-check.yml (PC4, PC11, PC12)", () => {
     expect(WORKFLOW).toContain(`SYNTHETIC_ORIGIN: \${{ vars.SYNTHETIC_ORIGIN || '${PRODUCTION_ORIGIN}' }}\n`);
   });
 
-  it("checks out the script alone, without credentials, and installs nothing, so the script uses Node's built-ins only", () => {
-    expect(WORKFLOW).toContain("uses: actions/checkout@v5\n        with:\n          persist-credentials: false\n          sparse-checkout: scripts/synthetic-check.mjs\n");
-    expect(WORKFLOW).not.toMatch(/npm|npx|setup-node/);
+  it("fetches the script alone, at the run's commit, with no token, and installs nothing, so the script uses Node's built-ins only", () => {
+    expect(WORKFLOW).toContain(
+      '      - name: Fetch the script\n        run: >-\n          curl --fail --silent --show-error --location --retry 3 --max-time 60 --create-dirs\n          --output scripts/synthetic-check.mjs\n          "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/scripts/synthetic-check.mjs"\n'
+    );
+    expect(WORKFLOW).not.toMatch(/npm|npx|setup-node|actions\/checkout/);
     const imports = [...read("scripts/synthetic-check.mjs").matchAll(/^import .+ from "([^"]+)";$/gm)].map((match) => match[1]);
     expect(imports.length).toBeGreaterThan(0);
     for (const specifier of imports) expect(specifier).toMatch(/^node:/);
