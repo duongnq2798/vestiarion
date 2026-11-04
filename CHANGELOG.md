@@ -23,7 +23,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   page gives its last result and time, how many times it was up of the times checked in the last 24 hours and 7 days,
   with the checks missed, and an hour-by-hour strip of the last 24 hours, where an hour with no check shows as not
   checked, never as up, with a legend and shapes as well as colours. Pages that failed come first. The page counts the
-  10-minute slots that had a check against the 144 a day, lists the incidents of the last 7 days (a page that failed
+  10-minute slots that had a check against the 144 a day, or, while the results kept are younger than the window,
+  against the slots since the oldest one, which it names, and lists the incidents of the last 7 days (a page that failed
   twice in a row, the rule the team is told by), says what it does not check (the API, signed-in pages, the agent's
   work, payments, Circle or Arc) and links GitHub Issues. Before the first results are published it says so. After each
   round the check publishes the last 7 days of rounds to the repository's

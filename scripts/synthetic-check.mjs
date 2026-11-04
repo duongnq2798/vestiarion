@@ -501,7 +501,7 @@ export function statusReadme(file, repository = "duongnq2798/vestiarion") {
       const ups = rounds.filter((round) => round.results[path][0] === 1).length;
       const verdict = result === undefined ? "Not checked" : result[0] === 1 ? "Up" : `Failed: ${result[2]}`;
       const time = result === undefined ? "" : `${result[1].toLocaleString("en-US")} ms`;
-      lines.push(`| [${path}](${file.origin}${path}) | ${cell(verdict)} | ${time} | up ${ups} of ${rounds.length} times checked |`);
+      lines.push(`| [${path}](${file.origin}${path}) | ${cell(verdict)} | ${time} | up ${ups} of ${rounds.length} ${rounds.length === 1 ? "time" : "times"} checked |`);
     }
   }
   lines.push(

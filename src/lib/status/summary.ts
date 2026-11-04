@@ -80,8 +80,12 @@ export interface StatusSummary {
   everyMinutes: number;
   headline: Headline;
   checks: CheckSummary[];
-  /** Slots with a round in the last 24 hours and 7 days, against what a round every `everyMinutes` makes. */
-  coverage: { day: number; week: number; dayExpected: number; weekExpected: number };
+  /**
+   * Slots with a round in the last 24 hours and 7 days, against what a round every `everyMinutes` makes in each, counted
+   * from `keptSince` when the results kept begin inside the window: before then nothing was published, so nothing was
+   * missed that the page could know of.
+   */
+  coverage: { day: number; week: number; dayExpected: number; weekExpected: number; keptSince: string | null };
   /** Newest first, from the last 7 days. */
   incidents: Incident[];
 }
@@ -168,7 +172,12 @@ export function summarize(file: StatusFile, now: Date): StatusSummary {
           ? { kind: "failing", checks: file.checks.length, failing }
           : { kind: "passing", checks: file.checks.length };
 
-  const perDay = Math.round(DAY / (file.everyMinutes * MINUTE));
+  const slot = file.everyMinutes * MINUTE;
+  const oldest = rounds[0] ? Date.parse(rounds[0].at) : null;
+  const day = slotsOf(rounds.map((round) => Date.parse(round.at)).filter((time) => time > dayFrom), file.everyMinutes);
+  const week = slotsOf(rounds.map((round) => Date.parse(round.at)).filter((time) => time > weekFrom), file.everyMinutes);
+  // A window the results kept do not fill expects a round every slot from the oldest one on, that one included.
+  const expected = (from: number, ran: number) => (oldest !== null && oldest > from ? Math.max(ran, Math.floor((at - oldest) / slot) + 1) : Math.round((at - from) / slot));
   return {
     readAt: now.toISOString(),
     updatedAt: newest?.at ?? null,
@@ -176,10 +185,11 @@ export function summarize(file: StatusFile, now: Date): StatusSummary {
     headline,
     checks,
     coverage: {
-      day: slotsOf(rounds.map((round) => Date.parse(round.at)).filter((time) => time > dayFrom), file.everyMinutes),
-      week: slotsOf(rounds.map((round) => Date.parse(round.at)).filter((time) => time > weekFrom), file.everyMinutes),
-      dayExpected: perDay,
-      weekExpected: perDay * 7,
+      day,
+      week,
+      dayExpected: expected(dayFrom, day),
+      weekExpected: expected(weekFrom, week),
+      keptSince: oldest !== null && oldest > weekFrom ? rounds[0].at : null,
     },
     incidents,
   };

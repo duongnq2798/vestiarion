@@ -169,8 +169,19 @@ describe("what the page says (SP6)", () => {
       return !(time > NOW.getTime() - 20 * 60 * MINUTE && time <= NOW.getTime() - 17 * 60 * MINUTE);
     });
     const summary = summarize(file(kept), NOW);
-    expect(summary.coverage).toEqual({ day: 144 - 18, week: 1008 - 18, dayExpected: 144, weekExpected: 1008 });
+    expect(summary.coverage).toEqual({ day: 144 - 18, week: 1008 - 18, dayExpected: 144, weekExpected: 1008, keptSince: kept[0].at });
     expect(summary.checks[0].day).toEqual({ rounds: 126, passed: 126, slots: 126 });
+  });
+
+  it("counts the checks it should have run from when the results kept begin, so a new history shows none missed", () => {
+    // The monitor first published an hour ago, and has not missed one since.
+    const summary = summarize(file(rounds(minutesAgo(65), minutesAgo(5))), NOW);
+    expect(summary.coverage).toEqual({ day: 7, week: 7, dayExpected: 7, weekExpected: 7, keptSince: minutesAgo(65).toISOString() });
+    // Its next check, 10 minutes after the oldest kept, is not due yet at 12:05, so nothing counts as missed.
+    expect(summarize(file(rounds(minutesAgo(65), minutesAgo(15))), NOW).coverage).toMatchObject({ day: 6, dayExpected: 7 });
+    // Results older than the window fill it: a whole day's checks are expected.
+    const older = summarize(file(rounds(new Date(NOW.getTime() - 26 * 60 * MINUTE), NOW)), NOW).coverage;
+    expect(older).toMatchObject({ day: 144, dayExpected: 144, keptSince: new Date(NOW.getTime() - 26 * 60 * MINUTE).toISOString() });
   });
 
   it("counts the monitor's 10-minute slots, so a run starting just after the last never counts more than it should", () => {
@@ -252,10 +263,12 @@ describe("the page (SP6)", () => {
     const words = text(markup);
     expect(words).toContain("All 10 pages up");
     expect(words).toContain("All 10 pages were up at the last check. Last checked Nov 4, 2026, 12:00 UTC.");
-    expect(words).toContain("In the last 24 hours the monitor ran 7 of the 144 times it should have, and 7 of 1,008 in the last 7 days.");
+    expect(words).toContain(
+      "The results kept begin Nov 4, 2026, 11:00 UTC, when the monitor first published them, so the checks it should have run are counted from then. In the last 24 hours the monitor ran 7 of the 7 times it should have, and 7 of 7 in the last 7 days."
+    );
     expect(words).toContain("This page read the results Nov 4, 2026, 12:05 UTC.");
     expect(words).toContain("Landing page / Up 120 ms at 12:00 UTC");
-    expect(words).toContain("Last 24 hours: up 7 of 7 times checked, 137 missed. Last 7 days: up 7 of 7 times checked, 1,001 missed.");
+    expect(words).toContain("Last 24 hours: up 7 of 7 times checked. Last 7 days: up 7 of 7 times checked.");
     expect(words).toContain("Last 24 hours, by the hour: 2 hours up every check, none with a failure, 22 hours not checked.");
     expect(words).toContain("Last 24 hours, by the hour: Up every check A failure Not checked");
     expect(words).toContain("No incident in the last 7 days.");

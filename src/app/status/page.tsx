@@ -168,6 +168,12 @@ function StatusBody({ summary }: { summary: StatusSummary }) {
           </Callout>
         )}
         <p className="text-sm text-ink-2">
+          {coverage.keptSince && (
+            <>
+              The results kept begin <time dateTime={coverage.keptSince}>{utcMinute(coverage.keptSince)}</time>, when the monitor first published
+              them, so the checks it should have run are counted from then.{" "}
+            </>
+          )}
           In the last 24 hours the monitor ran {count(coverage.day)} of the {count(coverage.dayExpected)} times it should have, and{" "}
           {count(coverage.week)} of {count(coverage.weekExpected)} in the last 7 days. This page read the results{" "}
           <time dateTime={summary.readAt}>{utcMinute(summary.readAt)}</time>.
