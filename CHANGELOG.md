@@ -167,7 +167,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   in UTF-16 and a whole API answer too. Every command now refuses an option given twice, where the last one used to win
   unseen. The CLI now needs `@vestiarion/sdk` 0.4.1. No
   migration. [Guide](https://www.vestiarion.xyz/docs/get-started/cli#evidence-and-close-packs).
-- **n8n nodes (`@vestiarion/n8n-nodes-vestiarion` 0.1.0).** A self-hosted n8n installs them under **Settings** >
+- **n8n nodes (`@vestiarion/n8n-nodes-vestiarion` 0.1.0 to 0.1.3).** A self-hosted n8n installs them under **Settings** >
   **Community nodes**. The **Vestiarion** node adds a bill for the agent to decide (the counterparty picked from a
   searchable list, an idempotency key so a rerun adds it once) and reads bills, counterparties, the agent's decisions with
   a cursor to resume from, and the workspace's status. It can be an n8n AI agent's tool, and never approves or pays.
@@ -200,7 +200,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **The Quality Lab replays 55 of the team's shadow-mode decisions, up from 46.** The team's own decisions were
   exported again on Nov 4, 2026, adding the 9 the agent made from Oct 28 to Oct 31, three of them payments it made on
   its own to a vendor that earned the owner's rule. All 9 reach the same outcome through today's code: of the 55, 46
-  reach the same outcome and 9 cannot be rebuilt from their record, as before, with 0 wrong payments. The figure is on
+  reach the same outcome and 9 cannot be rebuilt from their record, as before, with 0 wrong payments. The replay runs
+  the decision code outside shadow mode, so it does not test the earned-vendor gate; the scenarios do. The figure is on
   [Open numbers](https://www.vestiarion.xyz/open) and in
   [the Quality Lab](https://www.vestiarion.xyz/docs/research/quality-lab#real-decisions-replayed). Customers'
   workspaces are still never exported. No migration.
