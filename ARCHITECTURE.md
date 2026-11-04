@@ -107,9 +107,23 @@ passing again, unless the workflow is run by hand right after the change is depl
   run in progress, not the one just started. A new run that starts at once instead found none going, and the owner
   should cancel nothing. A run fails only when an alert that was due could not be sent or the state file could not be
   read, never because a page failed.
-- It reads public pages only, holds no token, and runs no JavaScript, so Google Analytics counts no probe; its user
-  agent, `vestiarion-synthetic-check`, tells the probes apart in Vercel's logs. A fork checks nothing unless its
+- It reads public pages only, sends them no token, and runs no JavaScript, so Google Analytics counts no probe; its
+  user agent, `vestiarion-synthetic-check`, tells the probes apart in Vercel's logs. A fork checks nothing unless its
   repository variable `SYNTHETIC_ORIGIN` names its own deployment.
+- **The status page** (`docs/superpowers/specs/2026-11-04-status-page-design.md`). After each round the script
+  publishes every round of the last 7 days to the repository's `status` branch through GitHub's REST API, with the
+  job's own `GITHUB_TOKEN`: a tree of `status.json`, a README with the last round as a table, and a `vercel.json` that
+  turns the branch's deployments off; a commit with no parent; and `refs/heads/status` moved to it by force. The job's
+  one write permission is `contents: write` for that, and `main`'s protection keeps the token from pushing to `main`.
+  When a run starts, it reads the history back from the branch, and until GitHub answers that read its rounds wait
+  unpublished, for at most 6 reads, when the history starts again.
+  A round GitHub refuses is a warning, never a failed run. The token can do more than write that branch (merge a pull
+  request whose `verify` passed, for one), so only the script's step is given it: the job fetches the script with
+  `curl` instead of `actions/checkout`, and pins its two cache actions to a commit. `/status`
+  (`src/app/status/page.tsx`) is rendered for each visit and reads `status.json` from raw.githubusercontent.com for it,
+  with no copy kept, parses it strictly (`src/lib/status/file.ts`) and works out the headline, each page's last 24
+  hours and 7 days, the 10-minute slots that had a check and the incidents in a pure function
+  (`src/lib/status/summary.ts`). It reads nothing from Vestiarion's database.
 
 ## Content Security Policy
 
@@ -5485,7 +5499,7 @@ the footer, whether the title takes one line or two.
 
 ## Search engines
 
-`src/app/sitemap.ts` serves `/sitemap.xml`: the landing page, the open numbers, the page for studios, how the agent
+`src/app/sitemap.ts` serves `/sitemap.xml`: the landing page, the open numbers, the status page, the page for studios, how the agent
 decides, every free tool in `FREE_TOOLS` followed by its own pages, every published docs page, then the terms, privacy
 and security pages, all on `publicOrigin()`. `src/app/robots.ts` serves `/robots.txt`, which names that sitemap and
 lets every crawler read every page (`docs/superpowers/specs/2026-10-28-robots-sitemap-design.md`). It disallows

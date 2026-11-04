@@ -11,7 +11,7 @@ const TOOL_PAGES: Partial<Record<FreeToolSlug, readonly string[]>> = {
 };
 
 /**
- * Served at /sitemap.xml: the landing page, the open numbers, the page for
+ * Served at /sitemap.xml: the landing page, the open numbers, the status page, the page for
  * studios, how the agent decides, the free tools (from their one list, free
  * tool attribution TA5), each followed by its own pages (the payment terms
  * calculator's term pages), every docs page (the API reference included), then
@@ -23,6 +23,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: `${origin}/` },
     { url: `${origin}/open` },
+    { url: `${origin}/status` },
     { url: `${origin}/studios` },
     { url: `${origin}/how-it-decides` },
     ...FREE_TOOLS.flatMap((tool) => [tool.path, ...(TOOL_PAGES[tool.slug] ?? [])]).map((path) => ({ url: `${origin}${path}` })),

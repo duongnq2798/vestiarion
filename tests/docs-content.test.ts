@@ -52,6 +52,7 @@ const APP_ROUTES = new Set([
   "/privacy",
   "/security",
   "/open",
+  "/status",
   "/studios",
   "/how-it-decides",
   ...FREE_TOOLS.map((tool) => tool.path),
@@ -365,7 +366,7 @@ describe("the Errors page", () => {
 });
 
 describe("the sitemap", () => {
-  it("lists the landing page, the open numbers, the page for studios, how the agent decides, the free tools, each followed by its own pages, every published docs page in nav order, then the terms, the privacy page and the security page, each as an absolute URL", () => {
+  it("lists the landing page, the open numbers, the status page, the page for studios, how the agent decides, the free tools, each followed by its own pages, every published docs page in nav order, then the terms, the privacy page and the security page, each as an absolute URL", () => {
     const origin = publicOrigin();
     const urls = sitemap().map((entry) => entry.url);
     // The free tools come from their one list (free tool attribution TA5): the address checker, the payment terms
@@ -374,6 +375,7 @@ describe("the sitemap", () => {
     expect(urls).toEqual([
       `${origin}/`,
       `${origin}/open`,
+      `${origin}/status`,
       `${origin}/studios`,
       `${origin}/how-it-decides`,
       `${origin}/check-address`,

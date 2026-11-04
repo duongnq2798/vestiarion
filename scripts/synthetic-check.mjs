@@ -5,12 +5,15 @@
  *
  *   node scripts/synthetic-check.mjs                                   # one round, nothing kept
  *   node scripts/synthetic-check.mjs --state .synthetic-state.json     # one round, the alert state kept in the file
- *   node scripts/synthetic-check.mjs --loop --minutes 345 --every 10 --state .synthetic-state.json
+ *   node scripts/synthetic-check.mjs --loop --minutes 345 --every 10 --state .synthetic-state.json --publish-status
  *
  * SYNTHETIC_ORIGIN names the deployment (production when unset). MONITOR_DISCORD_WEBHOOK_URL, the only secret, is the
  * team channel's webhook: it is never printed, whole or in part, and without it the checks still run and the log says
- * no alert could be sent (PC7). It reads public pages with GET, holds no token and runs no JavaScript, so no visit is
- * counted (PC10). Node's built-ins only: the workflow checks out this file alone and installs nothing (PC12).
+ * no alert could be sent (PC7). It reads public pages with GET, sends them no token and runs no JavaScript, so no visit
+ * is counted (PC10). With --publish-status it also publishes every round of the last 7 days to the repository's
+ * `status` branch, for the status page, with the job's own GITHUB_TOKEN, which is never printed either
+ * (docs/superpowers/specs/2026-11-04-status-page-design.md). Node's built-ins only: the workflow checks out this file
+ * alone and installs nothing (PC12).
  */
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { setTimeout as wait } from "node:timers/promises";
@@ -347,6 +350,321 @@ export async function postAlert(webhook, content, fetchImpl = fetch) {
   }
 }
 
+/** The branch the status page reads (docs/superpowers/specs/2026-11-04-status-page-design.md SP1), replaced every round. */
+export const STATUS_BRANCH = "status";
+/** Days of rounds the status file keeps (SP2). */
+export const HISTORY_DAYS = 7;
+const HISTORY_MS = HISTORY_DAYS * 24 * 60 * 60_000;
+/** A failure's reason, as far as the status file keeps it (SP2). */
+export const STATUS_REASON_MAX = 120;
+/** What the status file is, in its own words (SP2). */
+export const STATUS_SOURCE = "Vestiarion's production check, run from GitHub's servers outside Vercel and Supabase.";
+/** The branch's own Vercel settings: no deployment, ever (SP1). */
+export const STATUS_VERCEL_JSON = `${JSON.stringify({ git: { deploymentEnabled: false } })}\n`;
+const GITHUB_API = "https://api.github.com";
+const GITHUB_DEADLINE_MS = 15_000;
+const REPOSITORY = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/;
+
+/**
+ * @typedef {[1, number] | [0, number, string]} StatusResult
+ * @typedef {{ at: string, results: Record<string, StatusResult> }} StatusRound
+ * @typedef {{ version: 1, source: string, origin: string, everyMinutes: number, updatedAt: string,
+ *   checks: { path: string, budgetMs: number }[], rounds: StatusRound[] }} StatusFile
+ */
+
+/**
+ * One round as the status file keeps it (SP2): `[1, ms]` for a pass, `[0, ms, reason]` for a failure.
+ *
+ * @param {readonly Result[]} results
+ * @param {Date} now
+ * @returns {StatusRound}
+ */
+export function statusRound(results, now) {
+  /** @type {Record<string, StatusResult>} */
+  const kept = {};
+  for (const result of results) {
+    kept[result.path] = result.ok ? [1, result.ms] : [0, result.ms, String(result.reason ?? "failed").slice(0, STATUS_REASON_MAX)];
+  }
+  return { at: now.toISOString(), results: kept };
+}
+
+/**
+ * The history with a round added, oldest first, keeping only the rounds of the last 7 days up to `now` (SP4).
+ *
+ * @param {readonly StatusRound[]} rounds
+ * @param {StatusRound} round
+ * @param {Date} now
+ * @returns {StatusRound[]}
+ */
+export function appendRound(rounds, round, now) {
+  const until = now.getTime();
+  const from = until - HISTORY_MS;
+  return [...rounds, round]
+    .filter((kept) => {
+      const at = Date.parse(kept.at);
+      return at > from && at <= until;
+    })
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
+/**
+ * The status file (SP2).
+ *
+ * @param {{ origin: string, everyMinutes: number, checks: readonly Check[], rounds: readonly StatusRound[] }} input
+ * @returns {StatusFile}
+ */
+export function statusFile({ origin, everyMinutes, checks, rounds }) {
+  return {
+    version: 1,
+    source: STATUS_SOURCE,
+    origin,
+    everyMinutes,
+    updatedAt: rounds.length > 0 ? rounds[rounds.length - 1].at : new Date(0).toISOString(),
+    checks: checks.map((check) => ({ path: check.path, budgetMs: check.budgetMs })),
+    rounds: [...rounds],
+  };
+}
+
+const isResult = (value) =>
+  Array.isArray(value) &&
+  ((value.length === 2 && value[0] === 1 && Number.isSafeInteger(value[1]) && value[1] >= 0) ||
+    (value.length === 3 && value[0] === 0 && Number.isSafeInteger(value[1]) && value[1] >= 0 && typeof value[2] === "string" && value[2].length <= STATUS_REASON_MAX));
+
+/**
+ * The rounds of a status file this script wrote, read back from the branch when a run starts (SP4); throws on anything
+ * else.
+ *
+ * @param {string} text
+ * @returns {StatusRound[]}
+ */
+export function parseStatusRounds(text) {
+  const parsed = JSON.parse(text);
+  if (parsed === null || typeof parsed !== "object" || parsed.version !== 1 || !Array.isArray(parsed.rounds)) throw new Error("not a status file");
+  return parsed.rounds.map((round) => {
+    const valid =
+      round !== null &&
+      typeof round === "object" &&
+      isIso(round.at) &&
+      round.results !== null &&
+      typeof round.results === "object" &&
+      !Array.isArray(round.results) &&
+      Object.entries(round.results).every(([path, result]) => path.startsWith("/") && isResult(result));
+    if (!valid) throw new Error("a round is not one this script writes");
+    return { at: round.at, results: { ...round.results } };
+  });
+}
+
+/**
+ * A text as one Markdown table cell: no line break, and nothing GitHub reads as a column, a tag, code, a link, an image
+ * or emphasis, so a reason that quotes a redirect's target shows as text.
+ */
+const cell = (text) =>
+  String(text)
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[|`<>&[\]()!*_~\\]/g, (character) => `&#${character.charCodeAt(0)};`);
+
+/** A last round older than this means the monitor paused (the status page's PAUSED_AFTER_MINUTES, SP6). */
+export const PAUSED_AFTER_MINUTES = 25;
+
+/**
+ * The branch's README (SP1): the last round as a table, for someone who reaches GitHub while the site does not answer.
+ * It speaks of a monitor and pages, as the status page does.
+ *
+ * @param {StatusFile} file
+ * @param {string} [repository]
+ * @returns {string}
+ */
+export function statusReadme(file, repository = "duongnq2798/vestiarion") {
+  const last = file.rounds[file.rounds.length - 1];
+  const dayAgo = Date.parse(file.updatedAt) - 24 * 60 * 60_000;
+  const github = `https://github.com/${repository}`;
+  const lines = [
+    "# Vestiarion status",
+    "",
+    `What Vestiarion's public pages answered at the last check, by a monitor on GitHub's servers, outside Vestiarion's own hosting, about every ${file.everyMinutes} minutes. The full page: ${file.origin}/status`,
+    "",
+  ];
+  if (!last) {
+    lines.push("No results yet.");
+  } else {
+    const up = file.checks.filter((check) => last.results[check.path]?.[0] === 1).length;
+    lines.push(
+      `Last checked: ${last.at.slice(0, 16).replace("T", " ")} UTC. ${up} of ${file.checks.length} pages up.`,
+      "",
+      `If that time is more than ${PAUSED_AFTER_MINUTES} minutes old, monitoring paused, since GitHub sometimes starts the monitor late. That says nothing about the site itself.`,
+      ""
+    );
+    lines.push("| Page | Last check | Time | Last 24 hours |", "| --- | --- | --- | --- |");
+    for (const { path } of file.checks) {
+      const result = last.results[path];
+      const rounds = file.rounds.filter((round) => Date.parse(round.at) > dayAgo && round.results[path] !== undefined);
+      const ups = rounds.filter((round) => round.results[path][0] === 1).length;
+      const verdict = result === undefined ? "Not checked" : result[0] === 1 ? "Up" : `Failed: ${result[2]}`;
+      const time = result === undefined ? "" : `${result[1].toLocaleString("en-US")} ms`;
+      lines.push(`| [${path}](${file.origin}${path}) | ${cell(verdict)} | ${time} | up ${ups} of ${rounds.length} times checked |`);
+    }
+  }
+  lines.push(
+    "",
+    `Something wrong? Tell us on GitHub Issues: ${github}/issues`,
+    "",
+    `\`status.json\` holds every check of the last ${HISTORY_DAYS} days. This branch holds one commit, replaced after every check. How the monitor works: ${github}/blob/main/docs/superpowers/specs/2026-11-04-status-page-design.md`,
+    ""
+  );
+  return lines.join("\n");
+}
+
+/**
+ * One call to GitHub's REST API with the job's token (SP3): a 15-second deadline, no redirect followed, and nothing of
+ * GitHub's answer kept but its status and, when it took the call, its body.
+ */
+async function github(fetchImpl, token, method, path, body, accept = "application/vnd.github+json") {
+  try {
+    const response = await fetchImpl(`${GITHUB_API}${path}`, {
+      method,
+      headers: {
+        accept,
+        authorization: `Bearer ${token}`,
+        "user-agent": USER_AGENT,
+        "x-github-api-version": "2022-11-28",
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      redirect: "error",
+      signal: AbortSignal.timeout(GITHUB_DEADLINE_MS),
+    });
+    if (!response.ok) {
+      await response.arrayBuffer().catch(() => undefined);
+      return { ok: false, status: response.status, body: null };
+    }
+    return { ok: true, status: response.status, body: await response.text() };
+  } catch {
+    return { ok: false, status: 0, body: null };
+  }
+}
+
+const shaOf = (text) => {
+  try {
+    const sha = JSON.parse(text ?? "")?.sha;
+    return typeof sha === "string" && /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Publishes the status file, its README and the branch's Vercel settings to `refs/heads/status` (SP1, SP3): a tree, a
+ * commit with no parent, then the ref moved to it by force, or made when it does not exist. Never throws.
+ *
+ * @param {{ token: string, repository: string, file: StatusFile, fetchImpl?: typeof fetch }} input
+ * @returns {Promise<{ ok: boolean, step: string, status: number }>}
+ */
+export async function publishStatus({ token, repository, file, fetchImpl = fetch }) {
+  if (!REPOSITORY.test(repository)) return { ok: false, step: "repository", status: 0 };
+  const git = `/repos/${repository}/git`;
+  const files = [
+    { path: "status.json", content: `${JSON.stringify(file)}\n` },
+    { path: "README.md", content: statusReadme(file, repository) },
+    { path: "vercel.json", content: STATUS_VERCEL_JSON },
+  ];
+  const tree = await github(fetchImpl, token, "POST", `${git}/trees`, {
+    tree: files.map((entry) => ({ path: entry.path, mode: "100644", type: "blob", content: entry.content })),
+  });
+  const treeSha = tree.ok ? shaOf(tree.body) : null;
+  if (!treeSha) return { ok: false, step: "tree", status: tree.status };
+  const commit = await github(fetchImpl, token, "POST", `${git}/commits`, { message: `Production status at ${file.updatedAt}`, tree: treeSha, parents: [] });
+  const commitSha = commit.ok ? shaOf(commit.body) : null;
+  if (!commitSha) return { ok: false, step: "commit", status: commit.status };
+  const moved = await github(fetchImpl, token, "PATCH", `${git}/refs/heads/${STATUS_BRANCH}`, { sha: commitSha, force: true });
+  if (moved.ok) return { ok: true, step: "ref", status: moved.status };
+  // GitHub answers 422 when the ref does not exist yet, on the first round ever.
+  if (moved.status !== 422 && moved.status !== 404) return { ok: false, step: "ref", status: moved.status };
+  const made = await github(fetchImpl, token, "POST", `${git}/refs`, { ref: `refs/heads/${STATUS_BRANCH}`, sha: commitSha });
+  return { ok: made.ok, step: "ref", status: made.status };
+}
+
+/**
+ * The rounds the branch holds, read when a run starts (SP4): `read`; `none` when the branch does not exist yet;
+ * `unreachable` when GitHub did not answer, or said the file is missing from a branch that exists, so the history is
+ * still unknown; and `unreadable` when the file is not one this script writes.
+ *
+ * @param {{ token: string, repository: string, fetchImpl?: typeof fetch }} input
+ * @returns {Promise<{ state: "read" | "none" | "unreachable" | "unreadable", rounds: StatusRound[] }>}
+ */
+export async function readPublished({ token, repository, fetchImpl = fetch }) {
+  const answer = await github(fetchImpl, token, "GET", `/repos/${repository}/contents/status.json?ref=refs/heads/${STATUS_BRANCH}`, undefined, "application/vnd.github.raw+json");
+  if (answer.status === 404) {
+    // Only the branch itself being missing means no history: a 404 for the file of a branch that exists is not trusted
+    // to erase 7 days.
+    const ref = await github(fetchImpl, token, "GET", `/repos/${repository}/git/ref/heads/${STATUS_BRANCH}`);
+    return { state: ref.status === 404 ? "none" : "unreachable", rounds: [] };
+  }
+  if (!answer.ok) return { state: "unreachable", rounds: [] };
+  try {
+    return { state: "read", rounds: parseStatusRounds(answer.body ?? "") };
+  } catch {
+    return { state: "unreadable", rounds: [] };
+  }
+}
+
+/** Reads of the history GitHub may leave unanswered, the first included, before the history starts again (SP4). */
+export const HISTORY_READS = 6;
+
+/**
+ * Keeps the published history and publishes each round (SP3, SP4). The history is read from the branch first; until
+ * GitHub answers that read, rounds wait here unpublished, so a read that failed never replaces 7 days with one round.
+ * After HISTORY_READS unanswered reads, about an hour of rounds, the history starts again from the rounds waiting, so a
+ * branch GitHub can no longer read does not keep the status page paused.
+ *
+ * @param {{ token: string, repository: string, origin: string, everyMinutes: number, fetchImpl: typeof fetch,
+ *   log: (line: string) => void }} input
+ */
+export function statusPublisher({ token, repository, origin, everyMinutes, fetchImpl, log }) {
+  /** @type {StatusRound[] | null} */
+  let history = null;
+  /** @type {StatusRound[]} */
+  let waiting = [];
+  let unanswered = 0;
+
+  async function learn() {
+    const published = await readPublished({ token, repository, fetchImpl });
+    if (published.state === "unreachable") {
+      unanswered += 1;
+      if (unanswered < HISTORY_READS) return false;
+      log(`::warning::GitHub left ${unanswered} reads of the published status unanswered: its history starts again from this run.`);
+      history = [];
+      return true;
+    }
+    if (published.state === "unreadable") log("::warning::The published status is not a file this script writes: its history starts again from this run.");
+    else log(`Read ${published.rounds.length} published ${published.rounds.length === 1 ? "round" : "rounds"} back from the ${STATUS_BRANCH} branch.`);
+    history = published.rounds;
+    return true;
+  }
+
+  return {
+    learn,
+    /**
+     * @param {readonly Result[]} results
+     * @param {Date} now
+     */
+    async publish(results, now) {
+      const round = statusRound(results, now);
+      if (history === null && !(await learn())) {
+        waiting = appendRound(waiting, round, now);
+        log(`::warning::GitHub did not answer the read of the published status: this round waits, and is published once it does (${waiting.length} waiting).`);
+        return false;
+      }
+      history = [...waiting, round].reduce((kept, next) => appendRound(kept, next, now), history ?? []);
+      waiting = [];
+      const file = statusFile({ origin, everyMinutes, checks: CHECKS, rounds: history });
+      const published = await publishStatus({ token, repository, file, fetchImpl });
+      if (published.ok) log(`Published the status to the ${STATUS_BRANCH} branch: ${history.length} ${history.length === 1 ? "round" : "rounds"}.`);
+      else log(`::warning::GitHub did not take the status (${published.step}, ${published.status === 0 ? "no answer" : `answered ${published.status}`}): every round is published again next round.`);
+      return published.ok;
+    },
+  };
+}
+
 /** One log line per check: what it answered and how long it took, to set the budgets from. */
 function logLine(result) {
   const status = result.status === null ? "---" : String(result.status);
@@ -407,11 +725,12 @@ function runLinkOf(env) {
   return server && repository && run && /^\d+$/.test(run) ? `${server}/${repository}/actions/runs/${run}` : null;
 }
 
-const USAGE = "Usage: synthetic-check.mjs [--state <file>] [--loop --minutes <n> --every <n>]";
+const USAGE = "Usage: synthetic-check.mjs [--state <file>] [--loop --minutes <n> --every <n>] [--publish-status]";
 
 /**
  * The command (PC4, PC7-PC9): one round, or with `--loop` a round every `--every` minutes for `--minutes`, the state
- * read from and written to `--state` after each round. Exits 0 when pages fail: 1 only when the check itself could not
+ * read from and written to `--state` after each round, and with `--publish-status` each round published for the status
+ * page (SP3). Exits 0 when pages fail, and when a status could not be published: 1 only when the check itself could not
  * do its job, a message due that could not be sent or a state file that could not be read; 2 on wrong arguments.
  *
  * @param {string[]} argv
@@ -424,7 +743,13 @@ export async function main(argv, { env = process.env, fetchImpl = fetch, log = c
   try {
     options = parseArgs({
       args: argv,
-      options: { loop: { type: "boolean", default: false }, minutes: { type: "string" }, every: { type: "string" }, state: { type: "string" } },
+      options: {
+        loop: { type: "boolean", default: false },
+        minutes: { type: "string" },
+        every: { type: "string" },
+        state: { type: "string" },
+        "publish-status": { type: "boolean", default: false },
+      },
       strict: true,
       allowPositionals: false,
     }).values;
@@ -460,14 +785,30 @@ export async function main(argv, { env = process.env, fetchImpl = fetch, log = c
     }
   }
 
+  // The status page's file (SP3): published only when asked, with the job's own token, which is never printed.
+  let publisher = null;
+  if (options["publish-status"]) {
+    const token = env.GITHUB_TOKEN ?? "";
+    const repository = env.GITHUB_REPOSITORY ?? "";
+    if (token.trim() === "" || !REPOSITORY.test(repository)) {
+      log("::warning::--publish-status needs GITHUB_TOKEN and GITHUB_REPOSITORY: the checks run, and no status is published.");
+    } else {
+      publisher = statusPublisher({ token, repository, origin, everyMinutes: options.loop ? every : 10, fetchImpl, log });
+      await publisher.learn();
+    }
+  }
+
   log(`Checking ${origin}: ${CHECKS.length} checks${options.loop ? `, every ${every} minutes for ${minutes} minutes` : ""}.`);
   const runLink = runLinkOf(env);
   const start = clock();
   for (let round = 1; ; round += 1) {
-    const outcome = await runRound({ origin, state, now: new Date(clock()), webhook, runLink, fetchImpl, log });
+    const at = new Date(clock());
+    const outcome = await runRound({ origin, state, now: at, webhook, runLink, fetchImpl, log });
     state = outcome.state;
     if (outcome.unsent > 0) broken = true;
     if (options.state) saveState(options.state, state);
+    // A status GitHub did not take is a warning, never a failed run (SP3, PC9).
+    if (publisher) await publisher.publish(outcome.results, at);
     if (!options.loop) break;
     // Rounds keep to the start's own times, so a slow round does not push the rest later.
     const nextAt = start + round * every * 60_000;

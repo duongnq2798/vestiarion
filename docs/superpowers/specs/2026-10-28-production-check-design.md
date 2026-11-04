@@ -82,7 +82,8 @@ not a Discord URL, or Discord refused it), or an unreadable state file. Failing 
 emails its actor about a broken monitor, never once per failing page.
 
 PC10. Reads only. Plain `GET`s of public pages with the header `User-Agent: vestiarion-synthetic-check
-(+https://github.com/duongnq2798/vestiarion)`, which Vercel's logs can filter on; no cookie, no token, no write. It
+(+https://github.com/duongnq2798/vestiarion)`, which Vercel's logs can filter on; no cookie, no token, no write to
+production. Since Nov 4 the job also writes the repository's `status` branch with its own token (status page SP3, SP5). It
 runs no JavaScript, and the only analytics in the app is Google Analytics in the browser, so no probe counts as a
 visit. Database load: the landing and `/open` are each opened about 144 times a day. Their reads are kept a minute on
 each Vercel instance, so with 10 minutes between rounds a landing load usually finds them gone and makes 11 to 16
@@ -117,8 +118,9 @@ them.
 
 ## Known limits
 
-- If GitHub Actions is down, or starts no hourly run for about 6 hours, rounds pause, and nothing says so: silence on
-  the channel means every check passing, or no check running. The Actions tab shows the runs.
+- If GitHub Actions is down, or starts no hourly run for about 6 hours, rounds pause, and nothing tells the team:
+  silence on the channel means every check passing, or no check running. The Actions tab shows the runs, and since Nov
+  4 the status page shows the rounds paused (`2026-11-04-status-page-design.md`).
 - A secret added or changed while a run is going is used from the next run, up to about 6 hours later, unless the
   steps in "What the owner adds" start one at once. A run that started without it says in its log that no alert can be
   sent, and the checks it found failing are told by the first run with the secret, if they are still failing then.
@@ -135,7 +137,9 @@ them.
 
 ## Out of scope
 
-A public status page; a daily "all passing" post; checks that need a key or reach the API (`/api/v1`).
+A daily "all passing" post; checks that need a key or reach the API (`/api/v1`). A public status page was out of scope
+here, and is now built on these rounds: `docs/superpowers/specs/2026-11-04-status-page-design.md`, which also gives the
+job its one write, the repository's `status` branch (PC10 holds for the pages it opens).
 
 ## Tests
 
