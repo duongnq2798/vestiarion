@@ -12,6 +12,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+## [0.1.0-beta.15] - 2026-11-04
+
 ### Added
 
 - **A free payout batch check** at [/check-payouts](https://www.vestiarion.xyz/check-payouts). Paste a batch payout,
@@ -151,7 +153,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   refused on Arc mainnet. Needs migration 0146.
 
 - **Production is checked every 10 minutes.** From GitHub's servers, outside Vestiarion's hosting and database, a check
-  opens the landing page, the open numbers, the docs, the four free tools, robots.txt and the sitemap. When one fails
+  opens the landing page, the open numbers, the docs, the five free tools, robots.txt and the sitemap. When one fails
   two checks running, the team is told on a private Discord channel, and told again once it works. The check reads
   public pages only and is not counted as a visit. No migration.
 - **Evidence and close packs from a terminal (`@vestiarion/cli` 0.2.0).** `vestiarion evidence export` saves a bill's
@@ -165,7 +167,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   in UTF-16 and a whole API answer too. Every command now refuses an option given twice, where the last one used to win
   unseen. The CLI now needs `@vestiarion/sdk` 0.4.1. No
   migration. [Guide](https://www.vestiarion.xyz/docs/get-started/cli#evidence-and-close-packs).
-- **n8n nodes (`@vestiarion/n8n-nodes-vestiarion` 0.1.0).** A self-hosted n8n installs them under **Settings** >
+- **n8n nodes (`@vestiarion/n8n-nodes-vestiarion` 0.1.0 to 0.1.3).** A self-hosted n8n installs them under **Settings** >
   **Community nodes**. The **Vestiarion** node adds a bill for the agent to decide (the counterparty picked from a
   searchable list, an idempotency key so a rerun adds it once) and reads bills, counterparties, the agent's decisions with
   a cursor to resume from, and the workspace's status. It can be an n8n AI agent's tool, and never approves or pays.
@@ -195,6 +197,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   header shows, not every paid bill and two exact counts, and the newest page of the audit log no longer reads its
   newest entry a second time. What either page shows, and what opens, hovers and copies, is unchanged, as are the
   ledger, its exports and the API. No migration.
+- **The Quality Lab replays 55 of the team's shadow-mode decisions, up from 46.** The team's own decisions were
+  exported again on Nov 4, 2026, adding the 9 the agent made from Oct 28 to Oct 31, three of them payments it made on
+  its own to a vendor that earned the owner's rule. All 9 reach the same outcome through today's code: of the 55, 46
+  reach the same outcome and 9 cannot be rebuilt from their record, as before, with 0 wrong payments. The replay runs
+  the decision code outside shadow mode, so it does not test the earned-vendor gate; the scenarios do. The figure is on
+  [Open numbers](https://www.vestiarion.xyz/open) and in
+  [the Quality Lab](https://www.vestiarion.xyz/docs/research/quality-lab#real-decisions-replayed). Customers'
+  workspaces are still never exported. No migration.
 
 ### Fixed
 
@@ -1853,7 +1863,8 @@ public beta, on Arc testnet and Arc mainnet. Release notes:
   company.
 - HubSpot is read-only, polled every 15 minutes, and its app is not yet verified by HubSpot.
 
-[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.14...HEAD
+[Unreleased]: https://github.com/duongnq2798/vestiarion/compare/v0.1.0-beta.15...HEAD
+[0.1.0-beta.15]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.15
 [0.1.0-beta.14]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.14
 [0.1.0-beta.13]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.13
 [0.1.0-beta.12]: https://github.com/duongnq2798/vestiarion/releases/tag/v0.1.0-beta.12

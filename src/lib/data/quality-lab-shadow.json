@@ -1,14 +1,14 @@
 {
   "summary": {
-    "decisions": 46,
-    "same": 37,
+    "decisions": 55,
+    "same": 46,
     "nowStopped": 0,
     "nowLetThrough": 0,
     "cannotRebuild": 9,
     "wrongPayments": 0,
-    "agreed": 18,
+    "agreed": 20,
     "disagreed": 0,
-    "noVerdict": 28
+    "noVerdict": 35
   },
   "decisions": [
     {
@@ -482,7 +482,7 @@
         "payOnInDays": null,
         "fundWithSwap": null
       },
-      "verdict": null,
+      "verdict": "agree",
       "then": {
         "action": "request_info",
         "rule": null,
@@ -1028,6 +1028,213 @@
         "action": "schedule",
         "rule": "counterparty.new_payee",
         "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-47",
+      "day": "2026-10-28",
+      "answer": {
+        "action": "hold",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "hold",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-48",
+      "day": "2026-10-29",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-49",
+      "day": "2026-10-29",
+      "answer": {
+        "action": "schedule",
+        "payOnInDays": 2,
+        "fundWithSwap": false
+      },
+      "verdict": null,
+      "then": {
+        "action": "schedule",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": {
+        "action": "schedule",
+        "rule": null,
+        "money": "moves"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-50",
+      "day": "2026-10-29",
+      "answer": {
+        "action": "request_info",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "now": {
+        "action": "request_info",
+        "rule": null,
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-51",
+      "day": "2026-10-29",
+      "answer": {
+        "action": "schedule",
+        "payOnInDays": 1,
+        "fundWithSwap": false
+      },
+      "verdict": "agree",
+      "then": {
+        "action": "schedule",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": {
+        "action": "schedule",
+        "rule": null,
+        "money": "moves"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-52",
+      "day": "2026-10-29",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-53",
+      "day": "2026-10-30",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-54",
+      "day": "2026-10-30",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "now": {
+        "action": "pay",
+        "rule": "workspace.outflow_budget",
+        "money": "stops"
+      },
+      "class": "same",
+      "reason": null,
+      "wrongPayment": false
+    },
+    {
+      "id": "shadow-55",
+      "day": "2026-10-31",
+      "answer": {
+        "action": "pay",
+        "payOnInDays": null,
+        "fundWithSwap": null
+      },
+      "verdict": null,
+      "then": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
+      },
+      "now": {
+        "action": "pay",
+        "rule": null,
+        "money": "moves"
       },
       "class": "same",
       "reason": null,
