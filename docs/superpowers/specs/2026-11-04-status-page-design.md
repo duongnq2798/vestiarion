@@ -102,6 +102,9 @@ SP6. **The page.** `/status`, public, in the sitemap and the footer's Resources 
   readers that names the hours with a failure. An hour with no check is never shown as up.
 - **Coverage:** how many of the monitor's 10-minute slots had a check in the last 24 hours and 7 days, against the 144
   and 1,008 there are. Slots, not checks: a run can start right after the last ends, so checks alone can count more.
+  When the results kept begin inside a window, as in the first week after the branch first appeared (Nov 4, 2026,
+  14:49 UTC), the slots are counted from the oldest result kept, which the page names: before it nothing was published,
+  so nothing the page could know of was missed.
 - **Incidents:** each time a page failed twice in a row, the rule the team is told by (PC5), from its first failure to
   the check it was up again, or "Still failing" ("Failing when monitoring paused" while paused), with the first
   reason. One already failing in the oldest result kept says so. A single failure is not an incident; it shows in its

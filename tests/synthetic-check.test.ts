@@ -799,6 +799,8 @@ describe("the status branch (status page SP1-SP5)", () => {
     expect(readme).toContain("| [/open](https://www.vestiarion.xyz/open) | Failed: missing \"a &#124; b\" &#60;b&#62; | 200 ms | up 1 of 2 times checked |");
     expect(readme).toContain("Something wrong? Tell us on GitHub Issues: https://github.com/duongnq2798/vestiarion/issues");
     expect(statusReadme(file, "someone/fork")).toContain("https://github.com/someone/fork/issues");
+    const one = statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS.slice(0, 1), rounds: rounds.slice(0, 1) });
+    expect(statusReadme(one)).toContain("| [/](https://www.vestiarion.xyz/) | Up | 100 ms | up 1 of 1 time checked |");
     expect(statusReadme(statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS, rounds: [] }))).toContain("No results yet.");
     // The page and the README call a check paused after the same time.
     expect(PAUSED_AFTER_MINUTES).toBe(APP_PAUSED_AFTER_MINUTES);
