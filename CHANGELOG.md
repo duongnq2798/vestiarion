@@ -195,6 +195,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   header shows, not every paid bill and two exact counts, and the newest page of the audit log no longer reads its
   newest entry a second time. What either page shows, and what opens, hovers and copies, is unchanged, as are the
   ledger, its exports and the API. No migration.
+- **The Quality Lab replays 55 of the team's shadow-mode decisions, up from 46.** The team's own decisions were
+  exported again on Nov 4, 2026, adding the 9 the agent made from Oct 28 to Oct 31, three of them payments it made on
+  its own to a vendor that earned the owner's rule. All 9 reach the same outcome through today's code: of the 55, 46
+  reach the same outcome and 9 cannot be rebuilt from their record, as before, with 0 wrong payments. The figure is on
+  [Open numbers](https://www.vestiarion.xyz/open) and in
+  [the Quality Lab](https://www.vestiarion.xyz/docs/research/quality-lab#real-decisions-replayed). Customers'
+  workspaces are still never exported. No migration.
 
 ### Fixed
 
