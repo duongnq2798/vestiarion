@@ -16,7 +16,7 @@
 <a href="https://chromewebstore.google.com/detail/vestiarion-invoice-captur/jfhjgbdbolhnneomgifdnjamoldlioan"><img src="docs/assets/readme/add-to-chrome.svg" alt="Add to Chrome: Vestiarion Invoice Capture, on the Chrome Web Store" height="48"></a>
 <a href="https://www.npmjs.com/package/@vestiarion/sdk"><img src="docs/assets/readme/npm-sdk.svg" alt="Install from npm: @vestiarion/sdk" height="48"></a>
 
-**[Full tour (7:22)](https://youtu.be/ds6cu4__1J4)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Mainnet proof](#mainnet-proof)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** · **[Security](https://www.vestiarion.xyz/security)**
+**[Full tour (7:22)](https://youtu.be/ds6cu4__1J4)** · **[See your first decision](https://www.vestiarion.xyz/docs/guides/try-it)** · **[Open numbers](https://www.vestiarion.xyz/open)** · **[Status](https://www.vestiarion.xyz/status)** · **[Mainnet proof](#mainnet-proof)** · **[Docs](https://www.vestiarion.xyz/docs)** · **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** · **[Security](https://www.vestiarion.xyz/security)**
 
 <sub>Built on [Arc](https://www.arc.io) and [Circle](#circle-integrations) · Works with [Xero](https://www.vestiarion.xyz/docs/guides/xero) · [QuickBooks Online](https://www.vestiarion.xyz/docs/guides/quickbooks) · [Zoho Books](https://www.vestiarion.xyz/docs/guides/zohobooks) · [HubSpot](https://www.vestiarion.xyz/docs/guides/hubspot) · [Pipedrive](https://www.vestiarion.xyz/docs/guides/pipedrive) · [Zoho CRM](https://www.vestiarion.xyz/docs/guides/zohocrm) · [BlindPay](https://www.vestiarion.xyz/docs/guides/bank-payouts) · [Asana](https://www.vestiarion.xyz/docs/guides/asana) · [Linear](https://www.vestiarion.xyz/docs/guides/linear) · [Google Sheets](https://www.vestiarion.xyz/docs/guides/accountants#export-the-close-pack-to-google-sheets) · [Google Drive](https://www.vestiarion.xyz/docs/guides/google-drive) · [GitHub](https://www.vestiarion.xyz/docs/guides/github) · [Slack](https://www.vestiarion.xyz/docs/guides/slack) · [Telegram](https://www.vestiarion.xyz/docs/guides/telegram) · [Discord](https://www.vestiarion.xyz/docs/guides/discord) · [Chrome](https://www.vestiarion.xyz/docs/guides/invoice-capture) · [@vestiarionhq](https://x.com/vestiarionhq)</sub>
 
@@ -530,6 +530,10 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
 - **[Open numbers](https://www.vestiarion.xyz/open)** — workspaces, payments, the agent's decisions, what code refused
   and what people decided, per network, customers apart from us, read from production on every load. Figures change
   daily, so this README links there instead of copying them.
+- **[Status](https://www.vestiarion.xyz/status)** — whether the public pages answer, from the production check that
+  opens them about every 10 minutes from GitHub's servers, outside Vercel and Supabase: the last round, each check's
+  last 24 hours and 7 days, and every incident. The same results are on the
+  [`status` branch](https://github.com/duongnq2798/vestiarion/tree/status), which the check replaces after every round.
 - **The ledger** — every workspace's `/audit` verifies its whole chain in one click; exports and webhooks carry the
   same signed entries.
 - **[Research](https://www.vestiarion.xyz/docs/research/model-vs-policy)** — three weeks of the model's decisions

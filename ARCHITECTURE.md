@@ -107,9 +107,19 @@ passing again, unless the workflow is run by hand right after the change is depl
   run in progress, not the one just started. A new run that starts at once instead found none going, and the owner
   should cancel nothing. A run fails only when an alert that was due could not be sent or the state file could not be
   read, never because a page failed.
-- It reads public pages only, holds no token, and runs no JavaScript, so Google Analytics counts no probe; its user
-  agent, `vestiarion-synthetic-check`, tells the probes apart in Vercel's logs. A fork checks nothing unless its
+- It reads public pages only, sends them no token, and runs no JavaScript, so Google Analytics counts no probe; its
+  user agent, `vestiarion-synthetic-check`, tells the probes apart in Vercel's logs. A fork checks nothing unless its
   repository variable `SYNTHETIC_ORIGIN` names its own deployment.
+- **The status page** (`docs/superpowers/specs/2026-11-04-status-page-design.md`). After each round the script
+  publishes every round of the last 7 days to the repository's `status` branch through GitHub's REST API, with the
+  job's own `GITHUB_TOKEN`: a tree of `status.json`, a README with the last round as a table, and a `vercel.json` that
+  turns the branch's deployments off; a commit with no parent; and `refs/heads/status` moved to it by force. The job's
+  one write permission is `contents: write` for that, and `main`'s protection keeps the token off `main`. When a run
+  starts, it reads the history back from the branch, and until GitHub answers that read its rounds wait unpublished.
+  A round GitHub refuses is a warning, never a failed run. `/status` (`src/app/status/page.tsx`) reads `status.json`
+  from raw.githubusercontent.com, kept 60 seconds, parses it strictly (`src/lib/status/file.ts`) and works out the
+  headline, each check's last 24 hours and 7 days, the rounds that ran and the incidents in a pure function
+  (`src/lib/status/summary.ts`). It reads nothing from Vestiarion's database.
 
 ## Content Security Policy
 

@@ -474,7 +474,11 @@ Actions tab use Run workflow on Vestiarion production check. If a run is in prog
 of any hourly start that was waiting: then cancel the older run in progress, not the one you just started. Its last
 round is saved, and yours starts at once. If yours started at once instead of waiting, as in a fork that has just set
 `SYNTHETIC_ORIGIN`, none was going and yours already has the secret: cancel nothing. It needs no token of the app's and
-no database change. Each page must say a text from the app's own copy (`CHECKS` in the script), so change those too if
+no database change. After each round it publishes the last 7 days of rounds to the repository's `status` branch, one
+commit replaced every round, with the job's own `GITHUB_TOKEN`: the job's one write permission, `contents: write`.
+The branch holds a `vercel.json` that turns its deployments off. The status page, `/status`, reads that branch's
+`status.json` from GitHub (`STATUS_FILE_URL` in `src/lib/status/file.ts`), so a fork that wants its own results there
+names its own repository in that constant. Each page must say a text from the app's own copy (`CHECKS` in the script), so change those too if
 you change that copy: CI fails a copy edit made without its check. A run keeps the script of the commit it was queued
 at, so a change to it reaches the checks from the first run queued after it is on main, up to about 7 hours later, or
 at once after the same steps. Until then the running checks look for the old text, or for a free tool's old address if

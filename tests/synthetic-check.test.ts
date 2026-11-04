@@ -19,6 +19,12 @@ import {
   PRODUCTION_ORIGIN,
   TIMEOUT_MS,
   USER_AGENT,
+  HISTORY_DAYS,
+  STATUS_BRANCH,
+  STATUS_REASON_MAX,
+  STATUS_SOURCE,
+  STATUS_VERCEL_JSON,
+  appendRound,
   checkOnce,
   delivered,
   discordWebhook,
@@ -26,8 +32,14 @@ import {
   main,
   nextState,
   parseState,
+  parseStatusRounds,
   postAlert,
+  publishStatus,
+  readPublished,
   runRound,
+  statusFile,
+  statusReadme,
+  statusRound,
 } from "../scripts/synthetic-check.mjs";
 
 /**
@@ -663,6 +675,265 @@ describe("the command (PC7, PC8, PC9)", () => {
   }, 40_000);
 });
 
+// ---- The status branch (status page SP1-SP5) -------------------------------------------------------------------
+
+/** The job's own token, as GitHub gives it to the step: nothing of it may reach the log. */
+const GITHUB_TOKEN = "ghs_Kz8Qw3Lm5Np7Rt9Vx2Yb4Dc6Fg8Hj0Ks2Lm4Np";
+
+function expectNoToken(log: string) {
+  for (let start = 0; start + 8 <= GITHUB_TOKEN.length; start += 1) expect(log).not.toContain(GITHUB_TOKEN.slice(start, start + 8));
+}
+
+const pass = (route: string, ms = 100): Result => ({ path: route, ok: true, reason: null, status: 200, ms });
+const fail = (route: string, reason = "answered 500, expected 200", ms = 200): Result => ({ path: route, ok: false, reason, status: 500, ms });
+
+interface GithubCall {
+  method: string;
+  path: string;
+  headers: Record<string, string>;
+  body: Record<string, unknown> | null;
+}
+
+/**
+ * A fetch that plays GitHub's REST API for the status branch, and sends every other request on. `published` is what
+ * the branch's status.json holds (null: no branch yet), `answer` can refuse a call, and a ref that does not exist yet is
+ * answered 422, as GitHub answers it.
+ */
+function withGithub({ published = null as string | null, answer = ((() => null) as (call: GithubCall) => Response | null) } = {}) {
+  const calls: GithubCall[] = [];
+  let branch: string | null = published === null ? null : "f".repeat(40);
+  let file = published;
+  const trees = new Map<string, Array<{ path: string; content: string }>>();
+  const commits = new Map<string, string>();
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (!url.startsWith("https://api.github.com/")) return fetch(input, init);
+    const headers = Object.fromEntries(Object.entries((init?.headers ?? {}) as Record<string, string>).map(([key, value]) => [key.toLowerCase(), value]));
+    const call: GithubCall = { method: init?.method ?? "GET", path: url.slice("https://api.github.com".length), headers, body: init?.body ? JSON.parse(String(init.body)) : null };
+    calls.push(call);
+    const refused = answer(call);
+    if (refused) return refused;
+    const repo = "/repos/duongnq2798/vestiarion";
+    if (call.method === "GET" && call.path === `${repo}/contents/status.json?ref=status`) {
+      return file === null ? new Response("{}", { status: 404 }) : new Response(file, { status: 200 });
+    }
+    if (call.method === "POST" && call.path === `${repo}/git/trees`) {
+      const sha = String(trees.size + 1).padStart(40, "a");
+      trees.set(sha, (call.body?.tree as Array<{ path: string; content: string }>).map(({ path: name, content }) => ({ path: name, content })));
+      return Response.json({ sha }, { status: 201 });
+    }
+    if (call.method === "POST" && call.path === `${repo}/git/commits`) {
+      const sha = String(commits.size + 1).padStart(40, "c");
+      commits.set(sha, String(call.body?.tree));
+      return Response.json({ sha }, { status: 201 });
+    }
+    const point = (sha: string) => {
+      branch = sha;
+      file = trees.get(commits.get(sha) ?? "")?.find((entry) => entry.path === "status.json")?.content ?? null;
+    };
+    if (call.method === "PATCH" && call.path === `${repo}/git/refs/heads/status`) {
+      if (branch === null) return Response.json({ message: "Reference does not exist" }, { status: 422 });
+      point(String(call.body?.sha));
+      return Response.json({ ref: "refs/heads/status" }, { status: 200 });
+    }
+    if (call.method === "POST" && call.path === `${repo}/git/refs`) {
+      point(String(call.body?.sha));
+      return Response.json({ ref: "refs/heads/status" }, { status: 201 });
+    }
+    return new Response("{}", { status: 404 });
+  };
+  return { fetchImpl, calls, trees, published: () => file };
+}
+
+const DAY_MS = 24 * 60 * 60_000;
+
+describe("the status branch (status page SP1-SP5)", () => {
+  it("keeps a round as [1, ms] for a pass and [0, ms, reason] for a failure, the reason clipped", () => {
+    const long = "x".repeat(STATUS_REASON_MAX + 50);
+    expect(statusRound([pass("/", 4697), fail("/open", "answered 500, expected 200", 812), fail("/docs", long)], at(10, 0))).toEqual({
+      at: "2026-10-28T10:00:00.000Z",
+      results: { "/": [1, 4697], "/open": [0, 812, "answered 500, expected 200"], "/docs": [0, 200, "x".repeat(STATUS_REASON_MAX)] },
+    });
+  });
+
+  it("appends each round and keeps only the last 7 days, oldest first", () => {
+    const now = at(10, 0);
+    const old = { at: new Date(now.getTime() - HISTORY_DAYS * DAY_MS).toISOString(), results: { "/": [1, 1] as [1, number] } };
+    const kept = { at: new Date(now.getTime() - HISTORY_DAYS * DAY_MS + 60_000).toISOString(), results: { "/": [1, 2] as [1, number] } };
+    const later = { at: new Date(now.getTime() + 60_000).toISOString(), results: { "/": [1, 3] as [1, number] } };
+    const round = statusRound([pass("/")], now);
+    expect(appendRound([kept, old, later], round, now)).toEqual([kept, round]);
+  });
+
+  it("writes the file the status page reads, and a README with the last round, for GitHub to show", () => {
+    const rounds = [statusRound([pass("/"), pass("/open")], at(9, 50)), statusRound([pass("/"), fail("/open", "missing \"a | b\" <b>")], at(10, 0))];
+    const file = statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS.slice(0, 2), rounds });
+    expect(file).toEqual({
+      version: 1,
+      source: STATUS_SOURCE,
+      origin: PRODUCTION_ORIGIN,
+      everyMinutes: 10,
+      updatedAt: "2026-10-28T10:00:00.000Z",
+      checks: [{ path: "/", budgetMs: 8000 }, { path: "/open", budgetMs: 8000 }],
+      rounds,
+    });
+    const readme = statusReadme(file);
+    expect(readme).toContain("# Vestiarion production status");
+    expect(readme).toContain("The page: https://www.vestiarion.xyz/status");
+    expect(readme).toContain("Last round: 2026-10-28 10:00 UTC, 1 of 2 checks passed.");
+    expect(readme).toContain("| `/` | Passed | 100 ms | 2 of 2 rounds passed |");
+    // A reason never breaks the table or becomes a tag.
+    expect(readme).toContain("| `/open` | Failed: missing \"a &#124; b\" &#60;b&#62; | 200 ms | 1 of 2 rounds passed |");
+    expect(statusReadme(statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS, rounds: [] }))).toContain("No round has run yet.");
+    expect(JSON.parse(STATUS_VERCEL_JSON)).toEqual({ git: { deploymentEnabled: false } });
+  });
+
+  it("reads back only a file it wrote", () => {
+    const rounds = [statusRound([pass("/"), fail("/open")], at(10, 0))];
+    const text = JSON.stringify(statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS, rounds }));
+    expect(parseStatusRounds(text)).toEqual(rounds);
+    for (const bad of [
+      "{not json",
+      JSON.stringify({ version: 2, rounds: [] }),
+      JSON.stringify({ version: 1, rounds: [{ at: "yesterday", results: {} }] }),
+      JSON.stringify({ version: 1, rounds: [{ at: "2026-10-28T10:00:00.000Z", results: { "/": [1] } }] }),
+      JSON.stringify({ version: 1, rounds: [{ at: "2026-10-28T10:00:00.000Z", results: { "/": [0, 5] } }] }),
+      JSON.stringify({ version: 1, rounds: [{ at: "2026-10-28T10:00:00.000Z", results: { open: [1, 5] } }] }),
+    ]) {
+      expect(() => parseStatusRounds(bad), bad).toThrow();
+    }
+  });
+
+  it("publishes a tree of the three files, a commit with no parent, and moves the status branch to it by force", async () => {
+    const github = withGithub({ published: "{}" });
+    const file = statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS, rounds: [statusRound([pass("/")], at(10, 0))] });
+    expect(await publishStatus({ token: GITHUB_TOKEN, repository: "duongnq2798/vestiarion", file, fetchImpl: github.fetchImpl })).toEqual({ ok: true, step: "ref", status: 200 });
+    expect(github.calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      "POST /repos/duongnq2798/vestiarion/git/trees",
+      "POST /repos/duongnq2798/vestiarion/git/commits",
+      "PATCH /repos/duongnq2798/vestiarion/git/refs/heads/status",
+    ]);
+    for (const call of github.calls) {
+      expect(call.headers.authorization).toBe(`Bearer ${GITHUB_TOKEN}`);
+      expect(call.headers["user-agent"]).toBe(USER_AGENT);
+    }
+    const tree = github.calls[0].body?.tree as Array<{ path: string; mode: string; type: string; content: string }>;
+    expect(tree.map((entry) => [entry.path, entry.mode, entry.type])).toEqual([
+      ["status.json", "100644", "blob"],
+      ["README.md", "100644", "blob"],
+      ["vercel.json", "100644", "blob"],
+    ]);
+    expect(JSON.parse(tree[0].content)).toEqual(file);
+    expect(tree[2].content).toBe(STATUS_VERCEL_JSON);
+    expect(github.calls[1].body).toEqual({ message: "Production status at 2026-10-28T10:00:00.000Z", tree: "a".repeat(39) + "1", parents: [] });
+    expect(github.calls[2].body).toEqual({ sha: "c".repeat(39) + "1", force: true });
+  });
+
+  it("makes the branch on the first round ever, when GitHub says it does not exist", async () => {
+    const github = withGithub();
+    const file = statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS, rounds: [statusRound([pass("/")], at(10, 0))] });
+    expect(await publishStatus({ token: GITHUB_TOKEN, repository: "duongnq2798/vestiarion", file, fetchImpl: github.fetchImpl })).toEqual({ ok: true, step: "ref", status: 201 });
+    expect(github.calls.slice(2).map((call) => [call.method, call.path, call.body])).toEqual([
+      ["PATCH", "/repos/duongnq2798/vestiarion/git/refs/heads/status", { sha: "c".repeat(39) + "1", force: true }],
+      ["POST", "/repos/duongnq2798/vestiarion/git/refs", { ref: "refs/heads/status", sha: "c".repeat(39) + "1" }],
+    ]);
+  });
+
+  it("reports a refusal by its step and status, and never throws", async () => {
+    const file = statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS, rounds: [] });
+    const refuseTrees = withGithub({ answer: (call) => (call.path.endsWith("/git/trees") ? new Response("{}", { status: 403 }) : null) });
+    expect(await publishStatus({ token: GITHUB_TOKEN, repository: "duongnq2798/vestiarion", file, fetchImpl: refuseTrees.fetchImpl })).toEqual({ ok: false, step: "tree", status: 403 });
+    const refuseRef = withGithub({ published: "{}", answer: (call) => (call.method === "PATCH" ? new Response("{}", { status: 409 }) : null) });
+    expect(await publishStatus({ token: GITHUB_TOKEN, repository: "duongnq2798/vestiarion", file, fetchImpl: refuseRef.fetchImpl })).toEqual({ ok: false, step: "ref", status: 409 });
+    const down: typeof fetch = async () => {
+      throw new TypeError("fetch failed");
+    };
+    expect(await publishStatus({ token: GITHUB_TOKEN, repository: "duongnq2798/vestiarion", file, fetchImpl: down })).toEqual({ ok: false, step: "tree", status: 0 });
+    expect(await publishStatus({ token: GITHUB_TOKEN, repository: "not a repository", file, fetchImpl: down })).toEqual({ ok: false, step: "repository", status: 0 });
+  });
+
+  it("reads the branch's history: none before the branch exists, unknown while GitHub does not answer, dropped when it is not one", async () => {
+    const rounds = [statusRound([pass("/")], at(10, 0))];
+    const good = JSON.stringify(statusFile({ origin: PRODUCTION_ORIGIN, everyMinutes: 10, checks: CHECKS, rounds }));
+    const ask = (fetchImpl: typeof fetch) => readPublished({ token: GITHUB_TOKEN, repository: "duongnq2798/vestiarion", fetchImpl });
+    expect(await ask(withGithub({ published: good }).fetchImpl)).toEqual({ state: "read", rounds });
+    expect(await ask(withGithub().fetchImpl)).toEqual({ state: "none", rounds: [] });
+    expect(await ask(withGithub({ answer: () => new Response("{}", { status: 503 }) }).fetchImpl)).toEqual({ state: "unreachable", rounds: [] });
+    expect(await ask(withGithub({ published: "{not json" }).fetchImpl)).toEqual({ state: "unreadable", rounds: [] });
+    const reader = withGithub({ published: good });
+    await ask(reader.fetchImpl);
+    expect(reader.calls[0].headers.accept).toBe("application/vnd.github.raw+json");
+  });
+
+  describe("the command with --publish-status", () => {
+    /** A clock that moves only when the loop sleeps. */
+    function fakeTime(start = at(10, 0).getTime()) {
+      let now = start;
+      return { clock: () => now, sleep: async (ms: number) => void (now += ms) };
+    }
+    const env = (origin: string) => ({ SYNTHETIC_ORIGIN: origin, MONITOR_DISCORD_WEBHOOK_URL: WEBHOOK, GITHUB_TOKEN, GITHUB_REPOSITORY: "duongnq2798/vestiarion" });
+
+    it("goes on from the branch's last 7 days, publishes after every round, and never prints the token", async () => {
+      const production = await serve();
+      const earlier = [
+        { at: new Date(at(10, 0).getTime() - 8 * DAY_MS).toISOString(), results: { "/": [1, 1] } },
+        { at: at(9, 50).toISOString(), results: { "/": [0, 2, "answered 500, expected 200"] } },
+      ];
+      const github = withGithub({ published: JSON.stringify({ version: 1, rounds: earlier }) });
+      const discord = withDiscord();
+      const fetchImpl: typeof fetch = (input, init) => (String(input instanceof Request ? input.url : input).startsWith("https://api.github.com/") ? github.fetchImpl(input, init) : discord.fetchImpl(input, init));
+      const time = fakeTime();
+      const { log, text } = logger();
+      const code = await main(["--loop", "--minutes", "20", "--every", "10", "--publish-status"], { env: env(production.origin), fetchImpl, log, clock: time.clock, sleep: time.sleep });
+      expect(code).toBe(0);
+      expect(text()).toContain("Read 2 published rounds back from the status branch.");
+      expect(text()).toContain("Published the status to the status branch: 2 rounds.");
+      expect(text()).toContain("Published the status to the status branch: 3 rounds.");
+      const published = JSON.parse(github.published() ?? "{}");
+      expect(published.rounds.map((round: { at: string }) => round.at)).toEqual(["2026-10-28T09:50:00.000Z", "2026-10-28T10:00:00.000Z", "2026-10-28T10:10:00.000Z"]);
+      expect(Object.keys(published.rounds[2].results)).toEqual(CHECKS.map((check) => check.path));
+      expect(published.everyMinutes).toBe(10);
+      expectNoToken(text());
+    });
+
+    it("keeps rounds while GitHub does not answer the history's read, and publishes them all once it does", async () => {
+      const production = await serve();
+      let reads = 0;
+      const github = withGithub({ answer: (call) => (call.method === "GET" && (reads += 1) <= 2 ? new Response("{}", { status: 502 }) : null) });
+      const time = fakeTime();
+      const { log, text } = logger();
+      const code = await main(["--loop", "--minutes", "30", "--every", "10", "--publish-status"], { env: env(production.origin), fetchImpl: github.fetchImpl, log, clock: time.clock, sleep: time.sleep });
+      expect(code).toBe(0);
+      // The read when the run starts and the one before the first round's publish go unanswered; the second round's
+      // read finds no branch yet, so both rounds are published together, then the third.
+      expect(text()).toContain("::warning::GitHub did not answer the read of the published status: this round waits, and is published once it does (1 waiting).");
+      expect(text()).toContain("Read 0 published rounds back from the status branch.");
+      expect(text()).toContain("Published the status to the status branch: 2 rounds.");
+      expect(text()).toContain("Published the status to the status branch: 3 rounds.");
+      expect(JSON.parse(github.published() ?? "{}").rounds).toHaveLength(3);
+    });
+
+    it("warns and goes on when GitHub refuses a round, and never fails the run for it", async () => {
+      const production = await serve();
+      const github = withGithub({ answer: (call) => (call.method === "POST" ? new Response("{}", { status: 403 }) : null) });
+      const { log, text } = logger();
+      expect(await main(["--publish-status"], { env: env(production.origin), fetchImpl: github.fetchImpl, log })).toBe(0);
+      expect(text()).toContain("::warning::GitHub did not take the status (tree, answered 403): every round is published again next round.");
+      expectNoToken(text());
+    });
+
+    it("publishes nothing without the flag, or without a token, and says why", async () => {
+      const production = await serve();
+      const github = withGithub();
+      expect(await main([], { env: env(production.origin), fetchImpl: github.fetchImpl, log: () => undefined })).toBe(0);
+      const { log, text } = logger();
+      expect(await main(["--publish-status"], { env: { ...env(production.origin), GITHUB_TOKEN: "" }, fetchImpl: github.fetchImpl, log })).toBe(0);
+      expect(text()).toContain("::warning::--publish-status needs GITHUB_TOKEN and GITHUB_REPOSITORY: the checks run, and no status is published.");
+      expect(github.calls).toEqual([]);
+    });
+  });
+});
+
 // ---- The workflow ----------------------------------------------------------------------------------------------
 
 describe(".github/workflows/synthetic-check.yml (PC4, PC11, PC12)", () => {
@@ -676,7 +947,7 @@ describe(".github/workflows/synthetic-check.yml (PC4, PC11, PC12)", () => {
   });
 
   it("loops every 10 minutes for less than its job may run, which is less than GitHub's 6 hours", () => {
-    const run = /node scripts\/synthetic-check\.mjs --loop --minutes (\d+) --every (\d+) --state (\S+)\n/.exec(WORKFLOW);
+    const run = /node scripts\/synthetic-check\.mjs --loop --minutes (\d+) --every (\d+) --state (\S+) --publish-status\n/.exec(WORKFLOW);
     const timeout = Number(/^ {4}timeout-minutes: (\d+)$/m.exec(WORKFLOW)?.[1]);
     expect(run).not.toBeNull();
     const [, minutes, every] = run!.map(Number);
@@ -687,7 +958,7 @@ describe(".github/workflows/synthetic-check.yml (PC4, PC11, PC12)", () => {
   });
 
   it("restores the newest state and saves this run's under its own key, even after a failure or a cancel", () => {
-    const statePath = /--state (\S+)\n/.exec(WORKFLOW)?.[1];
+    const statePath = /--state (\S+) --publish-status\n/.exec(WORKFLOW)?.[1];
     expect(statePath).toBe(".synthetic-state.json");
     expect(WORKFLOW).toContain("uses: actions/cache/restore@v4");
     expect(WORKFLOW).toContain("uses: actions/cache/save@v4");
@@ -698,11 +969,22 @@ describe(".github/workflows/synthetic-check.yml (PC4, PC11, PC12)", () => {
     expect(WORKFLOW).toMatch(/- name: Save the state for the next run\n {8}if: always\(\)\n {8}uses: actions\/cache\/save@v4/);
   });
 
-  it("holds one secret, the Discord webhook, reads production only, and can write nothing", () => {
+  it("holds one secret, the Discord webhook, and the job's own token, which may write contents for the status branch alone", () => {
     expect([...WORKFLOW.matchAll(/secrets\.([A-Za-z0-9_]+)/g)].map((match) => match[1])).toEqual(["MONITOR_DISCORD_WEBHOOK_URL"]);
-    expect(WORKFLOW).not.toMatch(/github\.token|GITHUB_TOKEN|GH_TOKEN/);
+    // The token reaches the script's step alone, as GITHUB_TOKEN; no other step or name gets it.
+    expect([...WORKFLOW.matchAll(/github\.token|GITHUB_TOKEN|GH_TOKEN/g)].map((match) => match[0])).toEqual(["GITHUB_TOKEN", "github.token"]);
+    expect(WORKFLOW).toContain("          GITHUB_TOKEN: ${{ github.token }}\n        run: node scripts/synthetic-check.mjs ");
+    // Read for the workflow, write for its one job, and nothing else written (status page SP5).
     expect(WORKFLOW).toMatch(/^permissions:\n {2}contents: read\n\n/m);
-    expect(WORKFLOW).not.toMatch(/:\s*write\b/);
+    expect([...WORKFLOW.matchAll(/^\s+([a-z-]+):\s*write\b/gm)].map((match) => match[1])).toEqual(["contents"]);
+    expect(WORKFLOW).toMatch(/\n {4}permissions:\n {6}contents: write\n {4}steps:\n/);
+  });
+
+  it("publishes to the status branch alone, and names no other ref", () => {
+    const script = read("scripts/synthetic-check.mjs");
+    expect(STATUS_BRANCH).toBe("status");
+    expect([...script.matchAll(/refs\/[^`"'\s,)]*/g)].map((match) => match[0])).toEqual(["refs/heads/status", "refs/heads/${STATUS_BRANCH}", "refs/heads/${STATUS_BRANCH}"]);
+    expect(script).not.toMatch(/refs\/(tags|heads\/main)/);
   });
 
   it("checks production, or in a fork only the deployment its SYNTHETIC_ORIGIN variable names", () => {
