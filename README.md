@@ -561,6 +561,11 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
   compared with every other in the batch and with the addresses you have paid before, and the amounts and tokens are
   read and totalled per token as exact decimals; the batch comes back as a CSV with a Fix, Stop, Look or Nothing found
   verdict on each row.
+- **[Invoice details check](https://www.vestiarion.xyz/check-invoice)** — a free page that puts a vendor's payment
+  details on file beside the ones on a new invoice, in the browser: a changed wallet, IBAN, account or routing or sort
+  code, a sender's domain or a wallet made to look like the vendor's, an IBAN, US routing number or SWIFT / BIC that
+  cannot be right, and the words a request to change payment details uses in the message that came with it; then the
+  call to make, to the number on file, before you pay.
 
 ### Contracts on Arc testnet
 

@@ -49,6 +49,12 @@ export const FREE_TOOLS = [
     title: "Payout batch check",
     description: "Check a payout batch before you send it: lookalike, sanctioned or mistyped addresses, rows in it twice, and amounts and tokens to fix.",
   },
+  {
+    slug: "check-invoice",
+    path: "/check-invoice",
+    title: "Invoice details check",
+    description: "Check an invoice's payment details against the vendor's on file: changed bank details, a lookalike sender or wallet, and the call to make before you pay.",
+  },
 ] as const satisfies readonly FreeTool[];
 
 export type FreeToolSlug = (typeof FREE_TOOLS)[number]["slug"];

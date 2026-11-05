@@ -80,7 +80,7 @@ export default async function StatusPage() {
             <h2 id="covers" className="text-lg font-semibold text-ink">What the monitor checks, and what it does not</h2>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-ink-2">
               <li>
-                Each time, it opens the landing page, the open numbers, the docs, the five free tools, and the two files search engines read
+                Each time, it opens the landing page, the open numbers, the docs, each free tool, and the two files search engines read
                 (robots.txt and the sitemap), as any visitor would. A page fails when it does not answer within 15 seconds, answers with an error or a
                 redirect, is missing the text it must show or shows a text it must not, or is slower than its limit: 8 seconds for the landing page and
                 the open numbers, which read the database, and 4 for the rest.

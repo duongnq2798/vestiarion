@@ -4699,7 +4699,7 @@ tool's **Try it on your bills** goes to `/onboarding?shadow=1`, and `loginRedire
 the same browser, and even then the landing path `FirstTouch` records is `/onboarding`, not the tool. The tool's start
 links write the first touch themselves instead. `FREE_TOOLS` (`src/lib/free-tools.ts`) is the one list of tools, each a
 slug, a top-level path, a title and a one-line description: today the address checker, the payment terms
-calculator, the OFAC vendor check, the bill list check and the payout batch check. The full footer's **Free tools** group (above Legal, so the footer keeps four columns) and the sitemap read
+calculator, the OFAC vendor check, the bill list check, the payout batch check and the invoice details check. The full footer's **Free tools** group (above Legal, so the footer keeps four columns) and the sitemap read
 it; the sitemap lists a tool's own pages, such as the payment terms calculator's term pages, right after it. `ToolStartLink` (`src/components/public/ToolCta.tsx`) is every start
 on a tool's page: `ToolCta`, its **Try it on your bills** button, named `<slug>-start` for the analytics click, and the
 full footer's **Get started** when the page passes `SiteFooter` its `tool`. On a click or a middle click, and only when
@@ -4935,6 +4935,42 @@ there is no form, request, URL parameter or storage.
   the analytics click, and its full footer's **Get started** credits the tool too (`<SiteFooter tool="check-payouts" />`).
   The address checker links to it for a whole batch, and the vendor check for amounts and tokens.
   `tests/check-payouts-page.test.tsx` holds the checker's code to making no request and touching no cookie or storage.
+
+**The invoice details check.** `/check-invoice` (`src/app/check-invoice/page.tsx`,
+`docs/superpowers/specs/2026-11-05-check-invoice-design.md`) is a free public page, static and outside `/tools`, like
+the other tools. A vendor's details on file and a new invoice's are compared in the browser as they are typed
+(`InvoiceChecker`, `src/components/invoice-check/`), once typing pauses for `SETTLE_MS` (600 ms), with no form,
+request, URL parameter or storage.
+- `checkInvoice` (`src/lib/invoice-check/findings.ts`) compares each field filled on both sides (`FIELDS`): a changed
+  wallet, IBAN, account number or routing or sort code is a stop; a different name (`nameKey`, or NFKC lower case for
+  a name in another script), phone (`samePhone`), bank name or SWIFT / BIC is a look, and a different BIC with no IBAN
+  on either side a stop. A way to be paid on the invoice only is a stop when what is on file to pay matches none of
+  it, a look beside one that matches, and nothing when nothing is on file. A detail on file that cannot be read beside
+  a readable one on the invoice is a fix (a look for an email), never a silent skip. The wallet gets `checkAddress`
+  against the one on file and the OFAC snapshot the page carries, and a lookalike pair is shown with the address
+  checker's `Marked`.
+- `src/lib/invoice-check/bank.ts` takes off spaces, dashes and labels ("IBAN:", "Sort code:"), refuses a hidden
+  character by its code point, and reads an IBAN by its country's length (`IBAN_LENGTHS`) and its mod 97 check digits,
+  a 9-digit routing number by its ABA check digit, a UK sort code by its form, and a SWIFT / BIC by its form; one that
+  fails is a fix. `domain.ts` reads the sender (`readEmail`: the address in angle brackets, a different address in the
+  display name, which is a stop, or a domain alone) and compares its domain with the one on file (`compareDomains`):
+  the same or a subdomain, made to look alike (another ending, a word added or the vendor's name as a label of another
+  domain, one or two edits, look-alike letters), letters outside ASCII or `xn--`, a free mail service (`isFreeMail`,
+  where the whole address is compared), or another. `registered` reads two-label endings and hosts anyone can have a
+  name on (`onmicrosoft.com` and the like), so two names there are never one. An invoicing service
+  (`invoiceService`: Xero, QuickBooks and the like) is a look, its address not compared.
+- `readMessage` (`message.ts`) finds the words of a change request, pressure, a request not to call or for secrecy,
+  the reasons such requests give, a pasted `From:` line (read as the sender when no email is typed), and a `From` and
+  `Reply-To` on different domains unless the From is an invoicing service. A change request is a stop even when the
+  fields match, since the file may already hold the new details; the other kinds are looks only beside a change.
+- A fix's headline is "Check what you typed"; a stop's names the first stop on a way to be paid before one on the
+  email or the message (`lead`). `callScript` (`call-script.ts`) writes the call to make, to the phone number on file,
+  naming what changed or the email that asked, with the read-back of a wallet and what to do if the vendor did not
+  make the change, as plain text the page shows and copies.
+- It is `check-invoice` in `FREE_TOOLS`. Its **Try it on your bills** is `ToolCta`, `check-invoice-start` for the
+  analytics click, and its full footer's **Get started** credits the tool too (`<SiteFooter tool="check-invoice" />`).
+  The address checker and the payout batch check link to it. `tests/check-invoice-page.test.tsx` holds the checker's
+  code to making no request and touching no cookie or storage.
 
 ## Onboarding by role
 

@@ -69,7 +69,11 @@ export default function CheckAddressPage() {
             </p>
             <p className="mt-3 text-sm leading-relaxed text-ink-2">
               The same goes for an invoice whose payment details were changed, or an email that says a supplier has a new wallet. Compare the whole
-              address with one you already had, and confirm a new one with the payee by a call or a message to a contact you had before.
+              address with one you already had, and confirm a new one with the payee by a call or a message to a contact you had before. The{" "}
+              <Link href="/check-invoice" className="font-medium text-agent underline underline-offset-4">
+                invoice details check
+              </Link>{" "}
+              compares an invoice&apos;s bank details, sender and wallet with the vendor&apos;s on file, and writes the call to make.
             </p>
             <p className="mt-3 text-sm leading-relaxed text-ink-2">
               Sending a whole batch? The{" "}

@@ -83,6 +83,7 @@ describe("the full footer's columns", () => {
       { href: "/check-vendor", label: "OFAC vendor check" },
       { href: "/check-bills", label: "Bill list check" },
       { href: "/check-payouts", label: "Payout batch check" },
+      { href: "/check-invoice", label: "Invoice details check" },
     ]);
   });
 
