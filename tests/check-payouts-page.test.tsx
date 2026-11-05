@@ -477,7 +477,7 @@ describe("the page (payout check CP1, CP12-CP14)", () => {
     const { default: CheckPayoutsPage } = await import("@/app/check-payouts/page");
     const markup = renderToStaticMarkup(<CheckPayoutsPage />).replaceAll("&#x27;", "'").replace(/\s+/g, " ");
     expect(markup).toContain(
-      "Vestiarion locks each payee's payout address, checks it against OFAC's list and the payee's past addresses, and holds any payment whose address changes until someone confirms it, before it pays."
+      "Vestiarion checks each payee's payout address against OFAC's list and the payee's past addresses, and holds any payment whose address changed until a person confirms it, before it pays."
     );
     const link = /<a[^>]*data-cta="check-payouts-start"[^>]*>([^<]*)<\/a>/.exec(markup);
     expect(link?.[0]).toContain(`href="${TRY_HREF}"`);

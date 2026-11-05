@@ -123,6 +123,10 @@ export default function CheckPayoutsPage() {
                 <Link href="/check-vendor" className="font-medium text-agent underline underline-offset-4">
                   OFAC vendor check
                 </Link>
+                ; for an invoice whose bank details or wallet changed, the{" "}
+                <Link href="/check-invoice" className="font-medium text-agent underline underline-offset-4">
+                  invoice details check
+                </Link>
                 .
               </li>
             </ul>
@@ -133,8 +137,8 @@ export default function CheckPayoutsPage() {
               What Vestiarion does with payouts
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-ink-2">
-              Vestiarion locks each payee&apos;s payout address, checks it against OFAC&apos;s list and the payee&apos;s past addresses, and holds any
-              payment whose address changes until someone confirms it, before it pays. It is an AI agent for bills and payments, and every step is
+              Vestiarion checks each payee&apos;s payout address against OFAC&apos;s list and the payee&apos;s past addresses, and holds any
+              payment whose address changed until a person confirms it, before it pays. It is an AI agent for bills and payments, and every step is
               signed into a ledger anyone can verify.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">

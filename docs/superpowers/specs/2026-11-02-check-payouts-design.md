@@ -156,8 +156,9 @@ invalid checksum, the USDC contract as a receiver, an amount with 7 decimals, an
 contract made to look like USDC's, and two rows with nothing found. Its OFAC row uses an address that is on the
 snapshot, as the address checker's tests do. Every other address is made up and owned by no one the page knows.
 
-**CP12. The call to action.** "Vestiarion locks each payee's payout address, checks it against OFAC's list and the
-payee's past addresses, and holds any payment whose address changes until someone confirms it, before it pays." The
+**CP12. The call to action.** "Vestiarion checks each payee's payout address against OFAC's list and the payee's
+past addresses, and holds any payment whose address changed until a person confirms it, before it pays." (Until Nov 5
+it began "locks each payee's payout address", which overstated the payee lock, off by default on Arc testnet.) The
 shared `ToolCta tool="check-payouts"`, and a secondary link to the guide on payee checks.
 
 **CP13. Nothing leaves the browser.** The batch is read and checked in the page. No request carries any of it, no

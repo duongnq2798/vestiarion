@@ -31,6 +31,8 @@ one-line description. The footer, the sitemap and the tool's start button read i
   (`2026-10-28-check-bills-design.md`).
 - The payout batch check followed the bill list check: `check-payouts`, `/check-payouts`, "Payout batch check"
   (`2026-11-02-check-payouts-design.md`).
+- The invoice details check followed the payout batch check: `check-invoice`, `/check-invoice`, "Invoice details
+  check" (`2026-11-05-check-invoice-design.md`).
 
 **TA2. A tool's first touch** (`freeToolFirstTouch`). What the tool's start links keep:
 - `utm_source` the tool's slug, `utm_medium` `free_tool` (`FREE_TOOL_MEDIUM`), `utm_campaign` `free_tools`

@@ -14,9 +14,24 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A free invoice details check** at [/check-invoice](https://www.vestiarion.xyz/check-invoice). Put a vendor's
+  payment details on file beside the ones on their new invoice: name, the email it came from, phone, wallet, IBAN,
+  account number, routing or sort code, SWIFT / BIC and bank name, and paste the message that came with it. A changed
+  wallet, IBAN, account or routing code is a stop; a sender's domain made to look like the vendor's (another ending, a
+  word added, a letter or two changed, look-alike letters, or another alphabet), or a sender's name that is another
+  address, is a stop; a wallet made to look like
+  the one on file, on OFAC's list or not a wallet is a stop; an IBAN with the wrong length or check digits, a US routing
+  number with the wrong check digit or a SWIFT / BIC not in its form cannot be right. The message is read for a
+  request to change payment details, pressure, a request not to call or for secrecy, the reasons such requests give,
+  and a Reply-To on another domain; an invoicing service such as Xero is named, not flagged. A detail on file that
+  cannot be read is said, never skipped. Then the page writes the call to make, to the number on file and never one
+  from the invoice, naming what changed, with a button to copy it. Everything runs in the browser and nothing is sent or
+  kept. The address checker and the payout batch check link to it; it is in the footer's Free tools, the sitemap and
+  the production check. The status page now says "each free tool" instead of counting them, and the payout batch
+  check's call to action now says only what Vestiarion checks before it pays.
 - **A public status page** at [/status](https://www.vestiarion.xyz/status). It shows whether Vestiarion's public pages
   are up, as the production check finds them from GitHub's servers, outside Vercel and Supabase, about every 10
-  minutes: the landing page, the open numbers, the docs, the five free tools, robots.txt and the sitemap. It speaks of
+  minutes: the landing page, the open numbers, the docs, each free tool, robots.txt and the sitemap. It speaks of
   a monitor that checks pages. The headline says all pages up, which ones failed at the last check, or that monitoring
   paused when the last check is more than 25 minutes old: GitHub is set to start the monitor every hour, and has
   started it hours late. While paused, each page shows its last result as it was then, never as its state now. Each
