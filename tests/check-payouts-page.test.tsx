@@ -62,11 +62,18 @@ function click(label: string) {
   act(() => button(label).click());
 }
 
-/** Lets the check run: it waits for the page to show it is checking first (CP2). */
+/**
+ * Lets the check run: it waits for the page to show it is checking first (CP2), then runs on the next frame or after
+ * 100 ms, whichever comes first. A fixed 50 ms missed it on a busy runner, so this waits until the button is no longer
+ * busy, for 2 seconds at most.
+ */
 async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  });
+  for (let waited = 0; waited < 2000; waited += 50) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    if (!container.querySelector("[aria-busy='true']")) return;
+  }
 }
 
 function type(control: HTMLTextAreaElement, value: string) {
