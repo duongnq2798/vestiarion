@@ -4985,6 +4985,20 @@ request, URL parameter or storage.
   The address checker and the payout batch check link to it. `tests/check-invoice-page.test.tsx` holds the checker's
   code to making no request and touching no cookie or storage.
 
+**The quiz.** `/would-you-pay` (`src/app/would-you-pay/page.tsx`,
+`docs/superpowers/specs/2026-11-06-would-you-pay-quiz-design.md`) is a free public page, static and outside `/tools`,
+like the other tools.
+- `QUIZ_QUESTIONS` (`src/lib/pay-quiz/questions.ts`) writes ten Quality Lab scenarios as bill cards: a made-up vendor,
+  the amount, and the scenario's facts as a person reads them, its memo verbatim. A question carries no answer: Pay is
+  right when the scenario's `expected.money` is `moves`, Stop otherwise, and the reveal says what the lab's committed
+  run did (`QUALITY_LAB_RESULTS`, `outcomeWords` of `actual`), so a change to the lab changes the quiz with it.
+- `PayQuiz` (`src/components/pay-quiz/PayQuiz.tsx`) keeps the answers in its state only. After ten it shows the score,
+  a square per bill, the lab's own score, **Copy result** (`quizShareText`: the score, the squares and the page's
+  address) and **Post on X**, X's post intent with the same text.
+- It is `would-you-pay` in `FREE_TOOLS`, with `ToolCta` and `<SiteFooter tool="would-you-pay" />`. The Quality Lab
+  page links to it. `tests/pay-quiz.test.tsx` holds each question to its scenario and result, plays it through, and
+  holds the code to making no request and touching no cookie or storage.
+
 ## Onboarding by role
 
 `docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md` (R1 to R6). Each member's first real task
