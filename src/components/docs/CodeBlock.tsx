@@ -12,14 +12,16 @@ function knownLanguage(lang: string | undefined): BundledLanguage | "text" {
 /**
  * A dark code panel, highlighted on the server by shiki: nothing about it
  * runs in the browser but the copy button. A long line scrolls inside the
- * panel, never the page. `label` defaults to the language.
+ * panel, never the page. `label` defaults to the language. The panel is
+ * `focus-inverse`, so the copy button's focus ring is white on it: the
+ * agent-blue ring is 2.27:1 on ink, white 16.49:1.
  */
 export async function CodeBlock({ code, lang, label, className }: { code: string; lang?: string; label?: string; className?: string }) {
   const language = knownLanguage(lang);
   const html = await codeToHtml(code, { lang: language, theme: "github-dark" });
 
   return (
-    <div className={cn("my-6 overflow-hidden rounded-xl border border-ink/10 bg-ink text-ground shadow-control", className)}>
+    <div className={cn("focus-inverse my-6 overflow-hidden rounded-xl border border-ink/10 bg-ink text-ground shadow-control", className)}>
       <div className="flex h-10 items-center justify-between gap-3 border-b border-ground/10 pl-4 pr-1">
         <span className="truncate font-mono text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ground/70">{label ?? (lang || "text")}</span>
         <CopyButton value={code} label="Copy code" className="text-ground/70 hover:bg-ground/10 hover:text-ground active:bg-ground/15" />

@@ -51,7 +51,7 @@ export function DocsShell({ searchIndex, children }: { searchIndex: SearchEntry[
           <DocsMobileNav sections={DOCS_NAV} />
         </SiteHeader>
         <div className="mx-auto flex w-full max-w-[88rem] flex-1">
-          <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-[17.5rem] shrink-0 overflow-y-auto overscroll-contain border-r border-line bg-ground/40 lg:block">
+          <aside aria-label="Docs pages" className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-[17.5rem] shrink-0 overflow-y-auto overscroll-contain border-r border-line bg-ground/40 lg:block">
             <DocsSidebar sections={DOCS_NAV} />
           </aside>
           <div className="flex min-w-0 flex-1 flex-col">
@@ -150,7 +150,7 @@ export function DocsPage({
         <DocsPager slug={slug} />
       </article>
       {toc && (
-        <aside className="sticky top-16 hidden max-h-[calc(100dvh-4rem)] w-56 shrink-0 self-start overflow-y-auto py-8 xl:block">
+        <aside aria-label="Page contents" className="sticky top-16 hidden max-h-[calc(100dvh-4rem)] w-56 shrink-0 self-start overflow-y-auto py-8 xl:block">
           <DocsToc headings={headings} />
         </aside>
       )}

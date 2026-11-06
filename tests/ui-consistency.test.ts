@@ -124,6 +124,8 @@ function solidFocusBeside(halo: string, line: string): boolean {
  */
 const AGENT_BAND = /<(?:section|div|header|footer|aside|article|nav|main)\b[^>]*?(?<![\w-])bg-agent(?![\w/-])[^>]*>/g;
 const FOCUS_INVERSE = /(?<![\w-])focus-inverse(?![\w-])/;
+// A region painted solid ink, the dark code panels and bands: the agent-blue focus ring is 2.27:1 on it, white 16.49:1.
+const INK_BAND = /<(?:section|div|header|footer|aside|article|nav|main)\b[^>]*?(?<![\w-])bg-ink(?![\w/-])[^>]*>/g;
 
 describe("the design system holds", () => {
   it("renders no raw button, select or textarea outside src/components/ui", () => {
@@ -164,6 +166,10 @@ describe("the design system holds", () => {
 
   it("marks every agent-blue region focus-inverse", () => {
     expect(offences(TSX, AGENT_BAND, (tag) => !FOCUS_INVERSE.test(tag))).toEqual([]);
+  });
+
+  it("marks every ink region focus-inverse", () => {
+    expect(offences(TSX, INK_BAND, (tag) => !FOCUS_INVERSE.test(tag))).toEqual([]);
   });
 });
 
@@ -283,5 +289,14 @@ describe("the patterns themselves", () => {
     expect('<div className="bg-agent-soft p-3">'.match(AGENT_BAND)).toBeNull();
     expect('<span className="size-2 bg-agent" />'.match(AGENT_BAND)).toBeNull();
     expect('<div className="flex gap-4"><span className="bg-agent" /></div>'.match(AGENT_BAND)).toBeNull();
+  });
+
+  it("INK_BAND finds a region painted solid ink, and leaves tints, the lighter inks and spans alone", () => {
+    expect('<div className={cn("my-6 rounded-xl bg-ink text-ground", className)}>'.match(INK_BAND)).not.toBeNull();
+    expect('<section id="x" className="relative bg-ink text-ground">'.match(INK_BAND)).not.toBeNull();
+
+    expect('<section className="rounded-2xl bg-ink/60 p-5">'.match(INK_BAND)).toBeNull();
+    expect('<div className="bg-ink-2" />'.match(INK_BAND)).toBeNull();
+    expect('<span className="bg-ink" />'.match(INK_BAND)).toBeNull();
   });
 });

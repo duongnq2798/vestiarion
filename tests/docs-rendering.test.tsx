@@ -112,9 +112,10 @@ describe("GitHub-flavoured Markdown", () => {
     expect(readFileSync(path.join(process.cwd(), "next.config.ts"), "utf8")).toMatch(/remarkPlugins:\s*\["remark-gfm"\]/);
   });
 
-  it("compiles a table and renders it through the Table primitive in its scrolling frame", async () => {
+  it("compiles a table and renders it through the Table primitive in its scrolling frame, which a keyboard can reach", async () => {
     const markup = await renderPage("| Code | Status |\n| --- | --- |\n| `unauthorized` | 401 |\n");
-    expect(markup).toMatch(/<div class="relative w-full overflow-x-auto[^"]*"><table class="w-full border-collapse/);
+    // A focusable region, named from its header row, so a keyboard can scroll a table wider than the page.
+    expect(markup).toMatch(/<div class="relative w-full overflow-x-auto[^"]*" role="region" aria-label="Table: Code, Status" tabindex="0"><table class="w-full border-collapse/);
     expect(markup).toContain('<th scope="col"');
     expect(markup).toContain("401</td>");
   });
