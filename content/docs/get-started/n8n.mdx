@@ -52,7 +52,11 @@ It was recorded on 0.1.2. Since 0.1.3, Bill > Create's Currency is under **Addit
 
 ## Install
 
-In a self-hosted n8n, a user with the owner or admin role installs it:
+n8n has verified the package, so it is on n8n Cloud as well as in a self-hosted n8n.
+
+**On n8n Cloud**, there is nothing to install: in a workflow, search the nodes panel for **Vestiarion** and drag the node in. If it is not listed, an owner turns on **Verified community nodes** in the instance's Admin Panel, and restarts the instance.
+
+**In a self-hosted n8n**, a user with the owner or admin role installs it:
 
 1. Open **Settings**, then **Community nodes**.
 2. Choose **Install**, and enter `@vestiarion/n8n-nodes-vestiarion`.
@@ -60,9 +64,7 @@ In a self-hosted n8n, a user with the owner or admin role installs it:
 
 The nodes then appear in the nodes panel: search for **Vestiarion**. They are built and tested against n8n 2.45.
 
-n8n installs community packages it has not verified only while `N8N_UNVERIFIED_PACKAGES_ENABLED` is `true`. That is the default today, and n8n has said it will change to `false` in a future version: set it to `true` in the instance's environment to keep installing this package.
-
-n8n Cloud lists only community nodes n8n has verified. This package is not verified yet, so on n8n Cloud, use the [HTTP Request node](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/) with the [API](/docs/api) for now.
+n8n installs community packages it has not verified only while `N8N_UNVERIFIED_PACKAGES_ENABLED` is `true`. That is the default today, and n8n has said it will change to `false` in a future version: set it to `true` in the instance's environment to install a version n8n has not reviewed yet. n8n reviews each new version published to npm before n8n Cloud offers it.
 
 The site serves the same package, byte for byte: [vestiarion-n8n-nodes-vestiarion-0.1.3.tgz](https://www.vestiarion.xyz/n8n/vestiarion-n8n-nodes-vestiarion-0.1.3.tgz).
 

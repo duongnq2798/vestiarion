@@ -14,6 +14,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The n8n nodes on n8n Cloud.** n8n verified `@vestiarion/n8n-nodes-vestiarion`, and it is live on n8n Cloud: search
+  the nodes panel for Vestiarion, with nothing to install. The guide's Install section says so, in place of using the
+  HTTP Request node there. [Guide](https://www.vestiarion.xyz/docs/get-started/n8n#install).
 - **A Zapier integration**, private for now and joined by invitation. Triggers: New Agent Decision, with the agent's
   reasoning; Bill Paid, by the agent or once a person approves; and New Ledger Entry, filtered by domain, actor or
   action. The action Create Bill adds a payable for the agent to decide, with an idempotency key so a replayed Zap adds
