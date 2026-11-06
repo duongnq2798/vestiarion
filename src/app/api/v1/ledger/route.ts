@@ -23,6 +23,10 @@ export const dynamic = "force-dynamic";
  * Ascending order is deliberate and is the opposite of what the dashboard
  * wants. A newest-first feed cannot be resumed: new rows arrive at the front,
  * so a stored position drifts. Ascending means a cursor is a watermark.
+ *
+ * `order=desc` is the exception for a caller that keeps no position, such as a
+ * Zapier polling trigger (docs/superpowers/specs/2026-11-06-zapier-integration-design.md
+ * Z1): the newest `limit` entries, newest first, and no cursor either way.
  */
 export interface LedgerEntryPayload {
   seq: number;
@@ -68,6 +72,11 @@ export async function GET(request: Request) {
     return apiError("invalid_request", "cursor is not valid for this endpoint.");
   }
 
+  const order = url.searchParams.get("order") ?? "asc";
+  if (order !== "asc" && order !== "desc") return apiError("invalid_request", "order must be asc or desc.");
+  // A watermark read the other way round would skip or repeat entries: newest first is one page, with no cursor.
+  if (order === "desc" && rawCursor) return apiError("invalid_request", "cursor reads oldest first; order=desc takes none.");
+
   const domain = url.searchParams.get("domain");
   const actor = url.searchParams.get("actor");
 
@@ -78,7 +87,7 @@ export async function GET(request: Request) {
       let query = db()
         .from("ledger_entries")
         .select("seq, id, ts, actor, domain, action, summary, detail, body_hash, signature, prev_hash, hash, signing_key_id")
-        .order("seq", { ascending: true })
+        .order("seq", { ascending: order === "asc" })
         // One more than asked for, so `hasMore` is observed rather than guessed.
         .limit(limitResult.limit + 1);
 
@@ -104,7 +113,9 @@ export async function GET(request: Request) {
         signingKeyId: row.signing_key_id == null ? null : String(row.signing_key_id),
       }));
 
-      return paginate(entries, limitResult.limit, (entry) => ({ k: entry.seq }));
+      const collection = paginate(entries, limitResult.limit, (entry) => ({ k: entry.seq }));
+      // Newest first says whether older entries exist, and gives no cursor to page back with.
+      return order === "desc" ? { ...collection, page: { ...collection.page, nextCursor: null } } : collection;
     }
   );
 }

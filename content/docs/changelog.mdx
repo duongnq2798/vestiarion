@@ -1,5 +1,10 @@
 Changes to the API and webhooks that affect an integration, newest first. Changes to the product that do not touch this surface are not listed.
 
+## 2026-11-06: The ledger newest first, and Zapier
+
+- **`GET /api/v1/ledger`** takes **`order`**: `asc`, the default, oldest first and resumable from a cursor as before; or **`desc`**, the newest `limit` entries, newest first, with `domain` and `actor` as before. `order=desc` takes no `cursor` and answers `400 invalid_request` to one, since a watermark read the other way round would skip or repeat entries; its `page.nextCursor` is `null`, and `page.hasMore` says whether older entries exist. Any other `order` answers `400`. A request without `order` answers exactly as before.
+- A private [Zapier](/docs/get-started/zapier) integration reads it: triggers New Agent Decision, Bill Paid and New Ledger Entry, and the action Create Bill, with a workspace API key. The Postman collection's **List the agent's decisions** now reads newest first. The TypeScript SDK 0.4.2 accepts `order`; its `ledger.list` pages, the CLI and the MCP server keep reading oldest first. Nothing else in `/api/v1` or the webhooks changes.
+
 ## 2026-11-01: Bills from a Google Drive folder
 
 - Three new entries, domain `ap`, each listed by `GET /api/v1/ledger` and sent to webhook endpoints as `ledger.appended`:

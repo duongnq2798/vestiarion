@@ -1,0 +1,83 @@
+The Vestiarion integration connects a workspace to [Zapier](https://zapier.com), so a Zap can start on what the agent does and add bills from the apps you already use:
+
+- **New Agent Decision.** A Zap starts on each entry the agent signs: what it paid, held, flagged or scheduled, with its reasoning.
+- **Bill Paid.** A Zap starts on each bill paid, by the agent on its own or once a person approves it.
+- **New Ledger Entry.** A Zap starts on every signed entry, by the agent, a person or Vestiarion itself, filtered by domain, actor or action.
+- **Create Bill.** An email, a form or a spreadsheet row becomes a bill for the agent to decide.
+
+It calls this [API](/docs/api) with a workspace API key, and works the same on Arc testnet and on Arc mainnet. Its code is in the `zapier/` folder of the [Vestiarion repository](https://github.com/duongnq2798/vestiarion/tree/main/zapier).
+
+<Callout kind="note" title="Joined by invitation for now">
+The integration is not in Zapier's app directory yet. Until it is, it is joined with an invite link, which adds Vestiarion to your Zapier account: ask for one in a [GitHub issue](https://github.com/duongnq2798/vestiarion/issues/new).
+</Callout>
+
+## Connect a workspace
+
+In a Zap, choose Vestiarion, then **Sign in**. The connection has two fields:
+
+| Field | What to put |
+| --- | --- |
+| **API Key** | A [workspace API key](/docs/get-started/authentication). An owner or an admin creates one on the workspace's Settings page, under **API keys**. Create Bill needs one that can also add records; the triggers need only a read-only one. |
+| **Base URL** | `https://www.vestiarion.xyz`. Change it only for your own deployment. It must be https: plain http is refused, except to `localhost`, so the key never crosses a network in the clear. |
+
+Zapier tests the connection with one read, `GET /api/v1/status`, and names it after the workspace. The key is sent as `Authorization: Bearer`, never in a URL. A key that is revoked fails the next step with a request to reconnect.
+
+## Triggers
+
+Each trigger is a polling trigger: Zapier asks for the newest entries on your plan's schedule, every 1 to 15 minutes, and starts the Zap once for each entry it has not seen. On the first check, Zapier only remembers what is there, so a Zap starts on entries signed after you turn it on. Each check is one read of the [ledger, newest first](/docs/api/list-ledger-entries#newest-first).
+
+| Trigger | What starts a Zap | Options |
+| --- | --- | --- |
+| **New Agent Decision** | An entry the agent signs, such as `ap_pay`, `ap_schedule`, `ap_hold`, `ap_flag_fraud` or `ap_request_info` for bills. | **Domain**: one domain, such as Bills. |
+| **Bill Paid** | `ap_pay` that ended `paid`, by the agent, or `approval_paid` with status `paid`, once a person approves. A decision that held the bill, or a payment still waiting, is not one. | None. |
+| **New Ledger Entry** | Every signed entry: people's and Vestiarion's too, such as a bill added, a payee confirmed or a key created. | **Domain**, **Actor**, and **Actions**, separated by commas, such as `ap_hold, ap_flag_fraud`. |
+
+Each check reads the newest 100 entries, 200 for Bill Paid. A workspace that signs more than that between two checks starts no Zap for the older ones: use [webhooks](/docs/webhooks) where every entry must be handled.
+
+### What a trigger outputs
+
+The signed entry as the API returns it, `detail`, hashes and signature included, with these fields on top, so a Zap can map them without digging into `detail`:
+
+| Field | What it holds |
+| --- | --- |
+| **Seq**, **Time**, **Actor**, **Domain**, **Action**, **Summary** | The entry's own fields. |
+| **Agent's reasoning** | Why the agent decided as it did, when the entry records it. |
+| **Bill ID**, **Milestone ID**, **Counterparty ID** | What the entry is about, when it says. |
+| **Amount**, **Currency** | The amount paid, or the bill's amount. |
+| **Transaction** | The payment's transaction reference, once there is one. |
+| **Paid by** | Bill Paid only: `agent` or `human`. |
+
+## Create Bill
+
+Create Bill [adds an invoice](/docs/api/create-invoice) as a payable, for the agent to decide.
+
+- **Counterparty**: the vendor or contractor the bill is from. Pick it from the workspace's first 200 vendors and contractors, or map its ID.
+- **Amount**: as text, such as `1250.50`, so it stays exact. At most 6 decimal places.
+- **Due Date**: the day the bill is due. A date, or a date and time from another step: only the day is sent.
+- **Currency**: USDC, the default, or EURC.
+- **PO Reference** and **Goods Received**. Without both, the agent asks for the missing detail instead of paying.
+- **Memo**, up to 280 characters.
+- **Early-Payment Discount (Percent)** and its **Deadline**, both or neither.
+- **Idempotency Key**: something unique to the bill, such as the email's or the row's ID. It is sent as the `Idempotency-Key`, so a Zap that runs again on the same item within 24 hours adds the bill once. Without it, a replayed Zap adds another bill.
+
+A missing counterparty, amount or due date, or half a discount, stops the step with what to fix, before any request. The step outputs the bill as the API added it, with its **Bill ID** and **Status**.
+
+<Callout kind="important" title="An added bill is decided by the agent">
+The agent decides a bill added from Zapier as it decides one typed into the console, with every guardrail, usually within a minute. Within its limits it may pay it, on the workspace's network. That is the agent's decision under the workspace's rules; the integration itself never approves or pays.
+</Callout>
+
+## Errors
+
+An API error stops the step with the API's own message, such as "This key cannot do that." for a read-only key adding a bill, and its [code](/docs/get-started/errors). A `401` asks you to reconnect. A `429` tells Zapier to retry after the `Retry-After` the API sends.
+
+## Two Zaps to start from
+
+**Tell the team when the agent holds a bill.** New Agent Decision with Domain **Bills**, then Filter by Zapier on **Action** is `ap_hold` or `ap_flag_fraud`, then a message in Slack, Microsoft Teams or email: `{{Summary}}: {{Agent's reasoning}}`. Vestiarion's own [Slack](/docs/guides/slack) and [Telegram](/docs/guides/telegram) notices already cover this, with a link to review the bill; use Zapier when the message goes somewhere else.
+
+**Add bills from a spreadsheet.** New Spreadsheet Row in Google Sheets, then Vestiarion: Create Bill, with the counterparty's ID, the amount and the due date from the row, and **Idempotency Key** set to the row's invoice number.
+
+## What it does not do
+
+- It never approves, rejects or pays a bill, and adds only bills.
+- It has no instant triggers yet: the API cannot add a webhook endpoint, so each trigger polls. For an entry the moment it is signed, add a webhook endpoint in Settings and use [webhooks](/docs/webhooks), or Webhooks by Zapier.
+- It keeps nothing of its own: no copy of the ledger or of your bills. Zapier keeps the entry IDs it has seen, to start each Zap once.

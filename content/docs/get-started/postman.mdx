@@ -54,7 +54,7 @@ Open **Vestiarion: Getting Started**, then **1. Read, with a read-only key**, an
 Then send the next two:
 
 - **2. List invoices** returns the ten newest, each with the agent's verdict and why, in `agentReasoning`. To read the next ten, tick `cursor` under **Params** and paste the answer's `page.nextCursor` into it.
-- **3. List the agent's decisions, with its reasoning** returns the entries the agent signed into the ledger, with `actor=agent`, 200 at a time. The ledger answers oldest first, and has no newest-first order: it is a stream to resume from. To reach the latest decisions, tick `cursor` and send each answer's `page.nextCursor` back in it until `hasMore` is `false`; keep the last cursor, and your next read starts there. Tick `domain` for the payables' decisions only. For the latest decisions on bills at once, **2. List invoices** is newest first, with the agent's reasoning on each.
+- **3. List the agent's decisions, with its reasoning** returns the 50 newest entries the agent signed into the ledger, with `actor=agent` and `order=desc`, newest first. To read every entry and resume later instead, untick `order`: the ledger then answers oldest first, as a stream, and you tick `cursor` and send each answer's `page.nextCursor` back in it until `hasMore` is `false`, keeping the last cursor for your next read. Tick `domain` for the payables' decisions only.
 
 Each request checks its status in its post-response script, under **Scripts**, so running the folder in the Collection Runner shows at once whether every read answers. A `401 unauthorized` means the key is missing, mistyped or revoked: check the value of `apiKey`. [Errors](/docs/get-started/errors) lists every code.
 

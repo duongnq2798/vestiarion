@@ -183,13 +183,14 @@ export const OPERATIONS: readonly DocOperation[] = [
     path: "/api/v1/ledger",
     summary: "List ledger entries",
     description:
-      "The audit chain, oldest first, as a resumable stream. Because the ledger is append-only and ascending by `seq`, a stored `page.nextCursor` is a watermark: a request from it never returns an entry before it. Persist the last non-null `nextCursor` only after processing every entry in the responses read, and resume from it; the last page, which had no cursor of its own, is returned again, so de-duplicate on `seq`.\n\n`seq` is monotonic within a workspace but not gap-free; continuity is proven by the hash chain, not by `seq`.",
+      "The audit chain, oldest first, as a resumable stream. Because the ledger is append-only and ascending by `seq`, a stored `page.nextCursor` is a watermark: a request from it never returns an entry before it. Persist the last non-null `nextCursor` only after processing every entry in the responses read, and resume from it; the last page, which had no cursor of its own, is returned again, so de-duplicate on `seq`.\n\n`order=desc` answers the newest `limit` entries instead, newest first, for a caller that keeps no position, such as a polling trigger. It takes no `cursor`, since a watermark read the other way round would skip or repeat entries: its `page.nextCursor` is `null`, and `page.hasMore` says whether older entries exist.\n\n`seq` is monotonic within a workspace but not gap-free; continuity is proven by the hash chain, not by `seq`.",
     tag: "Ledger",
     scope: "read",
     params: [
       ...PAGE_PARAMS,
       { name: "domain", in: "query", required: false, type: "string", description: "Only entries in this domain.", example: "system" },
       { name: "actor", in: "query", required: false, type: "string", description: "Only entries written by this actor.", example: "system" },
+      { name: "order", in: "query", required: false, type: "string", description: "`asc`, the default, oldest first and resumable from a cursor; or `desc`, the newest entries first, with no cursor.", example: "desc" },
     ],
     status: 200,
     response: collectionOf(LedgerEntrySchema),

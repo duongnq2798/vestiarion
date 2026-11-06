@@ -28,7 +28,9 @@ A cursor continues the request that produced it. Send it to the same endpoint, w
 ## Order
 
 - **Invoices, counterparties and milestones** are newest first, by creation time, with the row id breaking a tie.
-- **The ledger** is oldest first, ascending by `seq`, because it is an append-only stream.
+- **The ledger** is oldest first, ascending by `seq`, because it is an append-only stream. With `order=desc` it answers
+  its newest entries first instead, one page with no cursor, for a caller that keeps no position, such as a polling
+  trigger in Zapier.
 
 ## The ledger cursor is a watermark
 

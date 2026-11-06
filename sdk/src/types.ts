@@ -1293,6 +1293,8 @@ export interface ListLedgerEntriesParams {
   domain?: string;
   /** Only entries written by this actor. */
   actor?: string;
+  /** `asc`, the default, oldest first and resumable from a cursor; or `desc`, the newest entries first, with no cursor. */
+  order?: string;
 }
 
 /** The query parameters of `list-invoices`. */

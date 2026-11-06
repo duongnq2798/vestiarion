@@ -92,6 +92,8 @@ const eslintConfig = defineConfig([
     "cli/dist/**",
     // The n8n node package: its own dependencies and n8n's own lint (npm run --prefix n8n verify).
     "n8n/**",
+    // The Zapier integration: CommonJS for Zapier's runtime, its own tests (npm run --prefix zapier verify).
+    "zapier/**",
   ]),
 ]);
 

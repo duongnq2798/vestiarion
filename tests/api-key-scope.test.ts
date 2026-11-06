@@ -591,6 +591,42 @@ describe("GET /api/v1/status", () => {
   });
 });
 
+describe("the ledger newest first (Zapier Z1)", () => {
+  const rows = [3, 2, 1].map((seq) => ({ seq, id: `e${seq}`, ts: "2026-11-06T00:00:00Z", actor: "agent", domain: "ap", action: "ap_pay", summary: `entry ${seq}`, detail: {}, body_hash: "b", signature: "s", prev_hash: "p", hash: "h", signing_key_id: null }));
+
+  it("reads the newest entries first, with the filters, and gives no cursor to page back with", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+    const fake = fakeSupabase(database({ "/rest/v1/ledger_entries": rows }));
+    const response = await call(fake, getLedger, "/api/v1/ledger?order=desc&actor=agent&limit=2", `Bearer ${PRESENTED}`);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data.map((entry: { seq: number }) => entry.seq)).toEqual([3, 2]);
+    expect(body.page).toEqual({ nextCursor: null, hasMore: true, count: 2 });
+    const [read] = tenantRequests(fake);
+    expect(read.params.get("order")).toBe("seq.desc");
+    expect(read.params.get("actor")).toBe("eq.agent");
+  });
+
+  it("keeps oldest first by default", async () => {
+    vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+    const fake = fakeSupabase(database());
+    await call(fake, getLedger, "/api/v1/ledger", `Bearer ${PRESENTED}`);
+    expect(tenantRequests(fake)[0].params.get("order")).toBe("seq.asc");
+  });
+
+  it.each([
+    ["order=desc&cursor=eyJrIjo4Mn0", "cursor reads oldest first; order=desc takes none."],
+    ["order=sideways", "order must be asc or desc."],
+  ])("answers 400 to %s, and never reaches the tenant database", async (query, message) => {
+    vi.mocked(authenticateApiKey).mockResolvedValueOnce(KEY_A);
+    const fake = fakeSupabase(database());
+    const response = await call(fake, getLedger, `/api/v1/ledger?${query}`, `Bearer ${PRESENTED}`);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: { code: "invalid_request", message } });
+    expect(tenantRequests(fake)).toEqual([]);
+  });
+});
+
 describe("a cursor this endpoint did not issue", () => {
   const cursorOf = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const INVOICE_CURSOR = cursorOf({ k: "2026-09-24T15:22:50.176754+00:00", id: "9440f32c-000d-4a63-97f1-4eb6bf78439f" });

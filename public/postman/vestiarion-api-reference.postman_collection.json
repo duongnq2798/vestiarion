@@ -247,10 +247,16 @@
                   "value": "system",
                   "description": "Only entries written by this actor.",
                   "disabled": true
+                },
+                {
+                  "key": "order",
+                  "value": "desc",
+                  "description": "`asc`, the default, oldest first and resumable from a cursor; or `desc`, the newest entries first, with no cursor.",
+                  "disabled": true
                 }
               ]
             },
-            "description": "The audit chain, oldest first, as a resumable stream. Because the ledger is append-only and ascending by `seq`, a stored `page.nextCursor` is a watermark: a request from it never returns an entry before it. Persist the last non-null `nextCursor` only after processing every entry in the responses read, and resume from it; the last page, which had no cursor of its own, is returned again, so de-duplicate on `seq`.\n\n`seq` is monotonic within a workspace but not gap-free; continuity is proven by the hash chain, not by `seq`.\n\n**Key:** any workspace API key; a read-only one is enough.\n\nReference: https://www.vestiarion.xyz/docs/api/list-ledger-entries"
+            "description": "The audit chain, oldest first, as a resumable stream. Because the ledger is append-only and ascending by `seq`, a stored `page.nextCursor` is a watermark: a request from it never returns an entry before it. Persist the last non-null `nextCursor` only after processing every entry in the responses read, and resume from it; the last page, which had no cursor of its own, is returned again, so de-duplicate on `seq`.\n\n`order=desc` answers the newest `limit` entries instead, newest first, for a caller that keeps no position, such as a polling trigger. It takes no `cursor`, since a watermark read the other way round would skip or repeat entries: its `page.nextCursor` is `null`, and `page.hasMore` says whether older entries exist.\n\n`seq` is monotonic within a workspace but not gap-free; continuity is proven by the hash chain, not by `seq`.\n\n**Key:** any workspace API key; a read-only one is enough.\n\nReference: https://www.vestiarion.xyz/docs/api/list-ledger-entries"
           },
           "response": [
             {
@@ -291,6 +297,12 @@
                       "key": "actor",
                       "value": "system",
                       "description": "Only entries written by this actor.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "order",
+                      "value": "desc",
+                      "description": "`asc`, the default, oldest first and resumable from a cursor; or `desc`, the newest entries first, with no cursor.",
                       "disabled": true
                     }
                   ]
@@ -347,6 +359,12 @@
                       "value": "system",
                       "description": "Only entries written by this actor.",
                       "disabled": true
+                    },
+                    {
+                      "key": "order",
+                      "value": "desc",
+                      "description": "`asc`, the default, oldest first and resumable from a cursor; or `desc`, the newest entries first, with no cursor.",
+                      "disabled": true
                     }
                   ]
                 }
@@ -401,6 +419,12 @@
                       "key": "actor",
                       "value": "system",
                       "description": "Only entries written by this actor.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "order",
+                      "value": "desc",
+                      "description": "`asc`, the default, oldest first and resumable from a cursor; or `desc`, the newest entries first, with no cursor.",
                       "disabled": true
                     }
                   ]
@@ -457,6 +481,12 @@
                       "value": "system",
                       "description": "Only entries written by this actor.",
                       "disabled": true
+                    },
+                    {
+                      "key": "order",
+                      "value": "desc",
+                      "description": "`asc`, the default, oldest first and resumable from a cursor; or `desc`, the newest entries first, with no cursor.",
+                      "disabled": true
                     }
                   ]
                 }
@@ -511,6 +541,12 @@
                       "key": "actor",
                       "value": "system",
                       "description": "Only entries written by this actor.",
+                      "disabled": true
+                    },
+                    {
+                      "key": "order",
+                      "value": "desc",
+                      "description": "`asc`, the default, oldest first and resumable from a cursor; or `desc`, the newest entries first, with no cursor.",
                       "disabled": true
                     }
                   ]
