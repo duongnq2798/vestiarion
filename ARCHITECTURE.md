@@ -4628,7 +4628,10 @@ Bill's counterparty dropdown) and `creates/createBill.js` (`POST /api/v1/invoice
 `Idempotency-Key`). `lib/http.js` refuses a Base URL that is not https, except to localhost, and turns a `401` into a
 reconnect and a `429` into Zapier's own retry. It keeps its own lock, the root's typecheck and lint leave it out, and
 the CI job `zapier` runs its tests (vitest with nock, `.mjs` loading the app through `createRequire`) and
-`zapier-platform validate`. Pushing a version takes the owner's deploy key, so it is done by hand, never in CI. Spec:
+`zapier-platform validate`. Pushing a version takes the owner's deploy key, so it is done by hand, never in CI:
+`.zapierapprc` names the integration (249314), and the push runs from a copy of the package with its production
+dependencies only (`npm install --omit=dev`, then `zapier-platform push`), since Zapier's build copies `node_modules`
+and the dev tools in it run Windows out of file handles. Spec:
 `docs/superpowers/specs/2026-11-06-zapier-integration-design.md`.
 
 The Postman collections are rendered from the OpenAPI document by `npm run postman:build` (`scripts/lib/postman.ts`)
