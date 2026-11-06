@@ -5498,7 +5498,8 @@ reported as zero.
 type and fluid page/section spacing are additive: default Tailwind typography, the existing radius values, colour
 values and control sizes stay intact for the app, docs and email. `cn.ts` registers the semantic font sizes and spacing
 so caller overrides keep working. `Heading` separates semantic heading level from visual size, while `Section` supplies
-a fluid gutter and a centred container; blue and ink tones carry `focus-inverse` automatically. `Card` keeps its default
+a fluid gutter and a centred container; blue and ink tones carry `focus-inverse` automatically, and
+`tests/ui-consistency.test.ts` holds every other region painted solid agent-blue or ink to it (a docs code panel is one). `Card` keeps its default
 surface elevation and adds an optional flat edge. The primitives add no client boundary. The development-only,
 noindex `/design/visual-system` specimen demonstrates composition without payment evidence; production returns 404.
 Rules and rollout boundaries are in `docs/design/visual-system.md`; token equality, AA colour pairs, class merging and

@@ -68,6 +68,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   which now fetches the script with `curl` instead of `actions/checkout`, and the job's cache actions are pinned to a
   commit. The token never reaches the log. The page is in the sitemap and the footer's Resources group. No migration.
 
+### Fixed
+
+- **Keyboard focus in the docs.** The copy button on a code block now shows a white focus ring on the dark panel,
+  where the blue one was 2.27:1 against it (white is 16.49:1); a test now holds every region painted solid ink to
+  `focus-inverse`, as it already held the blue ones. A table wider than the screen, which scrolls in its own frame,
+  can now be reached and scrolled with the keyboard, named for a screen reader from its header row ("Table: Trigger,
+  What starts a Zap, Options"). The docs' two side columns are named apart, Docs pages and Page contents. Found by an
+  axe pass over the newest pages: the quiz, the invoice details and payout batch checks, the status page and the
+  Zapier and n8n guides.
+
 ## [0.1.0-beta.15] - 2026-11-04
 
 ### Added

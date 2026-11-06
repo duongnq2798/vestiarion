@@ -8,7 +8,7 @@ Keep the existing palette: agent-blue `#3048c9`, cream ground `#f3f0e7`, paper s
 
 On blue or ink use `text-on-agent` for primary text and solid `text-on-agent-muted` for secondary text. The muted role reuses the existing `agent-soft` colour. Never fade small text with opacity: white at 70% on agent-blue fails AA. White on agent-blue is 7.25:1; the muted role is 6.22:1. Use `text-ink-2` on raised surfaces; `ink-3` is suitable on ground/surface, but fails small-text AA on raised.
 
-Every blue or dark region must carry `focus-inverse`. `Section tone="agent"` and `Section tone="ink"` do this automatically. Use inverse buttons there. Light Section tones restore `focus-default`; give other nested light panels with controls `focus-default` too, so their outline contrasts with the panel. When overriding a background, choose the matching focus palette as well. Focus always has a solid outline or border, never just a soft halo. Check Tab and Shift+Tab in the actual composed page.
+Every blue or dark region must carry `focus-inverse`. `Section tone="agent"` and `Section tone="ink"` do this automatically. `tests/ui-consistency.test.ts` fails on any other element painted solid `bg-agent` or `bg-ink` without it: on ink the blue ring is 2.27:1, white 16.49:1. Use inverse buttons there. Light Section tones restore `focus-default`; give other nested light panels with controls `focus-default` too, so their outline contrasts with the panel. When overriding a background, choose the matching focus palette as well. Focus always has a solid outline or border, never just a soft halo. Check Tab and Shift+Tab in the actual composed page.
 
 ## Type
 

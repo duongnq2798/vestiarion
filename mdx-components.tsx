@@ -21,7 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { isValidElement, type ComponentProps, type ReactNode } from "react";
+import { Children, isValidElement, type ComponentProps, type ReactNode } from "react";
 import { CodeBlock } from "@/components/docs/CodeBlock";
 import { Action, DocsCallout } from "@/components/docs/DocsCallout";
 import { DocsHeading, textOf } from "@/components/docs/DocsHeading";
@@ -54,6 +54,22 @@ import { isPageHref } from "@/lib/docs/paths";
  * wraps, not even at a hyphen, as the reference's own tables already keep it.
  */
 const CELL_WRAP = "[overflow-wrap:break-word] [&_*]:[overflow-wrap:break-word] [&_code]:whitespace-nowrap";
+
+/**
+ * A Markdown table's name for a screen reader, from its header row: "Table: Trigger, Starts on, Fields". A table wider
+ * than the page scrolls in its own frame, which takes keyboard focus to scroll, and a focusable region needs a name.
+ */
+export function tableLabel(children: ReactNode): string {
+  const first = (nodes: ReactNode) => Children.toArray(nodes).find((node) => isValidElement<{ children?: ReactNode }>(node)) as
+    | { props: { children?: ReactNode } }
+    | undefined;
+  const row = first(first(children)?.props.children);
+  const cells = Children.toArray(row?.props.children)
+    .filter((cell) => isValidElement<{ children?: ReactNode }>(cell))
+    .map((cell) => textOf((cell as { props: { children?: ReactNode } }).props.children).trim())
+    .filter(Boolean);
+  return cells.length > 0 ? `Table: ${cells.join(", ")}` : "Table";
+}
 
 /** A fenced block arrives as `<pre><code className="language-x">source</code></pre>`. */
 function Pre({ children }: { children?: ReactNode }) {
@@ -163,7 +179,7 @@ const components: MDXComponents = {
   ),
   pre: Pre,
   table: ({ children }) => (
-    <Table containerClassName="my-6 rounded-xl border border-line bg-surface">
+    <Table label={tableLabel(children)} containerClassName="my-6 rounded-xl border border-line bg-surface">
       {children}
     </Table>
   ),

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DocsCallout } from "@/components/docs/DocsCallout";
@@ -8,7 +9,7 @@ import { INDEXED_SECTIONS, TopicIndex } from "@/components/docs/TopicIndex";
 import { readSource } from "@/lib/docs/content";
 import { mdxToMarkdown } from "@/lib/docs/markdown";
 import { DOCS_NAV, docsHref } from "@/lib/docs/nav";
-import { useMDXComponents } from "../mdx-components";
+import { tableLabel, useMDXComponents } from "../mdx-components";
 
 /** The page being read, as the router would say it. */
 const route = vi.hoisted(() => ({ pathname: "/docs/guides/bank-payouts" }));
@@ -82,6 +83,16 @@ describe("a docs page's frame", () => {
       </DocsShell>
     );
     expect(markup).toMatch(/<\/aside><div class="[^"]*"><main [^>]*><p>Body<\/p><\/main><footer /);
+  });
+
+  it("names its sidebar and the page's contents apart, so a screen reader can tell the two asides apart", () => {
+    const markup = renderToStaticMarkup(
+      <DocsShell searchIndex={[]}>
+        <p>Body</p>
+      </DocsShell>
+    );
+    expect(markup).toContain('<aside aria-label="Docs pages"');
+    expect(readFileSync("src/components/docs/DocsShell.tsx", "utf8")).toContain('<aside aria-label="Page contents"');
   });
 });
 
@@ -227,5 +238,31 @@ describe("the docs' home, polished (docs home polish H1-H4)", () => {
     const card = markup.match(new RegExp(`<section aria-label="${last}" class="([^"]*)"`))?.[1] ?? "";
     if (INDEXED_SECTIONS.length % 2 === 1) expect(card).toContain("sm:col-span-2");
     if (INDEXED_SECTIONS.length % 3 === 1) expect(card).toContain("xl:col-span-3");
+  });
+});
+
+describe("a Markdown table", () => {
+  it("scrolls in a frame a keyboard can reach, named from its header row", () => {
+    const { table: MdxTable, thead: Thead, tbody: Tbody, tr: Tr, th: Th, td: Td } = useMDXComponents() as Record<string, (props: { children?: React.ReactNode }) => React.ReactNode>;
+    const markup = renderToStaticMarkup(
+      <MdxTable>
+        <Thead>
+          <Tr>
+            <Th>Trigger</Th>
+            <Th>
+              What <code>starts</code> a Zap
+            </Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          <Tr>
+            <Td>New Agent Decision</Td>
+            <Td>Each decision</Td>
+          </Tr>
+        </Tbody>
+      </MdxTable>
+    );
+    expect(markup).toMatch(/<div class="[^"]*overflow-x-auto[^"]*" role="region" aria-label="Table: Trigger, What starts a Zap" tabindex="0">/);
+    expect(tableLabel(null)).toBe("Table");
   });
 });

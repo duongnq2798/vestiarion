@@ -157,7 +157,7 @@ const STEPS: ReactNode[] = [
  */
 export function HowItWorks() {
   return (
-    <section id="decision-loop" aria-labelledby="decision-loop-title" className="relative scroll-mt-16 bg-ink text-ground">
+    <section id="decision-loop" aria-labelledby="decision-loop-title" className="focus-inverse relative scroll-mt-16 bg-ink text-ground">
       <div aria-hidden className="ledger-grid-dark absolute inset-0" />
       <div aria-hidden className="absolute inset-x-0 top-0 h-[42rem] overflow-hidden">
         <div className="absolute -top-40 left-1/2 size-[42rem] -translate-x-1/2 rounded-full bg-agent/25 blur-3xl" />
