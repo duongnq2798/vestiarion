@@ -370,9 +370,9 @@ describe("the sitemap", () => {
     const origin = publicOrigin();
     const urls = sitemap().map((entry) => entry.url);
     // The free tools come from their one list (free tool attribution TA5): the address checker, the payment terms
-    // calculator (its term pages follow it), the vendor check, the bill list check, the payout batch check, then the
-    // invoice details check.
-    expect(FREE_TOOLS.map((tool) => tool.path)).toEqual(["/check-address", "/payment-terms", "/check-vendor", "/check-bills", "/check-payouts", "/check-invoice"]);
+    // calculator (its term pages follow it), the vendor check, the bill list check, the payout batch check, the invoice
+    // details check, then the quiz.
+    expect(FREE_TOOLS.map((tool) => tool.path)).toEqual(["/check-address", "/payment-terms", "/check-vendor", "/check-bills", "/check-payouts", "/check-invoice", "/would-you-pay"]);
     expect(urls).toEqual([
       `${origin}/`,
       `${origin}/open`,
@@ -386,6 +386,7 @@ describe("the sitemap", () => {
       `${origin}/check-bills`,
       `${origin}/check-payouts`,
       `${origin}/check-invoice`,
+      `${origin}/would-you-pay`,
       ...publishedPages().map((page) => `${origin}${page.slug ? `/docs/${page.slug}` : "/docs"}`),
       `${origin}/terms`,
       `${origin}/privacy`,

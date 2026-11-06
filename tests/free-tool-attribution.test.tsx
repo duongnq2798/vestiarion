@@ -46,6 +46,7 @@ describe("the list of free tools (TA1)", () => {
       { slug: "check-bills", path: "/check-bills", title: "Bill list check" },
       { slug: "check-payouts", path: "/check-payouts", title: "Payout batch check" },
       { slug: "check-invoice", path: "/check-invoice", title: "Invoice details check" },
+      { slug: "would-you-pay", path: "/would-you-pay", title: "Would you pay this bill?" },
     ]);
     for (const tool of FREE_TOOLS) {
       expect(tool.description, tool.slug).toMatch(/^[A-Z][^\n]{20,160}\.$/);

@@ -14,6 +14,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A free quiz, Would you pay this bill?**, at [/would-you-pay](https://www.vestiarion.xyz/would-you-pay). Ten
+  bills from the Quality Lab, written as a person would see them: a changed address no one confirmed, a bill already
+  paid, a memo that tries to talk the agent into paying, an address on OFAC's list, a bill above the two-approvals
+  figure, and five that are fine, one scheduled for its early-payment discount. Answer Pay it or Stop it, then see what
+  Vestiarion did, in the lab's own words, and why. At the end: your score, a row of squares, the lab's own score, and
+  buttons to copy the result or post it on X. The right answers come from the lab's scenarios and what Vestiarion did
+  from its last run, so the quiz cannot drift from what CI proves. Nothing is sent or kept. The Quality Lab page links
+  to it; it is in the footer's Free tools, the sitemap and the production check.
 - **The n8n nodes on n8n Cloud.** n8n verified `@vestiarion/n8n-nodes-vestiarion`, and it is live on n8n Cloud: search
   the nodes panel for Vestiarion, with nothing to install. The guide's Install section says so, in place of using the
   HTTP Request node there. [Guide](https://www.vestiarion.xyz/docs/get-started/n8n#install).

@@ -28,6 +28,7 @@ PC1. What is checked. Each round opens these public addresses on production, `ht
 | `/check-bills` | 200 | `Check your bill list for duplicates and deadlines` (its heading) | | 4 s |
 | `/check-payouts` | 200 | `Check a batch payout before you send it` (its heading) | | 4 s |
 | `/check-invoice` | 200 | `payment details before you pay it` (its heading, after the apostrophe) | | 4 s |
+| `/would-you-pay` | 200 | `Would you pay this bill?` (its heading) | | 4 s |
 | `/robots.txt` | 200 | `Sitemap:` and `/sitemap.xml` (it names the sitemap) | | 4 s |
 | `/sitemap.xml` | 200 | `<urlset` and each free tool's `<path></loc>` (it lists the free tools) | | 4 s |
 

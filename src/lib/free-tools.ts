@@ -55,6 +55,12 @@ export const FREE_TOOLS = [
     title: "Invoice details check",
     description: "Check an invoice's payment details against the vendor's on file: changed bank details, a lookalike sender or wallet, and the call to make before you pay.",
   },
+  {
+    slug: "would-you-pay",
+    path: "/would-you-pay",
+    title: "Would you pay this bill?",
+    description: "A two-minute quiz of ten bills from Vestiarion's Quality Lab: pay or stop each one, see what the agent did and why, and share your score.",
+  },
 ] as const satisfies readonly FreeTool[];
 
 export type FreeToolSlug = (typeof FREE_TOOLS)[number]["slug"];

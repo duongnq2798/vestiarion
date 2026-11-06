@@ -567,6 +567,9 @@ See the [Quickstart](https://www.vestiarion.xyz/docs/get-started/quickstart) and
   code, a sender's domain or a wallet made to look like the vendor's, an IBAN, US routing number or SWIFT / BIC that
   cannot be right, and the words a request to change payment details uses in the message that came with it; then the
   call to make, to the number on file, before you pay.
+- **[Would you pay this bill?](https://www.vestiarion.xyz/would-you-pay)** — a free two-minute quiz of ten bills
+  from the Quality Lab, five to pay and five to stop: answer Pay it or Stop it, see what Vestiarion did, in the lab's
+  own words, and why, then copy or post the score. The right answers are the lab's, and the page sends nothing.
 
 ### Contracts on Arc testnet
 

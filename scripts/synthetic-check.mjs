@@ -68,11 +68,12 @@ export const CHECKS = [
   { path: "/check-bills", status: 200, contains: ["Check your bill list for duplicates and deadlines"], budgetMs: 4000 },
   { path: "/check-payouts", status: 200, contains: ["Check a batch payout before you send it"], budgetMs: 4000 },
   { path: "/check-invoice", status: 200, contains: ["payment details before you pay it"], budgetMs: 4000 },
+  { path: "/would-you-pay", status: 200, contains: ["Would you pay this bill?"], budgetMs: 4000 },
   { path: "/robots.txt", status: 200, contains: ["Sitemap:", "/sitemap.xml"], budgetMs: 4000 },
   {
     path: "/sitemap.xml",
     status: 200,
-    contains: ["<urlset", "/check-address</loc>", "/payment-terms</loc>", "/check-vendor</loc>", "/check-bills</loc>", "/check-payouts</loc>", "/check-invoice</loc>"],
+    contains: ["<urlset", "/check-address</loc>", "/payment-terms</loc>", "/check-vendor</loc>", "/check-bills</loc>", "/check-payouts</loc>", "/check-invoice</loc>", "/would-you-pay</loc>"],
     budgetMs: 4000,
   },
 ];

@@ -84,6 +84,7 @@ describe("the full footer's columns", () => {
       { href: "/check-bills", label: "Bill list check" },
       { href: "/check-payouts", label: "Payout batch check" },
       { href: "/check-invoice", label: "Invoice details check" },
+      { href: "/would-you-pay", label: "Would you pay this bill?" },
     ]);
   });
 

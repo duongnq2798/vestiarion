@@ -130,6 +130,7 @@ describe("what the page says (SP6)", () => {
       "Bill list check",
       "Payout batch check",
       "Invoice details check",
+      "Would you pay this bill?",
       "robots.txt",
       "Sitemap",
     ]);
@@ -138,7 +139,7 @@ describe("what the page says (SP6)", () => {
 
   it("says every check passes when each one passed in a recent last round", () => {
     const summary = summarize(file(rounds(minutesAgo(65), minutesAgo(5))), NOW);
-    expect(summary.headline).toEqual({ kind: "passing", checks: 11 });
+    expect(summary.headline).toEqual({ kind: "passing", checks: 12 });
     expect(summary.updatedAt).toBe(minutesAgo(5).toISOString());
     expect(summary.checks[0].last).toEqual({ at: minutesAgo(5).toISOString(), ok: true, ms: 120, reason: null });
   });
@@ -146,7 +147,7 @@ describe("what the page says (SP6)", () => {
   it("names the checks that failed in the last round", () => {
     const failing = (at: Date): Record<string, string> => (at >= minutesAgo(10) ? { "/open": "answered 500, expected 200", "/docs": "missing \"Vestiarion docs\"" } : {});
     const summary = summarize(file(rounds(minutesAgo(30), minutesAgo(0), failing)), NOW);
-    expect(summary.headline).toEqual({ kind: "failing", checks: 11, failing: ["Open numbers", "Docs"] });
+    expect(summary.headline).toEqual({ kind: "failing", checks: 12, failing: ["Open numbers", "Docs"] });
     expect(summary.checks[1].last).toEqual({ at: NOW.toISOString(), ok: false, ms: 120, reason: "answered 500, expected 200" });
   });
 
@@ -262,8 +263,8 @@ describe("the page (SP6)", () => {
   it("says every page is up, with each page's last result, its times checked and missed, its hours, and no incident", async () => {
     const markup = await render(file(rounds(minutesAgo(65), minutesAgo(5))));
     const words = text(markup);
-    expect(words).toContain("All 11 pages up");
-    expect(words).toContain("All 11 pages were up at the last check. Last checked Nov 4, 2026, 12:00 UTC.");
+    expect(words).toContain("All 12 pages up");
+    expect(words).toContain("All 12 pages were up at the last check. Last checked Nov 4, 2026, 12:00 UTC.");
     expect(words).toContain(
       "The results kept begin Nov 4, 2026, 11:00 UTC, when the monitor first published them, so the checks it should have run are counted from then. In the last 24 hours the monitor ran 7 of the 7 times it should have, and 7 of 7 in the last 7 days."
     );
@@ -285,8 +286,8 @@ describe("the page (SP6)", () => {
   it("names a failing page first, with its reason, the incident and where to report a problem", async () => {
     const markup = await render(file(rounds(minutesAgo(60), NOW, (at) => (at >= minutesAgo(10) ? { "/open": "answered 500, expected 200" } : {}))));
     const words = text(markup);
-    expect(words).toContain("1 of 11 pages failing");
-    expect(words).toContain("1 of 11 pages failed at the last check: Open numbers.");
+    expect(words).toContain("1 of 12 pages failing");
+    expect(words).toContain("1 of 12 pages failed at the last check: Open numbers.");
     expect(words).toContain("The team gets an alert when a page fails twice in a row. Something wrong that this page does not show? Tell us on GitHub Issues.");
     expect(words).toContain("Each page Last 24 hours, by the hour: Up every check A failure Not checked Open numbers /open Failing at 12:05 UTC answered 500, expected 200");
     expect(words).toContain("Last 24 hours, by the hour: 0 hours up every check, 2 hours with a failure (11:00 to 12:00 UTC, 12:00 to 13:00 UTC), 22 hours not checked.");
