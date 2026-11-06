@@ -11,6 +11,16 @@ Continue until `hasMore` is `false` and `nextCursor` is `null`. On the next poll
 
 A malformed cursor answers `400 invalid_request`. The API never silently restarts from the beginning.
 
+### Newest first
+
+`order=desc` answers the newest `limit` entries, newest first, with `domain` and `actor` as before. It is for a caller that keeps no position between reads, such as a polling trigger in [Zapier](/docs/get-started/zapier):
+
+```text
+GET /api/v1/ledger?order=desc&actor=agent&limit=50
+```
+
+It takes no `cursor`, and answers `400 invalid_request` to one: a watermark read the other way round would skip or repeat entries. Its `page.nextCursor` is `null`, and `page.hasMore` says whether older entries exist. To read every entry, read oldest first from a cursor, as above. `order` is `asc` by default; any other value answers `400`.
+
 ### `seq` and the hash chain
 
 `seq` is a global identity column, so within one workspace it rises but is not gap-free. Continuity is proven by the hash chain, not by `seq` running without gaps: each entry's `prevHash` is the `hash` of the entry before it, and the first entry's `prevHash` is 64 zeros. [Verify the ledger](/docs/api/verify-ledger) replays the chain and the signatures for you.

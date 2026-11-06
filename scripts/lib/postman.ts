@@ -354,9 +354,9 @@ function gettingStarted(ops: Operation[], origin: string) {
       }),
       itemOf(ledger, origin, {
         name: "3. List the agent's decisions, with its reasoning",
-        query: { actor: "agent", limit: "200" },
+        query: { actor: "agent", order: "desc", limit: "50" },
         queryOff: { domain: "ap" },
-        lead: "The entries the agent signed into the ledger, with what it decided and, where the decision records one, its reasoning, in `detail`. The ledger answers oldest first, and has no newest-first order: it is a stream to resume from. To reach the latest decisions, send `page.nextCursor` back as `cursor`, ticked under **Params**, until `hasMore` is `false`; keep the last cursor, and the next read starts there. Tick `domain` for payables only. For the latest decisions on bills at once, step 2 is newest first, and each invoice carries the agent's reasoning. The saved example is the reference page's: one entry, of any actor.",
+        lead: "The 50 newest entries the agent signed into the ledger, newest first, with what it decided and, where the decision records one, its reasoning, in `detail`. `order=desc` reads the newest once, with no cursor. To read every entry and resume later, untick `order` under **Params**: the ledger then answers oldest first, as a stream, and you send `page.nextCursor` back as `cursor` until `hasMore` is `false`, keeping the last cursor for the next read. Tick `domain` for payables only. The saved example is the reference page's: one entry, of any actor.",
       }),
     ],
   };

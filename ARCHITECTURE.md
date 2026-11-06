@@ -4621,6 +4621,16 @@ typecheck, lint and tests leave `n8n/` out, and the CI job `n8n` installs, lints
 API's recorded examples, signs deliveries with the app's own `signWebhook`, and holds the committed
 `public/n8n/` tarball to the build. Spec: `docs/superpowers/specs/2026-11-03-n8n-node-design.md`.
 
+The Zapier integration lives in `zapier/`, a Zapier Platform CLI app in CommonJS: `authentication.js` (a custom
+connection, the key as `Authorization: Bearer`, tested with `GET /api/v1/status`), `triggers/` (three polling triggers
+on `GET /api/v1/ledger?order=desc`, deduplicated by Zapier on the entry's `id`, and a hidden one that fills Create
+Bill's counterparty dropdown) and `creates/createBill.js` (`POST /api/v1/invoices`, a payable, with the
+`Idempotency-Key`). `lib/http.js` refuses a Base URL that is not https, except to localhost, and turns a `401` into a
+reconnect and a `429` into Zapier's own retry. It keeps its own lock, the root's typecheck and lint leave it out, and
+the CI job `zapier` runs its tests (vitest with nock, `.mjs` loading the app through `createRequire`) and
+`zapier-platform validate`. Pushing a version takes the owner's deploy key, so it is done by hand, never in CI. Spec:
+`docs/superpowers/specs/2026-11-06-zapier-integration-design.md`.
+
 The Postman collections are rendered from the OpenAPI document by `npm run postman:build` (`scripts/lib/postman.ts`)
 into `public/postman/`: "Vestiarion: Getting Started", five requests from a key to a first write; "Vestiarion API
 reference", every operation in a folder per tag, with a saved example of its success and of each documented error; and

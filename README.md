@@ -8,7 +8,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/duongnq2798/vestiarion/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/duongnq2798/vestiarion/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/duongnq2798/vestiarion?include_prereleases&style=flat-square&label=release)](https://github.com/duongnq2798/vestiarion/releases)
-[![npm](https://img.shields.io/badge/%40vestiarion%2Fsdk-v0.4.1-cb3837?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@vestiarion/sdk)
+[![npm](https://img.shields.io/badge/%40vestiarion%2Fsdk-v0.4.2-cb3837?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@vestiarion/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-6b7280?style=flat-square)](LICENSE)
 
 <a href="https://www.vestiarion.xyz"><img src="docs/assets/readme/open-the-app.svg" alt="Open the app: vestiarion.xyz" height="48"></a>
@@ -444,6 +444,7 @@ run in production, with its ledger entries and transactions.
 | **[TypeScript SDK](https://www.vestiarion.xyz/docs/get-started/sdk)** | [`@vestiarion/sdk`](https://www.npmjs.com/package/@vestiarion/sdk): a typed client for every `/api/v1` operation, plus webhook and ledger verification, and offline checks of evidence, receipts and close packs |
 | **[CLI](https://www.vestiarion.xyz/docs/get-started/cli)** | [`@vestiarion/cli`](https://www.npmjs.com/package/@vestiarion/cli): the `vestiarion` command for every `/api/v1` operation, asking before each write, saving evidence, receipts and close packs as signed files, plus offline checks of those files, audit exports and webhook signatures |
 | **[n8n](https://www.vestiarion.xyz/docs/get-started/n8n)** | [`@vestiarion/n8n-nodes-vestiarion`](https://www.npmjs.com/package/@vestiarion/n8n-nodes-vestiarion): a node that adds bills and reads the agent's decisions, and a trigger that starts a workflow on each signed ledger entry, checking its signature first |
+| **[Zapier](https://www.vestiarion.xyz/docs/get-started/zapier)** | A private integration, in [`zapier/`](zapier): triggers on the agent's decisions, on each bill paid and on every ledger entry, and Create Bill for the agent to decide. It never approves or pays |
 | **[Postman](https://www.vestiarion.xyz/docs/get-started/postman)** | A Getting Started collection, from a key to a first call and a first write, and an API reference collection with every `/api/v1` operation, both generated from the OpenAPI document and served at `/postman/` |
 | **[MCP server](https://www.vestiarion.xyz/docs/ai-integration/mcp)** | `/api/mcp`, for AI agents: its tools are the `/api/v1` operations, the evidence reads answering a digest of the signed file; [`server.json`](server.json) describes it for the MCP Registry |
 | **[Webhooks](https://www.vestiarion.xyz/docs/webhooks)** | Up to 5 HTTPS endpoints per workspace receive every ledger entry, signed, with retries |

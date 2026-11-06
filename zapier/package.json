@@ -1,0 +1,27 @@
+{
+  "name": "vestiarion-zapier",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Vestiarion in Zapier: add bills for the agent to decide, and start a Zap on its decisions and on each bill paid.",
+  "license": "MIT",
+  "homepage": "https://www.vestiarion.xyz/docs/get-started/zapier",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/duongnq2798/vestiarion.git",
+    "directory": "zapier"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "validate": "zapier-platform validate",
+    "verify": "npm run test && npm run validate"
+  },
+  "dependencies": {
+    "zapier-platform-core": "19.2.1"
+  },
+  "devDependencies": {
+    "nock": "14.0.17",
+    "vitest": "5.0.1",
+    "zapier-platform-cli": "19.2.1"
+  }
+}

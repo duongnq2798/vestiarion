@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **A Zapier integration**, private for now and joined by invitation. Triggers: New Agent Decision, with the agent's
+  reasoning; Bill Paid, by the agent or once a person approves; and New Ledger Entry, filtered by domain, actor or
+  action. The action Create Bill adds a payable for the agent to decide, with an idempotency key so a replayed Zap adds
+  it once. It connects with a workspace API key, and never approves or pays. For it, `GET /api/v1/ledger` takes
+  `order=desc`, the newest entries first, the Postman collection's **List the agent's decisions** uses it,
+  and the TypeScript SDK 0.4.2 accepts it.
+  [Guide](https://www.vestiarion.xyz/docs/get-started/zapier).
 - **A free invoice details check** at [/check-invoice](https://www.vestiarion.xyz/check-invoice). Put a vendor's
   payment details on file beside the ones on their new invoice: name, the email it came from, phone, wallet, IBAN,
   account number, routing or sort code, SWIFT / BIC and bank name, and paste the message that came with it. A changed

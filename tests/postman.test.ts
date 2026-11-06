@@ -257,9 +257,9 @@ describe("the Getting Started collection", () => {
       ["2. Add records, with a read-and-write key", "4. Add a counterparty", "POST /api/v1/counterparties"],
       ["2. Add records, with a read-and-write key", "5. Add an invoice for it", "POST /api/v1/invoices"],
     ]);
-    expect(step(3).request.url.raw).toBe("{{baseUrl}}/api/v1/ledger?limit=200&actor=agent");
-    // The ledger has no newest-first order: the step says so, and how to page to the latest decisions.
-    expect(step(3).request.description).toContain("The ledger answers oldest first");
+    expect(step(3).request.url.raw).toBe("{{baseUrl}}/api/v1/ledger?limit=50&actor=agent&order=desc");
+    // Newest first is one read with no cursor (Zapier Z1): the step says so, and how to read every entry instead.
+    expect(step(3).request.description).toContain("`order=desc` reads the newest once, with no cursor");
     expect(step(3).request.description).toContain("send `page.nextCursor` back as `cursor`");
   });
 
