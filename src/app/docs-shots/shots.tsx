@@ -53,6 +53,10 @@ import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
 import type { NavKey } from "@/components/vx/nav";
 import { Hash } from "@/components/vx/Primitives";
 import { ReportLists, ReportReadiness, ReportSummary } from "@/components/vx/WorkspaceReport";
+import { AgreementLadder } from "@/components/vx/AgreementLadder";
+import { EarnedVendors } from "@/components/vx/EarnedVendors";
+import { autonomyLadder, type LadderVerdict } from "@/lib/autonomy-ladder";
+import type { EarnedDecision, EarnedVendorsView } from "@/lib/earned-vendors";
 import ReportBaselineControl from "@/components/ReportBaselineControl";
 import { ReportShareButton, ReportShareLinks, type LiveLink } from "@/components/ReportShareControl";
 import { ReportValue } from "@/components/vx/ReportValue";
@@ -765,6 +769,63 @@ const REPORT_FACTS: ReportFacts = {
   payments: [reportPayment("11", 46.41, 1), reportPayment("22", 23.52, 6), reportPayment("33", 13.5, 11)],
 };
 const REPORT = buildReport(REPORT_FACTS);
+
+/**
+ * A few weeks of the same workspace's verdicts, for How often you agreed and Earned vendors (autonomy ladder and earned
+ * vendors designs): made up, and longer than the month above, so each kind of row shows.
+ */
+const ladderVendor = (id: string, name: string) => ({ id, name, sample: false });
+const LADDER_NORTHWIND = ladderVendor("cp-11", "Northwind Cloud");
+const LADDER_HARBOR = ladderVendor("cp-22", "Harbor VPS");
+const LADDER_LUMEN = ladderVendor("cp-33", "Lumen Hosting");
+const LADDER_ATLAS = ladderVendor("cp-44", "Atlas Compute");
+const ladderVerdict = (vendor: LadderVerdict["vendor"], action: string, verdict: LadderVerdict["verdict"] = "agree"): LadderVerdict => ({ action, verdict, vendor });
+const LADDER = autonomyLadder([
+  ...["ap_pay", "ap_pay", "ap_schedule", "ap_pay", "ap_pay", "ap_pay", "ap_pay"].map((action) => ladderVerdict(LADDER_NORTHWIND, action)),
+  ladderVerdict(LADDER_HARBOR, "ap_pay"),
+  ladderVerdict(LADDER_HARBOR, "ap_pay"),
+  ladderVerdict(LADDER_HARBOR, "ap_schedule"),
+  ladderVerdict(LADDER_HARBOR, "ap_pay", "disagree"),
+  ladderVerdict(LADDER_HARBOR, "ap_pay"),
+  ladderVerdict(LADDER_HARBOR, "ap_pay"),
+  ladderVerdict(LADDER_LUMEN, "ap_pay"),
+  ladderVerdict(LADDER_LUMEN, "ap_pay"),
+  ladderVerdict(LADDER_LUMEN, "ap_request_info"),
+  ladderVerdict(LADDER_ATLAS, "ap_hold"),
+  ladderVerdict(LADDER_ATLAS, "ap_flag_fraud"),
+]);
+const earnedDecision = (seq: number, day: string, action: string, amount: number): EarnedDecision => ({ seq, at: `2026-10-${day}T09:00:00Z`, action, amount, currency: "USDC" });
+const EARNED_VIEW: EarnedVendorsView = {
+  streak: 5,
+  payments: true,
+  statuses: [
+    {
+      vendorId: LADDER_NORTHWIND.id,
+      name: LADDER_NORTHWIND.name,
+      given: 7,
+      state: "earned",
+      agreed: 7,
+      counted: [
+        earnedDecision(48, "30", "ap_pay", 46.41),
+        earnedDecision(44, "28", "ap_pay", 12.8),
+        earnedDecision(39, "27", "ap_pay", 46.41),
+        earnedDecision(33, "25", "ap_pay", 8.25),
+        earnedDecision(29, "24", "ap_pay", 19.99),
+        earnedDecision(24, "22", "ap_schedule", 46.41),
+        earnedDecision(17, "20", "ap_pay", 31.1),
+      ],
+      from: "2026-10-20T09:00:00Z",
+      to: "2026-10-30T09:00:00Z",
+      since: null,
+      waiting: 1,
+      paused: false,
+    },
+    { vendorId: LADDER_HARBOR.id, name: LADDER_HARBOR.name, given: 6, state: "counting", agreed: 2, needed: 5, since: { kind: "disagreed", at: "2026-10-24T09:00:00Z", decisionSeq: 30, rule: null } },
+    { vendorId: LADDER_LUMEN.id, name: LADDER_LUMEN.name, given: 3, state: "counting", agreed: 2, needed: 5, since: null },
+    { vendorId: LADDER_ATLAS.id, name: LADDER_ATLAS.name, given: 2, state: "cannot", because: "no_payment_limit" },
+  ],
+  recorded: new Set([LADDER_NORTHWIND.id]),
+};
 
 /** What the same business recorded paying from its bank, for the comparison (actual payments design): made up too. */
 const ACTUALS_RECORDER = "00000000-0000-4000-8000-0000000004aa";
@@ -1643,6 +1704,8 @@ export const DOCS_SHOTS = {
     render: () => <ReportSummary report={REPORT} />,
   },
   "report-readiness": { guide: "report", render: () => <ReportReadiness steps={REPORT.readiness ?? []} /> },
+  "report-agreement": { guide: "report", render: () => <AgreementLadder ladder={LADDER} ruled /> },
+  "report-earned": { guide: "report", render: () => <EarnedVendors view={EARNED_VIEW} /> },
   "report-lists": { guide: "report", render: () => <ReportLists slug={SLUG} report={REPORT} /> },
   "try-a-rule-result": {
     guide: "try-a-rule",

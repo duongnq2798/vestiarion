@@ -211,6 +211,11 @@ const SHOTS = {
   "email-inbox-ap": async () => {},
   "report-shadow": async () => {},
   "report-readiness": async () => {},
+  "report-agreement": async () => {},
+  "report-earned": async (page) => {
+    await page.click(`document.querySelector("[data-docs-shot] details summary")`);
+    await page.waitFor(`document.querySelector("[data-docs-shot] details[open]")`);
+  },
   "report-lists": async () => {},
   "try-a-rule-result": async () => {},
   "report-actuals": async () => {},
