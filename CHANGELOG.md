@@ -23,6 +23,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   [Ask a vendor for a missing document](https://www.vestiarion.xyz/docs/guides/vendor-documents): turning vendor
   requests on, what the vendor sees, and how Vestiarion checks the document against the bill. It was a section of Your
   first payment, which now points to it; the Settings section and the controls guide link to the new page.
+- **Two screenshots in the report guide**: How often you agreed, by decision and by vendor, and Earned vendors, with a
+  vendor that earned the rule, one counting again since a disagreement, and one that cannot earn it.
+  [Guide](https://www.vestiarion.xyz/docs/guides/report#how-often-you-agreed).
 
 - **A free quiz, Would you pay this bill?**, at [/would-you-pay](https://www.vestiarion.xyz/would-you-pay). Ten
   bills from the Quality Lab, written as a person would see them: a changed address no one confirmed, a bill already

@@ -132,6 +132,12 @@ Each row gives its **Verdicts**, how many it rests on, and **Agreed**: from five
 
 The figures are your verdicts in shadow mode and nothing else. They are not **Agent vs what really happened**, below, which compares the agent with what your business paid, and not how often the agent followed its written policy. They only measure: nothing here changes what the agent may do, and the vendors you tick under **Start the live slice** are still your choice. Once an owner has set a rule for earned vendors, the last sentence reads "It only measures. What earning changes is under Earned vendors."
 
+<Screenshot
+  src="/docs/guides/report-agreement.png"
+  alt="How often you agreed, by decision and by vendor. By decision: Pay, 13 verdicts, 92% agreed, 12 of 13; Schedule, Hold, Flag for review and Ask for details, too few to tell yet. By vendor, most verdicts first: Northwind Cloud, 7 verdicts, 100%, 7 of 7; Harbor VPS, 6 verdicts, 83%, 5 of 6; Lumen Hosting and Atlas Compute, too few to tell yet."
+  caption="Your verdicts by decision and by vendor, with how many each figure rests on."
+/>
+
 ### Earned vendors
 
 Under it, **Earned vendors** shows which vendors met the rule an owner set in **Settings**, under **Earned vendors**: a number of agreed verdicts in a row on the agent's decisions to pay or schedule a vendor's bills, counted again after a disagreement, a bill flagged for review, or a check in code stopping one of its bills. See [Earned vendors](/docs/guides/shadow-mode#earned-vendors) for what counts. With no rule it says "No rule is set. An owner sets one in Settings, under Earned vendors."
@@ -144,6 +150,12 @@ With a rule, it says the rule, then each vendor of **By vendor**, in the same or
 - Why it cannot: "Cannot earn it: no payment limit. Set one on Counterparties."; "Cannot earn it: screened high risk." for a vendor whose screening keeps its limit at 0, whatever limit you set; or "Cannot earn it: only a vendor can." for a payee that is not a vendor.
 
 After the rule, the block says what earning changes. Until an owner lets the agent pay earned vendors on their own, in **Settings** under **Pay earned vendors on their own**, it says "Earning changes nothing the agent may do unless an owner lets it pay earned vendors on its own, in Settings." With that on, it says "The agent pays an earned vendor on its own, and you give your verdict after.", and under each earned vendor how many of its payments made that way wait for your verdict, such as "1 of its payments made on its own waits for your verdict."; at 3, "so its next waits for you". See [Pay earned vendors on their own](/docs/guides/shadow-mode#pay-earned-vendors-on-their-own). "Each change is signed in the ledger as vendor_earned or vendor_earned_lost." If the rule or that record cannot be read, the block is left out and the rest of the report is unchanged.
+
+<Screenshot
+  src="/docs/guides/report-earned.png"
+  alt="Earned vendors under a rule of 5 agreed verdicts in a row, with the agent paying earned vendors on its own. Northwind Cloud: Earned, 7 agreed in a row, Oct 20, 2026 to Oct 30, 2026, 1 of its payments made on its own waits for your verdict, and the verdicts behind it listed. Harbor VPS: 2 of 5 agreed in a row since you disagreed on Oct 24, 2026. Lumen Hosting: 2 of 5 agreed in a row. Atlas Compute: cannot earn it, no payment limit."
+  caption="Each vendor under the rule an owner set: earned, counting, or unable to earn it, and why."
+/>
 
 ### Start the live slice
 
