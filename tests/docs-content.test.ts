@@ -191,6 +191,7 @@ describe("the docs navigation", () => {
       ["guides/pay-a-contractor", "Pay a contractor for delivered work"],
       ["guides/early-payment-offers", "Pay early for a discount"],
       ["guides/more-time", "Ask a supplier for more time"],
+      ["guides/vendor-documents", "Ask a vendor for a missing document"],
       ["guides/bank-payouts", "Pay a vendor's bank account in Mexico"],
       ["guides/import-bills", "Import your bill list"],
       ["guides/email-invoices", "Add invoices by email"],
@@ -200,6 +201,7 @@ describe("the docs navigation", () => {
       ["guides/get-paid", "Get paid as a freelancer"],
     ]);
     expect(groupsOf("Pay bills")).toEqual([
+      "Pay",
       "Pay",
       "Pay",
       "Pay",

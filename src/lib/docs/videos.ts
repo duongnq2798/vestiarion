@@ -43,6 +43,10 @@ export const GUIDE_VIDEOS: readonly GuideVideo[] = [
   { guide: "guides/xero", title: "Bills from Xero, decided by the agent", duration: "1:52" },
   { guide: "guides/hubspot", title: "A deal from HubSpot, collected on Arc", duration: "1:55" },
   { guide: "get-started/n8n", title: "The Vestiarion nodes in n8n", duration: "4:23" },
+  { guide: "research/quality-lab", title: "The Quality Lab, scenario by scenario", duration: "1:43" },
+  { guide: "guides/accountants", title: "The monthly close pack for your accountant", duration: "1:13" },
+  { guide: "guides/vendor-documents", title: "A vendor's missing document, checked against the bill", duration: "0:58" },
+  { guide: "guides/report", title: "The autonomy ladder: from verdicts to earned vendors", duration: "1:23" },
 ];
 
 /**

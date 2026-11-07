@@ -496,7 +496,7 @@ describe("the Settings section (ER1)", () => {
     const owner = render({ canChange: true, status: { setting: "shadow", ready: true } });
     expect(owner).toContain("Ask vendors for missing documents");
     for (const label of ["Off", "Shadow", "On"]) expect(owner).toContain(`>${label}<`);
-    expect(owner).toContain('href="/docs/guides/first-payment#ask-the-vendor-for-a-missing-document"');
+    expect(owner).toContain('href="/docs/guides/vendor-documents"');
     const viewer = render();
     expect(viewer).not.toContain(">Shadow<");
     expect(viewer).toContain("An owner of this workspace can change it.");

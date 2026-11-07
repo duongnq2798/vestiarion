@@ -1,5 +1,47 @@
 An outside accountant who looks after several small businesses should not have to open each workspace to find out where something needs attention. Each business invites its accountant as a member with the **accountant** role, or opens its workspace from the accountant's own client link: see [Invite a client](#invite-a-client). The accountant's **Accountant console** then lists every workspace they are a member of, how long its items have been open, and one queue across them: payments waiting for a decision or for a verdict in shadow mode, bills waiting for your co-sign and addresses to confirm where an owner lets accountants co-sign, contractors' work to accept, invoices to review, payments to book in Xero, last month to close, receivables to follow up, what customers said on their statement links, connectors to fix and limits reached. Each item opens the right page in its own workspace. It works the same in a workspace on Arc testnet and on Arc mainnet.
 
+## Watch it
+
+About a minute: a month's payments on one page, each with its approval, its checks and its signed entry, and the downloads.
+
+<Video
+  src="/docs/videos/accountants-flow.mp4"
+  poster="/docs/videos/accountants-flow-poster.jpg"
+  title="The monthly close pack for your accountant"
+  duration="1:13"
+  caption="The live product on Arc testnet, with demo data in the team's own workspace: its October 2026 close pack, 21 payments. Recorded Nov 7, 2026."
+>
+
+The monthly close pack.
+
+Every payment in the month, with its approval, its checks and its signed entry.
+
+Under the audit log, the monthly close pack lists every payment settled in a month, one row each.
+
+October: 21 payments settled, 421.90 USDC paid, none left unsettled.
+
+And all 64 signed entries behind them verified.
+
+Each payment shows its bill, the address paid, and who decided it.
+
+Here no person approved it: code checked it, and the agent paid it.
+
+Then six checks, each labelled by how it is known: checked by code, verified outside, missing, or inferred.
+
+Missing is said plainly: this payment was made before Vestiarion checked addresses against OFAC's list.
+
+Download it as a CSV for a spreadsheet, as signed JSON, or print it as a PDF.
+
+Or export the month to Google Sheets.
+
+Every download is recorded in the ledger with the file's SHA-256, so a copy can be matched to it later.
+
+Close the month with every payment's proof in one file.
+
+vestiarion.xyz/docs/guides/accountants
+
+</Video>
+
 ## 1. Invite your accountant
 
 An owner or admin opens **Members** and, under the invitation form, chooses the role **accountant**. While you run the workspace alone, **Treasury** offers the same invitation under **Bring in a second person**: see [Bring in a second person](/docs/guides/workspace#bring-in-a-second-person). The form says what each role may do before you send it. For the accountant:

@@ -105,8 +105,8 @@ describe("the guides' videos", () => {
     expect(use.src).toMatch(/^\/docs\/videos\/[a-z0-9-]+\.mp4$/);
     expect(use.poster).toBe(use.src!.replace(/\.mp4$/, "-poster.jpg"));
     for (const src of [use.src!, use.poster!]) expect(statSync(publicFile(src)!).isFile(), src).toBe(true);
-    // Plain and true: where it was recorded, in words, on the page.
-    expect(use.caption).toContain("The live product on Arc testnet, with demo data");
+    // Plain and true: where it was recorded, in words, on the page. A film of public pages says so instead.
+    expect(use.caption).toMatch(/^(?:The live product on Arc testnet, with demo data|The public .+ on vestiarion\.xyz, as anyone sees them\.)/);
     expect(use.caption).toMatch(/Recorded [A-Z][a-z]{2} \d{1,2}, \d{4}\.$/);
     expect(use.caption).not.toMatch(/certified|official|endorsed|partner/i);
     expect(use.title!.length).toBeGreaterThan(15);
