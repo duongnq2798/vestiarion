@@ -20,6 +20,9 @@ export const TRACK_RECORD_EXPORTED = "track_record_exported";
 /** The most verdicts one record holds: past it, the newest (TR2). */
 export const TRACK_RECORD_MAX_VERDICTS = 2000;
 
+/** What Confirm says when the record moved since the page showed it (TR5); here, since a "use server" file exports only actions. */
+export const TRACK_RECORD_CHANGED = "The track record changed since you opened it. Read it again before you confirm it.";
+
 /** One verdict, with what it was given on (TR1). */
 export interface TrackRecordVerdict {
   /** The agent decision's entry. */

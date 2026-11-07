@@ -8,7 +8,7 @@ import { simulatesPayments } from "@/lib/capability-read";
 import { utcDay } from "@/lib/copy";
 import { inOrg } from "@/lib/dal/scope";
 import { takeTrackRecordDownloadToken } from "@/lib/rate-limit";
-import { confirmedBy } from "@/lib/track-record/build";
+import { confirmedBy, TRACK_RECORD_CHANGED } from "@/lib/track-record/build";
 import { readTrackRecord } from "@/lib/track-record/read";
 import { recordTrackRecordConfirmation } from "@/lib/track-record/record";
 
@@ -21,8 +21,6 @@ export interface TrackRecordConfirmAnswer {
 }
 
 const SHA256 = /^[0-9a-f]{64}$/;
-
-export const TRACK_RECORD_CHANGED = "The track record changed since you opened it. Read it again before you confirm it.";
 
 /**
  * Confirms the agent's track record (docs/superpowers/specs/2026-11-07-track-record-design.md TR4, TR5), for an

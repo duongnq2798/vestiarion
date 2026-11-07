@@ -21,7 +21,8 @@ vi.mock("@/lib/track-record/read", () => ({ readTrackRecord: readMock }));
 vi.mock("@/lib/track-record/record", () => ({ recordTrackRecordConfirmation: confirmMock }));
 vi.mock("@/lib/rate-limit", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/rate-limit")>()), takeTrackRecordDownloadToken: tokenMock }));
 
-import { confirmTrackRecordAction, TRACK_RECORD_CHANGED } from "@/app/actions/track-record";
+import { confirmTrackRecordAction } from "@/app/actions/track-record";
+import { TRACK_RECORD_CHANGED } from "@/lib/track-record/build";
 
 const USER = "0b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
 const SHA = "c".repeat(64);
