@@ -130,6 +130,7 @@ export interface DocsShot {
     | "try-it"
     | "go-live"
     | "first-payment"
+    | "vendor-documents"
     | "where-a-payment-is"
     | "payment-exceptions"
     | "import-bills"
@@ -1463,8 +1464,8 @@ export const DOCS_SHOTS = {
       return <ApprovalCard orgSlug={SLUG} payable={AWAITING} canDecide canEdit viewerId="docs-sample-owner" sandbox={false} />;
     },
   },
-  "first-payment-document-checked": {
-    guide: "first-payment",
+  "vendor-documents-document-checked": {
+    guide: "vendor-documents",
     page: "approvals",
     sub: "Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle.",
     render: function DocumentCheckedShot() {
