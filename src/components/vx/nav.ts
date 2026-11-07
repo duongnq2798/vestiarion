@@ -90,6 +90,8 @@ const SUBPAGES: ReadonlyArray<{ pattern: RegExp; section: NavKey; label: string 
   { pattern: /^\/o\/[^/]+\/evidence\/payee-lock(?:\/|$)/, section: "settings", label: "Payee lock evidence" },
   // The monthly close pack sits inside the Audit log, which links it beside the audit export (close pack CP11, CP16).
   { pattern: /^\/o\/[^/]+\/evidence\/close-pack(?:\/|$)/, section: "audit", label: "Monthly close pack" },
+  // The agent's track record sits inside the Report, whose agreement ladder links it (track record TR7).
+  { pattern: /^\/o\/[^/]+\/evidence\/track-record(?:\/|$)/, section: "report", label: "Track record" },
 ];
 
 function subpageOf(pathname: string) {

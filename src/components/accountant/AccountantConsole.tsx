@@ -1,4 +1,4 @@
-import { ArrowUpRight, Download, ScrollText } from "lucide-react";
+import { ArrowUpRight, BadgeCheck, Download, ScrollText } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -148,6 +148,14 @@ function WorkspaceCard({ workspace, now, filter }: { workspace: WorkspaceTriage;
           <Link href={orgHref(workspace.slug, `/evidence/close-pack?month=${thisMonth}`)} className="font-medium text-agent underline-offset-2 hover:underline">
             This month so far
           </Link>
+        </p>
+        {/* The agent's track record, which only an accountant confirms (track record TR4, TR7). */}
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-2">
+          <BadgeCheck aria-hidden className="size-3.5 text-ink-3" />
+          <Link href={orgHref(workspace.slug, "/evidence/track-record")} className="font-medium text-agent underline-offset-2 hover:underline">
+            The agent&apos;s track record
+          </Link>
+          <span>: read it, then confirm it</span>
         </p>
       </div>
     </Card>

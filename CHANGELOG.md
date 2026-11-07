@@ -14,6 +14,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **The agent's track record, for your accountant to confirm**,
+  [Confirm the agent's track record](https://www.vestiarion.xyz/docs/guides/accountants#confirm-the-agent-s-track-record):
+  every verdict you gave on a real bill, with the decision it judged and the signed entries both rest on, how often you
+  agreed by decision and by vendor, and the vendors that earned your rule, on a page linked from the report and the
+  accountant console, and as a JSON file that carries each entry in full. Your accountant confirms it with one button,
+  which signs their confirmation in the ledger against the record's SHA-256; a confirmation names the record it
+  confirmed until a new verdict changes it. It only measures: it changes nothing the agent may do.
 - **Four more short videos in the docs**, each at the top of its page with its transcript, recorded in the live
   product on Nov 7, 2026: the Quality Lab, scenario by scenario, and the quiz; the monthly close pack for your
   accountant; a vendor's missing document, sent through its link and checked against the bill; and the autonomy

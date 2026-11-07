@@ -31,6 +31,9 @@ export const PERMISSIONS = {
   // co-signing on (accountant co-sign CS2, CS6): the accountant's alone, since the others decide payments outright. A
   // co-sign is one of the two approvals and never the one that pays.
   "approval.cosign": ["accountant"],
+  // Confirming the agent's track record (track record TR4): the accountant's alone, since the others gave the verdicts
+  // or set the rule it rests on. A confirmation is a signed entry and changes nothing the agent may do.
+  "track_record.confirm": ["accountant"],
   "agent.run_cycle": ["owner", "admin"],
   "agent.resume": ["owner", "admin"],
   // The agent's spending limit: loosening it is as deliberate as resuming the agent.

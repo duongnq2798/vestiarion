@@ -5304,6 +5304,53 @@ and the counts of payments, entries read, entries cited and screening requests, 
   it, so the pay-to check does not apply. The indexes that would serve its reads once a workspace's ledger is large are
   listed in the page speed spec (CS10), for a later additive migration.
 
+## The agent's track record
+
+`docs/superpowers/specs/2026-11-07-track-record-design.md`. The report's agreement ladder as a record a person outside
+the business can check: every verdict on a real bill with the decision it judged and the entry that records it, the
+ladder by decision and by vendor, the earned vendors in the report's words, all resting on entries the file carries in
+full, and an accountant's signed confirmation of it. It only measures: it decides nothing, pays nothing, changes
+nothing the agent may do and calls no model. No migration.
+
+**The modules** (`src/lib/track-record/`). `build.ts` is pure: `buildTrackRecord` reuses the report's `autonomyLadder`,
+`decisionKindLabel`, `earnedStatusWords`, `earnedWaitingWords` and `shownEarned`, so the record and the report say the
+same, and cites each listed decision and its `decision_verdict`, and every `vendor_earned`, `vendor_earned_lost` and
+`track_record_confirmed` entry (TR1, TR2). Sample bills are left out, as the ladder leaves them out; past 2,000
+verdicts (`TRACK_RECORD_MAX_VERDICTS`) the newest are kept and the record is `cut`. `read.ts` reads, inside `inOrg`,
+through `db()` only: `readReportFacts`, `readEarnedView` (best effort), the decision entries by `seq` a hundred at a
+time, the four cited actions, the head and, for the page, the members; it builds twice, as the close pack does, once to
+find the entries, then with each checked alone by `verifyEntry`. `export.ts` writes the file,
+`vestiarion-track-record/1`, people by id only, with how to check an entry and what a confirmation means. `record.ts`
+records downloads and confirmations.
+
+**The rules.**
+- **The SHA-256** (TR3). `contentSha256` is the SHA-256 of `canonicalJson` of what the record says: the format, the
+  workspace's slug, the network, the totals, the ladder by decision and by vendor, the earned vendors and the verdicts.
+  It leaves out when it was read, the ledger's head, the entries and the confirmations, so a confirmation names the
+  record it confirmed until a verdict or an earned vendor's status moves.
+- **Who confirms** (TR4). An accountant only (`track_record.confirm`), as only an accountant co-signs: the person
+  outside the business checks it, and the owner cannot confirm their own agent.
+- **Confirm** (TR5; `confirmTrackRecordAction(orgSlug, shownSha256)`). The page sends the SHA-256 it showed; the action
+  reads the record afresh and signs nothing if it moved ("The track record changed since you opened it. Read it again
+  before you confirm it."), if there is no verdict on a real bill, or twice for one person and record (it says when they
+  did). It appends `track_record_confirmed` (actor `human`, domain `system`) strictly, not best effort, since a
+  confirmation that is not signed was not given: `{ by, role, sha256, headSeq, headHash, verdicts, agreed, disagreed,
+  earned }`, `earned` the vendor ids shown earned. It takes the download bucket's token first.
+- **The confirmations** (TR6). Newest first, each said to be this record or an earlier one; the page names the person
+  by email, the file by id.
+- **The page** (TR7; `/o/[slug]/evidence/track-record`, `src/components/TrackRecordView.tsx`, a `SUBPAGES` row inside
+  the Report). For every member; ten reads at once, then one every 6 seconds (`takeTrackRecordPageToken`), since each
+  read checks every cited signature. Linked under How often you agreed on the report, once there is a verdict, and from
+  each accountant console card. An accountant sees **Confirm this track record** (`TrackRecordConfirm`, which stays
+  mounted so its answer survives the revalidation); everyone else reads that an accountant confirms it.
+- **The download** (TR8; `GET /api/evidence/track-record?org=`). The close pack's gate in its order: cross-site 403,
+  the session 401, the membership 404, then a token per person per workspace (`takeTrackRecordDownloadToken`, six a
+  minute) and ten per ten minutes counted from `track_record_exported` entries (`TRACK_RECORD_EXPORT_LIMIT`), each 429
+  with `retry-after`. Each download appends `track_record_exported` best effort, `{ by, sha256, contentSha256,
+  verdicts, headSeq }`, the first the SHA-256 of the exact bytes served. Files are
+  `vestiarion-track-record-<slug>-<YYYY-MM-DD>.json`.
+- **The words** (TR9). A track record, verdicts, agreed and disagreed: never a score or a rating.
+
 ## Google Sheets: the close pack exported
 
 `docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md`. A workspace connects one Google account, and an
