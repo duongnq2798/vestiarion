@@ -3343,7 +3343,8 @@ one-time link that sends it straight to the bill (docs/superpowers/specs/2026-10
 migration 0142). Part 1 asks, collects and shows. Part 2 checks what comes back against the bill
 (docs/superpowers/specs/2026-10-25-exception-resolution-part-2-design.md, migration 0144): with vendor requests on, a
 document that matches adds the bill's purchase order and nothing else, and a person approves the payment. Neither part
-pays, nor changes a bill's status, amount or address.
+pays, nor changes a bill's status, amount or address. The guide for it is
+[Ask a vendor for a missing document](content/docs/guides/vendor-documents.mdx), with its walkthrough film.
 
 - **The setting** (`src/lib/document-requests/setting.ts`). `approval_policies.document_requests`, `off`, `shadow` or
   `on`, off by default; an owner (`approval.policy`) changes it in Settings, beside the payee lock

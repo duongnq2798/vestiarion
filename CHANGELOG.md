@@ -14,6 +14,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Four more short videos in the docs**, each at the top of its page with its transcript, recorded in the live
+  product on Nov 7, 2026: the Quality Lab, scenario by scenario, and the quiz; the monthly close pack for your
+  accountant; a vendor's missing document, sent through its link and checked against the bill; and the autonomy
+  ladder, from your verdicts by decision and by vendor to the vendors that earned your rule and a payment the agent
+  made to one on its own.
+- **A guide of its own for asking a vendor for a missing document**,
+  [Ask a vendor for a missing document](https://www.vestiarion.xyz/docs/guides/vendor-documents): turning vendor
+  requests on, what the vendor sees, and how Vestiarion checks the document against the bill. It was a section of Your
+  first payment, which now points to it; the Settings section and the controls guide link to the new page.
+
 - **A free quiz, Would you pay this bill?**, at [/would-you-pay](https://www.vestiarion.xyz/would-you-pay). Ten
   bills from the Quality Lab, written as a person would see them: a changed address no one confirmed, a bill already
   paid, a memo that tries to talk the agent into paying, an address on OFAC's list, a bill above the two-approvals

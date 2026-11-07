@@ -36,6 +36,7 @@ type GuideSlug =
   | "guides/early-payment-offers"
   | "guides/customer-discounts"
   | "guides/more-time"
+  | "guides/vendor-documents"
   | "guides/get-paid"
   | "guides/telegram"
   | "guides/slack"
@@ -1796,50 +1797,6 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Not yet decided", MAP],
     ["Payment in flight", MAP],
     ["Scheduled payments", SCHEDULED_PAYMENTS],
-    // Asking the vendor for a missing document (document requests ER1-ER6).
-    ["Ask vendors for missing documents", "src/components/DocumentRequestsPanel.tsx"],
-    ["document_requests_changed", "src/lib/document-requests/setting.ts"],
-    ["Vestiarion would ask Northstar Studio for the purchase order. Turn on vendor requests in Settings to send it.", "src/lib/document-requests/rules.ts", "Turn on vendor requests in Settings to send it."],
-    ["document_request_drafted", "src/lib/agent/document-requests.ts"],
-    ["Asked Northstar Studio for the purchase order on Oct 23; the link expires Nov 6.", "src/lib/document-requests/rules.ts", "; the link expires "],
-    ["document_requested", "src/lib/agent/document-requests.ts"],
-    ["Send the document", "src/components/document-requests/DocumentUploadForm.tsx"],
-    ["document_received", "src/lib/document-requests/intake.ts"],
-    ["Northstar Studio sent a document on Oct 24.", "src/lib/document-requests/rules.ts", " sent a document on "],
-    ["Open the PDF", "src/components/document-requests/DocumentRequestLine.tsx", "Open the {documentKindWord(view.fileType)}"],
-    ["Revoke", "src/components/document-requests/DocumentRequestLine.tsx"],
-    ["document_request_revoked", "src/lib/document-requests/read.ts"],
-    ["Not available in this workspace yet.", "src/components/DocumentRequestsPanel.tsx"],
-    // Checking the vendor's document against the bill (document checks DK4-DK13).
-    ["Vestiarion checks it against the bill at its next cycle, usually within a minute.", "src/lib/document-requests/rules.ts"],
-    ["document_checked", "src/lib/agent/document-checks.ts"],
-    [
-      "Vendor, amount and purchase order PO-2215 match the bill. Vestiarion added the purchase order and checked the bill again. A person approves the payment: the agent does not pay it on its own.",
-      "src/lib/document-requests/rules.ts",
-      " Vestiarion added the purchase order and checked the bill again. A person approves the payment: the agent does not pay it on its own.",
-    ],
-    ["Vendor, amount and purchase order PO-2215 match the bill.", "src/lib/document-requests/rules.ts", "Vendor, amount and purchase order ${po} match the bill."],
-    ["Its purchase order came from a vendor's document, which a person approves", "src/lib/rule-words.ts", "its purchase order came from a vendor's document, which a person approves"],
-    ["The document says 8.50 USDC; the bill says 8.00 USDC.", "src/lib/document-requests/check.ts", "; the bill says "],
-    ["The bill still waits: check it with Northstar Studio, or add the details yourself.", "src/lib/document-requests/rules.ts", " The bill still waits: check it with "],
-    // What the reader noted in a flagged document, quoted beneath the line (document checks DK4, amended 2026-10-26).
-    ["The reader flagged something in it for a person to check.", "src/lib/document-requests/check.ts"],
-    ['The reader noted: "', "src/lib/document-requests/rules.ts", 'The reader noted: "${note}"'],
-    ["(link removed)", "src/lib/document-requests/check.ts"],
-    ["(email address removed)", "src/lib/document-requests/check.ts"],
-    ["(token removed)", "src/lib/document-requests/check.ts"],
-    ["readerNote", "src/lib/agent/document-checks.ts"],
-    [
-      "Only your team can mark the goods received: do it in Add details once you have them, and a person then approves the payment.",
-      "src/lib/document-requests/rules.ts",
-      " Only your team can mark the goods received: do it in Add details once you have them, and a person then approves the payment.",
-    ],
-    ["It is an image. Only a PDF with its text is checked.", "src/lib/document-requests/check.ts"],
-    ["This PDF could not be read.", "src/lib/document-requests/check.ts"],
-    ["Vendor requests are in shadow, so the bill was left as it is: add the purchase order yourself.", "src/lib/document-requests/rules.ts"],
-    ["Attach a document", "src/components/document-requests/AttachDocumentDialog.tsx"],
-    ["Attach and check", "src/components/document-requests/AttachDocumentDialog.tsx"],
-    ["A member attached Northstar Studio's document on Oct 25.", "src/lib/document-requests/rules.ts", "A member attached ${vendorName}'s document on "],
     // Several bills approved with one confirmation (docs/superpowers/specs/2026-10-30-approve-many-design.md AM2-AM12).
     ["Clear", APPROVAL_SELECTION],
     ["Approve and pay", APPROVAL_SELECTION],
@@ -2612,6 +2569,52 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
   ],
   // Requests for more time (term requests X1-X7).
+  "guides/vendor-documents": [
+    // Asking the vendor for a missing document (document requests ER1-ER6).
+    ["Ask vendors for missing documents", "src/components/DocumentRequestsPanel.tsx"],
+    ["document_requests_changed", "src/lib/document-requests/setting.ts"],
+    ["Vestiarion would ask Northstar Studio for the purchase order. Turn on vendor requests in Settings to send it.", "src/lib/document-requests/rules.ts", "Turn on vendor requests in Settings to send it."],
+    ["document_request_drafted", "src/lib/agent/document-requests.ts"],
+    ["Asked Northstar Studio for the purchase order on Oct 23; the link expires Nov 6.", "src/lib/document-requests/rules.ts", "; the link expires "],
+    ["document_requested", "src/lib/agent/document-requests.ts"],
+    ["Send the document", "src/components/document-requests/DocumentUploadForm.tsx"],
+    ["document_received", "src/lib/document-requests/intake.ts"],
+    ["Northstar Studio sent a document on Oct 24.", "src/lib/document-requests/rules.ts", " sent a document on "],
+    ["Open the PDF", "src/components/document-requests/DocumentRequestLine.tsx", "Open the {documentKindWord(view.fileType)}"],
+    ["Revoke", "src/components/document-requests/DocumentRequestLine.tsx"],
+    ["document_request_revoked", "src/lib/document-requests/read.ts"],
+    ["Not available in this workspace yet.", "src/components/DocumentRequestsPanel.tsx"],
+    // Checking the vendor's document against the bill (document checks DK4-DK13).
+    ["Vestiarion checks it against the bill at its next cycle, usually within a minute.", "src/lib/document-requests/rules.ts"],
+    ["document_checked", "src/lib/agent/document-checks.ts"],
+    [
+      "Vendor, amount and purchase order PO-2215 match the bill. Vestiarion added the purchase order and checked the bill again. A person approves the payment: the agent does not pay it on its own.",
+      "src/lib/document-requests/rules.ts",
+      " Vestiarion added the purchase order and checked the bill again. A person approves the payment: the agent does not pay it on its own.",
+    ],
+    ["Vendor, amount and purchase order PO-2215 match the bill.", "src/lib/document-requests/rules.ts", "Vendor, amount and purchase order ${po} match the bill."],
+    ["Its purchase order came from a vendor's document, which a person approves", "src/lib/rule-words.ts", "its purchase order came from a vendor's document, which a person approves"],
+    ["The document says 8.50 USDC; the bill says 8.00 USDC.", "src/lib/document-requests/check.ts", "; the bill says "],
+    ["The bill still waits: check it with Northstar Studio, or add the details yourself.", "src/lib/document-requests/rules.ts", " The bill still waits: check it with "],
+    // What the reader noted in a flagged document, quoted beneath the line (document checks DK4, amended 2026-10-26).
+    ["The reader flagged something in it for a person to check.", "src/lib/document-requests/check.ts"],
+    ['The reader noted: "', "src/lib/document-requests/rules.ts", 'The reader noted: "${note}"'],
+    ["(link removed)", "src/lib/document-requests/check.ts"],
+    ["(email address removed)", "src/lib/document-requests/check.ts"],
+    ["(token removed)", "src/lib/document-requests/check.ts"],
+    ["readerNote", "src/lib/agent/document-checks.ts"],
+    [
+      "Only your team can mark the goods received: do it in Add details once you have them, and a person then approves the payment.",
+      "src/lib/document-requests/rules.ts",
+      " Only your team can mark the goods received: do it in Add details once you have them, and a person then approves the payment.",
+    ],
+    ["It is an image. Only a PDF with its text is checked.", "src/lib/document-requests/check.ts"],
+    ["This PDF could not be read.", "src/lib/document-requests/check.ts"],
+    ["Vendor requests are in shadow, so the bill was left as it is: add the purchase order yourself.", "src/lib/document-requests/rules.ts"],
+    ["Attach a document", "src/components/document-requests/AttachDocumentDialog.tsx"],
+    ["Attach and check", "src/components/document-requests/AttachDocumentDialog.tsx"],
+    ["A member attached Northstar Studio's document on Oct 25.", "src/lib/document-requests/rules.ts", "A member attached ${vendorName}'s document on "],
+  ],
   "guides/more-time": [
     ["The agent does not ask suppliers for more time. An owner or admin turns it on.", TERMS_CARD],
     ["More time when cash is short", TERMS_CARD, 'title="More time when cash is short"'],
@@ -3900,6 +3903,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/early-payment-offers": 20,
   "guides/customer-discounts": 20,
   "guides/more-time": 20,
+  "guides/vendor-documents": 20,
   "guides/get-paid": 20,
   "guides/telegram": 20,
   "guides/slack": 20,

@@ -93,7 +93,7 @@ export default function DocumentRequestsPanel({ orgSlug, status, canChange }: Do
       <SectionHeader
         id="document-requests-title"
         title="Ask vendors for missing documents"
-        action={<DocsLink href="/docs/guides/first-payment#ask-the-vendor-for-a-missing-document" topic="asking vendors for missing documents" />}
+        action={<DocsLink href="/docs/guides/vendor-documents" topic="asking vendors for missing documents" />}
       />
       <Card className="space-y-4 p-5">
         <div className="space-y-1">
