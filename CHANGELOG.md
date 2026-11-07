@@ -18,7 +18,7 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   product on Nov 7, 2026: the Quality Lab, scenario by scenario, and the quiz; the monthly close pack for your
   accountant; a vendor's missing document, sent through its link and checked against the bill; and the autonomy
   ladder, from your verdicts by decision and by vendor to the vendors that earned your rule and a payment the agent
-  made to one on its own.
+  made to one on its own. Each is also on YouTube, linked from the README.
 - **A guide of its own for asking a vendor for a missing document**,
   [Ask a vendor for a missing document](https://www.vestiarion.xyz/docs/guides/vendor-documents): turning vendor
   requests on, what the vendor sees, and how Vestiarion checks the document against the bill. It was a section of Your
