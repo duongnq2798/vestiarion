@@ -147,7 +147,7 @@ export function WorkspaceReport({
     <div className="space-y-8">
       <ReportSummary report={report} />
       {value}
-      {report.readiness && <ReportReadiness steps={report.readiness} slice={slice?.opened ?? null} start={slice?.start} ladder={ladder} earned={earned} />}
+      {report.readiness && <ReportReadiness steps={report.readiness} slice={slice?.opened ?? null} start={slice?.start} ladder={ladder} earned={earned} trackRecord={orgHref(slug, "/evidence/track-record")} />}
       {actuals}
       <ReportLists slug={slug} report={report} />
     </div>
@@ -345,12 +345,15 @@ export function ReportReadiness({
   start,
   ladder = null,
   earned = null,
+  trackRecord,
 }: {
   steps: ReadinessStep[];
   slice?: ReportSlice | null;
   start?: ReactNode;
   ladder?: AutonomyLadder | null;
   earned?: EarnedVendorsView | null;
+  /** The track record's page, linked under How often you agreed (track record TR7). */
+  trackRecord?: string;
 }) {
   const mainnetLabel = networkProfile("arc-mainnet").label;
   // The last step is ticked once the live slice opened from here is live (L5); before a slice, it is not counted.
@@ -410,6 +413,14 @@ export function ReportReadiness({
         {ladder && (
           <div className="border-t border-line px-3 pb-3 pt-4">
             <AgreementLadder ladder={ladder} ruled={earned !== null && earned.streak !== null} />
+            {trackRecord && ladder.given > 0 && (
+              <p className="mt-3 text-xs text-ink-2">
+                <Link href={trackRecord} className="font-medium text-agent underline-offset-2 hover:underline">
+                  The track record
+                </Link>
+                : these verdicts with the signed entries behind them, as a file, for your accountant to confirm.
+              </p>
+            )}
           </div>
         )}
         {earned && (

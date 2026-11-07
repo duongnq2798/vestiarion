@@ -630,6 +630,9 @@ describe("claims narrowed to what the code does", () => {
     // A co-sign is one of two approvals and never the one that pays (accountant co-sign CS7).
     expect(PERMISSIONS["approval.cosign"]).toEqual(["accountant"]);
     expect(access).toContain("co-signs a bill above the figure for two approvals, which never pays it");
+    // Confirming the agent's track record is the accountant's alone, and grants nothing (track record TR4).
+    expect(PERMISSIONS["track_record.confirm"]).toEqual(["accountant"]);
+    expect(access).toContain("Only an accountant confirms the agent's track record");
     expect(access).toContain("pause the agent");
     expect(access).toContain("A viewer reads, and changes only their own settings and links");
   });

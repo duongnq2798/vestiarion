@@ -95,6 +95,28 @@ export function takeClosePackDownloadToken(key: string, now = Date.now()): boole
   return take(closePackDownloadBuckets, key, 6, 60_000, now);
 }
 
+const trackRecordPageBuckets = new Map<string, Bucket>();
+
+/**
+ * The track record's page (docs/superpowers/specs/2026-11-07-track-record-design.md TR7): ten reads at once, then one
+ * every 6 seconds, per person, as the close pack's page, since each read checks every cited entry's signature.
+ * Single-instance, like the cycle guard.
+ */
+export function takeTrackRecordPageToken(userId: string, now = Date.now()): boolean {
+  return take(trackRecordPageBuckets, userId, 10, 6_000, now);
+}
+
+const trackRecordDownloadBuckets = new Map<string, Bucket>();
+
+/**
+ * Track record downloads and confirmations (track record TR5, TR8): six within a minute, then one a minute, per person
+ * per workspace (`<userId>:<orgId>`). The limit across instances for downloads is ten in ten minutes, counted from the
+ * ledger's own `track_record_exported` entries. Single-instance, like the cycle guard.
+ */
+export function takeTrackRecordDownloadToken(key: string, now = Date.now()): boolean {
+  return take(trackRecordDownloadBuckets, key, 6, 60_000, now);
+}
+
 const dueWatchBuckets = new Map<string, Bucket>();
 
 /**
