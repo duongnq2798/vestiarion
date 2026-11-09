@@ -7,6 +7,7 @@ import GoLivePanel from "@/components/GoLivePanel";
 import GitHubPanel from "@/components/GitHubPanel";
 import AsanaPanel from "@/components/AsanaPanel";
 import LinearPanel from "@/components/LinearPanel";
+import JiraPanel from "@/components/JiraPanel";
 import GoogleSheetsPanel from "@/components/GoogleSheetsPanel";
 import GoogleDrivePanel from "@/components/GoogleDrivePanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
@@ -69,6 +70,7 @@ import { crmPanelView, type CrmPanelView } from "@/lib/connectors/crm-review";
 import { NotSetUpError } from "@/lib/connectors/connections";
 import { asanaPanelFor } from "@/lib/asana/panel";
 import { linearPanelFor } from "@/lib/linear/panel";
+import { jiraPanelFor } from "@/lib/jira/panel";
 import { googleSheetsPanelFor } from "@/lib/googlesheets/panel";
 import { googleDrivePanelFor } from "@/lib/googledrive/panel";
 import { hubspotSettingsFromEnv } from "@/lib/hubspot/settings";
@@ -317,6 +319,13 @@ export default async function SettingsPage({
       return null;
     });
     const linearOutcome = ((await searchParams) as { linear?: string | string[] }).linear;
+    // Jira (Jira acceptance JR1, JR22), as Linear's: only on a deployment where it is configured; best effort. Before
+    // migration 0149 the card says Jira is not set up yet. How connecting it went comes back in `?jira=`.
+    const jira = await jiraPanelFor().catch((error: unknown) => {
+      console.error("settings: Jira status not loaded", error instanceof Error ? error.message : error);
+      return null;
+    });
+    const jiraOutcome = ((await searchParams) as { jira?: string | string[] }).jira;
     // Google Sheets (close pack Sheets GS2): only on a deployment with its Google client; best effort, like Asana's.
     // Before migration 0145 the card says Google Sheets is not set up yet. How connecting it went comes back in
     // `?googlesheets=`.
@@ -591,6 +600,11 @@ export default async function SettingsPage({
             content: linear ? (
               <LinearPanel orgSlug={slug} view={linear} canManage={canManageIntegrations} notice={typeof linearOutcome === "string" ? linearOutcome : null} />
             ) : null,
+          },
+          {
+            id: "jira-title",
+            title: "Jira",
+            content: jira ? <JiraPanel orgSlug={slug} view={jira} canManage={canManageIntegrations} notice={typeof jiraOutcome === "string" ? jiraOutcome : null} /> : null,
           },
           {
             id: "googlesheets-title",

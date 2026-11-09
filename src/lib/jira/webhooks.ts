@@ -268,10 +268,10 @@ export const WEBHOOK_LIFE_MS = 30 * DAY_MS;
 export const RETIRED_FOR_MS = 2 * 60 * 60_000;
 /** A site missing from two answers at least this far apart is gone (JR3). */
 export const SITE_GONE_AFTER_MS = 10 * 60_000;
-/** The milestones whose links the filter names: open ones (JR14). */
-const OPEN_STATUSES = ["verified", "held", "pending"] as const;
+/** The milestones whose links the filter names: open ones (JR14). The Settings card counts the same ones (JR21). */
+export const OPEN_STATUSES = ["verified", "held", "pending"] as const;
 /** The links the filter is built from, at most. */
-const FILTER_LINKS = 500;
+export const FILTER_LINKS = 500;
 
 /** Where Jira sends a delivery: one address per deployment. */
 export const jiraWebhookUrl = (origin: string) => `${origin}/api/integrations/jira/webhook`;

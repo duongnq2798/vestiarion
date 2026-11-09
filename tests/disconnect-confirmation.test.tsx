@@ -9,6 +9,7 @@ import type { CrmPanelView } from "@/lib/connectors/crm-review";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
 import type { StatusView } from "@/lib/connectors/status";
 import type { GitHubInstallation } from "@/lib/github/installs";
+import type { JiraPanelView } from "@/lib/jira/views";
 import type { LinearPanelView } from "@/lib/linear/views";
 import type { SlackPanelView } from "@/lib/slack/panel";
 
@@ -26,6 +27,7 @@ const { toastMock, actions } = vi.hoisted(() => ({
   actions: {
     asana: { disconnectAsanaAction: vi.fn(), syncAsanaNowAction: vi.fn() },
     linear: { disconnectLinearAction: vi.fn(), syncLinearNowAction: vi.fn() },
+    jira: { disconnectJiraAction: vi.fn(), syncJiraNowAction: vi.fn() },
     accounting: { disconnectAccountingAction: vi.fn(), syncAccountingNowAction: vi.fn(), loadAccountingAccountsAction: vi.fn(), chooseAccountingAccountAction: vi.fn() },
     hubspot: { disconnectHubSpotAction: vi.fn(), syncHubSpotNowAction: vi.fn(), setHubSpotReceiptsAction: vi.fn() },
     pipedrive: { disconnectPipedriveAction: vi.fn(), syncPipedriveNowAction: vi.fn(), setPipedriveReceiptsAction: vi.fn() },
@@ -38,6 +40,7 @@ const { toastMock, actions } = vi.hoisted(() => ({
 vi.mock("@/components/ui/Toaster", () => ({ toast: toastMock }));
 vi.mock("@/app/actions/asana", () => actions.asana);
 vi.mock("@/app/actions/linear", () => actions.linear);
+vi.mock("@/app/actions/jira", () => actions.jira);
 vi.mock("@/app/actions/accounting", () => actions.accounting);
 vi.mock("@/app/actions/hubspot", () => actions.hubspot);
 vi.mock("@/app/actions/pipedrive", () => actions.pipedrive);
@@ -52,6 +55,7 @@ import AsanaPanel from "@/components/AsanaPanel";
 import ChromeExtensionPanel, { type ConnectionView } from "@/components/ChromeExtensionPanel";
 import GitHubPanel from "@/components/GitHubPanel";
 import HubSpotPanel from "@/components/HubSpotPanel";
+import JiraPanel from "@/components/JiraPanel";
 import LinearPanel from "@/components/LinearPanel";
 import PipedrivePanel from "@/components/PipedrivePanel";
 import SlackPanel from "@/components/SlackPanel";
@@ -75,6 +79,18 @@ const linear = (revoked: boolean): LinearPanelView => ({
   connected: !revoked,
   revoked,
   workspaceName: "Northstar",
+  counts: { linked: 0, ready: 0, accepted: 0, held: 0 },
+  figures: { manualChecks: 0, disputes: 0, timeToProposal: null, window: "the last 30 days" },
+});
+
+const jira = (revoked: boolean): JiraPanelView => ({
+  state: "connection",
+  status: status(revoked, "the Northstar site in Jira"),
+  connected: !revoked,
+  revoked,
+  siteName: "Northstar",
+  siteHost: "northstar.atlassian.net",
+  noticeLine: revoked ? null : "Jira has not told Vestiarion of a change yet. Linked issues are read every 15 minutes.",
   counts: { linked: 0, ready: 0, accepted: 0, held: 0 },
   figures: { manualChecks: 0, disputes: 0, timeToProposal: null, window: "the last 30 days" },
 });
@@ -158,6 +174,15 @@ const CASES: Case[] = [
     message: "Linear is disconnected. Acceptances already recorded stay in Vestiarion.",
     before: <LinearPanel orgSlug="acme" view={linear(false)} canManage notice={null} />,
     after: <LinearPanel orgSlug="acme" view={linear(true)} canManage notice={null} />,
+  },
+  {
+    name: "Jira",
+    action: actions.jira.disconnectJiraAction,
+    button: "Disconnect Jira",
+    message:
+      "Jira is disconnected, and its webhook deleted. Acceptances already recorded stay in Vestiarion. To end Vestiarion's access at Atlassian too, remove it from Connected apps in your Atlassian account settings.",
+    before: <JiraPanel orgSlug="acme" view={jira(false)} canManage notice={null} />,
+    after: <JiraPanel orgSlug="acme" view={jira(true)} canManage notice={null} />,
   },
   books3("xero", "Xero"),
   books3("quickbooks", "QuickBooks"),
@@ -387,6 +412,7 @@ describe("disconnect forms in src/components (disconnect confirmation DC2, DC6)"
       expect.arrayContaining([
         "disconnectAsanaAction",
         "disconnectLinearAction",
+        "disconnectJiraAction",
         "disconnectAccountingAction",
         "disconnectHubSpotAction",
         "disconnectPipedriveAction",
