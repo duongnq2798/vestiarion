@@ -130,9 +130,9 @@ export default async function ContractorsPage({ params, searchParams }: { params
     const milestoneIds = milestones.map((milestone) => milestone.id);
     const [asana, linear, jira] = await Promise.all([asanaOnContractors(milestoneIds), linearOnContractors(milestoneIds), jiraOnContractors(milestoneIds)]);
     // Each milestone's evidence link, checked before its card offers it (evidence access E1): GitHub's pull requests,
-    // Asana's tasks and attachments and Linear's issues (through each tool's API, with the workspace's own connection)
-    // and the workspace's own storage only, kept briefly; the open milestones' first. Any other link, a Jira
-    // deliverable among them, is shown as not checked.
+    // Asana's tasks and attachments, Linear's issues and the connected Jira site's issues (Jira acceptance JR20), each
+    // through its tool's API with the workspace's own connection, and the workspace's own storage only, kept briefly;
+    // the open milestones' first. Any other link, a file attached in Jira among them, is shown as not checked.
     const evidenceHrefs = [
       ...milestones.filter((milestone) => milestone.status !== "paid" && milestone.status !== "closed"),
       ...milestones.filter((milestone) => milestone.status === "paid" || milestone.status === "closed"),

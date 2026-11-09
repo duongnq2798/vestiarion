@@ -3,11 +3,12 @@ import { z } from "zod";
 import { currentConfig, currentOrgId, hasScope } from "../context";
 import type { GitHubPullRequestRef } from "../github-verification";
 import { asanaAccessToken } from "../asana/workspace";
+import { jiraLinkCheck, type JiraLinkCheck } from "../jira/workspace";
 import { issueRefOf } from "../linear/urls";
 import { linearAccessToken } from "../linear/workspace";
 import { pullRequestTokens } from "../github/tokens";
 import { isPublicAddress, type LookupFn } from "../webhooks/safe-url";
-import { ASANA_HOST, checkTargetOf, LINEAR_API_HOST, NOT_CHECKED_WORDS, requestAllowed, storageHostOf, type CheckTarget } from "./allow-list";
+import { ASANA_HOST, checkTargetOf, JIRA_API_HOST, LINEAR_API_HOST, NOT_CHECKED_WORDS, requestAllowed, storageHostOf, type CheckTarget, type JiraLinkSite } from "./allow-list";
 
 /**
  * Whether an evidence link can be opened, checked before a page says "verified" or offers it
@@ -20,10 +21,11 @@ import { ASANA_HOST, checkTargetOf, LINEAR_API_HOST, NOT_CHECKED_WORDS, requestA
  * - **not_checked**: anything not on the allow-list (`./allow-list`). No request is made for it; it is shown as typed.
  * - **no_answer**: the service did not answer just now, or its rate limit was reached. Not verified either.
  *
- * Requests go only to GitHub's API and the workspace's own Supabase storage, each address re-checked before it is sent,
- * its host resolved and refused unless every address is public, no redirect followed except to GitHub's API, five
- * seconds at most. The member's session goes nowhere: GitHub is asked with the workspace's own GitHub connection where
- * the repository is in it, else the deployment's token, and storage with the link's own signature only. A private
+ * Requests go only to GitHub's API, the APIs of Asana, Linear and Jira (each held to one item, and asked with the
+ * workspace's own connection to that tool), and the workspace's own Supabase storage, each address re-checked before it
+ * is sent, its host resolved and refused unless every address is public, no redirect followed except to GitHub's API,
+ * five seconds at most. The member's session goes nowhere: GitHub is asked with the workspace's own GitHub connection
+ * where the repository is in it, else the deployment's token, and storage with the link's own signature only. A private
  * repository seen only through the deployment's token reads as not public, as a deleted one does, with the same words,
  * the same number of questions and the same time kept, and so does GitHub refusing that token: a check never says what
  * the deployment can see that the workspace cannot.
@@ -57,6 +59,11 @@ export const LINK_WORDS = {
   linearOtherWorkspace: "It is in another Linear workspace than the one connected, so Vestiarion did not check it.",
   linearSilent: "Linear did not answer just now.",
   linearLimited: "Linear's rate limit was reached; it is checked again in a minute.",
+  jiraNotConnected: "Reconnect Jira to this workspace to check Jira links: Vestiarion asks Jira with the workspace's own connection only.",
+  jiraNotFound: "Jira could not find it: it was deleted, or the workspace's Jira connection does not reach it.",
+  jiraRefused: "Jira refused access to it.",
+  jiraSilent: "Jira did not answer just now.",
+  jiraLimited: "Jira's rate limit was reached; it is checked again in a minute.",
   githubLimited: "GitHub's rate limit was reached; it is checked again in a minute.",
   storageSilent: "Storage did not answer just now.",
   redirected: "It was sent on to an address Vestiarion does not open.",
@@ -79,6 +86,12 @@ export interface LinkCheckOptions {
    * asked with it alone.
    */
   linearToken?: () => Promise<string | null>;
+  /**
+   * The Jira site the workspace connected, with its connection's token, or null without one (Jira acceptance JR20).
+   * Asked once, and only when some link is on a host no other check knows; in a workspace's scope `jiraLinkCheck` when
+   * absent, which answers null while Jira is off. Jira is asked with that connection alone.
+   */
+  jira?: () => Promise<JiraLinkCheck | null>;
   /** The deployment's own GitHub token; the configured one when absent. */
   fallbackToken?: string | null;
   /** The workspace's Supabase address, whose storage's signed links are checked; the configured one when absent. */
@@ -129,19 +142,24 @@ type Sent = { response: Response } | { refused: LinkAccess };
  */
 async function send(
   url: string,
-  init: { headers: Record<string, string>; storageHost: string | null; body?: string },
+  init: { headers: Record<string, string>; storageHost: string | null; jiraSite?: JiraLinkSite | null; body?: string },
   options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">>
 ): Promise<Sent> {
   let next = url;
   for (let hop = 0; hop < 2; hop += 1) {
-    if (!requestAllowed(next, { storageHost: init.storageHost })) return { refused: { state: "not_checked", reason: hop === 0 ? NOT_CHECKED_WORDS.host : LINK_WORDS.redirected } };
+    if (!requestAllowed(next, { storageHost: init.storageHost, jiraSite: init.jiraSite ?? null })) {
+      return { refused: { state: "not_checked", reason: hop === 0 ? NOT_CHECKED_WORDS.host : LINK_WORDS.redirected } };
+    }
     if (!(await hostIsPublic(next, options.resolve))) return { refused: { state: "not_checked", reason: NOT_CHECKED_WORDS.address } };
     const toGitHub = new URL(next).hostname === "api.github.com";
     // A credential goes to GitHub's API, the workspace's Asana token to Asana's API (whose path `requestAllowed` held
-    // to one task or attachment), and its Linear token to Linear's GraphQL API, and nowhere else.
+    // to one task or attachment), its Linear token to Linear's GraphQL API, and its Jira token to Jira's API (held to
+    // one issue on the connected site), and nowhere else.
     const toAsana = new URL(next).hostname === ASANA_HOST;
     const toLinear = new URL(next).hostname === LINEAR_API_HOST;
-    const headers = toGitHub || toAsana || toLinear ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
+    const toJira = new URL(next).hostname === JIRA_API_HOST;
+    const headers =
+      toGitHub || toAsana || toLinear || toJira ? init.headers : Object.fromEntries(Object.entries(init.headers).filter(([name]) => name.toLowerCase() !== "authorization"));
     // Linear's API is GraphQL, asked with a POST of the query built from the link's identifier; every other check is a GET.
     const post = toLinear && init.body !== undefined && hop === 0;
     const response = await options.fetch(next, {
@@ -283,6 +301,30 @@ const linearAnswerSchema = z.object({
   errors: z.array(z.object({ message: z.string().optional(), extensions: z.object({ code: z.string().optional() }).optional() })).optional(),
 });
 
+/**
+ * A Jira issue on the connected site, asked about at Atlassian's API by its key with the workspace's own connection
+ * (Jira acceptance JR20); no redirect is followed, and only the answer's status is read. Jira answers 404 alike for an
+ * issue that is gone and one the connection cannot see. While Atlassian's limit for every tenant of the app is spent
+ * (JR17), nothing is asked, and no token is read.
+ */
+async function askJira(
+  target: Extract<CheckTarget, { kind: "jira_issue" }>,
+  options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">> & { jira: JiraLinkCheck; token: () => Promise<string | null> }
+): Promise<LinkAccess> {
+  if (options.jira.pausedUntil() !== null) return { state: "no_answer", reason: LINK_WORDS.jiraLimited };
+  const token = await options.token();
+  if (!token) return { state: "not_checked", reason: LINK_WORDS.jiraNotConnected };
+  const sent = await send(target.request, { headers: { Accept: "application/json", Authorization: `Bearer ${token}` }, storageHost: null, jiraSite: options.jira.site }, options);
+  if ("refused" in sent) return sent.refused;
+  const { response } = sent;
+  await response.body?.cancel().catch(() => {});
+  if (response.ok) return { state: "open" };
+  if (response.status === 404) return { state: "cannot_open", reason: LINK_WORDS.jiraNotFound };
+  if (response.status === 403) return { state: "cannot_open", reason: LINK_WORDS.jiraRefused };
+  if (response.status === 429) return { state: "no_answer", reason: LINK_WORDS.jiraLimited };
+  return { state: "no_answer", reason: LINK_WORDS.jiraSilent };
+}
+
 async function askStorage(target: Extract<CheckTarget, { kind: "signed_storage" }>, options: Required<Pick<LinkCheckOptions, "fetch" | "resolve">>, now: number): Promise<LinkAccess> {
   if (target.expiresAt !== null && target.expiresAt <= now) return { state: "cannot_open", reason: LINK_WORDS.expired(target.expiresAt) };
   // The link's own signature is its only credential: no key of Vestiarion's, and no session, is sent with it.
@@ -324,11 +366,24 @@ export async function checkEvidenceLinks(hrefs: readonly string[], options: Link
   let linear: Promise<string | null> | undefined;
   const linearToken = (): Promise<string | null> =>
     (linear ??= (options.linearToken ? options.linearToken() : scoped ? linearAccessToken() : Promise.resolve(null)).catch(() => null));
+  // The Jira site the workspace connected, read once, and only when some link is on a host none of the checks above
+  // knows (Jira acceptance JR20): in a workspace's scope, and while Jira is on. Its token is read once, when a link on
+  // it is asked about; a token Atlassian did not give leaves those links unanswered.
+  const loadJira = options.jira ?? (scoped ? () => jiraLinkCheck() : null);
+  const elsewhere =
+    loadJira !== null &&
+    unique.some((href) => {
+      const decided = checkTargetOf(href, { storageHost });
+      return "notChecked" in decided && decided.notChecked === "host";
+    });
+  const jira = loadJira && elsewhere ? await loadJira().catch(jiraNotRead) : null;
+  let jiraTokenRead: Promise<string | null> | undefined;
+  const jiraToken = (): Promise<string | null> => (jiraTokenRead ??= jira ? jira.token() : Promise.resolve(null));
   let asked = 0;
 
   await Promise.all(
     unique.map(async (href) => {
-      const decided = checkTargetOf(href, { storageHost });
+      const decided = checkTargetOf(href, { storageHost, jiraSite: jira?.site ?? null });
       if ("notChecked" in decided) {
         out.set(href, { state: "not_checked", reason: NOT_CHECKED_WORDS[decided.notChecked] });
         return;
@@ -352,6 +407,7 @@ export async function checkEvidenceLinks(hrefs: readonly string[], options: Link
             if (target.kind === "signed_storage") return await askStorage(target, io, now);
             if (target.kind === "asana_task" || target.kind === "asana_attachment") return await askAsana(target, { ...io, token: await asanaToken() });
             if (target.kind === "linear_issue") return await askLinear(target, { ...io, token: await linearToken() });
+            if (target.kind === "jira_issue") return jira ? await askJira(target, { ...io, jira, token: jiraToken }) : { state: "not_checked", reason: NOT_CHECKED_WORDS.host };
             return await askGitHub(target, { ...io, tokenFor: await tokenFor(), fallbackToken });
           } catch (error) {
             // The host and the error's name only: a signed link carries its token, and is never logged.
@@ -365,7 +421,9 @@ export async function checkEvidenceLinks(hrefs: readonly string[], options: Link
                     ? LINK_WORDS.asanaSilent
                     : target.kind === "linear_issue"
                       ? LINK_WORDS.linearSilent
-                      : LINK_WORDS.githubSilent,
+                      : target.kind === "jira_issue"
+                        ? LINK_WORDS.jiraSilent
+                        : LINK_WORDS.githubSilent,
             };
           }
         })().then((access) => {
@@ -379,6 +437,12 @@ export async function checkEvidenceLinks(hrefs: readonly string[], options: Link
     })
   );
   return out;
+}
+
+/** A Jira site that could not be read leaves its links not checked, as when Jira is off (Jira acceptance JR20). */
+function jiraNotRead(error: unknown): null {
+  console.error("evidence link: the workspace's Jira site not read", error instanceof Error ? error.name : "unknown");
+  return null;
 }
 
 /** The workspace's own GitHub connection (GitHub App design G5); none when it cannot be read. */

@@ -4,6 +4,7 @@ import { createContext, runWith } from "@/lib/context";
 
 vi.mock("server-only", () => ({}));
 
+import { NOT_CHECKED_WORDS } from "@/lib/evidence-links/allow-list";
 import { checkEvidenceLinks, forgetLinkChecks, LINK_WORDS, type LinkCheckOptions } from "@/lib/evidence-links/check";
 
 /**
@@ -186,6 +187,29 @@ describe("checkEvidenceLinks: what is never requested", () => {
     const access = await checkEvidenceLinks(links, options({ fetch: fetchImpl }));
     for (const link of links) expect(access.get(link)?.state, link).toBe("not_checked");
     expect(calls).toHaveLength(0);
+  });
+
+  it("says why, naming the connected Jira site among the places checked (Jira acceptance JR20)", async () => {
+    const { calls, fetchImpl } = github({});
+    const drive = "https://drive.example.test/handoff";
+    const tree = "https://github.com/acme/app/tree/main";
+    const access = await checkEvidenceLinks([drive, tree], options({ fetch: fetchImpl, jira: async () => null }));
+    expect(access.get(drive)).toEqual({ state: "not_checked", reason: NOT_CHECKED_WORDS.host });
+    expect(access.get(tree)).toEqual({ state: "not_checked", reason: NOT_CHECKED_WORDS.path });
+    expect(NOT_CHECKED_WORDS.host).toBe("Vestiarion checks links on GitHub, Asana, Linear, the connected Jira site and its own file storage only, and never opens other sites.");
+    expect(NOT_CHECKED_WORDS.path).toContain("on Linear and the connected Jira site, issues");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("reads the workspace's Jira site only for a link on a host no other check knows, and a site not connected stays unchecked (JR20)", async () => {
+    const jira = vi.fn(async () => null);
+    const { calls, fetchImpl } = github({ [PR_API]: pull(false) });
+    await checkEvidenceLinks([PR, signed(Date.parse("2026-10-12T08:30:00Z") / 1000)], options({ fetch: fetchImpl, jira }));
+    expect(jira).not.toHaveBeenCalled();
+    const issue = "https://northstar.atlassian.net/browse/ENG-142";
+    expect((await checkEvidenceLinks([issue], options({ fetch: fetchImpl, jira }))).get(issue)).toEqual({ state: "not_checked", reason: NOT_CHECKED_WORDS.host });
+    expect(jira).toHaveBeenCalledTimes(1);
+    expect(calls.map((call) => call.url)).toEqual([PR_API]);
   });
 
   it("checks at most 25 links in one call; the rest read as not checked", async () => {

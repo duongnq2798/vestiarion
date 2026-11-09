@@ -4,9 +4,10 @@ import { syncErrorWords } from "../connectors/status";
 import { syncStore } from "../connectors/sync-store";
 import { connectionTokenStore } from "../connectors/token-store";
 import { ProviderError } from "../connectors/provider";
-import { currentOrgId } from "../context";
+import { currentOrgId, hasScope } from "../context";
 import { db } from "../dal";
 import { withOrg } from "../dal/scope";
+import type { JiraLinkSite } from "../evidence-links/allow-list";
 import { recordUsage } from "../usage/record";
 import { JiraNotSetUpError, jiraReady, linksOfMilestones, liveLinks, type IssueLink } from "./links";
 import { jiraProviderFromEnv, type JiraProvider } from "./provider";
@@ -19,11 +20,11 @@ import { ensureJiraWebhook, JiraSiteGoneError, type Upkeep } from "./webhooks";
 
 /**
  * A workspace's Jira, as every path uses it (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR3, JR13 to
- * JR17, JR21), as Linear's (`../linear/workspace`): its connection, a session on the connection's own token and the site
+ * JR17, JR20, JR21), as Linear's (`../linear/workspace`): its connection, a session on the connection's own token and the site
  * it reads, and the ways a linked issue is read again without a person: before the agent decides contractors, right
- * before it sends their releases, every 15 minutes from the sweeper, and after a signed webhook delivery. All of it in
- * the workspace's own scope; a delivery, which names webhook ids and no workspace, enters each workspace whose site row
- * holds one of them in turn.
+ * before it sends their releases, every 15 minutes from the sweeper, and after a signed webhook delivery; and the site an
+ * evidence link to one of its issues is checked on (JR20). All of it in the workspace's own scope; a delivery, which
+ * names webhook ids and no workspace, enters each workspace whose site row holds one of them in turn.
  *
  * Jira's rate limit is one pool for every tenant of the app (JR17), so the sweep spends it with care: status reads for
  * open issues, a change check over many issues in one request, floors for the rest, at most `SWEEP_READS` reads that make
@@ -393,4 +394,50 @@ export async function rereadForDelivery(event: JiraDeliveryEvent, given?: JiraPr
     }
   }
   return read;
+}
+
+/** The workspace's connected Jira site, as an evidence link to one of its issues is checked on, and its connection (JR20). */
+export interface JiraLinkCheck {
+  site: JiraLinkSite;
+  /** The connection's access token, fresh; null when the connection must be reconnected. Read only when a link is asked about. */
+  token: () => Promise<string | null>;
+  /** When the pause on every Jira call ends (JR17), or null: no link is asked about while it lasts. */
+  pausedUntil: () => number | null;
+}
+
+/**
+ * The site an evidence link to a Jira issue is checked on (JR20), `https://<host>/browse/KEY` at Atlassian's API with
+ * the workspace's own connection: the site row the upkeep keeps, read once per check. Null while Jira is off or not set
+ * up here, outside a workspace's scope, without a Jira connection, or before its site was saved. It asks Jira nothing
+ * itself; a connection that must be reconnected keeps its site, so its links say why they are not checked, and its token
+ * is null. Never throws.
+ */
+export async function jiraLinkCheck(given?: JiraProvider | null): Promise<JiraLinkCheck | null> {
+  const provider = given === undefined ? jiraProviderFromEnv() : given;
+  if (!provider || !hasScope()) return null;
+  try {
+    const context = await jiraContext(provider);
+    if ("missing" in context) {
+      if (context.missing !== "reconnect" || !context.connection) return null;
+      return linkCheckOf(await siteFor(currentOrgId(), context.connection.id), provider, async () => null);
+    }
+    const { session } = context;
+    return linkCheckOf(context.site, provider, async () => {
+      try {
+        return await session.call(async (token) => token);
+      } catch (error) {
+        if (needsReconnect(error)) return null;
+        throw error;
+      }
+    });
+  } catch (error) {
+    if (error instanceof JiraNotSetUpError || error instanceof NotSetUpError) return null;
+    console.error("jira: the site for checking evidence links was not read", error instanceof Error ? error.name : "unknown");
+    return null;
+  }
+}
+
+function linkCheckOf(site: StoredSite | null, provider: JiraProvider, token: () => Promise<string | null>): JiraLinkCheck | null {
+  const host = site ? siteHost(site.siteUrl) : null;
+  return site && host ? { site: { host, cloudId: site.cloudId }, token, pausedUntil: () => provider.pausedUntil() } : null;
 }
