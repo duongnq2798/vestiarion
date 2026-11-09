@@ -5,6 +5,7 @@
  * the rows, this says them, and the page decides how to show them.
  */
 import { billsHref, invoiceHref } from "./bills-view";
+import { milestoneRowPath } from "./counterparty-paths";
 import { deciderName } from "./decision-trail";
 import { awaitsVerdict, heldForVerdict, ruleInBrief } from "./next-step";
 import { networkProfile, type Network } from "./network";
@@ -263,15 +264,18 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
   if (entry.action.startsWith("milestone_")) {
     const id = text(entry.detail.milestoneId);
     const milestone = id ? refs.milestones.get(id) : undefined;
-    if (!milestone) return null;
+    if (!id || !milestone) return null;
     const what = `${activityAmount(milestone.amount, "USDC")} for ${milestone.title}`;
+    // Its own row on Contractors (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15): a paid one is
+    // listed past the latest ten only with every row shown. The link's words name no one.
+    const row = (paid: boolean) => milestoneRowPath(id, { paid });
     if (entry.action === "milestone_release" && !blocked) {
       const execution = record(entry.detail.execution);
       // What the release ended as, as the entry recorded it: one that did not go out is held, never "released".
       const resulting = text(execution?.resultingStatus);
       if (resulting === "held") {
         const why = text(execution?.heldBecause) === "cash_shortfall" ? "The operating wallet did not hold its USDC; the agent decides it again once cash comes in." : deciderLine(entry.detail);
-        return { seq: entry.seq, text: `Tried to release ${what} to ${milestone.name}; it is held for you.`, detail: why, tone: "stopped", path: "/contractors", pathLabel: "Decide in Contractors", txHash: null };
+        return { seq: entry.seq, text: `Tried to release ${what} to ${milestone.name}; it is held for you.`, detail: why, tone: "stopped", path: row(false), pathLabel: "Decide in Contractors", txHash: null };
       }
       const tx = arcTx(text(execution?.txRef)) ?? arcTx(milestone.txRef);
       // Released only once Circle confirmed it (I17): submitted, an unknown outcome, or no transfer recorded say so.
@@ -285,14 +289,15 @@ function itemOf(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem, "t
               ? `Submitted ${what} to ${milestone.name}; ${inFlight(outcome, refs.network)}.`
               : `Decided to release ${what} to ${milestone.name}.`;
       const done = outcome === "confirmed" || outcome === "simulated";
-      return { seq: entry.seq, text: said, detail: deciderLine(entry.detail), tone: done ? "done" : "pending", path: "/contractors", pathLabel: "Contractors", txHash: tx };
+      // Released, confirmed or simulated, it is paid; submitted, it is still among those under way.
+      return { seq: entry.seq, text: said, detail: deciderLine(entry.detail), tone: done ? "done" : "pending", path: row(done), pathLabel: "Contractors", txHash: tx };
     }
     return {
       seq: entry.seq,
       text: `Held ${what} from ${milestone.name} for you.`,
       detail: firstSentence(entry.detail),
       tone: "stopped",
-      path: "/contractors",
+      path: row(false),
       pathLabel: "Decide in Contractors",
       txHash: null,
     };
@@ -318,7 +323,9 @@ function stuckItem(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem,
   const invoiceId = text(entry.detail.invoiceId);
   const milestoneId = text(entry.detail.milestoneId);
   const payee = invoiceId ? refs.invoices.get(invoiceId)?.name : milestoneId ? refs.milestones.get(milestoneId)?.name : undefined;
-  if (!payee) return null;
+  // A milestone's own row on Contractors (CL15): in flight, it is not paid yet.
+  const path = invoiceId ? invoiceHref(invoiceId, "trail") : milestoneId ? milestoneRowPath(milestoneId, { paid: false }) : null;
+  if (!payee || !path) return null;
   const amount = activityAmount(number(entry.detail.amount) ?? 0, text(entry.detail.currency) ?? "USDC");
   return {
     seq: entry.seq,
@@ -326,7 +333,7 @@ function stuckItem(entry: ActivityEntry, refs: ActivityRefs): Omit<ActivityItem,
     text: `Payment of ${amount} to ${payee} has not confirmed ${number(entry.detail.minutes) ?? 0} min after it was submitted to Circle on ${networkProfile(refs.network).label}.`,
     detail: stuckCircleLine(entry.detail),
     tone: "stopped",
-    path: invoiceId ? invoiceHref(invoiceId, "trail") : "/contractors",
+    path,
     pathLabel: invoiceId ? "How it decided" : "Contractors",
     txHash: arcTx(text(entry.detail.txHash)),
   };

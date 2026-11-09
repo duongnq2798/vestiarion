@@ -2142,12 +2142,21 @@ own signed entries (CL14), and no action, ledger action, table, column or index 
   without one, the list), Pay a freelancer's result and the payee address and disputed-change emails (whose button
   still says "Open Counterparties", since a name in it would be untrusted text) open their section. Milestones open
   their row on Contractors (`milestoneRowPath`, `?history=all` for a paid or closed one), whose rows carry
-  `milestoneAnchor` ids. Chat notices, the activity feed and the transfer watch still link the sections' own pages.
+  `milestoneAnchor` ids. So do the chats and the activity feed: a milestone's decision in `agent-activity.ts` (and so
+  the console's notices and the Slack and Telegram decisions messages, which link `item.path`), a stuck milestone
+  payment there and in the transfer watch's email, and a held milestone in Slack's `/vestiarion waiting` and Telegram's
+  `/waiting`, paid only for a release Circle confirmed or the sandbox simulated. Their link words stay ours
+  ("Contractors", "Decide in Contractors"), never a name. Discord's notice lists only bills waiting for approval, each at
+  its card on Approvals, so it links no milestone or counterparty. A notice followed on Contractors itself changes only
+  the fragment (or the query, for `?history=all`), so nothing mounts again: `ScrollToHash` looks again whenever the
+  page's path or query changes and on `hashchange`, and the toast follows its link with `followLink`, which opens the
+  part of the page already open before the router scrolls to it.
 - **Tests.** `counterparty-paths`, `visible-text`, `counterparty-page-grants`, `counterparty-page-view` and
   `counterparty-page-read` (a fake database: platform reads name the workspace and the row's id, no `token_hash` in any
-  select, no `payee_links` read for a non-writer, one failed part leaves the rest, chunks of 25 and the cut note), and
+  select, no `payee_links` read for a non-writer, one failed part leaves the rest, chunks of 25 and the cut note),
   `counterparty-page.test.tsx` (both 404s, the held callout, a viewer's page, a writer's controls, a client's sections,
-  each section id once, no `vxp_` or `vxr_` in the markup).
+  each section id once, no `vxp_` or `vxr_` in the markup), and `scroll-to-hash.test.tsx` (a milestone's row opens
+  from a console notice clicked on Contractors itself, after a query-only navigation and on `hashchange`).
 
 ## Projects: budgets and the money set aside
 

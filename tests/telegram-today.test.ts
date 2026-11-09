@@ -118,7 +118,8 @@ describe("waitingFacts and waitingMessage", () => {
 
     const message = waitingMessage("Acme", facts, ORIGIN, "acme");
     // A payable's card on Approvals is reviewed, as Discord's notice and the decisions message link it; a milestone keeps
-    // its own page (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG3).
+    // its own page (docs/superpowers/specs/2026-10-23-telegram-review-links-design.md TG3), at its own row there, under a
+    // link that names no one (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15).
     expect(message.split("\n")).toEqual([
       "<b>Acme</b> · 2 payments wait for a person",
       "",
@@ -126,7 +127,7 @@ describe("waitingFacts and waitingMessage", () => {
       '<a href="https://www.vestiarion.xyz/o/acme/approvals#payable-p2">Review</a>',
       "",
       "⏸ Mr Pop: Landing page 2.00 USDC · held: Its evidence link is not a merged pull request.",
-      '<a href="https://www.vestiarion.xyz/o/acme/contractors">Contractors</a>',
+      '<a href="https://www.vestiarion.xyz/o/acme/contractors#milestone-m1">Contractors</a>',
       "",
       "Opening a link never approves anything.",
     ]);

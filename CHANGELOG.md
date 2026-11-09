@@ -129,6 +129,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   address waits for a person links **Open their address**. Pay a freelancer's result links the payee's page for a new
   link if the first is lost, and the payee's name on a payment's evidence opens their page; the evidence file and the
   API are unchanged. An old link to a row on Counterparties still opens the row. No migration.
+- **A milestone named in Slack, Telegram or the console opens its own row on Contractors.** A milestone the agent
+  released, submitted or held, in the console's notices and in the Slack and Telegram messages of what the agent
+  decided, a milestone payment that has not confirmed, there and in its email, and a held milestone in
+  `/vestiarion waiting` and `/waiting`, now open that milestone's row on Contractors, with every paid row shown for one
+  that was paid, instead of the top of the page, Contractors itself included when a console notice is clicked there.
+  The links still say Contractors or Decide in Contractors, never the contractor's name. Discord's notice is unchanged:
+  it lists only bills, each at its card on Approvals. No migration.
 
 ### Fixed
 

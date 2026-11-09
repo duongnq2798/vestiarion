@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { toast } from "@/components/ui/Toaster";
+import { followLink } from "@/components/vx/ScrollToHash";
 import { AGENT_EXPECTED_EVENT, EXPECT_AGENT_MS, nextPollMs, TOLD_ONE_BY_ONE, workingLabel, type ActivityItem } from "@/lib/agent-activity";
 import { isValidSlug, orgHref } from "@/lib/auth/org-paths";
 import { utcMinute } from "@/lib/copy";
@@ -59,7 +60,8 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
           setRunning(answer.running);
           setLastCycleAt(answer.lastCycleAt);
           if (since !== null && answer.items.length > 0) {
-            tell(answer.items, since, (path) => router.push(orgHref(slug as string, path)));
+            // A toast clicked on the page it links (a milestone's row, on Contractors) still opens its part there.
+            tell(answer.items, since, (path) => followLink(router, orgHref(slug as string, path)));
           }
           // A cycle starting (its payables read "Deciding now"), one finished, or anything new, is shown on the page
           // at once rather than at its next refresh.

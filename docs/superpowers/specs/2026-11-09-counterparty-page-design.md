@@ -1,6 +1,6 @@
 # One place for a contractor's links: the counterparty page
 
-Date: 2026-11-09 · Status: PR A (C1 to C7) built, PR B (C8) not built · Branch: `feat/counterparty-page` (PR A), `feat/counterparty-links-chat` (PR B) · No migration
+Date: 2026-11-09 · Status: PR A (C1 to C7) built, PR B (C8) built · Branch: `feat/counterparty-page` (PR A), `feat/counterparty-links-chat` (PR B) · No migration
 
 ## Why
 
@@ -282,6 +282,8 @@ Two of these differences are deliberate:
   - `src/lib/telegram/messages.ts:243`;
   - and the Discord notice builder that mirrors Slack.
 - They use `milestoneRowPath` and `counterpartyPath`.
+- Amended 2026-11-09, as built: none of these links a counterparty, so each uses `milestoneRowPath` alone: `{ paid: true }` only for a release Circle confirmed or the sandbox simulated, `{ paid: false }` for a held, submitted or stuck one. The Slack and Telegram decisions messages link `ActivityItem.path`, so they follow `agent-activity.ts`; the lines changed in `slack/blocks.ts` and `telegram/messages.ts` are `/vestiarion waiting` and `/waiting`. The Discord notice lists only bills waiting for approval, each at its card on Approvals, so it has no milestone or counterparty link and is unchanged. The link words stay "Contractors" and "Decide in Contractors", never a name.
+- Amended 2026-11-09, from review: a console notice clicked with Contractors already open changes only the fragment (or the query, for `?history=all`), so the page does not mount again and the row would stay folded. `ScrollToHash` looks again whenever the path or query changes and on `hashchange`, and the toast follows its link with `followLink`, which opens the part of the page already open (`tests/scroll-to-hash.test.tsx`).
 
 ## Data
 

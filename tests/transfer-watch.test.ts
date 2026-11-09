@@ -329,6 +329,19 @@ describe("one message to each person, however many payments (final review M1)", 
     expect(message.subject).toBe("2 payments have not confirmed");
     expect(message.text).toContain(`https://www.vestiarion.xyz/o/acme/invoices?open=${INVOICE}#trail-${INVOICE}`);
     expect(message.text).toContain("https://www.vestiarion.xyz/o/acme/contractors");
+    // CL15 (counterparty page): the milestone's own row on Contractors, as one in flight, so not paid yet.
+    expect(message.text).toContain(`https://www.vestiarion.xyz/o/acme/contractors#milestone-${MILESTONE}`);
+  });
+
+  it("CL15: links one milestone's payment, and the email's button, to its own row on Contractors", async () => {
+    const send = vi.fn(async () => ({ sent: true as const, id: "re_1" }));
+    await run(world({ intents: [intent({ idempotency_key: "pay-m", source_type: "milestone", source_id: MILESTONE })] }), {
+      provider: provider().provider,
+      mail: { settings: { apiKey: "re_test", from: "Vestiarion <no-reply@vestiarion.xyz>" }, send, recipients: async () => [{ email: "owner@acme.test" }] },
+    });
+    const message = (send.mock.calls[0] as unknown as [{ text: string; html: string }])[0];
+    expect(message.text).toContain(`See it in Vestiarion: https://www.vestiarion.xyz/o/acme/contractors#milestone-${MILESTONE}`);
+    expect(message.html).toContain(`https://www.vestiarion.xyz/o/acme/contractors#milestone-${MILESTONE}`);
   });
 });
 

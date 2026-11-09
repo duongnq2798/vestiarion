@@ -220,7 +220,7 @@ describe("what the agent did, in words", () => {
       tone: "done",
       txHash: TX,
     });
-    expect(activityItem(milestone("milestone_hold"), refs())).toMatchObject({ text: "Held 1.00 USDC for Landing page from Puka Hotel for you.", tone: "stopped", path: "/contractors" });
+    expect(activityItem(milestone("milestone_hold"), refs())).toMatchObject({ text: "Held 1.00 USDC for Landing page from Puka Hotel for you.", tone: "stopped", path: `/contractors#milestone-${MILESTONE}` });
     expect(activityItem(entry("ar_received", { txHash: TX }), refs({ status: "received" }))).toMatchObject({
       text: "Received 0.30 USDC from Jiren on Arc testnet: Circle reported the transfer complete.",
       tone: "done",
@@ -234,7 +234,7 @@ describe("what the agent did, in words", () => {
       text: "Tried to release 1.00 USDC for Landing page to Puka Hotel; it is held for you.",
       detail: "The operating wallet did not hold its USDC; the agent decides it again once cash comes in.",
       tone: "stopped",
-      path: "/contractors",
+      path: `/contractors#milestone-${MILESTONE}`,
       txHash: null,
     });
     expect(activityItem(release({ resultingStatus: "held", heldBecause: "agent_paused" }), refs())).toMatchObject({
@@ -247,6 +247,27 @@ describe("what the agent did, in words", () => {
       txHash: TX,
     });
     expect(activityItem(release({ txRef: TX, resultingStatus: "paid" }), refs())?.text).toBe("Released 1.00 USDC for Landing page to Puka Hotel; Circle confirmed it on Arc testnet.");
+  });
+
+  it("CL15: opens a milestone at its own row on Contractors, with every row shown once it is paid, in words that name no one", () => {
+    const release = (execution: Record<string, unknown>) => ({ seq: 5, action: "milestone_release", detail: { milestoneId: MILESTONE, guardrailBlocked: false, execution } });
+    const row = `/contractors#milestone-${MILESTONE}`;
+    const paidRow = `/contractors?history=all#milestone-${MILESTONE}`;
+    // Paid, confirmed by Circle or simulated: listed past the latest ten only with Show all.
+    expect(activityItem(release({ txRef: TX, resultingStatus: "paid" }), refs())).toMatchObject({ path: paidRow, pathLabel: "Contractors" });
+    expect(activityItem(release({ txRef: "sim_1", chainMode: "simulate", resultingStatus: "paid" }), refs())).toMatchObject({ path: paidRow, pathLabel: "Contractors" });
+    // Submitted, an unknown outcome, or a decision with no transfer recorded: not paid yet.
+    expect(activityItem(release({ txRef: TX, resultingStatus: "verified" }), refs())).toMatchObject({ path: row, pathLabel: "Contractors" });
+    expect(activityItem(release({ resultingStatus: "verified" }), refs())).toMatchObject({ path: row });
+    expect(activityItem(release({}), refs())).toMatchObject({ path: row });
+    // Held, by the release or by code.
+    expect(activityItem(release({ resultingStatus: "held", heldBecause: "cash_shortfall" }), refs())).toMatchObject({ path: row, pathLabel: "Decide in Contractors" });
+    expect(activityItem({ seq: 6, action: "milestone_release", detail: { milestoneId: MILESTONE, guardrailBlocked: true } }, refs())).toMatchObject({ path: row, pathLabel: "Decide in Contractors" });
+    expect(activityItem({ seq: 7, action: "milestone_hold", detail: { milestoneId: MILESTONE } }, refs())).toMatchObject({ path: row, pathLabel: "Decide in Contractors" });
+    // The link's words are ours: the contractor's name, which anyone can set, is in the sentence only.
+    for (const item of [release({ txRef: TX, resultingStatus: "paid" }), release({ resultingStatus: "held" })].map((one) => activityItem(one, refs()))) {
+      expect(item?.pathLabel).not.toContain("Puka");
+    }
   });
 
   it("says a reminder it sent a client, with who decided (collections R8)", () => {
@@ -559,7 +580,7 @@ describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () =>
     expect(activityItem(stuck({ providerState: "SENT" }), refs())?.detail).toBe("Circle shows it as SENT.");
   });
 
-  it("tells a milestone's on Contractors", () => {
+  it("CL15: tells a milestone's at its own row on Contractors, as one not paid yet", () => {
     const milestone: ActivityEntry = {
       seq: 991,
       action: "payment_stuck",
@@ -569,9 +590,14 @@ describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () =>
       text: "Payment of 1.00 USDC to Puka Hotel has not confirmed 16 min after it was submitted to Circle on Arc testnet.",
       detail: "Circle shows it as QUEUED.",
       tone: "stopped",
-      path: "/contractors",
+      path: `/contractors#milestone-${MILESTONE}`,
       pathLabel: "Contractors",
     });
+  });
+
+  it("says nothing of a payment whose milestone is gone", () => {
+    const gone: ActivityEntry = { seq: 992, action: "payment_stuck", detail: { milestoneId: "00000000-0000-4000-8000-000000000000", amount: 1, currency: "USDC", minutes: 16 } };
+    expect(activityItem(gone, refs())).toBeNull();
   });
 
   it("says nothing of a payment whose invoice is gone", () => {
