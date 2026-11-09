@@ -130,6 +130,7 @@ export const TENANT_TABLES = [
   "document_requests",
   "linear_issue_links",
   "google_drive_folders",
+  "jira_issue_links",
 ] as const;
 
 export interface SeededRows {
@@ -428,6 +429,18 @@ export async function seedOrgRows(db: PGlite, orgId: string, tag: string): Promi
     `insert into linear_issue_links (org_id, milestone_id, connection_id, issue_id, identifier, issue_title)
      select $1, m.id, $2, gen_random_uuid()::text, $3, 'Billing export' from milestones m where m.org_id = $1 and m.title = $4`,
     [orgId, linearConnectionId, `ENG-${crypto.randomInt(1, 999_999)}`, `m-${tag}`]
+  );
+  // A Jira connection, and an issue of its site linked to the workspace's milestone (0149).
+  const jiraCloudId = crypto.randomUUID();
+  const jiraConnectionId = await one(
+    `insert into accounting_connections (org_id, provider, external_org_id, consent_version, consented_at, window_from)
+     values ($1, 'jira', $2, 'jira-2026-11-09', now(), '2026-08-11') returning id`,
+    [orgId, jiraCloudId]
+  );
+  await db.query(
+    `insert into jira_issue_links (org_id, milestone_id, connection_id, cloud_id, issue_id, identifier, issue_title)
+     select $1, m.id, $2, $3, $4, $5, 'Webhook retries with backoff' from milestones m where m.org_id = $1 and m.title = $6`,
+    [orgId, jiraConnectionId, jiraCloudId, String(crypto.randomInt(10_000, 999_999)), `ENG-${crypto.randomInt(1, 999_999)}`, `m-${tag}`]
   );
   // A Google Drive connection, the folder it reads, and a file read from it into the review list (0148).
   const driveConnectionId = await one(
