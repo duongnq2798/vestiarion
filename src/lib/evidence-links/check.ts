@@ -305,7 +305,7 @@ const linearAnswerSchema = z.object({
  * A Jira issue on the connected site, asked about at Atlassian's API by its key with the workspace's own connection
  * (Jira acceptance JR20); no redirect is followed, and only the answer's status is read. Jira answers 404 alike for an
  * issue that is gone and one the connection cannot see. While Atlassian's limit for every tenant of the app is spent
- * (JR17), nothing is asked, and no token is read.
+ * (JR17), nothing is asked, and no token is read; an answer that says it is spent starts that pause.
  */
 async function askJira(
   target: Extract<CheckTarget, { kind: "jira_issue" }>,
@@ -321,7 +321,11 @@ async function askJira(
   if (response.ok) return { state: "open" };
   if (response.status === 404) return { state: "cannot_open", reason: LINK_WORDS.jiraNotFound };
   if (response.status === 403) return { state: "cannot_open", reason: LINK_WORDS.jiraRefused };
-  if (response.status === 429) return { state: "no_answer", reason: LINK_WORDS.jiraLimited };
+  if (response.status === 429) {
+    // A 429 for the app's whole pool pauses every Jira call of the process, as the client's own would (JR17).
+    options.jira.noteRateLimit(response);
+    return { state: "no_answer", reason: LINK_WORDS.jiraLimited };
+  }
   return { state: "no_answer", reason: LINK_WORDS.jiraSilent };
 }
 

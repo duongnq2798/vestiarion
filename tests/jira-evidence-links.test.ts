@@ -47,7 +47,7 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", ...headers } });
 
 /** The workspace's Jira as the check sees it: the connected site, a token, and Atlassian's shared limit not spent. */
-const connected = (over: Partial<JiraLinkCheck> = {}): JiraLinkCheck => ({ site: SITE, token: async () => "jira_access_1", pausedUntil: () => null, ...over });
+const connected = (over: Partial<JiraLinkCheck> = {}): JiraLinkCheck => ({ site: SITE, token: async () => "jira_access_1", pausedUntil: () => null, noteRateLimit: () => {}, ...over });
 const options = (over: Partial<LinkCheckOptions> = {}): LinkCheckOptions => ({ resolve: PUBLIC_DNS, fallbackToken: null, storageUrl: null, now: () => NOW, ...over });
 
 beforeEach(() => {
@@ -202,6 +202,17 @@ describe("checking an issue's link (JR20)", () => {
     expect(http.calls).toHaveLength(0);
   });
 
+  it("hands a 429 to the workspace's Jira, which decides whether it starts the pause, and no other answer (JR17)", async () => {
+    for (const [status, noted] of [[429, 1], [404, 0], [500, 0], [200, 0]] as const) {
+      forgetLinkChecks();
+      const noteRateLimit = vi.fn();
+      const http = atlassian(() => json({}, status, status === 429 ? { "retry-after": "120", "ratelimit-reason": "jira-quota-global-based" } : {}));
+      await checkEvidenceLinks([ISSUE], options({ fetch: http.fetchImpl, jira: async () => connected({ noteRateLimit }) }));
+      expect(noteRateLimit, String(status)).toHaveBeenCalledTimes(noted);
+      if (noted) expect((noteRateLimit.mock.calls[0][0] as Response).headers.get("ratelimit-reason")).toBe("jira-quota-global-based");
+    }
+  });
+
   it("checks no Jira link without the connected site, or when it could not be read, and asks nothing", async () => {
     for (const jira of [async () => null, async () => Promise.reject(new Error("the database did not answer"))]) {
       forgetLinkChecks();
@@ -272,6 +283,26 @@ describe("the connected site, read in the workspace's scope (jiraLinkCheck, JR20
     expect(found.get(ISSUE)).toEqual({ state: "open" });
     expect(found.get(`https://${HOST}/secure/attachment/10001/handoff.pdf`)).toEqual({ state: "not_checked", reason: NOT_CHECKED_WORDS.path });
     expect(http.calls.map((call) => [call.url, new Headers(call.init.headers).get("authorization")])).toEqual([[REQUEST, "Bearer jira_access_1"]]);
+  });
+
+  it("starts the pause on every Jira call when a check is told the app's whole pool is spent, and not for one site's limit (JR17)", async () => {
+    w.seedSite();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const burst = atlassian(() => json({}, 429, { "retry-after": "30", "ratelimit-reason": "jira-burst-based" }));
+    expect((await w.run(() => checkEvidenceLinks([ISSUE], options({ fetch: burst.fetchImpl, jira: () => jiraLinkCheck(w.provider) })))).get(ISSUE)).toEqual({ state: "no_answer", reason: LINK_WORDS.jiraLimited });
+    expect(w.pause.until).toBe(0);
+    forgetLinkChecks();
+    const spent = atlassian(() => json({}, 429, { "retry-after": "120", "ratelimit-reason": "jira-quota-global-based" }));
+    expect((await w.run(() => checkEvidenceLinks([ISSUE], options({ fetch: spent.fetchImpl, jira: () => jiraLinkCheck(w.provider) })))).get(ISSUE)).toEqual({ state: "no_answer", reason: LINK_WORDS.jiraLimited });
+    expect(w.pause.until).toBe(w.clock.now + 120_000);
+    expect(w.provider.pausedUntil()).toBe(w.clock.now + 120_000);
+    // While it lasts, the next check asks nothing, and the sweep's own calls wait too.
+    forgetLinkChecks();
+    const after = atlassian();
+    expect((await w.run(() => checkEvidenceLinks([ISSUE], options({ fetch: after.fetchImpl, jira: () => jiraLinkCheck(w.provider) })))).get(ISSUE)).toEqual({ state: "no_answer", reason: LINK_WORDS.jiraLimited });
+    expect(after.calls).toHaveLength(0);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
   it("keeps the site of a connection that must be reconnected, with no token, so its links say so", async () => {

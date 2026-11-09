@@ -17,6 +17,7 @@ import {
   JIRA_TOKEN,
   jiraFetch,
   jsonOf,
+  noteRateLimit,
   pausedUntil,
   waitOf,
   type JiraPause,
@@ -455,6 +456,25 @@ describe("every request (JR8, JR17)", () => {
       await expect(jiraReader(h).issue("token", SITE, "10042", "status"), reason).rejects.toMatchObject({ failure: "rate_limited", retryAfterMs: 3_000 });
       expect(pausedUntil(h), reason).toBeNull();
     }
+  });
+
+  it("starts the pause from an answer given outside jiraFetch, as an evidence link's check gets, and never shortens it", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const pause: JiraPause = { until: 0 };
+    const deps = { pause, now: () => NOW };
+    const limited = (reason: string, retryAfter = "120", status = 429) => new Response(null, { status, headers: { "retry-after": retryAfter, "ratelimit-reason": reason } });
+    noteRateLimit(limited("jira-burst-based"), deps);
+    noteRateLimit(limited("jira-quota-global-based", "120", 503), deps);
+    expect(pausedUntil(deps)).toBeNull();
+    noteRateLimit(limited("jira-quota-global-based"), deps);
+    expect(pausedUntil(deps)).toBe(NOW + 120_000);
+    noteRateLimit(limited("jira-quota-global-based", "30"), deps);
+    expect(pause.until).toBe(NOW + 120_000);
+    expect(jiraProvider(SETTINGS, deps).pausedUntil()).toBe(NOW + 120_000);
+    jiraProvider(SETTINGS, deps).noteRateLimit(limited("jira-quota-global-based", "600"));
+    expect(pause.until).toBe(NOW + 600_000);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
   });
 });
 

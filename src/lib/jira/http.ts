@@ -123,14 +123,24 @@ export async function jiraFetch(url: string, init: RequestInit, label: string, d
   } catch {
     throw new ProviderError("unavailable", `Jira ${label}: no answer`);
   }
-  if (rest && response.status === 429 && limitReason(response)?.startsWith("jira-quota-global")) {
-    const until = now() + waitOf(response, now());
-    if (until > pause.until) {
-      pause.until = until;
-      console.warn("jira: Atlassian's shared rate limit is spent; every Jira call waits (seconds)", Math.ceil((until - now()) / 1000));
-    }
-  }
+  if (rest) noteRateLimit(response, deps);
   return response;
+}
+
+/**
+ * Starts the pause on every Jira call (JR17) when an answer from a site's REST API is a 429 for the app's whole pool
+ * (`jira-quota-global-*`), until its `Retry-After`; any other answer changes nothing. `jiraFetch` notes its own answers;
+ * an evidence link's check, which asks Jira's API through the link checker's own request (JR20), notes its answer here.
+ */
+export function noteRateLimit(response: Response, deps: JiraHttp = {}): void {
+  if (response.status !== 429 || !limitReason(response)?.startsWith("jira-quota-global")) return;
+  const now = deps.now ?? Date.now;
+  const pause = deps.pause ?? PROCESS_PAUSE;
+  const until = now() + waitOf(response, now());
+  if (until > pause.until) {
+    pause.until = until;
+    console.warn("jira: Atlassian's shared rate limit is spent; every Jira call waits (seconds)", Math.ceil((until - now()) / 1000));
+  }
 }
 
 /** How long Atlassian asked to wait: `Retry-After`, in seconds or as a date; else a minute; at most an hour. */

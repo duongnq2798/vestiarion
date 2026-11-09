@@ -1,6 +1,6 @@
 import type { ConnectingProvider } from "../connectors/provider";
 import { jiraReader, type JiraReader } from "./api";
-import { pausedUntil, type JiraHttp } from "./http";
+import { noteRateLimit, pausedUntil, type JiraHttp } from "./http";
 import { authorizeUrl, exchangeCode, grantSites, refreshTokens, revokeToken } from "./oauth";
 import { JIRA_SCOPES, jiraSettingsFromEnv, type JiraSettings } from "./settings";
 import { jiraWebhookApi, type JiraWebhookApi } from "./webhooks";
@@ -18,6 +18,8 @@ export interface JiraProvider extends ConnectingProvider {
   hooks: JiraWebhookApi;
   /** When the pause on every Jira call ends (JR17), or null when there is none: the sweep makes no request while it lasts. */
   pausedUntil(): number | null;
+  /** Starts that pause when an answer Jira gave outside this provider's own calls says the app's whole pool is spent (JR17). */
+  noteRateLimit(response: Response): void;
 }
 
 export function jiraProvider(settings: JiraSettings, deps: JiraHttp = {}): JiraProvider {
@@ -33,6 +35,7 @@ export function jiraProvider(settings: JiraSettings, deps: JiraHttp = {}): JiraP
     reader: jiraReader(deps),
     hooks: jiraWebhookApi(deps),
     pausedUntil: () => pausedUntil(deps),
+    noteRateLimit: (response) => noteRateLimit(response, deps),
   };
 }
 

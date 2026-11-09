@@ -4361,7 +4361,8 @@ offers those with Jira scopes, and one is connected, its cloudId and name kept a
   one search per 50 linked issues for when each last changed, then reads those never read or whose last read failed,
   those that changed, then those past their floor (an accepted link hourly, any other daily, since a web link's edit may
   not move an issue's `updated`), accepted links first, at most `SWEEP_READS` (20) reads that make a request in a run. A
-  429 that says the shared pool is spent pauses every Jira call of the process until it refills (`http.ts`).
+  429 that says the shared pool is spent pauses every Jira call of the process until it refills (`http.ts`,
+  `noteRateLimit`), whether the sweep's own call got it or an evidence link's check did.
 - **The webhook and its upkeep** (`webhooks.ts`). Each connection keeps one dynamic webhook on its site, made with the
   connecting person's token, for issue updates, deletions and comments in the projects of the open links (a JQL filter
   of project ids), and only where the origin is https. The upkeep, daily and also the connection's keep-alive, makes it
@@ -5144,7 +5145,7 @@ as a short checklist, ticked from what happened, rendered by one component (`Get
   alone, sent to Asana's API only, and without one an Asana link is not checked; Linear likewise, with the workspace's
   own Linear connection's token, sent to Linear's API only; Jira likewise, with the workspace's own Jira connection's
   token, sent to Atlassian's API only, only the answer's status read, and nothing asked while Atlassian's shared rate
-  limit is spent. GitHub is asked with the workspace's own connection
+  limit is spent (a 429 saying it is spent starts that pause, as the Jira client's own would). GitHub is asked with the workspace's own connection
   (`pullRequestTokens`), else the deployment's `GITHUB_TOKEN`, sent to `api.github.com` only; a private repository seen
   only through the deployment's token, or a 403 to that token, answers as not public, as a deleted one does, after as
   many requests (a comment's repository is asked first) and kept as long. A signed link's expiry is read from

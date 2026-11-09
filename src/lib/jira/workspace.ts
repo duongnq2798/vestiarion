@@ -403,6 +403,8 @@ export interface JiraLinkCheck {
   token: () => Promise<string | null>;
   /** When the pause on every Jira call ends (JR17), or null: no link is asked about while it lasts. */
   pausedUntil: () => number | null;
+  /** Starts that pause when the answer to a link's check says the app's whole pool at Atlassian is spent (JR17). */
+  noteRateLimit: (response: Response) => void;
 }
 
 /**
@@ -439,5 +441,7 @@ export async function jiraLinkCheck(given?: JiraProvider | null): Promise<JiraLi
 
 function linkCheckOf(site: StoredSite | null, provider: JiraProvider, token: () => Promise<string | null>): JiraLinkCheck | null {
   const host = site ? siteHost(site.siteUrl) : null;
-  return site && host ? { site: { host, cloudId: site.cloudId }, token, pausedUntil: () => provider.pausedUntil() } : null;
+  return site && host
+    ? { site: { host, cloudId: site.cloudId }, token, pausedUntil: () => provider.pausedUntil(), noteRateLimit: (response) => provider.noteRateLimit(response) }
+    : null;
 }
