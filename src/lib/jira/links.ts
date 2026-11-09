@@ -330,6 +330,23 @@ export async function writeRead(link: IssueLink, facts: ReadWrite | null, next: 
   return (result.data ?? []).length === 1;
 }
 
+/**
+ * Moves a link's state with no read made (JR7: criteria written for a done issue held for want of them), over the state
+ * and reason it was seen in: false when either moved since, and nothing is written. `last_read_at` is left as it is,
+ * since no read started (JR15): a delivery sent before now is still one to read.
+ */
+export async function writeState(link: IssueLink, next: { state: Exclude<LinkState, "accepted">; heldReason: HeldReason | null }, nowIso: string): Promise<boolean> {
+  const update = db()
+    .from("jira_issue_links")
+    .update({ state: next.state, held_reason: next.heldReason, held_at: next.state === "held" ? nowIso : null, updated_at: nowIso })
+    .eq("id", link.id)
+    .eq("state", link.state)
+    .is("unlinked_at", null);
+  const result = await (link.heldReason === null ? update.is("held_reason", null) : update.eq("held_reason", link.heldReason)).select("id");
+  if (result.error) raise(result.error);
+  return (result.data ?? []).length === 1;
+}
+
 /** A read that did not finish, said on the link in business words; nothing else changes, `last_read_at` included. */
 export async function writeReadError(link: IssueLink, message: string, nowIso: string): Promise<void> {
   const result = await db().from("jira_issue_links").update({ read_error: message.slice(0, 300), updated_at: nowIso }).eq("id", link.id).select("id");

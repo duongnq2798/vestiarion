@@ -1,7 +1,7 @@
 import { currentOrgId } from "../context";
 import { ProviderError } from "../connectors/provider";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
-import { jiraPlan, planRead, WITHDRAWN_ACTION, type JiraReadPlan, type ReadFacts, type WithdrawReason } from "./acceptance";
+import { planJiraRead, WITHDRAWN_ACTION, type JiraReadPlan, type ReadFacts, type WithdrawReason } from "./acceptance";
 import type { IssueRead, JiraReader, SiteRef } from "./api";
 import { deliverablesOf, fingerprintOf } from "./deliverables";
 import { factsOf, holdAcceptance, milestonesForAcceptance, writeRead, writeReadError, type HoldOutcome, type IssueLink, type ReadWrite } from "./links";
@@ -34,8 +34,9 @@ export interface ReadContext {
 /** `auto`: a status read first, in full when it says done (JR8); `full`: in full at once, as before an acceptance. */
 export type LinkDepth = "auto" | "full";
 
+/** A read that answered; `gone` when Jira no longer shows the issue (a 404 or 403, or a link of another site). */
 export type LinkReadOutcome =
-  | { kind: "read"; plan: JiraReadPlan; held: HoldOutcome | null; becameReady: boolean; fingerprint: string; updatedAt: string | null }
+  | { kind: "read"; plan: JiraReadPlan; held: HoldOutcome | null; becameReady: boolean; fingerprint: string; updatedAt: string | null; gone: boolean }
   | { kind: "failed"; message: string };
 
 /** Whether the link's last read said the issue was done: it is read in full, so a change in what it delivers is seen. */
@@ -127,8 +128,10 @@ export const REASON_WORDS: Record<WithdrawReason, string> = {
 /**
  * Reads one link's issue and applies what it says. `criteria` is whether the milestone has acceptance criteria now. A
  * link of another site than the connected one is read as gone, with no request (JR16): its issue id may be another issue
- * on the new site. Throws `JiraAccessError` when the connection itself failed (the caller decides what the connection
- * says); any other failure is written on the link and answered as `failed`.
+ * on the new site. A gone issue holds the link `issue_unreachable`, whatever it was held for (`planJiraRead`), so
+ * nothing is accepted from it and the change check leaves its id out. Throws `JiraAccessError` when the connection
+ * itself failed (the caller decides what the connection says); any other failure is written on the link and answered as
+ * `failed`.
  */
 export async function readLink(link: IssueLink, milestone: { title: string; criteria: boolean }, ctx: ReadContext, depth: LinkDepth = "auto"): Promise<LinkReadOutcome> {
   const now = ctx.now ?? Date.now;
@@ -151,9 +154,11 @@ export async function readLink(link: IssueLink, milestone: { title: string; crit
 
   const found = read.kind === "issue" ? factsFromRead(read, ctx.site, link) : null;
   const facts: ReadFacts = found ? found.plan : { kind: "gone", reason: read.kind === "gone" ? read.reason : "not_found" };
-  const plan = jiraPlan(planRead(factsOf(link), facts, { criteria: milestone.criteria }));
+  // A gone issue holds the link unreachable, even one held after an acceptance for another reason (JR13, JR16).
+  const plan = planJiraRead(factsOf(link), facts, { criteria: milestone.criteria });
   const fingerprint = found?.write.deliverables?.fingerprint ?? link.fingerprint ?? "";
   const updatedAt = found?.write.updatedAt ?? null;
+  const gone = found === null;
 
   if (plan.kind === "withdraw") {
     const held = await holdAcceptance(link, plan.reason);
@@ -185,7 +190,7 @@ export async function readLink(link: IssueLink, milestone: { title: string; crit
         },
       });
     }
-    return { kind: "read", plan, held, becameReady: false, fingerprint, updatedAt };
+    return { kind: "read", plan, held, becameReady: false, fingerprint, updatedAt, gone };
   }
 
   const wrote = await writeRead(link, found?.write ?? null, plan.kind === "set" ? { state: plan.state, heldReason: plan.heldReason } : null, startedIso);
@@ -209,7 +214,7 @@ export async function readLink(link: IssueLink, milestone: { title: string; crit
       },
     });
   }
-  return { kind: "read", plan, held: null, becameReady, fingerprint, updatedAt };
+  return { kind: "read", plan, held: null, becameReady, fingerprint, updatedAt, gone };
 }
 
 export interface ReadSummary {

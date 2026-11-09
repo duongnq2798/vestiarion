@@ -145,7 +145,7 @@ Code comments and test names cite the rule ids, for example "(Jira acceptance JR
     - Each lookup reads as "not linked" before its own migration has run (0115, 0147, 0149).
   - After the insert, the webhook is made sure of (JR14). This is best effort, raced against 5 s, and never fails the link.
 
-- **JR7. Criteria.** As LN5. They are the shared `milestones.acceptance_criteria`, written through Linear's `writeCriteria` and only while the milestone is pending. With no criteria, a done issue is held (`no_criteria`).
+- **JR7. Criteria.** As LN5. They are the shared `milestones.acceptance_criteria`, written through Linear's `writeCriteria` and only while the milestone is pending. With no criteria, a done issue is held (`no_criteria`). Saving them makes such a link ready at once, from what was last read of it, by `writeState`: its state alone moves, compared against the state and reason it was seen in, and `last_read_at` stays as it was, since no read was made (JR15).
 
 - **JR8. Reading an issue.**
   - **Status read** (1 request): `GET /rest/api/3/issue/{id}?fields=summary,status,resolution,resolutiondate,statuscategorychangedate,updated,project`.
@@ -199,6 +199,8 @@ Code comments and test names cite the rule ids, for example "(Jira acceptance JR
 
   A done issue is never accepted by a read. Linear's `planRead` and `acceptable` are reused with `archived: false` always. Jira's `HeldReason` is Linear's without `archived`, and one narrowing line (an unreachable `archived` is read as `issue_unreachable`) keeps the types honest. A test pins that no read yields `archived`.
 
+  One rule is Jira's own (`planJiraRead`): a read that finds the issue gone (a 404 or 403, or a link of another site) holds the link `issue_unreachable`, whatever it was held for, even after an acceptance. Linear's plan keeps a link held after an acceptance held for its old reason; in Jira that would leave Accept offered on an issue Jira no longer shows, since the facts last read still say done, and its id in every change check, which Jira refuses whole (JR16). The link stays held.
+
 - **JR11. Accepting.** As LN8:
   - the person ticks that they checked each criterion against the deliverables shown;
   - the issue is read again, in full;
@@ -226,6 +228,8 @@ Code comments and test names cite the rule ids, for example "(Jira acceptance JR
   - Jira no longer shows it (`issue_unreachable`): a 404 or 403, a deleted issue, an archived one if Jira answers 404, lost access, or another site connected now.
 
   Before payment, `hold_jira_acceptance` takes the verification back and holds the milestone. After a payment was sent, only the link is held, as a dispute. Revoke manually is refused on a milestone accepted from Jira; Verify manually is refused while one is linked.
+
+  An issue Jira stops showing after its acceptance was taken back is held `issue_unreachable` from then on (JR10), and an acceptance whose own full read finds it gone is refused, whatever the link said before, so it is never accepted again from what was read before.
 
 - **JR14. One webhook per connection.**
   - It is registered with the connecting person's token:
@@ -275,7 +279,7 @@ Code comments and test names cite the rule ids, for example "(Jira acceptance JR
     - Each remaining row runs in its own workspace's scope (`withOrg`):
       1. its connection must still be the workspace's live Jira connection;
       2. it takes the live links with that cloudId and that issue id, at most 5;
-      3. a link is skipped when its last read **started** at least 5 s after the delivery's `timestamp`, since that read already saw the change (`last_read_at` is the read's start time, and failed reads do not set it);
+      3. a link is skipped when its last read **started** at least 5 s after the delivery's `timestamp`, since that read already saw the change (`last_read_at` is the read's start time; failed reads, and criteria saved with no read, do not set it);
       4. the rest are read with `readLinks`.
 
       A comment followed by Done 30 s later is therefore read twice, never left for the sweep.
@@ -494,6 +498,7 @@ Each file is the twin of `src/lib/linear/<same name>` unless noted.
   - It re-exports Asana's `fingerprintOf` and `MAX_DELIVERABLES`, and Linear's `DELIVERABLES_BYTES` and `storedBytes`.
 - **`acceptance.ts`**
   - Re-exports `planRead`, `acceptable`, `LinkState`, `LinkFacts`, `ReadFacts` and `ReadPlan`.
+  - `planJiraRead`: Linear's plan in Jira's reasons, with a gone read holding the link `issue_unreachable` whatever it was held for (JR10).
   - Jira's own `HeldReason` and its narrowing, `Identities {memberEmail, payeeEmail, payeeJiraIds, memberJiraIds}`, `selfAcceptance` and `SELF_WORDS`.
   - `stateWords` and `HELD_LINES`.
   - `ACCEPTED_ACTION = "jira_work_accepted"` and `WITHDRAWN_ACTION = "jira_acceptance_withdrawn"`.
@@ -504,7 +509,7 @@ Each file is the twin of `src/lib/linear/<same name>` unless noted.
   - `liveLinks({milestoneIds?, connectionId?, cloudId?, issueIds?, states?, limit?})` and `linksOfMilestones({statuses, method?: "jira", states?, limit})`.
   - `jiraReady()`: the RPC, the link table and `siteTableReady()`.
   - `insertLink`, where a 23505 on `_milestone_key` or `_issue_key` becomes `milestone_linked` or `issue_linked`.
-  - `ReadWrite`, whose deliverables part is null after a status read. Then `writeRead`, `writeReadError`, `holdAcceptance`, `acceptLink`, `AcceptRefusedError` and `unlinkLink`.
+  - `ReadWrite`, whose deliverables part is null after a status read. Then `writeRead`, `writeState` (a state moved with no read, JR7), `writeReadError`, `holdAcceptance`, `acceptLink`, `AcceptRefusedError` and `unlinkLink`.
   - It re-exports Linear's `milestonesForAcceptance` and `writeCriteria`.
 - **`sites.ts`** (new). The only module that reads or writes `jira_sites`. Every function asserts `currentOrgId() === orgId`, except `sitesForWebhooks` and `touchDelivery`.
   - `siteFor`, `saveSite`, `setWebhooks`, `retire`, `markChecked`, `markMissing`, `markMissedChange`, `clearSite`.
@@ -512,7 +517,7 @@ Each file is the twin of `src/lib/linear/<same name>` unless noted.
   - `touchDelivery` and `siteTableReady`.
 - **`reads.ts`**
   - `ReadContext {session, reader, site, now?}`, `factsFromRead`, `readFailureWords` and `REASON_WORDS`.
-  - `readLink(link, milestone, ctx, depth)`: a cloudId mismatch is `gone` with no request.
+  - `readLink(link, milestone, ctx, depth)`: a cloudId mismatch is `gone` with no request. A read outcome says `gone` when Jira no longer showed the issue.
   - `readLinks`.
   - Ledger entries `jira_issue_ready` and `jira_acceptance_withdrawn`.
 - **`workspace.ts`**
@@ -844,10 +849,11 @@ Estimates use Atlassian's model: 1 point per request, plus 1 per core object, pl
   - Linking by URL and by lower-case key; the row's `cloud_id` and numeric `issue_id`; `jira_issue_linked` with a null fingerprint for a waiting issue.
   - Every refusal in JR6. Linear's link refuses a Jira-linked milestone; Asana's link refuses Linear- and Jira-linked ones.
   - A waiting issue makes one request a read; done means a status read, then a full one.
-  - Done means ready, the milestone **not** verified, and one `jira_issue_ready`. No criteria means held; adding criteria makes it ready.
+  - Done means ready, the milestone **not** verified, and one `jira_issue_ready`. No criteria means held; adding criteria makes it ready, leaves `last_read_at` as it was (a delivery sent just before is still read), and moves no link whose hold changed since it was seen.
   - Accepting verifies with method jira, writes the detail and `runCycleSoon`. A second accept and a stale accept are refused.
   - "Won't Do" is held canceled and never ready.
   - Withdrawn after acceptance: reopened, done again with a new `statuscategorychangedate`, a new remote link, and a 404.
+  - Taken back for its deliverables, then deleted (404), hidden (403) or on a site no longer connected: held `issue_unreachable`, and Accept refused with the milestone left pending.
   - A moved issue refreshes its key and URL.
   - Another site connected: old links are held with zero requests, and an issue id that also exists on the new site is never read.
   - `held_after_payment`; deferred, then withdrawn at 11 minutes; unlink while deciding is refused; unlink, then link again.
@@ -860,6 +866,7 @@ Estimates use Atlassian's model: 1 point per request, plus 1 per core object, pl
   - Sweep:
     - one change check, then full reads only of changed or floored links;
     - a 400 falls back to oldest-first, within 20;
+    - an issue deleted after its acceptance was taken back is held `issue_unreachable` by that run and left out of the next check, which answers again;
     - 120 paid links do not starve open ones;
     - `missed_change_at` is set only for a change older than 2 minutes with no delivery since.
   - The global pause finishes the run `rate_limited` with zero Jira requests.

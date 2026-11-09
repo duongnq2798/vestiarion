@@ -329,6 +329,8 @@ export function jiraWorld(hooks: WorldHooks, options: { payeeEmail?: string | nu
     guideAnswer: "ok" as "ok" | 404 | "short",
     /** The change check refuses the whole search, as Jira does when an id was deleted or hidden. */
     searchRefused: false,
+    /** Issues the connection may no longer see: a read of one answers 403, and a change check naming one is refused. */
+    forbidden: new Set<string>(),
     /** Every REST call answers 429 for Atlassian's whole pool. */
     quotaSpent: false,
     /** The accounts with each email on the site, as user search answers them. */
@@ -407,13 +409,14 @@ export function jiraWorld(hooks: WorldHooks, options: { payeeEmail?: string | nu
       const ref = issueRoute[1];
       const one = onSite.get(ref) ?? [...onSite.values()].find((candidate) => candidate.key === ref);
       if (!one) return json({ errorMessages: ["Issue does not exist or you do not have permission to see it."], errors: {} }, 404);
+      if (jira.forbidden.has(one.id)) return json({ errorMessages: ["You do not have the permission to see the specified issue."], errors: {} }, 403);
       if (issueRoute[2] === "/remotelink") return json(one.remoteLinks);
       if (issueRoute[2] === "/comment") return json({ comments: one.comments, total: one.comments.length, startAt: 0, maxResults: 50 });
       return json(issueJson(cloud, one, fields.includes("description")));
     }
     if (path === "/search/jql") {
       const ids = (/^id in \(([^)]*)\)$/.exec(url.searchParams.get("jql") ?? "")?.[1] ?? "").split(",").map((id) => id.trim()).filter(Boolean);
-      if (jira.searchRefused || ids.some((id) => !onSite.has(id))) return json({ errorMessages: ["An issue with key '10999' does not exist for field 'id'."] }, 400);
+      if (jira.searchRefused || ids.some((id) => !onSite.has(id) || jira.forbidden.has(id))) return json({ errorMessages: ["An issue with key '10999' does not exist for field 'id'."] }, 400);
       return json({ issues: ids.map((id) => ({ id, fields: { updated: (onSite.get(id) as FakeIssue).updated } })), isLast: true });
     }
     if (path === "/myself") return json({ accountId: OWNER_ATLASSIAN, accountType: "atlassian", active: true });

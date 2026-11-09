@@ -4351,9 +4351,14 @@ offers those with Jira scopes, and one is connected, its cloudId and name kept a
   accepted is read in full (its status, resolution, attachments, 50 web links, and the links in its description and its
   newest 50 comments); any other is read for its status first, one request, and in full in the same call only when that
   says done and not resolved as canceled (`CANCELED_RESOLUTIONS`, `map.ts`). Done is the status category's key `done`,
-  never a status name, and a done issue resolved as Won't Do, Duplicate or the like is `held` (`canceled`). The ledger
-  entries are Jira's own (`jira_issue_linked`, `jira_issue_unlinked`, `jira_issue_ready`, `jira_work_accepted`,
-  `jira_acceptance_withdrawn`); `milestone_criteria_set` is shared. Reads run where Linear's do: the cycle before the
+  never a status name, and a done issue resolved as Won't Do, Duplicate or the like is `held` (`canceled`). A read that
+  finds the issue gone (a 404 or 403, or a link of another site) holds the link `issue_unreachable` whatever it was held
+  for, even after an acceptance (`planJiraRead`, Jira's one rule over Linear's plan), so Accept refuses it and the
+  sweep's change check leaves its id out; an acceptance whose own read finds the issue gone is refused too. Criteria
+  saved for a done issue held without them move the link's state alone (`writeState`), leaving `last_read_at` to the
+  last read, so a delivery sent before the save is still read. The ledger entries are Jira's own (`jira_issue_linked`,
+  `jira_issue_unlinked`, `jira_issue_ready`, `jira_work_accepted`, `jira_acceptance_withdrawn`); `milestone_criteria_set`
+  is shared. Reads run where Linear's do: the cycle before the
   contractor stage and right before sending (`refreshAcceptedWork` and `recheckAcceptedWork`, under `jira`), the sweeper
   every 15 minutes, **Check Jira now** and **Check linked issues now**, and an acceptance, which reads in full.
   `tests/jira-paying-path.test.ts` pins that the paying path reaches Jira only there.

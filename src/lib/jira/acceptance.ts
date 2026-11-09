@@ -1,9 +1,12 @@
 import {
   acceptanceKpis as linearKpis,
+  planRead,
   type AcceptanceEvent,
   type AcceptanceKpis,
   type HeldReason as LinearHeldReason,
+  type LinkFacts,
   type LinkState,
+  type ReadFacts,
   type ReadPlan,
   type WithdrawReason as LinearWithdrawReason,
 } from "../linear/acceptance";
@@ -19,6 +22,7 @@ import {
  * - After acceptance, an issue reopened (or done again at another time), resolved as not done, with a deliverable
  *   changed, or no longer shown by Jira takes the acceptance back before payment executes; the milestone is held.
  * - A held link stays held until a person accepts again: no read moves it back to accepted.
+ * - An issue Jira no longer shows holds its link as unreachable, whatever it was held for before (`planJiraRead`).
  * - Nothing here names an amount, a payee or an address.
  *
  * Jira has no archived state of its own (JR10): what Jira answers for an archived issue is whatever it answers, a 404
@@ -49,6 +53,20 @@ export type JiraReadPlan =
 export function jiraPlan(plan: ReadPlan): JiraReadPlan {
   if (plan.kind === "set") return { ...plan, heldReason: heldReasonOf(plan.heldReason) };
   if (plan.kind === "withdraw") return { kind: "withdraw", reason: heldReasonOf(plan.reason) };
+  return plan;
+}
+
+/**
+ * What a read does to a link (JR10, JR13, JR16): Linear's plan in Jira's reasons, and one rule of Jira's own. A read
+ * that finds the issue gone (a 404 or 403, or a link of another site than the connected one) holds the link
+ * `issue_unreachable`, whatever it was held for before. Linear's plan keeps a link held after an acceptance held for
+ * its old reason, whatever a read says; in Jira that reason would leave Accept offered on an issue Jira no longer shows,
+ * since the facts last read still say done, and the issue's id in every change check, which Jira refuses whole for one
+ * id it cannot find. The link stays held: no read moves a held link to anything but held.
+ */
+export function planJiraRead(link: LinkFacts, read: ReadFacts, options: { criteria: boolean }): JiraReadPlan {
+  const plan = jiraPlan(planRead(link, read, options));
+  if (read.kind === "gone" && plan.kind === "set") return { kind: "set", state: "held", heldReason: "issue_unreachable", becameReady: false };
   return plan;
 }
 

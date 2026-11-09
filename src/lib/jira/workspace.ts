@@ -190,7 +190,11 @@ export type JiraSyncOutcome = "synced" | "busy" | "reconnect" | "failed" | "rate
 const STATE_RANK: Record<IssueLink["state"], number> = { accepted: 0, ready: 1, held: 2, waiting: 3 };
 const sameInstant = (a: string | null, b: string | null) => (a === null || b === null ? a === b : Date.parse(a) === Date.parse(b));
 const readAt = (link: IssueLink) => (link.lastReadAt === null ? 0 : Date.parse(link.lastReadAt));
-/** A link held because Jira no longer shows its issue: the change check leaves it out, since Jira would refuse its id. */
+/**
+ * A link held because Jira no longer shows its issue, as every read that finds it gone leaves it, whatever it was held
+ * for before (`planJiraRead`): the change check leaves it out, since Jira refuses the whole search for one id it cannot
+ * find, and only its daily floor reads it again.
+ */
 const unreachable = (link: IssueLink) => link.state === "held" && link.heldReason === "issue_unreachable";
 
 /**

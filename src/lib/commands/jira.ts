@@ -5,7 +5,7 @@ import { ProviderError } from "../connectors/provider";
 import { parseGitHubPullRequestUrl } from "../github-verification";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { LinearNotSetUpError, liveLinks as linearLinks } from "../linear/links";
-import { ACCEPTED_ACTION, acceptable, jiraPlan, planRead, selfAcceptance, SELF_WORDS, stateWords, type Identities } from "../jira/acceptance";
+import { ACCEPTED_ACTION, acceptable, planJiraRead, selfAcceptance, SELF_WORDS, stateWords, type Identities } from "../jira/acceptance";
 import type { IssueRead } from "../jira/api";
 import { identitiesOf } from "../jira/identities";
 import {
@@ -20,6 +20,7 @@ import {
   unlinkLink,
   writeCriteria,
   writeRead,
+  writeState,
   type AcceptError,
   type IssueLink,
 } from "../jira/links";
@@ -200,7 +201,7 @@ export async function linkJiraIssue(actor: Actor, input: { milestoneId: string; 
         : refused("milestone_linked", "This milestone is linked to a Jira issue already. Unlink it first.");
     }
     const link = inserted.link;
-    const plan = jiraPlan(planRead(factsOf(link), facts.plan, { criteria: milestone.criteria !== null }));
+    const plan = planJiraRead(factsOf(link), facts.plan, { criteria: milestone.criteria !== null });
     const next = plan.kind === "set" ? { state: plan.state, heldReason: plan.heldReason } : null;
     await writeRead(link, facts.write, next, startedIso);
     await appendLedgerEntryBestEffort(actor.orgId, {
@@ -273,20 +274,22 @@ export async function unlinkJiraIssue(actor: Actor, input: { milestoneId: string
 /**
  * Writes the criteria of a milestone linked to Jira, or to be (JR7): `milestones.acceptance_criteria`, through Linear's
  * `writeCriteria`, held to the Jira link: never once its work was accepted, and a done issue held for want of criteria is
- * ready for acceptance at once.
+ * ready for acceptance at once, from what was last read of it. No read is made, so the link keeps the start of its last
+ * read (JR15): a delivery sent since is still read.
  */
-export async function setJiraAcceptanceCriteria(actor: Actor, input: { milestoneId: string; criteria: string }): Promise<CommandOutcome> {
+export async function setJiraAcceptanceCriteria(actor: Actor, input: { milestoneId: string; criteria: string }, deps: Pick<JiraCommandDeps, "now"> = {}): Promise<CommandOutcome> {
   const refusal = gate(actor, "milestone.set_issue_criteria");
   if (refusal) return refusal;
   if (!UUID.test(input.milestoneId)) return refused("not_found", "Milestone not found.");
   const criteria = input.criteria.replace(/\r\n/g, "\n").trim();
   if (criteria.length < CRITERIA_MIN || criteria.length > CRITERIA_MAX) return refused("criteria", `Write the acceptance criteria from the agreement: ${CRITERIA_MIN} to ${CRITERIA_MAX} characters.`);
+  const nowIso = new Date((deps.now ?? Date.now)()).toISOString();
   try {
     const milestone = (await milestonesForAcceptance([input.milestoneId])).get(input.milestoneId);
     if (!milestone) return refused("not_found", "Milestone not found.");
     const link = (await liveLinks({ milestoneIds: [milestone.id] }))[0] ?? null;
     if (link?.state === "accepted") return refused("accepted", "The work was accepted against these criteria. Unlink the issue to change them.");
-    if (!(await writeCriteria(milestone.id, criteria, actor.userId, new Date().toISOString()))) {
+    if (!(await writeCriteria(milestone.id, criteria, actor.userId, nowIso))) {
       return refused("milestone_not_open", "Criteria are written while the milestone waits for verification.");
     }
     await appendLedgerEntryBestEffort(actor.orgId, {
@@ -296,9 +299,10 @@ export async function setJiraAcceptanceCriteria(actor: Actor, input: { milestone
       summary: `Set the acceptance criteria of milestone “${milestone.title}”`,
       detail: { by: actor.userId, milestoneId: milestone.id, criteria, criteriaSha256: sha256(criteria), previousSha256: milestone.criteria ? sha256(milestone.criteria) : null },
     });
-    // A done issue held for want of criteria is ready for acceptance now, from what was last read of it.
+    // A done issue held for want of criteria is ready for acceptance now, from what was last read of it: its state alone
+    // moves, and only from that hold, so the next delivery and the accept's own full read still see what changed since.
     if (link && link.completed && link.state === "held" && link.heldReason === "no_criteria" && link.fingerprint) {
-      await writeRead(link, null, { state: "ready", heldReason: null }, new Date().toISOString());
+      await writeState(link, { state: "ready", heldReason: null }, nowIso);
     }
     return done("Criteria saved. They are what the work is accepted against.");
   } catch (error) {
@@ -349,6 +353,12 @@ export async function acceptJiraWork(
     if (read.kind === "failed") return refused("jira_unavailable", read.message);
     const fresh = (await liveLinks({ milestoneIds: [link.milestoneId] }))[0];
     if (!fresh) return refused("not_linked", ACCEPT_WORDS.link_not_found);
+    // Jira no longer shows the issue (JR13): nothing is accepted from it, whatever the facts last read of it say. The read
+    // held the link unreachable; this holds even when another write moved it in between.
+    if (read.gone) {
+      const words = stateWords("held", "issue_unreachable", false);
+      return refused("not_ready", `${words.label}. ${words.line}`, { changed: true });
+    }
     if (fresh.fingerprint !== input.fingerprint) return refused("stale", ACCEPT_WORDS.stale, { changed: true });
     // Jira has no archived state (JR10): what it answers for an archived issue is what the read held.
     if (!acceptable(fresh, { completed: fresh.completed, archived: false, criteria: milestone.criteria !== null, milestoneStatus: milestone.status })) {

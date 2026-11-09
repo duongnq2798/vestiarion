@@ -4,10 +4,10 @@ import { acceptJiraWork, checkJiraIssue, linkJiraIssue, MISSING_WORDS, setJiraAc
 import { payMilestoneNow } from "@/lib/commands/milestones";
 import { COMMAND_PERMISSIONS, SURFACE_COMMANDS } from "@/lib/commands/policy";
 import { syncErrorWords } from "@/lib/connectors/status";
-import { stateWords } from "@/lib/jira/acceptance";
+import { acceptable, HELD_LINES, stateWords } from "@/lib/jira/acceptance";
 import { approvesOwnJiraPayout, identitiesOf } from "@/lib/jira/identities";
 import { selfAcceptance } from "@/lib/jira/acceptance";
-import { acceptLink, liveLinks, milestonesForAcceptance } from "@/lib/jira/links";
+import { acceptLink, liveLinks, milestonesForAcceptance, writeState } from "@/lib/jira/links";
 import { readLink, type LinkDepth } from "@/lib/jira/reads";
 import { siteRef } from "@/lib/jira/sites";
 import type { JiraDeliveryEvent } from "@/lib/jira/webhook";
@@ -298,6 +298,35 @@ describe("an acceptance taken back (JR13)", () => {
     expect(entries("jira_acceptance_withdrawn")).toHaveLength(1);
   });
 
+  it.each([
+    ["deleted (404)", (world: JiraWorld): void => void world.issues.get(CLOUD)?.delete(ENG_142)],
+    ["hidden from the connection (403)", (world: JiraWorld): void => void world.jira.forbidden.add(ENG_142)],
+    ["on a site no longer connected", (world: JiraWorld): void => world.connectSouthwind()],
+  ] as const)("accepts nothing from an issue taken back for its deliverables and then %s", async (_what, move) => {
+    seedFreshSite(w);
+    await acceptedExport(w);
+    w.clock.now += MINUTE;
+    w.fakeIssue(ENG_142).remoteLinks.push({ id: 9001, object: { url: "https://github.com/northstar/app/pull/7", title: "PR 7" } });
+    w.change(ENG_142, {});
+    await readNow(w, EXPORT);
+    // Held for its deliverables, still done, with the new version's fingerprint: a person may accept that version.
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "deliverable_changed", completed: true });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+    w.clock.now += MINUTE;
+    move(w);
+    ledger.mockReset();
+    runSoon.mockReset();
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: false, code: "not_ready", message: `Held for review. ${HELD_LINES.issue_unreachable}`, changed: true });
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "issue_unreachable" });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false, verification_status: "unverified" });
+    expect(entries("jira_work_accepted")).toHaveLength(0);
+    expect(runSoon).not.toHaveBeenCalled();
+    // The card no longer offers it, and accepting again stays refused.
+    expect(acceptable(await w.live(EXPORT), { completed: true, archived: false, criteria: true, milestoneStatus: "pending" })).toBe(false);
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: false, code: "not_ready" });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+  });
+
   it("holds the old site's links with no request once another site is connected, and never reads the new site's issue of the same id", async () => {
     seedFreshSite(w);
     await acceptedExport(w);
@@ -463,6 +492,32 @@ describe("the sweep (JR16)", () => {
     const read = readCalls(w).filter((call) => call.startsWith("GET /issue/")).map((call) => call.split(" ")[1].replace("/issue/", ""));
     expect(read).toEqual(ids.slice(0, 20));
     expect(readCalls(w).filter((call) => call.startsWith("GET /search/"))).toHaveLength(1);
+    expect(warn.mock.calls.filter(([message]) => String(message).includes("change check was refused"))).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it("leaves an issue deleted after its acceptance was taken back out of the change check, so the check answers again", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    await acceptedExport(w);
+    await w.link(DOCS, ENG_143);
+    await readNow(w, DOCS);
+    w.clock.now += MINUTE;
+    w.reopen(ENG_142);
+    await readNow(w, EXPORT);
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "reopened" });
+    // Deleted in Jira: the next change check names it, so Jira refuses it whole and that sweep reads every link.
+    w.issues.get(CLOUD)?.delete(ENG_142);
+    w.clock.now += 15 * MINUTE;
+    w.jira.calls.length = 0;
+    await sweep(w);
+    expect(readCalls(w)).toEqual([`GET /search/jql id in (${ENG_142}, ${ENG_143}) updated`, "GET /issue/10042 status", "GET /issue/10043 status"]);
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "issue_unreachable" });
+    // Held as unreachable now: left out of the check, which answers again, and nothing unchanged is read.
+    w.clock.now += 15 * MINUTE;
+    w.jira.calls.length = 0;
+    await sweep(w);
+    expect(readCalls(w)).toEqual([`GET /search/jql id in (${ENG_143}) updated`]);
     expect(warn.mock.calls.filter(([message]) => String(message).includes("change check was refused"))).toHaveLength(1);
     warn.mockRestore();
   });
@@ -652,7 +707,7 @@ const deps = (): JiraCommandDeps => ({ provider: w.provider, now: () => w.clock.
 const linkIssue = (milestoneId: string, issue: string, who: Actor = actor()) => w.run(() => linkJiraIssue(who, { milestoneId, issue }, deps()));
 const unlinkIssue = (milestoneId: string, who: Actor = actor()) => w.run(() => unlinkJiraIssue(who, { milestoneId }, deps()));
 const checkIssue = (milestoneId: string, who: Actor = actor()) => w.run(() => checkJiraIssue(who, { milestoneId }, deps()));
-const setCriteria = (milestoneId: string, criteria: string, who: Actor = actor()) => w.run(() => setJiraAcceptanceCriteria(who, { milestoneId, criteria }));
+const setCriteria = (milestoneId: string, criteria: string, who: Actor = actor()) => w.run(() => setJiraAcceptanceCriteria(who, { milestoneId, criteria }, deps()));
 /** An acceptance of what the card last showed: the link's fingerprint and the milestone's criteria, unless told otherwise. */
 const acceptWork = (milestoneId: string, who: Actor = actor(), shown: { fingerprint?: string; criteriaSha256?: string; confirmed?: boolean } = {}) =>
   w.run(() =>
@@ -913,6 +968,43 @@ describe("criteria through the command (JR7)", () => {
     expect(await acceptWork(DOCS)).toMatchObject({ ok: true });
     expect(await setCriteria(DOCS, "Something else entirely.")).toMatchObject({ ok: false, code: "accepted" });
     expect(w.milestone(DOCS).acceptance_criteria).toBe(criteria);
+  });
+
+  it("makes the link ready without marking a read, so Jira's notice of a file added just before the criteria is still read", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    w.database.rows("jira_sites")[0].webhook_ids = [101];
+    w.done(ENG_143);
+    expect(await linkIssue(DOCS, "ENG-143")).toMatchObject({ ok: true, state: "held" });
+    const lastRead = w.row(DOCS).last_read_at;
+    const shown = w.row(DOCS).deliverable_fingerprint;
+    // The contractor adds the final web link; a person saves the criteria 20 s later, before Jira's notice arrives.
+    w.clock.now += MINUTE;
+    w.fakeIssue(ENG_143).remoteLinks.push({ id: 9002, object: { url: "https://github.com/northstar/app/pull/8", title: "PR 8" } });
+    w.change(ENG_143, {});
+    const added = w.clock.now;
+    w.clock.now += 20_000;
+    expect(await setCriteria(DOCS, "The export, CSV and PDF, with tests.")).toMatchObject({ ok: true });
+    expect(w.row(DOCS)).toMatchObject({ state: "ready", held_reason: null, held_at: null, last_read_at: lastRead, deliverable_fingerprint: shown });
+    // The notice is read: the card shows the new version, and accepting the one shown before is refused as stale.
+    w.clock.now += MINUTE;
+    expect(await deliver(w, { issueId: ENG_143, timestamp: added })).toBe(1);
+    expect(w.row(DOCS)).toMatchObject({ state: "ready", last_read_at: w.iso() });
+    expect(w.row(DOCS).deliverable_fingerprint).not.toBe(shown);
+    expect(await acceptWork(DOCS, actor(), { fingerprint: String(shown) })).toMatchObject({ ok: false, code: "stale" });
+  });
+
+  it("moves no link whose hold changed since it was seen: criteria never make an issue Jira no longer shows ready", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    w.done(ENG_143);
+    await linkIssue(DOCS, "ENG-143");
+    const seen = await w.live(DOCS);
+    expect(seen).toMatchObject({ state: "held", heldReason: "no_criteria" });
+    w.issues.get(CLOUD)?.delete(ENG_143);
+    await checkIssue(DOCS);
+    expect(w.row(DOCS)).toMatchObject({ state: "held", held_reason: "issue_unreachable" });
+    expect(await w.run(() => writeState(seen, { state: "ready", heldReason: null }, w.iso()))).toBe(false);
+    expect(await setCriteria(DOCS, "The export, CSV and PDF, with tests.")).toMatchObject({ ok: true });
+    expect(w.row(DOCS)).toMatchObject({ state: "held", held_reason: "issue_unreachable" });
   });
 });
 

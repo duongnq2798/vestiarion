@@ -120,6 +120,8 @@ After the work was accepted, any of these takes the acceptance back:
 
 The acceptance is taken back when Vestiarion reads that before the payment is sent: when Jira says the issue changed, right before the agent decides on contractors, once more right before it sends the payment, at the 15-minute check, or on **Check Jira now**. The milestone waits for verification again and the card says **Held for review**, with why, such as "The issue was reopened in Jira after the work was accepted, so the acceptance was taken back before any payment. Accept it again once it is done." The ledger records `jira_acceptance_withdrawn`, with why. Accept the work again once the issue is done, against what Jira shows now.
 
+If Jira then stops showing the issue (it is deleted or archived, the person who connected Jira loses access to its project, or another Jira site is connected), the card says so in place of the first reason, and nothing is accepted from it, even from the deliverables read before. Link another issue, or unlink this one and link it again once Jira shows it.
+
 <Screenshot
   src="/docs/guides/jira-held.png"
   alt="The milestone Webhook retries with backoff and its Jira card for ENG-142, both Held for review: The issue was reopened in Jira after the work was accepted, so the acceptance was taken back before any payment. Accept it again once it is done. Below, In Progress in Jira: not done yet, the deliverables in Jira, and the criteria."

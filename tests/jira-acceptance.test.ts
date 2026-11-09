@@ -6,6 +6,7 @@ import {
   HELD_LINES,
   heldReasonOf,
   jiraPlan,
+  planJiraRead,
   planRead,
   SELF_WORDS,
   selfAcceptance,
@@ -358,6 +359,28 @@ describe("what a read does to a link (JR10, JR13)", () => {
       const held = { ...accepted, state: "held" as const, heldReason: reason };
       expect(jiraPlan(planRead(held, read(), { criteria: true }))).toEqual({ kind: "set", state: "held", heldReason: reason, becameReady: false });
     }
+  });
+
+  it("holds a link Jira no longer shows as unreachable, whatever it was held for, even after an acceptance or a payment", () => {
+    const unreachable = { kind: "set", state: "held", heldReason: "issue_unreachable", becameReady: false };
+    for (const reason of ["reopened", "canceled", "deliverable_changed", "issue_unreachable", "no_criteria"] as const) {
+      const links = [linkFacts({ state: "held", heldReason: reason }), { ...accepted, state: "held" as const, heldReason: reason }, { ...accepted, state: "held" as const, heldReason: reason, afterPayment: true }];
+      for (const link of links) {
+        for (const gone of ["not_found", "forbidden"] as const) {
+          for (const criteria of [true, false]) expect(planJiraRead(link, { kind: "gone", reason: gone }, { criteria })).toEqual(unreachable);
+        }
+      }
+    }
+    // Linear's plan alone keeps the old reason, which Accept and the change check would not refuse: the rule is Jira's.
+    const changed = { ...accepted, state: "held" as const, heldReason: "deliverable_changed" as const };
+    expect(jiraPlan(planRead(changed, { kind: "gone", reason: "not_found" }, { criteria: true }))).toEqual({ kind: "set", state: "held", heldReason: "deliverable_changed", becameReady: false });
+    expect(acceptable(changed, { completed: true, archived: false, criteria: true, milestoneStatus: "pending" })).toBe(true);
+    expect(acceptable({ ...changed, heldReason: "issue_unreachable" }, { completed: true, archived: false, criteria: true, milestoneStatus: "pending" })).toBe(false);
+    // Any other read is Linear's plan: a found issue keeps the hold, an accepted one gone is taken back.
+    expect(planJiraRead(changed, read(), { criteria: true })).toEqual({ kind: "set", state: "held", heldReason: "deliverable_changed", becameReady: false });
+    expect(planJiraRead(accepted, { kind: "gone", reason: "forbidden" }, { criteria: true })).toEqual({ kind: "withdraw", reason: "issue_unreachable" });
+    expect(planJiraRead(linkFacts(), { kind: "gone", reason: "not_found" }, { criteria: true })).toEqual(unreachable);
+    expect(planJiraRead(linkFacts(), read(), { criteria: true })).toEqual({ kind: "set", state: "ready", heldReason: null, becameReady: true });
   });
 
   it("never yields archived: no Jira read says it, and were Linear's plan ever to answer it, it is an issue Jira no longer shows", () => {
