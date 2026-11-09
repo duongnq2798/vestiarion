@@ -114,6 +114,7 @@ import { Input } from "@/components/ui/Input";
 import { CrmReceiptCard } from "@/components/CrmReceiptCard";
 import { receiptView } from "@/lib/connectors/crm-receipts-view";
 import { RECEIPT_ROWS, RECEIPTS_CONNECTED, RECEIPTS_DEAL_ID, RECEIPTS_PANELS } from "./crm-receipts-fixture";
+import { JiraMilestoneState, JiraSettingsState } from "./jira-states";
 
 /**
  * The screenshots in the user guides, one state each, rendered by the app's
@@ -147,6 +148,7 @@ export interface DocsShot {
     | "xero"
     | "quickbooks"
     | "hubspot"
+    | "jira"
     | "payment-plan"
     | "report"
     | "workspace"
@@ -2374,6 +2376,37 @@ export const DOCS_SHOTS = {
     page: "invoices",
     // The Receivables tab's list: a claim of payment, and a dispute with a member's reply.
     render: () => <FromCustomers orgSlug={SLUG} items={fromCustomersShot((id) => orgHref(SLUG, `/invoices?tab=receivables&open=${id}`), { kinds: ["paid", "dispute"] })} canWrite />,
+  },
+  "jira-settings": {
+    guide: "jira",
+    page: "settings",
+    sub: SETTINGS_SUB,
+    // Connected to the Northstar site: its notices, its linked issues and the last 30 days' figures (JR21).
+    render: () => <JiraSettingsState />,
+  },
+  "jira-link": {
+    guide: "jira",
+    page: "contractors",
+    // A milestone's Jira card before an issue is linked: the issue's link and the criteria fields.
+    render: () => <JiraMilestoneState state="link" />,
+  },
+  "jira-ready": {
+    guide: "jira",
+    page: "contractors",
+    // ENG-142 done in Jira, its deliverables listed, waiting for a person to accept it against its criteria.
+    render: () => <JiraMilestoneState state="ready" />,
+  },
+  "jira-accepted": {
+    guide: "jira",
+    page: "contractors",
+    // Accepted by a member: the milestone is verified, and pays on the next cycle.
+    render: () => <JiraMilestoneState state="accepted" />,
+  },
+  "jira-held": {
+    guide: "jira",
+    page: "contractors",
+    // Reopened in Jira after it was accepted: the acceptance is taken back and the milestone held for review.
+    render: () => <JiraMilestoneState state="held" />,
   },
 } satisfies Record<string, DocsShot>;
 

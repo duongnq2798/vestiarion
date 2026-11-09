@@ -4392,7 +4392,8 @@ offers those with Jira scopes, and one is connected, its cloudId and name kept a
   Atlassian's API (`jira_issue`, see "Evidence links people can open"). The accountant console's Work to accept lists
   Jira's ready and held links. `/integrations/jira` and `/integrations/jira/connect` (which offers the sites to choose
   from) are Linear's pages for Jira; `/docs-shots/jira/<state>` draws the card and its states with sample data
-  (`src/app/docs-shots/jira-fixture.ts`).
+  (`src/app/docs-shots/jira-fixture.ts`, drawn by `src/app/docs-shots/jira-states.tsx`), and the Jira guide's five
+  screenshots (`jira-<state>` in `src/app/docs-shots/shots.tsx`) are the same states.
 - **Before migration 0149**, reads answer not set up: the Settings card says so, Contractors shows no Jira controls,
   the cycle and the sweeper read nothing, and the connect flow sends no one to Atlassian.
 
