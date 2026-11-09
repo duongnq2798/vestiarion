@@ -6,6 +6,7 @@ export { addPayableDetails, approvePayable, heldMessage, rejectPayable, returnPa
 export { addMilestone, closeMilestoneUnpaid, payMilestoneNow } from "./milestones";
 export { acceptMilestoneWork, checkAsanaTask, linkAsanaTask, setAcceptanceCriteria, unlinkAsanaTask } from "./asana";
 export { acceptLinearWork, checkLinearIssue, linkLinearIssue, setLinearAcceptanceCriteria, unlinkLinearIssue } from "./linear";
+export { acceptJiraWork, checkJiraIssue, linkJiraIssue, setJiraAcceptanceCriteria, unlinkJiraIssue } from "./jira";
 export { pauseWorkspaceAgent, resumeWorkspaceAgent, runWorkspaceCycle } from "./agent";
 export { addInvoice } from "./invoices";
 export { importInvoices, type ImportOutcome } from "./imports";

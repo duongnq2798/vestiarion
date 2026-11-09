@@ -114,6 +114,8 @@ function world(options: { payeeEmail?: string | null; ownerAsanaIsPayee?: boolea
     ],
     counterparties: [{ id: FERNHILL, org_id: ORG, name: "Fernhill Studio", notice_email: options.payeeEmail === undefined ? "mai@fernhill.example" : options.payeeEmail }],
     asana_task_links: [],
+    linear_issue_links: [],
+    jira_issue_links: [],
     payment_intents: [],
   };
   const members = [
@@ -356,6 +358,33 @@ describe("two milestones accepted", () => {
     expect(w.asanaCalls).toHaveLength(0);
     await w.run(() => linkAsanaTask(actor(), { milestoneId: LOGO, taskUrl: `https://app.asana.com/0/${PROJECT}/${LOGO_TASK}` }, { provider: w.provider }));
     expect(await w.run(() => linkAsanaTask(actor(), { milestoneId: POSTS, taskUrl: `https://app.asana.com/0/${PROJECT}/${LOGO_TASK}` }, { provider: w.provider }))).toMatchObject({ ok: false, code: "task_linked" });
+  });
+
+  it("refuses a milestone linked to a Linear issue or a Jira issue, before asking Asana anything: one tool per milestone (Jira acceptance JR6)", async () => {
+    const w = world();
+    const linkLogo = () => w.run(() => linkAsanaTask(actor(), { milestoneId: LOGO, taskUrl: `https://app.asana.com/0/${PROJECT}/${LOGO_TASK}` }, { provider: w.provider }));
+    w.tables.linear_issue_links.push({
+      id: crypto.randomUUID(), org_id: ORG, milestone_id: LOGO, connection_id: "conn-linear", issue_id: "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c01", identifier: "ENG-123", team_id: null,
+      team_key: "ENG", issue_title: "Logo animation", issue_url: null, state: "waiting", held_reason: null, after_payment: false, held_at: null, state_type: "started", state_name: "In Progress",
+      completed: false, completed_at: null, archived: false, deliverables: [], deliverable_fingerprint: null, attachments_read: 0, comments_read: 0, more_unread: false, issue_updated_at: null,
+      last_read_at: null, read_error: null, accepted_by: null, accepted_at: null, accepted_fingerprint: null, accepted_completed_at: null, accepted_criteria_sha256: null,
+      accepted_deliverables: null, linked_by: ADMIN, linked_at: "2026-10-14T08:00:00Z", unlinked_by: null, unlinked_at: null, updated_at: "2026-10-14T08:00:00Z",
+    });
+    expect(await linkLogo()).toMatchObject({ ok: false, code: "linear", message: "This milestone is linked to a Linear issue. Unlink the issue first to accept the work from Asana." });
+    w.tables.linear_issue_links[0].unlinked_at = "2026-10-14T08:30:00Z";
+    w.tables.jira_issue_links.push({
+      id: crypto.randomUUID(), org_id: ORG, milestone_id: LOGO, connection_id: "conn-jira", cloud_id: "4f6c3a2e-8b1d-4e7a-9c2f-1a0b3c4d5e6f", issue_id: "10042", identifier: "ENG-142",
+      project_id: "10000", project_key: "ENG", issue_title: "Logo animation", issue_url: "https://northstar.atlassian.net/browse/ENG-142", state: "waiting", held_reason: null,
+      after_payment: false, held_at: null, status_category: "indeterminate", status_name: "In Progress", resolution_name: null, completed: false, completed_at: null, deliverables: [],
+      deliverable_fingerprint: null, attachments_read: 0, remote_links_read: 0, comments_read: 0, more_unread: false, issue_updated_at: null, last_read_at: null, read_error: null,
+      accepted_by: null, accepted_at: null, accepted_fingerprint: null, accepted_completed_at: null, accepted_criteria_sha256: null, accepted_deliverables: null, linked_by: ADMIN,
+      linked_at: "2026-10-14T08:00:00Z", unlinked_by: null, unlinked_at: null, updated_at: "2026-10-14T08:00:00Z",
+    });
+    expect(await linkLogo()).toMatchObject({ ok: false, code: "jira", message: "This milestone is linked to a Jira issue. Unlink the issue first to accept the work from Asana." });
+    expect(w.asanaCalls).toHaveLength(0);
+    expect(w.tables.asana_task_links).toHaveLength(0);
+    w.tables.jira_issue_links[0].unlinked_at = "2026-10-14T08:30:00Z";
+    expect(await linkLogo()).toMatchObject({ ok: true });
   });
 });
 

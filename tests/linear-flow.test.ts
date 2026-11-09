@@ -182,6 +182,7 @@ function world(options: { payeeEmail?: string | null; ownerLinearIsPayee?: boole
     counterparties: [{ id: FERNHILL, org_id: ORG, name: "Fernhill Studio", notice_email: options.payeeEmail === undefined ? "mai@fernhill.example" : options.payeeEmail }],
     linear_issue_links: [],
     asana_task_links: [],
+    jira_issue_links: [],
     payment_intents: [],
   };
   const members = [
@@ -547,6 +548,27 @@ describe("two milestones accepted (LN4 to LN8)", () => {
       accepted_fingerprint: null, accepted_completed_at: null, accepted_deliverables: null, linked_at: "2026-10-31T08:00:00Z", unlinked_at: null,
     });
     expect(await w.run(() => linkLinearIssue(actor(), { milestoneId: DOCS, issue: "ENG-124" }, { provider: w.provider }))).toMatchObject({ ok: false, code: "asana" });
+  });
+
+  it("refuses a milestone linked to a Jira issue, before asking Linear anything, and links it once that is unlinked (Jira acceptance JR6)", async () => {
+    const w = world();
+    w.tables.jira_issue_links.push({
+      id: crypto.randomUUID(), org_id: ORG, milestone_id: DOCS, connection_id: "conn-jira", cloud_id: "4f6c3a2e-8b1d-4e7a-9c2f-1a0b3c4d5e6f", issue_id: "10042", identifier: "ENG-142",
+      project_id: "10000", project_key: "ENG", issue_title: "Docs site", issue_url: "https://northstar.atlassian.net/browse/ENG-142", state: "waiting", held_reason: null,
+      after_payment: false, held_at: null, status_category: "indeterminate", status_name: "In Progress", resolution_name: null, completed: false, completed_at: null, deliverables: [],
+      deliverable_fingerprint: null, attachments_read: 0, remote_links_read: 0, comments_read: 0, more_unread: false, issue_updated_at: null, last_read_at: null, read_error: null,
+      accepted_by: null, accepted_at: null, accepted_fingerprint: null, accepted_completed_at: null, accepted_criteria_sha256: null, accepted_deliverables: null, linked_by: ADMIN,
+      linked_at: "2026-10-31T08:00:00Z", unlinked_by: null, unlinked_at: null, updated_at: "2026-10-31T08:00:00Z",
+    });
+    expect(await w.run(() => linkLinearIssue(actor(), { milestoneId: DOCS, issue: "ENG-124" }, { provider: w.provider }))).toMatchObject({
+      ok: false,
+      code: "jira",
+      message: "This milestone is linked to a Jira issue. Unlink the issue first to accept the work from Linear.",
+    });
+    expect(w.linearCalls).toHaveLength(0);
+    expect(w.tables.linear_issue_links).toHaveLength(0);
+    w.tables.jira_issue_links[0].unlinked_at = "2026-10-31T08:30:00Z";
+    expect(await w.run(() => linkLinearIssue(actor(), { milestoneId: DOCS, issue: "ENG-124" }, { provider: w.provider }))).toMatchObject({ ok: true });
   });
 
   it("links only a milestone waiting for verification, and none a GitHub pull request verifies, before asking Linear anything (Linear acceptance LN4)", async () => {

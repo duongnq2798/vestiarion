@@ -188,6 +188,45 @@ describe("verifying a milestone by hand", () => {
     expect(fake.requests.filter((sent) => sent.path === "/rest/v1/milestones" && sent.method !== "GET")).toHaveLength(0);
     expect(mocks.appendLedgerEntry).not.toHaveBeenCalled();
   });
+
+  /** A milestone whose live link to a Jira issue is in `state`, as 0149 keeps it. */
+  const jiraLinked = (state: "waiting" | "accepted", verified: boolean) =>
+    fakeSupabase((sent) => {
+      if (sent.path === "/rest/v1/milestones" && sent.method === "GET") {
+        return { body: [{ id: MILESTONE, title: "Shipped", verified, status: verified ? "verified" : "pending", verification_source: null }] };
+      }
+      if (sent.path === "/rest/v1/jira_issue_links" && sent.method === "GET") {
+        const at = "2026-11-09T08:00:00Z";
+        const accepted = state === "accepted";
+        return {
+          body: [
+            {
+              id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001d1", milestone_id: MILESTONE, connection_id: "0b6c1c9e-4a4f-4a7e-9b1e-0000000001d2", cloud_id: "4f6c3a2e-8b1d-4e7a-9c2f-1a0b3c4d5e6f",
+              issue_id: "10042", identifier: "ENG-142", state, held_at: null, completed: accepted, completed_at: accepted ? at : null, issue_updated_at: at, last_read_at: at,
+              accepted_at: accepted ? at : null, accepted_completed_at: accepted ? at : null, deliverables: [], accepted_deliverables: accepted ? [] : null, linked_at: at,
+            },
+          ],
+        };
+      }
+      return workspace(sent);
+    });
+
+  it("refuses to revoke a milestone accepted from a Jira issue, whose acceptance is taken back by unlinking it (Jira acceptance JR13)", async () => {
+    fake = jiraLinked("accepted", true);
+    const result = await manualMilestoneVerificationAction(empty, form({ milestoneId: MILESTONE, intent: "revoke", note: "Not merged after all" }));
+    expect(result).toEqual({ ok: false, message: "This milestone's work was accepted from its Jira issue. Unlink the issue to take the acceptance back." });
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/milestones" && sent.method !== "GET")).toHaveLength(0);
+    expect(mocks.appendLedgerEntry).not.toHaveBeenCalled();
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses to verify by hand a milestone linked to a Jira issue, whose work is accepted there (Jira acceptance JR11)", async () => {
+    fake = jiraLinked("waiting", false);
+    const result = await manualMilestoneVerificationAction(empty, form({ milestoneId: MILESTONE, intent: "verify", note: "Shipped and reviewed" }));
+    expect(result).toEqual({ ok: false, message: "This milestone's work is accepted from its Jira issue. Accept it there against its criteria, or unlink the issue first." });
+    expect(fake.requests.filter((sent) => sent.path === "/rest/v1/milestones" && sent.method !== "GET")).toHaveLength(0);
+    expect(raiseMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("returning a payable to the agent", () => {

@@ -4,6 +4,7 @@ import { AsanaNotSetUpError, liveLinks as asanaLinks } from "../asana/links";
 import { ProviderError } from "../connectors/provider";
 import { parseGitHubPullRequestUrl } from "../github-verification";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
+import { JiraNotSetUpError, liveLinks as jiraLinks } from "../jira/links";
 import { ACCEPTED_ACTION, acceptable, planRead, selfAcceptance, SELF_WORDS, stateWords, type Identities } from "../linear/acceptance";
 import { identitiesOf } from "../linear/identities";
 import {
@@ -82,6 +83,16 @@ async function linkedInAsana(milestoneId: string): Promise<boolean> {
   }
 }
 
+/** Whether the milestone is linked to a Jira issue (Jira acceptance JR6). Never, before 0149. */
+async function linkedInJira(milestoneId: string): Promise<boolean> {
+  try {
+    return (await jiraLinks({ milestoneIds: [milestoneId] })).length > 0;
+  } catch (error) {
+    if (error instanceof JiraNotSetUpError) return false;
+    throw error;
+  }
+}
+
 export async function linkLinearIssue(actor: Actor, input: { milestoneId: string; issue: string }, deps: { provider?: LinearProvider | null } = {}): Promise<CommandOutcome<{ linkId: string; state: string }>> {
   const refusal = gate(actor, "milestone.link_issue");
   if (refusal) return refusal;
@@ -97,10 +108,11 @@ export async function linkLinearIssue(actor: Actor, input: { milestoneId: string
     if (milestone.status !== "pending") {
       return refused("milestone_not_open", milestone.status === "paid" || milestone.status === "closed" ? "This milestone is done: nothing is linked to it now." : "This milestone is verified already. Revoke its verification first to accept it from Linear.");
     }
-    // A merged pull request verifies its milestone on its own (GitHub check), and an Asana task is accepted on its own
-    // (Asana acceptance A8): one milestone is not verified two ways.
+    // A merged pull request verifies its milestone on its own (GitHub check), and an Asana task or a Jira issue is
+    // accepted on its own (Asana acceptance A8, Jira acceptance JR6): one milestone is not verified two ways.
     if (parseGitHubPullRequestUrl(milestone.verificationSource)) return refused("github", "This milestone is verified by its GitHub pull request. Add a new milestone to accept work from Linear.");
     if (await linkedInAsana(milestone.id)) return refused("asana", "This milestone is linked to an Asana task. Unlink the task first to accept the work from Linear.");
+    if (await linkedInJira(milestone.id)) return refused("jira", "This milestone is linked to a Jira issue. Unlink the issue first to accept the work from Linear.");
     if ((await liveLinks({ milestoneIds: [milestone.id] })).length > 0) return refused("milestone_linked", "This milestone is linked to a Linear issue already. Unlink it first.");
 
     let read;

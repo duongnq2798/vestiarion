@@ -22,6 +22,8 @@ import type { AsanaProvider } from "../asana/provider";
 import { identitiesOf } from "../asana/identities";
 import { factsFromRead, readFailureWords, readLink } from "../asana/reads";
 import { ProviderError } from "../connectors/provider";
+import { JiraNotSetUpError, liveLinks as jiraLinks } from "../jira/links";
+import { LinearNotSetUpError, liveLinks as linearLinks } from "../linear/links";
 import { AsanaAccessError } from "../asana/session";
 import { taskRefOf } from "../asana/urls";
 import { asanaContext, markReconnect, needsReconnect, startWebhook, stopWebhooks, type AsanaContext } from "../asana/workspace";
@@ -69,6 +71,28 @@ function notSetUp(error: unknown): Refused | null {
   return error instanceof AsanaNotSetUpError ? refused("not_set_up", MISSING_WORDS.not_set_up) : null;
 }
 
+/**
+ * Whether the milestone is linked to a Linear issue, or to a Jira issue: one milestone is accepted from one tool, which
+ * the server holds to, not only the cards (Jira acceptance JR6). Never, before 0147 or 0149.
+ */
+async function linkedInLinear(milestoneId: string): Promise<boolean> {
+  try {
+    return (await linearLinks({ milestoneIds: [milestoneId] })).length > 0;
+  } catch (error) {
+    if (error instanceof LinearNotSetUpError) return false;
+    throw error;
+  }
+}
+
+async function linkedInJira(milestoneId: string): Promise<boolean> {
+  try {
+    return (await jiraLinks({ milestoneIds: [milestoneId] })).length > 0;
+  } catch (error) {
+    if (error instanceof JiraNotSetUpError) return false;
+    throw error;
+  }
+}
+
 /** Runs after the answer when a request is there (`after()`), and at once in a script or a test. */
 export type Defer = (work: () => Promise<void>) => void;
 
@@ -95,8 +119,11 @@ export async function linkAsanaTask(
     if (milestone.status !== "pending") {
       return refused("milestone_not_open", milestone.status === "paid" || milestone.status === "closed" ? "This milestone is done: nothing is linked to it now." : "This milestone is verified already. Revoke its verification first to accept it from Asana.");
     }
-    // A merged pull request verifies its milestone on its own (GitHub check): one milestone is not verified two ways.
+    // A merged pull request verifies its milestone on its own (GitHub check), and a Linear or Jira issue is accepted on
+    // its own (Linear acceptance LN4, Jira acceptance JR6): one milestone is not verified two ways.
     if (parseGitHubPullRequestUrl(milestone.verificationSource)) return refused("github", "This milestone is verified by its GitHub pull request. Add a new milestone to accept work from Asana.");
+    if (await linkedInLinear(milestone.id)) return refused("linear", "This milestone is linked to a Linear issue. Unlink the issue first to accept the work from Asana.");
+    if (await linkedInJira(milestone.id)) return refused("jira", "This milestone is linked to a Jira issue. Unlink the issue first to accept the work from Asana.");
     if ((await liveLinks({ milestoneIds: [milestone.id] })).length > 0) return refused("milestone_linked", "This milestone is linked to an Asana task already. Unlink it first.");
 
     let read;
