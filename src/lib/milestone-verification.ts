@@ -1,4 +1,5 @@
 import { recheckBeforeSending, refreshAsanaMilestones } from "./asana/workspace";
+import { recheckJiraBeforeSending, refreshJiraMilestones } from "./jira/workspace";
 import { recheckLinearBeforeSending, refreshLinearMilestones } from "./linear/workspace";
 import { parseGitHubPullRequestUrl, verifyGitHubPullRequest } from "./github-verification";
 import { pullRequestTokens } from "./github/tokens";
@@ -114,16 +115,18 @@ export interface AcceptedWorkRefresh {
  * acceptance-design.md A11), as merged pull requests are above: a task reopened or changed since its acceptance takes
  * the acceptance back here, through the milestone's verification, so this cycle's contractor stage never releases it.
  * Work accepted from Linear is read again the same way, at the same time and within the same budget
- * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN12), and counted apart under `linear`. Nothing else
- * of Asana or Linear reaches the agent. Never throws.
+ * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN12), and counted apart under `linear`; work accepted
+ * from Jira too (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR16), in full, counted apart under `jira`.
+ * Nothing else of Asana, Linear or Jira reaches the agent. Never throws.
  */
-export async function refreshAcceptedWork(): Promise<AcceptedWorkRefresh & { linear: AcceptedWorkRefresh }> {
-  const [summary, linear] = await Promise.all([refreshAsanaMilestones(), refreshLinearMilestones()]);
+export async function refreshAcceptedWork(): Promise<AcceptedWorkRefresh & { linear: AcceptedWorkRefresh; jira: AcceptedWorkRefresh }> {
+  const [summary, linear, jira] = await Promise.all([refreshAsanaMilestones(), refreshLinearMilestones(), refreshJiraMilestones()]);
   return {
     checked: summary.checked,
     withdrawn: summary.withdrawn,
     failed: summary.failed,
     linear: { checked: linear.checked, withdrawn: linear.withdrawn, failed: linear.failed },
+    jira: { checked: jira.checked, withdrawn: jira.withdrawn, failed: jira.failed },
   };
 }
 
@@ -132,17 +135,22 @@ export async function refreshAcceptedWork(): Promise<AcceptedWorkRefresh & { lin
  * sent (docs/superpowers/specs/2026-10-14-asana-acceptance-design.md A10): a task reopened or changed while the stage
  * decided takes its acceptance back through the milestone's verification, and the stage's still-verified check then
  * holds that release. The accepted Linear issues of those releases are read at the same time (Linear acceptance LN10,
- * LN12), and counted apart under `linear`. Nothing else of Asana or Linear reaches the agent. Never throws, and waits at
- * most 20 seconds, the two reads together; `complete` is false when an Asana task was not read again by then, and
- * `linear.complete` when a Linear issue was not, whose acceptance then stands as it was.
+ * LN12), and counted apart under `linear`, and so are their accepted Jira issues (Jira acceptance JR13, JR16), under
+ * `jira`. Nothing else of Asana, Linear or Jira reaches the agent. Never throws, and waits at most 20 seconds, the three
+ * reads together; `complete` is false when an Asana task was not read again by then, `linear.complete` when a Linear
+ * issue was not, and `jira.complete` when a Jira issue was not, or Atlassian's shared rate limit was spent, whose
+ * acceptance then stands as it was.
  */
-export async function recheckAcceptedWork(milestoneIds: readonly string[]): Promise<AcceptedWorkRefresh & { complete: boolean; linear: AcceptedWorkRefresh & { complete: boolean } }> {
-  const [summary, linear] = await Promise.all([recheckBeforeSending(milestoneIds), recheckLinearBeforeSending(milestoneIds)]);
+export async function recheckAcceptedWork(
+  milestoneIds: readonly string[]
+): Promise<AcceptedWorkRefresh & { complete: boolean; linear: AcceptedWorkRefresh & { complete: boolean }; jira: AcceptedWorkRefresh & { complete: boolean } }> {
+  const [summary, linear, jira] = await Promise.all([recheckBeforeSending(milestoneIds), recheckLinearBeforeSending(milestoneIds), recheckJiraBeforeSending(milestoneIds)]);
   return {
     checked: summary.checked,
     withdrawn: summary.withdrawn,
     failed: summary.failed,
     complete: summary.complete,
     linear: { checked: linear.checked, withdrawn: linear.withdrawn, failed: linear.failed, complete: linear.complete },
+    jira: { checked: jira.checked, withdrawn: jira.withdrawn, failed: jira.failed, complete: jira.complete },
   };
 }

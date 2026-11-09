@@ -110,6 +110,8 @@ describe("the policy (CSP1, CSP2)", () => {
       googledrive: [GOOGLE_AUTHORIZE],
       googlesheets: [GOOGLE_AUTHORIZE],
       hubspot: [HUBSPOT_AUTHORIZE],
+      // Atlassian's consent screen, or its sign-in for a person signed out first (Jira acceptance B11, L4).
+      jira: [JIRA_AUTHORIZE, JIRA_LOGIN],
       linear: [LINEAR_AUTHORIZE],
       pipedrive: [PIPEDRIVE_AUTHORIZE],
       quickbooks: [INTUIT_AUTHORIZE],
@@ -130,7 +132,7 @@ describe("the policy (CSP1, CSP2)", () => {
   });
 
   it("lets Jira's connect form end at Atlassian's consent screen, or at its sign-in for a person signed out (Jira acceptance B11, L4)", () => {
-    // Jira's connect route joins the map above with these two when it is added; until then Jira is off everywhere.
+    // Both are in the map above, beside Jira's connect route.
     for (const url of [JIRA_AUTHORIZE, JIRA_LOGIN]) expect(policy.get("form-action"), url).toContain(new URL(url).origin);
     expect(new URL(JIRA_AUTHORIZE).origin).toBe("https://auth.atlassian.com");
     expect(JIRA_LOGIN).toBe("https://id.atlassian.com");

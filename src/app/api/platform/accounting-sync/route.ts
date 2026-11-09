@@ -8,6 +8,8 @@ import { sweepAccounting } from "@/lib/connectors/sweep";
 import { crmProvider } from "@/lib/crm-providers";
 import { googleDriveProviderFromEnv, type GoogleDriveProvider } from "@/lib/googledrive/provider";
 import { syncGoogleDriveConnection } from "@/lib/googledrive/workspace";
+import { jiraProviderFromEnv, type JiraProvider } from "@/lib/jira/provider";
+import { syncJiraConnection, type JiraSyncOutcome } from "@/lib/jira/workspace";
 import { linearProviderFromEnv, type LinearProvider } from "@/lib/linear/provider";
 import { syncLinearConnection, type LinearSyncOutcome } from "@/lib/linear/workspace";
 
@@ -16,8 +18,9 @@ export const maxDuration = 300;
 
 /**
  * Brings bills in from the accounting tools workspaces connected, and deals from their CRMs (HubSpot connector H7), and
- * reads again the Asana tasks and the Linear issues linked to milestones (Asana acceptance A11, Linear acceptance LN12),
- * and reads the Google Drive folder each workspace chose for new files (Google Drive intake GD7), without a person:
+ * reads again the Asana tasks and the Linear and Jira issues linked to milestones (Asana acceptance A11, Linear
+ * acceptance LN12, Jira acceptance JR16), and reads the Google Drive folder each workspace chose for new files (Google
+ * Drive intake GD7), without a person:
  * bearer-protected, run every 15 minutes by Supabase Cron (`supabase/cron/watches.sql`) and by hand from
  * `.github/workflows/accounting-sync.yml`.
  */
@@ -27,19 +30,24 @@ export async function POST(request: Request) {
   }
   try {
     // Counts only: this body is printed into the workflow's log, and the repository is public.
-    // One Asana provider, one Linear provider and one Google Drive provider for the run, each when it is set up on this
-    // deployment.
+    // One Asana provider, one Linear provider, one Jira provider and one Google Drive provider for the run, each when it
+    // is set up on this deployment.
     const asana = asanaProviderFromEnv();
     const linear = linearProviderFromEnv();
+    const jira = jiraProviderFromEnv();
     const googleDrive = googleDriveProviderFromEnv();
     return NextResponse.json(
       await sweepAccounting({
         providerFor: accountingProvider,
         crm: { providerFor: crmProvider, sync: crmSyncInScope },
         work: {
-          providerFor: (id) => (id === "asana" ? asana : id === "linear" ? linear : null),
-          sync: (connectionId, provider): Promise<{ outcome: AsanaSyncOutcome | LinearSyncOutcome }> =>
-            provider.id === "linear" ? syncLinearConnection(connectionId, provider as LinearProvider) : syncAsanaConnection(connectionId, provider as NonNullable<typeof asana>),
+          providerFor: (id) => (id === "asana" ? asana : id === "linear" ? linear : id === "jira" ? jira : null),
+          sync: (connectionId, provider): Promise<{ outcome: AsanaSyncOutcome | LinearSyncOutcome | JiraSyncOutcome }> =>
+            provider.id === "linear"
+              ? syncLinearConnection(connectionId, provider as LinearProvider)
+              : provider.id === "jira"
+                ? syncJiraConnection(connectionId, provider as JiraProvider)
+                : syncAsanaConnection(connectionId, provider as NonNullable<typeof asana>),
         },
         intake: {
           providerFor: (id) => (id === "googledrive" ? googleDrive : null),

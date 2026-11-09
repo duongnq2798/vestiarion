@@ -299,3 +299,16 @@ describe("a delivery", () => {
     expect(error).toHaveBeenCalledWith("jira webhook: the issue was not read again", "TypeError");
   });
 });
+
+describe("the route", () => {
+  it("checks each delivery with the client secret, and reads again only after the answer, in every workspace it matched (JR15)", () => {
+    const route = readFileSync("src/app/api/integrations/jira/webhook/route.ts", "utf8");
+    expect(route).toContain("secret: settings.clientSecret,");
+    expect(route).toContain("defer: (work) => after(work),");
+    expect(route).toContain("reread: (event) => rereadForDelivery(event, provider),");
+    expect(route).toContain("export const maxDuration = 60;");
+    // Not there unless Jira is configured (JR1): no third variable, the deliveries are signed with the client secret.
+    expect(route).toMatch(/const settings = jiraSettingsFromEnv\(\);\s*if \(!settings\) return Response\.json\(\{ error: "not_found" \}, \{ status: 404 \}\);/);
+    expect(route).not.toMatch(/JIRA_WEBHOOK|webhookSecret/);
+  });
+});
