@@ -79,8 +79,11 @@ export function shellFooterLine(network: Network): string {
   return `Hash-chained decisions · Ed25519 signed · ${networkProfile(network).label}`;
 }
 
-/** A workspace page's title, the line under it, and its own actions on the right. The title is the page's only `<h1>`. */
-export function PageHead({ title, sub, right }: { title: string; sub?: ReactNode; right?: ReactNode }) {
+/**
+ * A workspace page's title, the line under it, and its own actions on the right. The title is the page's only `<h1>`: a
+ * section's label, or a record's name, which a counterparty's page sets apart as text from outside (`UntrustedText`).
+ */
+export function PageHead({ title, sub, right }: { title: ReactNode; sub?: ReactNode; right?: ReactNode }) {
   return (
     <div className="mb-7 flex flex-col gap-4 border-b border-line pb-5 md:flex-row md:items-start md:justify-between">
       <div className="min-w-0">

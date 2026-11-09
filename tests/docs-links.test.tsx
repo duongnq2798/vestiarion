@@ -41,6 +41,7 @@ const SECTIONS: Array<[string, string]> = [
   ["src/components/LedgerKeyPanel.tsx", "/docs/guides/audit-export#5-after-a-key-rotation"],
   ["src/components/NotificationsPanel.tsx", "/docs/guides/telegram"],
   ["src/app/o/[slug]/contractors/page.tsx", "/docs/guides/pay-a-contractor"],
+  ["src/app/o/[slug]/counterparties/[id]/page.tsx", "/docs/guides/pay-a-contractor#one-page-for-each-contractor"],
   ["src/app/o/[slug]/audit/page.tsx", "/docs/guides/audit-export"],
   ["src/app/o/[slug]/evidence/[kind]/[id]/page.tsx", "/docs/guides/evidence"],
   ["src/app/o/[slug]/evidence/payee-lock/page.tsx", "/docs/guides/evidence-and-receipts"],

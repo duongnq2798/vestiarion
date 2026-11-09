@@ -1524,10 +1524,11 @@ Every page under `/o/[slug]` sits in one frame (spec `2026-10-10-workspace-shell
   payment gates refuse on the same failure; the agent shows as stopped while payments are off or held.
 - **Breadcrumb.** The workspace (linking home), then the section; on a page inside a section, the section links back
   and the page is the current crumb (`aria-current="page"`, the only one). `SUBPAGES` in `nav.ts` lists those pages
-  (Commissions and a deal under Bills & receivables, a project under Projects, a payment's evidence under its record's
-  section) with each one's name, which is also its tab title: `navItemForPathname` files each under its section,
-  `insideSection` has the sidebar mark the section `aria-current="true"`, and `subpageLabel` names it. A page showing
-  one record passes its name as `ProductShell`'s `crumb` (a deal's title, a project's name, the evidence's bill or
+  (Commissions and a deal under Bills & receivables, a project under Projects, a counterparty's page under
+  Counterparties, a payment's evidence under its record's section) with each one's name, which is also its tab title:
+  `navItemForPathname` files each under its section, `insideSection` has the sidebar mark the section
+  `aria-current="true"`, and `subpageLabel` names it. A page showing one record passes its name as `ProductShell`'s
+  `crumb` (a deal's title, a project's name, what is visible of a counterparty's name, the evidence's bill or
   milestone); the loading and error states, and the phone bar, which the layout draws, name it by its kind (Deal).
   Where the row is short (`lg` beside the open sidebar) the workspace's name gives way first (`shrink-3`), the
   section's and a page's kind stay whole, and a record's name is cut at 10rem, 16rem from `xl`, whole in its `title`;

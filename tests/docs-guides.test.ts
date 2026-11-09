@@ -162,6 +162,12 @@ const PAYEE_INVOICE_FORM = "src/components/payee/PayeeInvoiceForm.tsx";
 const PAYEE_INVOICE_RULES = "src/lib/payee-invoice.ts";
 const PAYEE_EMAIL = "src/lib/email/payee-link.ts";
 const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
+/** A counterparty's own page and what it shows (docs/superpowers/specs/2026-11-09-counterparty-page-design.md). */
+const COUNTERPARTY_PAGE = "src/app/o/[slug]/counterparties/[id]/page.tsx";
+const COUNTERPARTY_PAGE_VIEW = "src/lib/counterparties/page-view.ts";
+const COUNTERPARTY_ROW = "src/components/CounterpartyRow.tsx";
+const PAYEE_LINK_HISTORY = "src/components/counterparty/PayeeLinkHistory.tsx";
+const COUNTERPARTY_HISTORY = "src/components/counterparty/CounterpartyHistory.tsx";
 const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
 const SLACK_PANEL = "src/components/SlackPanel.tsx";
 const SLACK_CONNECT_PAGE = "src/app/integrations/slack/connect/page.tsx";
@@ -1997,6 +2003,39 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["milestone_closed", MILESTONE_DECISIONS],
     ["Closed without paying", MAP],
     ["Audit log", APP_NAV],
+    // One page for each contractor (counterparty page CL1-CL13).
+    ["Open their page", COUNTERPARTY_ROW],
+    ["All counterparties", COUNTERPARTY_PAGE],
+    ["Nothing here makes a payment: the agent pays under its rules, and people decide in Approvals and on Contractors.", COUNTERPARTY_PAGE],
+    ["Owed to them", COUNTERPARTY_PAGE_VIEW],
+    ["Paid to them", COUNTERPARTY_PAGE_VIEW],
+    ["Profile", COUNTERPARTY_PAGE, 'title="Profile"'],
+    ["Payment address", COUNTERPARTY_PAGE],
+    ["Open on the explorer", ADDRESS_CONTROLS],
+    ["An owner or admin sends and stops payee links.", COUNTERPARTY_PAGE],
+    ["Open in Contractors", COUNTERPARTY_PAGE],
+    ["Bills from them", COUNTERPARTY_PAGE],
+    ["Open in Bills & receivables", COUNTERPARTY_PAGE, "Open in Bills &amp; receivables"],
+    ["Show every payment", COUNTERPARTY_PAGE],
+    ["Receipt shared", COUNTERPARTY_PAGE],
+    ["Receipt link stopped", COUNTERPARTY_PAGE],
+    ["No receipt shared", COUNTERPARTY_PAGE],
+    ["No receipt: not paid on chain", COUNTERPARTY_PAGE],
+    ["Paid to an earlier address", COUNTERPARTY_PAGE],
+    ["Sent from the browser extension", COUNTERPARTY_PAGE],
+    ["All of it in the Audit log", COUNTERPARTY_HISTORY],
+    ["Not read just now. Reload the page in a moment.", COUNTERPARTY_PAGE_VIEW],
+    ["Some of this record's history was not read; the Audit log has all of it.", COUNTERPARTY_PAGE],
+    ["Copy address", ADDRESS_CONTROLS],
+    ["Copy comes back once someone confirms this address.", COUNTERPARTY_PAGE_VIEW],
+    ["Check every character on the explorer.", COUNTERPARTY_PAGE_VIEW],
+    ["Replaced by a newer link", COUNTERPARTY_PAGE_VIEW],
+    ["Expired unused", COUNTERPARTY_PAGE_VIEW],
+    ["Invoice sent", COUNTERPARTY_PAGE_VIEW],
+    ["Waiting for their invoice", COUNTERPARTY_PAGE_VIEW],
+    ["Invoice closed", COUNTERPARTY_PAGE_VIEW],
+    ["The latest 5 links; every one is in History and the Audit log.", PAYEE_LINK_HISTORY, "The latest {PAYEE_LINKS_SHOWN} links; every one is in History and the Audit log."],
+    ["A used link's status page stays open to the payee for 30 days.", PAYEE_LINK_HISTORY, "A used link&apos;s status page stays open to the payee for 30 days."],
   ],
   "guides/telegram": [
     ["Give your verdict", "src/lib/agent-activity.ts"],

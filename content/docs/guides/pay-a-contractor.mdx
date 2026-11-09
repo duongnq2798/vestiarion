@@ -158,3 +158,37 @@ The contract was written for Vestiarion and is not audited. Its source, its func
 Open **Audit log** to see the milestone's whole story in order, each entry signed: `create_milestone` when it was added, the verification, and the agent's release decision with its reasoning and its transaction. [Verify an audit export](/docs/guides/audit-export) shows how someone outside the workspace can check the same entries.
 
 For one milestone, its card's **Why it was paid** (or **Evidence so far**, before it is paid) puts the same story on one page, link by link: its terms and who added them, the merged pull request GitHub reported or the person who verified the work, the payee, the decision, the people, and the payment read back from Arc, each fact marked with how it is known. See [Why a payment was paid](/docs/guides/evidence).
+
+## One page for each contractor
+
+Every counterparty has a page of its own, a contractor, a vendor or a client alike. Open their row on **Counterparties** and choose **Open their page**; **All counterparties** takes you back to the row. The page puts everything Vestiarion holds about them in one place, for every member of the workspace, viewers included. Nothing here makes a payment: the agent pays under its rules, and people decide in Approvals and on Contractors.
+
+From the top:
+
+- **The tiles.** What is **Owed to them** and what was **Paid to them**, each per currency: USDC and EURC are never added together. Then the state of their **Address**, and, for an owner or admin, their **Payee link**.
+- **Profile.** Their screening, their limits, where they are, when they were last screened, their billing email, and whether the agent needs a purchase order before it pays them. An owner or admin edits each here, as on the list; whoever decides payments reviews a screening match.
+- **Payment address.** The whole address, never cut short, with **Open on the explorer**. An owner or admin edits it; an owner, admin or approver confirms a changed one with **Confirm address**, as does an accountant while co-signing is on.
+- **Payee link.** The one-time link that asks them for their address, and for their invoice (see Payee link states below). Only an owner or admin sees it; anyone else reads "An owner or admin sends and stops payee links."
+- **Milestones.** The open ones, and those closed without paying. Each row opens its milestone with **Open in Contractors**, where it is verified, paid or closed: none of that is done from this page.
+- **Bills from them.** Their open bills, by due date, and the latest rejected ones. **Open in Bills & receivables** opens a bill where it is decided. For a client, this part is their invoices instead.
+- **Payments.** Their paid milestones and bills, newest first: the latest 10, or every one with **Show every payment**. Each paid bill says where its receipt is, to every member: **Receipt shared**, **Receipt link stopped**, **No receipt shared**, or "No receipt: not paid on chain". In a live workspace, an owner or admin shares one from here too. A payment sent to an address they no longer have says "Paid to an earlier address", with that address on the explorer.
+- **Documents.** The documents the agent asked them for on their bills, and what was **Sent from the browser extension** naming them.
+- **History.** The latest changes to them, each linked to its entry in the Audit log, where its signature is checked. **All of it in the Audit log** lists every one.
+
+A part that could not be read says "Not read just now. Reload the page in a moment.", and its tile says it was not read: never zero, never none. A record whose history was read only in part says "Some of this record's history was not read; the Audit log has all of it."
+
+### Copy an address safely
+
+**Copy address** shows only for an address that was set when they were added, or confirmed since, that is not frozen, and that looks like no other counterparty's address and none they had before. Otherwise one line says why, for example "Copy comes back once someone confirms this address." A lookalike address is made to pass a glance at its first and last characters, so its line ends "Check every character on the explorer." Do that before you paste it anywhere money is sent from.
+
+### Payee link states
+
+Under **Payee link**, an owner or admin sends, renews and stops the link with the same controls as on the list. Below them are the latest five links, newest first, each naming who made it, in one of these states:
+
+- **Out**: not used, not expired and not revoked.
+- **Replaced by a newer link**: making a new link stops every earlier one that was not used.
+- **Revoked**: someone stopped it.
+- **Expired unused**: it ran out before they used it.
+- **Used**, with their invoice when the link asked for one: **Invoice sent**, **Waiting for their invoice** until 30 days after they used it, or **Invoice closed**.
+
+The list ends "The latest 5 links; every one is in History and the Audit log." and "A used link's status page stays open to the payee for 30 days." A link's address is shown once, when it is made, and a receipt's link once, when it is shared: this page never shows either again.
