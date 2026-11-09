@@ -106,6 +106,7 @@ interface World {
   revokes?: typeof ROWS;
   intent?: Record<string, unknown> | null;
   targets?: typeof ROWS;
+  counterparty?: Record<string, unknown> | null;
 }
 
 function database(world: World = {}) {
@@ -118,7 +119,7 @@ function database(world: World = {}) {
       case "/rest/v1/milestones":
         return one(world.milestone ?? null);
       case "/rest/v1/counterparties":
-        return one(COUNTERPARTY_ROW);
+        return one(world.counterparty === undefined ? COUNTERPARTY_ROW : world.counterparty);
       case "/rest/v1/rpc/ledger_entries_for_targets":
         return many(world.targets ?? [PAID, CREATED]);
       case "/rest/v1/ledger_entries": {
@@ -217,6 +218,17 @@ describe("reading a paid payable's evidence", () => {
     expect(chain.steps.find((s) => s.id === "agreed")?.facts[0].who).toBe("alice@northstar.test");
     expect(read!.publicKeys).toEqual({ [ledgerKeyId(publicKey)]: publicKey.export({ type: "spki", format: "pem" }).toString() });
     expect(read!.receipt).toEqual({ state: "shared" });
+  });
+
+  it("CL15: names the payee's counterparty for its page to link to, beside the chain and never in it, which the evidence document publishes", async () => {
+    const read = await database().run(() => readEvidence("invoice", INVOICE, { fetch: arcFetch as unknown as typeof fetch }));
+    expect(read!.counterpartyId).toBe(CP);
+    expect(Object.keys(read!).sort()).toEqual(["chain", "counterpartyId", "publicKeys", "receipt"]);
+    expect(Object.keys(read!.chain).sort()).toEqual(["entries", "network", "steps", "subject", "tally"]);
+    expect(Object.keys(read!.chain.subject)).not.toContain("counterpartyId");
+    // None when the workspace holds no such counterparty, so the page links nowhere.
+    const none = await database({ counterparty: null }).run(() => readEvidence("invoice", INVOICE, { fetch: arcFetch as unknown as typeof fetch }));
+    expect(none!.counterpartyId).toBeNull();
   });
 
   it("finds the receipt's own entries by its seq and by the receipt, never the workspace's other receipts", async () => {
@@ -320,6 +332,7 @@ describe("a milestone's evidence", () => {
     const read = await db.run(() => readEvidence("milestone", MILESTONE));
     expect(read!.chain.subject).toMatchObject({ kind: "milestone", title: "Fix the login redirect", amount: 25, paid: false });
     expect(read!.receipt).toBeNull();
+    expect(read!.counterpartyId).toBe(CP);
     const paths = db.fake.requests.map((request) => request.path);
     expect(paths).not.toContain("/rest/v1/payment_receipts");
     expect(paths).not.toContain("/rest/v1/invoices");

@@ -68,13 +68,17 @@ export interface CounterpartyRow {
   purchase_order_required?: boolean;
   /** The Circle wallet Vestiarion made as this payee's mirror address in shadow mode (shadow mode S7, 0084); null otherwise. */
   mirror_wallet_id?: string | null;
+  /**
+   * When its contact on file said they did not make the change to its address (address change check AC3, 0137;
+   * `select("*")` reads it): no one confirms it and nothing pays it until an owner or admin unfreezes it. Absent before
+   * 0137, null when not frozen.
+   */
+  frozen_at?: string | null;
 }
 
-export async function listCounterparties(): Promise<CounterpartyRow[]> {
-  const rows = unwrap(
-    await db().from("counterparties").select("*").order("name")
-  ) as Record<string, unknown>[];
-  return rows.map((r) => ({
+/** A counterparty row as every reader here returns it: its figures as numbers. */
+function counterpartyOf(r: Record<string, unknown>): CounterpartyRow {
+  return {
     ...(r as unknown as CounterpartyRow),
     payment_limit: r.payment_limit == null ? null : num(r.payment_limit),
     baseline_payment_limit:
@@ -83,7 +87,56 @@ export async function listCounterparties(): Promise<CounterpartyRow[]> {
     performance_inputs:
       (r.performance_inputs as CounterpartyHistoryInputs | null | undefined) ?? null,
     sample: r.sample === true,
-  }));
+  };
+}
+
+export async function listCounterparties(): Promise<CounterpartyRow[]> {
+  const rows = unwrap(
+    await db().from("counterparties").select("*").order("name")
+  ) as Record<string, unknown>[];
+  return rows.map(counterpartyOf);
+}
+
+/**
+ * One counterparty of the workspace in scope, or null for an id it does not hold
+ * (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL2): `db()` keeps to the workspace, so another
+ * workspace's counterparty is null too, like one that does not exist. A read that fails throws.
+ */
+export async function readCounterparty(id: string): Promise<CounterpartyRow | null> {
+  const found = await db().from("counterparties").select("*").eq("id", id).maybeSingle();
+  if (found.error) throw new Error(found.error.message);
+  return found.data ? counterpartyOf(found.data as Record<string, unknown>) : null;
+}
+
+/** A counterparty's address as the payee lock compares it with the others' (PL6): never more of the row. */
+export interface AddressBookRow {
+  id: string;
+  name: string;
+  address: string;
+  chain: string | null;
+}
+
+/**
+ * Every counterparty with an address, and the chain it is paid on, a page at a time: what a counterparty's page compares
+ * its address with to find a lookalike (counterparty page CL5, payee lock PL6), as Counterparties compares every row.
+ */
+export async function payeeAddressBook(): Promise<AddressBookRow[]> {
+  return everyPage<AddressBookRow>((from, to) =>
+    db().from("counterparties").select("id, name, address, chain").not("address", "is", null).order("id", { ascending: true }).range(from, to)
+  );
+}
+
+/** PostgREST's `max_rows` on Supabase: the most rows one request answers with. */
+const PAGE = 1000;
+
+/** Every row of a read, a page at a time; `read` orders its rows so the pages do not overlap. */
+async function everyPage<T>(read: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const page = unwrap(await read(from, from + PAGE - 1)) as T[];
+    rows.push(...page);
+    if (page.length < PAGE) return rows;
+  }
 }
 
 export interface InvoiceRow {
@@ -133,15 +186,12 @@ export interface InvoiceRow {
   created_at?: string;
 }
 
-export async function listInvoices(): Promise<InvoiceRow[]> {
-  const rows = unwrap(
-    await db()
-      .from("invoices")
-      .select("*, counterparties(name)")
-      .order("due_date", { ascending: true })
-  ) as Array<Record<string, unknown> & { counterparties: { name: string } | null }>;
+/** An invoice or a milestone row as read with its counterparty's name. */
+type WithName = Record<string, unknown> & { counterparties: { name: string } | null };
 
-  return rows.map((r) => ({
+/** An invoice row as every reader here returns it: its amounts as numbers, its currency USDC unless EURC. */
+function invoiceOf(r: WithName): InvoiceRow {
+  return {
     ...(r as unknown as InvoiceRow),
     amount: num(r.amount),
     counterparty_name: r.counterparties?.name ?? "unknown",
@@ -149,7 +199,35 @@ export async function listInvoices(): Promise<InvoiceRow[]> {
     currency: r.currency === "EURC" ? "EURC" : "USDC",
     original_amount: r.original_amount == null ? null : num(r.original_amount),
     fx_rate: r.fx_rate == null ? null : num(r.fx_rate),
-  }));
+  };
+}
+
+export async function listInvoices(): Promise<InvoiceRow[]> {
+  const rows = unwrap(
+    await db()
+      .from("invoices")
+      .select("*, counterparties(name)")
+      .order("due_date", { ascending: true })
+  ) as WithName[];
+
+  return rows.map(invoiceOf);
+}
+
+/**
+ * One counterparty's invoices, both ways, by due date, a page at a time, read and mapped as `listInvoices` reads them
+ * (counterparty page CL13): every one, however many, so its totals count them all.
+ */
+export async function listInvoicesOf(counterpartyId: string): Promise<InvoiceRow[]> {
+  const rows = await everyPage<WithName>((from, to) =>
+    db()
+      .from("invoices")
+      .select("*, counterparties(name)")
+      .eq("counterparty_id", counterpartyId)
+      .order("due_date", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  return rows.map(invoiceOf);
 }
 
 export interface MilestoneRow {
@@ -186,19 +264,41 @@ export interface MilestoneRow {
   acceptance_criteria?: string | null;
 }
 
+/** A milestone row as every reader here returns it: its amount as a number, with its contractor's name. */
+function milestoneOf(r: WithName): MilestoneRow {
+  return {
+    ...(r as unknown as MilestoneRow),
+    amount: num(r.amount),
+    contractor_name: r.counterparties?.name ?? "unknown",
+  };
+}
+
 export async function listMilestones(): Promise<MilestoneRow[]> {
   const rows = unwrap(
     await db()
       .from("milestones")
       .select("*, counterparties(name)")
       .order("created_at", { ascending: true })
-  ) as Array<Record<string, unknown> & { counterparties: { name: string } | null }>;
+  ) as WithName[];
 
-  return rows.map((r) => ({
-    ...(r as unknown as MilestoneRow),
-    amount: num(r.amount),
-    contractor_name: r.counterparties?.name ?? "unknown",
-  }));
+  return rows.map(milestoneOf);
+}
+
+/**
+ * One payee's milestones, oldest first, a page at a time, read and mapped as `listMilestones` reads them (counterparty
+ * page CL13).
+ */
+export async function listMilestonesOf(counterpartyId: string): Promise<MilestoneRow[]> {
+  const rows = await everyPage<WithName>((from, to) =>
+    db()
+      .from("milestones")
+      .select("*, counterparties(name)")
+      .eq("contractor_id", counterpartyId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  return rows.map(milestoneOf);
 }
 
 export interface TreasuryActionRow {

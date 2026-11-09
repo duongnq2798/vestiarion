@@ -228,7 +228,7 @@ describe("who can see this (E10)", () => {
 
 describe("the page", () => {
   const params = (kind: string, id: string) => ({ params: Promise.resolve({ slug: "northstar", kind, id }) });
-  const read = (chain: EvidenceChain, receipt: EvidenceRead["receipt"] = { state: "shared" }): EvidenceRead => ({ chain, publicKeys: {}, receipt });
+  const read = (chain: EvidenceChain, receipt: EvidenceRead["receipt"] = { state: "shared" }): EvidenceRead => ({ chain, publicKeys: {}, receipt, counterpartyId: null });
   const page = async (kind = "invoice", id = INVOICE) => renderToStaticMarkup(await EvidencePage(params(kind, id)));
 
   beforeEach(() => {

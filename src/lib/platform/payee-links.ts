@@ -6,6 +6,7 @@ import { withOrg } from "../dal/scope";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { notifyPayeeAddress } from "../notifications/payee-address";
 import { bridgeFee } from "../circle/cctp";
+import type { PayeeLinkRecord } from "../counterparties/page-view";
 import { choosablePayeeChains } from "../payee-chain-choice";
 import { networkProfile } from "../network";
 import { chainById, networkOfChain } from "../payee-chains";
@@ -136,38 +137,57 @@ export async function createPayeeLink(input: {
   return { link, token };
 }
 
-/** The workspace's usable links, by counterparty. */
-export async function listActivePayeeLinks(orgId: string, now: number = Date.now()): Promise<Map<string, { id: string; expiresAt: string }>> {
-  const rows = unwrap(
-    await platformDb()
-      .from("payee_links")
-      .select("id, counterparty_id, expires_at")
-      .eq("org_id", orgId)
-      .is("used_at", null)
-      .is("revoked_at", null)
-      .gt("expires_at", new Date(now).toISOString())
-  ) as Array<{ id: string; counterparty_id: string; expires_at: string }>;
+/** Which payee's links a list reads: every payee's, or with `counterpartyId` one payee's, as its page reads them (CL6). */
+export interface PayeeLinkFilter {
+  counterpartyId?: string;
+}
+
+/** The workspace's usable links, by counterparty; with `counterpartyId`, only that payee's. */
+export async function listActivePayeeLinks(
+  orgId: string,
+  now: number = Date.now(),
+  filter: PayeeLinkFilter = {}
+): Promise<Map<string, { id: string; expiresAt: string }>> {
+  const query = platformDb()
+    .from("payee_links")
+    .select("id, counterparty_id, expires_at")
+    .eq("org_id", orgId)
+    .is("used_at", null)
+    .is("revoked_at", null)
+    .gt("expires_at", new Date(now).toISOString());
+  const rows = unwrap(await (filter.counterpartyId ? query.eq("counterparty_id", filter.counterpartyId) : query)) as Array<{
+    id: string;
+    counterparty_id: string;
+    expires_at: string;
+  }>;
   return new Map(rows.map((row) => [row.counterparty_id, { id: row.id, expiresAt: row.expires_at }]));
 }
 
 /**
  * The workspace's used links still waiting for their payee's invoice, by counterparty (payee invoice link P6): within the
  * 30 days a used link takes one, neither sent nor closed. Revoke stops them. Empty before migration 0133, or when they
- * cannot be read: Counterparties then shows what it did before.
+ * cannot be read: Counterparties then shows what it did before. With `counterpartyId`, only that payee's.
  */
-export async function listWaitingInvoiceLinks(orgId: string, now: number = Date.now()): Promise<Map<string, { id: string; until: string }>> {
+export async function listWaitingInvoiceLinks(
+  orgId: string,
+  now: number = Date.now(),
+  filter: PayeeLinkFilter = {}
+): Promise<Map<string, { id: string; until: string }>> {
   try {
-    const rows = unwrap(
-      await platformDb()
-        .from("payee_links")
-        .select("id, counterparty_id, used_at")
-        .eq("org_id", orgId)
-        .eq("asks_invoice", true)
-        .is("revoked_at", null)
-        .is("invoice_at", null)
-        .is("invoice_closed_at", null)
-        .gt("used_at", new Date(now - INVOICE_DAYS_MS).toISOString())
-    ) as Array<{ id: string; counterparty_id: string; used_at: string }>;
+    const query = platformDb()
+      .from("payee_links")
+      .select("id, counterparty_id, used_at")
+      .eq("org_id", orgId)
+      .eq("asks_invoice", true)
+      .is("revoked_at", null)
+      .is("invoice_at", null)
+      .is("invoice_closed_at", null)
+      .gt("used_at", new Date(now - INVOICE_DAYS_MS).toISOString());
+    const rows = unwrap(await (filter.counterpartyId ? query.eq("counterparty_id", filter.counterpartyId) : query)) as Array<{
+      id: string;
+      counterparty_id: string;
+      used_at: string;
+    }>;
     return new Map(rows.map((row) => [row.counterparty_id, { id: row.id, until: new Date(Date.parse(row.used_at) + INVOICE_DAYS_MS).toISOString() }]));
   } catch (error) {
     console.error("payee links: links waiting for an invoice not read", error instanceof Error ? error.message : "unknown error");
@@ -177,6 +197,31 @@ export async function listWaitingInvoiceLinks(orgId: string, now: number = Date.
 
 /** How long a used link still takes its payee's invoice, as 0133's functions count it. */
 export const INVOICE_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** What a payee's page reads of each link (counterparty page CL6): never its token's hash (CL4). 0133's columns last. */
+const LINK_COLUMNS_0039 = "id, created_at, expires_at, used_at, revoked_at, created_by";
+const LINK_COLUMNS = `${LINK_COLUMNS_0039}, asks_invoice, invoice_at, invoice_closed_at`;
+
+/** Postgres's "no such column" (42703): migration 0133 has not added the invoice columns here yet. */
+const missingColumn = (error: { code?: string }) => error.code === "42703";
+
+/**
+ * A payee's latest `limit` links, newest first, for its page's history (counterparty page CL6). `payee_links` is a
+ * platform table, so the read names the workspace and the payee both (CL2), and never the token's hash (CL4). Before
+ * migration 0133 the links are read without their invoice columns. A read that fails throws, for the page to say so.
+ */
+export async function payeeLinksOf(orgId: string, counterpartyId: string, limit: number): Promise<PayeeLinkRecord[]> {
+  const read = (columns: string) =>
+    platformDb()
+      .from("payee_links")
+      .select(columns)
+      .eq("org_id", orgId)
+      .eq("counterparty_id", counterpartyId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+  const found = await read(LINK_COLUMNS);
+  return unwrap(found.error && missingColumn(found.error) ? await read(LINK_COLUMNS_0039) : found) as unknown as PayeeLinkRecord[];
+}
 
 /**
  * Revokes an unused link of the workspace, or stops a used one still waiting for its invoice from taking it (payee

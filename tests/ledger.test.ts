@@ -1,12 +1,16 @@
 import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { configFromEnv } from "@/lib/config";
+import { runWith } from "@/lib/context";
 import {
   bodyHashOf,
   canonicalJson,
+  listCounterpartyEntries,
   verifyChain,
   type LedgerEntryInput,
 } from "@/lib/ledger";
 import { ledgerKeyId, type LedgerKeyring } from "@/lib/ledger-keys";
+import { carriesOrg, fakeSupabase, orgTestContext } from "./support/fake-supabase";
 import { buildChain, continueChain } from "./support/ledger-chain";
 
 /** A keyring holding one current key and whatever retired ones are given. */
@@ -321,5 +325,31 @@ describe("verifyChain", () => {
     const rows = buildChain(SAMPLE, privateKey);
     rows[0].prev_hash = "f".repeat(64);
     expect(verifyChain(rows, ring(publicKey)).checkedEntries).toBe(3);
+  });
+});
+
+describe("listCounterpartyEntries (counterparty page CL11)", () => {
+  const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0c";
+  const CP = "0b6c1c9e-4a4f-4a7e-9b1e-0000000003cc";
+  const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
+
+  it("reads a counterparty's latest compliance entries, newest first, with no detail", async () => {
+    const line = { seq: 9, ts: "2026-11-09T09:00:00Z", actor: "human", action: "counterparty_limit_changed", summary: "Changed a payment limit" };
+    const fake = fakeSupabase(() => ({ body: [line] }));
+    const read = await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => listCounterpartyEntries(CP, 25));
+    expect(read).toEqual([line]);
+    const [request] = fake.requests;
+    expect(request.path).toBe("/rest/v1/ledger_entries");
+    expect(request.params.get("select")).toBe("seq,ts,actor,action,summary");
+    expect(request.params.get("domain")).toBe("eq.compliance");
+    expect(request.params.get("detail->>counterpartyId")).toBe(`eq.${CP}`);
+    expect(request.params.get("order")).toBe("seq.desc");
+    expect(request.params.get("limit")).toBe("25");
+    expect(carriesOrg(request, ORG)).toBe(true);
+  });
+
+  it("throws a read that failed, for the page to say History was not read", async () => {
+    const fake = fakeSupabase(() => ({ status: 500, body: { message: "down" } }));
+    await expect(runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => listCounterpartyEntries(CP, 25))).rejects.toThrow("down");
   });
 });
