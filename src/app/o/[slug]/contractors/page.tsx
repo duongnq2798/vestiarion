@@ -36,11 +36,11 @@ import { readEscrowContract } from "@/lib/circle/escrow-setup";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { milestoneDate } from "@/lib/milestone-date";
 import { milestoneWaiting } from "@/lib/milestone-waiting";
 import { PAYEE_LOCK_OFF, readPayeeLock } from "@/lib/payee-lock";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { orgHref } from "@/lib/auth/org-paths";
-import { utcDay } from "@/lib/copy";
 import { listMembers } from "@/lib/platform/members";
 import { listCounterparties, listMilestones, stats, type MilestoneRow } from "@/lib/queries";
 import { workspaceNetwork } from "@/lib/workspace-network";
@@ -464,15 +464,4 @@ export default async function ContractorsPage({ params, searchParams }: { params
       </ProductShell>
     );
   });
-}
-
-/** The date a milestone's row leads with: when it was paid, closed or held, when it was verified, or that it waits for verification. */
-function milestoneDate(milestone: MilestoneRow | undefined, decidedAt: string): DecisionRowItem["date"] {
-  if (!milestone) return null;
-  const day = (at: string) => utcDay(at);
-  if (milestone.status === "paid") return { label: `Paid ${day(decidedAt)}` };
-  if (milestone.status === "closed") return { label: `Closed ${day(milestone.closed_at ?? decidedAt)}` };
-  if (milestone.status === "held") return { label: `Held ${day(decidedAt)}`, tone: "held" };
-  if (milestone.status === "verified") return { label: milestone.verified_at ? `Verified ${day(milestone.verified_at)}` : "Verified" };
-  return { label: "Awaiting verification" };
 }
