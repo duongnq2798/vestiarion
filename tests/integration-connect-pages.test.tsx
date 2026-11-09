@@ -241,7 +241,8 @@ describe("the organization pick after Zoho Books (Zoho Books connector Z5)", () 
   });
 });
 
-const anyConnectPage = async (provider: ProviderId, query: Record<string, string> = {}) => {
+// Jira's connect page comes with its routes (Jira acceptance JR2); until then it is no page here.
+const anyConnectPage = async (provider: Exclude<ProviderId, "jira">, query: Record<string, string> = {}) => {
   const searchParams = Promise.resolve(query);
   if (provider === "pipedrive") return renderToStaticMarkup(await PipedriveConnectPage({ searchParams }));
   if (provider === "asana") return renderToStaticMarkup(await AsanaConnectPage({ searchParams }));

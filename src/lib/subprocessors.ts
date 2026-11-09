@@ -8,7 +8,7 @@ import { ENS_GATEWAY_HOSTS, ENS_RPC_DEFAULT } from "./ens-hosts";
 import { NETWORKS } from "./network";
 
 /** The day this list was last checked against the code. */
-export const SUBPROCESSORS_AS_OF = "2026-11-01";
+export const SUBPROCESSORS_AS_OF = "2026-11-09";
 
 const hostOf = (url: string) => new URL(url).host;
 
@@ -211,6 +211,16 @@ export const SUBPROCESSORS: readonly Subprocessor[] = [
     names: ["Linear"],
     purpose: "read for the issues linked to milestones, and never written to",
     data: "the requests that read the linked issues and the people on them, each naming an issue by its ID",
+    when: ONLY_IF_CONNECTED,
+  },
+  // One Jira site per workspace, read as the person who connected it; the one write is Vestiarion's own webhook
+  // (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR8, JR12, JR14, JR19).
+  {
+    name: "Atlassian (Jira)",
+    privacyEntry: "Jira",
+    names: ["Jira", "Atlassian"],
+    purpose: "read for the issues linked to milestones, and written to only to make, renew and delete one webhook on the connected site",
+    data: "the requests that read the linked issues, each naming an issue by its ID, the email addresses it asks about to tell whether one belongs to an Atlassian account, and the one webhook per site, for the projects of the linked issues",
     when: ONLY_IF_CONNECTED,
   },
   {

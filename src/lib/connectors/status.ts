@@ -63,13 +63,24 @@ const EXPORT_RECONNECT = (label: string) =>
 const INTAKE_RECONNECT = (label: string) =>
   `Google no longer accepts this connection: its access was removed in the Google Account. Reconnect ${label} to go on reading the ${providerWords(label).bills}.`;
 
+/**
+ * A work tool's grant (Asana acceptance A1, Linear acceptance LN1): its access is removed in the tool, or, for Jira, in
+ * the Atlassian account, whose refresh token also lapses after 90 days unused
+ * (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR3). Asana and Linear have no idle days.
+ */
+const WORK_RECONNECT = (label: string) => {
+  const words = providerWords(label);
+  const idle = words.idleDays > 0 ? `, or it went unused for ${words.idleDays} days` : "";
+  return `${label} no longer accepts this connection: the app's access was removed in ${words.revokedIn ?? label}${idle}. Reconnect ${label} to go on reading the ${words.workItem ?? "task"}s linked to milestones.`;
+};
+
 const reconnectWords = (label: string) =>
   providerKind(label) === "export"
     ? EXPORT_RECONNECT(label)
     : providerKind(label) === "intake"
     ? INTAKE_RECONNECT(label)
     : providerKind(label) === "work"
-    ? `${label} no longer accepts this connection: the app's access was removed in ${label}. Reconnect ${label} to go on reading the ${providerWords(label).workItem ?? "task"}s linked to milestones.`
+    ? WORK_RECONNECT(label)
     : providerKind(label) === "crm"
       ? `${label} no longer accepts this connection: the app was uninstalled in ${label}, or its access was removed. Reconnect ${label} to go on bringing its deals in.`
       : providerWords(label).idleDays > 0

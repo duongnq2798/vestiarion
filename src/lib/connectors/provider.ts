@@ -5,7 +5,7 @@
  * either. Pure types and one error class: no I/O.
  */
 
-export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear", "googledrive"] as const;
+export const PROVIDERS = ["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear", "googledrive", "jira"] as const;
 export type ProviderId = (typeof PROVIDERS)[number];
 
 /**
@@ -14,13 +14,15 @@ export type ProviderId = (typeof PROVIDERS)[number];
  * Sheets card and connect page write its name beside a neutral icon. Linear's logo is not shipped yet
  * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN16): its card uses the icon for work tools until the
  * brand asset is added. Google Drive is Google's too, so its card uses a plain folder icon
- * (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD1). `PROVIDER_MARKS` holds the others.
+ * (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD1). No Atlassian logo ships for Jira either
+ * (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR22): its cards use the icon for work tools.
+ * `PROVIDER_MARKS` holds the others.
  */
-export const UNMARKED_PROVIDERS = ["googlesheets", "linear", "googledrive"] as const;
+export const UNMARKED_PROVIDERS = ["googlesheets", "linear", "googledrive", "jira"] as const;
 export type MarkedProviderId = Exclude<ProviderId, (typeof UNMARKED_PROVIDERS)[number]>;
 
 /** A provider's name in copy. */
-export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books", zohocrm: "Zoho CRM", googlesheets: "Google Sheets", linear: "Linear", googledrive: "Google Drive" };
+export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quickbooks: "QuickBooks", hubspot: "HubSpot", pipedrive: "Pipedrive", asana: "Asana", zohobooks: "Zoho Books", zohocrm: "Zoho CRM", googlesheets: "Google Sheets", linear: "Linear", googledrive: "Google Drive", jira: "Jira" };
 
 /**
  * What a provider brings in (docs/superpowers/specs/2026-10-12-hubspot-connector-design.md H1): an accounting tool its
@@ -31,7 +33,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = { xero: "Xero", quick
  * (docs/superpowers/specs/2026-11-01-google-drive-intake-design.md GD1). The core's words follow it.
  */
 export type ProviderKind = "accounting" | "crm" | "work" | "export" | "intake";
-export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting", zohocrm: "crm", googlesheets: "export", linear: "work", googledrive: "intake" };
+export const PROVIDER_KINDS: Record<ProviderId, ProviderKind> = { xero: "accounting", quickbooks: "accounting", hubspot: "crm", pipedrive: "crm", asana: "work", zohobooks: "accounting", zohocrm: "crm", googlesheets: "export", linear: "work", googledrive: "intake", jira: "work" };
 
 /** The kind of a provider named by its id or its label; accounting for a name neither is. */
 export function providerKind(provider: string): ProviderKind {
@@ -63,9 +65,15 @@ export interface ProviderWords {
   customer?: string;
   /**
    * A work tool's word for what a milestone is linked to: Linear's issue
-   * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN1). Absent: task, Asana's.
+   * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN1), and Jira's (Jira acceptance JR1). Absent: task,
+   * Asana's.
    */
   workItem?: string;
+  /**
+   * Where a person removes a work tool's access, when that is not the tool itself: Jira's app is removed under Connected
+   * apps in the Atlassian account (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR3). Absent: the tool.
+   */
+  revokedIn?: string;
 }
 
 export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
@@ -179,6 +187,20 @@ export const PROVIDER_WORDS: Record<ProviderId, ProviderWords> = {
     idleDays: 0,
     bills: "new files in its folder",
     approval: "A file in the Google Drive folder is never by itself a reason to pay: a person adds each bill.",
+  },
+  // A work tool, as Linear (Jira acceptance JR1): one Jira site, its issues linked to milestones; no chart. Atlassian's
+  // refresh token is taken to lapse after 90 days unused, though the daily webhook upkeep refreshes it (JR3), and the
+  // app's access is removed in the Atlassian account, not in Jira.
+  jira: {
+    possessive: "Jira's",
+    organisation: "site",
+    contacts: "users",
+    accounts: "no accounts",
+    idleDays: 90,
+    bills: "linked issues",
+    approval: "An issue done in Jira is never by itself a reason to pay: a person accepts the work against its criteria.",
+    workItem: "issue",
+    revokedIn: "the Atlassian account",
   },
 };
 
@@ -447,7 +469,7 @@ export type CrmProviderId = "hubspot" | "pipedrive" | "zohocrm";
 
 /**
  * The accounting tools among the providers: those that bring bills in (HubSpot connector H1; Asana acceptance A1; Linear
- * acceptance LN1). Google Sheets brings nothing in (close pack Sheets GS1), so it never reads as one; nor does Google
- * Drive, whose files are read into the review list a person adds them from (Google Drive intake GD1).
+ * acceptance LN1; Jira acceptance JR1). Google Sheets brings nothing in (close pack Sheets GS1), so it never reads as one;
+ * nor does Google Drive, whose files are read into the review list a person adds them from (Google Drive intake GD1).
  */
-export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana" | "googlesheets" | "linear" | "googledrive">;
+export type AccountingProviderId = Exclude<ProviderId, CrmProviderId | "asana" | "googlesheets" | "linear" | "googledrive" | "jira">;

@@ -60,6 +60,7 @@ function accountingProviderOf(connection: Connection): AccountingProviderId {
     connection.provider === "zohocrm" ||
     connection.provider === "asana" ||
     connection.provider === "linear" ||
+    connection.provider === "jira" ||
     connection.provider === "googlesheets" ||
     connection.provider === "googledrive"
   )

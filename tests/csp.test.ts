@@ -5,6 +5,7 @@ import { MAX_REPORT_BYTES, POST } from "@/app/api/csp-report/route";
 import { ASANA_AUTHORIZE } from "@/lib/asana/http";
 import { GOOGLE_AUTHORIZE } from "@/lib/googlesheets/http";
 import { HUBSPOT_AUTHORIZE } from "@/lib/hubspot/http";
+import { JIRA_AUTHORIZE, JIRA_LOGIN } from "@/lib/jira/http";
 import { LINEAR_AUTHORIZE } from "@/lib/linear/http";
 import { NETWORKS } from "@/lib/network";
 import { PIPEDRIVE_AUTHORIZE } from "@/lib/pipedrive/http";
@@ -126,6 +127,15 @@ describe("the policy (CSP1, CSP2)", () => {
     }
     expect(policy.get("form-action")).toContain("https://accounts.google.com");
     expect(policy.get("form-action")![0]).toBe("'self'");
+  });
+
+  it("lets Jira's connect form end at Atlassian's consent screen, or at its sign-in for a person signed out (Jira acceptance B11, L4)", () => {
+    // Jira's connect route joins the map above with these two when it is added; until then Jira is off everywhere.
+    for (const url of [JIRA_AUTHORIZE, JIRA_LOGIN]) expect(policy.get("form-action"), url).toContain(new URL(url).origin);
+    expect(new URL(JIRA_AUTHORIZE).origin).toBe("https://auth.atlassian.com");
+    expect(JIRA_LOGIN).toBe("https://id.atlassian.com");
+    // form-action stays report-only, so a sign-in host Atlassian adds shows in the reports and never stops a connection.
+    expect(REPORT_ONLY_DIRECTIVES.has("form-action")).toBe(true);
   });
 });
 

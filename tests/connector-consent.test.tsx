@@ -15,6 +15,7 @@ import {
   namesModelProvider,
 } from "@/lib/connectors/consent";
 import { PROVIDER_KINDS, PROVIDERS, type ProviderId } from "@/lib/connectors/provider";
+import { SCOPES_BY_CONSENT } from "@/lib/jira/settings";
 
 /**
  * What a person agrees to before connecting a tool (src/lib/connectors/consent.ts). A connection keeps the version it
@@ -38,7 +39,7 @@ const JOINED: Record<string, readonly string[]> = {
 /** consent.ts's other exports, none of them a gate. */
 const NOT_GATES = ["CONSENT_VERSIONS", "CONSENT_HISTORY", "HOSTED_MODEL_PROVIDER", "namesModelProvider", "CONSENT_CHANGED", "consentStatement", "CONSENT_LABEL"];
 
-const VERSION = /\b(?:xero|quickbooks|hubspot|pipedrive|asana|googlesheets|linear|googledrive)-\d{4}-\d{2}-\d{2}(?:\.\d+)?\b/;
+const VERSION = /\b(?:xero|quickbooks|hubspot|pipedrive|asana|googlesheets|linear|googledrive|jira)-\d{4}-\d{2}-\d{2}(?:\.\d+)?\b/;
 
 function files(dir: string, extension: RegExp): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -94,8 +95,20 @@ describe("consent versions", () => {
       .filter((file) => file !== "src/lib/connectors/consent.ts")
       // The docs screenshots' fixtures stand for a stored connection, and gate nothing.
       .filter((file) => !file.startsWith("src/app/docs-shots/"))
+      // Jira's settings record the scopes each of its versions asked, and gate nothing (Jira acceptance JR3): the test
+      // below holds them to Jira's history here.
+      .filter((file) => file !== "src/lib/jira/settings.ts")
       .filter((file) => VERSION.test(readFileSync(file, "utf8")));
     expect(elsewhere).toEqual([]);
+  });
+
+  it("lets Jira's record of scopes name exactly the versions Jira's statement has had, and read no current version (Jira acceptance JR3)", () => {
+    const source = readFileSync(path.join(process.cwd(), "src/lib/jira/settings.ts"), "utf8");
+    const named = [...source.matchAll(new RegExp(VERSION.source, "g"))].map((match) => match[0]);
+    expect(named).toEqual([...CONSENT_HISTORY.jira]);
+    expect(Object.keys(SCOPES_BY_CONSENT)).toEqual([...CONSENT_HISTORY.jira]);
+    expect(source).not.toMatch(/\b(?:CONSENT_VERSIONS|CONSENT_HISTORY|consentVersion|consent_version)\b/);
+    expect(source).not.toMatch(/from "[^"]*connectors\/consent"/);
   });
 
   it("lets only the connect route and the statement on the connect page read the current versions, so no 'reconnect to agree' check hides elsewhere", () => {
@@ -163,9 +176,10 @@ describe("the model provider a statement names", () => {
   it.each(PROVIDERS)("%s's statement names the hosted provider and its own terms where the agent decides on its facts", (provider) => {
     const naming = consentStatement(provider).filter(namesModelProvider);
     const named = `The agent's model provider (${HOSTED_MODEL_PROVIDER.name}, on the hosted service)`;
-    if (provider === "asana" || provider === "linear" || provider === "googlesheets") {
+    if (provider === "asana" || provider === "linear" || provider === "jira" || provider === "googlesheets") {
       // A task's or an issue's facts reach no model: a person accepts the work, and the agent decides the milestone's
-      // payment (Linear acceptance LN13). Nothing from Google Sheets reaches the agent at all (close pack Sheets GS17).
+      // payment (Linear acceptance LN13, Jira acceptance JR11). Nothing from Google Sheets reaches the agent at all (close
+      // pack Sheets GS17).
       expect(naming).toEqual([]);
       return;
     }
