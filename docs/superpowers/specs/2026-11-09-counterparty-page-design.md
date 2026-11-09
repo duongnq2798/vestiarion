@@ -90,20 +90,21 @@ Code comments and test names cite the ids, for example `// CL5: copy only an add
   - Each row's `after` slot holds "Open in Bills & receivables", which goes to `invoiceHref(id)`. Verdicts, allocations and variances belong to Bills and stay there.
 - **CL9 Payments and receipts.**
   - For a payee: paid milestones and paid payables, merged, newest first by the date each row shows (`milestoneDate`, `rowDate`). The latest 10 show by default; `?history=all#payments` shows up to 500.
+  - A milestone's date is `milestoneAt`: for a paid one, its intent's `confirmed_at`, else `executed_at`; otherwise the ledger entry its decision rests on (`milestoneDecidedAt`). With neither read it is null: the row says "Paid" or "Held" with no day, and a paid one sorts last. `milestoneDecision`'s `at` is never shown as a date, since it is the time of the request when no entry was read (amended 2026-11-09).
   - The card footer already gives the transaction, the mint, the evidence and the audit links.
   - Each payable gets a note with its receipt state, shown to every member, as the evidence page does: shared, stopped, none, or unavailable when not paid on chain. A milestone's note is "A milestone has no receipt".
   - A destination different from the current address gives a second note:
     - a `0x` destination: "Paid to an earlier address" with `Hash` and the explorer link;
     - a `blindpay:` destination: "Paid to their bank account through BlindPay";
     - a `sim:` destination: the simulated line.
-  - `footerAction` holds the existing receipt control (share, renew, revoke) when `shareReceipts && receiptShareable(invoice, decision)`.
+  - `footerAction` holds the existing receipt control (share, renew, revoke) when `shareReceipts && receiptShareable(invoice, decision)`. While the receipts part is unread it gets `shared={null}` and offers no button, only why: sharing renews a shared receipt's token, which would stop the link its payee holds (amended 2026-11-09).
   - For a client the section is "Payments from them": received invoices, with a transaction link where `tx_ref` is a `0x` hash, and no receipt state (receipts are for payables, P6).
   - The tiles and section totals are per currency ("120 USDC · 40 EURC"). USDC and EURC are never added together.
   - Totals use every row read (CL13), not just the rows shown.
 - **CL10 Documents.**
   - Payees only.
-  - Document requests on the shown bills come from `readDocumentRequests(invoiceIds, db(), now)` and are drawn with `DocumentRequestLine`, with `canRevoke={write}`. The file link is the existing members-only route.
-  - Below them is "Sent from the browser extension": `sentDraftsFrom(counterpartyId, 20)` (state `sent`, this counterparty). These link to `billsHref({ tab: "bills", review: "captured" })`.
+  - Document requests on the shown bills come from `readDocumentRequests(invoiceIds, db(), now)` and are drawn with `DocumentRequestLine`, with `canRevoke={write}`, each view through `visibleRequest` first (CL12). The file link is the existing members-only route.
+  - Below them is "Invoices sent for review": `sentDraftsFrom(counterpartyId, 20)` (state `sent`, this counterparty), which holds what the browser extension captured and what the payee sent through their payee link (0133's `source 'payee_link'`). These link to `billsHref({ tab: "bills", review: "captured" })` (amended 2026-11-09: it was named for the browser extension alone).
   - Before 0121 the drafts part says "Not read" (`isMissingRelation`).
 - **CL11 History.**
   - Comes from `listCounterpartyEntries(counterpartyId, 25)`: `seq, ts, actor, action, summary` only, from `domain = "compliance"` entries with `detail->>counterpartyId`, `seq` descending.
@@ -117,8 +118,9 @@ Code comments and test names cite the ids, for example `// CL5: copy only an add
     - keeps at most two combining marks in a row;
     - trims, and cuts at `max` with an ellipsis.
   - `src/lib/document-requests/check.ts` imports these classes rather than keeping its own copy.
-  - `UntrustedText` wraps the result in `<bdi>`. It is used for the counterparty's name, lookalike names, milestone titles, invoice numbers and memos, request notes and draft fields.
-  - Names and titles go through `visibleText` before they reach `milestoneDecision` and `invoiceDecision`. The breadcrumb crumb is `visibleText(counterparty.name, 80)`.
+  - `UntrustedText` wraps the result in `<bdi>`. It is used for the counterparty's name, lookalike names, milestone titles, invoice numbers and memos, and draft fields.
+  - Names and titles go through `visibleText` before they reach `milestoneDecision` and `invoiceDecision`. The breadcrumb crumb is `visibleText(counterparty.name, 80)`. `CounterpartyProfile`, `CounterpartyAddressBlock` (with `AddressCheckNote`'s "is frozen" callout), `CounterpartyPayoutBlock` and `PayeeLinkControl` get the row with that cleaned name.
+  - A document request's note keeps its lines: `visibleLines(text, max)` cleans each line as `visibleText` does, leaves out a line with nothing visible, and cuts the whole at `max`. `visibleRequest` (in `page-view.ts`) runs the note through it and the purchase order number through `visibleText`, for the request and for what was sent with an earlier one (`received`), before `DocumentRequestLine` draws them (amended 2026-11-09).
 - **CL13 Reads and refresh.**
   - The counterparty is read first. Every other part then runs in parallel and best effort. A failed part renders "Not read just now. Reload the page in a moment.", and its tile says "Not read".
   - This counterparty's invoices and milestones are paged by 1000.
@@ -196,17 +198,18 @@ Two of these differences are deliberate:
 
 - `src/app/o/[slug]/counterparties/[id]/page.tsx`: the page (CL1–CL17).
 - `src/lib/counterparty-paths.ts`: sections, paths, `counterpartyIdOf`, milestone anchors (CL15).
-- `src/lib/visible-text.ts`: `visibleText` and the shared character classes (CL12).
+- `src/lib/visible-text.ts`: `visibleText`, `visibleLines` and the shared character classes (CL12).
 - `src/lib/counterparties/page-grants.ts`: `pageGrants` (CL3).
 - `src/lib/counterparties/page-view.ts`, all pure:
   - `addressFacts`;
   - `payeeLinkStates`;
-  - `paymentRows` (merge, order, cap);
+  - `paymentRows` (merge, order, cap) and `milestoneAt` (CL9);
   - `totalsByCurrency`;
   - the bill, invoice and milestone groupings;
+  - `visibleRequest` (CL10, CL12);
   - `tiles`.
 - `src/lib/counterparties/page-read.ts`: `readCounterpartyPage(counterparty, { orgId, grants, network, now, history })`. It returns each part as `{ read: true, value } | { read: false }`.
-- `src/lib/milestone-date.ts`: `milestoneDate`, moved from the bottom of `contractors/page.tsx` so both pages use it.
+- `src/lib/milestone-date.ts`: `milestoneDate`, moved from the bottom of `contractors/page.tsx` so both pages use it. It takes a null time too, and then names the state without a day (CL9).
 - `src/components/CounterpartyDetails.tsx`, server components with no tenant-data value imports:
   - `CounterpartyProfile`: `ScreeningMatch`, `PerformanceHistory`, and the six-line `dl` (Configured limit, Allowed now, Jurisdiction, Last screened, Billing email, Purchase orders);
   - `CounterpartyAddressBlock`: `CounterpartyAddress`, `AddressCheckNote`, the mirror note, `MirrorAddressControl`;
@@ -224,6 +227,8 @@ Two of these differences are deliberate:
 - `src/components/CounterpartyRow.tsx`: optional `pageHref`, which puts "Open their page" at the top of the opened row. The Disclosure id `counterparty-<id>` stays.
 - `src/components/intake/CounterpartyAddressEdit.tsx`: optional `full`, `explorerHref`, `copyable` and `copyNote` (CL5). Without them the list renders as today.
 - `src/components/vx/DecisionRows.tsx`: `DecisionRowItem.anchor?: string`, passed to `Disclosure id`.
+- `src/components/vx/map.ts`: `milestoneDecidedAt(milestoneId, entries)`, the time of the entry `milestoneDecision` rests on, or null (CL9).
+- `src/components/ReceiptControl.tsx`: `shared` may be null, for a receipt whose state was not read: no button then (CL9).
 - `src/app/o/[slug]/contractors/page.tsx`:
   - rows get `anchor: milestoneAnchor(milestone.id)`;
   - `after` starts with "Open their page" (`counterpartyPath(milestone.contractor_id)`);
@@ -316,7 +321,7 @@ None added. CL14 lists the existing entries the reused controls write. History r
   - "The latest 5 links; every one is in History and the Audit log.";
   - "An owner or admin sends and stops payee links."
 - Sections:
-  - "Profile", "Payment address", "Payee link", "Milestones" ("Open", "Closed without paying"), "Bills from them" ("Open", "Rejected"), "Invoices to them" ("Open", "Received"), "Payments", "Payments from them", "Documents" ("Document requests", "Sent from the browser extension"), "History";
+  - "Profile", "Payment address", "Payee link", "Milestones" ("Open", "Closed without paying"), "Bills from them" ("Open", "Rejected"), "Invoices to them" ("Open", "Received"), "Payments", "Payments from them", "Documents" ("Document requests", "Invoices sent for review"), "History";
   - "Show every payment" / "Show the latest 10";
   - "All of it in the Audit log".
 - Row links: "Open in Contractors", "Open in Bills & receivables", "Open their page", "Open their address".
@@ -356,13 +361,15 @@ None added. CL14 lists the existing entries the reused controls write. History r
 **New**
 
 - `tests/counterparty-paths.test.ts`: sections, `""` to the list, UUID check and lowercase, milestone paths (CL15).
-- `tests/visible-text.test.ts`: each class dropped, breaks to spaces, combining marks capped at 2, the cut. The document-request note tests still pass (CL12).
+- `tests/visible-text.test.ts`: each class dropped, breaks to spaces, combining marks capped at 2, the cut; `visibleLines` keeping lines. The document-request note tests still pass (CL12).
 - `tests/counterparty-page-grants.test.ts`: the role matrix row by row, co-sign on and off, live and not live (CL3).
 - `tests/counterparty-page-view.test.ts`:
   - `addressFacts` for all five states;
   - copy rules;
   - `payeeLinkStates`, including "replaced" with equal timestamps and "used" within and after 30 days;
-  - `paymentRows` order and cap;
+  - `paymentRows` order and cap, a milestone with no time last;
+  - `milestoneAt` and `milestoneDate` with no time read;
+  - `visibleRequest`, with an earlier answer under a newer request;
   - per-currency totals never summed;
   - groups by status (CL5, CL6, CL8, CL9).
 - `tests/counterparty-page-read.test.ts`, with a fake db:
@@ -376,6 +383,11 @@ None added. CL14 lists the existing entries the reused controls write. History r
   - a reader that throws gives the held callout;
   - a viewer sees History and receipt state but no payee-link section and no Copy on an unconfirmed address;
   - a writer gets `PayeeLinkControl` with `offers`;
+  - an accountant gets Confirm address while co-signing, and not otherwise;
+  - receipts unread: no Share receipt, New link or Stop sharing;
+  - a paid milestone dated by its payment, with no day and last when nothing about it was read;
+  - a request note, a purchase order number and a frozen payee's name without bidi or zero-width characters;
+  - a payee-link draft under "Invoices sent for review";
   - a client has no payee-link, milestones or documents section;
   - an explorer link only for `0x`;
   - each section id appears exactly once;

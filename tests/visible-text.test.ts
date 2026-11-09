@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readerNoteOf } from "@/lib/document-requests/check";
-import { NOTE_BREAK, NOTE_INVISIBLE, NOTE_MARKS, visibleText } from "@/lib/visible-text";
+import { NOTE_BREAK, NOTE_INVISIBLE, NOTE_MARKS, visibleLines, visibleText } from "@/lib/visible-text";
 
 /**
  * Text someone outside the workspace wrote, as a page shows it (docs/superpowers/specs/2026-11-09-counterparty-page-design.md
@@ -77,6 +77,32 @@ describe("visibleText", () => {
     for (const pattern of [NOTE_INVISIBLE, NOTE_BREAK, NOTE_MARKS]) expect(pattern.flags).toBe("gu");
     expect(`a${at(0x202e)}b`.replace(NOTE_INVISIBLE, "")).toBe("ab");
     expect("a\nb".replace(NOTE_BREAK, " ")).toBe("a b");
+  });
+});
+
+describe("visibleLines", () => {
+  it("CL12: drops from each line what visibleText drops, and keeps the lines", () => {
+    expect(visibleLines(`PO 1234${at(0x202e)} fdp.exe${at(0x200b)}\nSecond${at(0x2066)} line`, 500)).toBe("PO 1234 fdp.exe\nSecond line");
+    const acute = at(0x0301);
+    expect(visibleLines(`e${acute}${acute}${acute}${acute}\n  two   spaces\tand a tab  `, 500)).toBe(`e${acute}${acute}\ntwo spaces and a tab`);
+  });
+
+  it("CL12: ends a line at every line break, and leaves out a line with nothing visible in it", () => {
+    expect(visibleLines("one\r\ntwo\rthree\nfour", 500)).toBe("one\ntwo\nthree\nfour");
+    expect(visibleLines(`one${at(0x2028)}two${at(0x2029)}three`, 500)).toBe("one\ntwo\nthree");
+    expect(visibleLines(`one\n\n${at(0x202e)}${at(0x200b)}\n   \nfive`, 500)).toBe("one\nfive");
+  });
+
+  it("CL12: cuts at max characters in all, with an ellipsis", () => {
+    expect(visibleLines("Northwind\nTraders", 17)).toBe("Northwind\nTraders");
+    expect(visibleLines("Northwind\nTraders", 12)).toBe("Northwind\nT…");
+    expect(visibleLines(`Acme${at(0x200b).repeat(100)}\nLtd`, 8)).toBe("Acme\nLtd");
+  });
+
+  it("CL12: is empty for no text, or for text with nothing visible in it", () => {
+    expect(visibleLines(null, 500)).toBe("");
+    expect(visibleLines(undefined, 500)).toBe("");
+    expect(visibleLines(`${at(0x202e)}\n${at(0x2800)}\r\n `, 500)).toBe("");
   });
 });
 

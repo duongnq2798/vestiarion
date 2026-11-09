@@ -24,12 +24,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   confirmed since, not frozen, and like no other counterparty's address or one they had before (otherwise one line
   says why); for an owner or admin, their payee link with the latest five links and what became of each, from out
   and replaced by a newer link to revoked, expired unused or used, with their invoice; their open milestones and those
-  closed without paying; their bills, or a client's invoices; their payments, newest first, each paid bill with where
-  its receipt is, for every member, and a payment sent to an address they no longer have marked as such; the
-  documents asked of them and what the browser extension captured from them; and the latest changes to them, each
-  linked to its signed entry in the Audit log. A part that could not be read says so, never zero or none. Names,
-  titles and notes the counterparty wrote are shown without invisible or direction-changing characters. Nothing on
-  the page pays or records anything new: its controls are the ones Counterparties, Contractors and Bills &
+  closed without paying; their bills, or a client's invoices; their payments, newest first, a paid milestone dated by
+  when its payment was confirmed, each paid bill with where its receipt is, for every member, and a payment sent to
+  an address they no longer have marked as such; the documents asked of them, with the purchase order number and note
+  they typed, and the invoices sent for review that name them, captured with the browser extension or sent through
+  their payee link; and the latest changes to them, each linked to its signed entry in the Audit log. A part that
+  could not be read says so, never zero or none, and a date it did not read is never shown: a paid milestone without
+  one names no day and comes last. While whether a receipt is shared could not be read, it cannot be shared from the
+  page, since sharing again would stop a link already sent. Names, titles, purchase order numbers and notes the
+  counterparty wrote are shown without invisible or direction-changing characters, the notes with their lines.
+  Nothing on the page pays or records anything new: its controls are the ones Counterparties, Contractors and Bills &
   receivables already have, with their own signed entries, and paying, verifying or closing a milestone stays on
   Contractors. Another workspace's counterparty is not found, like one that does not exist; the browser tab and
   analytics name the page only as Counterparty. No migration.

@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { DecisionRows, RowGroupHeading, type DecisionRowItem } from "@/components/vx/DecisionRows";
-import { invoiceDecision, milestoneDecision } from "@/components/vx/map";
+import { invoiceDecision, milestoneDecidedAt, milestoneDecision } from "@/components/vx/map";
 import { fmt, Hash, Money, shortHash } from "@/components/vx/Primitives";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { StatTile } from "@/components/vx/StatTile";
@@ -43,6 +43,7 @@ import {
   counterpartyTotals,
   invoiceGroups,
   isPayee,
+  milestoneAt,
   milestoneGroups,
   NOT_READ,
   OPEN_SHOWN,
@@ -51,6 +52,7 @@ import {
   paymentRows,
   PAYMENTS_SHOWN,
   tiles,
+  visibleRequest,
   type CopyOff,
   type CurrencyTotal,
   type Group,
@@ -172,8 +174,10 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
     };
     const links = read.payeeLinks?.read ? read.payeeLinks.value : null;
 
-    // CL7–CL9: each record's decision, with its name and title as text from outside (CL12).
-    const shown: CounterpartyRow = { ...counterparty, name };
+    // CL12: the row as the page's own parts name it (the profile, the address and its "is frozen" callout, the payout,
+    // the payee link), by what is visible of the name. CL7–CL9: each record's decision, with its name and title as text
+    // from outside too.
+    const shown: CounterpartyRow = { ...counterparty, name: name || "This counterparty" };
     const settlements =
       payments && invoices
         ? settlementsByBill({
@@ -187,6 +191,8 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
     const billDecision = (invoice: InvoiceRow) =>
       invoiceDecision({ ...invoice, counterparty_name: name, memo: invoice.memo === null ? null : visibleText(invoice.memo, 200) || null }, shown, entries, { network, settlements, asOf: now });
     const waits = (milestone: MilestoneRow) => milestoneWaiting(milestone, counterparty, { live, lock: read.payeeLock, now });
+    // CL9: when a milestone was paid or last decided, from its payment or its entries; null with neither read.
+    const milestoneTime = (milestone: MilestoneRow) => milestoneAt(milestone, payments?.payments.get(milestone.id), milestoneDecidedAt(milestone.id, entries));
     const workDecision = (milestone: MilestoneRow) => {
       const wait = waits(milestone);
       return milestoneDecision({ ...milestone, contractor_name: name, title: visibleText(milestone.title, 200) }, entries, {
@@ -267,7 +273,8 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
       const note = inPayments ? ["A milestone has no receipt", sent?.words].filter(Boolean).join(" · ") : undefined;
       return {
         decision,
-        date: milestoneDate(milestone, decision.at),
+        // CL9: never `decision.at`, which is the time of this request when no entry about the milestone was read.
+        date: milestoneDate(milestone, milestoneTime(milestone)),
         ...(hint ? { hint } : {}),
         ...(note ? { note } : {}),
         ...(before ? { before } : {}),
@@ -284,10 +291,11 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
       const sent = paidOut ? destination(invoice.id) : null;
       const note = paidOut ? [receiptWords(invoice, decision), sent?.words].filter(Boolean).join(" · ") : undefined;
       const before = nodes(cutNote(invoice.id), sent?.link);
-      // CL4: mounted on write access in a live workspace and the payment alone, never on the receipt's own state.
+      // CL4: mounted on write access in a live workspace and the payment alone, never on the receipt's own state. With
+      // that state unread the control offers nothing (null): sharing a shared receipt again would stop its link.
       const footerAction =
         paidOut && grants.shareReceipts && receiptShareable(invoice, decision) ? (
-          <ReceiptControl orgSlug={slug} invoiceId={invoice.id} shared={read.receipts?.read === true && read.receipts.value.get(invoice.id) === "shared"} />
+          <ReceiptControl orgSlug={slug} invoiceId={invoice.id} shared={read.receipts?.read ? read.receipts.value.get(invoice.id) === "shared" : null} />
         ) : undefined;
       return {
         decision,
@@ -306,7 +314,7 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
       bills && work
         ? paymentRows(
             {
-              milestones: payee ? work.paid.map((milestone) => ({ milestone, paidAt: workDecision(milestone).at })) : [],
+              milestones: payee ? work.paid.map((milestone) => ({ milestone, paidAt: milestoneTime(milestone) })) : [],
               invoices: bills.paid,
             },
             everyPayment
@@ -332,7 +340,8 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
       payee && bills && read.documents?.read
         ? [...bills.open.rows, ...bills.closed.rows].flatMap((invoice) => {
             const view = read.documents?.read ? read.documents.value.get(invoice.id) : undefined;
-            return view ? [{ invoice, view }] : [];
+            // CL12: the note and purchase order number the vendor typed, only as far as they show.
+            return view ? [{ invoice, view: visibleRequest(view) }] : [];
           })
         : [];
     const drafts = read.drafts?.read ? read.drafts.value : null;
@@ -362,21 +371,21 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
           </div>
 
           <Section id="profile" title="Profile">
-            <CounterpartyProfile orgSlug={slug} network={network} counterparty={counterparty} grants={grants} liveScreening={screeningMode() === "live"} anchored />
+            <CounterpartyProfile orgSlug={slug} network={network} counterparty={shown} grants={grants} liveScreening={screeningMode() === "live"} anchored />
           </Section>
 
           <Section id="address" title="Payment address">
             <CounterpartyAddressBlock
               orgSlug={slug}
               network={network}
-              counterparty={counterparty}
+              counterparty={shown}
               // CL5: no confirming an address while the lookalikes the confirm form warns of are unread.
               grants={{ write: grants.write, confirmAddress: grants.confirmAddress && checks.read }}
               found={found}
               shadow={read.controls.shadow}
               view={addressView}
             />
-            <CounterpartyPayoutBlock orgSlug={slug} counterparty={counterparty} grants={grants} bank={read.controls.bank} />
+            <CounterpartyPayoutBlock orgSlug={slug} counterparty={shown} grants={grants} bank={read.controls.bank} />
           </Section>
 
           {payee && (
@@ -386,7 +395,7 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
                   {/* CL4: mounted on write access alone, so a refresh after Create link never takes away the link it shows. */}
                   <PayeeLinkControl
                     orgSlug={slug}
-                    counterparty={{ id: counterparty.id, name: counterparty.name }}
+                    counterparty={{ id: counterparty.id, name: shown.name }}
                     chainLabel={chainLabel}
                     activeLink={links?.active ?? null}
                     offers={{ invoice: true, chains: read.controls.chainChoices }}
@@ -497,7 +506,7 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
                   )}
                   {(drafts === null || drafts.length > 0) && (
                     <div>
-                      <h3 className="mb-2 text-sm font-semibold text-ink">Sent from the browser extension</h3>
+                      <h3 className="mb-2 text-sm font-semibold text-ink">Invoices sent for review</h3>
                       {drafts === null ? <NotRead /> : <SentDrafts orgSlug={slug} drafts={drafts} />}
                     </div>
                   )}

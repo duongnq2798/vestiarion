@@ -1,17 +1,19 @@
 import { OPEN_STATUSES } from "../bills-view";
 import { utcDay } from "../copy";
 import { addressUnconfirmed } from "../counterparty-address";
+import { MAX_DOCUMENT_NOTE, MAX_DOCUMENT_PO, type DocumentReceivedView, type DocumentRequestView } from "../document-requests/rules";
 import type { Network, PayeeChainEntry } from "../network";
 import { addressOnChainUrl, ChainNotOnNetworkError, chainOn } from "../payee-chains";
 import type { Lookalike } from "../payee-lock-rules";
 import type { CounterpartyRow, InvoiceRow, MilestoneRow } from "../queries";
-import { visibleText } from "../visible-text";
+import type { IntentRecord } from "../settlement-facts";
+import { visibleLines, visibleText } from "../visible-text";
 
 /**
  * What a counterparty's page shows, from what it read (docs/superpowers/specs/2026-11-09-counterparty-page-design.md):
  * the address's state and whether it may be copied (CL5), each payee link's state (CL6), the milestone, bill and
- * invoice groups (CL7, CL8), Payments' rows and the totals per currency (CL9), and the tiles. Pure: the page reads, and
- * this decides what each part says.
+ * invoice groups (CL7, CL8), Payments' rows, their dates and the totals per currency (CL9), what a document request's
+ * vendor typed (CL10, CL12), and the tiles. Pure: the page reads, and this decides what each part says.
  */
 
 /** A part of the page, read best effort (CL13): its value, or that it could not be read. Never 0 or "none" for that. */
@@ -347,15 +349,34 @@ export function milestoneGroups(milestones: readonly MilestoneRow[]): MilestoneG
 export const PAYMENTS_SHOWN = 10;
 export const PAYMENTS_ALL = 500;
 
-/** A row of Payments, at the time its row's date says: a milestone when it was paid, a bill or invoice its due date. */
-export type PaymentRow = { kind: "milestone"; at: string; milestone: MilestoneRow } | { kind: "invoice"; at: string; invoice: InvoiceRow };
+/**
+ * A row of Payments, at the time its row's date says: a milestone when it was paid (`milestoneAt`), null when that was
+ * not read, and a bill or invoice its due date.
+ */
+export type PaymentRow = { kind: "milestone"; at: string | null; milestone: MilestoneRow } | { kind: "invoice"; at: string; invoice: InvoiceRow };
+
+/**
+ * CL9: the time a milestone's row is dated by (`milestoneDate`), and Payments orders a paid one by: a paid milestone's
+ * payment, when it was confirmed or else sent; otherwise, or with no payment read, the entry the agent's decision on it
+ * rests on (`decidedAt`). Null when neither was read, so the row names no day and sorts last: never the time the page
+ * was opened, which the decision stands in with when it has no entry.
+ */
+export function milestoneAt(
+  milestone: Pick<MilestoneRow, "status">,
+  payment: Pick<IntentRecord, "confirmed_at" | "executed_at"> | null | undefined,
+  decidedAt: string | null
+): string | null {
+  const paidAt = milestone.status === "paid" ? (payment?.confirmed_at ?? payment?.executed_at ?? null) : null;
+  return paidAt ?? decidedAt;
+}
 
 /**
  * CL9: paid milestones and paid bills (a client's paid invoices), merged, newest first by the date each row shows
- * (`milestoneDate`, `rowDate`): the latest 10, or 500 with every payment asked for. `count` is every one.
+ * (`milestoneDate`, `rowDate`), a milestone whose time of payment was not read last: the latest 10, or 500 with every
+ * payment asked for. `count` is every one.
  */
 export function paymentRows(
-  input: { milestones: ReadonlyArray<{ milestone: MilestoneRow; paidAt: string }>; invoices: readonly InvoiceRow[] },
+  input: { milestones: ReadonlyArray<{ milestone: MilestoneRow; paidAt: string | null }>; invoices: readonly InvoiceRow[] },
   all: boolean
 ): { shown: PaymentRow[]; count: number } {
   const rows: PaymentRow[] = [
@@ -408,6 +429,24 @@ export function counterpartyTotals(role: string, invoices: readonly InvoiceRow[]
     paid: totalsByCurrency([...bills.paid.map(paidAmount), ...work.paid.map(milestoneAmount)]),
   };
 }
+
+// --- Documents (CL10) ---
+
+/**
+ * CL10, CL12: a bill's document request as Documents shows it: the note and the purchase order number the vendor typed,
+ * and those under a newer request (`received`), only as far as they show. The note keeps its lines (`visibleLines`); the
+ * number is one line (`visibleText`); either is null with nothing visible left. Everything else is as read.
+ */
+export function visibleRequest(view: DocumentRequestView): DocumentRequestView {
+  if (view.state === "answered") return visibleSent(view);
+  return view.received ? { ...view, received: visibleSent(view.received) } : view;
+}
+
+const visibleSent = (sent: DocumentReceivedView): DocumentReceivedView => ({
+  ...sent,
+  ...(sent.note == null ? {} : { note: visibleLines(sent.note, MAX_DOCUMENT_NOTE) || null }),
+  ...(sent.poReference == null ? {} : { poReference: visibleText(sent.poReference, MAX_DOCUMENT_PO) || null }),
+});
 
 // --- The tiles ---
 

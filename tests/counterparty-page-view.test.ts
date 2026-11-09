@@ -6,6 +6,7 @@ import {
   copyOffWords,
   counterpartyTotals,
   invoiceGroups,
+  milestoneAt,
   milestoneGroups,
   NO_EXPLORER,
   NOT_READ,
@@ -18,8 +19,10 @@ import {
   tiles,
   totalsByCurrency,
   USED_LINK_DAYS_MS,
+  visibleRequest,
   type PayeeLinkRecord,
 } from "@/lib/counterparties/page-view";
+import type { DocumentReceivedView } from "@/lib/document-requests/rules";
 import { milestoneDate } from "@/lib/milestone-date";
 import { INVOICE_DAYS_MS } from "@/lib/platform/payee-links";
 import type { InvoiceRow, MilestoneRow } from "@/lib/queries";
@@ -325,6 +328,35 @@ describe("Payments and totals (CL9)", () => {
     expect(rows.count).toBe(4);
   });
 
+  it("CL9: puts a milestone whose time of payment was not read last", () => {
+    const rows = paymentRows(
+      {
+        milestones: [
+          { milestone: milestone("m-unread", { status: "paid" }), paidAt: null },
+          { milestone: milestone("m-old", { status: "paid" }), paidAt: "2026-10-02T09:00:00Z" },
+        ],
+        invoices: [invoice("b-old", { status: "paid", due_date: "2026-09-20" })],
+      },
+      false
+    );
+    expect(rows.shown.map((row) => (row.kind === "milestone" ? row.milestone.id : row.invoice.id))).toEqual(["m-old", "b-old", "m-unread"]);
+    expect(rows.shown.at(-1)?.at).toBeNull();
+  });
+
+  it("CL9: dates a paid milestone by its payment's confirmation, then when it was sent, then the entry its decision rests on", () => {
+    const paid = milestone("m", { status: "paid" });
+    const entry = "2026-11-02T09:00:00Z";
+    expect(milestoneAt(paid, { confirmed_at: "2026-11-01T10:00:00Z", executed_at: "2026-11-01T09:58:00Z" }, entry)).toBe("2026-11-01T10:00:00Z");
+    expect(milestoneAt(paid, { confirmed_at: null, executed_at: "2026-11-01T09:58:00Z" }, entry)).toBe("2026-11-01T09:58:00Z");
+    expect(milestoneAt(paid, { confirmed_at: null, executed_at: null }, entry)).toBe(entry);
+    expect(milestoneAt(paid, undefined, entry)).toBe(entry);
+    // Neither read: no time at all, never the time of the request.
+    expect(milestoneAt(paid, undefined, null)).toBeNull();
+    // A milestone not paid is dated by its entry alone, whatever its payment says.
+    expect(milestoneAt(milestone("h", { status: "held" }), { confirmed_at: "2026-11-01T10:00:00Z", executed_at: null }, entry)).toBe(entry);
+    expect(milestoneAt(milestone("h", { status: "held" }), undefined, null)).toBeNull();
+  });
+
   it("CL9: shows the latest 10, or up to 500 when every payment is asked for", () => {
     const invoices = Array.from({ length: PAYMENTS_ALL + 20 }, (_, index) => invoice(`b-${index}`, { status: "paid", due_date: new Date(NOW - index * DAY).toISOString().slice(0, 10) }));
     const latest = paymentRows({ milestones: [], invoices }, false);
@@ -386,6 +418,43 @@ describe("Payments and totals (CL9)", () => {
     expect(milestoneDate(milestone("m", { status: "verified", verified_at: "2026-11-06T09:00:00Z" }), "2026-11-08T09:00:00Z")).toEqual({ label: "Verified Nov 6, 2026" });
     expect(milestoneDate(milestone("m", { status: "verified" }), "2026-11-08T09:00:00Z")).toEqual({ label: "Verified" });
     expect(milestoneDate(milestone("m"), "2026-11-08T09:00:00Z")).toEqual({ label: "Awaiting verification" });
+  });
+
+  it("CL9: names a milestone's state without a day when its time was not read", () => {
+    expect(milestoneDate(milestone("m", { status: "paid" }), null)).toEqual({ label: "Paid" });
+    expect(milestoneDate(milestone("m", { status: "held" }), null)).toEqual({ label: "Held", tone: "held" });
+    expect(milestoneDate(milestone("m", { status: "closed" }), null)).toEqual({ label: "Closed" });
+    expect(milestoneDate(milestone("m", { status: "closed", closed_at: "2026-11-07T09:00:00Z" }), null)).toEqual({ label: "Closed Nov 7, 2026" });
+  });
+});
+
+describe("documents (CL10, CL12)", () => {
+  const sent = (over: Partial<DocumentReceivedView> = {}): DocumentReceivedView => ({
+    state: "answered",
+    id: "req-1",
+    missing: ["purchase_order"],
+    answeredAt: "2026-11-08T10:00:00Z",
+    note: `Paid${at(0x202e)} to 0xabc${at(0x200b)}\n\n${at(0x2066)}${at(0x2069)}\nThanks`,
+    poReference: `PO-${at(0xfeff)}77`,
+    fileType: "application/pdf",
+    ...over,
+  });
+
+  it("CL12: keeps only what shows of the vendor's note and purchase order number, and the note's lines", () => {
+    expect(visibleRequest(sent())).toEqual(sent({ note: "Paid to 0xabc\nThanks", poReference: "PO-77" }));
+  });
+
+  it("CL12: cleans what a vendor sent with an earlier request, under a newer one", () => {
+    const asked = { state: "asked" as const, id: "req-2", missing: ["purchase_order" as const], sentAt: "2026-11-08T11:00:00Z", expiresAt: "2026-11-22T11:00:00Z", received: sent() };
+    expect(visibleRequest(asked)).toEqual({ ...asked, received: sent({ note: "Paid to 0xabc\nThanks", poReference: "PO-77" }) });
+    const expired = { state: "expired" as const, missing: ["purchase_order" as const], sentAt: "2026-10-01T11:00:00Z", expiresAt: "2026-10-15T11:00:00Z" };
+    expect(visibleRequest(expired)).toBe(expired);
+  });
+
+  it("CL12: makes a note or a number with nothing visible in it none, and leaves one never typed as it was", () => {
+    expect(visibleRequest(sent({ note: `${at(0x202e)}\n${at(0x200b)}`, poReference: at(0x2800) }))).toEqual(sent({ note: null, poReference: null }));
+    const plain = { state: "answered" as const, missing: ["purchase_order" as const], answeredAt: "2026-11-08T10:00:00Z" };
+    expect(visibleRequest(plain)).toEqual(plain);
   });
 });
 

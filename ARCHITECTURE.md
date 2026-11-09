@@ -2089,8 +2089,9 @@ own signed entries (CL14), and no action, ledger action, table, column or index 
   on the bills it shows. Milestone evidence is checked as Contractors checks it (`asanaOnContractors`,
   `linearOnContractors`, `checkEvidenceLinks`, open milestones first). History is `listCounterpartyEntries(id, 25)`:
   `seq, ts, actor, action, summary` of the compliance entries naming them, newest first, never `detail`; its query is
-  the evidence page's, unindexed on `detail->>counterpartyId`, filtered by `org_id` and cut to 25. The drafts sent from
-  the browser extension (`sentDraftsFrom`) are not read before 0121. The page has no `maxDuration`, and re-reads as the
+  the evidence page's, unindexed on `detail->>counterpartyId`, filtered by `org_id` and cut to 25. The drafts sent for
+  review (`sentDraftsFrom`: every `sent` draft naming them, from the browser extension or a payee link, under
+  "Invoices sent for review") are not read before 0121. The page has no `maxDuration`, and re-reads as the
   list does (`counterpartiesRefreshMs`: every 15 s while its link is out or its address waits, else every minute).
 - **The address** (CL5). `addressFacts` (`src/lib/counterparties/page-view.ts`, pure) gives its state from the row:
   none, set when added, confirmed, unconfirmed or frozen. It is shown whole and wrapping (`CounterpartyAddressEdit`'s
@@ -2113,15 +2114,22 @@ own signed entries (CL14), and no action, ledger action, table, column or index 
   Contractors and Bills build them, each linking back there (`milestoneRowPath`, `invoiceHref`): open and closed
   milestones, open and rejected bills (a client's open and received invoices). Payments merges paid milestones and paid
   payables newest first by the date each shows (`milestoneDate`, moved to `src/lib/milestone-date.ts`, and `rowDate`),
-  the latest 10 or 500 with `?history=all#payments`; each paid bill notes its receipt state for every member, a
-  destination not their address now says where it went, and a live writer gets the existing `ReceiptControl`. Totals and
-  tiles add every row read in millionths, per currency, never USDC and EURC together.
+  the latest 10 or 500 with `?history=all#payments`. A milestone's time is `milestoneAt`: a paid one's intent
+  `confirmed_at`, else `executed_at`, else the entry its decision rests on (`milestoneDecidedAt`), and null with none
+  read, so its row names no day and sorts last; never `milestoneDecision`'s `at`, which is the request's time when no
+  entry was read. Each paid bill notes its receipt state for every member, a destination not their address now says
+  where it went, and a live writer gets the existing `ReceiptControl`, with `shared={null}` while the receipts are
+  unread: it then offers neither **Share receipt**, which renews a shared receipt's link, nor **Stop sharing**. Totals
+  and tiles add every row read in millionths, per currency, never USDC and EURC together.
 - **Text from outside** (CL12). `visibleText(text, max)` (`src/lib/visible-text.ts`) drops what does not show
   (`NOTE_INVISIBLE`: format, surrogate, default-ignorable, private-use and unassigned code points and U+2800), turns
   `NOTE_BREAK` into spaces, keeps two marks on a letter (`NOTE_MARKS`), and cuts with "…"; the document check's
   `readerNoteOf` uses the same classes. `UntrustedText` puts the result in `<bdi>`, for the name, lookalike names,
-  milestone titles, invoice numbers and memos, request notes, draft fields and History's summaries; names and titles
-  are cleaned before they reach the decision builders.
+  milestone titles, invoice numbers and memos, draft fields and History's summaries; names and titles are cleaned
+  before they reach the decision builders, and the profile, address (its "is frozen" callout among them), payout and
+  payee link parts get the row with its name cleaned. A document request's note and purchase order number, and those
+  under a newer request, are cleaned before `DocumentRequestLine` draws them (`visibleRequest`): the note line by line
+  with `visibleLines`, which keeps its line breaks, the number with `visibleText`.
 - **Shared with the list.** `src/components/CounterpartyDetails.tsx` holds `CounterpartyProfile`,
   `CounterpartyAddressBlock` and `CounterpartyPayoutBlock`, which the page and each Counterparties row both render (the
   page with `anchored` ids); a row's `CounterpartyRow` takes `pageHref` for **Open their page** and keeps its

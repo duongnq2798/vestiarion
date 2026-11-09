@@ -17,15 +17,16 @@ const AMOUNT = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximu
 
 /**
  * The drafts sent for review that name this counterparty, newest first, under Documents on its page
- * (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL10): what was captured and when, each opening the
- * captured drafts on Bills & receivables, where it is reviewed and added. Never the captured text. The invoice number is
- * the document's, so it is shown as text from outside (CL12). Nothing when there are none.
+ * (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL10), whether the browser extension captured them or
+ * the payee sent them through their payee link: what was captured and when, each opening the captured drafts on Bills &
+ * receivables, where it is reviewed and added. Never the captured text. The invoice number is the document's, so it is
+ * shown as text from outside (CL12). Nothing when there are none.
  */
 export function SentDrafts({ orgSlug, drafts }: { orgSlug: string; drafts: readonly SentDraft[] }) {
   if (drafts.length === 0) return null;
   const review = orgHref(orgSlug, billsHref({ tab: "bills", review: "captured" }));
   return (
-    <ul className="divide-y divide-line rounded-lg border border-line bg-raised text-sm" aria-label="Sent from the browser extension">
+    <ul className="divide-y divide-line rounded-lg border border-line bg-raised text-sm" aria-label="Invoices sent for review">
       {drafts.map((draft) => (
         <li key={draft.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-3 py-2">
           <span className="min-w-0">

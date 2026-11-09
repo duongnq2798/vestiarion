@@ -54,7 +54,7 @@ To pay someone who is not yet on file for work they have delivered, open **Contr
 
 <Screenshot
   src="/docs/guides/pay-freelancer.png"
-  alt="New payment opened on the Contractors page, on its Pay a freelancer tab, the form filled in: Freelancer's name Linh Tran, Freelancer's email linh@example.com, What they delivered 10 social posts for October, Amount (USDC) 25.00, and a Link to the work. Below it, the result after Set up payment: a message that the link was emailed, the payee link with a Copy link button, and when the link expires."
+  alt="New payment opened on the Contractors page, on its Pay a freelancer tab, the form filled in: Freelancer's name Linh Tran, Freelancer's email linh@example.com, What they delivered 10 social posts for October, Amount (USDC) 25.00, and a Link to the work. Below it, the result after Set up payment: a message that the link was emailed, the payee link with a Copy link button, and when the link expires, with a link to their page to make a new one if it is lost."
   caption="One form sets up the payment; the link goes to the freelancer by email and is shown once to copy."
 />
 
@@ -171,8 +171,8 @@ From the top:
 - **Payee link.** The one-time link that asks them for their address, and for their invoice (see Payee link states below). Only an owner or admin sees it; anyone else reads "An owner or admin sends and stops payee links."
 - **Milestones.** The open ones, and those closed without paying. Each row opens its milestone with **Open in Contractors**, where it is verified, paid or closed: none of that is done from this page.
 - **Bills from them.** Their open bills, by due date, and the latest rejected ones. **Open in Bills & receivables** opens a bill where it is decided. For a client, this part is their invoices instead.
-- **Payments.** Their paid milestones and bills, newest first: the latest 10, or every one with **Show every payment**. Each paid bill says where its receipt is, to every member: **Receipt shared**, **Receipt link stopped**, **No receipt shared**, or "No receipt: not paid on chain". In a live workspace, an owner or admin shares one from here too. A payment sent to an address they no longer have says "Paid to an earlier address", with that address on the explorer.
-- **Documents.** The documents the agent asked them for on their bills, and what was **Sent from the browser extension** naming them.
+- **Payments.** Their paid milestones and bills, newest first: the latest 10, or every one with **Show every payment**. A paid milestone is dated by when its payment was confirmed; one whose payment and history could not be read just now names no day and comes last. Each paid bill says where its receipt is, to every member: **Receipt shared**, **Receipt link stopped**, **No receipt shared**, or "No receipt: not paid on chain". In a live workspace, an owner or admin shares one from here too, except while whether it is shared could not be read: sharing again would stop a link already sent. A payment sent to an address they no longer have says "Paid to an earlier address", with that address on the explorer.
+- **Documents.** The documents the agent asked them for on their bills, with the purchase order number and note they typed, and the **Invoices sent for review** that name them: captured with the browser extension, or sent by them through their payee link.
 - **History.** The latest changes to them, each linked to its entry in the Audit log, where its signature is checked. **All of it in the Audit log** lists every one.
 
 A part that could not be read says "Not read just now. Reload the page in a moment.", and its tile says it was not read: never zero, never none. A record whose history was read only in part says "Some of this record's history was not read; the Audit log has all of it."

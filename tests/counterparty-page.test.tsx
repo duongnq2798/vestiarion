@@ -80,8 +80,11 @@ vi.mock("@/app/actions/receipts", () => ({ shareReceiptAction: vi.fn(), stopShar
 vi.mock("@/app/actions/recurring", () => ({ createRecurringPayableAction: vi.fn(), stopRecurringPayableAction: vi.fn() }));
 
 import CounterpartyPage, { metadata } from "@/app/o/[slug]/counterparties/[id]/page";
+import { RECEIPT_STATE_NOT_READ } from "@/components/ReceiptControl";
 
-const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
+/** A character by its code point, so none hides in this file. */
+const at = (...codes: number[]) => String.fromCodePoint(...codes);
+const text =(markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ").trim();
 
 const ID = "1b6c1c9e-4a4f-4a7e-9b1e-0000000000c7";
 const ADDRESS = "0x840de234Bfc3F66fA380888A0a8204D9487D60d4";
@@ -318,9 +321,31 @@ describe("what each member sees (CL3, CL5, CL6, CL9, CL11)", () => {
     ACCESS.membership.role = "accountant";
     cosignsMock.mockResolvedValue(true);
     showing(CONTRACTOR);
-    await page();
+    const words = text(await page());
     expect(cosignsMock).toHaveBeenCalledTimes(1);
-    expect(readPageMock.mock.calls[0][1].grants).toEqual(expect.objectContaining({ confirmAddress: true, write: false }));
+    expect(readPageMock.mock.calls[0][1].grants).toEqual(expect.objectContaining({ confirmAddress: true, write: false, decide: false }));
+    // The page offers it to them, though they decide no payment and edit nothing (co-sign CS6).
+    expect(words).toContain("Confirm address");
+    expect(words).not.toContain("Edit address");
+  });
+
+  it("CL3: an accountant not co-signing confirms no address", async () => {
+    ACCESS.membership.role = "accountant";
+    cosignsMock.mockResolvedValue(false);
+    showing(CONTRACTOR);
+    const words = text(await page());
+    expect(readPageMock.mock.calls[0][1].grants).toEqual(expect.objectContaining({ confirmAddress: false }));
+    expect(words).not.toContain("Confirm address");
+  });
+
+  it("CL9: offers no way to share a receipt while whether it is shared was not read", async () => {
+    ACCESS.membership.role = "owner";
+    showing(CONFIRMED, { receipts: { read: false } });
+    const words = text(await page());
+    expect(words).toContain("Receipt: not read");
+    // Share receipt would renew a shared receipt's link, and stop the one its payee holds.
+    expect(words).toContain(RECEIPT_STATE_NOT_READ);
+    for (const control of ["Share receipt", "New link", "Stop sharing"]) expect(words, control).not.toContain(control);
   });
 
   it("CL5: no Copy and no confirming while the address's checks are unread", async () => {
@@ -441,6 +466,83 @@ describe("the page's parts (CL1, CL4, CL13)", () => {
     const markup = await page();
     expect(markup).toMatch(/<h1[^>]*><bdi>Linh Tran<\/bdi><\/h1>/);
     expect(shell.crumb).toBe("Linh Tran");
+  });
+
+  it("CL12: names a frozen payee in its callout, and to the payee link control, by what is visible of the name", async () => {
+    ACCESS.membership.role = "owner";
+    showing({ ...CONFIRMED, name: `Acme${at(0x202e)} Ltd${at(0x200b)}`, frozen_at: "2026-11-08T12:00:00Z" }, { addressCheck: { frozen: true, check: null } });
+    const markup = await page();
+    expect(text(markup)).toContain("Acme Ltd is frozen");
+    expect(payeeLinkControl[0]).toEqual(expect.objectContaining({ counterparty: { id: ID, name: "Acme Ltd" } }));
+    for (const code of [0x202e, 0x200b]) expect(markup, code.toString(16)).not.toContain(at(code));
+  });
+
+  it("CL10, CL12: shows the note and purchase order number a vendor typed only as far as they show, the note's lines kept", async () => {
+    const answered = {
+      state: "answered" as const,
+      id: "req-1",
+      missing: ["purchase_order" as const],
+      answeredAt: "2026-11-08T10:00:00Z",
+      note: `PO 1234${at(0x202e)} fdp.exe${at(0x200b)}\n${at(0x2066)}Second line`,
+      poReference: `PO-${at(0x2069)}77`,
+      fileType: "application/pdf",
+    };
+    showing(CONFIRMED, { documents: { read: true, value: new Map([[OPEN_BILL.id, answered]]) } });
+    const markup = await page();
+    expect(markup).toContain("PO 1234 fdp.exe\nSecond line");
+    expect(markup).toContain(">PO-77<");
+    for (const code of [0x202e, 0x200b, 0x2066, 0x2069]) expect(markup, code.toString(16)).not.toContain(at(code));
+  });
+
+  it("CL10: lists every invoice sent for review under one heading, from the browser extension or a payee link", async () => {
+    showing(CONFIRMED, { drafts: { read: true, value: [{ id: "d1", source: "payee_link", invoice_number: "INV-9", amount: "40", currency: "USDC", sent_at: "2026-11-07T08:00:00Z" }] } });
+    const markup = await page();
+    expect(text(markup)).toContain("Invoices sent for review INV-9 · 40.00 USDC Sent through their payee link · sent Nov 7, 2026");
+    expect(markup).toContain('aria-label="Invoices sent for review"');
+    expect(text(markup)).not.toContain("Sent from the browser extension");
+  });
+});
+
+describe("milestone dates (CL9)", () => {
+  const PAID: MilestoneRow = { ...MILESTONE, id: "00000000-0000-4000-9000-000000000002", title: "Four September posts", status: "paid", verified: true, tx_ref: TX };
+  const HELD: MilestoneRow = { ...MILESTONE, id: "00000000-0000-4000-9000-000000000003", title: "Launch video", status: "held", verified: true };
+  const intent = (over: Record<string, unknown>) => ({ source_type: "milestone", source_id: PAID.id, status: "confirmed", destination_chain: null, executed_at: null, confirmed_at: null, ...over }) as never;
+  const paymentsPart = (markup: string) => markup.slice(markup.indexOf('id="payments"'), markup.indexOf('id="documents"'));
+
+  it("CL9: dates and orders a paid milestone by its payment's confirmation, with its entries unread", async () => {
+    showing(CONFIRMED, {
+      milestones: { read: true, value: [PAID] },
+      entries: { read: false },
+      payments: { read: true, value: { payments: new Map([[PAID.id, intent({ executed_at: "2026-10-05T09:58:00Z", confirmed_at: "2026-10-05T10:00:00Z" })]]), destinations: new Map() } },
+    });
+    const payments = paymentsPart(await page());
+    expect(payments).toContain(">Paid Oct 5, 2026<");
+    expect(payments).not.toContain("Paid Nov 9, 2026");
+    // The bill due Oct 20 is newer, so it comes first.
+    expect(payments.indexOf("September retainer")).toBeLessThan(payments.indexOf("Four September posts"));
+  });
+
+  it("CL9: falls back to when it was sent, then to its entry", async () => {
+    showing(CONFIRMED, {
+      milestones: { read: true, value: [PAID] },
+      payments: { read: true, value: { payments: new Map([[PAID.id, intent({ status: "submitted", executed_at: "2026-10-06T09:00:00Z" })]]), destinations: new Map() } },
+    });
+    expect(paymentsPart(await page())).toContain(">Paid Oct 6, 2026<");
+    showing(CONFIRMED, {
+      milestones: { read: true, value: [PAID] },
+      entries: { read: true, value: { entries: [{ seq: 7, ts: "2026-10-07T09:00:00Z", actor: "agent", domain: "contractor", action: "release_milestone", summary: "Paid", detail: { milestoneId: PAID.id } } as never], cut: new Set() } },
+    });
+    expect(paymentsPart(await page())).toContain(">Paid Oct 7, 2026<");
+  });
+
+  it("CL9: with neither its payment nor its entries read, names no day and comes last, never today", async () => {
+    showing(CONFIRMED, { milestones: { read: true, value: [PAID, HELD] }, entries: { read: false } });
+    const markup = await page();
+    const payments = paymentsPart(markup);
+    expect(payments).toContain(">Paid<");
+    expect(payments.indexOf("September retainer")).toBeLessThan(payments.indexOf("Four September posts"));
+    // A held milestone under Milestones names no day either.
+    expect(markup).not.toMatch(/(?:Paid|Held) Nov 9, 2026/);
   });
 });
 

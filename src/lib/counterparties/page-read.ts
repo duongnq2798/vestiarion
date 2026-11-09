@@ -34,7 +34,7 @@ import { invoiceGroups, isPayee, PAYEE_LINKS_SHOWN, paymentRows, type Part, type
 export const ENTRY_ID_CHUNK = 25;
 /** History's lines (CL11). */
 export const HISTORY_SHOWN = 25;
-/** Documents' "Sent from the browser extension" (CL10). */
+/** Documents' "Invoices sent for review" (CL10). */
 export const DRAFTS_SHOWN = 20;
 
 /** The entries about this counterparty's invoices and milestones, newest first. */
@@ -109,7 +109,10 @@ export interface CounterpartyPageRead {
   evidence: MilestoneEvidence;
   /** The document requests on a payee's shown bills (CL10), by invoice id. */
   documents: Part<Map<string, DocumentRequestView>> | null;
-  /** A payee's drafts sent from the browser extension (CL10): not read before migration 0121. */
+  /**
+   * A payee's drafts sent for review (CL10), from the browser extension or through their payee link: not read before
+   * migration 0121.
+   */
   drafts: Part<SentDraft[]> | null;
   history: Part<CounterpartyEntry[]>;
   controls: ControlsRead;

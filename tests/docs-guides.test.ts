@@ -2030,7 +2030,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["No receipt shared", COUNTERPARTY_PAGE],
     ["No receipt: not paid on chain", COUNTERPARTY_PAGE],
     ["Paid to an earlier address", COUNTERPARTY_PAGE],
-    ["Sent from the browser extension", COUNTERPARTY_PAGE],
+    ["Invoices sent for review", COUNTERPARTY_PAGE],
     ["All of it in the Audit log", COUNTERPARTY_HISTORY],
     ["Not read just now. Reload the page in a moment.", COUNTERPARTY_PAGE_VIEW],
     ["Some of this record's history was not read; the Audit log has all of it.", COUNTERPARTY_PAGE],
@@ -4099,6 +4099,12 @@ describe("the first-payment guide's steps", () => {
 
   it("gives the explorer link a settled card opens, as the app builds it", () => {
     expect(guide).toContain(`at \`${txUrl("arc-testnet", "")}\` followed by the hash`);
+  });
+
+  it("says Add billing email opens the billing email on the client's page, where the pay link control points it (counterparty page CL15)", () => {
+    expect(sourceFile(PAY_LINK_CONTROL)).toContain('counterpartyPath(client.id, "billing-email")');
+    expect(guide).toContain("**Add billing email**, which opens the billing email on the [client's page](/docs/guides/pay-a-contractor#one-page-for-each-contractor)");
+    expect(guide).not.toContain("opens the client's row on **Counterparties**");
   });
 });
 

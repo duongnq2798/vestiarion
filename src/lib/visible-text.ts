@@ -1,7 +1,7 @@
 /**
  * Text someone outside the workspace wrote, as a page shows it (docs/superpowers/specs/2026-11-09-counterparty-page-design.md
  * CL12): a counterparty's name, a lookalike's name, a milestone's title, an invoice's number and memo, a document request's
- * note, a captured draft's fields. Pure. The character classes are shared with the reader's note of a document check
+ * note and purchase order number, a captured draft's fields. Pure. The character classes are shared with the reader's note of a document check
  * (src/lib/document-requests/check.ts), so both drop the same characters. Each is global: use it with `replace`.
  */
 
@@ -24,8 +24,33 @@ export const NOTE_MARKS = /(\p{M}{2})\p{M}+/gu;
  */
 export function visibleText(text: string | null | undefined, max: number): string {
   if (!text) return "";
-  const visible = text.replace(NOTE_INVISIBLE, "").replace(NOTE_MARKS, "$1").replace(NOTE_BREAK, " ").replace(/\s+/g, " ").trim();
-  const characters = Array.from(visible);
-  if (characters.length <= max) return visible;
+  return cut(text.replace(NOTE_INVISIBLE, "").replace(NOTE_MARKS, "$1").replace(NOTE_BREAK, " ").replace(/\s+/g, " ").trim(), max);
+}
+
+/** A line break: `\n`, `\r\n` or `\r`, or a line or paragraph separator (U+2028, U+2029). */
+const LINE_END = /\r\n?|[\n\p{Zl}\p{Zp}]/u;
+
+/**
+ * CL12: text that keeps its lines, such as the note a vendor typed beside a document: each line as `visibleText` leaves
+ * it, a line with nothing visible left out, the lines joined by `\n`, and at most `max` characters in all, cut with "…".
+ * Only a line break (`LINE_END`) ends a line; any other control character, a tab among them, is a space within it.
+ * Empty when nothing visible is left.
+ */
+export function visibleLines(text: string | null | undefined, max: number): string {
+  if (!text) return "";
+  return cut(
+    text
+      .split(LINE_END)
+      .map((line) => visibleText(line, Number.POSITIVE_INFINITY))
+      .filter(Boolean)
+      .join("\n"),
+    max
+  );
+}
+
+/** At most `max` whole characters, the last of them "…" when the text is longer. */
+function cut(text: string, max: number): string {
+  const characters = Array.from(text);
+  if (characters.length <= max) return text;
   return `${characters.slice(0, Math.max(0, max - 1)).join("").trimEnd()}…`;
 }

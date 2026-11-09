@@ -270,6 +270,9 @@ describe("SentDrafts", () => {
 
   it("CL10: lists the drafts sent for review, each opening the captured drafts on Bills & receivables", () => {
     const markup = renderToStaticMarkup(<SentDrafts orgSlug="acme" drafts={drafts} />);
+    // Named for both ways a draft comes: the browser extension, and a payee's own link.
+    expect(markup).toContain('aria-label="Invoices sent for review"');
+    expect(markup).not.toContain("Sent from the browser extension");
     expect(markup.split('href="/o/acme/invoices?review=captured"').length - 1).toBe(2);
     expect(markup).toContain("<bdi>INV-204</bdi>");
     const shown = text(markup);
