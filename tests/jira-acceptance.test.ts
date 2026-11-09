@@ -1,13 +1,28 @@
 import { describe, expect, it } from "vitest";
+import {
+  ACCEPTED_ACTION,
+  acceptable,
+  acceptanceKpis,
+  HELD_LINES,
+  heldReasonOf,
+  jiraPlan,
+  planRead,
+  SELF_WORDS,
+  selfAcceptance,
+  stateWords,
+  WITHDRAWN_ACTION,
+  type LinkFacts,
+} from "@/lib/jira/acceptance";
 import { ADF_DEPTH, ADF_NODES, adfLinksIn, DELIVERABLES_BYTES, deliverablesOf, fingerprintOf, MAX_DELIVERABLES, storedBytes } from "@/lib/jira/deliverables";
 import { CANCELED_RESOLUTIONS, cancels, commentsTruncated, jiraDate, mapIssue, type AttachmentFacts, type CommentFacts, type RemoteLinkFacts } from "@/lib/jira/map";
 import { issueRefOf, linksToIssue, siteHost } from "@/lib/jira/urls";
+import { acceptanceKpis as linearKpis } from "@/lib/linear/acceptance";
 
 /**
  * Accepting work delivered in Jira, by the rules alone (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR6,
- * JR8, JR9, JR13): what a pasted link or key is read as, the links an Atlassian Document Format text holds, what an issue
- * delivers and its fingerprint, and what an issue's answer says of whether it is done, canceled, and when. Pure: no
- * Jira, no database.
+ * JR8 to JR13, JR21, JR22): what a pasted link or key is read as, the links an Atlassian Document Format text holds, what an
+ * issue delivers and its fingerprint, what an issue's answer says of whether it is done, canceled, and when, what each read
+ * does to a link, who may accept, the words of each state, and the card's figures. Pure: no Jira, no database.
  */
 
 const SITE = "https://northstar.atlassian.net";
@@ -298,5 +313,156 @@ describe("an issue's answer (JR8)", () => {
     const facts = mapIssue(issue({ comment: embedded }), [], SITE, page);
     expect(facts.comments).toEqual([{ id: "10279", createdAt: "2026-11-09T07:00:00.000Z", links: ["https://new.example/build"] }]);
     expect(facts.moreUnread).toBe(true);
+  });
+});
+
+const COMPLETED_AT = "2026-11-09T08:30:00.000Z";
+const FP = "a".repeat(64);
+const linkFacts = (fields: Partial<LinkFacts> = {}): LinkFacts => ({ state: "waiting", heldReason: null, acceptedAt: null, acceptedFingerprint: null, acceptedCompletedAt: null, afterPayment: false, ...fields });
+const accepted = linkFacts({ state: "accepted", acceptedAt: "2026-11-09T09:00:00.000Z", acceptedFingerprint: FP, acceptedCompletedAt: COMPLETED_AT });
+/** A read as `factsFromRead` builds it from a Jira issue: never archived, since Jira has no such state (JR10). */
+const read = (fields: Partial<{ completed: boolean; canceled: boolean; completedAt: string | null; fingerprint: string }> = {}) => ({
+  kind: "issue" as const,
+  completed: true,
+  canceled: false,
+  archived: false,
+  completedAt: COMPLETED_AT,
+  fingerprint: FP,
+  ...fields,
+});
+
+describe("what a read does to a link (JR10, JR13)", () => {
+  it("makes a done issue ready, never accepted, and holds it without criteria, canceled, or gone", () => {
+    expect(jiraPlan(planRead(linkFacts(), read(), { criteria: true }))).toEqual({ kind: "set", state: "ready", heldReason: null, becameReady: true });
+    expect(jiraPlan(planRead(linkFacts({ state: "ready" }), read(), { criteria: true }))).toEqual({ kind: "set", state: "ready", heldReason: null, becameReady: false });
+    expect(jiraPlan(planRead(linkFacts(), read(), { criteria: false }))).toEqual({ kind: "set", state: "held", heldReason: "no_criteria", becameReady: false });
+    expect(jiraPlan(planRead(linkFacts(), read({ completed: false, canceled: true, completedAt: null }), { criteria: true }))).toEqual({ kind: "set", state: "held", heldReason: "canceled", becameReady: false });
+    expect(jiraPlan(planRead(linkFacts(), read({ completed: false, completedAt: null }), { criteria: true }))).toEqual({ kind: "set", state: "waiting", heldReason: null, becameReady: false });
+    for (const reason of ["not_found", "forbidden"] as const) {
+      expect(jiraPlan(planRead(linkFacts(), { kind: "gone", reason }, { criteria: true }))).toEqual({ kind: "set", state: "held", heldReason: "issue_unreachable", becameReady: false });
+    }
+  });
+
+  it("takes an acceptance back for each of Jira's reasons, and keeps it while the issue is what was accepted", () => {
+    expect(jiraPlan(planRead(accepted, read(), { criteria: true }))).toEqual({ kind: "keep" });
+    expect(jiraPlan(planRead(accepted, read({ completed: false, completedAt: null }), { criteria: true }))).toEqual({ kind: "withdraw", reason: "reopened" });
+    // Done again at another time: Jira's statuscategorychangedate moved, so it is not the completion accepted.
+    expect(jiraPlan(planRead(accepted, read({ completedAt: "2026-11-09T10:00:00.000Z" }), { criteria: true }))).toEqual({ kind: "withdraw", reason: "reopened" });
+    expect(jiraPlan(planRead(accepted, read({ completed: false, canceled: true, completedAt: null }), { criteria: true }))).toEqual({ kind: "withdraw", reason: "canceled" });
+    expect(jiraPlan(planRead(accepted, read({ fingerprint: "b".repeat(64) }), { criteria: true }))).toEqual({ kind: "withdraw", reason: "deliverable_changed" });
+    expect(jiraPlan(planRead(accepted, { kind: "gone", reason: "not_found" }, { criteria: true }))).toEqual({ kind: "withdraw", reason: "issue_unreachable" });
+  });
+
+  it("keeps a link held after an acceptance held, whatever Jira says now, until a person accepts again", () => {
+    for (const reason of ["reopened", "canceled", "deliverable_changed", "issue_unreachable", "unlinked"] as const) {
+      const held = { ...accepted, state: "held" as const, heldReason: reason };
+      expect(jiraPlan(planRead(held, read(), { criteria: true }))).toEqual({ kind: "set", state: "held", heldReason: reason, becameReady: false });
+    }
+  });
+
+  it("never yields archived: no Jira read says it, and were Linear's plan ever to answer it, it is an issue Jira no longer shows", () => {
+    const reads = [read(), read({ completed: false, completedAt: null }), read({ completed: false, canceled: true, completedAt: null }), read({ fingerprint: "b".repeat(64) }), { kind: "gone" as const, reason: "not_found" as const }];
+    for (const link of [linkFacts(), linkFacts({ state: "ready" }), accepted]) {
+      for (const one of reads) {
+        for (const criteria of [true, false]) expect(JSON.stringify(jiraPlan(planRead(link, one, { criteria })))).not.toContain("archived");
+      }
+    }
+    expect(heldReasonOf("archived")).toBe("issue_unreachable");
+    expect(heldReasonOf(null)).toBeNull();
+    expect(jiraPlan({ kind: "withdraw", reason: "archived" })).toEqual({ kind: "withdraw", reason: "issue_unreachable" });
+    expect(jiraPlan({ kind: "set", state: "held", heldReason: "archived", becameReady: false })).toEqual({ kind: "set", state: "held", heldReason: "issue_unreachable", becameReady: false });
+  });
+
+  it("lets a person accept only a done issue with criteria on a pending milestone, never one Jira no longer shows", () => {
+    const facts = { completed: true, archived: false, criteria: true, milestoneStatus: "pending" };
+    expect(acceptable({ state: "ready", afterPayment: false, heldReason: null }, facts)).toBe(true);
+    expect(acceptable({ state: "held", afterPayment: false, heldReason: "reopened" }, facts)).toBe(true);
+    expect(acceptable({ state: "held", afterPayment: false, heldReason: "issue_unreachable" }, facts)).toBe(false);
+    expect(acceptable({ state: "accepted", afterPayment: false, heldReason: null }, facts)).toBe(false);
+    expect(acceptable({ state: "held", afterPayment: true, heldReason: "reopened" }, facts)).toBe(false);
+    expect(acceptable({ state: "ready", afterPayment: false, heldReason: null }, { ...facts, criteria: false })).toBe(false);
+    expect(acceptable({ state: "ready", afterPayment: false, heldReason: null }, { ...facts, milestoneStatus: "verified" })).toBe(false);
+  });
+});
+
+describe("who may accept (JR12)", () => {
+  const none = { memberEmail: "admin@business.example", payeeEmail: "mai@fernhill.example", payeeJiraIds: [] as string[], memberJiraIds: [] as string[] };
+
+  it("refuses the payee by their email in Vestiarion, in any case and spacing", () => {
+    expect(selfAcceptance({ ...none, memberEmail: " Mai@Fernhill.example " })).toBe("payee_member");
+    expect(SELF_WORDS.payee_member).toBe("You are this milestone's payee, so someone else accepts the work.");
+  });
+
+  it("refuses the payee by their Atlassian account, and lets anyone else accept", () => {
+    expect(selfAcceptance({ ...none, payeeJiraIds: ["557058:f58131cb"], memberJiraIds: ["557058:f58131cb"] })).toBe("payee_jira");
+    expect(SELF_WORDS.payee_jira).toBe("Your Atlassian account is this milestone's payee, so someone else accepts the work.");
+    expect(selfAcceptance({ ...none, payeeJiraIds: ["557058:f58131cb"], memberJiraIds: ["5b10ac8d82e05b22cc7d4ef5"] })).toBeNull();
+    expect(selfAcceptance(none)).toBeNull();
+    expect(selfAcceptance({ ...none, memberEmail: null, payeeEmail: null })).toBeNull();
+  });
+});
+
+describe("a link's state in words (JR22)", () => {
+  it("says each state, Jira's own words for a canceled issue, and a change after payment", () => {
+    expect(stateWords("waiting", null, false)).toEqual({ label: "Waiting for the issue", line: "Not done in Jira yet. It is read again when it changes there. Deliverables are read once it is done." });
+    expect(stateWords("ready", null, false)).toEqual({
+      label: "Ready for acceptance",
+      line: "Done in Jira. Check the deliverables against the criteria, then accept the work: the agent decides on pay only after that.",
+    });
+    expect(stateWords("accepted", null, false).label).toBe("Accepted");
+    expect(stateWords("held", "canceled", false, `Won${CURLY}t Do`)).toEqual({
+      label: "Held for review",
+      line: `Jira resolved the issue as Won${CURLY}t Do, which is not done. Nothing is accepted from it: reopen it, or link another issue.`,
+    });
+    expect(stateWords("held", "canceled", false).line).toBe(HELD_LINES.canceled);
+    expect(stateWords("held", "issue_unreachable", false).line).toBe(
+      "Jira no longer shows this issue to the connection: it was deleted or archived, the person who connected Jira lost access to its project, or another Jira site is connected now. Restore it, link another issue, or reconnect Jira."
+    );
+    expect(stateWords("held", "reopened", true)).toEqual({
+      label: "Changed after payment",
+      line: "The issue changed in Jira after the payment was sent. Review it with the contractor: Vestiarion does not take a payment back.",
+    });
+  });
+
+  it("has a line for every held reason, each naming Jira where Linear's names Linear, and none naming Linear", () => {
+    expect(Object.keys(HELD_LINES).sort()).toEqual(["canceled", "deliverable_changed", "issue_unreachable", "no_criteria", "reopened", "unlinked"]);
+    for (const [reason, line] of Object.entries(HELD_LINES)) {
+      expect(line, reason).not.toMatch(/Linear/);
+      if (reason !== "no_criteria" && reason !== "unlinked") expect(line, reason).toMatch(/Jira/);
+    }
+  });
+});
+
+describe("the card's figures (JR21)", () => {
+  it("count Jira's acceptances and those taken back, never Linear's or Asana's, with the median minutes to the agent's decision", () => {
+    const now = Date.parse("2026-11-09T12:00:00Z");
+    const kpis = acceptanceKpis(
+      [
+        { action: ACCEPTED_ACTION, ts: "2026-11-09T10:00:00Z", milestoneId: "m-1" },
+        { action: "milestone_release", ts: "2026-11-09T10:04:00Z", milestoneId: "m-1" },
+        { action: ACCEPTED_ACTION, ts: "2026-11-08T10:00:00Z", milestoneId: "m-2" },
+        { action: "milestone_hold", ts: "2026-11-08T10:10:00Z", milestoneId: "m-2" },
+        { action: WITHDRAWN_ACTION, ts: "2026-11-09T11:00:00Z", milestoneId: "m-3" },
+        { action: "linear_work_accepted", ts: "2026-11-09T10:00:00Z", milestoneId: "m-linear" },
+        { action: "linear_acceptance_withdrawn", ts: "2026-11-09T10:00:00Z", milestoneId: "m-linear" },
+        { action: "milestone_accepted", ts: "2026-11-09T10:00:00Z", milestoneId: "m-asana" },
+        { action: ACCEPTED_ACTION, ts: "2026-09-01T10:00:00Z", milestoneId: "m-old" },
+      ],
+      now
+    );
+    expect(kpis).toEqual({ manualChecks: 2, disputes: 1, medianMinutesToProposal: 7, proposals: 2 });
+    expect([ACCEPTED_ACTION, WITHDRAWN_ACTION]).toEqual(["jira_work_accepted", "jira_acceptance_withdrawn"]);
+  });
+
+  it("leave Linear's figures as they were: its own two actions, unless a caller names another tool's", () => {
+    const now = Date.parse("2026-11-09T12:00:00Z");
+    const events = [
+      { action: "linear_work_accepted", ts: "2026-11-09T10:00:00Z", milestoneId: "m-1" },
+      { action: ACCEPTED_ACTION, ts: "2026-11-09T10:00:00Z", milestoneId: "m-2" },
+      { action: ACCEPTED_ACTION, ts: "2026-11-09T10:30:00Z", milestoneId: "m-3" },
+    ];
+    expect(linearKpis(events, now).manualChecks).toBe(1);
+    expect(linearKpis(events, now, 30, { accepted: ACCEPTED_ACTION, withdrawn: WITHDRAWN_ACTION }).manualChecks).toBe(2);
+    expect(acceptanceKpis(events, now).manualChecks).toBe(2);
   });
 });

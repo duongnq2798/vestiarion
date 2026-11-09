@@ -1,6 +1,6 @@
 import type { ConnectingProvider } from "../connectors/provider";
 import { jiraReader, type JiraReader } from "./api";
-import type { JiraHttp } from "./http";
+import { pausedUntil, type JiraHttp } from "./http";
 import { authorizeUrl, exchangeCode, grantSites, refreshTokens, revokeToken } from "./oauth";
 import { JIRA_SCOPES, jiraSettingsFromEnv, type JiraSettings } from "./settings";
 import { jiraWebhookApi, type JiraWebhookApi } from "./webhooks";
@@ -16,6 +16,8 @@ import { jiraWebhookApi, type JiraWebhookApi } from "./webhooks";
 export interface JiraProvider extends ConnectingProvider {
   reader: JiraReader;
   hooks: JiraWebhookApi;
+  /** When the pause on every Jira call ends (JR17), or null when there is none: the sweep makes no request while it lasts. */
+  pausedUntil(): number | null;
 }
 
 export function jiraProvider(settings: JiraSettings, deps: JiraHttp = {}): JiraProvider {
@@ -30,6 +32,7 @@ export function jiraProvider(settings: JiraSettings, deps: JiraHttp = {}): JiraP
     revoke: () => revokeToken(),
     reader: jiraReader(deps),
     hooks: jiraWebhookApi(deps),
+    pausedUntil: () => pausedUntil(deps),
   };
 }
 

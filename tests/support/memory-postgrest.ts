@@ -3,7 +3,7 @@ import { fakeSupabase, type FakeReply, type RecordedRequest } from "./fake-supab
 
 /**
  * A small PostgREST in memory, behind a real supabase-js client (`fakeSupabase`): rows kept per table, the filters
- * supabase-js writes (`eq`, `neq`, `is`, `gt`, `gte`, `lt`, `lte`, `in`, and `or` of them), `order` and `limit`, inserts
+ * supabase-js writes (`eq`, `neq`, `is`, `gt`, `gte`, `lt`, `lte`, `in`, `ov` on an array column, and `or` of them), `order` and `limit`, inserts
  * with defaults and unique keys (a clash is PostgREST's 409 with `23505`), updates and deletes that answer the rows they
  * touched, and `.single()`'s 406 when no row matches. A table's checks refuse an insert or an update that breaks one, as
  * Postgres does (400, `23514`), the whole request at once. An upsert (`on_conflict` with `resolution=ignore-duplicates`
@@ -92,6 +92,11 @@ function matches(row: Row, column: string, filter: string): boolean {
       return compare(cell, value) <= 0;
     case "in":
       return cell !== null && cell !== undefined && splitList(value.replace(/^\(|\)$/g, "")).includes(String(cell));
+    case "ov": {
+      // `.overlaps(column, [1, 2])`: an array column sharing any element with `{1,2}`.
+      const wanted = splitList(value.replace(/^\{|\}$/g, ""));
+      return Array.isArray(cell) && cell.some((element) => wanted.includes(String(element)));
+    }
     default:
       throw new Error(`memory-postgrest: the filter ${operator} is not supported`);
   }
