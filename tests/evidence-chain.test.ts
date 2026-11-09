@@ -431,6 +431,103 @@ describe("a milestone accepted from Linear (Linear acceptance LN8, LN10, LN16)",
   });
 });
 
+describe("a milestone accepted from Jira (Jira acceptance JR11, JR13, JR22)", () => {
+  const ISSUE = "https://northstar.atlassian.net/browse/ENG-142";
+  const accepted = entry(81, "08:40:00", "human", "jira_work_accepted", {
+    by: BOB, milestoneId: MILESTONE, linkId: "4d5e6f70-8192-4a3b-9c4d-5e6f70819203", issueId: "10042", identifier: "ENG-142", issueUrl: ISSUE, completedAt: at("08:30:00"),
+    statusName: "Done", resolutionName: "Done", fingerprint: "f".repeat(64),
+    deliverables: [
+      { kind: "attachment", label: "webhooks.pdf", href: "https://northstar.atlassian.net/secure/attachment/10100/webhooks.pdf" },
+      { kind: "link", label: "github.com/northstar/app/pull/42", href: "https://github.com/northstar/app/pull/42" },
+    ],
+    criteriaSha256: "c".repeat(64), payeeJiraMapped: true,
+  }, "contractor");
+  const jira = (verification: Record<string, unknown>, entries: EvidenceEntry[]) =>
+    buildEvidenceChain(milestoneInput({ entries: [ADDRESS_GIVEN, ...entries], verification: { verification_method: "jira", verification_source: null, ...verification } }));
+  const verified = (detail: Record<string, unknown> = {}) => ({ verification_status: "verified", verified: true, verification_detail: { jiraIssue: ISSUE, identifier: "ENG-142", completedAt: at("08:30:00"), ...detail } });
+
+  it("shows Jira's word that the issue was done beside the person's acceptance, which is what verifies it", () => {
+    const delivered = step(jira(verified(), [accepted]), "delivered");
+    expect(delivered.facts[0]).toEqual({
+      kind: "verified",
+      text: "Jira reported the issue done.",
+      at: at("08:30:00"),
+      seqs: [],
+      // Jira's own status and resolution, as the person saw them (JR9).
+      notes: ["Its status in Jira was Done, resolved as Done."],
+      link: { href: ISSUE, label: "ENG-142 in Jira", state: "not_opened", given: true },
+    });
+    expect(delivered.facts[1]).toMatchObject({ kind: "stated", who: "bob@northstar.test", seqs: [81] });
+    expect(delivered.facts[1].notes).toEqual(["2 deliverables accepted, by their fingerprint ffffffffffff.", "An issue marked done alone never verifies a milestone: a person accepts it."]);
+    expect(givenLinks(jira(verified(), [accepted]))).toContain(ISSUE);
+  });
+
+  it("names the status alone when Jira gave no resolution, and says nothing of either without the acceptance's entry", () => {
+    const unresolved = entry(81, "08:40:00", "human", "jira_work_accepted", { ...accepted.detail, resolutionName: null }, "contractor");
+    expect(step(jira(verified(), [unresolved]), "delivered").facts[0].notes).toEqual(["Its status in Jira was Done."]);
+    const delivered = step(jira(verified(), []), "delivered");
+    expect(delivered.facts[0].notes).toBeUndefined();
+    expect(delivered.facts[0].link).toMatchObject({ href: ISSUE, label: "ENG-142 in Jira" });
+  });
+
+  it("offers the issue's link only in the browse form the reads build", () => {
+    for (const href of [
+      "https://northstar.atlassian.net/jira/software/projects/ENG/boards/1?selectedIssue=ENG-142",
+      "https://northstar.atlassian.net/browse/eng-142",
+      "https://northstar.atlassian.net/browse/ENG-142?focusedCommentId=1",
+      "https://northstar.atlassian.net/browse/ENG-142/",
+      "http://northstar.atlassian.net/browse/ENG-142",
+      "https://northstar.atlassian.net:8443/browse/ENG-142",
+      "https://someone@northstar.atlassian.net/browse/ENG-142",
+      "https://evil.example?x=/browse/ENG-142",
+      "https://Northstar.atlassian.net/browse/ENG-142",
+      "javascript:alert(1)//browse/ENG-142",
+    ]) {
+      const delivered = step(jira(verified({ jiraIssue: href }), [{ ...accepted, detail: { ...accepted.detail, issueUrl: href } }]), "delivered");
+      expect(delivered.facts[0].link, href).toBeUndefined();
+      expect(delivered.facts[0].text).toBe("Jira reported the issue done.");
+    }
+    // The milestone's own detail first, else the acceptance's entry.
+    expect(step(jira({ ...verified(), verification_detail: { identifier: "ENG-142" } }, [accepted]), "delivered").facts[0].link).toMatchObject({ href: ISSUE });
+  });
+
+  it("reads only Jira's own entries: a Linear acceptance of the same milestone is not Jira's", () => {
+    const linearAccepted = entry(81, "08:40:00", "human", "linear_work_accepted", { by: BOB, milestoneId: MILESTONE, identifier: "ENG-142", issueUrl: "https://linear.app/fernhill/issue/ENG-142/x" }, "contractor");
+    const delivered = step(jira(verified(), [linearAccepted]), "delivered");
+    expect(delivered.facts[0].notes).toBeUndefined();
+    expect(delivered.facts[1]).toMatchObject({ kind: "stated", seqs: [] });
+    expect(delivered.facts[1].notes).toEqual(["An issue marked done alone never verifies a milestone: a person accepts it."]);
+  });
+
+  it("says an acceptance taken back is missing, with why, in Jira's words", () => {
+    const words: Array<[string, string]> = [
+      ["reopened", "was reopened in Jira"],
+      ["canceled", "was resolved in Jira as not done"],
+      ["deliverable_changed", "changed its deliverables in Jira"],
+      ["issue_unreachable", "could no longer be read in Jira"],
+      ["unlinked", "was unlinked"],
+      ["archived", "changed in Jira"],
+    ];
+    for (const [reason, said] of words) {
+      const withdrawn = entry(82, "08:50:00", "system", "jira_acceptance_withdrawn", { milestoneId: MILESTONE, linkId: accepted.detail.linkId, reason, afterPayment: false }, "contractor");
+      const chain = jira({ verification_status: "unverified", verified: false, verification_detail: { jiraIssue: ISSUE, identifier: "ENG-142", heldReason: reason } }, [accepted, withdrawn]);
+      expect(step(chain, "delivered").facts[0], reason).toMatchObject({
+        kind: "missing",
+        text: `The acceptance was taken back before payment: the issue ${said}.`,
+        fill: "A person accepts the work again on Contractors, once the issue is done, against its criteria.",
+        at: at("08:50:00"),
+        seqs: [82],
+        link: { href: ISSUE, label: "ENG-142 in Jira", state: "not_opened", given: true },
+        warn: true,
+      });
+    }
+    // The reason from the withdrawal's entry when the milestone's detail has none.
+    const withdrawn = entry(82, "08:50:00", "system", "jira_acceptance_withdrawn", { milestoneId: MILESTONE, reason: "deliverable_changed", afterPayment: false }, "contractor");
+    const chain = jira({ verification_status: "unverified", verified: false, verification_detail: {} }, [accepted, withdrawn]);
+    expect(step(chain, "delivered").facts[0].text).toBe("The acceptance was taken back before payment: the issue changed its deliverables in Jira.");
+  });
+});
+
 describe("a given link, labelled by whether it can be opened (evidence access E1, E3)", () => {
   const LINK = "https://drive.example.test/handoff";
   const withLinks = (links: Map<string, { state: "open" } | { state: "cannot_open" | "not_checked" | "no_answer"; reason: string }>, input = milestoneInput()) =>

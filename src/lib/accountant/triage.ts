@@ -56,8 +56,8 @@ export const KIND_TITLES: Record<TriageKind, { one: string; many: string }> = {
  * The four kinds of 2026-11-01-accountant-all-waiting-design.md (AW2 to AW5) take the permission their own action checks:
  * a verdict `giveVerdictAction`'s, `approval.decide`; an invoice to review the review list's add and dismiss commands',
  * `records.write` (`inbox.add`, `inbox.dismiss`, `invoice_draft.confirm`, `invoice_draft.discard`); work to accept
- * Asana's and Linear's accept commands', `records.write` (`milestone.accept`, `milestone.accept_issue`); and the month to
- * close the close pack's download's, `workspace.read`, which every member holds.
+ * Asana's, Linear's and Jira's accept commands', `records.write` (`milestone.accept`, and `milestone.accept_issue`, which
+ * covers Linear and Jira); and the month to close the close pack's download's, `workspace.read`, which every member holds.
  */
 const ACTS: Record<Exclude<TriageKind, "limit">, Permission> = {
   past_decide_by: "approval.decide",
