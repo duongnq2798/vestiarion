@@ -60,11 +60,12 @@ describe("MirrorAddressControl", () => {
 });
 
 describe("the Counterparties page and mirror addresses", () => {
-  const page = readFileSync(path.join(process.cwd(), "src/app/o/[slug]/counterparties/page.tsx"), "utf8");
+  // A row's address block, which the counterparty's page shows too (counterparty page CL1).
+  const page = readFileSync(path.join(process.cwd(), "src/components/CounterpartyDetails.tsx"), "utf8");
 
   it("offers one to a payee with no address in shadow mode, and says which addresses are mirrors", () => {
     expect(page).toContain("shadow && canWrite && counterparty.role !== \"client\" && !counterparty.address && (");
-    expect(page).toContain("<MirrorAddressControl orgSlug={slug} counterparty={{ id: counterparty.id, name: counterparty.name }} />");
+    expect(page).toContain("<MirrorAddressControl orgSlug={orgSlug} counterparty={{ id: counterparty.id, name: counterparty.name }} />");
     expect(page).toContain("Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.");
   });
 });

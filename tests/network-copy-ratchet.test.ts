@@ -93,10 +93,10 @@ const ALLOWED: Record<string, number> = {
   "src/components/TestUsdcControl.tsx": 1,
   "src/app/actions/test-usdc.ts": 3,
   "src/lib/test-usdc.ts": 5,
-  // A mirror address, made only in shadow mode: its control and the page's line saying which address is one, the library's
-  // refusal before going live and its ledger summary.
+  // A mirror address, made only in shadow mode: its control and the address block's line saying which address is one (on
+  // the Counterparties list and a counterparty's page), the library's refusal before going live and its ledger summary.
   "src/components/MirrorAddressControl.tsx": 1,
-  "src/app/o/[slug]/counterparties/page.tsx": 1,
+  "src/components/CounterpartyDetails.tsx": 1,
   "src/lib/mirror-address.ts": 2,
   // The weekly brief in shadow mode (weekly brief W6): what agreeing paid, and that nothing did, both only on Arc testnet;
   // and what the agent paid on its own to earned vendors beside it, only in shadow mode (earned vendors AL28).

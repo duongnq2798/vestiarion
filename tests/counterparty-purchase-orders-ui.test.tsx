@@ -33,7 +33,8 @@ describe("purchaseOrdersLabel", () => {
 });
 
 describe("the Counterparties page", () => {
-  const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "counterparties", "page.tsx"), "utf8");
+  // A row's profile, which the counterparty's page shows too (counterparty page CL1).
+  const page = readFileSync(path.join(process.cwd(), "src", "components", "CounterpartyDetails.tsx"), "utf8");
 
   it("shows whether a vendor or contractor needs purchase orders, and not for a client, whose payables wait for a person", () => {
     expect(page).toMatch(/counterparty\.role !== "client" && \(\s*<div[^>]*>\s*<dt className="text-ink-3">Purchase orders<\/dt>/);

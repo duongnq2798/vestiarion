@@ -652,7 +652,8 @@ describe("the new control screens, as source", () => {
   it("a counterparty takes a billing email when added, and on its row, whatever its role (collections R8)", () => {
     expect(read("src/components/intake/CounterpartyIntake.tsx")).toContain('label="Billing email"');
     expect(read("src/components/intake/CounterpartyIntake.tsx")).toContain('name="noticeEmail"');
-    const page = read("src/app/o/[slug]/counterparties/page.tsx");
+    // The row's profile, which the counterparty's page shows too (counterparty page CL1).
+    const page = read("src/components/CounterpartyDetails.tsx");
     expect(page).toContain("Billing email");
     expect(page).toContain("<CounterpartyNoticeEmailEdit");
     // Shown for every role: a client's reminders go to it too.

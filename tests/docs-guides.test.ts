@@ -82,6 +82,8 @@ const PAUSE = "src/components/AgentPauseControl.tsx";
 const RUN = "src/components/AgentControlsClient.tsx";
 const COUNTERPARTY_FORM = "src/components/intake/CounterpartyIntake.tsx";
 const COUNTERPARTIES_PAGE = "src/app/o/[slug]/counterparties/page.tsx";
+/** A Counterparties row's profile, address and payout, which the counterparty's page shows too (counterparty page CL1). */
+const COUNTERPARTY_DETAILS = "src/components/CounterpartyDetails.tsx";
 const INVOICE_FORM = "src/components/intake/InvoiceIntake.tsx";
 const INVOICES_PAGE = "src/app/o/[slug]/invoices/page.tsx";
 const DOCUMENT_TAB = "src/components/intake/InvoiceDocumentIntake.tsx";
@@ -1652,8 +1654,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Nothing is waiting for a decision.", APPROVALS_PAGE],
     ["Edit limit", "src/components/intake/CounterpartyLimitEdit.tsx"],
     ["Save limit", "src/components/intake/CounterpartyLimitEdit.tsx"],
-    ["Configured limit", COUNTERPARTIES_PAGE],
-    ["Allowed now", COUNTERPARTIES_PAGE],
+    ["Configured limit", COUNTERPARTY_DETAILS],
+    ["Allowed now", COUNTERPARTY_DETAILS],
     ["Review match", "src/components/CounterpartyRow.tsx"],
     ["Address needed", "src/components/CounterpartyRow.tsx"],
     ["Not screened yet", "src/components/CounterpartyRow.tsx"],
@@ -1711,7 +1713,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["as the written policy would", "src/lib/agent-activity.ts"],
     ["Checks passed:", "src/lib/agent-activity.ts"],
     ["Billing email", "src/components/intake/CounterpartyIntake.tsx"],
-    ["Billing email", "src/app/o/[slug]/counterparties/page.tsx"],
+    ["Billing email", COUNTERPARTY_DETAILS],
     ["Remind the client by email", PAY_LINK_CONTROL],
     ["Add billing email", PAY_LINK_CONTROL],
     ["Turn off reminders", PAY_LINK_CONTROL],
@@ -3573,7 +3575,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["recovered: true", TEST_USDC_LIBRARY, "recovered: true"],
     ["Counterparties", APP_NAV],
     ["Give it a mirror address", "src/components/MirrorAddressControl.tsx"],
-    ["Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.", "src/app/o/[slug]/counterparties/page.tsx"],
+    ["Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.", COUNTERPARTY_DETAILS],
     ["This payee has an address already. A mirror address is for a payee with none.", "src/lib/mirror-address.ts"],
     ["Go live on Arc testnet first: a mirror address is a wallet in this workspace's Circle wallets.", "src/lib/mirror-address.ts"],
     ["A mirror address is for shadow mode. An owner turns it on in Settings.", "src/lib/mirror-address.ts"],

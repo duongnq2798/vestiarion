@@ -86,6 +86,13 @@ describe("DecisionRows", () => {
     expect(markup).toMatch(/<details[^>]*\sopen/);
   });
 
+  it("CL15: gives a row the id a link opens it at, and none without one", () => {
+    const anchored = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, anchor: "milestone-m-1" }]} />);
+    expect(anchored).toMatch(/<details[^>]*\sid="milestone-m-1"/);
+    expect(anchored.split('id="milestone-m-1"').length - 1).toBe(1);
+    expect(renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION }]} />)).not.toMatch(/<details[^>]*\sid=/);
+  });
+
   it("marks a date past due", () => {
     const markup = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, date: { label: "Overdue Sep 30, 2026", tone: "held" } }]} />);
     expect(markup).toMatch(/text-held[^"]*">Overdue Sep 30, 2026/);
