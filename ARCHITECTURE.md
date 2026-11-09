@@ -960,6 +960,15 @@ mainnet plan).
     Analytics property rather than of the code, also sends the full address of each link clicked to another site. So
     a link a free tool draws carries nothing of what was typed or found: the vendor check links to Treasury's search
     page, not to the matched entry's page there.
+  - A page view's path, title and same-site referrer go through `redactPath` (`src/lib/analytics/redact.ts`): a link
+    token's path becomes `/<route>/:token`, a workspace's slug `/o/:org`, and every path segment under it that is a
+    UUID `:id` (`docs/superpowers/specs/2026-11-09-counterparty-page-design.md` CL17), so a counterparty's page, a
+    project, a deal and an evidence page name no record, as `/o/:org/counterparties/:id`. A segment that is not a
+    UUID, such as an evidence page's kind, is kept. Only the pathname is sent, never the hash or the query.
+  - Outbound clicks also send a block explorer link's full URL: an address link holds a payee's address, and a
+    transaction link a hash whose page shows it. Transaction links have sent theirs since they were added. Turning
+    outbound clicks off (Admin > Data streams > the web stream > Enhanced measurement) is an owner step. The privacy
+    page says that, while it is on, Google Analytics receives such a link's address.
   - Safety and control (`src/components/landing/Safety.tsx`): three principles, each saying what holds it (the team,
     rules in code and Arc mainnet's spending-limit contract, the signed ledger), then two past cases step by step, each
     labelled with its network and its own mode in the team's workspace. A past decision's facts do not change, so they

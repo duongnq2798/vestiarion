@@ -88,6 +88,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   which now fetches the script with `curl` instead of `actions/checkout`, and the job's cache actions are pinned to a
   commit. The token never reaches the log. The page is in the sitemap and the footer's Resources group. No migration.
 
+### Changed
+
+- **Analytics no longer sees which record a page is about.** Every id in a workspace page's address, such as a
+  counterparty's, a project's, a deal's or a payment's evidence, now reaches Google Analytics as `:id`, as in
+  `/o/:org/projects/:id`, and the page's title and a referrer from this site follow; a part of the address that is not
+  an id, such as `invoice` on an evidence page, is kept. The [privacy page](https://www.vestiarion.xyz/privacy#analytics)
+  says so, and also that while Google Analytics' enhanced measurement is on, which is Google's default, a click on a
+  link to a block explorer sends it that link's address, which can hold a payee's wallet address. No migration.
+
 ### Fixed
 
 - **Keyboard focus in the docs.** The copy button on a code block now shows a white focus ring on the dark panel,
