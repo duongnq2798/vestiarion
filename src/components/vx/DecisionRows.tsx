@@ -36,6 +36,11 @@ export interface DecisionRowItem {
   why?: string | null;
   /** What it belongs to, in one line under the title: the deal a receivable was released from. */
   context?: string;
+  /**
+   * The row's id, which a link opens it at (`ScrollToHash`): a milestone's `milestoneAnchor` on Contractors
+   * (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15). Unique on its page.
+   */
+  anchor?: string;
 }
 
 export function DecisionRows({ items, orgSlug, className }: { items: DecisionRowItem[]; orgSlug: string; className?: string }) {
@@ -58,6 +63,7 @@ function DecisionRow({ item, orgSlug }: { item: DecisionRowItem; orgSlug: string
   return (
     <Disclosure
       variant="bare"
+      id={item.anchor}
       defaultOpen={item.open}
       summaryClassName="grid grid-cols-[minmax(0,1fr)_auto_1rem] items-center gap-x-4 gap-y-1 px-4 py-3 transition-colors duration-150 ease-standard hover:bg-ground/50 sm:grid-cols-[minmax(0,1fr)_9.5rem_7.5rem_12.5rem_1rem] sm:px-5"
       summary={

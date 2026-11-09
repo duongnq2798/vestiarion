@@ -313,6 +313,27 @@ export async function listLedgerEntriesForTargets({
   return rows.map(rowToEntry);
 }
 
+/** A line of a counterparty's History: what was done, by whom and when, and nothing of the entry's detail. */
+export type CounterpartyEntry = Pick<LedgerEntry, "seq" | "ts" | "actor" | "action" | "summary">;
+
+/**
+ * The latest `limit` compliance entries naming this counterparty (`detail.counterpartyId`), newest first, for History on
+ * its page (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL11): their number, time, actor, action and
+ * summary only, never their detail. The evidence page's filter, which no index covers, so it is cut to `limit` rows of
+ * the workspace in scope.
+ */
+export async function listCounterpartyEntries(counterpartyId: string, limit: number): Promise<CounterpartyEntry[]> {
+  return unwrap(
+    await db()
+      .from("ledger_entries")
+      .select("seq, ts, actor, action, summary")
+      .eq("domain", "compliance")
+      .eq("detail->>counterpartyId", counterpartyId)
+      .order("seq", { ascending: false })
+      .limit(limit)
+  ) as CounterpartyEntry[];
+}
+
 export async function listLedgerEntriesByDomain(domain: LedgerDomain, limit = 100): Promise<LedgerEntry[]> {
   const rows = unwrap(
     await db()

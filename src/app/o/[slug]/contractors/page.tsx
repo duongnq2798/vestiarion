@@ -1,4 +1,4 @@
-import { Flag, ListChecks, UserPlus } from "lucide-react";
+import { ArrowRight, Flag, ListChecks, UserPlus } from "lucide-react";
 import Link from "next/link";
 import type { Metadata } from "next";
 import AgentControls from "@/components/AgentControls";
@@ -35,13 +35,14 @@ import { readCapability } from "@/lib/capability-read";
 import { shellModes } from "@/lib/circle";
 import { readEscrowContract } from "@/lib/circle/escrow-setup";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
+import { counterpartyPath, milestoneAnchor } from "@/lib/counterparty-paths";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
+import { milestoneDate } from "@/lib/milestone-date";
 import { milestoneWaiting } from "@/lib/milestone-waiting";
 import { PAYEE_LOCK_OFF, readPayeeLock } from "@/lib/payee-lock";
 import { listLedgerEntries, listLedgerEntriesForTargets } from "@/lib/ledger";
 import { orgHref } from "@/lib/auth/org-paths";
-import { utcDay } from "@/lib/copy";
 import { listMembers } from "@/lib/platform/members";
 import { listCounterparties, listMilestones, stats, type MilestoneRow } from "@/lib/queries";
 import { workspaceNetwork } from "@/lib/workspace-network";
@@ -56,6 +57,7 @@ import { linearOnContractors } from "@/lib/linear/contractors";
 import { linearMilestoneView, linearNeedsPerson } from "@/lib/linear/views";
 import { jiraOnContractors } from "@/lib/jira/contractors";
 import { jiraMilestoneView, jiraNeedsPerson } from "@/lib/jira/views";
+import { visibleText } from "@/lib/visible-text";
 import { workToolCards } from "@/lib/work-tool-cards";
 
 export const dynamic = "force-dynamic";
@@ -163,8 +165,8 @@ export default async function ContractorsPage({ params, searchParams }: { params
     // The projects a new milestone may go in, and whether milestones take a purchase order yet (project budgets P3, P9).
     const projectOptions = canWrite ? await readProjectOptions() : null;
 
-    // Under a milestone's card once its row is opened: its Asana task, Linear issue or Jira issue, its verification, and
-    // its escrow hold.
+    // Under a milestone's card once its row is opened: the way to its contractor's page (CL15), its Asana task, Linear
+    // issue or Jira issue, its verification, and its escrow hold.
     const controls = (milestone: MilestoneRow) => {
       const asanaLink = asana?.links.get(milestone.id) ?? null;
       const linearLink = linear?.links.get(milestone.id) ?? null;
@@ -180,6 +182,14 @@ export default async function ContractorsPage({ params, searchParams }: { params
       });
       return (
       <>
+        <p>
+          <Button asChild variant="link" className="text-xs">
+            <Link href={orgHref(slug, counterpartyPath(milestone.contractor_id))} aria-label={`Open ${visibleText(milestone.contractor_name, 80)}'s page`}>
+              Open their page
+              <ArrowRight aria-hidden />
+            </Link>
+          </Button>
+        </p>
         {/* Work delivered in Asana is accepted there against its criteria (Asana acceptance A8): its card, open or linked. */}
         {asana && cards.asana && (
           <AsanaTaskCard
@@ -264,6 +274,8 @@ export default async function ContractorsPage({ params, searchParams }: { params
         amount: milestone.amount,
         agentReasoning: milestone.agent_reasoning,
         contractor: {
+          // Their id, so a hold about them links the part of their page that settles it (CL15).
+          id: milestone.contractor_id,
           name: milestone.contractor_name,
           riskLevel: contractor?.risk_level ?? "unscreened",
           riskNotes: contractor?.risk_notes ?? null,
@@ -280,7 +292,8 @@ export default async function ContractorsPage({ params, searchParams }: { params
     };
     const row = (decision: (typeof decisions)[number]): DecisionRowItem => {
       const milestone = milestonesById.get(decision.id) as MilestoneRow;
-      const item: DecisionRowItem = { decision, date: milestoneDate(milestone, decision.at), after: controls(milestone) };
+      // CL15: the row's id, which a link to the milestone opens it at.
+      const item: DecisionRowItem = { decision, anchor: milestoneAnchor(milestone.id), date: milestoneDate(milestone, decision.at), after: controls(milestone) };
       const waiting = waitingOf(milestone);
       // Ready for acceptance, or held for review, in Asana: a person's to do (Asana acceptance A16).
       const asanaLink = asana?.links.get(milestone.id);
@@ -306,9 +319,9 @@ export default async function ContractorsPage({ params, searchParams }: { params
           before: (
             <Callout tone="held" title="What it waits for">
               <p>
-                {milestone.contractor_name}&apos;s address changed and no one has confirmed it yet. Confirm it on Counterparties, and the agent decides on pay within a minute.{" "}
+                {milestone.contractor_name}&apos;s address changed and no one has confirmed it yet. Confirm it on their page, and the agent decides on pay within a minute.{" "}
                 <Button asChild variant="link">
-                  <Link href={orgHref(slug, "/counterparties")}>Open Counterparties</Link>
+                  <Link href={orgHref(slug, counterpartyPath(milestone.contractor_id, "address"))}>Open their address</Link>
                 </Button>
               </p>
             </Callout>
@@ -487,15 +500,4 @@ export default async function ContractorsPage({ params, searchParams }: { params
       </ProductShell>
     );
   });
-}
-
-/** The date a milestone's row leads with: when it was paid, closed or held, when it was verified, or that it waits for verification. */
-function milestoneDate(milestone: MilestoneRow | undefined, decidedAt: string): DecisionRowItem["date"] {
-  if (!milestone) return null;
-  const day = (at: string) => utcDay(at);
-  if (milestone.status === "paid") return { label: `Paid ${day(decidedAt)}` };
-  if (milestone.status === "closed") return { label: `Closed ${day(milestone.closed_at ?? decidedAt)}` };
-  if (milestone.status === "held") return { label: `Held ${day(decidedAt)}`, tone: "held" };
-  if (milestone.status === "verified") return { label: milestone.verified_at ? `Verified ${day(milestone.verified_at)}` : "Verified" };
-  return { label: "Awaiting verification" };
 }

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { shareReceiptAction, stopSharingReceiptAction } from "@/app/actions/receipts";
-import { ReceiptControl, ReceiptLink } from "@/components/ReceiptControl";
+import { RECEIPT_STATE_NOT_READ, ReceiptControl, ReceiptLink } from "@/components/ReceiptControl";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { DecisionCard } from "@/components/vx/DecisionCard";
 import type { Decision } from "@/components/vx/types";
@@ -112,6 +112,13 @@ describe("the receipt control on a paid payable", () => {
     expect(markup).toContain("Receipt shared");
     expect(markup).toContain("New link");
     expect(markup).toContain("Stop sharing");
+  });
+
+  it("offers nothing, and says why, while whether the receipt is shared was not read", () => {
+    const markup = renderToStaticMarkup(<ReceiptControl orgSlug="testnet-2" invoiceId={INVOICE} shared={null} />);
+    expect(text(markup)).toContain(RECEIPT_STATE_NOT_READ);
+    for (const control of ["Share receipt", "New link", "Stop sharing", "Receipt shared"]) expect(text(markup), control).not.toContain(control);
+    expect(markup).not.toContain("<form");
   });
 });
 

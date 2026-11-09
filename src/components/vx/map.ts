@@ -788,6 +788,15 @@ export function milestoneDecision(milestone: MilestoneRow, entries: LedgerEntry[
   return { ...decideMilestone(milestone, entries, context), network: context.network };
 }
 
+/**
+ * When the entry a milestone's decision rests on was signed, among `entries`; null with none read. `milestoneDecision`'s
+ * `at` is this, or the time of the request when there is none, which a row must never show as a date (counterparty page
+ * CL9).
+ */
+export function milestoneDecidedAt(milestoneId: string, entries: LedgerEntry[]): string | null {
+  return matchingEntry(entries, "milestoneId", milestoneId)?.ts ?? null;
+}
+
 function decideMilestone(milestone: MilestoneRow, entries: LedgerEntry[], context: MilestoneContext): Omit<Decision, "network"> {
   const entry = matchingEntry(entries, "milestoneId", milestone.id);
   // What the agent observed when it last decided: a person's decision after it (Pay now, Close) records none.

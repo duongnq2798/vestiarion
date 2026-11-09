@@ -92,9 +92,17 @@ describe("Payments in flight", () => {
     expect(words).toContain("Confirmed, but the bill is not marked paid yet: the agent's next cycle marks it.");
   });
 
-  it("links each payable to its track on Bills & receivables, and a milestone to Contractors", () => {
+  it("CL15: links each payable to its track on Bills & receivables, and a milestone to its row on Contractors", () => {
     expect(markup).toContain('href="/o/acme/invoices?open=a#settlement-a"');
-    expect(markup).toContain('href="/o/acme/contractors"');
+    // Not marked paid yet: among the open rows.
+    expect(markup).toContain('href="/o/acme/contractors#milestone-c"');
+  });
+
+  it("CL15: links a milestone the books mark paid to its row among every paid one", () => {
+    const paid: SettlementBooks = { paid: true, txRef: TX, at: T(5) };
+    const marked = row("m", [sent(30)], { source: { type: "milestone", id: "m" }, name: "Logo for Ana Lima" }, paid);
+    expect(marked.settlement.mismatch).toBe("marked_paid_not_confirmed");
+    expect(render([marked])).toContain('href="/o/acme/contractors?history=all#milestone-m"');
   });
 
   it("shows each amount in its own currency", () => {

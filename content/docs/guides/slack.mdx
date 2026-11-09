@@ -28,7 +28,7 @@ A Slack account acts as you only after you confirm it on that page, signed in. C
 
 ## 3. What the channel receives
 
-After each cycle, the channel gets one message listing what the agent decided since the last one: what it paid, scheduled, released or received, what it stopped, and the early payment it negotiated (its offers, a supplier's answer or counter, its answer, an offer it withdrew), each with why, and links. While deciding from Slack is off, the default, the bills it held or flagged for a person, or asked details for, and that still wait, end the message, each with a button to review it. A payment that has not confirmed 15 minutes after it was submitted to Circle is posted within minutes, without waiting for a cycle.
+After each cycle, the channel gets one message listing what the agent decided since the last one: what it paid, scheduled, released or received, what it stopped, and the early payment it negotiated (its offers, a supplier's answer or counter, its answer, an offer it withdrew), each with why, and links; a milestone's opens its own row on **Contractors**. While deciding from Slack is off, the default, the bills it held or flagged for a person, or asked details for, and that still wait, end the message, each with a button to review it. A payment that has not confirmed 15 minutes after it was submitted to Circle is posted within minutes, without waiting for a cycle.
 
 ```text
 Acme · the agent decided 3 things
@@ -64,7 +64,7 @@ In these messages and in `/vestiarion waiting`, hidden direction and zero-width 
 | Type | What you get, seen by you alone |
 |---|---|
 | `/vestiarion today` | Safe to spend today, what is due in the next 30 days, how many payments wait for a person, and what the agent pays next |
-| `/vestiarion waiting` | Each payable or milestone waiting for a person, why it waits, and a link: **Review** for a payable, **Contractors** for a milestone. When a **Review** link is listed, the answer ends with "Opening a link never approves anything." A payable a check in code stopped says what stopped it; the rest give the first sentence of why the agent stopped them. A bill asked for details says it is waiting for details. In shadow mode, a payment held for your verdict says it waits for your verdict, with **Give your verdict** |
+| `/vestiarion waiting` | Each payable or milestone waiting for a person, why it waits, and a link: **Review** for a payable, **Contractors** for a milestone, which opens its own row there. When a **Review** link is listed, the answer ends with "Opening a link never approves anything." A payable a check in code stopped says what stopped it; the rest give the first sentence of why the agent stopped them. A bill asked for details says it is waiting for details. In shadow mode, a payment held for your verdict says it waits for your verdict, with **Give your verdict** |
 | `/vestiarion ledger` | Whether the signed ledger is intact, checked the way **Verify hash chain** checks it |
 | `/vestiarion pause [reason]` | Stops the agent, for an owner, admin or approver. The channel where you typed it sees that you paused it. Resuming stays in Vestiarion |
 | `/vestiarion disconnect` | Disconnects your Slack account |

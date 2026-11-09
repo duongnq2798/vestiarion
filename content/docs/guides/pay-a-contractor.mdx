@@ -50,21 +50,21 @@ To pay someone who is not yet on file for work they have delivered, open **Contr
 
 - adds them as a contractor, with that amount as their payment limit, and screens them;
 - adds the work as a milestone, verified by you, with the note "Delivered work confirmed when the payment was set up";
-- emails them a one-time link to add the address they want to be paid at, and shows you the same link to copy. **Copy link** is there if they have no email or it does not arrive. The same email is where they are told once they are paid, with the transaction (see [Tell the payee it was paid](/docs/guides/first-payment#tell-the-payee-it-was-paid)).
+- emails them a one-time link to add the address they want to be paid at, and shows you the same link to copy. **Copy link** is there if they have no email or it does not arrive. The link is shown only then: if it is lost, make a new one on their page, which the line under the link opens. The same email is where they are told once they are paid, with the transaction (see [Tell the payee it was paid](/docs/guides/first-payment#tell-the-payee-it-was-paid)).
 
 <Screenshot
   src="/docs/guides/pay-freelancer.png"
-  alt="New payment opened on the Contractors page, on its Pay a freelancer tab, the form filled in: Freelancer's name Linh Tran, Freelancer's email linh@example.com, What they delivered 10 social posts for October, Amount (USDC) 25.00, and a Link to the work. Below it, the result after Set up payment: a message that the link was emailed, the payee link with a Copy link button, and when the link expires."
+  alt="New payment opened on the Contractors page, on its Pay a freelancer tab, the form filled in: Freelancer's name Linh Tran, Freelancer's email linh@example.com, What they delivered 10 social posts for October, Amount (USDC) 25.00, and a Link to the work. Below it, the result after Set up payment: a message that the link was emailed, the payee link with a Copy link button, and when the link expires, with a link to their page to make a new one if it is lost."
   caption="One form sets up the payment; the link goes to the freelancer by email and is shown once to copy."
 />
 
-The link takes them through their side in three steps, and afterwards shows them their payment's status, up to a confirmation with the transaction: [Get paid as a freelancer](/docs/guides/get-paid) is the guide to send them. When they add their address, the members who can confirm addresses get an email. Once someone other than whoever set up the payment confirms it on **Counterparties** with **Confirm address**, the agent pays the milestone within a minute. Whoever set up the payment created the link, so they count as having given the address: if they confirm it themselves, the first payment waits for another owner, admin or approver to pay it with **Pay now**, or for them to, if they are the only person in the workspace who can approve payments. Until the address is confirmed the milestone is listed under **Needs you** on Contractors, reading "Address to confirm", with a link to Counterparties; before they add an address, it reads "Waiting for an address". In a live workspace nothing is paid before that; a sandbox pays them simulated, at once. The steps below are the same path one at a time, for someone already on file.
+The link takes them through their side in three steps, and afterwards shows them their payment's status, up to a confirmation with the transaction: [Get paid as a freelancer](/docs/guides/get-paid) is the guide to send them. When they add their address, the members who can confirm addresses get an email, whose button opens that address on the freelancer's own page (see [One page for each contractor](#one-page-for-each-contractor)). Once someone other than whoever set up the payment confirms it with **Confirm address**, there or in their row on **Counterparties**, the agent pays the milestone within a minute. Whoever set up the payment created the link, so they count as having given the address: if they confirm it themselves, the first payment waits for another owner, admin or approver to pay it with **Pay now**, or for them to, if they are the only person in the workspace who can approve payments. Until the address is confirmed the milestone is listed under **Needs you** on Contractors, reading "Address to confirm"; opened, its row says to confirm it on their page, and **Open their address** opens it there. Before they add an address, it reads "Waiting for an address". In a live workspace nothing is paid before that; a sandbox pays them simulated, at once. The steps below are the same path one at a time, for someone already on file.
 
 ## 1. Add the contractor
 
 Open **Counterparties** and add the person or studio you pay, with **Role** set to **Contractor** and a **Payment limit (USDC)** at least as large as the milestones you will add. A vendor can be paid for milestones too; a client cannot.
 
-The agent pays to the counterparty's Arc address. To have the contractor enter it themselves, open their row on **Counterparties** and choose **Ask for address**, then **Create link**, and send them the link. They need no account. Once they have entered it, choose **Confirm address**: until someone confirms a new address, the agent waits. Whoever created the link counts as having given the address, so its first payment needs a second person: someone else confirms it, or someone else pays that first milestone with **Pay now** (see [Two people before the first payment](/docs/guides/first-payment#ask-a-payee-for-their-address)).
+The agent pays to the counterparty's Arc address. To have the contractor enter it themselves, open their row on **Counterparties** and choose **Ask for address**, then **Create link**, and send them the link. The row's **Open their page** opens their page, which has the same controls under **Payee link** and **Payment address**, with the links made before. They need no account. Once they have entered it, choose **Confirm address**: until someone confirms a new address, the agent waits. Whoever created the link counts as having given the address, so its first payment needs a second person: someone else confirms it, or someone else pays that first milestone with **Pay now** (see [Two people before the first payment](/docs/guides/first-payment#ask-a-payee-for-their-address)).
 
 ## 2. Add the milestone
 
@@ -119,7 +119,7 @@ A held milestone is listed under **Needs you**, and its row says in a few words 
 
 What it waits for decides what you can do:
 
-- **The contractor's screening, limit or address.** For example "A screening match lowered Quoc Duong's limit to 0.25 USDC, below this milestone's 1 USDC." Settle it on **Counterparties**: review the match, raise the limit, or confirm the address. Once the limit or the screening changes, the agent decides the milestone again within a minute. It cannot be paid by hand before then.
+- **The contractor's screening, limit or address.** For example "A screening match lowered Quoc Duong's limit to 0.25 USDC, below this milestone's 1 USDC." Settle it on their page: **Open Counterparty**, at the end of **What it waits for**, opens the part of it that settles the hold, where you review the match, raise the limit, or confirm the address. Once the limit or the screening changes, the agent decides the milestone again within a minute. It cannot be paid by hand before then.
 - **Circle did not send it.** Nothing moved. **Pay now** sends it again, on its own, as a new attempt.
 - **Not screened yet.** Screening could not run when the contractor was added, so the agent releases nothing to them. Screening runs again at every cycle, and once it gives a verdict the agent decides the milestone again. **Pay now** pays it anyway.
 - **Waiting for cash.** The operating wallet did not hold the milestone's USDC when the agent released it, so nothing was sent. The agent decides it again on its own once cash comes in: USDC added to the operating wallet, or brought back from the reserve. **Pay now** pays it once the wallet holds it, or the reserve covers what it lacks. On Arc mainnet, the figure it names leaves out the 0.10 USDC the wallet keeps for gas.
@@ -159,3 +159,37 @@ The contract was written for Vestiarion and is not audited. Its source, its func
 Open **Audit log** to see the milestone's whole story in order, each entry signed: `create_milestone` when it was added, the verification, and the agent's release decision with its reasoning and its transaction. [Verify an audit export](/docs/guides/audit-export) shows how someone outside the workspace can check the same entries.
 
 For one milestone, its card's **Why it was paid** (or **Evidence so far**, before it is paid) puts the same story on one page, link by link: its terms and who added them, the merged pull request GitHub reported or the person who verified the work, the payee, the decision, the people, and the payment read back from Arc, each fact marked with how it is known. See [Why a payment was paid](/docs/guides/evidence).
+
+## One page for each contractor
+
+Every counterparty has a page of its own, a contractor, a vendor or a client alike. Open their row on **Counterparties** and choose **Open their page**; **All counterparties** takes you back to the row. The page puts everything Vestiarion holds about them in one place, for every member of the workspace, viewers included. Nothing here makes a payment: the agent pays under its rules, and people decide in Approvals and on Contractors.
+
+From the top:
+
+- **The tiles.** What is **Owed to them** and what was **Paid to them**, each per currency: USDC and EURC are never added together. Then the state of their **Address**, and, for an owner or admin, their **Payee link**.
+- **Profile.** Their screening, their limits, where they are, when they were last screened, their billing email, and whether the agent needs a purchase order before it pays them. An owner or admin edits each here, as on the list; whoever decides payments reviews a screening match.
+- **Payment address.** The whole address, never cut short, with **Open on the explorer**. An owner or admin edits it; an owner, admin or approver confirms a changed one with **Confirm address**, as does an accountant while co-signing is on.
+- **Payee link.** The one-time link that asks them for their address, and for their invoice (see Payee link states below). Only an owner or admin sees it; anyone else reads "An owner or admin sends and stops payee links."
+- **Milestones.** The open ones, and those closed without paying. Each row opens its milestone with **Open in Contractors**, where it is verified, paid or closed: none of that is done from this page.
+- **Bills from them.** Their open bills, by due date, and the latest rejected ones. **Open in Bills & receivables** opens a bill where it is decided. For a client, this part is their invoices instead.
+- **Payments.** Their paid milestones and bills, newest first: the latest 10, or every one with **Show every payment**. A paid milestone is dated by when its payment was confirmed; one whose payment and history could not be read just now names no day and comes last. Each paid bill says where its receipt is, to every member: **Receipt shared**, **Receipt link stopped**, **No receipt shared**, or "No receipt: not paid on chain". In a live workspace, an owner or admin shares one from here too, except while whether it is shared could not be read: sharing again would stop a link already sent. A payment sent to an address they no longer have says "Paid to an earlier address", with that address on the explorer.
+- **Documents.** The documents the agent asked them for on their bills, with the purchase order number and note they typed, and the **Invoices sent for review** that name them: captured with the browser extension, or sent by them through their payee link.
+- **History.** The latest changes to them, each linked to its entry in the Audit log, where its signature is checked. **All of it in the Audit log** lists every one.
+
+A part that could not be read says "Not read just now. Reload the page in a moment.", and its tile says it was not read: never zero, never none. A record whose history was read only in part says "Some of this record's history was not read; the Audit log has all of it."
+
+### Copy an address safely
+
+**Copy address** shows only for an address that was set when they were added, or confirmed since, that is not frozen, and that looks like no other counterparty's address and none they had before. Otherwise one line says why, for example "Copy comes back once someone confirms this address." A lookalike address is made to pass a glance at its first and last characters, so its line ends "Check every character on the explorer." Do that before you paste it anywhere money is sent from.
+
+### Payee link states
+
+Under **Payee link**, an owner or admin sends, renews and stops the link with the same controls as on the list. Below them are the latest five links, newest first, each naming who made it, in one of these states:
+
+- **Out**: not used, not expired and not revoked.
+- **Replaced by a newer link**: making a new link stops every earlier one that was not used.
+- **Revoked**: someone stopped it.
+- **Expired unused**: it ran out before they used it.
+- **Used**, with their invoice when the link asked for one: **Invoice sent**, **Waiting for their invoice** until 30 days after they used it, or **Invoice closed**.
+
+The list ends "The latest 5 links; every one is in History and the Audit log." and "A used link's status page stays open to the payee for 30 days." A link's address is shown once, when it is made, and a receipt's link once, when it is shared: this page never shows either again.

@@ -420,7 +420,8 @@ describe("readPortfolio: what waits for the accountant", () => {
         detail: "Its address changed on Oct 12, 2026. The agent pays nothing to it until someone confirms it.",
         amount: null,
         since: "2026-10-12T08:00:00Z",
-        href: "/o/harbor-bakery/counterparties#counterparty-cp-new",
+        // CL15: the address on the payee's page.
+        href: "/o/harbor-bakery/counterparties/cp-new#address",
         canAct: true,
         who: "You can confirm it",
       }),

@@ -1,6 +1,12 @@
+/** One whole path segment that is a UUID, the id of a workspace's record. */
+const UUID_SEGMENT = /\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?=\/|$)/gi;
+
 /**
  * The path Google Analytics may see: invite, payee-link, pay-link, receipt, shared-report, statement, supplier status, early-payment offer, customer discount, term request, address-change check, document request and accountant client link tokens
  * and organization slugs are replaced, and callers pass a pathname only, so no query string or hash.
+ * Under a workspace, every path segment that is a UUID becomes `:id` (docs/superpowers/specs/2026-11-09-counterparty-page-design.md
+ * CL17): a counterparty's page, a project, a deal and an evidence page then name no record. A segment that is not a
+ * UUID, such as an evidence page's kind, is kept.
  */
 export function redactPath(pathname: string): string {
   if (/^\/invite\/[^/]+/.test(pathname)) return "/invite/:token";
@@ -16,7 +22,8 @@ export function redactPath(pathname: string): string {
   if (/^\/address-change\/[^/]+/.test(pathname)) return "/address-change/:token";
   if (/^\/join\/[^/]+/.test(pathname)) return "/join/:token";
   if (/^\/documents\/[^/]+/.test(pathname)) return "/documents/:token";
-  return pathname.replace(/^\/o\/[^/]+/, "/o/:org");
+  if (!/^\/o\/[^/]+/.test(pathname)) return pathname;
+  return pathname.replace(/^\/o\/[^/]+/, "/o/:org").replace(UUID_SEGMENT, "/:id");
 }
 
 /**

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import PrivacyPage, { metadata as privacyMetadata } from "@/app/privacy/page";
 import sitemap from "@/app/sitemap";
 import TermsPage, { metadata as termsMetadata } from "@/app/terms/page";
+import { redactPath } from "@/lib/analytics/redact";
 import { can, ORG_ROLES, PERMISSIONS, type OrgRole, type Permission } from "@/lib/auth/roles";
 import { MAINNET_STARTING_TWO_APPROVALS } from "@/lib/mainnet";
 import { ARC_MAINNET, ARC_TESTNET } from "@/lib/network";
@@ -494,6 +495,21 @@ describe("the privacy page", () => {
   it("says a workspace address has the workspace's slug replaced in analytics, as the redaction does", () => {
     expect(body).toContain("a workspace address has the workspace's slug replaced, as /o/:org");
     expect(body).not.toContain("workspace's name replaced");
+  });
+
+  it("CL17: says the id of a record in a workspace address is replaced with :id, as the redaction does", () => {
+    expect(body).toContain("the id of any record in it, such as a counterparty, a project or a payment's evidence, replaced with :id");
+    expect(body).toContain("/o/:org/counterparties/:id");
+    expect(redactPath("/o/acme/counterparties/3f2b8c1e-9d4a-4e7b-8a6c-1b2d3e4f5a6b")).toBe("/o/:org/counterparties/:id");
+    expect(source("src/lib/analytics/redact.ts")).toContain('"/:id"');
+  });
+
+  it("CL17: says enhanced measurement can send a link's full address, such as a block explorer's, and the code turns on nothing else", () => {
+    const analytics = source("src/components/analytics/GoogleAnalytics.tsx");
+    expect(analytics).not.toMatch(/enhanced|outbound/i);
+    for (const phrase of ["The code turns on nothing else in Google Analytics.", "enhanced measurement", "a link to another site", "block explorer", "wallet address"]) {
+      expect(body, phrase).toContain(phrase);
+    }
   });
 
   it("says the signed ledger keeps an account's id after the account is deleted, and the tombstone who deleted a workspace", () => {

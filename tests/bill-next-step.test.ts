@@ -53,7 +53,8 @@ describe("billNextStep", () => {
     expect(billNextStep(decision({ outcome: "refused" }), { status: "flagged", waiting: waiting({ poReference: "PO-1", goodsReceived: true }), rule: "counterparty.payment_limit", ...people })).toEqual({
       text: "Edit limit",
       tone: "held",
-      href: "/counterparties#counterparty-cp-1",
+      // CL15: the limit line of the counterparty's page.
+      href: "/counterparties/cp-1#limit",
     });
     expect(
       billNextStep(decision({ outcome: "refused" }), { status: "flagged", waiting: waiting({ poReference: "PO-1", goodsReceived: true }), rule: "counterparty.payment_limit", ...people, canWrite: false })

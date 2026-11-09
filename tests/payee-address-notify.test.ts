@@ -19,6 +19,7 @@ vi.mock("@/lib/email/send", async (importOriginal) => ({
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 const ORG = "0b6c1c9e-4a4f-4a7e-9b1e-000000000a0a";
 const ADDRESS = "0x2222222222222222222222222222222222222222";
+const PAYEE = "0b6c1c9e-4a4f-4a7e-9b1e-000000000c0c";
 
 const MEMBERS = [
   { user_id: "u1", email: "owner@studio.test", role: "owner", joined_at: "2026-09-30T00:00:00Z" },
@@ -37,7 +38,7 @@ const workspace = (request: RecordedRequest): FakeReply => {
   return { body: [] };
 };
 
-const input = { orgId: ORG, orgName: "Mai Studio", payeeName: "Linh", address: ADDRESS };
+const input = { orgId: ORG, orgName: "Mai Studio", counterpartyId: PAYEE, payeeName: "Linh", address: ADDRESS };
 
 beforeEach(() => {
   sendMock.mockReset().mockResolvedValue({ sent: true, id: "e1" });
@@ -45,14 +46,17 @@ beforeEach(() => {
 });
 
 describe("notifyPayeeAddress", () => {
-  it("emails each member who can confirm addresses, linking the workspace's Counterparties", async () => {
+  it("CL15: emails each member who can confirm addresses, linking the address on the payee's page", async () => {
     const { result } = platform(() => notifyPayeeAddress(input), workspace);
     expect(await result).toBe(2);
     expect(sendMock.mock.calls.map(([message]) => message.to).sort()).toEqual(["approver@studio.test", "owner@studio.test"]);
     const [message] = sendMock.mock.calls[0];
     expect(message.subject).toBe("Linh added an address to be paid at");
     expect(message.text).toContain(ADDRESS);
-    expect(message.text).toContain("https://www.vestiarion.xyz/o/mai-studio/counterparties");
+    expect(message.text).toContain(`https://www.vestiarion.xyz/o/mai-studio/counterparties/${PAYEE}#address`);
+    // The button keeps its words: a payee's name in it would be untrusted text.
+    expect(message.html).toContain("Open Counterparties");
+    expect(message.html).toContain(`href="https://www.vestiarion.xyz/o/mai-studio/counterparties/${PAYEE}#address"`);
   });
 
   it("counts only the sends that went out, and never throws for one that failed", async () => {

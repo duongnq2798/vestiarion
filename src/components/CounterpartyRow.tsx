@@ -1,6 +1,8 @@
-import { ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { Badge, type BadgeProps } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Money, shortHash } from "@/components/vx/Primitives";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
@@ -11,7 +13,7 @@ import type { CounterpartyRow as CounterpartyRecord } from "@/lib/queries";
 /**
  * One counterparty in the Counterparty book (Counterparties layout): its name, role and chain, risk, what it may
  * be paid now, its address, and what it needs before the agent can pay it; opening the row shows the rest, as
- * `children`. The docs' screenshots draw the same row.
+ * `children`, under a link to the counterparty's own page (`pageHref`). The docs' screenshots draw the same row.
  */
 
 export const RISK_TONE: Record<string, NonNullable<BadgeProps["tone"]>> = {
@@ -41,12 +43,18 @@ export function CounterpartyRow({
   defaultOpen,
   children,
   network,
+  pageHref,
 }: {
   /** The workspace's network: its explorer links what this shows (network threading P6). */
   network: Network;
   counterparty: Fields & Pick<CounterpartyRecord, "id" | "name" | "chain" | "payment_limit"> & { sample?: boolean };
   defaultOpen?: boolean;
   children: ReactNode;
+  /**
+   * The counterparty's page (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL1), which "Open their page"
+   * at the top of the opened row goes to. The row keeps its id, so a link to it still opens it here.
+   */
+  pageHref?: string;
 }) {
   const ready = readiness(counterparty);
   const role = (
@@ -102,6 +110,16 @@ export function CounterpartyRow({
           </div>
           {risk("shrink-0")}
         </div>
+        {pageHref && (
+          <p className="max-md:mt-2">
+            <Button asChild variant="link" className="text-xs">
+              <Link href={pageHref} aria-label={`Open ${counterparty.name}'s page`}>
+                Open their page
+                <ArrowRight aria-hidden />
+              </Link>
+            </Button>
+          </p>
+        )}
         {children}
       </article>
     </Disclosure>

@@ -305,7 +305,9 @@ describe("the payee's page (AC3)", () => {
     await run(() => deferred[0]());
     expect(sent.mock.calls.map((call) => call[0].to)).toEqual(["owner@pinecrest.example"]);
     expect(sent.mock.calls[0][0].subject).toBe("Northwind says they did not change their payment address");
-    expect(sent.mock.calls[0][0].text).toContain("/o/pinecrest/counterparties");
+    // CL15: the address on the payee's page, where it is unfrozen; the button keeps its words.
+    expect(sent.mock.calls[0][0].text).toContain(`/o/pinecrest/counterparties/${COUNTERPARTY}#address`);
+    expect(sent.mock.calls[0][0].html).toContain("Open Counterparties");
   });
 
   it("still tells the owners and admins when nothing else can be read or signed", async () => {

@@ -258,10 +258,10 @@ describe("PayLinkControl", () => {
     expect(on).toContain('name="on" value="false"');
   });
 
-  it("sends a client with no billing email to its row on Counterparties", () => {
+  it("CL15: sends a client with no billing email to the billing email line of its page", () => {
     const markup = control({ client: { ...CLIENT, hasEmail: false } });
     expect(text(markup)).toContain("Add Mai Studio's billing email on Counterparties");
-    expect(markup).toContain('href="/o/mai/counterparties#counterparty-cp-mai"');
+    expect(markup).toContain('href="/o/mai/counterparties/cp-mai#billing-email"');
     expect(text(markup)).not.toContain("Remind the client by email");
   });
 });

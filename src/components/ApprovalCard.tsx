@@ -490,7 +490,7 @@ export default function ApprovalCard({
 /**
  * An accountant's Co-sign (accountant co-sign CS8): one of the two approvals, recorded behind a confirmation, never paid.
  * A co-sign that cannot be given yet says why instead (accountant queue AQ5); an address to confirm, or one still to add,
- * links the payee's row.
+ * links the address on the payee's page (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15).
  */
 function CosignControl({ orgSlug, payable, viewerId, cosign: state }: { orgSlug: string; payable: WaitingPayable; viewerId: string; cosign?: CosignState }) {
   const form = useActionForm(cosign, INITIAL);
@@ -506,18 +506,15 @@ function CosignControl({ orgSlug, payable, viewerId, cosign: state }: { orgSlug:
     return (
       <CardFooter>
         <p className="text-sm text-ink-2">
-          {state.reason}
-          {state.reason === COSIGN_BLOCKED.unconfirmed || state.reason === COSIGN_BLOCKED.no_address ? (
+          {state.reason}.
+          {(state.reason === COSIGN_BLOCKED.unconfirmed || state.reason === COSIGN_BLOCKED.no_address) && (
             <>
               {" "}
-              on{" "}
-              <Link href={orgHref(orgSlug, counterpartyPath(payable.counterpartyId))} className="font-medium text-agent underline-offset-2 hover:underline">
-                Counterparties
+              <Link href={orgHref(orgSlug, counterpartyPath(payable.counterpartyId, "address"))} className="font-medium text-agent underline-offset-2 hover:underline">
+                {/* An address still to add is an owner's or admin's to add: the link only opens it. */}
+                {state.reason === COSIGN_BLOCKED.unconfirmed ? "Confirm address" : "Open their address"}
               </Link>
-              .
             </>
-          ) : (
-            "."
           )}
         </p>
       </CardFooter>
@@ -806,7 +803,7 @@ function ApprovalGuidance({
         <p>{HIGH_RISK_EXPLAINED}</p>
         {canEdit && (
           <Button asChild size="touch" variant="secondary" className="mt-2">
-            <Link href={orgHref(orgSlug, counterpartyPath(payable.counterpartyId))}>Review screening</Link>
+            <Link href={orgHref(orgSlug, counterpartyPath(payable.counterpartyId, "screening"))}>Review screening</Link>
           </Button>
         )}
       </Callout>

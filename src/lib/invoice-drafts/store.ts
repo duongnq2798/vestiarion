@@ -203,6 +203,33 @@ export async function capturedDraftsToReview(): Promise<{ available: true; draft
   };
 }
 
+/** A draft sent for review as a counterparty's page lists it: what it is and when it was sent, never what it was read from. */
+export interface SentDraft {
+  id: string;
+  source: DraftSource;
+  invoice_number: string | null;
+  amount: string | null;
+  currency: string | null;
+  sent_at: string | null;
+}
+
+/**
+ * The latest `limit` drafts sent for review that name this counterparty, newest first, for Documents on its page
+ * (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL10): six named columns, never the captured text or
+ * what was read from it. Throws `CaptureNotSetUpError` before migration 0121, as every read here does.
+ */
+export async function sentDraftsFrom(counterpartyId: string, limit: number): Promise<SentDraft[]> {
+  const found = await db()
+    .from("invoice_drafts")
+    .select("id, source, invoice_number, amount, currency, sent_at")
+    .eq("state", "sent")
+    .eq("counterparty_id", counterpartyId)
+    .order("sent_at", { ascending: false })
+    .limit(limit);
+  if (found.error) raise(found.error);
+  return found.data as unknown as SentDraft[];
+}
+
 /**
  * The text a draft was read from, for the person reviewing it (C9): null when it was removed, as it is once the draft
  * is decided or 30 days after capture, or for a draft not sent for review.

@@ -82,3 +82,16 @@ export function txUrl(network: Network, hash: string): string {
 export function addressUrl(network: Network, address: string): string {
   return `${networkProfile(network).explorer}/address/${address}`;
 }
+
+const EVM_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const TX_PATH = "/tx/";
+
+/**
+ * A payee's address on the explorer of the chain it is paid on (docs/superpowers/specs/2026-11-09-counterparty-page-design.md
+ * CL5): the chain's transaction link with its `/tx/` as `/address/`. Null for anything but 0x and 40 hex digits, so no
+ * text a person typed becomes a link, and for a chain whose transaction link does not end in `/tx/`.
+ */
+export function addressOnChainUrl(chain: PayeeChainEntry, address: string): string | null {
+  if (!EVM_ADDRESS.test(address) || !chain.explorerTx.endsWith(TX_PATH)) return null;
+  return `${chain.explorerTx.slice(0, -TX_PATH.length)}/address/${address}`;
+}

@@ -13,10 +13,24 @@ import {
   listLedgerEntriesAfter,
   listLedgerEntriesByDomain,
   listLedgerEntriesForTargets,
+  listCounterpartyEntries,
   listLedgerEntryPage,
   verifyLedger,
 } from "@/lib/ledger";
-import { latestForecast, listAccounts, listCounterparties, listInvoices, listMilestones, listTreasuryActions, shellClock, stats } from "@/lib/queries";
+import {
+  latestForecast,
+  listAccounts,
+  listCounterparties,
+  listInvoices,
+  listInvoicesOf,
+  listMilestones,
+  listMilestonesOf,
+  listTreasuryActions,
+  payeeAddressBook,
+  readCounterparty,
+  shellClock,
+  stats,
+} from "@/lib/queries";
 import { LedgerSigningKeyError } from "@/lib/ledger-keys";
 import { carriesOrg, fakeSupabase, orgTestContext } from "./support/fake-supabase";
 
@@ -40,6 +54,12 @@ const READS: Array<[string, () => Promise<unknown>]> = [
   ["listCounterparties", () => listCounterparties()],
   ["listInvoices", () => listInvoices()],
   ["listMilestones", () => listMilestones()],
+  // A counterparty's page (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL2).
+  ["readCounterparty", () => readCounterparty("0b6c1c9e-4a4f-4a7e-9b1e-0000000003cc")],
+  ["payeeAddressBook", () => payeeAddressBook()],
+  ["listInvoicesOf", () => listInvoicesOf("0b6c1c9e-4a4f-4a7e-9b1e-0000000003cc")],
+  ["listMilestonesOf", () => listMilestonesOf("0b6c1c9e-4a4f-4a7e-9b1e-0000000003cc")],
+  ["listCounterpartyEntries", () => listCounterpartyEntries("0b6c1c9e-4a4f-4a7e-9b1e-0000000003cc", 25)],
   ["listTreasuryActions", () => listTreasuryActions()],
   ["latestForecast", () => latestForecast()],
   ["stats", () => stats()],

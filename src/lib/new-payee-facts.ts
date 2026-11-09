@@ -27,7 +27,7 @@ export interface NewPayeeFacts {
 }
 
 /** The address's own entries, and the signed entries that name who asked the payee for one (./new-payee). */
-const ADDRESS_ACTIONS = [
+export const ADDRESS_ACTIONS = [
   "create_counterparty",
   "counterparty_address_changed",
   "counterparty_address_confirmed",
@@ -35,7 +35,7 @@ const ADDRESS_ACTIONS = [
   "github_bounty_attached",
 ];
 /** `payee_link_created` is a compliance entry; `github_bounty_attached` a contractor one. */
-const ADDRESS_DOMAINS = ["compliance", "contractor"];
+export const ADDRESS_DOMAINS = ["compliance", "contractor"];
 
 const NONE: ReadonlySet<string> = new Set();
 

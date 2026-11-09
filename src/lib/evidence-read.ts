@@ -48,6 +48,12 @@ export interface EvidenceRead {
   /** The public halves of the workspace's keys, by id: what the reader's browser checks the entries with. */
   publicKeys: Record<string, string>;
   receipt: ReceiptState;
+  /**
+   * The payee's id, for the page to link to its counterparty page (docs/superpowers/specs/2026-11-09-counterparty-page-design.md
+   * CL15); null when the workspace holds no such counterparty. Kept out of `chain`, whose subject the evidence document
+   * and `GET /api/v1/invoices/{id}/evidence` publish.
+   */
+  counterpartyId: string | null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -299,5 +305,6 @@ export async function readEvidence(
     chain,
     publicKeys,
     receipt: invoiceId ? { state: receipt ? (receipt.revoked_at ? "stopped" : "shared") : chain.subject.onChain ? "none" : "unavailable" } : null,
+    counterpartyId: counterpartyRow ? counterpartyId : null,
   };
 }

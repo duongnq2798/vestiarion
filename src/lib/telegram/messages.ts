@@ -1,6 +1,7 @@
 import type { ActivityItem } from "../agent-activity";
 import { networkProfile } from "../network";
 import { approvalAnchor, orgHref } from "../auth/org-paths";
+import { milestoneRowPath } from "../counterparty-paths";
 import { lateFeeLine, READER_NAMES } from "../invoice-document/chat-draft";
 import type { InvoiceDraftRead } from "../invoice-document/draft";
 import type { VerificationResult } from "../ledger";
@@ -236,11 +237,12 @@ export function todayMessage(workspaceName: string, facts: TodayFacts, consoleUr
 /** One payment a person must decide, for /waiting: what, how much, why it waits, and where to decide it. */
 function waitingBlock(fact: WaitingFact, origin: string, slug: string): string {
   // A payable is reviewed on its card in Approvals, as the decisions message and Discord link it (TG3); one held for a
-  // person's verdict is settled by giving one, in Vestiarion (shadow mode S4).
+  // person's verdict is settled by giving one, in Vestiarion (shadow mode S4). A held milestone opens its own row on
+  // Contractors, which is not paid (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15).
   const where =
     fact.kind === "payable"
       ? link(orgUrl(origin, slug, `/approvals#${approvalAnchor(fact.id)}`), fact.forVerdict ? "Give your verdict" : "Review")
-      : link(orgUrl(origin, slug, "/contractors"), "Contractors");
+      : link(orgUrl(origin, slug, milestoneRowPath(fact.id, { paid: false })), "Contractors");
   const why = fact.reason ? `: ${telegramText(fact.reason)}` : "";
   const state = fact.forVerdict ? "waits for your verdict" : (WAITING_STATUS[fact.status] ?? telegramText(fact.status, 40));
   return `⏸ ${telegramText(fact.name, NAME_MAX)} ${telegramText(amountText(fact.amount, fact.currency), 60)} · ${state}${why}\n${where}`;

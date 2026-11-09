@@ -627,7 +627,8 @@ describe("all waiting: work to accept (AW4)", () => {
     detail: "Completed in Asana. Accept it against its criteria.",
     amount: { value: 800, currency: "USDC" },
     since: "2026-10-30T12:00:00Z",
-    href: "/o/harbor-bakery/contractors",
+    // CL15: the milestone's row on Contractors, open: it waits for verification.
+    href: "/o/harbor-bakery/contractors#milestone-ms-a1",
   };
 
   it("lists ready and held Asana and Linear links of milestones waiting for verification, in the Contractors card's words", async () => {
@@ -652,6 +653,7 @@ describe("all waiting: work to accept (AW4)", () => {
         detail: "Completed in Linear (ENG-12). Accept it against its criteria.",
         amount: { value: 2400, currency: "USDC" },
         since: "2026-11-01T15:00:00Z",
+        href: "/o/harbor-bakery/contractors#milestone-ms-l1",
         canAct: true,
         who: "You can check it and accept it",
       }),
@@ -713,6 +715,15 @@ describe("all waiting: work to accept (AW4)", () => {
   it("still lists one tool's work when only the other is set up", async () => {
     const { read } = world({ extra: (sent) => (sent.path === "/rest/v1/linear_issue_links" ? { status: 400, body: { code: "42P01", message: 'relation "public.linear_issue_links" does not exist' } } : null) });
     expect(ofKind((await read()).items, "accept_work").map((item) => item.key.split(":").pop())).toEqual(["a1", "a2"]);
+  });
+
+  it("CL15: links a milestone held for a person to its row on Contractors, which opens at it", async () => {
+    const held: Row = { id: "ms-held", title: "Menu shoot", amount: "120", status: "held", decided_at: "2026-10-30T09:00:00Z", created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Studio North" } };
+    const { read } = world({
+      extra: (sent) => (sent.path === "/rest/v1/milestones" && sent.params.get("status") === "eq.held" && claimsOf(sent)?.org_id === HARBOR.id ? answer([held], sent) : null),
+    });
+    const items = ofKind((await read()).items, "decision").filter((item) => item.key.endsWith(":ms-held"));
+    expect(items).toEqual([expect.objectContaining({ detail: "Milestone held for a person: Menu shoot.", href: "/o/harbor-bakery/contractors#milestone-ms-held" })]);
   });
 });
 

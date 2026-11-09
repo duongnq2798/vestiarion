@@ -558,7 +558,8 @@ export default function PrivacyPage() {
             <code>/more-time/:token</code>, a question about a payee&apos;s address change <code>/address-change/:token</code>, a request for a
             bill&apos;s missing document <code>/documents/:token</code> and an accountant&apos;s client link <code>/join/:token</code>, and a
             workspace address has the workspace&apos;s slug
-            replaced, as <code>/o/:org</code>;
+            replaced, as <code>/o/:org</code>, and the id of any record in it, such as a counterparty, a project or a payment&apos;s
+            evidence, replaced with <code>:id</code>, as <code>/o/:org/counterparties/:id</code>;
           </li>
           <li>only the path is sent, never the query string or anything after a #;</li>
           <li>the title of a workspace page, which names the workspace, is replaced with its redacted path;</li>
@@ -572,6 +573,11 @@ export default function PrivacyPage() {
         <p>
           It loads on every page, signed-in pages included. Google signals and ad personalization signals are turned off. Google Analytics sets its
           own cookies to tell visits apart, and collects what any site it runs on sends it, such as your IP address and your device and browser.
+        </p>
+        <p>
+          The code turns on nothing else in Google Analytics. Its enhanced measurement, a setting of the Analytics property that Google turns on by
+          default, can also count a click on a link to another site, with that link&apos;s full address. A link to a block explorer holds a
+          transaction&apos;s hash or a wallet address, such as a payee&apos;s, so while that setting is on, Google Analytics receives it.
         </p>
       </LegalSection>
 

@@ -102,21 +102,23 @@ describe("Co-sign on the approval card", () => {
     expect(shown).not.toContain("Co-sign");
   });
 
-  it("links the address to confirm from the card", () => {
+  it("CL15: links the address to confirm on the payee's page, as Confirm address", () => {
     const markup = html(
       <ApprovalCard orgSlug="acme" payable={payable} canDecide={false} viewerId={ACCOUNTANT} sandbox={false} canCosign cosign={{ state: "blocked", reason: COSIGN_BLOCKED.unconfirmed }} />
     );
-    expect(text(markup)).toContain("Confirm the address first on Counterparties .");
-    expect(markup).toContain(`href="/o/acme/counterparties#counterparty-${payable.counterpartyId}"`);
+    expect(text(markup)).toContain("Confirm the address first. Confirm address");
+    expect(markup).toMatch(new RegExp(`<a [^>]*href="/o/acme/counterparties/${payable.counterpartyId}#address"[^>]*>Confirm address</a>`));
   });
 
-  it("links the payee's row where it has no payment address yet, which the server refuses with no_address", () => {
+  it("CL15: opens the address on the payee's page where it has no payment address yet, which the server refuses with no_address", () => {
     const markup = html(
       <ApprovalCard orgSlug="acme" payable={{ ...payable, address: null }} canDecide={false} viewerId={ACCOUNTANT} sandbox={false} canCosign cosign={{ state: "blocked", reason: COSIGN_BLOCKED.no_address }} />
     );
-    expect(text(markup)).toContain("The payee has no payment address yet on Counterparties .");
+    // An owner or admin adds it: the accountant is shown where it goes, not offered to confirm one.
+    expect(text(markup)).toContain("The payee has no payment address yet. Open their address");
     expect(text(markup)).not.toContain("Co-sign");
-    expect(markup).toContain(`href="/o/acme/counterparties#counterparty-${payable.counterpartyId}"`);
+    expect(text(markup)).not.toContain("Confirm address");
+    expect(markup).toContain(`href="/o/acme/counterparties/${payable.counterpartyId}#address"`);
   });
 
   it("says they co-signed it when the page read so", () => {

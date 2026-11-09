@@ -229,7 +229,7 @@ export async function handlePullRequestComment(event: PullRequestComment, option
         })
       );
       // Nothing is paid to it until a member confirms it, and they are told it arrived, as for a payee link.
-      await notifyPayeeAddress({ orgId, orgName, payeeName: changed.name, address: command.address });
+      await notifyPayeeAddress({ orgId, orgName, counterpartyId: bounty.counterparty_id, payeeName: changed.name, address: command.address });
     } catch (error) {
       if (error instanceof CounterpartyAddressError && error.code === "unchanged") return reply({ kind: "address_on_file", author: event.comment.author }, "refused");
       // A mistyped address is told apart from one that is no address (payment safety A3).

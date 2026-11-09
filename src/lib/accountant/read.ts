@@ -16,6 +16,7 @@ import { PROVIDER_LABELS } from "../connectors/provider";
 import { currentUserId } from "../context";
 import { readCosignStates, type CosignState } from "../cosign-state";
 import { addressUnconfirmed } from "../counterparty-address";
+import { counterpartyPath, milestoneRowPath } from "../counterparty-paths";
 import { readCustomerRequests } from "../customer-portal/requests";
 import { db, type OrgDb } from "../dal";
 import { withOrg } from "../dal/scope";
@@ -32,7 +33,6 @@ import { isLinearNotSetUp } from "../linear/links";
 import { linearSettingsFromEnv } from "../linear/settings";
 import { addressGiver } from "../new-payee";
 import { ID_CHUNK, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
-import { counterpartyPath } from "../next-step";
 import { readPayeeLock } from "../payee-lock";
 import { maskEmail } from "../payment-notices";
 import { twoApprovalsSentence } from "../two-approvals";
@@ -261,7 +261,8 @@ async function decisionItems(
       detail: `Milestone held for a person: ${row.title}.`,
       amount: { value: num(row.amount), currency: "USDC" },
       since: row.decided_at ?? row.created_at,
-      href: orgHref(ws.slug, "/contractors"),
+      // CL15: its row on Contractors, which opens at it; a held milestone is not paid yet.
+      href: orgHref(ws.slug, milestoneRowPath(row.id, { paid: false })),
       ...routeTo(ws.role, "decision"),
     });
   }
@@ -345,7 +346,7 @@ async function addressItems(orgDb: OrgDb, ws: { slug: string; name: string; role
         : `Its address changed on ${dayWords(row.address_changed_at)}. The agent pays nothing to it until someone confirms it.`,
       amount: null,
       since: row.address_changed_at,
-      href: orgHref(ws.slug, counterpartyPath(row.id)),
+      href: orgHref(ws.slug, counterpartyPath(row.id, "address")),
       ...route,
     };
   });
@@ -692,7 +693,8 @@ async function workItems(orgDb: OrgDb, ws: { slug: string; name: string; role: O
         detail: link.state === "ready" ? `${ready} Accept it against its criteria.` : `Held: ${held}`,
         amount: { value: num(milestone.amount), currency: "USDC" },
         since: link.state === "ready" ? (link.completed_at ?? link.linked_at) : (link.held_at ?? link.linked_at),
-        href: orgHref(ws.slug, "/contractors"),
+        // CL15: the milestone waits for verification, so it is open on Contractors.
+        href: orgHref(ws.slug, milestoneRowPath(link.milestone_id, { paid: false })),
         ...(link.state === "held" && route.canAct ? HELD_WORK : route),
       },
     ];

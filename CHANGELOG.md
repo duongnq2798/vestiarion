@@ -36,6 +36,29 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   account. An evidence link to an issue on the connected site is checked through Jira. Jira's logo is not shown: its
   card uses the icon for work tools. Needs `JIRA_CLIENT_ID` and `JIRA_CLIENT_SECRET`, and migration `0149`; until it
   runs, the Jira card says Jira is not set up yet. SDK 0.4.3 accepts `jira` as a milestone's verification method.
+- **One page for each counterparty**,
+  [Guide](https://www.vestiarion.xyz/docs/guides/pay-a-contractor#one-page-for-each-contractor):
+  everything Vestiarion holds about a contractor, a vendor or a client, in one place, for every member of the
+  workspace. An opened row on Counterparties has **Open their page** at its top, and **All counterparties** leads back
+  to the row. From the top: what is owed to them and what was paid to them, each per currency, never USDC and EURC
+  added together; their profile, with the row's own controls; their payment address in full, never cut short, with
+  **Open on the explorer** and **Copy address**, which shows only for an address set when they were added or
+  confirmed since, not frozen, and like no other counterparty's address or one they had before (otherwise one line
+  says why); for an owner or admin, their payee link with the latest five links and what became of each, from out
+  and replaced by a newer link to revoked, expired unused or used, with their invoice; their open milestones and those
+  closed without paying; their bills, or a client's invoices; their payments, newest first, a paid milestone dated by
+  when its payment was confirmed, each paid bill with where its receipt is, for every member, and a payment sent to
+  an address they no longer have marked as such; the documents asked of them, with the purchase order number and note
+  they typed, and the invoices sent for review that name them, captured with the browser extension or sent through
+  their payee link; and the latest changes to them, each linked to its signed entry in the Audit log. A part that
+  could not be read says so, never zero or none, and a date it did not read is never shown: a paid milestone without
+  one names no day and comes last. While whether a receipt is shared could not be read, it cannot be shared from the
+  page, since sharing again would stop a link already sent. Names, titles, purchase order numbers and notes the
+  counterparty wrote are shown without invisible or direction-changing characters, the notes with their lines.
+  Nothing on the page pays or records anything new: its controls are the ones Counterparties, Contractors and Bills &
+  receivables already have, with their own signed entries, and paying, verifying or closing a milestone stays on
+  Contractors. Another workspace's counterparty is not found, like one that does not exist; the browser tab and
+  analytics name the page only as Counterparty. No migration.
 - **The agent's track record, for your accountant to confirm**,
   [Confirm the agent's track record](https://www.vestiarion.xyz/docs/guides/accountants#confirm-the-agent-s-track-record):
   every verdict you gave on a real bill, with the decision it judged and the signed entries both rest on, how often you
@@ -109,6 +132,32 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   uses for that branch alone; since that permission is the repository's, the token goes only to the script's own step,
   which now fetches the script with `curl` instead of `actions/checkout`, and the job's cache actions are pinned to a
   commit. The token never reaches the log. The page is in the sitemap and the footer's Resources group. No migration.
+
+### Changed
+
+- **Analytics no longer sees which record a page is about.** Every id in a workspace page's address, such as a
+  counterparty's, a project's, a deal's or a payment's evidence, now reaches Google Analytics as `:id`, as in
+  `/o/:org/projects/:id`, and the page's title and a referrer from this site follow; a part of the address that is not
+  an id, such as `invoice` on an evidence page, is kept. The [privacy page](https://www.vestiarion.xyz/privacy#analytics)
+  says so, and also that while Google Analytics' enhanced measurement is on, which is Google's default, a click on a
+  link to a block explorer sends it that link's address, which can hold a payee's wallet address. No migration.
+- **Every "fix it" link opens its part of the counterparty's page.** **Edit limit**, **Confirm address**,
+  **Review screening** and **Purchase orders** under a stopped bill, a held milestone's **What it waits for**, the
+  co-sign card's address link, **Add billing email** beside a client's payment link, the accountant console's
+  addresses to confirm, and the emails that a payee added or disputed an address now open the counterparty's page at
+  their limit, address, screening, purchase orders or billing email, instead of their row on the list; the emails'
+  button still says Open Counterparties. A milestone linked from the accountant console or from Payments in flight
+  opens its own row on Contractors. Each opened row there now has **Open their page** under its card, and one whose
+  address waits for a person links **Open their address**. Pay a freelancer's result links the payee's page for a new
+  link if the first is lost, and the payee's name on a payment's evidence opens their page; the evidence file and the
+  API are unchanged. An old link to a row on Counterparties still opens the row. No migration.
+- **A milestone named in Slack, Telegram or the console opens its own row on Contractors.** A milestone the agent
+  released, submitted or held, in the console's notices and in the Slack and Telegram messages of what the agent
+  decided, a milestone payment that has not confirmed, there and in its email, and a held milestone in
+  `/vestiarion waiting` and `/waiting`, now open that milestone's row on Contractors, with every paid row shown for one
+  that was paid, instead of the top of the page, Contractors itself included when a console notice is clicked there.
+  The links still say Contractors or Decide in Contractors, never the contractor's name. Discord's notice is unchanged:
+  it lists only bills, each at its card on Approvals. No migration.
 
 ### Fixed
 

@@ -15,6 +15,7 @@ import {
 import { readAgentActivity } from "@/lib/agent-activity-read";
 import { agentResumes, CASH_SHORTFALL, codeStoppedLine, counterpartyPath, heldForCash, ruleInBrief, ruleNextStep, VENDOR_DOCUMENT } from "@/lib/next-step";
 import { ruleLabel } from "@/lib/rule-words";
+import { counterpartyPath as pagePath } from "@/lib/counterparty-paths";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -219,7 +220,7 @@ describe("what the agent did, in words", () => {
       tone: "done",
       txHash: TX,
     });
-    expect(activityItem(milestone("milestone_hold"), refs())).toMatchObject({ text: "Held 1.00 USDC for Landing page from Puka Hotel for you.", tone: "stopped", path: "/contractors" });
+    expect(activityItem(milestone("milestone_hold"), refs())).toMatchObject({ text: "Held 1.00 USDC for Landing page from Puka Hotel for you.", tone: "stopped", path: `/contractors#milestone-${MILESTONE}` });
     expect(activityItem(entry("ar_received", { txHash: TX }), refs({ status: "received" }))).toMatchObject({
       text: "Received 0.30 USDC from Jiren on Arc testnet: Circle reported the transfer complete.",
       tone: "done",
@@ -233,7 +234,7 @@ describe("what the agent did, in words", () => {
       text: "Tried to release 1.00 USDC for Landing page to Puka Hotel; it is held for you.",
       detail: "The operating wallet did not hold its USDC; the agent decides it again once cash comes in.",
       tone: "stopped",
-      path: "/contractors",
+      path: `/contractors#milestone-${MILESTONE}`,
       txHash: null,
     });
     expect(activityItem(release({ resultingStatus: "held", heldBecause: "agent_paused" }), refs())).toMatchObject({
@@ -246,6 +247,27 @@ describe("what the agent did, in words", () => {
       txHash: TX,
     });
     expect(activityItem(release({ txRef: TX, resultingStatus: "paid" }), refs())?.text).toBe("Released 1.00 USDC for Landing page to Puka Hotel; Circle confirmed it on Arc testnet.");
+  });
+
+  it("CL15: opens a milestone at its own row on Contractors, with every row shown once it is paid, in words that name no one", () => {
+    const release = (execution: Record<string, unknown>) => ({ seq: 5, action: "milestone_release", detail: { milestoneId: MILESTONE, guardrailBlocked: false, execution } });
+    const row = `/contractors#milestone-${MILESTONE}`;
+    const paidRow = `/contractors?history=all#milestone-${MILESTONE}`;
+    // Paid, confirmed by Circle or simulated: listed past the latest ten only with Show all.
+    expect(activityItem(release({ txRef: TX, resultingStatus: "paid" }), refs())).toMatchObject({ path: paidRow, pathLabel: "Contractors" });
+    expect(activityItem(release({ txRef: "sim_1", chainMode: "simulate", resultingStatus: "paid" }), refs())).toMatchObject({ path: paidRow, pathLabel: "Contractors" });
+    // Submitted, an unknown outcome, or a decision with no transfer recorded: not paid yet.
+    expect(activityItem(release({ txRef: TX, resultingStatus: "verified" }), refs())).toMatchObject({ path: row, pathLabel: "Contractors" });
+    expect(activityItem(release({ resultingStatus: "verified" }), refs())).toMatchObject({ path: row });
+    expect(activityItem(release({}), refs())).toMatchObject({ path: row });
+    // Held, by the release or by code.
+    expect(activityItem(release({ resultingStatus: "held", heldBecause: "cash_shortfall" }), refs())).toMatchObject({ path: row, pathLabel: "Decide in Contractors" });
+    expect(activityItem({ seq: 6, action: "milestone_release", detail: { milestoneId: MILESTONE, guardrailBlocked: true } }, refs())).toMatchObject({ path: row, pathLabel: "Decide in Contractors" });
+    expect(activityItem({ seq: 7, action: "milestone_hold", detail: { milestoneId: MILESTONE } }, refs())).toMatchObject({ path: row, pathLabel: "Decide in Contractors" });
+    // The link's words are ours: the contractor's name, which anyone can set, is in the sentence only.
+    for (const item of [release({ txRef: TX, resultingStatus: "paid" }), release({ resultingStatus: "held" })].map((one) => activityItem(one, refs()))) {
+      expect(item?.pathLabel).not.toContain("Puka");
+    }
   });
 
   it("says a reminder it sent a client, with who decided (collections R8)", () => {
@@ -319,7 +341,7 @@ describe("what to do about a payable code stopped", () => {
   it("asks for the address of a payee that has none, and says the agent decides it again once it is confirmed", () => {
     expect(ruleNextStep("counterparty.no_address", counterparty)).toEqual({
       sentence: "CME has no payment address yet. Add it, or ask CME for it with a one-time link; the agent decides it again once the address is confirmed.",
-      fix: { label: "Add address", path: "/counterparties#counterparty-cp-1" },
+      fix: { label: "Add address", path: "/counterparties/cp-1#address" },
     });
     expect(ruleInBrief("counterparty.no_address")).toBe("the counterparty has no payment address yet");
     expect(agentResumes("counterparty.no_address")).toBe("The agent decides it again on its own once the counterparty has an address and a person has confirmed it.");
@@ -346,13 +368,31 @@ describe("what to do about a payable code stopped", () => {
   it("links the page that removes the cause, for the rules a person can change", () => {
     expect(ruleNextStep("counterparty.payment_limit", counterparty)).toEqual({
       sentence: "It is above CME's payment limit. Pay it in Approvals, or raise the limit.",
-      fix: { label: "Edit limit", path: counterpartyPath("cp-1") },
+      fix: { label: "Edit limit", path: counterpartyPath("cp-1", "limit") },
     });
-    expect(ruleNextStep("counterparty.address_unconfirmed", counterparty)?.fix).toEqual({ label: "Confirm address", path: "/counterparties#counterparty-cp-1" });
-    // "Not this person" is on the counterparty's row.
-    expect(ruleNextStep("counterparty.high_risk", counterparty)?.fix).toEqual({ label: "Review screening", path: "/counterparties#counterparty-cp-1" });
+    expect(ruleNextStep("counterparty.address_unconfirmed", counterparty)?.fix).toEqual({ label: "Confirm address", path: "/counterparties/cp-1#address" });
+    // "Not this person" is in the screening part of the counterparty's page.
+    expect(ruleNextStep("counterparty.high_risk", counterparty)?.fix).toEqual({ label: "Review screening", path: "/counterparties/cp-1#screening" });
     expect(ruleNextStep("workspace.outflow_budget", counterparty)?.fix).toEqual({ label: "Spending limit", path: "/console#agent-budget" });
     expect(ruleNextStep("workspace.onchain_limit", counterparty)?.fix?.path).toBe("/console#agent-budget");
+  });
+
+  it("CL15: opens the part of the counterparty's page that removes each rule's cause", () => {
+    // next-step hands on the page's own path, so every caller writes it alike.
+    expect(counterpartyPath).toBe(pagePath);
+    const sections: Array<[string, string]> = [
+      ["counterparty.payment_limit", "limit"],
+      ["counterparty.no_address", "address"],
+      ["counterparty.address_unconfirmed", "address"],
+      ["counterparty.cooling_off", "address"],
+      ["invoice.pay_to_differs", "address"],
+      ["counterparty.unscreened", "screening"],
+      ["counterparty.high_risk", "screening"],
+      ["invoice.match_incomplete", "purchase-orders"],
+    ];
+    for (const [rule, section] of sections) expect(ruleNextStep(rule, counterparty)?.fix?.path, rule).toBe(`/counterparties/cp-1#${section}`);
+    // A payable with no counterparty on file has only the list to open.
+    expect(ruleNextStep("counterparty.payment_limit", { id: "", name: "CME" })?.fix?.path).toBe("/counterparties");
   });
 
   it("sends the rest to Approvals, saying why", () => {
@@ -369,7 +409,7 @@ describe("what to do about a payable code stopped", () => {
     expect(ruleNextStep("invoice.match_incomplete", counterparty)).toEqual({
       sentence:
         "Its three-way match is incomplete. Add the purchase order or confirm the goods with Add details, and the agent decides it again; or mark CME as paid without purchase orders, if it is.",
-      fix: { label: "Purchase orders", path: counterpartyPath("cp-1") },
+      fix: { label: "Purchase orders", path: counterpartyPath("cp-1", "purchase-orders") },
     });
     expect(ruleInBrief("invoice.match_incomplete")).toBe("its three-way match is incomplete");
     expect(agentResumes("invoice.match_incomplete")).toBe(
@@ -540,7 +580,7 @@ describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () =>
     expect(activityItem(stuck({ providerState: "SENT" }), refs())?.detail).toBe("Circle shows it as SENT.");
   });
 
-  it("tells a milestone's on Contractors", () => {
+  it("CL15: tells a milestone's at its own row on Contractors, as one not paid yet", () => {
     const milestone: ActivityEntry = {
       seq: 991,
       action: "payment_stuck",
@@ -550,9 +590,14 @@ describe("a payment that has not confirmed (stuck-transfer alert D6, D7)", () =>
       text: "Payment of 1.00 USDC to Puka Hotel has not confirmed 16 min after it was submitted to Circle on Arc testnet.",
       detail: "Circle shows it as QUEUED.",
       tone: "stopped",
-      path: "/contractors",
+      path: `/contractors#milestone-${MILESTONE}`,
       pathLabel: "Contractors",
     });
+  });
+
+  it("says nothing of a payment whose milestone is gone", () => {
+    const gone: ActivityEntry = { seq: 992, action: "payment_stuck", detail: { milestoneId: "00000000-0000-4000-8000-000000000000", amount: 1, currency: "USDC", minutes: 16 } };
+    expect(activityItem(gone, refs())).toBeNull();
   });
 
   it("says nothing of a payment whose invoice is gone", () => {

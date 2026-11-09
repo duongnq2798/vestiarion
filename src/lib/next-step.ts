@@ -1,4 +1,5 @@
 import { HELD_FOR_VERDICT } from "./agent/shadow-hold";
+import { counterpartyPath, type CounterpartySection } from "./counterparty-paths";
 
 /**
  * What a person can do about a payable code stopped (agent activity spec R5): the rule, in words, and the page that
@@ -80,45 +81,47 @@ export const MATCH_INCOMPLETE = "invoice.match_incomplete";
  */
 export const VENDOR_DOCUMENT = "invoice.vendor_document";
 
-/** A counterparty's row on Counterparties, which a link opens at (`ScrollToHash` opens a closed row). */
-export function counterpartyPath(counterpartyId: string): string {
-  return `/counterparties#counterparty-${counterpartyId}`;
-}
+/**
+ * A counterparty's page, at the part a link opens (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15):
+ * the one pure helper every fix path, email and chat notice writes it with.
+ */
+export { counterpartyPath };
 
 /** The next step for a guardrail rule, or null for a stop no rule explains (a model's own hold). */
 export function ruleNextStep(rule: string | null | undefined, counterparty: { id: string; name: string }): NextStep | null {
-  const row = counterpartyPath(counterparty.id);
+  // CL15: each rule's fix opens the part of the counterparty's page that removes its cause.
+  const at = (section: CounterpartySection) => counterpartyPath(counterparty.id, section);
   switch (rule) {
     case "counterparty.payment_limit":
-      return { sentence: `It is above ${counterparty.name}'s payment limit. Pay it in Approvals, or raise the limit.`, fix: { label: "Edit limit", path: row } };
+      return { sentence: `It is above ${counterparty.name}'s payment limit. Pay it in Approvals, or raise the limit.`, fix: { label: "Edit limit", path: at("limit") } };
     case "counterparty.no_address":
       // Nothing can be sent until there is an address (counterparty.no_address); the follow-up decides it again once confirmed.
       return {
         sentence: `${counterparty.name} has no payment address yet. Add it, or ask ${counterparty.name} for it with a one-time link; the agent decides it again once the address is confirmed.`,
-        fix: { label: "Add address", path: row },
+        fix: { label: "Add address", path: at("address") },
       };
     case "counterparty.address_unconfirmed":
       return {
         sentence: `${counterparty.name}'s payment address changed and no one has confirmed it. Confirm it, or pay it in Approvals.`,
-        fix: { label: "Confirm address", path: row },
+        fix: { label: "Confirm address", path: at("address") },
       };
     case "counterparty.cooling_off":
       // The payee lock's wait after an address change (payee lock PL5): it ends on its own, and the agent decides it again.
       return {
         sentence: `${counterparty.name}'s payment address changed recently, and the payee lock makes it wait before it is paid. The agent decides it again once the wait ends.`,
-        fix: { label: "Open counterparty", path: row },
+        fix: { label: "Open counterparty", path: at("address") },
       };
     case "invoice.pay_to_differs":
       // The invoice asked to be paid somewhere else (invoice pay-to hold IP3): a person checks with the vendor, then pays
       // the address on file in Approvals, or changes the address, which goes through its own checks.
       return {
         sentence: `The invoice from ${counterparty.name} asks to be paid to a different address from the one on file. Check with them, by a contact you had before, which address is theirs: approve to pay the one on file, or change the address.`,
-        fix: { label: "Open counterparty", path: row },
+        fix: { label: "Open counterparty", path: at("address") },
       };
     case "counterparty.unscreened":
       return {
         sentence: `${counterparty.name} has not been screened yet. Screening runs again at every cycle, and the agent decides it again once there is a verdict; you can also pay it in Approvals.`,
-        fix: { label: "Open counterparty", path: row },
+        fix: { label: "Open counterparty", path: at("screening") },
       };
     case "counterparty.client_payable":
       return {
@@ -126,10 +129,10 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
         fix: null,
       };
     case "counterparty.high_risk":
-      // "Not this person" is on the counterparty's row: a dismissed match lowers its risk, and the agent decides again.
+      // "Not this person" is in the screening part of the counterparty's page: a dismissed match lowers its risk, and the agent decides again.
       return {
         sentence: `${counterparty.name} is screened high risk, so it is never paid. Review the screening match, or reject the invoice in Approvals.`,
-        fix: { label: "Review screening", path: row },
+        fix: { label: "Review screening", path: at("screening") },
       };
     case "invoice.duplicate_of_settled":
       return { sentence: "It repeats an invoice already paid, being paid or scheduled. Reject it in Approvals if it is a duplicate.", fix: null };
@@ -146,10 +149,10 @@ export function ruleNextStep(rule: string | null | undefined, counterparty: { id
         fix: null,
       };
     case MATCH_INCOMPLETE:
-      // The counterparty's row says whether it needs purchase orders, and an owner or admin changes it there (M2, M7).
+      // The purchase orders line of the counterparty's page says whether it needs them, and an owner or admin changes it there (M2, M7).
       return {
         sentence: `Its three-way match is incomplete. Add the purchase order or confirm the goods with Add details, and the agent decides it again; or mark ${counterparty.name} as paid without purchase orders, if it is.`,
-        fix: { label: "Purchase orders", path: row },
+        fix: { label: "Purchase orders", path: at("purchase-orders") },
       };
     case "workspace.two_approvals":
       // Two people's approval above the workspace's figure (two approvals T3, T4): the first is recorded, the second pays.
