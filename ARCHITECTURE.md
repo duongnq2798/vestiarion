@@ -2087,9 +2087,10 @@ own signed entries (CL14), and no action, ledger action, table, column or index 
   each was sent (`readIntentsFor`, 100 ids a read, the destination in its own map, never on `IntentRecord`), the
   receipts of the paid bills Payments can show (`receiptStatesOf`: `invoice_id, revoked_at`), and the document requests
   on the bills it shows. Milestone evidence is checked as Contractors checks it (`asanaOnContractors`,
-  `linearOnContractors`, `checkEvidenceLinks`, open milestones first). History is `listCounterpartyEntries(id, 25)`:
-  `seq, ts, actor, action, summary` of the compliance entries naming them, newest first, never `detail`; its query is
-  the evidence page's, unindexed on `detail->>counterpartyId`, filtered by `org_id` and cut to 25. The drafts sent for
+  `linearOnContractors`, `jiraOnContractors`, `checkEvidenceLinks`, open milestones first). History is
+  `listCounterpartyEntries(id, 25)`: `seq, ts, actor, action, summary` of the compliance entries naming them, newest
+  first, never `detail`; its query is the evidence page's, unindexed on `detail->>counterpartyId`, filtered by `org_id`
+  and cut to 25. The drafts sent for
   review (`sentDraftsFrom`: every `sent` draft naming them, from the browser extension or a payee link, under
   "Invoices sent for review") are not read before 0121. The page has no `maxDuration`, and re-reads as the
   list does (`counterpartiesRefreshMs`: every 15 s while its link is out or its address waits, else every minute).

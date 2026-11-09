@@ -741,7 +741,8 @@ describe("all waiting: work to accept from Jira (all waiting AW4; Jira acceptanc
     detail: "Done in Jira (ENG-142). Accept it against its criteria.",
     amount: { value: 1200, currency: "USDC" },
     since: "2026-11-02T09:00:00Z",
-    href: "/o/harbor-bakery/contractors",
+    // CL15: the milestone's row on Contractors, open: it waits for verification.
+    href: "/o/harbor-bakery/contractors#milestone-ms-j1",
   };
 
   it("reads nothing of Jira and lists none of its work while JIRA_CLIENT_ID and JIRA_CLIENT_SECRET are unset, or only one is set (JR1)", async () => {
@@ -774,7 +775,7 @@ describe("all waiting: work to accept from Jira (all waiting AW4; Jira acceptanc
         detail: "Held: Jira resolved the issue as Won't Do, which is not done. Nothing is accepted from it: reopen it, or link another issue.",
         amount: { value: 500, currency: "USDC" },
         since: "2026-11-02T11:00:00Z",
-        href: "/o/harbor-bakery/contractors",
+        href: "/o/harbor-bakery/contractors#milestone-ms-j2",
         canAct: true,
         who: "You can review it",
       },
@@ -784,6 +785,7 @@ describe("all waiting: work to accept from Jira (all waiting AW4; Jira acceptanc
         detail:
           "Held: Jira no longer shows this issue to the connection: it was deleted or archived, the person who connected Jira lost access to its project, or another Jira site is connected now. Restore it, link another issue, or reconnect Jira.",
         since: "2026-11-02T12:00:00Z",
+        href: "/o/harbor-bakery/contractors#milestone-ms-j3",
         canAct: true,
         who: "You can review it",
       }),

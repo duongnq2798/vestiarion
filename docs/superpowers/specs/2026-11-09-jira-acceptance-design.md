@@ -330,7 +330,7 @@ Code comments and test names cite the rule ids, for example "(Jira acceptance JR
   - So there is no `report-accounts` duty, and the guide and the privacy page say so.
 
 - **JR20. Evidence links.**
-  - On Contractors and the evidence page, a link to `https://<connected site host>/browse/KEY` is checked at `https://api.atlassian.com/ex/jira/<cloudId>/rest/api/3/issue/<KEY>?fields=summary`, with the workspace's own Jira token. The link a person typed is never opened.
+  - On Contractors, a counterparty's page (amended 2026-11-09) and the evidence page, a link to `https://<connected site host>/browse/KEY` is checked at `https://api.atlassian.com/ex/jira/<cloudId>/rest/api/3/issue/<KEY>?fields=summary`, with the workspace's own Jira token. The link a person typed is never opened.
   - The site's host and cloudId are loaded once per check, only when Jira is on, the check runs in a workspace's scope, and some link's host is none of GitHub's, Asana's, Linear's or storage's.
   - `requestAllowed` takes only that exact path shape.
   - Links on other Atlassian hosts, and other paths on the site, are "Not checked".
@@ -618,6 +618,7 @@ Each file is the twin of `src/lib/linear/<same name>` unless noted.
   - `workToolCards({…, jira})` and `JiraIssueCard`;
   - the `MilestoneVerification` condition becomes `((!asanaLink && !linearLink && !jiraLink) || milestone.verified) && linearLink?.state !== "accepted" && jiraLink?.state !== "accepted"`;
   - the hints and Needs you count `jiraNeedsPerson`.
+- `src/lib/counterparties/page-read.ts` (amended 2026-11-09): `jiraOnContractors` joins `evidenceOf`'s `Promise.all`, and Jira deliverable links join its hrefs, as on Contractors; the page offers no Jira card.
 - `src/app/o/[slug]/settings/page.tsx`: `jiraPanelFor`, the `?jira=` notice (cast as Linear's is) and `section id="jira"`.
 - `src/components/vx/map.ts`: `verificationLabel` gains "Accepted from Jira".
 
@@ -773,7 +774,7 @@ Estimates use Atlassian's model: 1 point per request, plus 1 per core object, pl
 - `content/docs/changelog.mdx` (an `/api/v1` change).
 - `ARCHITECTURE.md`:
   - a new "## Contractor work accepted from Jira" section after Linear's, on the differences: the sites table, the upkeep, the JWT, the timestamp rule, depths and floors, no person data, and the cross-tool refusal now on Asana's link;
-  - every list of work tools updated.
+  - every list of work tools updated, the counterparty page's evidence read among them (amended 2026-11-09).
 - `CHANGELOG.md` `[Unreleased]` Added; README (the integrations table and its mentions); `.env.example` (`JIRA_CLIENT_ID=`, `JIRA_CLIENT_SECRET=`, "Production only"); `docs/self-hosting.md` (a Jira section after Linear's).
 - The privacy, terms and security pages, and subprocessors.
 - `tests/docs-guides.test.ts` gets a phrase-to-source row for each quoted UI string. The repo is public, so no local path appears anywhere.
@@ -932,7 +933,8 @@ Estimates use Atlassian's model: 1 point per request, plus 1 per core object, pl
 | `tests/disconnect-confirmation.test.tsx` | `JiraPanel` and `disconnectJiraAction` |
 | `tests/cycle-events-actions.test.ts` | the Jira revoke refusal |
 | `tests/support/pglite.ts`, `tests/rls.test.ts`, `tests/dal.test.ts`, `tests/account-deletion.test.ts`, `tests/delete-org-migration.test.ts` (its `PLATFORM_TABLES` list and seed), `tests/tenant-rpcs-migration.test.ts`, `tests/lifecycle-migration.test.ts` | the new table, platform table and functions |
-| `tests/evidence-chain.test.ts`, `tests/accountant-all-waiting.test.ts` | the Jira branches |
+| `tests/evidence-chain.test.ts`, `tests/accountant-all-waiting.test.ts` | the Jira branches; a Jira item links to its milestone's row on Contractors (`#milestone-<id>`), as Asana's and Linear's do (amended 2026-11-09) |
+| `tests/counterparty-page-read.test.ts`, `tests/counterparty-page.test.tsx` | the evidence read gains `jira`, and Jira deliverable links are checked with the others (amended 2026-11-09) |
 | `tests/evidence-link-allow-list.test.ts`, `tests/evidence-link-check.test.ts` | the not-checked words name the Jira site |
 | `tests/docs-guides.test.ts`, `tests/docs-content.test.ts`, `tests/docs-links.test.tsx` | the guide and its phrases |
 | `tests/sdk-types.test.ts`, `tests/sdk-package.test.ts` | follow 0.4.3 |

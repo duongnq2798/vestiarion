@@ -184,7 +184,7 @@ function pageRead(counterparty: CounterpartyRow, options: PageReadOptions, over:
       payee && options.grants.seeLinks
         ? { read: true, value: { links: [LINK], active: { id: LINK.id, expiresAt: LINK.expires_at }, waiting: null, members: [{ userId: "u-alice", email: "alice@northstar.test" }] } }
         : null,
-    evidence: { asana: null, linear: null, links: new Map() },
+    evidence: { asana: null, linear: null, jira: null, links: new Map() },
     documents: payee ? { read: true, value: new Map() } : null,
     drafts: payee ? { read: true, value: [] } : null,
     history: { read: true, value: [{ seq: 41, ts: "2026-11-08T10:00:00Z", actor: "human", action: "counterparty_address_changed", summary: "Changed the payment address of Linh Tran" }] },
