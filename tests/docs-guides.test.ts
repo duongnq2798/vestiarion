@@ -783,6 +783,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Settings", APP_NAV],
     // A page inside a section, named in the breadcrumb after its section.
     ["Commissions", APP_NAV],
+    // A counterparty's page names them in the header, and its tab by its kind (counterparty page CL16).
+    ["Counterparty", APP_NAV, 'label: "Counterparty"'],
+    ["Counterparty", COUNTERPARTY_PAGE, 'export const metadata: Metadata = { title: "Counterparty" };'],
     ["Live", "src/components/vx/WorkspaceMeta.tsx"],
     ["Sandbox", "src/components/vx/WorkspaceMeta.tsx"],
     ["Not live yet", "src/components/vx/WorkspaceMeta.tsx"],
@@ -1991,6 +1994,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Revoke manually", MILESTONE_CHECK],
     ["Paid and closed", CONTRACTORS_PAGE],
     ["Address to confirm", CONTRACTORS_PAGE],
+    // The fix links open the part of their page that settles it (counterparty page CL15).
+    ["Open their address", CONTRACTORS_PAGE],
+    ["Open Counterparty", HELD_ACTIONS, "Open {reason.link.label}"],
+    ["Counterparty", MILESTONE_DECISIONS, 'label: "Counterparty"'],
+    ["Payee link", COUNTERPARTY_PAGE, 'title="Payee link"'],
     ["Waiting for an address", CONTRACTORS_PAGE],
     ["What it waits for", HELD_ACTIONS],
     ["Pay now", HELD_ACTIONS],
@@ -3678,6 +3686,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Not paid yet. This is the chain so far, read-only: nothing on this page pays, approves or changes anything.", EVIDENCE_PAGE],
     ["Not paid: a person rejected this bill.", EVIDENCE_PAGE],
     ["Download evidence", EVIDENCE_PAGE],
+    // The payee's name opens their page (counterparty page CL15).
+    ["Payee", EVIDENCE_VIEW, '<dt className="text-ink-3">Payee</dt>'],
     ["How each fact is known", EVIDENCE_VIEW],
     ["Each link reads as its weakest fact, so it is never labelled above what its least-supported fact is.", EVIDENCE_VIEW],
     ["Verified outside", EVIDENCE_CHAIN],
@@ -3744,6 +3754,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["An owner of this workspace can change it.", PAYEE_LOCK_PANEL],
     ["Counterparties", APP_NAV],
     ["Confirm address", ADDRESS_CONTROLS],
+    // Receipt state, for every member, on the payee's page (counterparty page CL9).
+    ["Payments", COUNTERPARTY_PAGE, 'title={payee ? "Payments" : "Payments from them"}'],
+    ["Open their page", COUNTERPARTY_ROW],
+    ["Receipt link stopped", COUNTERPARTY_PAGE],
+    ["No receipt shared", COUNTERPARTY_PAGE],
+    ["No receipt: not paid on chain", COUNTERPARTY_PAGE],
     // Opening the pack and choosing a period.
     ["Settings", APP_NAV],
     ["Security", SETTINGS_PAGE],
