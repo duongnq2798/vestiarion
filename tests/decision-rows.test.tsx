@@ -86,6 +86,13 @@ describe("DecisionRows", () => {
     expect(markup).toMatch(/<details[^>]*\sopen/);
   });
 
+  it("CL15: gives a row the id a link opens it at, and none without one", () => {
+    const anchored = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, anchor: "milestone-m-1" }]} />);
+    expect(anchored).toMatch(/<details[^>]*\sid="milestone-m-1"/);
+    expect(anchored.split('id="milestone-m-1"').length - 1).toBe(1);
+    expect(renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION }]} />)).not.toMatch(/<details[^>]*\sid=/);
+  });
+
   it("marks a date past due", () => {
     const markup = renderToStaticMarkup(<DecisionRows orgSlug="testnet-2" items={[{ decision: DECISION, date: { label: "Overdue Sep 30, 2026", tone: "held" } }]} />);
     expect(markup).toMatch(/text-held[^"]*">Overdue Sep 30, 2026/);
@@ -156,10 +163,22 @@ describe("the Contractors page", () => {
     expect(page).toContain("<HeldMilestoneActions");
   });
 
-  it("puts a verified milestone whose address no one has confirmed under Needs you, with where to confirm it", () => {
+  it("CL15: puts a verified milestone whose address no one has confirmed under Needs you, with the address on their page", () => {
     expect(page).toContain("statusOf(decision) === \"held\" || confirming(decision)");
     expect(page).toContain('hint: "Address to confirm"');
-    expect(page).toContain('<Link href={orgHref(slug, "/counterparties")}>Open Counterparties</Link>');
+    expect(page).toContain("Confirm it on their page, and the agent decides on pay within a minute.");
+    expect(page).toContain('<Link href={orgHref(slug, counterpartyPath(milestone.contractor_id, "address"))}>Open their address</Link>');
+    expect(page).not.toContain("Open Counterparties");
+  });
+
+  it("CL15: gives each row its milestone's anchor, and opens it with the way to its contractor's page first", () => {
+    expect(page).toContain("anchor: milestoneAnchor(milestone.id)");
+    const after = page.slice(page.indexOf("const controls = (milestone: MilestoneRow) =>"), page.indexOf("<AsanaTaskCard"));
+    expect(after).toContain("<Link href={orgHref(slug, counterpartyPath(milestone.contractor_id))}");
+    expect(after).toContain("Open their page");
+    // A held row's reason links the part of their page that settles it.
+    const waitingFor = page.slice(page.indexOf("const waitingFor = (milestone: MilestoneRow) =>"), page.indexOf("const row = (decision"));
+    expect(waitingFor).toContain("id: milestone.contractor_id,");
   });
 });
 

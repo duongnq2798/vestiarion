@@ -5,9 +5,10 @@ import { Card } from "@/components/ui/Card";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { orgHref } from "@/lib/auth/org-paths";
 import { plural } from "@/lib/copy";
+import { milestoneRowPath } from "@/lib/counterparty-paths";
 import type { Network } from "@/lib/network";
 import { inFlightNext, runbookHref } from "@/lib/payment-exceptions";
-import { ageText, paymentsInFlight, type PaymentsInFlight as Summary } from "@/lib/settlement";
+import { ageText, paymentsInFlight, type PaymentsInFlight as Summary, type SettlementMismatch } from "@/lib/settlement";
 import type { FlightRow } from "@/lib/settlement-facts";
 import { invoiceHref } from "@/lib/bills-view";
 import { fmt, Money } from "./Primitives";
@@ -38,9 +39,18 @@ export function flightLine(summary: Summary<FlightRow>, stuckAfterMinutes: numbe
   return parts.join(" · ");
 }
 
-/** Where a payment's own card is: its track on Bills & receivables, or a milestone's contractor page. */
+/** The ways the books disagree that still mark it paid (L5): a milestone so marked is listed with the paid ones. */
+const MARKED_PAID: ReadonlySet<SettlementMismatch> = new Set(["marked_paid_not_confirmed", "marked_paid_other_transaction", "no_signed_entry"]);
+
+/**
+ * Where a payment's own card is: its track on Bills & receivables, or a milestone's row on Contractors, which opens at it
+ * (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15). A milestone in flight is not marked paid yet, so
+ * its row is among the open ones; one the books mark paid is found with every paid row shown.
+ */
 function cardHref(orgSlug: string, row: FlightRow): string {
-  return row.source.type === "invoice" ? orgHref(orgSlug, invoiceHref(row.source.id, "settlement")) : orgHref(orgSlug, "/contractors");
+  if (row.source.type === "invoice") return orgHref(orgSlug, invoiceHref(row.source.id, "settlement"));
+  const paid = row.settlement.mismatch !== null && MARKED_PAID.has(row.settlement.mismatch);
+  return orgHref(orgSlug, milestoneRowPath(row.source.id, { paid }));
 }
 
 function Row({ row, orgSlug, children }: { row: FlightRow; orgSlug: string; children: ReactNode }) {

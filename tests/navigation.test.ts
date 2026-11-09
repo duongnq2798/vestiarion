@@ -106,6 +106,8 @@ describe("navItemForPathname — which section the current URL is in", () => {
     ["/o/acme/evidence/milestone/5f1e2d3c-0000-4000-8000-000000000002", "contractors", "/contractors"],
     // A project's page is part of Projects.
     ["/o/acme/projects/5f1e2d3c-0000-4000-8000-000000000003", "projects", "/projects"],
+    // A counterparty's page is part of Counterparties (counterparty page CL16).
+    ["/o/acme/counterparties/5f1e2d3c-0000-4000-8000-000000000004", "counterparties", "/counterparties"],
   ])("%s → %s", (pathname, key, path) => {
     expect(navItemForPathname(pathname)?.key).toBe(key);
     expect(sectionPathOf(pathname)).toBe(path);
@@ -133,6 +135,8 @@ describe("subpageLabel — the page inside a section, named after it", () => {
     ["/o/pinecrest-studio/invoices/commissions", "invoices", "Commissions"],
     [`/o/acme/invoices/deals/${ID}`, "invoices", "Deal"],
     [`/o/acme/projects/${ID}`, "projects", "Project"],
+    // A counterparty's page sits inside Counterparties, whose rows open it (counterparty page CL16).
+    [`/o/acme/counterparties/${ID}`, "counterparties", "Counterparty"],
     [`/o/acme/evidence/invoice/${ID}`, "invoices", "Payment evidence"],
     [`/o/acme/evidence/milestone/${ID}`, "contractors", "Payment evidence"],
     // The monthly close pack sits inside the Audit log, which links it (close pack CP11, CP16).
@@ -145,7 +149,7 @@ describe("subpageLabel — the page inside a section, named after it", () => {
     expect(subpageLabel(pathname)).toBe(label);
   });
 
-  it.each(["/o/acme/invoices", "/o/acme/projects", "/o/acme/contractors", "/o/acme/console", "/o/acme", "/onboarding", "/"])(
+  it.each(["/o/acme/invoices", "/o/acme/projects", "/o/acme/counterparties", "/o/acme/contractors", "/o/acme/console", "/o/acme", "/onboarding", "/"])(
     "%s is no page inside a section",
     (pathname) => {
       expect(insideSection(pathname)).toBe(false);
@@ -172,7 +176,7 @@ describe("subpageLabel — the page inside a section, named after it", () => {
 
   it("finds the pages inside sections there are", () => {
     expect(NESTED_PAGES).toEqual(
-      expect.arrayContaining(["evidence/[kind]/[id]/page.tsx", "invoices/commissions/page.tsx", "invoices/deals/[id]/page.tsx", "projects/[id]/page.tsx"])
+      expect.arrayContaining(["counterparties/[id]/page.tsx", "evidence/[kind]/[id]/page.tsx", "invoices/commissions/page.tsx", "invoices/deals/[id]/page.tsx", "projects/[id]/page.tsx"])
     );
   });
 
@@ -191,6 +195,8 @@ describe("subpageLabel — the page inside a section, named after it", () => {
     ["invoices/deals/[id]/page.tsx", "crumb={deal.title}"],
     ["projects/[id]/page.tsx", "crumb={project.name}"],
     ["evidence/[kind]/[id]/page.tsx", "crumb={subject.title}"],
+    // Only what is visible of a counterparty's name, cut short (counterparty page CL12, CL16).
+    ["counterparties/[id]/page.tsx", "crumb={visibleText(counterparty.name, 80)}"],
   ])("%s names its record in the breadcrumb", (file, crumb) => {
     expect(readFileSync(path.join(WORKSPACE, file), "utf8")).toContain(crumb);
   });

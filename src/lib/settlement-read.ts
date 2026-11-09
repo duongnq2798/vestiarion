@@ -1,4 +1,5 @@
 import { unwrap, type OrgDb } from "./dal";
+import { ID_CHUNK } from "./new-payee-facts";
 import type { IntentRecord } from "./settlement-facts";
 
 /**
@@ -39,6 +40,43 @@ export async function readInvoicePayments(orgDb: OrgDb): Promise<Map<string, Pay
     orgDb.from("payment_intents").select(INTENT_COLUMNS).eq("source_type", "invoice").order("source_id", { ascending: true }).range(from, to)
   );
   return new Map(rows.map((row) => [row.source_id, row]));
+}
+
+/** What `readIntentsFor` reads: each payment by the id of the invoice or milestone it pays, and where each was sent. */
+export interface IntentsRead {
+  payments: Map<string, PaymentRecord>;
+  /**
+   * Each payment's destination by the same id: an address, `blindpay:` for a bank payout, `sim:` for a simulated one.
+   * Kept apart, never added to `IntentRecord`, so no other reader of the lifecycle carries it.
+   */
+  destinations: Map<string, string>;
+}
+
+/**
+ * One counterparty's payments (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL9, CL13): the intents of
+ * these invoices and milestones, with where each was sent, a hundred ids a read (`ID_CHUNK`) so no request's address
+ * grows long enough to be refused. An invoice or a milestone has at most one intent, so no read is cut by the row cap.
+ */
+export async function readIntentsFor(orgDb: OrgDb, ids: { invoiceIds?: readonly string[]; milestoneIds?: readonly string[] }): Promise<IntentsRead> {
+  const chunks = (["invoice", "milestone"] as const).flatMap((type) => {
+    const sourceIds = [...new Set((type === "invoice" ? ids.invoiceIds : ids.milestoneIds) ?? [])];
+    return Array.from({ length: Math.ceil(sourceIds.length / ID_CHUNK) }, (_, index) => ({ type, sourceIds: sourceIds.slice(index * ID_CHUNK, (index + 1) * ID_CHUNK) }));
+  });
+  const read = await Promise.all(
+    chunks.map(
+      async ({ type, sourceIds }) =>
+        unwrap(await orgDb.from("payment_intents").select(`${INTENT_COLUMNS}, destination`).eq("source_type", type).in("source_id", sourceIds)) as Array<
+          PaymentRow & { destination?: string | null }
+        >
+    )
+  );
+  const payments = new Map<string, PaymentRecord>();
+  const destinations = new Map<string, string>();
+  for (const { destination, ...row } of read.flat()) {
+    payments.set(row.source_id, { ...row, amount: Number(row.amount), token: row.token ?? "USDC" });
+    if (typeof destination === "string" && destination) destinations.set(row.source_id, destination);
+  }
+  return { payments, destinations };
 }
 
 /**

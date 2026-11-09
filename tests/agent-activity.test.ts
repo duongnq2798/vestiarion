@@ -15,6 +15,7 @@ import {
 import { readAgentActivity } from "@/lib/agent-activity-read";
 import { agentResumes, CASH_SHORTFALL, codeStoppedLine, counterpartyPath, heldForCash, ruleInBrief, ruleNextStep, VENDOR_DOCUMENT } from "@/lib/next-step";
 import { ruleLabel } from "@/lib/rule-words";
+import { counterpartyPath as pagePath } from "@/lib/counterparty-paths";
 import { fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
 /**
@@ -319,7 +320,7 @@ describe("what to do about a payable code stopped", () => {
   it("asks for the address of a payee that has none, and says the agent decides it again once it is confirmed", () => {
     expect(ruleNextStep("counterparty.no_address", counterparty)).toEqual({
       sentence: "CME has no payment address yet. Add it, or ask CME for it with a one-time link; the agent decides it again once the address is confirmed.",
-      fix: { label: "Add address", path: "/counterparties#counterparty-cp-1" },
+      fix: { label: "Add address", path: "/counterparties/cp-1#address" },
     });
     expect(ruleInBrief("counterparty.no_address")).toBe("the counterparty has no payment address yet");
     expect(agentResumes("counterparty.no_address")).toBe("The agent decides it again on its own once the counterparty has an address and a person has confirmed it.");
@@ -346,13 +347,31 @@ describe("what to do about a payable code stopped", () => {
   it("links the page that removes the cause, for the rules a person can change", () => {
     expect(ruleNextStep("counterparty.payment_limit", counterparty)).toEqual({
       sentence: "It is above CME's payment limit. Pay it in Approvals, or raise the limit.",
-      fix: { label: "Edit limit", path: counterpartyPath("cp-1") },
+      fix: { label: "Edit limit", path: counterpartyPath("cp-1", "limit") },
     });
-    expect(ruleNextStep("counterparty.address_unconfirmed", counterparty)?.fix).toEqual({ label: "Confirm address", path: "/counterparties#counterparty-cp-1" });
-    // "Not this person" is on the counterparty's row.
-    expect(ruleNextStep("counterparty.high_risk", counterparty)?.fix).toEqual({ label: "Review screening", path: "/counterparties#counterparty-cp-1" });
+    expect(ruleNextStep("counterparty.address_unconfirmed", counterparty)?.fix).toEqual({ label: "Confirm address", path: "/counterparties/cp-1#address" });
+    // "Not this person" is in the screening part of the counterparty's page.
+    expect(ruleNextStep("counterparty.high_risk", counterparty)?.fix).toEqual({ label: "Review screening", path: "/counterparties/cp-1#screening" });
     expect(ruleNextStep("workspace.outflow_budget", counterparty)?.fix).toEqual({ label: "Spending limit", path: "/console#agent-budget" });
     expect(ruleNextStep("workspace.onchain_limit", counterparty)?.fix?.path).toBe("/console#agent-budget");
+  });
+
+  it("CL15: opens the part of the counterparty's page that removes each rule's cause", () => {
+    // next-step hands on the page's own path, so every caller writes it alike.
+    expect(counterpartyPath).toBe(pagePath);
+    const sections: Array<[string, string]> = [
+      ["counterparty.payment_limit", "limit"],
+      ["counterparty.no_address", "address"],
+      ["counterparty.address_unconfirmed", "address"],
+      ["counterparty.cooling_off", "address"],
+      ["invoice.pay_to_differs", "address"],
+      ["counterparty.unscreened", "screening"],
+      ["counterparty.high_risk", "screening"],
+      ["invoice.match_incomplete", "purchase-orders"],
+    ];
+    for (const [rule, section] of sections) expect(ruleNextStep(rule, counterparty)?.fix?.path, rule).toBe(`/counterparties/cp-1#${section}`);
+    // A payable with no counterparty on file has only the list to open.
+    expect(ruleNextStep("counterparty.payment_limit", { id: "", name: "CME" })?.fix?.path).toBe("/counterparties");
   });
 
   it("sends the rest to Approvals, saying why", () => {
@@ -369,7 +388,7 @@ describe("what to do about a payable code stopped", () => {
     expect(ruleNextStep("invoice.match_incomplete", counterparty)).toEqual({
       sentence:
         "Its three-way match is incomplete. Add the purchase order or confirm the goods with Add details, and the agent decides it again; or mark CME as paid without purchase orders, if it is.",
-      fix: { label: "Purchase orders", path: counterpartyPath("cp-1") },
+      fix: { label: "Purchase orders", path: counterpartyPath("cp-1", "purchase-orders") },
     });
     expect(ruleInBrief("invoice.match_incomplete")).toBe("its three-way match is incomplete");
     expect(agentResumes("invoice.match_incomplete")).toBe(

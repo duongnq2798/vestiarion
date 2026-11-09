@@ -960,6 +960,15 @@ mainnet plan).
     Analytics property rather than of the code, also sends the full address of each link clicked to another site. So
     a link a free tool draws carries nothing of what was typed or found: the vendor check links to Treasury's search
     page, not to the matched entry's page there.
+  - A page view's path, title and same-site referrer go through `redactPath` (`src/lib/analytics/redact.ts`): a link
+    token's path becomes `/<route>/:token`, a workspace's slug `/o/:org`, and every path segment under it that is a
+    UUID `:id` (`docs/superpowers/specs/2026-11-09-counterparty-page-design.md` CL17), so a counterparty's page, a
+    project, a deal and an evidence page name no record, as `/o/:org/counterparties/:id`. A segment that is not a
+    UUID, such as an evidence page's kind, is kept. Only the pathname is sent, never the hash or the query.
+  - Outbound clicks also send a block explorer link's full URL: an address link holds a payee's address, and a
+    transaction link a hash whose page shows it. Transaction links have sent theirs since they were added. Turning
+    outbound clicks off (Admin > Data streams > the web stream > Enhanced measurement) is an owner step. The privacy
+    page says that, while it is on, Google Analytics receives such a link's address.
   - Safety and control (`src/components/landing/Safety.tsx`): three principles, each saying what holds it (the team,
     rules in code and Arc mainnet's spending-limit contract, the signed ledger), then two past cases step by step, each
     labelled with its network and its own mode in the team's workspace. A past decision's facts do not change, so they
@@ -1515,10 +1524,11 @@ Every page under `/o/[slug]` sits in one frame (spec `2026-10-10-workspace-shell
   payment gates refuse on the same failure; the agent shows as stopped while payments are off or held.
 - **Breadcrumb.** The workspace (linking home), then the section; on a page inside a section, the section links back
   and the page is the current crumb (`aria-current="page"`, the only one). `SUBPAGES` in `nav.ts` lists those pages
-  (Commissions and a deal under Bills & receivables, a project under Projects, a payment's evidence under its record's
-  section) with each one's name, which is also its tab title: `navItemForPathname` files each under its section,
-  `insideSection` has the sidebar mark the section `aria-current="true"`, and `subpageLabel` names it. A page showing
-  one record passes its name as `ProductShell`'s `crumb` (a deal's title, a project's name, the evidence's bill or
+  (Commissions and a deal under Bills & receivables, a project under Projects, a counterparty's page under
+  Counterparties, a payment's evidence under its record's section) with each one's name, which is also its tab title:
+  `navItemForPathname` files each under its section, `insideSection` has the sidebar mark the section
+  `aria-current="true"`, and `subpageLabel` names it. A page showing one record passes its name as `ProductShell`'s
+  `crumb` (a deal's title, a project's name, what is visible of a counterparty's name, the evidence's bill or
   milestone); the loading and error states, and the phone bar, which the layout draws, name it by its kind (Deal).
   Where the row is short (`lg` beside the open sidebar) the workspace's name gives way first (`shrink-3`), the
   section's and a page's kind stay whole, and a record's name is cut at 10rem, 16rem from `xl`, whole in its `title`;
@@ -2043,6 +2053,102 @@ add up to the total exactly.
   (`tests/deal-cash.test.ts`). Before 0108 runs the reads answer not set up (`costsNotReady`): the page says so and the
   margin says not enough data.
 
+## The counterparty page
+
+`/o/[slug]/counterparties/[id]` (spec `2026-11-09-counterparty-page-design.md`, rules CL1 to CL18) gives every member one
+page per counterparty, a vendor, a contractor or a client: the header with its tiles, then `profile` (with the lines
+`screening`, `limit`, `billing-email` and `purchase-orders`), `address`, `payee-link`, `milestones`, `bills`,
+`payments`, `documents` and `history`, the payee link, milestones and documents for a payee only. It reads; it pays and
+records nothing new. Every control on it is one Counterparties, Contractors or Bills & receivables already has, with its
+own signed entries (CL14), and no action, ledger action, table, column or index was added. No migration.
+
+- **Isolation** (CL2). `counterpartyIdOf` (`src/lib/counterparty-paths.ts`) lowercases the id and checks it is a UUID:
+  anything else is `notFound()` before a read. `readCounterparty` reads through `db()` inside `inOrg`, so another
+  workspace's counterparty comes back as none and is the same not-found as one that does not exist. A read that throws
+  shows the held callout "This counterparty could not be read just now. Reload the page in a moment.", never a 404.
+  Every later read starts from the row's `id`, never the URL's, and the platform table `payee_links` is read naming the
+  workspace and the counterparty both. The title is the static `metadata` "Counterparty", so the name never reaches
+  the tab or analytics (whose `redactPath` turns the id into `:id`); the header names them, and the crumb is
+  `visibleText(name, 80)`.
+- **Grants** (CL3). `pageGrants(role, { cosigns, live, bankPayouts })` (`src/lib/counterparties/page-grants.ts`, pure)
+  puts the list's grants together from the role and the page's one `cosignsNow(role)` call, with no `viewerCan` round
+  trip: `write` (`records.write`), `decide`, `confirmAddress` (decide, or co-sign for the role that co-signs),
+  `reconcile`, `manageBank`, `seeLinks = write` and `shareReceipts = write && live`. What a grant does not allow is not
+  read: a non-writer's page makes no `payee_links` read, and its payee link section holds one line. Receipt state and
+  History are every member's, as the evidence page and the Audit log already are.
+- **Parts, read at once** (CL13). `readCounterpartyPage` (`src/lib/counterparties/page-read.ts`) returns each part as
+  `Part<T>`, `{ read: true, value }` or `{ read: false }`, and a part the role or the grants leave out as null. Each is
+  best effort: one that fails is logged by its name and the error's name only (CL4), its section says "Not read just
+  now. Reload the page in a moment." and its tile "Not read", never 0 or none. The counterparty's invoices and milestones
+  (`listInvoicesOf`, `listMilestonesOf`, paged by 1000 with the list's own selects and mappers) start first; what waits
+  on their ids starts the moment they are in: the ledger entries in chunks of `ENTRY_ID_CHUNK` (25) ids, since
+  `ledger_entries_for_targets` answers at most 1000 rows (a chunk `ledgerReadMayBeCut` names its ids in `cut`, and those
+  rows say "Some of this record's history was not read; the Audit log has all of it."), the payment intents with where
+  each was sent (`readIntentsFor`, 100 ids a read, the destination in its own map, never on `IntentRecord`), the
+  receipts of the paid bills Payments can show (`receiptStatesOf`: `invoice_id, revoked_at`), and the document requests
+  on the bills it shows. Milestone evidence is checked as Contractors checks it (`asanaOnContractors`,
+  `linearOnContractors`, `checkEvidenceLinks`, open milestones first). History is `listCounterpartyEntries(id, 25)`:
+  `seq, ts, actor, action, summary` of the compliance entries naming them, newest first, never `detail`; its query is
+  the evidence page's, unindexed on `detail->>counterpartyId`, filtered by `org_id` and cut to 25. The drafts sent for
+  review (`sentDraftsFrom`: every `sent` draft naming them, from the browser extension or a payee link, under
+  "Invoices sent for review") are not read before 0121. The page has no `maxDuration`, and re-reads as the
+  list does (`counterpartiesRefreshMs`: every 15 s while its link is out or its address waits, else every minute).
+- **The address** (CL5). `addressFacts` (`src/lib/counterparties/page-view.ts`, pure) gives its state from the row:
+  none, set when added, confirmed, unconfirmed or frozen. It is shown whole and wrapping (`CounterpartyAddressEdit`'s
+  `full`), never through `Hash`, whose first-6/last-4 form is what a lookalike copies. `addressOnChainUrl`
+  (`src/lib/payee-chains.ts`) links the explorer only for a `0x` address of 40 hex characters on a chain whose
+  `explorerTx` ends in `/tx/`; a chain not on the workspace's network says there is no explorer link. **Copy address**
+  shows only for an address set when added or confirmed, not frozen, with no lookalike on the address book
+  (`payeeAddressBook`, every role) and none among this payee's earlier addresses (its own address entries, read as
+  `from`, `to` and `address` only, and its confirmed payments' destinations on its chain). Until all of that is read,
+  copy is off and **Confirm address**, which warns only of the lookalikes it is given, is not offered.
+- **Payee links** (CL6). For a writer, `PayeeLinkControl` with the list's props, mounted on write access and the row
+  alone so a refresh after **Create link** cannot unmount the link it just showed (CL4). Under it `PayeeLinkHistory`
+  lists `payeeLinksOf(orgId, id, 5)` (never `token_hash`; the 0039 columns again before 0133) with `payeeLinkStates`:
+  out, replaced by a newer link (revoked at a newer link's `created_at`, to the microsecond, since
+  `create_payee_link` revokes the earlier unused ones in the same transaction), revoked, expired unused, or used with
+  its invoice sent, waiting or closed (30 days after use, `USED_LINK_DAYS_MS`, which a test holds equal to
+  `INVOICE_DAYS_MS`). A link or
+  receipt URL appears only in the result of the action that made it.
+- **Records and payments** (CL7 to CL9). Rows are `DecisionRows` items from `milestoneDecision` and `invoiceDecision`, as
+  Contractors and Bills build them, each linking back there (`milestoneRowPath`, `invoiceHref`): open and closed
+  milestones, open and rejected bills (a client's open and received invoices). Payments merges paid milestones and paid
+  payables newest first by the date each shows (`milestoneDate`, moved to `src/lib/milestone-date.ts`, and `rowDate`),
+  the latest 10 or 500 with `?history=all#payments`. A milestone's time is `milestoneAt`: a paid one's intent
+  `confirmed_at`, else `executed_at`, else the entry its decision rests on (`milestoneDecidedAt`), and null with none
+  read, so its row names no day and sorts last; never `milestoneDecision`'s `at`, which is the request's time when no
+  entry was read. Each paid bill notes its receipt state for every member, a destination not their address now says
+  where it went, and a live writer gets the existing `ReceiptControl`, with `shared={null}` while the receipts are
+  unread: it then offers neither **Share receipt**, which renews a shared receipt's link, nor **Stop sharing**. Totals
+  and tiles add every row read in millionths, per currency, never USDC and EURC together.
+- **Text from outside** (CL12). `visibleText(text, max)` (`src/lib/visible-text.ts`) drops what does not show
+  (`NOTE_INVISIBLE`: format, surrogate, default-ignorable, private-use and unassigned code points and U+2800), turns
+  `NOTE_BREAK` into spaces, keeps two marks on a letter (`NOTE_MARKS`), and cuts with "…"; the document check's
+  `readerNoteOf` uses the same classes. `UntrustedText` puts the result in `<bdi>`, for the name, lookalike names,
+  milestone titles, invoice numbers and memos, draft fields and History's summaries; names and titles are cleaned
+  before they reach the decision builders, and the profile, address (its "is frozen" callout among them), payout and
+  payee link parts get the row with its name cleaned. A document request's note and purchase order number, and those
+  under a newer request, are cleaned before `DocumentRequestLine` draws them (`visibleRequest`): the note line by line
+  with `visibleLines`, which keeps its line breaks, the number with `visibleText`.
+- **Shared with the list.** `src/components/CounterpartyDetails.tsx` holds `CounterpartyProfile`,
+  `CounterpartyAddressBlock` and `CounterpartyPayoutBlock`, which the page and each Counterparties row both render (the
+  page with `anchored` ids); a row's `CounterpartyRow` takes `pageHref` for **Open their page** and keeps its
+  `counterparty-<id>` Disclosure id, so an old link still opens the row, and the page's **All counterparties** goes back
+  there (`counterpartyRowPath`).
+- **Deep links** (CL15). `counterpartyPath(id, section?)` gives `/counterparties/<id>#<section>` (the list for `""`),
+  and `next-step.ts` re-exports it, mapping each stop to its section: the limit, the address (no address, unconfirmed,
+  the payee lock's wait, an invoice paying elsewhere), the screening, the purchase orders. The co-sign card, the client
+  payment link's billing email, the accountant console's addresses, a held milestone's link (`HeldFacts.contractor.id`;
+  without one, the list), Pay a freelancer's result and the payee address and disputed-change emails (whose button
+  still says "Open Counterparties", since a name in it would be untrusted text) open their section. Milestones open
+  their row on Contractors (`milestoneRowPath`, `?history=all` for a paid or closed one), whose rows carry
+  `milestoneAnchor` ids. Chat notices, the activity feed and the transfer watch still link the sections' own pages.
+- **Tests.** `counterparty-paths`, `visible-text`, `counterparty-page-grants`, `counterparty-page-view` and
+  `counterparty-page-read` (a fake database: platform reads name the workspace and the row's id, no `token_hash` in any
+  select, no `payee_links` read for a non-writer, one failed part leaves the rest, chunks of 25 and the cut note), and
+  `counterparty-page.test.tsx` (both 404s, the held callout, a viewer's page, a writer's controls, a client's sections,
+  each section id once, no `vxp_` or `vxr_` in the markup).
+
 ## Projects: budgets and the money set aside
 
 A project (`docs/superpowers/specs/2026-10-13-project-budgets-design.md`) gives a job, a client or a launch its own budget
@@ -2219,6 +2325,11 @@ payable's and milestone's card footer links it (`Decision.chain`, set by `invoic
   The audit export's gate: a session (401), membership (404), cross-site refused (403), a bad kind or id 400. It writes
   nothing, the ledger included. An API key reads the same document, members named by user id, from
   `GET /api/v1/invoices/{id}/evidence` and `GET /api/v1/milestones/{id}/evidence` (see "API").
+- **The payee's page.** `readEvidence` also gives `counterpartyId`, null when the record's counterparty row is gone, and
+  the page passes `EvidenceChainView` a `payeeHref` to their counterparty page (`counterpartyPath`, see "The
+  counterparty page"), which links the payee's name; without one the name is plain. Neither is in the chain or in
+  `evidenceDocument`: `chain.subject` names the payee only, so `vestiarion-evidence/1` and the API's evidence are
+  unchanged.
 - **Who can see it** (`EvidenceAccess`) says the existing permissions in words: every member reads and downloads it;
   from the page, only a shared receipt leaves the workspace, shared by an owner or admin (`records.write`), and the
   panel names the workspace's other ways out for the same entries: webhooks and API keys (owner or admin, in
@@ -3488,7 +3599,8 @@ Part 2, checking the document (`src/lib/agent/document-checks.ts`, `src/lib/docu
   being unset. The first failure gives the reason, built only from the counterparty's name, a purchase order, decimal
   figures and `0x` hex. A set `notes` is then quoted after that sentence as the reader's (` The reader noted: "…"`,
   `readerNoteWords` in `rules.ts`), within 0144's 300 characters, once `readerNoteOf` has cleaned it: format,
-  default-ignorable (variation selectors, Hangul fillers), private-use and unassigned characters out; double quotation
+  default-ignorable (variation selectors, Hangul fillers), private-use and unassigned characters out (the classes
+  `visibleText` uses too, from `src/lib/visible-text.ts`, see "The counterparty page"); double quotation
   marks, characters that look like one and runs of any quote-like or prime-like characters (single quotes, backticks,
   acute accents, modifier primes, low single quotes, ornaments, gereshes) as `'` so it cannot close its quote, before
   NFKC, which then turns fullwidth letters and dots into plain ones; at most two marks on a letter; control characters

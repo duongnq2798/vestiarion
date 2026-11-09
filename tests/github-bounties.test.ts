@@ -325,7 +325,8 @@ describe("handlePullRequestComment: /payto", () => {
       counterpartyId: COUNTERPARTY,
       raw: ADDRESS,
     });
-    expect(mocks.notifyPayeeAddress).toHaveBeenCalledWith({ orgId: ORG, orgName: "Northstar *Labs* @team", payeeName: "octocat (GitHub)", address: ADDRESS });
+    // Its email opens the address on the payee's page (counterparty page CL15).
+    expect(mocks.notifyPayeeAddress).toHaveBeenCalledWith({ orgId: ORG, orgName: "Northstar *Labs* @team", counterpartyId: COUNTERPARTY, payeeName: "octocat (GitHub)", address: ADDRESS });
     expect(replies()[0]).toContain("0xabab");
     expect(replies()[0]).toContain("confirms new addresses before paying them");
   });

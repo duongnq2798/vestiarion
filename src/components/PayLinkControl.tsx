@@ -13,8 +13,8 @@ import { useActionForm } from "@/components/ui/useActionForm";
 import { orgHref } from "@/lib/auth/org-paths";
 import { EARLIEST_DAYS_BEFORE_DUE, MAX_REMINDERS, MIN_DAYS_BETWEEN, type SentReminder } from "@/lib/collections";
 import { utcDay } from "@/lib/copy";
+import { counterpartyPath } from "@/lib/counterparty-paths";
 import { networkProfile, type Network } from "@/lib/network";
-import { counterpartyPath } from "@/lib/next-step";
 
 const INITIAL: PayLinkActionResult = { ok: false, message: "" };
 
@@ -123,7 +123,7 @@ export function PayLinkControl({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs leading-5 text-ink-3">Add {client.name}&apos;s billing email on Counterparties to let the agent remind them of this invoice.</p>
             <Button asChild size="sm" variant="secondary">
-              <Link href={orgHref(orgSlug, counterpartyPath(client.id))}>Add billing email</Link>
+              <Link href={orgHref(orgSlug, counterpartyPath(client.id, "billing-email"))}>Add billing email</Link>
             </Button>
           </div>
         )}

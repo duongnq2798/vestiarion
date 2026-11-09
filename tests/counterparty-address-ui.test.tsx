@@ -130,7 +130,8 @@ describe("CounterpartyLimitEdit", () => {
 });
 
 describe("the Counterparties page", () => {
-  const page = readFileSync(path.join(process.cwd(), "src", "app", "o", "[slug]", "counterparties", "page.tsx"), "utf8");
+  // A row's profile, which the counterparty's page shows too (counterparty page CL1).
+  const page = readFileSync(path.join(process.cwd(), "src", "components", "CounterpartyDetails.tsx"), "utf8");
 
   it("offers Edit limit only to people who may add records", () => {
     expect(page).toMatch(/\{canWrite && \(\s*<CounterpartyLimitEdit/);

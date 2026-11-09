@@ -261,8 +261,8 @@ Its link opens a page with **Yes, I made this change** and **No, this wasn't me*
 - **No, this wasn't me** freezes the payee, while that address is still the one on file:
   - its address is no longer confirmed, so the agent holds every payment to it, as for any address no one has confirmed;
   - no one can confirm it, and no approval pays it, to its address or its bank account: **Approve and pay** and **Pay now** are refused, with "is frozen: their contact on file said they did not make the change to its address";
-  - the owners and admins get an email;
-  - the payee's row and its approval card say it is frozen.
+  - the owners and admins get an email, whose button opens the address on the payee's page;
+  - the payee's row, their page and its approval card say it is frozen.
 - **To unfreeze**, an owner or admin checks with the payee by a contact you had before, then chooses **Unfreeze** on its row and says how they checked. Whoever made the disputed change cannot, while another owner or admin can. The address still needs confirming afterwards, under the payee lock's rules when it is on. To put the old address back, edit it as usual: the billing email is asked again, and the payee stays frozen until someone unfreezes it.
 
 Nothing is asked for a payee's first address, a cleared address, a payee with no billing email, a sandbox or a workspace in shadow mode. Clearing an address and then setting a new one still asks, about the address it had before. A newer change asks again, and the older link stops working. The email goes to the billing email on file when the address changes: check the billing email itself too, if it changed recently.
@@ -419,9 +419,9 @@ At the foot of a payable's card, **How the agent decided** opens its steps, olde
 
 A payable the agent stopped also says what you can do about it, on the console's **Stopped** section as on **Bills & receivables**. Under the card, a line names the cause and the way through, for example "It is above CME's payment limit. Pay it in Approvals, or raise the limit." **Decide in Approvals** opens Approvals at that payable's card. Owners and admins also get the page that removes the cause:
 
-- **Edit limit** or **Confirm address** opens the counterparty's row on **Counterparties**, already open;
-- **Purchase orders** opens the counterparty's row too, when code refused a payable for a missing purchase order, for a counterparty that is in fact paid without them;
-- **Review screening** opens the counterparty's row, for a counterparty screened high risk, where a wrong match is marked **Not this person**;
+- **Edit limit** or **Confirm address** opens that part of the [counterparty's page](/docs/guides/pay-a-contractor#one-page-for-each-contractor): its limit, or its address;
+- **Purchase orders** opens their purchase orders on the same page, when code refused a payable for a missing purchase order, for a counterparty that is in fact paid without them;
+- **Review screening** opens their screening, for a counterparty screened high risk, where a wrong match is marked **Not this person**;
 - **Spending limit** opens the agent's spending limit on **Treasury**, when it had no room for the payment;
 - **USYC reserve** opens the reserve in **Settings**, when the operating wallet did not hold the cash a payment needs and the reserve could not cover it: bring cash back there, or add USDC to the operating wallet, and the agent decides the payment again on its own;
 - **Treasury**, when the operating wallet is short of EURC or the Gateway balance of a payout.
@@ -584,7 +584,7 @@ Where payments are real, **Approve and pay** also refuses a payee with no addres
   - **A payment sent again asks the same.** When the outcome of a payment's earlier send was never recorded, the agent first looks the send up at Circle, sending nothing. If Circle took it, it is recorded as paid; if Circle has not listed it yet, the bill waits for the next cycle. Only once Circle has none does the agent send the payment again, to the payee's address as it stands now, so it asks the same question first. If that would still be the first payment to this payee at that address, and two people do not stand behind it, such as an address one member changed and confirmed alone while the payment waited, the agent holds it as `counterparty.new_payee` for a person instead. Its reasoning says "Not sent again: this is the first payment to this address, and only one person stands behind it — another person approves it." Another owner, admin or approver pays it, or the agent decides it again once a second person stands behind the address. A payout to another chain cannot be looked up this way, so it is asked the same question before Circle is asked for it again under the same payment key, and can be held while Circle may hold the transfer; **Approve and pay** then asks Circle for it under that key, which Circle takes only once. A transfer recorded with its Circle transaction id is only checked, never sent again.
   - **After the first payment,** the agent pays this payee at this address on its own, and decides again any other bill to the same payee that it held for this, including one held when it was to be sent again. A payout to another chain held that way waits for a person, since Circle may still hold its first send. A payment counts at the address it was sent to: a held bill a person pays once the payee gave a new address counts as paid at the new address, and the old one stays a first payment.
   - **Alone in a workspace.** The only approver may pay the first payment to an address they gave, asked for with a payee link, or confirmed, or that no one else confirmed, as for an invoice they entered. The agent holds it for them first, and the ledger entry of their approval says they approved it alone; after it, the agent pays that payee at that address on its own.
-- **Screened high risk.** A counterparty screened high risk is never paid, not even by approval. If the screening matched someone else, **Review screening** opens the counterparty's row on **Counterparties**, where you mark the match **Not this person**; the agent then decides the invoice again.
+- **Screened high risk.** A counterparty screened high risk is never paid, not even by approval. If the screening matched someone else, **Review screening** opens their screening, on the counterparty's page, where you mark the match **Not this person**; the agent then decides the invoice again.
 
 <Screenshot
   src="/docs/guides/first-payment-approval-yours.png"
@@ -754,7 +754,7 @@ The link stays on the invoice's row: **Copy link** copies it again at any time. 
 
 ### Let the agent remind the client
 
-A client who forgets to pay can be reminded by the agent, by email, with the pay link. On **Bills & receivables**, on the **Receivables** tab, open the receivable and choose **Remind the client by email** (owners and admins, in a live workspace). It needs the client's **Billing email**: without one, the row offers **Add billing email**, which opens the client's row on **Counterparties**.
+A client who forgets to pay can be reminded by the agent, by email, with the pay link. On **Bills & receivables**, on the **Receivables** tab, open the receivable and choose **Remind the client by email** (owners and admins, in a live workspace). It needs the client's **Billing email**: without one, the row offers **Add billing email**, which opens the billing email on the [client's page](/docs/guides/pay-a-contractor#one-page-for-each-contractor).
 
 From then on, each cycle, the agent decides whether to send a reminder now or to wait, and how firmly. Code sets the bounds:
 

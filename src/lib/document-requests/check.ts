@@ -1,6 +1,7 @@
 import { totalLineFigures } from "../invoice-document/extract";
 import { nameKey } from "../invoice-document/match";
 import { normalizeExtraction, rawExtractionSchema, type RawExtraction } from "../invoice-document/normalize";
+import { NOTE_BREAK, NOTE_INVISIBLE, NOTE_MARKS } from "../visible-text";
 import { emailDomainOf, readerNoteWords } from "./rules";
 import { TOP_LEVEL_DOMAINS } from "./top-level-domains";
 
@@ -222,17 +223,9 @@ function vendorWords(name: string): string {
 /** Characters, by code point, for a character class. */
 const anyOf = (codes: number[]) => codes.map((code) => String.fromCodePoint(code)).join("");
 
-/**
- * Removed from a reader's note: format characters (bidi controls such as U+202E, zero-width ones, U+FEFF), other
- * default-ignorable ones (variation selectors, U+034F, Hangul fillers, tag characters), the blank U+2800, private-use and
- * unassigned code points, and half a surrogate pair. None shows, so text spelled in them would reach a program reading
- * the note and never the person reading the card.
- */
-const NOTE_INVISIBLE = new RegExp(`[${/\p{Cf}\p{Cs}\p{Default_Ignorable_Code_Point}\p{Co}\p{Cn}/u.source}${anyOf([0x2800])}]`, "gu");
-/** A line or a tab in a reader's note: one space. */
-const NOTE_BREAK = /[\p{Cc}\p{Zl}\p{Zp}]/gu;
-/** More than two marks on one letter, which stack above or below its line and paint over the text around it: two kept. */
-const NOTE_MARKS = /(\p{M}{2})\p{M}+/gu;
+// A reader's note loses what any untrusted text on a page does (src/lib/visible-text.ts, counterparty page CL12): the
+// invisible characters (`NOTE_INVISIBLE`), its breaks (`NOTE_BREAK`, as spaces) and marks past two on a letter
+// (`NOTE_MARKS`).
 const LINK_REMOVED = "(link removed)";
 /**
  * An HTML character reference, which a Markdown or HTML reader turns into its character: `&#58;` and `&colon;` into ":",

@@ -4,7 +4,7 @@ import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { ledgerKeyId } from "@/lib/ledger-keys";
 import type { LedgerEntry } from "@/lib/ledger";
-import { ReceiptError, sharedReceipts, shareReceipt, stopSharingReceipt } from "@/lib/receipts/share";
+import { ReceiptError, receiptStatesOf, sharedReceipts, shareReceipt, stopSharingReceipt } from "@/lib/receipts/share";
 import { receiptTokenHash } from "@/lib/receipts/token";
 import { fakeSupabase, orgTestContext, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
 
@@ -180,5 +180,46 @@ describe("sharedReceipts", () => {
     const [read] = db.fake.requests.filter((r) => r.path === "/rest/v1/payment_receipts");
     expect(read.params.get("invoice_id")).toBeNull();
     expect(read.params.get("revoked_at")).toBe("is.null");
+  });
+});
+
+describe("receiptStatesOf (counterparty page CL9)", () => {
+  const STOPPED = "0b6c1c9e-4a4f-4a7e-9b1e-0000000001bb";
+  const ids = (count: number) => Array.from({ length: count }, (_, i) => `0b6c1c9e-4a4f-4a7e-9b1e-${String(i).padStart(12, "0")}`);
+  const receipts = (rows: Array<{ invoice_id: string; revoked_at: string | null }>) => {
+    const fake = fakeSupabase((request) => {
+      if (request.path !== "/rest/v1/payment_receipts") throw new Error(`unexpected request ${request.path}`);
+      const asked = new Set((request.params.get("invoice_id") ?? "").replace(/^in\.\(|\)$/g, "").split(","));
+      return { body: rows.filter((row) => asked.has(row.invoice_id)) };
+    });
+    return { fake, run: <T>(fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG, userId: USER }), fn) };
+  };
+
+  it("says which payables' receipts are shared and which were stopped, and leaves out a payable with none", async () => {
+    const { fake, run } = receipts([
+      { invoice_id: INVOICE, revoked_at: null },
+      { invoice_id: STOPPED, revoked_at: "2026-10-02T09:00:00Z" },
+    ]);
+    const read = await run(() => receiptStatesOf([INVOICE, STOPPED, ids(1)[0]]));
+    expect(read).toEqual(new Map([[INVOICE, "shared"], [STOPPED, "stopped"]]));
+    const [request] = fake.requests;
+    expect(request.params.get("select")).toBe("invoice_id,revoked_at");
+    expect(request.params.get("org_id")).toBe(`eq.${ORG}`);
+  });
+
+  it("CL4: reads no token, and nothing at all for no payable", async () => {
+    const { fake, run } = receipts([]);
+    expect(await run(() => receiptStatesOf([]))).toEqual(new Map());
+    expect(fake.requests).toHaveLength(0);
+    await run(() => receiptStatesOf([INVOICE]));
+    expect(fake.requests[0].params.get("select")).not.toMatch(/token|\*/);
+  });
+
+  it("CL13: names a hundred invoices a read at most, so no request's address grows too long", async () => {
+    const many = ids(250);
+    const { fake, run } = receipts([{ invoice_id: many[249], revoked_at: null }]);
+    expect(await run(() => receiptStatesOf([...many, many[0]]))).toEqual(new Map([[many[249], "shared"]]));
+    const asked = fake.requests.map((request) => (request.params.get("invoice_id") ?? "").split(",").length);
+    expect(asked).toEqual([100, 100, 50]);
   });
 });

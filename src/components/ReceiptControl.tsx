@@ -12,11 +12,18 @@ import { useActionForm } from "@/components/ui/useActionForm";
 const INITIAL: ReceiptActionResult = { ok: false, message: "" };
 
 /**
+ * What the control says while whether a receipt is shared was not read (counterparty page CL9): sharing it then would
+ * replace a link its payee may hold, so neither button shows.
+ */
+export const RECEIPT_STATE_NOT_READ = "Whether this receipt is shared could not be read, so it cannot be shared from here: sharing again would stop a link already sent. Reload the page in a moment.";
+
+/**
  * A paid payable's receipt, on its card on Invoices (docs/superpowers/specs/2026-10-01-payment-receipts-design.md
  * P6), for an owner or admin. Not shared: one button that shares it. Shared: a new link, which replaces the old
- * one, or stop sharing. A link is shown once, right after it is made, with Copy.
+ * one, or stop sharing. A link is shown once, right after it is made, with Copy. `shared` is null where the page could
+ * not read it (a counterparty's page, CL9): no button then, since sharing renews a shared receipt's link, and only why.
  */
-export function ReceiptControl({ orgSlug, invoiceId, shared }: { orgSlug: string; invoiceId: string; shared: boolean }) {
+export function ReceiptControl({ orgSlug, invoiceId, shared }: { orgSlug: string; invoiceId: string; shared: boolean | null }) {
   const [url, setUrl] = useState<string | null>(null);
   const share = useActionForm(shareReceiptAction, INITIAL, { onResult: (result) => setUrl(result.ok && result.url ? result.url : null) });
   const stop = useActionForm(stopSharingReceiptAction, INITIAL, { onResult: (result) => result.ok && setUrl(null) });
@@ -24,30 +31,34 @@ export function ReceiptControl({ orgSlug, invoiceId, shared }: { orgSlug: string
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {shared && (
-          <span className="inline-flex items-center gap-1.5 text-xs text-ink-3">
-            <ReceiptText className="size-3.5" aria-hidden />
-            Receipt shared
-          </span>
-        )}
-        <form {...share.formProps}>
-          <input type="hidden" name="orgSlug" value={orgSlug} />
-          <input type="hidden" name="invoiceId" value={invoiceId} />
-          <SubmitButton variant="secondary" size="sm" icon={<Link2 />} pendingLabel={shared ? "Making a link…" : "Sharing…"}>
-            {shared ? "New link" : "Share receipt"}
-          </SubmitButton>
-        </form>
-        {shared && (
-          <form {...stop.formProps}>
+      {shared === null ? (
+        <p className="text-xs leading-5 text-ink-3">{RECEIPT_STATE_NOT_READ}</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {shared && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-ink-3">
+              <ReceiptText className="size-3.5" aria-hidden />
+              Receipt shared
+            </span>
+          )}
+          <form {...share.formProps}>
             <input type="hidden" name="orgSlug" value={orgSlug} />
             <input type="hidden" name="invoiceId" value={invoiceId} />
-            <SubmitButton variant="ghost" size="sm" icon={<Link2Off />} pendingLabel="Stopping…">
-              Stop sharing
+            <SubmitButton variant="secondary" size="sm" icon={<Link2 />} pendingLabel={shared ? "Making a link…" : "Sharing…"}>
+              {shared ? "New link" : "Share receipt"}
             </SubmitButton>
           </form>
-        )}
-      </div>
+          {shared && (
+            <form {...stop.formProps}>
+              <input type="hidden" name="orgSlug" value={orgSlug} />
+              <input type="hidden" name="invoiceId" value={invoiceId} />
+              <SubmitButton variant="ghost" size="sm" icon={<Link2Off />} pendingLabel="Stopping…">
+                Stop sharing
+              </SubmitButton>
+            </form>
+          )}
+        </div>
+      )}
       {url && <ReceiptLink url={url} message={share.state.message} />}
       {error && <FormMessage tone="error">{error}</FormMessage>}
     </div>

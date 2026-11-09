@@ -35,13 +35,22 @@ describe("PayFreelancerForm", () => {
 });
 
 describe("PaymentLinkReady", () => {
+  const PAGE = "/o/mai/counterparties/5f1e2d3c-0000-4000-8000-0000000000c1#payee-link";
+
   it("shows what happened, the link to copy, and when it expires", () => {
-    const markup = render(<PaymentLinkReady message="Emailed Linh a link to add the address to be paid at." url={URL} expiresAt="2026-10-08T15:00:00+00:00" />);
+    const markup = render(<PaymentLinkReady message="Emailed Linh a link to add the address to be paid at." url={URL} expiresAt="2026-10-08T15:00:00+00:00" pageHref={PAGE} />);
     expect(markup).toContain('role="status"');
     expect(markup).toContain(`value="${URL}"`);
     const page = text(markup);
     expect(page).toContain("Emailed Linh a link");
     expect(page).toContain("Copy link");
     expect(page).toContain("expires Oct 8, 2026");
+  });
+
+  it("CL15: says a lost link is made again on their page, and links its payee link part", () => {
+    const markup = render(<PaymentLinkReady message="Emailed Linh a link." url={URL} expiresAt="2026-10-08T15:00:00+00:00" pageHref={PAGE} />);
+    expect(text(markup)).toContain("It is shown only now; make a new one on their page if it is lost.");
+    expect(markup).toMatch(new RegExp(`<a [^>]*href="${PAGE}"[^>]*>their page</a>`));
+    expect(text(markup)).not.toContain("on Counterparties");
   });
 });

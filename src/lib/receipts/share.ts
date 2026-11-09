@@ -2,6 +2,7 @@ import { db, unwrap } from "../dal";
 import { appendLedgerEntry, ledgerPublicKeyPems, ledgerVerificationKeyring, listLedgerEntriesForTargets } from "../ledger";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
 import { currentOrgId } from "../context";
+import { ID_CHUNK } from "../new-payee-facts";
 import { buildReceipt, receiptSummary, type ReceiptIntent } from "./facts";
 import { generateReceiptToken } from "./token";
 
@@ -114,4 +115,22 @@ export async function sharedReceipts(invoiceIds: string[]): Promise<Set<string>>
   const rows = unwrap(await db().from("payment_receipts").select("invoice_id").is("revoked_at", null)) as Array<{ invoice_id: string }>;
   const wanted = new Set(invoiceIds);
   return new Set(rows.map((row) => row.invoice_id).filter((id) => wanted.has(id)));
+}
+
+/** A payable's receipt: `shared` while its link opens, `stopped` once its link was revoked. */
+export type ReceiptLinkState = "shared" | "stopped";
+
+/**
+ * The receipt of each of these payables that has one, by invoice id, for a counterparty's Payments, which every member
+ * reads (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL9): its invoice and whether its link was
+ * revoked, never the link's hash. A payable with no receipt is left out. A hundred invoices a read (`ID_CHUNK`), so no
+ * request's address grows long enough to be refused.
+ */
+export async function receiptStatesOf(invoiceIds: readonly string[]): Promise<Map<string, ReceiptLinkState>> {
+  const ids = [...new Set(invoiceIds)];
+  const chunks = Array.from({ length: Math.ceil(ids.length / ID_CHUNK) }, (_, index) => ids.slice(index * ID_CHUNK, (index + 1) * ID_CHUNK));
+  const read = await Promise.all(
+    chunks.map(async (chunk) => unwrap(await db().from("payment_receipts").select("invoice_id, revoked_at").in("invoice_id", chunk)) as Array<{ invoice_id: string; revoked_at: string | null }>)
+  );
+  return new Map<string, ReceiptLinkState>(read.flat().map((row) => [row.invoice_id, row.revoked_at ? "stopped" : "shared"]));
 }

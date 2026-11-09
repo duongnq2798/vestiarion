@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { AddressChangeVia, AddressCheckStatus } from "./address-change-check-words";
 import { can } from "./auth/roles";
 import { simulatesPayments } from "./capability-read";
+import { counterpartyPath } from "./counterparty-paths";
 import { db, platformDb, unwrap, type OrgDb } from "./dal";
 import { withOrg } from "./dal/scope";
 import { addressChangeCheckEmail } from "./email/address-change-check";
@@ -273,7 +274,8 @@ export async function answerAddressChange(
     console.error("address change answer: not recorded", error instanceof Error ? error.message : "unknown error");
   });
   if (notMe && to && row.org_slug) {
-    const work = () => notifyDisputed({ orgId, orgName: row.org_name ?? "Your workspace", slug: row.org_slug as string, payeeName, to, frozen: row.outcome === "frozen" });
+    const work = () =>
+      notifyDisputed({ orgId, orgName: row.org_name ?? "Your workspace", slug: row.org_slug as string, counterpartyId, payeeName, to, frozen: row.outcome === "frozen" });
     if (options.defer) {
       try {
         options.defer(work);
@@ -285,8 +287,12 @@ export async function answerAddressChange(
   return row.outcome;
 }
 
-/** Tells the owners and admins that a payee disputed an address change (AC3). Best effort: never throws. */
-async function notifyDisputed(input: { orgId: string; orgName: string; slug: string; payeeName: string; to: string; frozen: boolean }): Promise<number> {
+/**
+ * Tells the owners and admins that a payee disputed an address change (AC3). Best effort: never throws. Its button opens
+ * the address on the payee's page (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15), where it is
+ * unfrozen; its words stay "Open Counterparties".
+ */
+async function notifyDisputed(input: { orgId: string; orgName: string; slug: string; counterpartyId: string; payeeName: string; to: string; frozen: boolean }): Promise<number> {
   try {
     const recipients = (await listMembers(input.orgId)).filter((member) => can(member.role, "records.write")).slice(0, MAX_RECIPIENTS);
     const origin = publicOrigin();
@@ -295,7 +301,7 @@ async function notifyDisputed(input: { orgId: string; orgName: string; slug: str
       payeeName: input.payeeName,
       to: input.to,
       frozen: input.frozen,
-      link: `${origin}/o/${input.slug}/counterparties`,
+      link: `${origin}/o/${input.slug}${counterpartyPath(input.counterpartyId, "address")}`,
       origin,
     });
     const results = await Promise.allSettled(recipients.map((member) => sendEmail({ to: member.email, ...email })));

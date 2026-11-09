@@ -72,6 +72,7 @@ import { closePackShot } from "./close-pack-fixture";
 import { PageHead } from "@/components/vx/Shell";
 import { evidenceLinkLabel, evidencePath } from "@/lib/evidence-paths";
 import { orgHref } from "@/lib/auth/org-paths";
+import { counterpartyPath } from "@/lib/counterparty-paths";
 import type { EvidenceStep } from "@/lib/evidence-chain";
 import { compareActuals, type ActualRecord, type ActualsFacts } from "@/lib/actual-payments-compare";
 import { readStatement, type StatementChoices } from "@/lib/bank-statement/lines";
@@ -1600,6 +1601,7 @@ export const DOCS_SHOTS = {
               message="Emailed Linh Tran a link to add the address to be paid at. When they add their address you get an email; confirm it on Counterparties and the agent pays within a minute."
               url={`https://www.vestiarion.xyz/payee/vxp_${"d0c5".repeat(10)}abc`}
               expiresAt="2026-10-08T15:00:00Z"
+              pageHref={orgHref(SLUG, counterpartyPath("5f1e2d3c-0000-4000-8000-0000000000f1", "payee-link"))}
             />
           </div>
         </section>

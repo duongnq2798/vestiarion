@@ -1,45 +1,35 @@
 import type { Metadata } from "next";
 import { cosignsNow } from "@/lib/approval-policy";
 import AgentControls from "@/components/AgentControls";
-import { AddressCheckNote } from "@/components/address-change/AddressCheckNote";
+import { CounterpartyDetails } from "@/components/CounterpartyDetails";
 import { CounterpartyRow, readiness } from "@/components/CounterpartyRow";
 import { AutoRefresh } from "@/components/AutoRefresh";
-import CounterpartyAddress from "@/components/intake/CounterpartyAddressEdit";
-import CounterpartyBankAccount from "@/components/intake/CounterpartyBankAccount";
 import { bankAccountsOf, readPayoutPartner } from "@/lib/bank-payouts/store";
 import { blindpaySettingsFromEnv } from "@/lib/blindpay/settings";
 import CounterpartyIntake from "@/components/intake/CounterpartyIntake";
-import CounterpartyLimitEdit from "@/components/intake/CounterpartyLimitEdit";
-import CounterpartyNoticeEmailEdit from "@/components/intake/CounterpartyNoticeEmailEdit";
-import CounterpartyPurchaseOrdersEdit from "@/components/intake/CounterpartyPurchaseOrdersEdit";
-import MirrorAddressControl from "@/components/MirrorAddressControl";
-import ScreeningMatch from "@/components/intake/ScreeningMatch";
-import PayeeLinkControl from "@/components/intake/PayeeLinkControl";
 import { AskEveryPayee } from "@/components/intake/AskEveryPayee";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { IntakeFold } from "@/components/vx/IntakeFold";
-import { Money } from "@/components/vx/Primitives";
-import { PerformanceHistory } from "@/components/vx/PerformanceHistory";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
 import { viewerCan } from "@/lib/auth/authorize";
-import { VendorStatementCheck } from "@/components/VendorStatementCheck";
+import { orgHref } from "@/lib/auth/org-paths";
 import { requireMembership } from "@/lib/auth/membership";
 import { shellModes } from "@/lib/circle";
 import { screeningMode } from "@/lib/compliance";
 import { counterpartiesRefreshMs } from "@/lib/counterparties-refresh";
 import { addressUnconfirmed } from "@/lib/counterparty-address";
-import { purchaseOrdersLabel } from "@/lib/counterparty-purchase-orders";
+import { counterpartyPath } from "@/lib/counterparty-paths";
 import { db } from "@/lib/dal";
 import { inOrg } from "@/lib/dal/scope";
 import { draftSupplierName } from "@/lib/invoice-drafts/store";
 import { listLedgerEntries } from "@/lib/ledger";
 import { listActivePayeeLinks, listWaitingInvoiceLinks } from "@/lib/platform/payee-links";
 import { chainChoiceFits, choosablePayeeChains, payeesHeldToTheirChain } from "@/lib/payee-chain-choice";
-import { chainById, homeChain } from "@/lib/payee-chains";
+import { homeChain } from "@/lib/payee-chains";
 import { askablePayees } from "@/lib/address-requests";
 import { simulatesPayments } from "@/lib/capability-read";
 import { plural } from "@/lib/copy";
@@ -170,6 +160,8 @@ export default async function CounterpartiesPage({
       : [new Map(), null, false];
     // What needs someone first, then by name (Counterparties layout).
     const ordered = [...counterparties].sort((a, b) => readiness(a).rank - readiness(b).rank || a.name.localeCompare(b.name));
+    // What this member may do on each row, as on a counterparty's page (counterparty page CL3).
+    const grants = { write: canWrite, decide: canConfirm, confirmAddress: canConfirmAddress, reconcile: canReconcile, manageBank: canManageBank };
     const refreshMs = counterpartiesRefreshMs({
       linksOut: payeeLinks.size,
       unconfirmed: counterparties.filter((counterparty) => addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at)).length,
@@ -219,125 +211,31 @@ export default async function CounterpartiesPage({
               <ul className="divide-y divide-line">
                 {ordered.map((counterparty) => (
                   <li key={counterparty.id}>
-                    <CounterpartyRow counterparty={counterparty} network={network}>
-                      <ScreeningMatch
+                    <CounterpartyRow counterparty={counterparty} network={network} pageHref={orgHref(slug, counterpartyPath(counterparty.id))}>
+                      <CounterpartyDetails
                         orgSlug={slug}
-                        counterparty={{
-                          id: counterparty.id,
-                          name: counterparty.name,
-                          riskLevel: counterparty.risk_level,
-                          riskNotes: counterparty.risk_notes,
-                          riskEntityId: counterparty.risk_entity_id ?? null,
-                          matches: counterparty.risk_matches ?? null,
-                        }}
-                        canDismiss={canConfirm}
+                        network={network}
+                        counterparty={counterparty}
+                        grants={grants}
                         liveScreening={liveScreening}
-                      />
-                      <PerformanceHistory
-                        score={counterparty.performance_score}
-                        inputs={counterparty.performance_inputs}
-                        compact
-                      />
-                      <dl className="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 text-xs sm:grid-cols-4">
-                        <div className="min-w-0">
-                          <dt className="text-ink-3">Configured limit</dt>
-                          <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-ink">
-                            {counterparty.baseline_payment_limit == null ? "Not set" : <Money value={counterparty.baseline_payment_limit} />}
-                            {canWrite && (
-                              <CounterpartyLimitEdit
-                                orgSlug={slug}
-                                counterparty={{ id: counterparty.id, name: counterparty.name, role: counterparty.role, baselineLimit: counterparty.baseline_payment_limit }}
-                              />
-                            )}
-                          </dd>
-                        </div>
-                        <div className="min-w-0"><dt className="text-ink-3" title="The configured limit as its screening allows it today">Allowed now</dt><dd className="mt-0.5 text-ink">{counterparty.payment_limit == null ? "Not set" : <Money value={counterparty.payment_limit} />}</dd></div>
-                        <div className="min-w-0"><dt className="text-ink-3">Jurisdiction</dt><dd className="mt-0.5 break-words text-ink">{counterparty.jurisdiction || "Not set"}</dd></div>
-                        <div className="min-w-0"><dt className="text-ink-3">Last screened</dt><dd className="mt-0.5 break-words text-ink">{counterparty.last_screened_at ? new Date(counterparty.last_screened_at).toLocaleString() : "Not yet"}</dd></div>
-                        {/* A payee is emailed when it is paid, a client the reminders turned on, at the address set here
-                            (payment notices R1, collections R8). */}
-                        <div className="col-span-2 min-w-0">
-                          <dt className="text-ink-3">Billing email</dt>
-                          <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-2 break-words text-ink">
-                            {counterparty.notice_email ?? "None"}
-                            {canWrite && (
-                              <CounterpartyNoticeEmailEdit
-                                network={network}
-                                orgSlug={slug}
-                                counterparty={{ id: counterparty.id, name: counterparty.name, role: counterparty.role, noticeEmail: counterparty.notice_email ?? null }}
-                              />
-                            )}
-                          </dd>
-                        </div>
-                        {/* Whether the agent needs a purchase order before it pays (three-way match design M2). A payable to a
-                            client waits for a person whatever its match (client payables R1). */}
-                        {counterparty.role !== "client" && (
-                          <div className="col-span-2 min-w-0">
-                            <dt className="text-ink-3">Purchase orders</dt>
-                            <dd className="mt-0.5 flex flex-wrap items-baseline gap-x-2 break-words text-ink">
-                              {purchaseOrdersLabel(counterparty.purchase_order_required !== false)}
-                              {canWrite && (
-                                <CounterpartyPurchaseOrdersEdit
-                                  orgSlug={slug}
-                                  counterparty={{ id: counterparty.id, name: counterparty.name, purchaseOrderRequired: counterparty.purchase_order_required !== false }}
-                                />
-                              )}
-                            </dd>
-                          </div>
-                        )}
-                      </dl>
-                      <CounterpartyAddress
-                        orgSlug={slug}
-                        counterparty={{ id: counterparty.id, name: counterparty.name, address: counterparty.address, chain: counterparty.chain ?? homeChain(network).id }}
-                        unconfirmedSince={
-                          addressUnconfirmed(counterparty.address_changed_at, counterparty.address_confirmed_at) ? counterparty.address_changed_at : null
+                        found={{
+                          payeeLockOn: payeeLock.on,
+                          lookalikes: alike.get(counterparty.id) ?? [],
+                          earlierLookalike: earlierAlike.get(counterparty.id) ?? null,
+                          check: addressChecks.get(counterparty.id) ?? null,
+                        }}
+                        shadow={shadow !== null}
+                        bank={bankPayoutsOn && counterparty.role === "vendor" ? { account: bankAccounts.get(counterparty.id) ?? null, setUp: Boolean(bankPartner?.customerId) } : null}
+                        payeeLink={
+                          canWrite
+                            ? {
+                                active: payeeLinks.get(counterparty.id) ?? null,
+                                waiting: waitingInvoices.get(counterparty.id) ?? null,
+                                chains: chainChoiceFits(counterparty, heldToChain) ? choosableChains : [],
+                              }
+                            : null
                         }
-                        canWrite={canWrite}
-                        canConfirm={canConfirmAddress}
-                        payeeLockOn={payeeLock.on}
-                        lookalikes={alike.get(counterparty.id) ?? []}
-                        earlierLookalike={earlierAlike.get(counterparty.id) ?? null}
                       />
-                      <AddressCheckNote
-                        orgSlug={slug}
-                        counterparty={{ id: counterparty.id, name: counterparty.name, address: counterparty.address }}
-                        view={addressChecks.get(counterparty.id) ?? null}
-                        canUnfreeze={canWrite}
-                      />
-                      {canReconcile && counterparty.role === "vendor" && (
-                        <div className="mt-2">
-                          <VendorStatementCheck orgSlug={slug} vendor={{ id: counterparty.id, name: counterparty.name }} canAddBills={canWrite} />
-                        </div>
-                      )}
-                      {bankPayoutsOn && counterparty.role === "vendor" && (
-                        <CounterpartyBankAccount
-                          orgSlug={slug}
-                          counterparty={{ id: counterparty.id, name: counterparty.name }}
-                          account={bankAccounts.get(counterparty.id) ?? null}
-                          canManage={canManageBank}
-                          setUp={Boolean(bankPartner?.customerId)}
-                        />
-                      )}
-                      {counterparty.mirror_wallet_id && (
-                        <p className="mt-1 text-xs text-ink-3">Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.</p>
-                      )}
-                      {shadow && canWrite && counterparty.role !== "client" && !counterparty.address && (
-                        <div className="mt-2">
-                          <MirrorAddressControl orgSlug={slug} counterparty={{ id: counterparty.id, name: counterparty.name }} />
-                        </div>
-                      )}
-                      {canWrite && counterparty.role !== "client" && (
-                        <div className="mt-2">
-                          <PayeeLinkControl
-                            orgSlug={slug}
-                            counterparty={{ id: counterparty.id, name: counterparty.name }}
-                            chainLabel={chainById(counterparty.chain ?? homeChain(network).id).label}
-                            activeLink={payeeLinks.get(counterparty.id) ?? null}
-                            offers={{ invoice: true, chains: chainChoiceFits(counterparty, heldToChain) ? choosableChains : [] }}
-                            waitingInvoice={waitingInvoices.get(counterparty.id) ?? null}
-                          />
-                        </div>
-                      )}
                     </CounterpartyRow>
                   </li>
                 ))}

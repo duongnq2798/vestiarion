@@ -1,4 +1,5 @@
 import { can } from "../auth/roles";
+import { counterpartyPath } from "../counterparty-paths";
 import { platformDb, unwrap } from "../dal";
 import { payeeAddressEmail } from "../email/payee-address";
 import { sendEmail } from "../email/send";
@@ -16,8 +17,11 @@ const MAX_RECIPIENTS = 10;
  * this nobody knew it had arrived. Best effort (R7): it never throws, logs any
  * send that did not go out, and returns how many did. `chainLabel` names the
  * chain the payee chose, on a link that let it choose (payee invoice link P3).
+ * Its button opens the address on the page of `counterpartyId`
+ * (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15) and
+ * still says "Open Counterparties": a payee's name in it would be untrusted text.
  */
-export async function notifyPayeeAddress(input: { orgId: string; orgName: string; payeeName: string; address: string; chainLabel?: string }): Promise<number> {
+export async function notifyPayeeAddress(input: { orgId: string; orgName: string; counterpartyId: string; payeeName: string; address: string; chainLabel?: string }): Promise<number> {
   try {
     const org = unwrap(await platformDb().from("orgs").select("slug").eq("id", input.orgId).single()) as { slug: string };
     const recipients = (await listMembers(input.orgId)).filter((member) => can(member.role, "approval.decide")).slice(0, MAX_RECIPIENTS);
@@ -27,7 +31,7 @@ export async function notifyPayeeAddress(input: { orgId: string; orgName: string
       payeeName: input.payeeName,
       address: input.address,
       ...(input.chainLabel ? { chainLabel: input.chainLabel } : {}),
-      link: `${origin}/o/${org.slug}/counterparties`,
+      link: `${origin}/o/${org.slug}${counterpartyPath(input.counterpartyId, "address")}`,
       origin,
     });
     const results = await Promise.allSettled(recipients.map((member) => sendEmail({ to: member.email, ...email })));

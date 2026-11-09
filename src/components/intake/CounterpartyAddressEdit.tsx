@@ -1,7 +1,7 @@
 "use client";
 
-import { BadgeCheck, PencilLine, TriangleAlert } from "lucide-react";
-import { useCallback, useState } from "react";
+import { ArrowUpRight, BadgeCheck, PencilLine, TriangleAlert } from "lucide-react";
+import { useCallback, useState, type ReactNode } from "react";
 import {
   confirmCounterpartyAddressAction,
   updateCounterpartyAddressAction,
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Checkbox } from "@/components/ui/Checkbox";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTrigger } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
@@ -49,6 +50,17 @@ export interface CounterpartyAddressProps {
   lookalikes?: readonly Lookalike[];
   /** An address this payee had or was paid at before that its changed one is made to look like (PL6); null when none. */
   earlierLookalike?: string | null;
+  /**
+   * On the counterparty's page (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL5): the address in full,
+   * wrapping, never cut short, since the short form is what a lookalike copies. The list keeps its one line.
+   */
+  full?: boolean;
+  /** The address on its chain's explorer (`addressOnChainUrl`), opened in a new tab; none for no link. */
+  explorerHref?: string | null;
+  /** CL5: Copy address shows, for an address someone can trust (`addressFacts`). */
+  copyable?: boolean;
+  /** CL5: why Copy address is off, in one line, when it is. */
+  copyNote?: ReactNode;
 }
 
 /**
@@ -68,12 +80,22 @@ export default function CounterpartyAddress({
   payeeLockOn = false,
   lookalikes = [],
   earlierLookalike = null,
+  full = false,
+  explorerHref = null,
+  copyable = false,
+  copyNote = null,
 }: CounterpartyAddressProps) {
   const chainLabel = counterparty.chain ? chainById(counterparty.chain).label : null;
   return (
     <div className="mt-3 space-y-2 border-t border-line pt-3">
-      <div className="flex min-w-0 items-center justify-between gap-2">
-        {counterparty.address ? (
+      <div className={full ? "flex min-w-0 items-start justify-between gap-2" : "flex min-w-0 items-center justify-between gap-2"}>
+        {counterparty.address && full ? (
+          // CL5: every character, as it is paid to; it wraps rather than being cut.
+          <p className="min-w-0 text-ink-3">
+            <span className="break-all font-mono text-xs text-ink">{counterparty.address}</span>
+            {chainLabel && <span className="ml-1.5 whitespace-nowrap text-xs">on {chainLabel}</span>}
+          </p>
+        ) : counterparty.address ? (
           <p className="flex min-w-0 items-baseline gap-1.5 text-ink-3">
             <span className="min-w-0 truncate font-mono text-[0.7rem]" title={counterparty.address}>
               {counterparty.address}
@@ -85,6 +107,27 @@ export default function CounterpartyAddress({
         )}
         {canWrite && <EditAddress orgSlug={orgSlug} counterparty={counterparty} />}
       </div>
+      {counterparty.address && (explorerHref || copyable || copyNote) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {explorerHref && (
+            <Button asChild variant="link" className="text-xs">
+              <a href={explorerHref} target="_blank" rel="noreferrer">
+                Open on the explorer
+                <ArrowUpRight aria-hidden />
+                <span className="sr-only">(opens in a new tab)</span>
+              </a>
+            </Button>
+          )}
+          {/* CL5: copy only an address someone can trust; otherwise one line says why not. */}
+          {copyable ? (
+            <CopyButton value={counterparty.address} variant="secondary">
+              Copy address
+            </CopyButton>
+          ) : (
+            copyNote && <p className="text-xs text-ink-3">{copyNote}</p>
+          )}
+        </div>
+      )}
       {(lookalikes.length > 0 || earlierLookalike) && (
         <ul className="flex flex-wrap gap-1.5" aria-label="Lookalike addresses">
           {earlierLookalike && (

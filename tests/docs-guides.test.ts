@@ -82,6 +82,8 @@ const PAUSE = "src/components/AgentPauseControl.tsx";
 const RUN = "src/components/AgentControlsClient.tsx";
 const COUNTERPARTY_FORM = "src/components/intake/CounterpartyIntake.tsx";
 const COUNTERPARTIES_PAGE = "src/app/o/[slug]/counterparties/page.tsx";
+/** A Counterparties row's profile, address and payout, which the counterparty's page shows too (counterparty page CL1). */
+const COUNTERPARTY_DETAILS = "src/components/CounterpartyDetails.tsx";
 const INVOICE_FORM = "src/components/intake/InvoiceIntake.tsx";
 const INVOICES_PAGE = "src/app/o/[slug]/invoices/page.tsx";
 const DOCUMENT_TAB = "src/components/intake/InvoiceDocumentIntake.tsx";
@@ -160,6 +162,12 @@ const PAYEE_INVOICE_FORM = "src/components/payee/PayeeInvoiceForm.tsx";
 const PAYEE_INVOICE_RULES = "src/lib/payee-invoice.ts";
 const PAYEE_EMAIL = "src/lib/email/payee-link.ts";
 const HELD_ACTIONS = "src/components/HeldMilestoneActions.tsx";
+/** A counterparty's own page and what it shows (docs/superpowers/specs/2026-11-09-counterparty-page-design.md). */
+const COUNTERPARTY_PAGE = "src/app/o/[slug]/counterparties/[id]/page.tsx";
+const COUNTERPARTY_PAGE_VIEW = "src/lib/counterparties/page-view.ts";
+const COUNTERPARTY_ROW = "src/components/CounterpartyRow.tsx";
+const PAYEE_LINK_HISTORY = "src/components/counterparty/PayeeLinkHistory.tsx";
+const COUNTERPARTY_HISTORY = "src/components/counterparty/CounterpartyHistory.tsx";
 const MILESTONE_DECISIONS = "src/lib/agent/milestone-decisions.ts";
 const SLACK_PANEL = "src/components/SlackPanel.tsx";
 const SLACK_CONNECT_PAGE = "src/app/integrations/slack/connect/page.tsx";
@@ -775,6 +783,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Settings", APP_NAV],
     // A page inside a section, named in the breadcrumb after its section.
     ["Commissions", APP_NAV],
+    // A counterparty's page names them in the header, and its tab by its kind (counterparty page CL16).
+    ["Counterparty", APP_NAV, 'label: "Counterparty"'],
+    ["Counterparty", COUNTERPARTY_PAGE, 'export const metadata: Metadata = { title: "Counterparty" };'],
     ["Live", "src/components/vx/WorkspaceMeta.tsx"],
     ["Sandbox", "src/components/vx/WorkspaceMeta.tsx"],
     ["Not live yet", "src/components/vx/WorkspaceMeta.tsx"],
@@ -1652,8 +1663,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Nothing is waiting for a decision.", APPROVALS_PAGE],
     ["Edit limit", "src/components/intake/CounterpartyLimitEdit.tsx"],
     ["Save limit", "src/components/intake/CounterpartyLimitEdit.tsx"],
-    ["Configured limit", COUNTERPARTIES_PAGE],
-    ["Allowed now", COUNTERPARTIES_PAGE],
+    ["Configured limit", COUNTERPARTY_DETAILS],
+    ["Allowed now", COUNTERPARTY_DETAILS],
     ["Review match", "src/components/CounterpartyRow.tsx"],
     ["Address needed", "src/components/CounterpartyRow.tsx"],
     ["Not screened yet", "src/components/CounterpartyRow.tsx"],
@@ -1711,7 +1722,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["as the written policy would", "src/lib/agent-activity.ts"],
     ["Checks passed:", "src/lib/agent-activity.ts"],
     ["Billing email", "src/components/intake/CounterpartyIntake.tsx"],
-    ["Billing email", "src/app/o/[slug]/counterparties/page.tsx"],
+    ["Billing email", COUNTERPARTY_DETAILS],
     ["Remind the client by email", PAY_LINK_CONTROL],
     ["Add billing email", PAY_LINK_CONTROL],
     ["Turn off reminders", PAY_LINK_CONTROL],
@@ -1983,6 +1994,11 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Revoke manually", MILESTONE_CHECK],
     ["Paid and closed", CONTRACTORS_PAGE],
     ["Address to confirm", CONTRACTORS_PAGE],
+    // The fix links open the part of their page that settles it (counterparty page CL15).
+    ["Open their address", CONTRACTORS_PAGE],
+    ["Open Counterparty", HELD_ACTIONS, "Open {reason.link.label}"],
+    ["Counterparty", MILESTONE_DECISIONS, 'label: "Counterparty"'],
+    ["Payee link", COUNTERPARTY_PAGE, 'title="Payee link"'],
     ["Waiting for an address", CONTRACTORS_PAGE],
     ["What it waits for", HELD_ACTIONS],
     ["Pay now", HELD_ACTIONS],
@@ -1995,6 +2011,39 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["milestone_closed", MILESTONE_DECISIONS],
     ["Closed without paying", MAP],
     ["Audit log", APP_NAV],
+    // One page for each contractor (counterparty page CL1-CL13).
+    ["Open their page", COUNTERPARTY_ROW],
+    ["All counterparties", COUNTERPARTY_PAGE],
+    ["Nothing here makes a payment: the agent pays under its rules, and people decide in Approvals and on Contractors.", COUNTERPARTY_PAGE],
+    ["Owed to them", COUNTERPARTY_PAGE_VIEW],
+    ["Paid to them", COUNTERPARTY_PAGE_VIEW],
+    ["Profile", COUNTERPARTY_PAGE, 'title="Profile"'],
+    ["Payment address", COUNTERPARTY_PAGE],
+    ["Open on the explorer", ADDRESS_CONTROLS],
+    ["An owner or admin sends and stops payee links.", COUNTERPARTY_PAGE],
+    ["Open in Contractors", COUNTERPARTY_PAGE],
+    ["Bills from them", COUNTERPARTY_PAGE],
+    ["Open in Bills & receivables", COUNTERPARTY_PAGE, "Open in Bills &amp; receivables"],
+    ["Show every payment", COUNTERPARTY_PAGE],
+    ["Receipt shared", COUNTERPARTY_PAGE],
+    ["Receipt link stopped", COUNTERPARTY_PAGE],
+    ["No receipt shared", COUNTERPARTY_PAGE],
+    ["No receipt: not paid on chain", COUNTERPARTY_PAGE],
+    ["Paid to an earlier address", COUNTERPARTY_PAGE],
+    ["Invoices sent for review", COUNTERPARTY_PAGE],
+    ["All of it in the Audit log", COUNTERPARTY_HISTORY],
+    ["Not read just now. Reload the page in a moment.", COUNTERPARTY_PAGE_VIEW],
+    ["Some of this record's history was not read; the Audit log has all of it.", COUNTERPARTY_PAGE],
+    ["Copy address", ADDRESS_CONTROLS],
+    ["Copy comes back once someone confirms this address.", COUNTERPARTY_PAGE_VIEW],
+    ["Check every character on the explorer.", COUNTERPARTY_PAGE_VIEW],
+    ["Replaced by a newer link", COUNTERPARTY_PAGE_VIEW],
+    ["Expired unused", COUNTERPARTY_PAGE_VIEW],
+    ["Invoice sent", COUNTERPARTY_PAGE_VIEW],
+    ["Waiting for their invoice", COUNTERPARTY_PAGE_VIEW],
+    ["Invoice closed", COUNTERPARTY_PAGE_VIEW],
+    ["The latest 5 links; every one is in History and the Audit log.", PAYEE_LINK_HISTORY, "The latest {PAYEE_LINKS_SHOWN} links; every one is in History and the Audit log."],
+    ["A used link's status page stays open to the payee for 30 days.", PAYEE_LINK_HISTORY, "A used link&apos;s status page stays open to the payee for 30 days."],
   ],
   "guides/telegram": [
     ["Give your verdict", "src/lib/agent-activity.ts"],
@@ -3573,7 +3622,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["recovered: true", TEST_USDC_LIBRARY, "recovered: true"],
     ["Counterparties", APP_NAV],
     ["Give it a mirror address", "src/components/MirrorAddressControl.tsx"],
-    ["Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.", "src/app/o/[slug]/counterparties/page.tsx"],
+    ["Mirror address: a wallet Vestiarion made for this payee on Arc testnet, in shadow mode.", COUNTERPARTY_DETAILS],
     ["This payee has an address already. A mirror address is for a payee with none.", "src/lib/mirror-address.ts"],
     ["Go live on Arc testnet first: a mirror address is a wallet in this workspace's Circle wallets.", "src/lib/mirror-address.ts"],
     ["A mirror address is for shadow mode. An owner turns it on in Settings.", "src/lib/mirror-address.ts"],
@@ -3637,6 +3686,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Not paid yet. This is the chain so far, read-only: nothing on this page pays, approves or changes anything.", EVIDENCE_PAGE],
     ["Not paid: a person rejected this bill.", EVIDENCE_PAGE],
     ["Download evidence", EVIDENCE_PAGE],
+    // The payee's name opens their page (counterparty page CL15).
+    ["Payee", EVIDENCE_VIEW, '<dt className="text-ink-3">Payee</dt>'],
     ["How each fact is known", EVIDENCE_VIEW],
     ["Each link reads as its weakest fact, so it is never labelled above what its least-supported fact is.", EVIDENCE_VIEW],
     ["Verified outside", EVIDENCE_CHAIN],
@@ -3703,6 +3754,12 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["An owner of this workspace can change it.", PAYEE_LOCK_PANEL],
     ["Counterparties", APP_NAV],
     ["Confirm address", ADDRESS_CONTROLS],
+    // Receipt state, for every member, on the payee's page (counterparty page CL9).
+    ["Payments", COUNTERPARTY_PAGE, 'title={payee ? "Payments" : "Payments from them"}'],
+    ["Open their page", COUNTERPARTY_ROW],
+    ["Receipt link stopped", COUNTERPARTY_PAGE],
+    ["No receipt shared", COUNTERPARTY_PAGE],
+    ["No receipt: not paid on chain", COUNTERPARTY_PAGE],
     // Opening the pack and choosing a period.
     ["Settings", APP_NAV],
     ["Security", SETTINGS_PAGE],
@@ -4042,6 +4099,12 @@ describe("the first-payment guide's steps", () => {
 
   it("gives the explorer link a settled card opens, as the app builds it", () => {
     expect(guide).toContain(`at \`${txUrl("arc-testnet", "")}\` followed by the hash`);
+  });
+
+  it("says Add billing email opens the billing email on the client's page, where the pay link control points it (counterparty page CL15)", () => {
+    expect(sourceFile(PAY_LINK_CONTROL)).toContain('counterpartyPath(client.id, "billing-email")');
+    expect(guide).toContain("**Add billing email**, which opens the billing email on the [client's page](/docs/guides/pay-a-contractor#one-page-for-each-contractor)");
+    expect(guide).not.toContain("opens the client's row on **Counterparties**");
   });
 });
 

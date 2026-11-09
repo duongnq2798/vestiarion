@@ -98,6 +98,13 @@ describe("a payable's chain, as the page draws it", () => {
     expect(text(markup)).toContain("October design retainer Payee Northstar Studio Amount 12.50 USDC Status Paid Record A bill on Bills & receivables");
     expect(markup).toContain('href="/o/northstar/invoices"');
   });
+
+  it("CL15: links the payee's name to their page only when it is given one", () => {
+    expect(markup).not.toContain("/counterparties/");
+    const linked = renderToStaticMarkup(<EvidenceChainView chain={PAID} orgSlug="northstar" publicKeys={{}} payeeHref={`/o/northstar/counterparties/${CP}`} />);
+    expect(linked).toMatch(new RegExp(`<a [^>]*href="/o/northstar/counterparties/${CP}"[^>]*>Northstar Studio</a>`));
+    expect(text(linked)).toContain("Payee Northstar Studio Amount 12.50 USDC");
+  });
 });
 
 describe("what the record says it paid", () => {
@@ -228,7 +235,7 @@ describe("who can see this (E10)", () => {
 
 describe("the page", () => {
   const params = (kind: string, id: string) => ({ params: Promise.resolve({ slug: "northstar", kind, id }) });
-  const read = (chain: EvidenceChain, receipt: EvidenceRead["receipt"] = { state: "shared" }): EvidenceRead => ({ chain, publicKeys: {}, receipt });
+  const read = (chain: EvidenceChain, receipt: EvidenceRead["receipt"] = { state: "shared" }): EvidenceRead => ({ chain, publicKeys: {}, receipt, counterpartyId: null });
   const page = async (kind = "invoice", id = INVOICE) => renderToStaticMarkup(await EvidencePage(params(kind, id)));
 
   beforeEach(() => {
@@ -284,6 +291,13 @@ describe("the page", () => {
     const markup = await page();
     expect(text(markup)).toContain("October design retainer: 12.25 USDC to Northstar Studio, for a 12.50 USDC bill less its early-payment discount.");
     expect(text(markup)).not.toContain("in a simulation");
+  });
+
+  it("CL15: links the payee to their page when the record names its counterparty, and not otherwise", async () => {
+    readEvidenceMock.mockResolvedValue({ ...read(PAID), counterpartyId: CP });
+    expect(await page()).toMatch(new RegExp(`<a [^>]*href="/o/northstar/counterparties/${CP}"[^>]*>Northstar Studio</a>`));
+    readEvidenceMock.mockResolvedValue(read(PAID));
+    expect(await page()).not.toContain("/o/northstar/counterparties/");
   });
 
   it("says a rejected bill was not paid", async () => {

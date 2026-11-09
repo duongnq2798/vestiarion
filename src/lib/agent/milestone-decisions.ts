@@ -3,6 +3,7 @@ import { currentConfig, currentOrgId } from "../context";
 import { db } from "../dal";
 import { chainModes, getChainProvider } from "../circle";
 import { payeeNotReady } from "../counterparty-address";
+import { counterpartyPath, type CounterpartySection } from "../counterparty-paths";
 import { firstPaymentCheck, loadNewPayeeFacts, newPayeeCheckFor } from "../new-payee-facts";
 import { firstPaymentRefusal, membersLeftOut, newPayeeSelfMessage, type NewPayeeCheck } from "../new-payee";
 import { appendLedgerEntryBestEffort } from "../ledger-best-effort";
@@ -171,6 +172,8 @@ export interface HeldFacts {
   amount: number;
   agentReasoning: string | null;
   contractor: {
+    /** Their counterparty id: with it, a hold about them links the part of their page that settles it (CL15). */
+    id?: string;
     name: string;
     riskLevel: string;
     riskNotes: string | null;
@@ -189,6 +192,14 @@ export interface HeldFacts {
 }
 
 const COUNTERPARTIES = { label: "Counterparties", path: "/counterparties" };
+
+/**
+ * Where a hold about the contractor is settled (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15): the
+ * part of their page that settles it, when the facts name them; the Counterparties list when they do not.
+ */
+function contractorLink(id: string | undefined, section: CounterpartySection): { label: string; path: string } {
+  return id ? { label: "Counterparty", path: counterpartyPath(id, section) } : COUNTERPARTIES;
+}
 
 const HINTS: Record<HeldReasonKind, string> = {
   in_flight: "Transfer to record",
@@ -220,7 +231,14 @@ export function heldReason(facts: HeldFacts): HeldReason {
 function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
   const { contractor, intent } = facts;
   const name = contractor.name;
-  const blocked = (kind: HeldReasonKind, text: string): Omit<HeldReason, "hint"> => ({ kind, text, link: COUNTERPARTIES, canPay: false, canClose: true, override: false });
+  const blocked = (kind: HeldReasonKind, text: string, section: CounterpartySection): Omit<HeldReason, "hint"> => ({
+    kind,
+    text,
+    link: contractorLink(contractor.id, section),
+    canPay: false,
+    canClose: true,
+    override: false,
+  });
 
   // A transfer that went out, or may still: recorded, never sent twice, and never closed over.
   if (intent?.status === "confirmed") {
@@ -251,14 +269,14 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
 
   // What the agent's release enforces, and Pay now with it.
   if (contractor.riskLevel === "high") {
-    return blocked("high_risk", `${name} is screened high risk, so it is not paid. Review the match on Counterparties: once the screening changes, the agent decides it again.`);
+    return blocked("high_risk", `${name} is screened high risk, so it is not paid. Review the match on Counterparties: once the screening changes, the agent decides it again.`, "screening");
   }
   // Screening could not give a verdict yet (unscreened hold R4, R5): the agent waits for one; a person may pay it now.
   if (contractor.riskLevel === "unscreened") {
     return {
       kind: "unscreened",
       text: `${name} has not been screened yet, so the agent pays it nothing. Screening runs again at every cycle; once it gives a verdict, the agent decides this milestone again. Pay now pays it anyway.`,
-      link: COUNTERPARTIES,
+      link: contractorLink(contractor.id, "screening"),
       canPay: true,
       canClose: true,
       override: true,
@@ -269,13 +287,14 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
     return cut
       ? blocked(
           "screening_limit",
-          `A screening match lowered ${name}'s limit to ${usdc(contractor.paymentLimit)}, below this milestone's ${usdc(facts.amount)}. Review the match on Counterparties: once the limit changes, the agent decides it again.`
+          `A screening match lowered ${name}'s limit to ${usdc(contractor.paymentLimit)}, below this milestone's ${usdc(facts.amount)}. Review the match on Counterparties: once the limit changes, the agent decides it again.`,
+          "screening"
         )
-      : blocked("above_limit", `${usdc(facts.amount)} is above ${name}'s limit of ${usdc(contractor.paymentLimit)}. Raise the limit on Counterparties, and the agent decides it again.`);
+      : blocked("above_limit", `${usdc(facts.amount)} is above ${name}'s limit of ${usdc(contractor.paymentLimit)}. Raise the limit on Counterparties, and the agent decides it again.`, "limit");
   }
   const waiting = payeeNotReady({ address: contractor.address, address_changed_at: contractor.addressChangedAt, address_confirmed_at: contractor.addressConfirmedAt }, facts.live);
-  if (waiting === "unconfirmed") return blocked("address_unconfirmed", `${name}'s address changed and no one has confirmed it. Confirm it on Counterparties.`);
-  if (waiting === "no_address") return blocked("no_address", `${name} has no address to pay yet. Add it on Counterparties.`);
+  if (waiting === "unconfirmed") return blocked("address_unconfirmed", `${name}'s address changed and no one has confirmed it. Confirm it on Counterparties.`, "address");
+  if (waiting === "no_address") return blocked("no_address", `${name} has no address to pay yet. Add it on Counterparties.`, "address");
 
   const detail = facts.lastEntry?.detail ?? {};
   const execution = (detail.execution ?? {}) as Record<string, unknown>;
@@ -332,7 +351,7 @@ function reasonOf(facts: HeldFacts): Omit<HeldReason, "hint"> {
     return {
       kind: "new_payee",
       text: `This would be the first payment to ${name} at this address, and two different people do not stand behind it yet. Someone other than whoever gave the address, or asked for it with a payee link, pays it now; for an address sent on GitHub, or one no one can be named as having given, one member confirms it on Counterparties and a different one pays it. If you are the only person here who can approve payments, pay it yourself with Pay now. After that, the agent pays ${name} at this address on its own.`,
-      link: COUNTERPARTIES,
+      link: contractorLink(contractor.id, "address"),
       canPay: true,
       canClose: true,
       override: true,
@@ -508,6 +527,7 @@ async function loadMilestone(milestoneId: string, live: boolean): Promise<Loaded
       amount,
       agentReasoning,
       contractor: {
+        id: String(contractor.id),
         name: String(contractor.name),
         riskLevel: String(contractor.risk_level ?? "unscreened"),
         riskNotes: (contractor.risk_notes as string | null) ?? null,

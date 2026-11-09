@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith } from "@/lib/context";
 import { db } from "@/lib/dal";
-import { INTENT_COLUMNS, readInvoicePayments, readPaymentsInFlight } from "@/lib/settlement-read";
+import { INTENT_COLUMNS, readIntentsFor, readInvoicePayments, readPaymentsInFlight } from "@/lib/settlement-read";
 import type { IntentRecord } from "@/lib/settlement-facts";
 import { carriesOrg, fakeSupabase, orgTestContext, type RecordedRequest } from "./support/fake-supabase";
 
@@ -104,5 +104,47 @@ describe("readPaymentsInFlight", () => {
     const fake = fakeSupabase(() => ({ body: [] }));
     await runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), () => readPaymentsInFlight(db(), []));
     expect(fake.requests.map((request) => request.params.get("status"))).toEqual(["neq.confirmed"]);
+  });
+});
+
+describe("readIntentsFor (counterparty page CL9, CL13)", () => {
+  const run = <T>(fake: ReturnType<typeof fakeSupabase>, fn: () => Promise<T>) => runWith(orgTestContext({ config, client: fake.client, orgId: ORG }), fn);
+  const asked = (request: RecordedRequest) => (request.params.get("source_id") ?? "").replace(/^in\.\(|\)$/g, "").split(",");
+
+  it("reads one counterparty's intents by the ids of what they pay, each kind on its own, with where each was sent kept apart", async () => {
+    const fake = fakeSupabase((request) =>
+      request.params.get("source_type") === "eq.invoice"
+        ? { body: [{ ...row("inv-1", { status: "confirmed" }), destination: "0xAbC0000000000000000000000000000000000001" }] }
+        : { body: [{ ...row("ms-1", { source_type: "milestone" }), destination: "blindpay:ba_1" }] }
+    );
+    const read = await run(fake, () => readIntentsFor(db(), { invoiceIds: ["inv-1", "inv-1"], milestoneIds: ["ms-1"] }));
+    expect([...read.payments.keys()]).toEqual(["inv-1", "ms-1"]);
+    expect(read.payments.get("inv-1")).toMatchObject({ source_type: "invoice", amount: 12.5, token: "USDC", status: "confirmed" });
+    // The destination is never on the record the lifecycle reads.
+    expect(read.payments.get("inv-1")).not.toHaveProperty("destination");
+    expect(read.destinations).toEqual(new Map([["inv-1", "0xAbC0000000000000000000000000000000000001"], ["ms-1", "blindpay:ba_1"]]));
+    for (const request of fake.requests) {
+      expect(request.params.get("select")).toBe(`${INTENT_COLUMNS},destination`.replaceAll(" ", ""));
+      expect(carriesOrg(request, ORG)).toBe(true);
+    }
+    expect(fake.requests.map((request) => [request.params.get("source_type"), asked(request)])).toEqual([
+      ["eq.invoice", ["inv-1"]],
+      ["eq.milestone", ["ms-1"]],
+    ]);
+  });
+
+  it("names a hundred ids a read at most, and reads nothing for none", async () => {
+    const fake = fakeSupabase(() => ({ body: [] }));
+    const invoices = Array.from({ length: 230 }, (_, index) => `inv-${index}`);
+    await run(fake, () => readIntentsFor(db(), { invoiceIds: invoices, milestoneIds: ["ms-1"] }));
+    expect(fake.requests.map((request) => asked(request).length)).toEqual([100, 100, 30, 1]);
+    const none = fakeSupabase(() => ({ body: [] }));
+    expect(await run(none, () => readIntentsFor(db(), {}))).toEqual({ payments: new Map(), destinations: new Map() });
+    expect(none.requests).toHaveLength(0);
+  });
+
+  it("throws a read that failed, for the page to say the part was not read", async () => {
+    const fake = fakeSupabase(() => ({ status: 500, body: { message: "down" } }));
+    await expect(run(fake, () => readIntentsFor(db(), { invoiceIds: ["inv-1"] }))).rejects.toThrow("down");
   });
 });
