@@ -1,6 +1,6 @@
 # One place for a contractor's links: the counterparty page
 
-Date: 2026-11-09 · Status: approved, not built · Branch: `feat/counterparty-page` (PR A), `feat/counterparty-links-chat` (PR B) · No migration
+Date: 2026-11-09 · Status: PR A (C1 to C7) built, PR B (C8) not built · Branch: `feat/counterparty-page` (PR A), `feat/counterparty-links-chat` (PR B) · No migration
 
 ## Why
 
