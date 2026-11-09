@@ -5,7 +5,7 @@ A task completed in Asana is never by itself a reason to pay, and nothing from A
 ## Before you start
 
 - **An owner or admin** of the workspace connects Asana. Anyone else sees "An owner or admin connects Asana." Linking tasks, writing criteria and accepting work are for whoever verifies milestones by hand: an owner or admin.
-- **A milestone** for the contractor, waiting for verification. [Pay a contractor](/docs/guides/pay-a-contractor) adds one. A milestone verified by a GitHub pull request is not linked to Asana as well.
+- **A milestone** for the contractor, waiting for verification. [Pay a contractor](/docs/guides/pay-a-contractor) adds one. A milestone verified by a GitHub pull request, or linked to a [Linear](/docs/guides/linear) or [Jira](/docs/guides/jira) issue, is not linked to Asana as well.
 - **An Asana task** for the work, in a project the person who connects Asana can see, with the deliverables attached or linked in its description or comments.
 
 ## 1. Connect Asana
@@ -29,7 +29,7 @@ On **Contractors**, open the milestone's row. Under its card, **Accept from Asan
 - Paste the task's link from Asana (its **Copy task link**) and choose **Link the task**. Vestiarion reads the task through Asana with this workspace's connection, never by opening the link.
 - Or choose **Choose the task in Asana instead**, then the workspace, the project and the task, and **Link this task**.
 
-One task verifies one milestone: a task linked to another milestone is refused with "That Asana task is linked to another milestone already: one task verifies one milestone." The ledger records `asana_task_linked`. **Unlink the task** takes the link off, and takes back an acceptance the agent has not paid (`asana_task_unlinked`).
+One task verifies one milestone: a task linked to another milestone is refused with "That Asana task is linked to another milestone already: one task verifies one milestone." One work tool verifies a milestone, too: a milestone linked to a Linear issue is refused with "This milestone is linked to a Linear issue. Unlink the issue first to accept the work from Asana.", and one linked to a Jira issue with "This milestone is linked to a Jira issue. Unlink the issue first to accept the work from Asana." The ledger records `asana_task_linked`. **Unlink the task** takes the link off, and takes back an acceptance the agent has not paid (`asana_task_unlinked`).
 
 ## 3. Write the acceptance criteria
 

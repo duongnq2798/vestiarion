@@ -67,7 +67,7 @@ describe("/security", () => {
 
   it("renders its heading, the date it was last updated, the site header and the compact footer", () => {
     expect(markup).toMatch(/<h1[^>]*>Security<\/h1>/);
-    expect(body).toContain("Last updated 2026-10-28");
+    expect(body).toContain("Last updated 2026-11-09");
     expect(markup).toMatch(/<header[^>]*class="sticky top-0/);
     for (const href of ["/terms", "/privacy", "/security"]) expect(markup).toContain(`href="${href}"`);
   });
@@ -409,6 +409,18 @@ describe("the figures and settings it quotes, as the code has them", () => {
     expect(webhooks).toContain("at most 5 active endpoints");
     expect(source("src/lib/webhooks/sign.ts")).toContain("Vestiarion-Signature");
     expect(source("src/lib/circle/notifications.ts")).toContain("ECDSA P-256");
+  });
+
+  it("webhooks: Jira's token, held to the algorithms and the leeway the route checks (Jira acceptance JR15)", () => {
+    const webhooks = section("webhooks");
+    expect(webhooks).toContain("a JSON Web Token in the Authorization header, signed with the app's client secret, checked before the body is read");
+    expect(webhooks).toContain("only HS256, HS384 or HS512, compared in constant time, its expiry at most 300 seconds past and its start at most 300 seconds ahead");
+    const route = source("src/lib/jira/webhook.ts");
+    expect(route).toContain('const HMAC = { HS256: "sha256", HS384: "sha384", HS512: "sha512" } as const;');
+    expect(route).toContain("export const EXP_LEEWAY_S = 300;");
+    // Jira's disconnect revokes nothing at Atlassian, which has no way for an app to end its own access.
+    expect(section("connectors")).toContain("disconnecting Jira deletes its webhook on the site and then the tokens, revokes nothing at Atlassian");
+    expect(source("src/app/actions/jira.ts")).toContain("revoke: async () => false");
   });
 
   it("the starting figures of a workspace on Arc mainnet, held even when its limit is missing", () => {

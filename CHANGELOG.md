@@ -14,6 +14,28 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Added
 
+- **Accept contractor work from Jira**,
+  [Accept contractor work from Jira](https://www.vestiarion.xyz/docs/guides/jira): an owner or admin connects one Jira
+  Cloud site in Settings, after agreeing to what Vestiarion reads there. On Contractors, a milestone is linked to the
+  Jira issue its work is delivered in, by pasting the issue's link or its key (such as `ENG-123`), and holds the
+  acceptance criteria from the agreement, written in Vestiarion. When the issue is done in Jira and not resolved as Won't
+  Do, Duplicate or the like, the milestone is **ready for acceptance**: a person checks the deliverables (the issue's
+  attachments and web links, and the links in its description and newest 50 comments) against the criteria and accepts
+  the work, and only then is it verified and decided by the agent under every guardrail. Anyone on a Jira site can move
+  an issue to Done, so a done issue alone never pays; a done issue without criteria, or one resolved as not done, is
+  held; an acceptance by the payee is refused, matched by email, and by Atlassian account where Jira finds one for the
+  payee's email; and Pay now by the payee is refused, matched by email. If the issue is reopened, resolved as not done
+  or deleted, or its deliverables change, after acceptance and Vestiarion reads that before the payment is sent, the
+  acceptance is taken back and the milestone is held for review; unlinking the issue takes it back by hand. Vestiarion
+  writes nothing to Jira but one webhook on the site, for the projects of the linked issues, which only has an issue
+  read again, as do the agent's cycle, the read right before sending and a check every 15 minutes; it keeps no
+  Atlassian account ID, name or email. The Jira card names the site, says whether Jira's notices arrive, and counts
+  acceptances, disputes and the time from acceptance to the agent's decision. One work tool verifies a milestone: Asana,
+  Linear and Jira each refuse a milestone linked in another. Atlassian gives apps no way to end their own access, so
+  disconnecting deletes the webhook and the tokens, and says to remove Vestiarion from Connected apps in the Atlassian
+  account. An evidence link to an issue on the connected site is checked through Jira. Jira's logo is not shown: its
+  card uses the icon for work tools. Needs `JIRA_CLIENT_ID` and `JIRA_CLIENT_SECRET`, and migration `0149`; until it
+  runs, the Jira card says Jira is not set up yet. SDK 0.4.3 accepts `jira` as a milestone's verification method.
 - **The agent's track record, for your accountant to confirm**,
   [Confirm the agent's track record](https://www.vestiarion.xyz/docs/guides/accountants#confirm-the-agent-s-track-record):
   every verdict you gave on a real bill, with the decision it judged and the signed entries both rest on, how often you

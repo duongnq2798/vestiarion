@@ -138,8 +138,8 @@ A production build enforces the policy as `Content-Security-Policy`, but for `fo
 - `connect-src` names Circle's Iris and modular wallets client, which the browser calls, Google Analytics, and the
   deployment's Supabase, where a vendor's browser puts the document a request asked for (document requests ER5).
 - `img-src` names Product Hunt's badge in the site footer.
-- `form-action` names every connect form's consent screen (each Zoho data center's), Google sign-in and the
-  deployment's Supabase, since Chrome checks a form submission's redirects too.
+- `form-action` names every connect form's consent screen (each Zoho data center's), Atlassian's sign-in, which Jira's
+  consent screen may send a signed-out person to first, Google sign-in and the deployment's Supabase, since Chrome checks a form submission's redirects too.
 - A Vercel preview also allows Vercel's toolbar.
 - `tests/csp.test.ts` holds each origin to the code that reaches it, and fails on a connect route whose consent screen
   is not named.
@@ -205,7 +205,7 @@ for adding, testing and removing a workspace's own webhook endpoints — `owner`
 every other member sees the endpoint list with each URL reduced to its host — see
 [Webhooks security](https://www.vestiarion.xyz/docs/webhooks/security#who-sees-what)), and `integrations.manage` (`src/app/actions/slack.ts`,
 `/api/slack/install`, `src/app/actions/github.ts` and `/api/github/install`, `src/app/actions/xero.ts` and
-`/api/integrations/xero/*`, `src/app/actions/asana.ts` and `/api/integrations/asana/*`, `src/app/actions/linear.ts` and `/api/integrations/linear/*`, and `src/app/actions/discord.ts`, for connecting and removing the workspace's Slack, GitHub, Xero, Asana, Linear and Discord — `owner` and `admin` hold it; the
+`/api/integrations/xero/*`, `src/app/actions/asana.ts` and `/api/integrations/asana/*`, `src/app/actions/linear.ts` and `/api/integrations/linear/*`, `src/app/actions/jira.ts` and `/api/integrations/jira/*`, and `src/app/actions/discord.ts`, for connecting and removing the workspace's Slack, GitHub, Xero, Asana, Linear, Jira and Discord — `owner` and `admin` hold it; the
 limit on deciding payments from Slack takes `org.administer`, an owner's). The remaining permissions — `workspace.read` (beyond
 the leaving case above) and `org.administer` — and `canAssignRole`'s rule that an admin may grant
 `approver`, `accountant` or `viewer` but nothing at its own rank or above while only an owner assigns `admin` or
@@ -3719,7 +3719,7 @@ Intuit app; `QUICKBOOKS_ENVIRONMENT` picks sandbox or production companies), Zoh
 otherwise its card and routes are not there. The Settings card (`AccountingPanel`), the review list (`AccountingBillsReview`), the
 account picker, the launch and connect pages and the server actions (`src/app/actions/accounting.ts`) are one set, given
 the provider. The core's providers are `xero`, `quickbooks` and `zohobooks` (kind `accounting`), `hubspot`, `pipedrive`
-and `zohocrm` (`crm`, below), `asana` and `linear` (`work`), `googlesheets` (`export`: it brings nothing in, and writes close
+and `zohocrm` (`crm`, below), `asana`, `linear` and `jira` (`work`), `googlesheets` (`export`: it brings nothing in, and writes close
 packs out; see "Google Sheets: the close pack exported") and `googledrive` (`intake`: the files added to one folder, read
 into the review list; see "Google Drive: bills dropped into a folder").
 
@@ -3754,7 +3754,7 @@ into the review list; see "Google Drive: bills dropped into a folder").
 - **Disconnecting from Settings** (docs/superpowers/specs/2026-10-27-disconnect-confirmation-design.md). A disconnect
   action revalidates the page before it answers, and the card it leaves no longer draws the Disconnect button, so the
   answer and the page without the button land in one render. The Disconnect forms of `AccountingPanel`,
-  `HubSpotPanel`, `PipedrivePanel`, `ZohoCrmPanel`, `AsanaPanel` and `LinearPanel`, and likewise `SlackPanel`'s Disconnect my account
+  `HubSpotPanel`, `PipedrivePanel`, `ZohoCrmPanel`, `AsanaPanel`, `LinearPanel` and `JiraPanel`, and likewise `SlackPanel`'s Disconnect my account
   and Remove Slack and the per-row Disconnect of `GitHubPanel` and `ChromeExtensionPanel`, pass their action through
   `withSuccessToast`, which raises the toast as the action answers, not `useActionForm`'s `toastOnSuccess`, whose
   effect would run in the button that is gone (DC1, DC2). A refusal answers before anything is revalidated and stays
@@ -4223,7 +4223,8 @@ exclusive. Consent `asana-2026-10-14`.
   unlinking, a paid or closed milestone, and disconnecting delete them.
 - **Commands** (`src/lib/commands/asana.ts`, `records.write`, the console only): `milestone.link_task` (a pasted link
   read for its ids by `taskRefOf`, never opened; or the picker's workspace, project and task, read live through
-  `asanaChoicesAction`), `milestone.set_criteria`, `milestone.accept` (the checkbox, the fingerprint and the criteria's
+  `asanaChoicesAction`; refused on a milestone linked to a Linear or Jira issue, since one work tool verifies a
+  milestone), `milestone.set_criteria`, `milestone.accept` (the checkbox, the fingerprint and the criteria's
   hash the page showed, a fresh read, then the self-acceptance check, then `accept_asana_task`, then
   `milestone_accepted` and a cycle soon), `milestone.unlink_task` and `milestone.check_task`. Self-acceptance
   (`selfAcceptance`, `identities.ts`): the member's email against the payee's notice email, and, where Asana has them,
@@ -4277,7 +4278,7 @@ Linear; there is no webhook to delete.
   `hold_linear_acceptance`. The ledger entries are Linear's own (`linear_issue_linked`, `linear_issue_unlinked`,
   `linear_issue_ready`, `linear_work_accepted`, `linear_acceptance_withdrawn`), so Asana's card counts none of them;
   `milestone_criteria_set` is shared. Reads run where Asana's do, with its budgets: `refreshAcceptedWork` and
-  `recheckAcceptedWork` read both tools at once and report Linear under `linear`, the sweeper reads the live links of open
+  `recheckAcceptedWork` read every work tool at once and report Linear under `linear` (and Jira under `jira`), the sweeper reads the live links of open
   milestones every 15 minutes, **Check Linear now** and **Check linked issues now** read at once, and an acceptance
   reads first. `tests/linear-paying-path.test.ts` pins, as Asana's, that the paying path reaches Linear only there.
 - **Webhooks** (`webhook.ts`, `POST /api/integrations/linear/webhook`): Linear makes the app's webhook for every Linear
@@ -4288,7 +4289,7 @@ Linear; there is no webhook to delete.
   believed. An `OAuthApp` revoked delivery marks those connections to reconnect.
 - **Commands** (`src/lib/commands/linear.ts`, `records.write`, the console only): `milestone.link_issue` (a pasted link
   or identifier read by `issueRefOf`, never opened; the issue read once; refused on a milestone verified by a pull
-  request or linked to Asana, and for a link whose workspace key is not the issue's own), `milestone.set_issue_criteria`
+  request or linked to Asana or Jira, and for a link whose workspace key is not the issue's own), `milestone.set_issue_criteria`
   (`setLinearAcceptanceCriteria`, which knows Linear's links), `milestone.accept_issue`, `milestone.unlink_issue` and
   `milestone.check_issue`. Self-acceptance (`identities.ts`, LN9), as Asana's A9: the member's email against the payee's
   notice email, and the Linear user with the payee's notice email, looked up across the Linear workspace whoever is on
@@ -4301,10 +4302,11 @@ Linear; there is no webhook to delete.
   the linked issues by state and the last 30 days' figures. Contractors: `LinearIssueCard` under each milestone waiting
   for verification or linked, which links by an issue's link or identifier (no picker), takes the criteria and offers
   Accept the work; ready and held links count under **Needs you**. `workToolCards` (`src/lib/work-tool-cards.ts`) picks
-  the cards: a linked card always shows, an open milestone linked in one tool offers none for the other (Asana's link
-  does not refuse a Linear-linked milestone, so its card is not offered there), and an unlinked milestone offers a
-  tool's card where that tool is connected or the other one is not; where both offer to link it, Asana's card alone
-  asks for the criteria (`linearCriteria`); without Linear, Asana's card is as before. The evidence page:
+  the cards: a linked card always shows, an open milestone linked in one tool offers none for the others (each tool's link
+  refuses a milestone linked in another, Asana's too since Jira's), and an unlinked milestone offers a tool's card
+  where that tool is connected or no other one is; where several offer to link it, the first that asks for the
+  criteria does (Asana's, connected, then Linear's: `linearCriteria`, `jiraCriteria`); without Linear, Asana's card is
+  as before. The evidence page:
   `deliveredFromLinear`, Linear's word that the issue was done beside the person's acceptance, its link checked through
   Linear's API (`linear_issue` in the evidence links' allow-list), and taken as checked only when the issue Linear
   answers is in the Linear workspace the link names, since Linear finds an identifier in the connection's own.
@@ -4312,6 +4314,87 @@ Linear; there is no webhook to delete.
   draws the card and the states with sample data (`src/app/docs-shots/linear-fixture.ts`).
 - **Before migration 0147**, reads answer not set up: the Settings card says so, Contractors shows no Linear controls,
   the cycle and the sweeper read nothing, and the connect flow sends no one to Linear.
+
+## Contractor work accepted from Jira
+
+A milestone's work can be delivered in a Jira Cloud issue and accepted against its criteria, as Linear's above
+(docs/superpowers/specs/2026-11-09-jira-acceptance-design.md, JR1 to JR22). Jira is a third `work` provider on the
+connector core: `src/lib/jira/` mirrors `src/lib/linear/`, and imports what names no tool rather than copying it
+(`planRead`, `acceptable`, `storedBytes`, `writeCriteria` and `criteriaHash` from `src/lib/linear/`; the deliverables'
+fingerprint and link reading from `asana/deliverables.ts`). It is on only with `JIRA_CLIENT_ID` and `JIRA_CLIENT_SECRET`
+(`settings.ts`), set for Production only since the app has one callback URL; without both there is no card and no
+control, and every `/api/integrations/jira/*` route answers 404. Every API request goes to `api.atlassian.com`, naming
+the site by its cloudId (`/ex/jira/<cloudId>/rest/api/3/...`), and a person goes to `auth.atlassian.com` only to
+authorize (`http.ts`): OAuth 2.0 (3LO) with the classic scopes `read:jira-work`, `read:jira-user`, `manage:jira-webhook`
+and `offline_access`, and `prompt=consent` (`oauth.ts`); Atlassian disables each refresh token once it is used, so a
+refresh happens only under the token row's lease (`session.ts`). A grant may reach several sites: the connect page
+offers those with Jira scopes, and one is connected, its cloudId and name kept as the external organisation. Consent
+`jira-2026-11-09`. Atlassian has no revoke endpoint for apps, so Disconnect deletes the webhook and the tokens, signs
+`accounting_disconnected` with `revokedAtProvider: false`, and says to remove the app under Connected apps.
+
+- **Schema (migration `0149`).** The provider checks take `jira`, keeping every value 0148 lists, and
+  `milestones.verification_method` takes `jira`. `jira_issue_links` is a tenant table as `linear_issue_links` (RLS, the
+  restrictive guard, composite foreign keys; read, insert and update, never delete): one live link per milestone and
+  per issue on a site, the site's cloudId, the issue's numeric id (which survives a move), key, project and link, its
+  status category, status and resolution as last read, the deliverables and their fingerprint, and the link's state
+  and the version accepted. `jira_sites` is a platform table only the service role reaches, as `asana_webhooks` is,
+  since a delivery names webhook ids and no workspace: for each connection, the site's cloudId and address, its webhook
+  ids and their expiry, when a delivery last came and what the last upkeep said (`sites.ts`, the one module that reads
+  or writes it). `accept_jira_issue` and `hold_jira_acceptance` are Linear's two moves for Jira; `jira_connector_ready`
+  is the probe the connect flow asks first. `tests/jira-migration.test.ts` runs it in PGlite.
+- **No person data.** No issue's assignee, reporter or other user field is asked for (`api.ts` names the fields it
+  reads), and no ledger detail or row carries an Atlassian account ID, name or email. The payee check (`identities.ts`)
+  asks, at acceptance only, `/myself` and the user search by the payee's and the member's emails, compares the account
+  ids in memory and keeps neither; an account whose email Jira hides counts as the payee's, so it refuses rather than
+  lets the payee accept.
+- **Reads** (`reads.ts`, `acceptance.ts`): an issue is read at one of two depths. A link last read as done, ready or
+  accepted is read in full (its status, resolution, attachments, 50 web links, and the links in its description and its
+  newest 50 comments); any other is read for its status first, one request, and in full in the same call only when that
+  says done and not resolved as canceled (`CANCELED_RESOLUTIONS`, `map.ts`). Done is the status category's key `done`,
+  never a status name, and a done issue resolved as Won't Do, Duplicate or the like is `held` (`canceled`). The ledger
+  entries are Jira's own (`jira_issue_linked`, `jira_issue_unlinked`, `jira_issue_ready`, `jira_work_accepted`,
+  `jira_acceptance_withdrawn`); `milestone_criteria_set` is shared. Reads run where Linear's do: the cycle before the
+  contractor stage and right before sending (`refreshAcceptedWork` and `recheckAcceptedWork`, under `jira`), the sweeper
+  every 15 minutes, **Check Jira now** and **Check linked issues now**, and an acceptance, which reads in full.
+  `tests/jira-paying-path.test.ts` pins that the paying path reaches Jira only there.
+- **The sweep and the rate limit** (`workspace.ts`). Atlassian's pool is one for every tenant of the app, so a sweep asks
+  one search per 50 linked issues for when each last changed, then reads those never read or whose last read failed,
+  those that changed, then those past their floor (an accepted link hourly, any other daily, since a web link's edit may
+  not move an issue's `updated`), accepted links first, at most `SWEEP_READS` (20) reads that make a request in a run. A
+  429 that says the shared pool is spent pauses every Jira call of the process until it refills (`http.ts`).
+- **The webhook and its upkeep** (`webhooks.ts`). Each connection keeps one dynamic webhook on its site, made with the
+  connecting person's token, for issue updates, deletions and comments in the projects of the open links (a JQL filter
+  of project ids), and only where the origin is https. The upkeep, daily and also the connection's keep-alive, makes it
+  when there are links, renews it within 7 days of Jira's 30-day end, changes its filter as the links do, deletes the
+  app's orphan webhooks on the site, and says on the card when Jira refused one or no longer shows the site. The
+  connect flow's first upkeep runs once the answer is sent (`connect-deps.ts`, `jiraConnectDeps`): the site row saved,
+  orphans deleted, and no issue read. Upkeep is housekeeping, not in the ledger.
+- **Deliveries** (`webhook.ts`, `POST /api/integrations/jira/webhook`). `Authorization: Bearer <JWT>` is checked before
+  the body is read: `alg` HS256, HS384 or HS512 only, under the client secret, compared in constant time, an `exp` at
+  most 300 seconds past and an `nbf` at most 300 seconds ahead; any failure answers 401. A signed delivery answers 200 at
+  once and, after the answer, finds the rows of the webhooks it matched in `jira_sites`, takes from it only the issue's
+  numeric id, its `self` address (to tell sites apart) and when Jira sent it, and reads that issue again in each such
+  workspace where it is linked. There is no time window: Jira retries 5 to 15 minutes later, so a delivery of any age is
+  taken, and a read that started at least 5 seconds after the delivery was sent is not made again. A change the
+  15-minute check finds that no delivery told of is noted, and the card says Jira's notices are not reaching Vestiarion.
+- **Commands** (`src/lib/commands/jira.ts`, `records.write`, the console only): `milestone.link_issue`,
+  `milestone.set_issue_criteria`, `milestone.accept_issue`, `milestone.unlink_issue` and `milestone.check_issue`, the five
+  commands Linear's use, which now cover both tools. A pasted link or key is read by `issueRefOf` (`urls.ts`:
+  `/browse/KEY`, `/issues/KEY`, `selectedIssue=` or a bare key), never opened, and refused when its host is not the
+  connected site's; one issue verifies one milestone; a milestone linked to an Asana task or a Linear issue is refused,
+  and Asana's and Linear's links refuse one linked to Jira. Pay now refuses the payee by email (`approvesOwnJiraPayout`);
+  Verify manually is refused on a linked milestone, and Revoke manually on one accepted from Jira.
+- **Where it shows.** Settings: `JiraPanel`, with the work-tool icon (`UNMARKED_PROVIDERS` lists `jira`; no Atlassian
+  logo ships), the site, the linked issues by state, whether Jira's notices arrive, and the last 30 days' figures.
+  Contractors: `JiraIssueCard`, picked by `workToolCards` as above, asking for the criteria only where no earlier card
+  does (`jiraCriteria`). The evidence page: `deliveredFromJira`, Jira's word that the issue was done, with its status and
+  resolution, beside the person's acceptance. An evidence link to an issue on the connected site is checked through
+  Atlassian's API (`jira_issue`, see "Evidence links people can open"). The accountant console's Work to accept lists
+  Jira's ready and held links. `/integrations/jira` and `/integrations/jira/connect` (which offers the sites to choose
+  from) are Linear's pages for Jira; `/docs-shots/jira/<state>` draws the card and its states with sample data
+  (`src/app/docs-shots/jira-fixture.ts`).
+- **Before migration 0149**, reads answer not set up: the Settings card says so, Contractors shows no Jira controls,
+  the cycle and the sweeper read nothing, and the connect flow sends no one to Atlassian.
 
 ## API
 
@@ -5043,11 +5126,13 @@ as a short checklist, ticked from what happened, rendered by one component (`Get
 `docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md` (E1 to E4); `src/lib/evidence-links/`.
 
 - **The allow-list** (`allow-list.ts`, pure). `checkTargetOf` takes a pull request or a comment on `github.com`, an
-  Asana task or attachment on `app.asana.com`, a Linear issue on `linear.app`, and a signed link (`/storage/v1/object/sign/...?token=`) to the
+  Asana task or attachment on `app.asana.com`, a Linear issue on `linear.app`, an issue's own page (`/browse/<KEY>`) on
+  the Jira site the workspace connected (`jiraSite`; any other Atlassian site is not checked), and a signed link (`/storage/v1/object/sign/...?token=`) to the
   workspace's own Supabase (`storageHostOf`, https and a public name only), and builds the request address itself:
   GitHub's API from the link's owner, repository and number; Asana's `/api/1.0/tasks/<id>` or `/api/1.0/attachments/<id>`
   from the id alone; Linear's GraphQL API, `api.linear.app/graphql`, with a query for the issue built from its identifier
-  alone and sent as a POST. Anything
+  alone and sent as a POST; Atlassian's API, `api.atlassian.com/ex/jira/<cloudId>/rest/api/3/issue/<KEY>?fields=summary`,
+  from the connected site's cloudId and the issue's key alone, never the page the person typed. Anything
   else is `notChecked` with its reason: another scheme, credentials, a port, an IP literal in any notation, a local name,
   another host, another path. `requestAllowed` checks every address again before a request, a redirect's included.
 - **The check** (`check.ts`). `checkEvidenceLinks(hrefs)` answers `open` (public, or a private repository the
@@ -5056,7 +5141,9 @@ as a short checklist, ticked from what happened, rendered by one component (`Get
   address is public (`isPublicAddress`, as webhooks use it); `redirect: "manual"`, five seconds, at most one redirect and
   only GitHub's API to itself; at most 25 links a call. Asana is asked with the workspace's own Asana connection's token
   alone, sent to Asana's API only, and without one an Asana link is not checked; Linear likewise, with the workspace's
-  own Linear connection's token, sent to Linear's API only. GitHub is asked with the workspace's own connection
+  own Linear connection's token, sent to Linear's API only; Jira likewise, with the workspace's own Jira connection's
+  token, sent to Atlassian's API only, only the answer's status read, and nothing asked while Atlassian's shared rate
+  limit is spent. GitHub is asked with the workspace's own connection
   (`pullRequestTokens`), else the deployment's `GITHUB_TOKEN`, sent to `api.github.com` only; a private repository seen
   only through the deployment's token, or a 403 to that token, answers as not public, as a deleted one does, after as
   many requests (a comment's repository is asked first) and kept as long. A signed link's expiry is read from
@@ -5107,7 +5194,7 @@ Each part of a workspace is read on its own, and one that fails is named on its 
 | `verdict` | the same payables, `held` only, as `verdictGate` and the Approvals card hold a bill for a verdict only then: those `verdictHolds` answers `waiting` (shadow mode S4), asked once for the workspace's held bills, in place of their decision item; each is a payment the agent decided to pay (`awaitsVerdict`), so it says so, and that agreeing pays it, never the held words; past its decide-by day a bill stays `past_decide_by` and says it also waits; one in `disagreed` stays `decision` and says to return or reject it | as the decision item would | Approvals at the bill | `approval.decide`, as `giveVerdictAction` checks |
 | `cosign` | the same payables, for an accountant while `accountant_cosigns` is on: those `readCosignStates` answers `can_cosign`, in place of their decision item | as the decision item would | Approvals at the bill | `approval.cosign` |
 | `confirm_address` | `counterparties` with `address_changed_at` set (newest first, at most 200), kept where `addressUnconfirmed`; frozen ones from `readFrozenPayees` | `address_changed_at` | Counterparties at the payee | `approval.decide`; an accountant's `approval.cosign` while co-signing is on; a frozen payee `records.write`, who unfreezes it; under the payee lock, not whoever gave the address (`loadNewPayeeFacts`, `addressGiver`) while `billApproversBesides` counts someone else, as `giver_confirms` refuses |
-| `accept_work` | `asana_task_links` and `linear_issue_links` live (`unlinked_at` null), `ready` or `held`, not `after_payment` (at most 200 each), each only on a deployment where Contractors shows that tool's card (`asanaSettingsFromEnv`, `linearSettingsFromEnv`), then their `milestones` still `pending`, by id in chunks of 100; held words from each tool's `stateWords`; a missing table (before `0115` or `0147`, `isAsanaNotSetUp`, `isLinearNotSetUp`) adds nothing and names nothing | `completed_at`, or `held_at` | Contractors | `records.write`, as `milestone.accept` and `milestone.accept_issue` check; a `held` link, which `acceptable` may refuse as it stands, says "You can review it" |
+| `accept_work` | `asana_task_links`, `linear_issue_links` and `jira_issue_links` live (`unlinked_at` null), `ready` or `held`, not `after_payment` (at most 200 each), each only on a deployment where Contractors shows that tool's card (`asanaSettingsFromEnv`, `linearSettingsFromEnv`, `jiraSettingsFromEnv`), then their `milestones` still `pending`, by id in chunks of 100; held words from each tool's `stateWords`, Jira's with the resolution last read; a missing table (before `0115`, `0147` or `0149`, `isAsanaNotSetUp`, `isLinearNotSetUp`, `isJiraNotSetUp`) adds nothing and names nothing | `completed_at`, or `held_at` | Contractors | `records.write`, as `milestone.accept` and `milestone.accept_issue` check; a `held` link, which `acceptable` may refuse as it stands, says "You can review it" |
 | `to_review` | `inbox_emails` in the review list's own window, `STILL_TO_DECIDE`, newest first, `TO_DECIDE_LIMIT` (50), as `inboxEmailsToDecide` reads it, kept where `ready`, `needs_details` or `unreadable`, only on a deployment where the Bills page lists them (`inboxSettingsFromEnv`, `googleDriveSettingsFromEnv`), the read's names and amount by JSON path, never the sender, subject or memo (retried without the Drive columns before `0148`); `invoice_drafts` `sent`, newest first, `REVIEW_LIMIT` (50), as `capturedDraftsToReview` reads them, never `raw_text` or the payee's note (nothing before `0121`); so an item never opens a list that leaves it out; an email address in a title, reason or folder name masked (`maskEmail`) | `received_at`; a draft's `sent_at` | the review list (`?review=email`, `?review=captured`) | `records.write`, as `inbox.add`, `inbox.dismiss`, `invoice_draft.confirm` and `invoice_draft.discard` check |
 | `to_book` | `accounting_postings` `draft` or `failed` | `created_at` | the bookings review | `accounting.book`; an accountant only on a connection whose consent is in `ACCOUNTANT_BOOKING_CONSENTS`, as the command checks |
 | `month_close` | last month (`closePackMonth(null, now)`): a `head` count of `payment_intents` confirmed, created or submitted in it, the close pack's own month filter, and one `close_pack_exported` entry whose `detail` names that month as `ended`; listed while the count is above 0 and no such entry exists | the next month's first day | the close pack at that month | `workspace.read`, as `/api/evidence/close-pack` checks: every member |
@@ -5125,7 +5212,7 @@ shadow-mode verdict says it once, in the verdict's words: a `verdict` item while
 someone disagreed; a co-sign read that fails leaves the decision items and names "bills to co-sign". No member list is
 read, and no address is put on an item.
 `verdict`, `to_review`, `accept_work` and `month_close` (`docs/superpowers/specs/2026-11-01-accountant-all-waiting-design.md`
-AW1 to AW7) read only Vestiarion's own tables and ledger, in the same scope: no model, Google, Asana, Linear, accounting
+AW1 to AW7) read only Vestiarion's own tables and ledger, in the same scope: no model, Google, Asana, Linear, Jira, accounting
 tool or Circle is called. Bills brought in from Xero, QuickBooks or Zoho Books, which wait in `accounting_bills`
 (`review_state` review, `source_status` open) from the tool's last sync, are not listed yet. Each is its own part ("invoices to review", "work to accept", "last month's close"); the verdict read, made with the
 bills, leaves them decision items when it fails and names "decisions waiting for a verdict". The KPI is how many items are open in each age bucket (under a day, 1 to 3, 4 to 7,

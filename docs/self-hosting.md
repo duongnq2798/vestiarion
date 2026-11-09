@@ -663,6 +663,23 @@ seconds, and only has the issue read again. Without all three, Linear is off and
 kept encrypted under `VESTIARION_MASTER_KEYS`. See [Accept contractor work from
 Linear](https://www.vestiarion.xyz/docs/guides/linear).
 
+With `JIRA_CLIENT_ID` and `JIRA_CLIENT_SECRET` set, from an Atlassian OAuth 2.0 (3LO) app, an owner or admin connects a
+workspace to one Jira Cloud site from Settings, after agreeing to what Vestiarion does with its data. A person links a
+milestone to the Jira issue its work is delivered in, writes the acceptance criteria from the agreement, and accepts the
+work once the issue is done; an issue marked done alone never verifies a milestone. Create the app in Atlassian's
+developer console, opting into resource-restricted tokens when you create it, so a grant reaches the one site the person
+picks; add the Jira API with the classic scopes `read:jira-work`, `read:jira-user` and `manage:jira-webhook` (the
+authorize URL adds `offline_access`), and register the callback URL `<origin>/api/integrations/jira/callback` exactly.
+There is no webhook secret: each connection makes one webhook on its site, for the projects of its linked issues, at
+`<origin>/api/integrations/jira/webhook` (https only), renews it before Jira ends it after 30 days, and deletes it on
+disconnect; Jira signs each delivery's token with the client secret, and a delivery only has the issue read again. The
+linked issues are read every 15 minutes by the accounting sync either way. An app has one callback URL, so set the two
+variables for one deployment only, such as Production. Without both, Jira is off and `/api/integrations/jira/*` answers
+404. The connection needs migration 0149; before it runs, the Jira card says Jira is not set up yet. Its tokens are kept
+encrypted under `VESTIARION_MASTER_KEYS`. Atlassian gives apps no way to end their own access, so a person ends it under
+Connected apps in their Atlassian account settings. See [Accept contractor work from
+Jira](https://www.vestiarion.xyz/docs/guides/jira).
+
 With `GOOGLE_SHEETS_CLIENT_ID` and `GOOGLE_SHEETS_CLIENT_SECRET` set, from a Google OAuth client of type Web application,
 an owner or admin connects a workspace to one Google account from Settings, after agreeing to what Vestiarion does with
 its Drive, and an owner, admin or accountant exports a month's close pack to a spreadsheet in that Drive from **Monthly
