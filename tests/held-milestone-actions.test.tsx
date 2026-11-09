@@ -56,6 +56,14 @@ describe("HeldMilestoneActions", () => {
     expect(text(markup)).toContain("Close without paying");
   });
 
+  it("CL15: opens the part of the contractor's page that settles it, when the reason names their page", () => {
+    const id = "018f8ce0-1557-7b54-a931-4d777f6bc002";
+    const markup = render({ ...FAILED, kind: "address_unconfirmed", canPay: false, link: { label: "Counterparty", path: `/counterparties/${id}#address` }, text: "Puka Hotel's address changed." });
+    expect(markup).toContain(`href="/o/testnet-2/counterparties/${id}#address"`);
+    expect(text(markup)).toContain("Open Counterparty");
+    expect(text(markup)).not.toContain("Open Counterparties");
+  });
+
   it("keeps Pay now from whoever added the milestone when it overrides the agent's hold", () => {
     const markup = render({ ...FAILED, kind: "agent_held", override: true }, { selfAdded: true });
     expect(markup).toMatch(/<button[^>]*disabled=""[^>]*aria-describedby="pay-held-m-1-blocked"/);

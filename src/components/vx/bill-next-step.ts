@@ -57,6 +57,8 @@ export function billNextStep(decision: Decision, facts: NextStepFacts): NextStep
   const refused = decision.outcome === "refused";
   if (facts.waiting) {
     if (facts.waiting.added) return { text: waitingHint(facts.waiting.onFile, facts.waiting.added) as string, tone: "muted", opens: "detail" };
+    // A rule's fix opens the part of the counterparty's page that removes its cause, such as its limit or its address
+    // (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15).
     const step = ruleNextStep(facts.rule, facts.counterparty);
     const missing = missingDetails(facts.waiting.onFile);
     if (facts.canWrite && missing && (step === null || facts.rule === MATCH_INCOMPLETE)) return { text: addWords(missing), tone: "held", opens: "detail" };

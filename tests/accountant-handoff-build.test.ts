@@ -139,7 +139,7 @@ describe("buildHandoff: co-signs and what waits for the accountant", () => {
     const doc = await run(() => buildHandoff(MEMBERSHIP, handoffPeriod("2026-09", NOW)!, { now: NOW, origin: "https://www.vestiarion.xyz" }));
     expect(doc.openItems.map((item) => [item.kind, item.title, item.link])).toEqual([
       ["Waiting for your co-sign", "Brightline Ovens", "https://www.vestiarion.xyz/o/harbor-bakery/approvals#payable-inv-9"],
-      ["Address to confirm", "Northwind Packaging", "https://www.vestiarion.xyz/o/harbor-bakery/counterparties#counterparty-cp-4"],
+      ["Address to confirm", "Northwind Packaging", "https://www.vestiarion.xyz/o/harbor-bakery/counterparties/cp-4#address"],
     ]);
     expect(doc.unread).toEqual([]);
   });

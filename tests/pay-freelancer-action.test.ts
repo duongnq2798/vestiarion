@@ -68,7 +68,8 @@ describe("payFreelancerAction", () => {
       // The workspace's mode, which says whether its payments are simulated while its chain mode cannot be told (capability and reasons R5).
       mode: "live",
     });
-    expect(answer).toMatchObject({ ok: true, url: URL, name: "Linh", emailed: true });
+    // The contractor's id, whose page makes a new link if this one is lost (counterparty page CL15).
+    expect(answer).toMatchObject({ ok: true, url: URL, name: "Linh", counterpartyId: "c1", emailed: true });
     expect(answer.message).toContain("Emailed Linh a link");
     expect(answer.message).toContain("confirm it on Counterparties");
   });

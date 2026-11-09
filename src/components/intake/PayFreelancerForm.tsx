@@ -1,6 +1,7 @@
 "use client";
 
 import { Send } from "lucide-react";
+import Link from "next/link";
 import { payFreelancerAction, type PayFreelancerResult } from "@/app/actions/pay-freelancer";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Field } from "@/components/ui/Field";
@@ -8,8 +9,10 @@ import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
+import { orgHref } from "@/lib/auth/org-paths";
 import { paysSimulated, type Capability } from "@/lib/capability";
 import { utcDay } from "@/lib/copy";
+import { counterpartyPath } from "@/lib/counterparty-paths";
 
 const INITIAL: PayFreelancerResult = { ok: false, message: "" };
 
@@ -62,13 +65,19 @@ export default function PayFreelancerForm({ orgSlug, live, capability }: { orgSl
           {payFreelancerNote(live, capability)}
         </p>
       </form>
-      {state.ok && state.url && state.expiresAt && <PaymentLinkReady message={state.message} url={state.url} expiresAt={state.expiresAt} />}
+      {/* Shown from the action's own answer, so a refresh never takes the link away (CL4). */}
+      {state.ok && state.url && state.expiresAt && (
+        <PaymentLinkReady message={state.message} url={state.url} expiresAt={state.expiresAt} pageHref={orgHref(orgSlug, counterpartyPath(state.counterpartyId ?? "", "payee-link"))} />
+      )}
     </div>
   );
 }
 
-/** The payment just set up, and its link, shown this once: it is never stored where anyone can read it again. */
-export function PaymentLinkReady({ message, url, expiresAt }: { message: string; url: string; expiresAt: string }) {
+/**
+ * The payment just set up, and its link, shown this once: it is never stored where anyone can read it again. `pageHref`
+ * is the payee link part of the contractor's page, where a new one is made (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15).
+ */
+export function PaymentLinkReady({ message, url, expiresAt, pageHref }: { message: string; url: string; expiresAt: string; pageHref: string }) {
   return (
     <div role="status" className="grid gap-3 rounded-xl border border-proof-line bg-proof-soft p-4">
       <p className="text-sm leading-6 text-ink">{message}</p>
@@ -78,7 +87,13 @@ export function PaymentLinkReady({ message, url, expiresAt }: { message: string;
           Copy link
         </CopyButton>
       </div>
-      <p className="text-xs text-ink-3">The link works once and expires {utcDay(expiresAt)}. It is shown only now; make a new one on Counterparties if it is lost.</p>
+      <p className="text-xs text-ink-3">
+        The link works once and expires {utcDay(expiresAt)}. It is shown only now; make a new one on{" "}
+        <Link href={pageHref} className="font-medium text-agent underline-offset-2 hover:underline">
+          their page
+        </Link>{" "}
+        if it is lost.
+      </p>
     </div>
   );
 }

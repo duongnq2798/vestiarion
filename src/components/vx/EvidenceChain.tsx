@@ -106,13 +106,16 @@ export function evidenceStatus(subject: Chain["subject"]): string {
 /**
  * The whole chain: what it is about and the labels beside the steps where the page is wide, above them where it is
  * not. Sized by its own width (a container query), so a folded sidebar or a narrow window lays it out alike.
+ *
+ * `payeeHref`, the payee's page in the workspace (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15),
+ * links the payee's name; without it the name is plain. It is the page's only: the evidence document never carries it.
  */
-export function EvidenceChainView({ chain, orgSlug, publicKeys }: { chain: Chain; orgSlug: string; publicKeys: Record<string, string> }) {
+export function EvidenceChainView({ chain, orgSlug, publicKeys, payeeHref }: { chain: Chain; orgSlug: string; publicKeys: Record<string, string>; payeeHref?: string }) {
   return (
     <div className="@container">
       <div className="grid gap-6 @5xl:grid-cols-[minmax(0,1fr)_19rem] @5xl:items-start @5xl:gap-8">
         <aside aria-label="About this evidence" className="grid gap-4 @2xl:grid-cols-2 @5xl:sticky @5xl:top-20 @5xl:order-last @5xl:grid-cols-1">
-          <EvidenceSubject chain={chain} orgSlug={orgSlug} />
+          <EvidenceSubject chain={chain} orgSlug={orgSlug} payeeHref={payeeHref} />
           <EvidenceKey tally={chain.tally} />
         </aside>
         <ol aria-label="The chain, link by link" className="min-w-0 space-y-4">
@@ -127,7 +130,7 @@ export function EvidenceChainView({ chain, orgSlug, publicKeys }: { chain: Chain
   );
 }
 
-function EvidenceSubject({ chain, orgSlug }: { chain: Chain; orgSlug: string }) {
+function EvidenceSubject({ chain, orgSlug, payeeHref }: { chain: Chain; orgSlug: string; payeeHref?: string }) {
   const { subject } = chain;
   const section = subject.kind === "invoice" ? { path: "/invoices", label: "Bills & receivables", record: "A bill" } : { path: "/contractors", label: "Contractors", record: "A milestone" };
   return (
@@ -135,7 +138,15 @@ function EvidenceSubject({ chain, orgSlug }: { chain: Chain; orgSlug: string }) 
       <h2 className="text-sm font-semibold text-ink">{subject.title}</h2>
       <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[0.8125rem]">
         <dt className="text-ink-3">Payee</dt>
-        <dd className="min-w-0 text-ink [overflow-wrap:anywhere]">{subject.payee}</dd>
+        <dd className="min-w-0 text-ink [overflow-wrap:anywhere]">
+          {payeeHref ? (
+            <Link href={payeeHref} className="text-agent hover:underline">
+              {subject.payee}
+            </Link>
+          ) : (
+            subject.payee
+          )}
+        </dd>
         <dt className="text-ink-3">Amount</dt>
         <dd>
           <Money value={subject.amount} token={subject.currency} simulated={subject.simulated} className="text-ink" />

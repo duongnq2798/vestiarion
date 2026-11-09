@@ -489,6 +489,8 @@ export async function submitPayeeAddress(token: string, raw: string, options: { 
   const notice = {
     orgId: link.org_id,
     orgName: preview.orgName,
+    // Its email opens the address on this payee's page (counterparty page CL15).
+    counterpartyId: link.counterparty_id,
     payeeName: preview.counterpartyName,
     address: parsed.address,
     ...(chain !== undefined ? { chainLabel: chainById(chain).label } : {}),

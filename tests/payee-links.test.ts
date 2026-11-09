@@ -331,7 +331,7 @@ describe("submitPayeeAddress", () => {
   it("tells the people who can confirm the address that it arrived (pay a freelancer R4)", async () => {
     const { result } = platform(() => submitPayeeAddress(TOKEN, ADDRESS), usable());
     await result;
-    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Northwind", address: ADDRESS });
+    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", counterpartyId: PAYEE, payeeName: "Northwind", address: ADDRESS });
   });
 
   it("leaves that email to the caller's defer, so the payee's answer does not wait for it", async () => {
@@ -341,7 +341,7 @@ describe("submitPayeeAddress", () => {
     expect(notifyMock).not.toHaveBeenCalled();
     expect(deferred).toHaveLength(1);
     await deferred[0]();
-    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Northwind", address: ADDRESS });
+    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", counterpartyId: PAYEE, payeeName: "Northwind", address: ADDRESS });
   });
 
   it("sends that email at once when it cannot be deferred, since the address is written already", async () => {
@@ -351,7 +351,7 @@ describe("submitPayeeAddress", () => {
     };
     const { result } = platform(() => submitPayeeAddress(TOKEN, ADDRESS, { defer }), usable());
     expect(await result).toMatchObject({ ok: true, orgName: "Acme" });
-    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Northwind", address: ADDRESS });
+    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", counterpartyId: PAYEE, payeeName: "Northwind", address: ADDRESS });
     expect(logged).toHaveBeenCalledWith("payee email not deferred; sent at once");
     logged.mockRestore();
   });
@@ -614,7 +614,7 @@ describe("submitPayeeAddress with a chain (payee invoice link P2)", () => {
       "/rest/v1/rpc/claim_payee_link",
     ]);
     expect(changeMock).toHaveBeenCalledWith({ payeeLinkId: LINK, counterpartyId: PAYEE, raw: BASE_ADDRESS, chain: "BASE" });
-    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", payeeName: "Northwind", address: BASE_ADDRESS, chainLabel: "Base" });
+    expect(notifyMock).toHaveBeenCalledWith({ orgId: ORG, orgName: "Acme", counterpartyId: PAYEE, payeeName: "Northwind", address: BASE_ADDRESS, chainLabel: "Base" });
   });
 
   it("uses nothing when the link no longer lets its payee choose", async () => {

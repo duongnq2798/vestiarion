@@ -162,6 +162,24 @@ describe("what a held milestone waits for", () => {
     );
   });
 
+  it("CL15: links the part of the contractor's page that settles a hold about them, once the facts name them", () => {
+    const id = "018f8ce0-1557-7b54-a931-4d777f6bc002";
+    const linkOf = (over: Parameters<typeof facts>[0]) => heldReason(facts({ ...over, contractor: { id, ...over?.contractor } })).link;
+    const page = (section: string) => ({ label: "Counterparty", path: `/counterparties/${id}#${section}` });
+    expect(linkOf({ contractor: { riskLevel: "high" } })).toEqual(page("screening"));
+    expect(linkOf({ contractor: { riskLevel: "unscreened" } })).toEqual(page("screening"));
+    expect(linkOf({ amount: 1, contractor: { riskLevel: "medium", riskNotes: "Matched a politically exposed person", paymentLimit: 0.25, baselinePaymentLimit: 1 } })).toEqual(page("screening"));
+    expect(linkOf({ amount: 6 })).toEqual(page("limit"));
+    expect(linkOf({ contractor: { addressChangedAt: "2026-10-02T09:00:00Z" } })).toEqual(page("address"));
+    expect(linkOf({ contractor: { address: null } })).toEqual(page("address"));
+    expect(linkOf({ lastEntry: { action: "milestone_release", detail: { guardrailBlocked: true, guardrailRule: "counterparty.new_payee" } } })).toEqual(page("address"));
+    // A hold about something else keeps its own link, or none.
+    expect(linkOf({ lastEntry: { action: "milestone_release", detail: { guardrailBlocked: true, guardrailRule: "workspace.outflow_budget" } } })).toEqual({ label: "Spending limit on Treasury", path: "/console" });
+    expect(linkOf({})).toBeNull();
+    // Without their id, the list, as before.
+    expect(heldReason(facts({ amount: 6 })).link).toEqual({ label: "Counterparties", path: "/counterparties" });
+  });
+
   it("holds a contractor screened high risk, above its limit, or without a confirmed address, before a failed transfer", () => {
     expect(heldReason(facts({ intent: FAILED_INTENT, contractor: { riskLevel: "high" } })).kind).toBe("high_risk");
     expect(heldReason(facts({ amount: 6 })).kind).toBe("above_limit");

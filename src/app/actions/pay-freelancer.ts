@@ -14,6 +14,8 @@ export interface PayFreelancerResult {
   /** The payee link, shown once, to copy. */
   url?: string;
   name?: string;
+  /** The contractor added, whose page makes a new link if this one is lost (counterparty page CL15). */
+  counterpartyId?: string;
   /** True when emailed, false when the email did not go out, null when no email was given. */
   emailed?: boolean | null;
   expiresAt?: string;
@@ -54,7 +56,7 @@ export async function payFreelancerAction(_previous: PayFreelancerResult, formDa
           : result.emailed === false
             ? `The email to ${result.name} did not go out. Send them this link instead. ${next}`
             : `Send ${result.name} this link to add the address to be paid at. ${next}`;
-      return { ok: true, message, url: result.url, name: result.name, emailed: result.emailed, expiresAt: result.expiresAt };
+      return { ok: true, message, url: result.url, name: result.name, counterpartyId: result.counterpartyId, emailed: result.emailed, expiresAt: result.expiresAt };
     } catch (error) {
       console.error("pay a freelancer failed", error instanceof Error ? error.message : error);
       return { ok: false, message: "That did not work. Try again in a moment." };

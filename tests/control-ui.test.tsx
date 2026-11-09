@@ -854,7 +854,7 @@ describe("a payable waiting for a person, on its card on Invoices (complete held
       />
     );
     expect(markup).toContain("It is above CME&#x27;s payment limit. Pay it in Approvals, or raise the limit.");
-    expect(markup).toContain('href="/o/acme/counterparties#counterparty-cp-1"');
+    expect(markup).toContain('href="/o/acme/counterparties/cp-1#limit"');
     expect(markup).toContain("Edit limit");
     expect(markup).toContain(DECIDE_LINK);
   });
@@ -891,7 +891,7 @@ describe("a payable waiting for a person, on its card on Invoices (complete held
     );
     expect(markup).toContain("Add the purchase order, and the agent decides it again. Or, if CME is paid without purchase orders, mark it so.");
     expect(markup).toContain("Add details");
-    expect(markup).toContain('href="/o/acme/counterparties#counterparty-cp-1"');
+    expect(markup).toContain('href="/o/acme/counterparties/cp-1#purchase-orders"');
     expect(markup).toContain(">Purchase orders</a>");
     expect(markup).toContain(DECIDE_LINK);
   });
@@ -1009,7 +1009,7 @@ describe("why Approve and pay is off, and what to do instead (approval guidance)
     const markup = card({ riskLevel: "high" }, { canEdit: true });
     expect(markup).toContain("Screened high risk");
     expect(markup).toContain(HIGH_RISK_EXPLAINED);
-    expect(markup).toContain('href="/o/acme/counterparties#counterparty-1b6c1c9e-4a4f-4a7e-9b1e-0000000000a1"');
+    expect(markup).toContain('href="/o/acme/counterparties/1b6c1c9e-4a4f-4a7e-9b1e-0000000000a1#screening"');
   });
 
   it("says nothing more when the viewer may approve it", () => {

@@ -7,8 +7,10 @@ import { Callout } from "@/components/ui/Callout";
 import { EvidenceAccess, EvidenceChainView, evidenceSub } from "@/components/vx/EvidenceChain";
 import { PageHead, ProductShell } from "@/components/vx/Shell";
 import { requireMembership } from "@/lib/auth/membership";
+import { orgHref } from "@/lib/auth/org-paths";
 import { can } from "@/lib/auth/roles";
 import { shellModes } from "@/lib/circle";
+import { counterpartyPath } from "@/lib/counterparty-paths";
 import { inOrg } from "@/lib/dal/scope";
 import { evidenceLinkLabel } from "@/lib/evidence-paths";
 import { readEvidence } from "@/lib/evidence-read";
@@ -65,7 +67,8 @@ export default async function EvidencePage({ params }: EvidencePageProps) {
           </Callout>
         )}
         {subject.simulated && <Callout className="mb-6">Paid in a simulation: nothing moved on chain. This is its evidence as it stands.</Callout>}
-        <EvidenceChainView chain={chain} orgSlug={slug} publicKeys={read.publicKeys} />
+        {/* The payee's name opens their page, when the record names one (CL15). */}
+        <EvidenceChainView chain={chain} orgSlug={slug} publicKeys={read.publicKeys} payeeHref={read.counterpartyId ? orgHref(slug, counterpartyPath(read.counterpartyId)) : undefined} />
         <div className="mt-8">
           <EvidenceAccess kind={subject.kind} receipt={read.receipt?.state ?? null} role={access.membership.role} canShare={can(access.membership.role, "records.write")} />
         </div>
