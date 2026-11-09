@@ -316,6 +316,7 @@ const ACCEPT_WORDS: Record<AcceptError, string> = {
   link_not_found: "This milestone is not linked to a Jira issue.",
   already_accepted: "This work was accepted already.",
   after_payment: "A payment for this milestone was sent before the issue changed. Review it with the contractor.",
+  issue_unreachable: "Jira no longer shows this issue. Unlink it, then link the issue the work is in.",
   not_completed: "The issue is not done in Jira, so there is nothing to accept yet.",
   stale: "The deliverables changed in Jira since you opened this. Look at them again before accepting.",
   milestone_not_open: "This milestone is not waiting for verification any more.",

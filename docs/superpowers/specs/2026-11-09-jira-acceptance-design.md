@@ -438,7 +438,7 @@ The owner runs it. It is merged last.
 
    GIN indexes on `webhook_ids` and on `retired_webhook_ids`. RLS is enabled; everything is revoked from `anon`, `authenticated` and `vestiarion_tenant`, and all is granted to `service_role`.
 5. **`accept_jira_issue(p_org_id, p_link_id, p_by, p_fingerprint, p_criteria_sha256, p_note) returns public.jira_issue_links`.** A copy of `accept_linear_issue`: plpgsql, security invoker, `search_path ''`.
-   - It locks the link and raises, in order, `link_not_found`, `already_accepted`, `after_payment`, `not_completed` and `stale`. There is no `archived` step.
+   - It locks the link and raises, in order, `link_not_found`, `already_accepted`, `after_payment`, `issue_unreachable` (a link held because Jira stopped showing its issue, in place of Linear's `archived` step), `not_completed` and `stale`.
    - It locks the milestone and raises `milestone_not_open`, `no_criteria` and `criteria_changed`.
    - It sets the milestone verified, `status 'verified'`, `verification_method 'jira'`, `verification_status 'verified'`, and `verified_at` and `checked_at` to now. `verification_detail` is `{note, jiraIssue: issue_url, issueId, identifier, cloudId, completedAt, fingerprint, criteriaSha256, acceptedBy}`.
    - It sets the link accepted, as 0147 does.

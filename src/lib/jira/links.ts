@@ -364,8 +364,17 @@ export async function holdAcceptance(link: IssueLink, reason: WithdrawReason): P
   throw new Error("hold_jira_acceptance answered something else");
 }
 
-/** `accept_jira_issue`'s refusals, in its order (0149): no `archived` step, since Jira has no such state. */
-export type AcceptError = "link_not_found" | "already_accepted" | "after_payment" | "not_completed" | "stale" | "milestone_not_open" | "no_criteria" | "criteria_changed";
+/** `accept_jira_issue`'s refusals, in its order (0149): `issue_unreachable` where Linear has `archived`. */
+export type AcceptError =
+  | "link_not_found"
+  | "already_accepted"
+  | "after_payment"
+  | "issue_unreachable"
+  | "not_completed"
+  | "stale"
+  | "milestone_not_open"
+  | "no_criteria"
+  | "criteria_changed";
 
 export class AcceptRefusedError extends Error {
   constructor(readonly code: AcceptError) {
@@ -374,7 +383,17 @@ export class AcceptRefusedError extends Error {
   }
 }
 
-const ACCEPT_CODES: ReadonlySet<string> = new Set(["link_not_found", "already_accepted", "after_payment", "not_completed", "stale", "milestone_not_open", "no_criteria", "criteria_changed"]);
+const ACCEPT_CODES: ReadonlySet<string> = new Set([
+  "link_not_found",
+  "already_accepted",
+  "after_payment",
+  "issue_unreachable",
+  "not_completed",
+  "stale",
+  "milestone_not_open",
+  "no_criteria",
+  "criteria_changed",
+]);
 
 /** `accept_jira_issue` (JR11): the milestone verified by this person's acceptance, or the refusal's code. */
 export async function acceptLink(link: IssueLink, input: { by: string; fingerprint: string; criteriaSha256: string; note: string }): Promise<IssueLink> {

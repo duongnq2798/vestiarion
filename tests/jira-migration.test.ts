@@ -556,6 +556,10 @@ describe("accept_jira_issue (JR11)", () => {
     await expect(
       accept(orgId, await link(orgId, await milestone(orgId), { completed: false, completed_at: null, state: "held", held_reason: "canceled", resolution_name: "Won't Do" }))
     ).rejects.toThrow(/not_completed/);
+    // A link held because Jira stopped showing its issue is refused even with completed left from an earlier read.
+    await expect(accept(orgId, await link(orgId, await milestone(orgId), { state: "held", held_reason: "issue_unreachable" }))).rejects.toThrow(
+      /issue_unreachable: Jira no longer shows this issue/
+    );
     await expect(accept(orgId, await link(orgId, await milestone(orgId)), { fingerprint: "b".repeat(64) })).rejects.toThrow(/stale/);
     await expect(accept(orgId, await link(orgId, await milestone(orgId), { deliverable_fingerprint: null }))).rejects.toThrow(/stale/);
     await expect(accept(orgId, await link(orgId, await milestone(orgId, { criteria: null })))).rejects.toThrow(/no_criteria/);

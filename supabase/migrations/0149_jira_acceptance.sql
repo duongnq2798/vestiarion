@@ -221,6 +221,11 @@ begin
   if l.after_payment then
     raise exception 'after_payment: a payment for this milestone was sent before the issue changed';
   end if;
+  -- Jira's stand-in for Linear's archived step: a link held because Jira stopped showing its issue stays refused, even
+  -- with completed left from an earlier read, until a person unlinks it and links the issue the work is in.
+  if l.held_reason = 'issue_unreachable' then
+    raise exception 'issue_unreachable: Jira no longer shows this issue';
+  end if;
   if not l.completed then
     raise exception 'not_completed: the issue is not done in Jira';
   end if;
