@@ -20,7 +20,7 @@ The bot works only in a private chat with you. Added to a group, it answers "I o
 
 ## 2. What the chat receives
 
-After each cycle, the chat gets one message listing what the agent decided since the last one: what it paid, scheduled, released or received, what it stopped, and the early payment it negotiated: the offers it made, a supplier's answer or counter, its answer to that, and an offer it withdrew. Each decision says why, and links to where you see it in Vestiarion. The bills it held or flagged for a person, or asked details for, and that still wait, end the message, each with a link to review it. A payment that has not confirmed 15 minutes after it was submitted to Circle is posted within minutes, without waiting for a cycle.
+After each cycle, the chat gets one message listing what the agent decided since the last one: what it paid, scheduled, released or received, what it stopped, and the early payment it negotiated: the offers it made, a supplier's answer or counter, its answer to that, and an offer it withdrew. Each decision says why, and links to where you see it in Vestiarion: a milestone's opens its own row on **Contractors**. The bills it held or flagged for a person, or asked details for, and that still wait, end the message, each with a link to review it. A payment that has not confirmed 15 minutes after it was submitted to Circle is posted within minutes, without waiting for a cycle.
 
 ```text
 Acme · the agent decided 3 things
@@ -58,7 +58,7 @@ In these messages and in `/waiting`, every value that comes from a bill or from 
 | Ask | What you get |
 |---|---|
 | `/today` | Safe to spend today, what is due in the next 30 days, how many payments wait for a person, and what the agent pays next |
-| `/waiting` | Each payable or milestone waiting for a person, why it waits, and a link: **Review** for a payable, **Contractors** for a milestone. A payable a check in code stopped says what stopped it, such as "Code stopped it: the operating wallet did not hold the cash it needs."; the rest give the first sentence of why the agent stopped them. A bill asked for details says it is waiting for details. In shadow mode, a payment held for your verdict says it waits for your verdict, with **Give your verdict** |
+| `/waiting` | Each payable or milestone waiting for a person, why it waits, and a link: **Review** for a payable, **Contractors** for a milestone, which opens its own row there. A payable a check in code stopped says what stopped it, such as "Code stopped it: the operating wallet did not hold the cash it needs."; the rest give the first sentence of why the agent stopped them. A bill asked for details says it is waiting for details. In shadow mode, a payment held for your verdict says it waits for your verdict, with **Give your verdict** |
 | `/ledger` | Whether the signed ledger is intact, checked the way **Verify hash chain** checks it |
 | `/workspaces` | Your connected workspaces, to switch between them |
 | `/disconnect` | Stops this workspace's decisions coming to the chat |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ActivityItem } from "@/lib/agent-activity";
+import { activityItem, type ActivityItem, type ActivityRefs } from "@/lib/agent-activity";
 import { NEVER_APPROVES as DISCORD_NEVER_APPROVES } from "@/lib/discord/messages";
 import { buildWaitingNotice, type NoticePolicy, type WaitingBill } from "@/lib/notifications/waiting-notice";
 import {
@@ -19,6 +19,7 @@ import { NEVER_APPROVES as TELEGRAM_NEVER_APPROVES } from "@/lib/telegram/messag
 const ORIGIN = "https://www.vestiarion.xyz";
 const WORKSPACE = { name: "Northstar & Co", slug: "northstar" };
 const INVOICE = "1b6c1c9e-4a4f-4a7e-9b1e-0000000000a1";
+const MILESTONE = "1b6c1c9e-4a4f-4a7e-9b1e-0000000000b1";
 const TX = `0x${"a".repeat(64)}`;
 
 const item = (fields: Partial<ActivityItem> = {}): ActivityItem => {
@@ -85,6 +86,26 @@ describe("decisionsMessage", () => {
     expect(text).toContain("DeepSeek decided to pay it");
     expect(text).toContain(`https://explorer.testnet.arc.io/tx/${TX}`);
     expect(text).toContain(`${ORIGIN}/o/northstar/invoices?open=${INVOICE}#trail-${INVOICE}`);
+  });
+
+  it("CL15: opens a milestone's decision at its own row on Contractors, on a button whose words name no one", () => {
+    const refs: ActivityRefs = {
+      network: "arc-testnet",
+      invoices: new Map(),
+      milestones: new Map([[MILESTONE, { name: `Puka${RLO} Ltd https://evil.example`, title: "Design", amount: 40, txRef: TX }]]),
+    };
+    const holding = activityItem({ seq: 7, action: "milestone_hold", detail: { milestoneId: MILESTONE } }, refs);
+    const released = activityItem({ seq: 8, action: "milestone_release", detail: { milestoneId: MILESTONE, execution: { txRef: TX, resultingStatus: "paid" } } }, refs);
+    const message = decisionsMessage(WORKSPACE, [holding!, released!], ORIGIN, null);
+    const opens = blocksOf(message)
+      .filter((block) => block.type === "actions")
+      .map((block) => block.elements?.find((element) => element.action_id === "vx_open"));
+    expect(opens.map((button) => button?.url)).toEqual([
+      `${ORIGIN}/o/northstar/contractors#milestone-${MILESTONE}`,
+      `${ORIGIN}/o/northstar/contractors?history=all#milestone-${MILESTONE}`,
+    ]);
+    expect(opens.map((button) => (button?.text as { text: string }).text)).toEqual(["Decide in Contractors", "Contractors"]);
+    expect(allText(message)).not.toContain(RLO);
   });
 
   it("gives a stopped payable only its link to Approvals while deciding from Slack is off", () => {
@@ -408,7 +429,8 @@ describe("answers to /vestiarion", () => {
       "*Northstar* · 3 payments wait for a person",
       `• Jiren 0.50 USDC · held: Code stopped it: it is above the counterparty's payment limit. <${ORIGIN}/o/northstar/approvals#payable-${INVOICE}|Review>`,
       `• Vendor 2 12.00 USDC · waiting for details <${ORIGIN}/o/northstar/approvals#payable-${BILL(2)}|Review>`,
-      `• Puka: Design 40.00 USDC · held <${ORIGIN}/o/northstar/contractors|Contractors>`,
+      // Its own row on Contractors (counterparty page CL15).
+      `• Puka: Design 40.00 USDC · held <${ORIGIN}/o/northstar/contractors#milestone-m-1|Contractors>`,
     ]);
     expect(never).toMatchObject({ type: "context", elements: [{ type: "mrkdwn", text: NEVER_APPROVES, verbatim: true }] });
     expect(allText(answer)).not.toContain("Decide in Approvals");
@@ -423,7 +445,7 @@ describe("answers to /vestiarion", () => {
 
     // A milestone is decided on Contractors, so a list of milestones alone has no Review link.
     const milestone = waitingAnswer("Northstar", [{ kind: "milestone", id: "m-1", name: "Puka: Design", amount: 40, currency: "USDC", status: "held", reason: null }], ORIGIN, "northstar");
-    expect(allText(milestone)).toContain(`<${ORIGIN}/o/northstar/contractors|Contractors>`);
+    expect(allText(milestone)).toContain(`<${ORIGIN}/o/northstar/contractors#milestone-m-1|Contractors>`);
     expect(allText(milestone)).not.toContain(NEVER_APPROVES);
     expect(blocksOf(milestone)).toHaveLength(1);
 

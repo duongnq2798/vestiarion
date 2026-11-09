@@ -2142,7 +2142,12 @@ own signed entries (CL14), and no action, ledger action, table, column or index 
   without one, the list), Pay a freelancer's result and the payee address and disputed-change emails (whose button
   still says "Open Counterparties", since a name in it would be untrusted text) open their section. Milestones open
   their row on Contractors (`milestoneRowPath`, `?history=all` for a paid or closed one), whose rows carry
-  `milestoneAnchor` ids. Chat notices, the activity feed and the transfer watch still link the sections' own pages.
+  `milestoneAnchor` ids. So do the chats and the activity feed: a milestone's decision in `agent-activity.ts` (and so
+  the console's notices and the Slack and Telegram decisions messages, which link `item.path`), a stuck milestone
+  payment there and in the transfer watch's email, and a held milestone in Slack's `/vestiarion waiting` and Telegram's
+  `/waiting`, paid only for a release Circle confirmed or the sandbox simulated. Their link words stay ours
+  ("Contractors", "Decide in Contractors"), never a name. Discord's notice lists only bills waiting for approval, each at
+  its card on Approvals, so it links no milestone or counterparty.
 - **Tests.** `counterparty-paths`, `visible-text`, `counterparty-page-grants`, `counterparty-page-view` and
   `counterparty-page-read` (a fake database: platform reads name the workspace and the row's id, no `token_hash` in any
   select, no `payee_links` read for a non-writer, one failed part leaves the rest, chunks of 25 and the cut note), and

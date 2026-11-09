@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ActivityItem } from "@/lib/agent-activity";
+import { activityItem, type ActivityItem, type ActivityRefs } from "@/lib/agent-activity";
 import { NEVER_APPROVES as DISCORD_NEVER_APPROVES } from "@/lib/discord/messages";
 import type { InvoiceDraftRead } from "@/lib/invoice-document/draft";
 import { buildWaitingNotice, type NoticePolicy, type WaitingBill } from "@/lib/notifications/waiting-notice";
@@ -57,6 +57,23 @@ describe("decisionsMessage", () => {
     const held = decisionsMessage(WORKSPACE, [item({ txHash: null, tone: "stopped", path: "/approvals#payable-9", pathLabel: "Decide in Approvals" })], ORIGIN);
     expect(held).not.toContain("/tx/");
     expect(held).toContain('<a href="https://www.vestiarion.xyz/o/acme/approvals#payable-9">Decide in Approvals</a>');
+  });
+
+  it("CL15: links a milestone's decision to its own row on Contractors, in words that name no one", () => {
+    const MILESTONE = "1b6c1c9e-4a4f-4a7e-9b1e-0000000000b1";
+    const refs: ActivityRefs = {
+      network: "arc-testnet",
+      invoices: new Map(),
+      milestones: new Map([[MILESTONE, { name: "Puka <b>Ltd</b>", title: "Design", amount: 40, txRef: TX }]]),
+    };
+    const holding = activityItem({ seq: 7, action: "milestone_hold", detail: { milestoneId: MILESTONE } }, refs);
+    const released = activityItem({ seq: 8, action: "milestone_release", detail: { milestoneId: MILESTONE, execution: { txRef: TX, resultingStatus: "paid" } } }, refs);
+    const message = decisionsMessage(WORKSPACE, [holding!, released!], ORIGIN);
+    expect(message).toContain(`<a href="https://www.vestiarion.xyz/o/acme/contractors#milestone-${MILESTONE}">Decide in Contractors</a>`);
+    expect(message).toContain(`<a href="https://www.vestiarion.xyz/o/acme/contractors?history=all#milestone-${MILESTONE}">Contractors</a>`);
+    // The name is in the sentence only, escaped; no link's words carry it.
+    expect([...message.matchAll(/<a href="[^"]*">([^<]*)<\/a>/g)].map((match) => match[1])).toEqual(["Decide in Contractors", "Arc testnet transaction", "Contractors"]);
+    expect(message).toContain("Puka &lt;b&gt;Ltd&lt;");
   });
 
   it("marks what was done apart from what was stopped", () => {

@@ -1760,6 +1760,9 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     // A payment that has not confirmed (stuck-transfer alert D6–D8).
     ["payment_stuck", "src/lib/agent/transfer-watch.ts"],
     ["Circle shows it stuck.", "src/lib/agent-activity.ts"],
+    // Its link: the bill's, or the milestone's own row (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15).
+    ["How it decided", AGENT_ACTIVITY, 'pathLabel: invoiceId ? "How it decided" : "Contractors"'],
+    ["Contractors", AGENT_ACTIVITY, 'pathLabel: invoiceId ? "How it decided" : "Contractors"'],
     ["the workspace's people were told.", "src/lib/decision-trail.ts"],
     ["A payment of 12.50 USDC to Jiren has not confirmed", "src/lib/email/payment-stuck.ts", "A payment of ${first.amount} ${first.currency} to ${first.payeeName} has not confirmed"],
     [

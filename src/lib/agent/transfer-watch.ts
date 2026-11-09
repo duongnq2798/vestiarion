@@ -2,6 +2,7 @@ import { siteOrigin } from "../auth/env";
 import { getChainProvider } from "../circle";
 import type { ChainProvider } from "../circle/types";
 import { currentOrgId } from "../context";
+import { milestoneRowPath } from "../counterparty-paths";
 import { db, platformDb, unwrap } from "../dal";
 import { withOrg } from "../dal/scope";
 import { paymentStuckEmail, type StuckPayment } from "../email/payment-stuck";
@@ -290,7 +291,7 @@ async function emailTold(told: Told[], deps: WatchDeps): Promise<void> {
         sendAnswered: detail.sendAnswered,
         providerState: detail.providerState,
         txUrl: detail.txHash ? txUrl(network, detail.txHash) : null,
-        link: detail.invoiceId ? `${origin}/o/${org.slug}${invoiceHref(detail.invoiceId, "trail")}` : `${origin}/o/${org.slug}/contractors`,
+        link: `${origin}/o/${org.slug}${stuckPath(detail)}`,
       };
     });
     const email = paymentStuckEmail({ orgName: org.name, payments, link: payments.length === 1 ? payments[0].link : `${origin}/o/${org.slug}/invoices`, origin });
@@ -303,6 +304,15 @@ async function emailTold(told: Told[], deps: WatchDeps): Promise<void> {
   } catch (reason) {
     console.error("transfer watch: email failed", orgId, messageOf(reason));
   }
+}
+
+/**
+ * Where a payment told is seen: its bill's How it decided, or a milestone's own row on Contractors
+ * (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL15), which is in flight, so not paid yet.
+ */
+function stuckPath(detail: StuckDetail): string {
+  if (detail.invoiceId) return invoiceHref(detail.invoiceId, "trail");
+  return detail.milestoneId ? milestoneRowPath(detail.milestoneId, { paid: false }) : "/contractors";
 }
 
 /** Each payment's payee, by `source_type:source_id`: an invoice's counterparty, or a milestone's contractor. */
