@@ -200,6 +200,15 @@ describe("the Screenshot component", () => {
     expect(image).not.toContain("width=");
   });
 
+  it("reads a size only for a guide screenshot, so the build traces nothing else into the docs", () => {
+    // A real PNG elsewhere under public/ is not read, nor is a path that climbs out of the guides.
+    expect(pngSize(readFileSync(path.join(ROOT, "public", "icons", "icon-192.png")))).not.toBeNull();
+    expect(screenshotSize("/icons/icon-192.png")).toBeNull();
+    expect(screenshotSize("/docs/guides/../../icons/icon-192.png")).toBeNull();
+    expect(screenshotSize("/docs/guides/sub/go-live-fund.png")).toBeNull();
+    expect(screenshotSize("/docs/guides/go-live-fund.png")).not.toBeNull();
+  });
+
   it("reads a PNG's size from its header, and only from files under public/", () => {
     expect(pngSize(Buffer.from("not a png at all, not at all"))).toBeNull();
     expect(publicFile("/../package.json")).toBeNull();

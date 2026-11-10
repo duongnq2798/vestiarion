@@ -123,8 +123,8 @@ GitHub groups the generated list by label, first match wins, as `.github/release
 (`enhancement`), Fixes (`bug`), Accessibility (`accessibility`), Documentation (`documentation`), and Other changes for
 everything else, so nothing merged is dropped. A pull request labelled `ignore-for-release` is left out.
 
-`enhancement`, `bug`, `accessibility` and `documentation` exist. `breaking-change`, `security`, `database` and
-`ignore-for-release` are to be created when wanted (`gh label create security --color B60205`). Until pull requests carry
+`security`, `enhancement`, `bug`, `accessibility` and `documentation` exist. `breaking-change`, `database` and
+`ignore-for-release` are to be created when wanted (`gh label create database --color 5319E7`). Until pull requests carry
 labels, the generated list is one "Other changes" section; the curated notes are what readers read.
 
 ## Signing

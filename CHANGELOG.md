@@ -169,6 +169,15 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   axe pass over the newest pages: the quiz, the invoice details and payout batch checks, the status page and the
   Zapier and n8n guides.
 
+### Security
+
+- **Next.js 16.4.6.** The app now runs on Next.js 16.4.6, up from 16.3.6, which fixes the advisories published against
+  16.3.6. Among them are a remote code execution in image optimization when SVG files are served, a denial of service
+  through Server Actions and a server-side request forgery in image optimization. Vestiarion serves no SVG through
+  image optimization and uses no `use cache`, but it does use Server Actions and `next/image`. The docs' MDX and the
+  lint rules move to 16.4.6 with it, and a test now holds the three packages to one exact version, and the
+  lock to Linux builds of the compiler. Nothing changes in how the app looks or works. No migration.
+
 ## [0.1.0-beta.15] - 2026-11-04
 
 ### Added
