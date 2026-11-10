@@ -1,0 +1,183 @@
+Pay contractors for work they deliver in Jira. You link a milestone to the Jira issue its work is delivered in. When the issue is done in Jira, the milestone is **ready for acceptance**: a person checks the deliverables against the milestone's acceptance criteria and accepts the work. Only then is the milestone verified, and the agent decides the payment under every guardrail, as it does for any [milestone](/docs/guides/pay-a-contractor), on the workspace's network: Arc testnet or Arc mainnet.
+
+Anyone on your Jira site can move an issue to Done, the contractor included. So an issue done in Jira is never by itself a reason to pay, and nothing from Jira sets an amount or a payee. If the issue is reopened, resolved as not done, deleted or archived, or its deliverables change, after the work was accepted, and Vestiarion reads that before the payment is sent, the acceptance is taken back and the milestone is held for review.
+
+Jira works here as [Linear](/docs/guides/linear) does. One work tool verifies a milestone: Jira refuses a milestone linked to an Asana task or a Linear issue, Asana and Linear refuse one linked to a Jira issue, and Contractors offers no other tool's card on a milestone linked to Jira.
+
+## Before you start
+
+- **An owner or admin** of the workspace connects Jira. Anyone else sees "An owner or admin connects Jira." Linking issues, writing criteria and accepting work are for whoever verifies milestones by hand: an owner or admin.
+- **A milestone** for the contractor, waiting for verification. [Pay a contractor](/docs/guides/pay-a-contractor) adds one. A milestone verified by a GitHub pull request, or linked to an Asana task or a Linear issue, is not linked to Jira as well.
+- **A Jira issue** for the work, on a Jira Cloud site, in a project the person who connects Jira can see, with the deliverables attached to it, added as web links, or linked in its description or comments.
+
+## 1. Connect Jira
+
+Open **Settings**, then **Integrations**. Under **Jira**, choose **Connect Jira**.
+
+The connect page has the workspace you came from already picked and says what Vestiarion does with Jira's data, under **What Vestiarion does with Jira's data**. Among it:
+
+- It reads Jira as the Atlassian user who connects, on the one Jira site you connect. For each linked issue it reads its key, title, project, status and resolution, and when it was done; once the issue is done, also its attachments' names, its web links, and the links in its description and its newest 50 comments. It keeps the links and names, not the words of the description or the comments, and keeps no Atlassian account ID, name or email.
+- It makes one webhook on the site for the projects of the linked issues, so a change there is read again within a minute. What a notice says is never used as it is: Vestiarion reads the issue again from Jira. It writes nothing else to Jira.
+- Nothing from Jira sets an amount or a payee.
+
+Tick **I agree**, then choose **Continue to Jira**. Atlassian asks you to allow access as yourself to one Jira site: Vestiarion sees the issues you can see there, and reads only the ones linked to milestones. Your agreement, with its date, is kept on the connection and in the workspace's signed ledger.
+
+Back in Settings, the card says "Jira is connected. Link a milestone to its Jira issue on Contractors." It names the site it reads, and its address after "Site:". The ledger records `accounting_connected`, with `provider: "jira"`.
+
+A workspace connects one Jira site at a time. If the workspace is connected to another site already, connecting is refused with "This workspace is connected to another Jira site. Disconnect it first, then connect the one you want." Several Vestiarion workspaces may connect the same site; each has its own webhook there.
+
+### If your Atlassian account has several Jira sites
+
+When Atlassian gives Vestiarion more than one site, you come back to the connect page, which asks you to **Choose the Jira site to connect**. Pick the site whose issues this workspace accepts contractor work from and choose **Connect this site**. Vestiarion reads only the site you choose. The choice waits for ten minutes; after that the page says "The time to choose a Jira site ran out", and **Connect Jira** starts again.
+
+### Atlassian's own screens
+
+The screen where you allow access is Atlassian's, not Vestiarion's. Atlassian may show its own notice there, for example that it has not reviewed the app; what Vestiarion does with the access is what its connect page says.
+
+A site's admin can stop people from connecting apps to Jira by themselves. Where yours has, or your account reaches no Jira site, Atlassian gives Vestiarion no site to read, nothing is kept, and the card says "Your Atlassian account has no Jira site Vestiarion can read. Connect with the account you use Jira with, or ask the site's admin whether apps are allowed."
+
+## 2. Link a milestone to its issue
+
+On **Contractors**, open the milestone's row. Under its card, **Accept from Jira** asks for **The Jira issue the work is delivered in**. Paste the issue's link from Jira, such as `https://your-site.atlassian.net/browse/ENG-123`, or its key alone, such as `ENG-123`, and choose **Link the issue**. A board link that selects the issue works too. Vestiarion reads the issue through Jira with this workspace's connection, never by opening the link.
+
+<Screenshot
+  src="/docs/guides/jira-link.png"
+  alt="On Contractors, the milestone Webhook retries with backoff for Kestrel Labs, 1,200.00 USDC, Awaiting verification. Below it, the Accept from Jira card: a field for The Jira issue the work is delivered in, with the Link the issue button, then the Acceptance criteria, from the agreement field with the Add the criteria button."
+  caption="A milestone before an issue is linked: the issue's link or key, and the criteria from the agreement."
+/>
+
+Vestiarion links only an issue the connection can see, on the connected site:
+
+- Something that is not an issue's link or key is refused with "That is not a Jira issue. Paste the issue's link from Jira, or its key, such as ENG-123."
+- A link to another Jira site is refused with "That issue is on another Jira site than the one connected (your-site.atlassian.net). Link an issue of the connected site."
+- An issue Jira does not show is refused with "Jira does not show ENG-123 to the connected account. Check the key, or ask whoever connected Jira to open the project." Jira answers the same way for an issue that does not exist and for one the connection may not see.
+- One issue verifies one milestone: an issue linked to another milestone is refused with "That Jira issue is linked to another milestone already: one issue verifies one milestone."
+- A milestone linked to another work tool is refused, with "This milestone is linked to an Asana task. Unlink the task first to accept the work from Jira." or "This milestone is linked to a Linear issue. Unlink the issue first to accept the work from Jira."
+
+The ledger records `jira_issue_linked`. Vestiarion keeps the issue by Jira's own ID for it, so an issue moved to another project keeps its link, and its new key and link show on the card at the next read. **Unlink the issue** takes the link off, and takes back an acceptance the agent has not paid (`jira_issue_unlinked`).
+
+## 3. Write the acceptance criteria
+
+The criteria are what the work is held to, taken from your agreement with the contractor. Type them in **Acceptance criteria, from the agreement** and choose **Add the criteria**. Jira never writes them: anyone on your Jira site can edit an issue's description, the contractor included, so it is evidence, not the agreement.
+
+When Asana or Linear is connected too, a milestone not linked yet asks for its criteria once, on the first card that offers to link it: they are the milestone's, and hold in Jira as well.
+
+Without criteria, a done issue is held: "The issue is done, but the milestone has no acceptance criteria. Add the criteria from the agreement, then accept the work." Once the work is accepted, its criteria stay as they were accepted: "The work was accepted against these criteria. Unlink the issue to change them." The ledger records `milestone_criteria_set`, with the criteria.
+
+## 4. When the issue is done
+
+The card says where the issue stands:
+
+| Status | What it means |
+| --- | --- |
+| **Waiting for the issue** | Not done in Jira yet. |
+| **Ready for acceptance** | Done in Jira, with criteria written. A person accepts the work. |
+| **Accepted** | A person accepted the work against its criteria. The agent decides on pay. |
+| **Held for review** | Reopened, resolved as not done, deleted or archived, or changed after acceptance; no longer readable; or done without criteria. |
+
+An issue is done when Jira puts its status in the Done category, whatever the status is called on your site. An issue in that category whose resolution says the work was not done, such as Won't Do, Won't Fix, Duplicate, Cancelled, Declined, Rejected, Cannot Reproduce, Incomplete, Obsolete, Abandoned, Not a Bug or Invalid, is held for review and never accepted: "Jira resolved the issue as Won't Do, which is not done. Nothing is accepted from it: reopen it, or link another issue." If your site names such a resolution in its own way, the issue reads as done, and the card shows the resolution beside the status, as in "Done in Jira on Nov 6, 2026 (Done, resolved as Done).", so the person who accepts sees it.
+
+While the issue is waiting, the card says "Not done in Jira yet. It is read again when it changes there. Deliverables are read once it is done." Vestiarion reads the issue again when Jira says it or its comments changed, before each of the agent's cycles once the work is accepted and again right before the agent sends its payment, and every 15 minutes, when it asks Jira which linked issues changed. An accepted issue is read at least once an hour, and any other at least once a day, even when Jira says nothing changed. **Check Jira now** reads it at once; **Check linked issues now**, on the Jira card in Settings, reads the issues of every open milestone. When the issue becomes ready, the ledger records `jira_issue_ready`, with when it was done, its status and its resolution.
+
+Under **Deliverables in Jira**, the card lists each file attached to the issue (**Attachment**), each of its web links (**Web link**), and each link in its description (**Link in the description**) and in its comments (**Link in a comment**), links Jira shows as cards included. A link to the issue itself is left out. Before a link is offered, an issue on the connected Jira site among them is checked through Jira with the workspace's own connection, and a GitHub pull request through GitHub; a link to another Jira site, or to another site, is shown as given and never opened by Vestiarion. Vestiarion reads at most 50 files, 50 web links and the newest 50 comments of an issue. When it has more, the card says "Jira has more than Vestiarion reads: the first 50 attachments, 50 web links and the newest 50 comments were checked." It lists at most 50 deliverables, and fewer when their links are very long; the rest are counted, not listed.
+
+<Screenshot
+  src="/docs/guides/jira-ready.png"
+  alt="The Jira card for issue ENG-142, Webhook retries with backoff, Ready for acceptance: Done in Jira on Nov 9, 2026 (Done, resolved as Done), on northstar.atlassian.net. Under Deliverables in Jira, an attachment, a web link to a pull request, a link in the description and a link in a comment. Below, the criteria, the box I checked each criterion against these deliverables, as shown here, and the Accept the work button."
+  caption="Done in Jira, with its deliverables listed: a person accepts the work against the criteria."
+/>
+
+## 5. Accept the work
+
+When the issue is ready, read the deliverables against the criteria. Tick "I checked each criterion against these deliverables, as shown here." and choose **Accept the work**. The card says "Accepted. The agent decides on pay within a minute, under every guardrail."
+
+Vestiarion reads the issue again first, in full. If its deliverables changed since you opened the page, nothing is accepted: "The deliverables changed in Jira since you opened this. Look at them again before accepting." The milestone is verified only for the version you saw: the ledger records `jira_work_accepted`, with the deliverables, their fingerprint and the criteria's hash. The card then lists them under **Deliverables accepted**.
+
+<Screenshot
+  src="/docs/guides/jira-accepted.png"
+  alt="The milestone Webhook retries with backoff, Verified, and its Jira card for ENG-142, Accepted: A person accepted the work against its criteria. The agent decides on pay under every guardrail. Below, the date it was done in Jira, the date and the member who accepted it, the four deliverables under Deliverables accepted, the acceptance criteria, and the Check Jira now and Unlink the issue buttons."
+  caption="Accepted against its criteria: the milestone is verified, and the agent decides on pay."
+/>
+
+Vestiarion refuses an acceptance by the payee, as far as it can tell who the payee is:
+
+- A member whose email is the payee's (the email the contractor's payment notices go to) is refused with "You are this milestone's payee, so someone else accepts the work."
+- A member whose own Atlassian account has the payee's email is refused too, whoever is on the issue: "Your Atlassian account is this milestone's payee, so someone else accepts the work." Vestiarion asks Jira which Atlassian account has that email, and which is the member's own, for this check only, and keeps neither the emails nor the answer. Where Jira hides an account's email, Vestiarion counts the account as having it, so it refuses rather than lets the payee accept.
+- On such a milestone, **Pay now** is refused to the payee as well: "You are this milestone's payee, so someone else approves paying it."
+
+Vestiarion knows a member's own Atlassian account when that member connected Jira, or when their Vestiarion email is their Atlassian email. So it cannot tell a payee who joined the workspace under another email than their Atlassian account's and did not connect Jira, or a payee with no notice email. Whoever may verify a milestone by hand, an owner or admin, may accept, and the ledger names who did.
+
+From here the agent decides on the release as for any verified milestone: the contractor's screening, their limit, the workspace's spending limit, two approvals above its figure, and a confirmed address.
+
+## 6. Reopened or changed after acceptance
+
+After the work was accepted, any of these takes the acceptance back:
+
+- the issue leaves Done in Jira, even if it is done again later;
+- it is resolved as not done, deleted or archived;
+- its deliverables change: a file, a web link or a link added, removed or replaced;
+- or Jira no longer shows it to the connection: the person who connected Jira lost access to its project, or another Jira site is connected now.
+
+The acceptance is taken back when Vestiarion reads that before the payment is sent: when Jira says the issue changed, right before the agent decides on contractors, once more right before it sends the payment, at the 15-minute check, or on **Check Jira now**. The milestone waits for verification again and the card says **Held for review**, with why, such as "The issue was reopened in Jira after the work was accepted, so the acceptance was taken back before any payment. Accept it again once it is done." The ledger records `jira_acceptance_withdrawn`, with why. Accept the work again once the issue is done, against what Jira shows now.
+
+If Jira then stops showing the issue (it is deleted or archived, the person who connected Jira loses access to its project, or another Jira site is connected), the card says so in place of the first reason, and nothing is accepted from it, even from the deliverables read before. Link another issue, or unlink this one and link it again once Jira shows it.
+
+<Screenshot
+  src="/docs/guides/jira-held.png"
+  alt="The milestone Webhook retries with backoff and its Jira card for ENG-142, both Held for review: The issue was reopened in Jira after the work was accepted, so the acceptance was taken back before any payment. Accept it again once it is done. Below, In Progress in Jira: not done yet, the deliverables in Jira, and the criteria."
+  caption="Reopened in Jira after acceptance: the acceptance is taken back before any payment."
+/>
+
+Renaming a file or a web link changes nothing. If Jira cannot be read at those times, the acceptance stands as the person gave it. What a link to another site points at is never read, so a change there is not seen.
+
+To take an acceptance back yourself, choose **Unlink the issue**: the card says "To take the acceptance back, unlink the issue: the milestone then waits for verification again." **Revoke manually** is not offered on a milestone accepted from Jira.
+
+If the payment was sent already, the card says **Changed after payment**: "The issue changed in Jira after the payment was sent. Review it with the contractor: Vestiarion does not take a payment back."
+
+## 7. The Jira card in Settings
+
+The Jira card counts, over the last 30 days:
+
+- **Evidence checked by a person**: each acceptance is a person's check of the deliverables against the criteria.
+- **Disputes**: acceptances taken back because the issue was reopened or changed.
+- **From acceptance to the agent's decision**: the median time from an acceptance to the agent's first decision on that milestone.
+
+They count Jira's acceptances only. Asana's and Linear's cards count their own.
+
+While an open milestone is linked to an issue on the site, the card also says whether Jira's notices reach Vestiarion:
+
+- "Jira last told Vestiarion of a change", with when, while they do.
+- "Jira has not told Vestiarion of a change yet. Linked issues are read every 15 minutes." before the first one.
+- "Jira's notices are not reaching Vestiarion: the 15-minute check found a change Jira did not send. Linked issues are still read every 15 minutes."
+- "Jira did not take Vestiarion's webhook:", with Jira's own words, when Jira refused it.
+
+The webhook covers the projects of the issues linked to open milestones. Vestiarion renews it before Jira lets it lapse after 30 days, and deletes it when no linked issue is left open. Without it, linked issues are still read every 15 minutes.
+
+<Screenshot
+  src="/docs/guides/jira-settings.png"
+  alt="The Jira card in Settings: Connected to the Northstar site in Jira, Site: northstar.atlassian.net, last synced 5 minutes ago, and Jira last told Vestiarion of a change Nov 9, 2026, 10:20 UTC. Links to 3 issues linked to milestones, 1 issue ready for acceptance and 1 issue held for review. In the last 30 days: 3 acceptances, 1 acceptance taken back, and 2 minutes from acceptance to the agent's decision. The Check linked issues now and Disconnect Jira buttons."
+  caption="Connected to one Jira site, with its linked issues and the last 30 days' figures."
+/>
+
+## Why it was paid
+
+A milestone accepted from Jira says so on its [evidence page](/docs/guides/evidence): "Jira reported the issue done.", verified outside, with the issue's status and resolution as Jira gave them, beside the person who accepted the work against its criteria.
+
+## What Vestiarion keeps
+
+- Of the site: its ID, name and address, and the webhook's ID and the projects it covers.
+- Of each linked issue: its ID, key, title, link and project, its status and resolution as last read and when it was done, and its deliverables' names and links with their fingerprint.
+- Not the words of the issue's description or comments, and no Atlassian account ID, name or email. Who moved an issue to Done, and who it is assigned to, are never read.
+
+## Status and errors
+
+- Jira needs you to reconnect when it refuses the connection, with "Jira no longer accepts this connection: the app's access was removed in the Atlassian account, or it went unused for 90 days. Reconnect Jira to go on reading the issues linked to milestones." Choose **Reconnect Jira**.
+- When Atlassian no longer lists the connected site, twice at least 10 minutes apart, the card names it, as in "Jira no longer shows Vestiarion the Northstar site: the site was removed, or the person who connected Jira lost access to it. Reconnect Jira."
+- "Jira did not answer just now. It is read again within 15 minutes." on an issue the card could not read. "Jira asked Vestiarion to slow down." when Atlassian's rate limit, which every workspace on the app shares, was reached: Jira is not asked again until Atlassian's wait is over.
+- "Jira is not set up on this deployment yet." until the deployment runs migration 0149. A deployment without Jira's app settings shows no Jira card.
+
+## Disconnect
+
+Choose **Disconnect Jira** on the card. Vestiarion deletes its webhook on the site and its tokens: "Jira is disconnected, and its webhook deleted. Acceptances already recorded stay in Vestiarion." If Jira could not be reached to delete the webhook, the card says "Jira ends its webhook within 30 days." instead, and Vestiarion ignores what that webhook still sends. The ledger records `accounting_disconnected`.
+
+Atlassian gives apps no way to end their own access. "To end Vestiarion's access at Atlassian too, remove it from Connected apps in your Atlassian account settings."

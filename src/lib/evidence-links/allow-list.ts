@@ -35,6 +35,27 @@ export const LINEAR_WEB_HOST = "linear.app";
 export const LINEAR_API_HOST = "api.linear.app";
 const LINEAR_GRAPHQL = `https://${LINEAR_API_HOST}/graphql`;
 const LINEAR_ISSUE_QUERY = "query IssueExists($id: String!) { issue(id: $id) { id url } }";
+/**
+ * A Jira site's pages and Jira's API are on two hosts (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md
+ * JR20): an issue's link on the site the workspace connected, `https://<site>/browse/<KEY>`, is asked about at
+ * Atlassian's API, `api.atlassian.com/ex/jira/<cloudId>/rest/api/3/issue/<KEY>?fields=summary`, at an address built here
+ * from the site's cloudId and the issue's key alone, with the workspace's own Jira connection. The page a person typed is
+ * never requested. Only the connected site is known here (`jiraSite`): a link on any other Atlassian site, and any other
+ * page on the connected one, is not checked.
+ */
+export const JIRA_API_HOST = "api.atlassian.com";
+const JIRA_CLOUD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/** An issue's own page on the site, `/browse/ENG-142`; Jira takes its key in any case. */
+const JIRA_BROWSE_PATH = /^\/browse\/([A-Za-z][A-Za-z0-9_]{0,49}-[0-9]{1,18})\/?$/;
+/** The one request a Jira link is checked with: one issue, by its key in capitals, on one site, for its summary only. */
+const JIRA_API_PATH = /^\/ex\/jira\/([0-9a-f-]{36})\/rest\/api\/3\/issue\/[A-Z][A-Z0-9_]{0,49}-[0-9]{1,18}$/;
+const JIRA_API_QUERY = "?fields=summary";
+
+/** The Jira site the workspace connected: its host, as its address names it, and the cloudId Jira's API names it by. */
+export interface JiraLinkSite {
+  host: string;
+  cloudId: string;
+}
 
 /** A signed storage link carries a long token; nothing longer is read. */
 const URL_MAX = 4000;
@@ -48,8 +69,8 @@ export const NOT_CHECKED_WORDS: Readonly<Record<NotCheckedReason, string>> = {
   credentials: "A link that carries a user name or a password is never opened.",
   port: "A link to a port other than the web's own is never opened.",
   address: "A link to a private, local or numeric address is never opened.",
-  host: "Vestiarion checks links on GitHub, Asana, Linear and its own file storage only, and never opens other sites.",
-  path: "On GitHub, Vestiarion checks pull requests and their comments; on Asana, tasks and attachments; on Linear, issues; on its own storage, signed links.",
+  host: "Vestiarion checks links on GitHub, Asana, Linear, the connected Jira site and its own file storage only, and never opens other sites.",
+  path: "On GitHub, Vestiarion checks pull requests and their comments; on Asana, tasks and attachments; on Linear and the connected Jira site, issues; on its own storage, signed links.",
 };
 
 export type CheckTarget =
@@ -59,7 +80,9 @@ export type CheckTarget =
   | { kind: "asana_task"; href: string; taskGid: string; request: string }
   | { kind: "asana_attachment"; href: string; attachmentGid: string; request: string }
   /** Asked with a POST of `body`, a GraphQL query for the issue by its identifier, to `request`; `workspaceKey` is the link's. */
-  | { kind: "linear_issue"; href: string; identifier: string; workspaceKey: string; request: string; body: string };
+  | { kind: "linear_issue"; href: string; identifier: string; workspaceKey: string; request: string; body: string }
+  /** Asked with a GET of `request`, Jira's API for the issue by its key on the connected site, whose cloudId it names. */
+  | { kind: "jira_issue"; href: string; key: string; cloudId: string; request: string };
 
 export type TargetOf = { target: CheckTarget } | { notChecked: NotCheckedReason };
 
@@ -113,6 +136,18 @@ export function signedTokenExpiry(token: string): number | null {
   }
 }
 
+/**
+ * The connected Jira site, when it is what Atlassian names a site by: a cloudId, and a public host name that is none of
+ * the hosts checked otherwise. Null for anything else, so no link is checked on it.
+ */
+function jiraSiteOf(site: JiraLinkSite | null | undefined): JiraLinkSite | null {
+  if (!site || typeof site.host !== "string" || typeof site.cloudId !== "string" || !JIRA_CLOUD_ID.test(site.cloudId)) return null;
+  const host = site.host.toLowerCase();
+  if (numericHost(host) || localName(host)) return null;
+  if ([GITHUB_WEB_HOST, GITHUB_API_HOST, ASANA_HOST, LINEAR_WEB_HOST, LINEAR_API_HOST, JIRA_API_HOST].includes(host)) return null;
+  return { host, cloudId: site.cloudId };
+}
+
 /** The URL's own rules, shared by a link and a redirect: https, no credentials, the default port, a public name. */
 function checkedUrl(raw: string): { url: URL } | { notChecked: NotCheckedReason } {
   if (typeof raw !== "string" || raw.length === 0 || raw.length > URL_MAX) return { notChecked: "invalid" };
@@ -133,9 +168,10 @@ function checkedUrl(raw: string): { url: URL } | { notChecked: NotCheckedReason 
 
 /**
  * How a link may be checked, or why it is not. `storageHost` is the workspace's own Supabase (`storageHostOf`); a link
- * to any other storage is not checked.
+ * to any other storage is not checked. `jiraSite` is the Jira site the workspace connected; without it, no Jira link is
+ * checked.
  */
-export function checkTargetOf(raw: string, options: { storageHost?: string | null } = {}): TargetOf {
+export function checkTargetOf(raw: string, options: { storageHost?: string | null; jiraSite?: JiraLinkSite | null } = {}): TargetOf {
   const parsed = checkedUrl(raw);
   if ("notChecked" in parsed) return parsed;
   const { url } = parsed;
@@ -174,6 +210,16 @@ export function checkTargetOf(raw: string, options: { storageHost?: string | nul
     return { target: { kind: "linear_issue", href: url.href, identifier: issue.identifier, workspaceKey: issue.workspaceKey, request: LINEAR_GRAPHQL, body } };
   }
 
+  // An issue's own page on the connected Jira site only (Jira acceptance JR20): its attachments, boards and filters are
+  // other pages, and another site, Atlassian's own included, is another host.
+  const jiraSite = jiraSiteOf(options.jiraSite);
+  if (jiraSite && host === jiraSite.host) {
+    const browse = JIRA_BROWSE_PATH.exec(url.pathname);
+    if (!browse) return { notChecked: "path" };
+    const key = browse[1].toUpperCase();
+    return { target: { kind: "jira_issue", href: url.href, key, cloudId: jiraSite.cloudId, request: `https://${JIRA_API_HOST}/ex/jira/${jiraSite.cloudId}/rest/api/3/issue/${key}${JIRA_API_QUERY}` } };
+  }
+
   const storageHost = options.storageHost ?? null;
   if (storageHost && host === storageHost) {
     const token = url.searchParams.get("token");
@@ -187,15 +233,21 @@ export function checkTargetOf(raw: string, options: { storageHost?: string | nul
 /**
  * Whether the server may send a request to this address at all: the last check before any request, for a target and for
  * a redirect alike. Only GitHub's API, under a repository; Asana's API, for one task or one attachment; Linear's
- * GraphQL API; or the workspace's own storage, signed.
+ * GraphQL API; Jira's API, for one issue's summary on the connected site and in exactly the shape `checkTargetOf`
+ * builds; or the workspace's own storage, signed.
  */
-export function requestAllowed(raw: string, options: { storageHost?: string | null } = {}): boolean {
+export function requestAllowed(raw: string, options: { storageHost?: string | null; jiraSite?: JiraLinkSite | null } = {}): boolean {
   const parsed = checkedUrl(raw);
   if ("notChecked" in parsed) return false;
   const host = parsed.url.hostname.toLowerCase();
   if (host === GITHUB_API_HOST) return parsed.url.pathname.startsWith("/repos/") || parsed.url.pathname.startsWith("/repositories/");
   if (host === ASANA_HOST) return ASANA_API_PATH.test(parsed.url.pathname);
   if (host === LINEAR_API_HOST) return parsed.url.pathname === "/graphql" && parsed.url.search === "";
+  if (host === JIRA_API_HOST) {
+    const jiraSite = jiraSiteOf(options.jiraSite);
+    const issue = JIRA_API_PATH.exec(parsed.url.pathname);
+    return jiraSite !== null && issue !== null && issue[1] === jiraSite.cloudId && parsed.url.search === JIRA_API_QUERY && parsed.url.hash === "";
+  }
   const storageHost = options.storageHost ?? null;
   return Boolean(storageHost) && host === storageHost && SIGNED_PATH.test(parsed.url.pathname);
 }

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { raiseCycleEvent } from "@/lib/agent/cycle-soon";
 import { AsanaNotSetUpError, liveLinks } from "@/lib/asana/links";
 import { LinearNotSetUpError, liveLinks as linearLinks } from "@/lib/linear/links";
+import { JiraNotSetUpError, liveLinks as jiraLinks } from "@/lib/jira/links";
 import { authorize } from "@/lib/auth/authorize";
 import { revalidateOrgPages } from "@/lib/auth/revalidate";
 import { db } from "@/lib/dal";
@@ -65,6 +66,16 @@ async function linearLinkOf(milestoneId: string): Promise<{ state: string } | nu
     return (await linearLinks({ milestoneIds: [milestoneId] }))[0] ?? null;
   } catch (error) {
     if (error instanceof LinearNotSetUpError) return null;
+    throw error;
+  }
+}
+
+/** A milestone's live link to a Jira issue, and its state; none, before migration 0149. */
+async function jiraLinkOf(milestoneId: string): Promise<{ state: string } | null> {
+  try {
+    return (await jiraLinks({ milestoneIds: [milestoneId] }))[0] ?? null;
+  } catch (error) {
+    if (error instanceof JiraNotSetUpError) return null;
     throw error;
   }
 }
@@ -130,6 +141,14 @@ export async function manualMilestoneVerificationAction(
     }
     if (intent === "revoke" && linearLink?.state === "accepted") {
       return { ok: false, message: "This milestone's work was accepted from its Linear issue. Unlink the issue to take the acceptance back." };
+    }
+    // And work delivered in Jira, the same way (Jira acceptance JR11, JR13).
+    const jiraLink = await jiraLinkOf(milestone.id);
+    if (intent === "verify" && jiraLink) {
+      return { ok: false, message: "This milestone's work is accepted from its Jira issue. Accept it there against its criteria, or unlink the issue first." };
+    }
+    if (intent === "revoke" && jiraLink?.state === "accepted") {
+      return { ok: false, message: "This milestone's work was accepted from its Jira issue. Unlink the issue to take the acceptance back." };
     }
 
     const verified = intent === "verify";

@@ -19,7 +19,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of use"
-      updated="2026-11-01"
+      updated="2026-11-09"
       intro="These terms cover your use of Vestiarion, an AI agent for bills and payments that pays invoices and contractors in USDC on Arc mainnet and Arc testnet. By using it, you accept them."
     >
       <LegalSection id="networks" title="Arc mainnet and Arc testnet">
@@ -97,7 +97,7 @@ export default function TermsPage() {
             access to;
           </li>
           <li>
-            the work tool you connect, such as your Asana or Linear, and the acceptance criteria you write: a person in your workspace, never the
+            the work tool you connect, such as your Asana, Linear or Jira, and the acceptance criteria you write: a person in your workspace, never the
             work tool, accepts a contractor&apos;s work against them;
           </li>
           <li>using the service lawfully where you and the people you pay are, including any rules on paying in stablecoins.</li>
@@ -214,6 +214,20 @@ export default function TermsPage() {
           anyone else from accepting their own work stays the workspace&apos;s. Vestiarion never uses Linear data to train or improve any AI model,
           and never passes it to anyone else without the workspace&apos;s say. Disconnecting stops the reading at once and revokes Vestiarion&apos;s
           access at Linear; acceptances already recorded stay with the workspace.
+        </p>
+        <p>
+          When an owner or admin connects Jira to a workspace, they agree, for the workspace, that Vestiarion reads Jira as them, on the one Jira
+          site they connect: the site&apos;s name and address, and for each issue linked to a milestone its key, title, project, status and
+          resolution, when it was done, and once it is done its attachments&apos; names, its web links and the links in its description and newest
+          comments. Vestiarion writes nothing to Jira but one webhook on the site, which only tells it that a linked issue changed, and keeps no
+          Atlassian account ID, name or email. Anyone on a Jira site can move an issue to Done, so an issue done in Jira is never by itself a reason
+          to pay: a person in the workspace accepts the work against the milestone&apos;s criteria, an acceptance by a member Vestiarion can tell is
+          the payee is refused, and the agent then decides the payment within the workspace&apos;s guardrails. Nothing from Jira sets an amount or a
+          payee, and an issue reopened, resolved as not done or changed after it was accepted is held for review when Vestiarion reads that before
+          the payment is sent; keeping anyone else from accepting their own work stays the workspace&apos;s. Vestiarion never uses Jira data to train
+          or improve any AI model, and never passes it to anyone else without the workspace&apos;s say. Disconnecting stops the reading at once and
+          deletes the webhook and Vestiarion&apos;s tokens; Atlassian gives apps no way to end their own access, so the person who connected removes
+          Vestiarion from Connected apps in their Atlassian account settings to end it there. Acceptances already recorded stay with the workspace.
         </p>
         <p>
           When an owner or admin connects Google Sheets to a workspace, they agree, for the workspace, that Vestiarion makes spreadsheets in the Drive

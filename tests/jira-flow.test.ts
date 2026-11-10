@@ -1,0 +1,1144 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Actor } from "@/lib/commands/actor";
+import { acceptJiraWork, checkJiraIssue, linkJiraIssue, MISSING_WORDS, setJiraAcceptanceCriteria, unlinkJiraIssue, type JiraCommandDeps } from "@/lib/commands/jira";
+import { payMilestoneNow } from "@/lib/commands/milestones";
+import { COMMAND_PERMISSIONS, SURFACE_COMMANDS } from "@/lib/commands/policy";
+import { syncErrorWords } from "@/lib/connectors/status";
+import { acceptable, HELD_LINES, stateWords } from "@/lib/jira/acceptance";
+import { approvesOwnJiraPayout, identitiesOf } from "@/lib/jira/identities";
+import { selfAcceptance } from "@/lib/jira/acceptance";
+import { acceptLink, liveLinks, milestonesForAcceptance, writeState } from "@/lib/jira/links";
+import { readLink, type LinkDepth } from "@/lib/jira/reads";
+import { siteRef } from "@/lib/jira/sites";
+import type { JiraDeliveryEvent } from "@/lib/jira/webhook";
+import { jiraContext, recheckJiraBeforeSending, refreshJiraMilestones, rereadForDelivery, syncJiraConnection } from "@/lib/jira/workspace";
+import {
+  ADMIN,
+  CLOUD,
+  CONN,
+  CRITERIA,
+  DOCS,
+  ENG,
+  ENG_142,
+  ENG_143,
+  EXPORT,
+  FERNHILL,
+  jiraWorld,
+  MAI_ATLASSIAN,
+  NEW_CLOUD,
+  NEW_CONN,
+  OPS,
+  OPS_7,
+  ORG,
+  ORIGIN,
+  OTHER_CONN,
+  OTHER_EXPORT,
+  OTHER_ORG,
+  OWNER,
+  OWNER_ATLASSIAN,
+  PAYEE_MEMBER,
+  sha,
+  SITE_URL,
+  STATUS,
+  WEBHOOK_URL,
+  type JiraWorld,
+  type WorldHooks,
+} from "./support/jira-world";
+
+/**
+ * Contractor work accepted from Jira, its reads end to end over the real stores
+ * (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR8 to JR17, JR19, JR21): what a read of a linked issue
+ * does to the link and, through 0149's functions alone, to the milestone; what a signed delivery reads again, in which
+ * workspaces; what the sweep reads, and what it spends of Atlassian's shared rate limit; the agent's own reads before it
+ * decides and before it sends; and who may accept. Then the five commands themselves (JR1, JR6, JR7, JR11 to JR14): who
+ * may run them, what a link refuses, what accepting and unlinking do to the milestone, and what they say when Jira cannot
+ * be called. The database is an in-memory PostgREST holding 0149's checks; Jira is a fake Atlassian
+ * (tests/support/jira-world.ts). The reads' tests make and accept links through the stores, as the commands do.
+ */
+
+const { ledger, usage, hooks, runSoon } = vi.hoisted(() => ({
+  ledger: vi.fn(),
+  usage: vi.fn(async () => undefined),
+  hooks: { tokens: null, enter: null } as WorldHooks,
+  runSoon: vi.fn(),
+}));
+vi.mock("@/lib/ledger-best-effort", () => ({ appendLedgerEntryBestEffort: ledger }));
+vi.mock("@/lib/agent/cycle-soon", async (original) => ({ ...(await original<typeof import("@/lib/agent/cycle-soon")>()), runCycleSoon: runSoon }));
+vi.mock("@/lib/usage/record", () => ({ recordUsage: usage }));
+vi.mock("@/lib/connectors/token-store", async (original) => ({
+  ...(await original<typeof import("@/lib/connectors/token-store")>()),
+  connectionTokenStore: (_orgId: string, connectionId: string) => hooks.tokens?.(connectionId),
+}));
+vi.mock("@/lib/dal/scope", async (original) => ({
+  ...(await original<typeof import("@/lib/dal/scope")>()),
+  withOrg: <T,>(orgId: string, fn: () => Promise<T>) => (hooks.enter ? hooks.enter(orgId, fn) : Promise.reject(new Error("no scope"))),
+}));
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+const CURLY = String.fromCodePoint(0x2019);
+const HEX64 = /^[0-9a-f]{64}$/;
+
+const entries = (action: string) => ledger.mock.calls.filter(([, input]) => input.action === action).map(([, input]) => input);
+
+/** The site row as the connect flow's first upkeep leaves it, with a webhook for both projects checked just now. */
+function seedFreshSite(w: JiraWorld, connectionId = CONN, orgId = ORG, jql = `project in (${ENG}, ${OPS})`) {
+  const id = w.seedWebhook(jql);
+  w.seedSite({ webhook_ids: [id], webhook_jql: jql, webhook_expires_at: w.iso(w.clock.now + 30 * 24 * HOUR), webhook_registered_at: w.iso(), webhook_checked_at: w.iso() }, connectionId, orgId);
+  return id;
+}
+
+/** Check Jira now, as the card's button reads one link: with the workspace's connection, on its site. */
+const readNow = (w: JiraWorld, milestoneId: string, orgId = ORG, depth: LinkDepth = "auto") =>
+  w.runIn(orgId, async () => {
+    const context = await jiraContext(w.provider);
+    if ("missing" in context) throw new Error(context.missing);
+    if (!context.site) throw new Error("no site");
+    const link = (await liveLinks({ milestoneIds: [milestoneId] }))[0];
+    const milestone = (await milestonesForAcceptance([milestoneId])).get(milestoneId);
+    if (!link || !milestone) throw new Error("no link");
+    return readLink(link, { title: milestone.title, criteria: milestone.criteria !== null }, { session: context.session, reader: context.provider.reader, site: siteRef(context.site), now: () => w.clock.now }, depth);
+  });
+
+/** A person's acceptance, through `accept_jira_issue`, of the deliverables last read. */
+const accept = (w: JiraWorld, milestoneId: string, orgId = ORG) =>
+  w.runIn(orgId, async () => {
+    const link = (await liveLinks({ milestoneIds: [milestoneId] }))[0];
+    return acceptLink(link, { by: ADMIN, fingerprint: link.fingerprint ?? "", criteriaSha256: sha(CRITERIA), note: "Checked each criterion against the deliverables." });
+  });
+
+async function acceptedExport(w: JiraWorld, orgId = ORG, milestoneId = EXPORT) {
+  await w.link(milestoneId, ENG_142, orgId);
+  w.done(ENG_142);
+  await readNow(w, milestoneId, orgId);
+  await accept(w, milestoneId, orgId);
+  expect(w.milestone(milestoneId, orgId)).toMatchObject({ status: "verified", verification_method: "jira" });
+}
+
+const sweep = (w: JiraWorld, options: { force?: boolean; connectionId?: string } = {}) =>
+  w.run(() => syncJiraConnection(options.connectionId ?? CONN, w.provider, { now: () => w.clock.now, origin: ORIGIN, ...(options.force ? { force: true } : {}) }));
+/** The requests that read issues: the issue reads, their web links, and the change check. */
+const readCalls = (w: JiraWorld) => w.jira.calls.filter((call) => call.startsWith("GET /issue/") || call.startsWith("GET /search/"));
+const deliver = (w: JiraWorld, fields: Partial<JiraDeliveryEvent> = {}) =>
+  w.platform(() =>
+    rereadForDelivery({ event: "jira:issue_updated", webhookIds: [101], issueId: ENG_142, self: { cloudId: CLOUD }, timestamp: w.clock.now, ...fields }, w.provider, { now: () => w.clock.now })
+  );
+
+let w: JiraWorld;
+beforeEach(() => {
+  ledger.mockReset();
+  usage.mockClear();
+  runSoon.mockReset();
+  w = jiraWorld(hooks);
+});
+
+describe("reading a linked issue (Jira acceptance JR8 to JR10)", () => {
+  it("costs one request while the issue is open, a status read then a full one once it is done, and a full one at once after that", async () => {
+    seedFreshSite(w);
+    await w.link(EXPORT, ENG_142);
+    expect(await readNow(w, EXPORT)).toMatchObject({ kind: "read", plan: { kind: "set", state: "waiting" } });
+    expect(w.jira.calls).toEqual(["GET /issue/10042 status"]);
+    expect(w.row(EXPORT)).toMatchObject({
+      state: "waiting", status_category: "indeterminate", status_name: "In Progress", resolution_name: null, completed: false, completed_at: null,
+      deliverables: [], deliverable_fingerprint: null, last_read_at: w.iso(), read_error: null, issue_updated_at: "2026-11-08T10:00:00.000Z",
+    });
+
+    w.done(ENG_142);
+    w.jira.calls.length = 0;
+    expect(await readNow(w, EXPORT)).toMatchObject({ kind: "read", becameReady: true });
+    expect(w.jira.calls).toEqual(["GET /issue/10042 status", "GET /issue/10042 full", "GET /issue/10042/remotelink"]);
+
+    // Ready: read in full at once, so a change in what it delivers is seen.
+    w.jira.calls.length = 0;
+    expect(await readNow(w, EXPORT)).toMatchObject({ kind: "read", becameReady: false, plan: { kind: "set", state: "ready" } });
+    expect(w.jira.calls).toEqual(["GET /issue/10042 full", "GET /issue/10042/remotelink"]);
+  });
+
+  it("makes a done issue ready for a person, never the milestone verified, with one jira_issue_ready; without criteria it is held until they are written", async () => {
+    seedFreshSite(w);
+    await w.link(EXPORT, ENG_142);
+    await w.link(DOCS, ENG_143);
+    const doneAt = w.clock.now - HOUR;
+    w.done(ENG_142, doneAt);
+    w.done(ENG_143, doneAt);
+    await readNow(w, EXPORT);
+    await readNow(w, DOCS);
+    expect(w.row(EXPORT)).toMatchObject({ state: "ready", held_reason: null, completed: true, completed_at: w.iso(doneAt), status_category: "done", status_name: "Done", resolution_name: "Done" });
+    expect(w.row(EXPORT).deliverable_fingerprint).toMatch(HEX64);
+    expect(w.row(EXPORT).deliverables).toEqual([{ kind: "link", label: "figma.com/file/AbC123/webhooks", href: "https://www.figma.com/file/AbC123/webhooks", id: "https://www.figma.com/file/AbC123/webhooks" }]);
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false, verification_method: "unverified" });
+    expect(entries("jira_issue_ready")).toHaveLength(1);
+    expect(entries("jira_issue_ready")[0]).toMatchObject({
+      actor: "system",
+      domain: "contractor",
+      detail: {
+        milestoneId: EXPORT, linkId: w.row(EXPORT).id, issueId: ENG_142, identifier: "ENG-142", completedAt: w.iso(doneAt), statusName: "Done", resolutionName: "Done",
+        fingerprint: w.row(EXPORT).deliverable_fingerprint, deliverables: 1,
+      },
+    });
+    // The docs have no criteria: held, and ready once a person writes them.
+    expect(w.row(DOCS)).toMatchObject({ state: "held", held_reason: "no_criteria" });
+    Object.assign(w.milestone(DOCS), { acceptance_criteria: "The export, CSV and PDF, with tests." });
+    await readNow(w, DOCS);
+    expect(w.row(DOCS)).toMatchObject({ state: "ready", held_reason: null });
+    expect(entries("jira_issue_ready")).toHaveLength(2);
+  });
+
+  it("holds an issue resolved as Won't Do as canceled, never ready, in Jira's own words, after one status read", async () => {
+    seedFreshSite(w);
+    await w.link(STATUS, OPS_7);
+    w.done(OPS_7, w.clock.now - HOUR, `Won${CURLY}t Do`);
+    await readNow(w, STATUS);
+    expect(w.row(STATUS)).toMatchObject({ state: "held", held_reason: "canceled", completed: false, completed_at: null, resolution_name: `Won${CURLY}t Do`, status_category: "done" });
+    expect(w.jira.calls).toEqual(["GET /issue/10107 status"]);
+    expect(entries("jira_issue_ready")).toHaveLength(0);
+    expect(stateWords("held", "canceled", false, String(w.row(STATUS).resolution_name)).line).toBe(
+      `Jira resolved the issue as Won${CURLY}t Do, which is not done. Nothing is accepted from it: reopen it, or link another issue.`
+    );
+  });
+
+  it("follows an issue moved to another project: its new key, project and browse link, by the numeric id it keeps", async () => {
+    seedFreshSite(w);
+    await w.link(EXPORT, ENG_142);
+    w.change(ENG_142, { key: "OPS-12", projectId: OPS, projectKey: "OPS" });
+    await readNow(w, EXPORT);
+    expect(w.row(EXPORT)).toMatchObject({ issue_id: ENG_142, identifier: "OPS-12", project_id: OPS, project_key: "OPS", issue_url: `${SITE_URL}/browse/OPS-12` });
+  });
+
+  it("writes a failed read's words on the link and changes nothing else; an issue Jira no longer shows is held", async () => {
+    seedFreshSite(w);
+    await w.link(EXPORT, ENG_142);
+    w.jira.down = true;
+    expect(await readNow(w, EXPORT)).toEqual({ kind: "failed", message: "Jira did not answer just now. It is read again within 15 minutes." });
+    expect(w.row(EXPORT)).toMatchObject({ state: "waiting", read_error: "Jira did not answer just now. It is read again within 15 minutes.", last_read_at: null });
+    w.jira.down = false;
+    w.issues.get(CLOUD)?.delete(ENG_142);
+    await readNow(w, EXPORT);
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "issue_unreachable", read_error: null });
+  });
+});
+
+describe("an acceptance taken back (JR13)", () => {
+  it.each([
+    ["reopened", "reopened", (world: JiraWorld): void => world.reopen(ENG_142)],
+    [
+      "done again at another time",
+      "reopened",
+      (world: JiraWorld): void => {
+        world.reopen(ENG_142, world.clock.now - 10 * MINUTE);
+        world.done(ENG_142, world.clock.now - MINUTE);
+      },
+    ],
+    [
+      "given a new web link",
+      "deliverable_changed",
+      (world: JiraWorld): void => {
+        world.fakeIssue(ENG_142).remoteLinks.push({ id: 9001, object: { url: "https://github.com/northstar/app/pull/7", title: "PR 7" } });
+        world.change(ENG_142, {});
+      },
+    ],
+    ["deleted (404)", "issue_unreachable", (world: JiraWorld): void => void world.issues.get(CLOUD)?.delete(ENG_142)],
+  ] as const)("when the issue is %s, before any payment: the milestone goes back to pending", async (_what, reason, move) => {
+    seedFreshSite(w);
+    await acceptedExport(w);
+    const acceptedFingerprint = w.row(EXPORT).accepted_fingerprint;
+    const original = w.fakeIssue(ENG_142);
+    w.clock.now += MINUTE;
+    move(w);
+    expect(await readNow(w, EXPORT)).toMatchObject({ kind: "read", held: "held", plan: { kind: "withdraw", reason } });
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: reason, after_payment: false });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false, verification_status: "unverified" });
+    expect(entries("jira_acceptance_withdrawn")).toHaveLength(1);
+    expect(entries("jira_acceptance_withdrawn")[0]).toMatchObject({
+      actor: "system",
+      domain: "contractor",
+      summary: expect.stringContaining("before payment. Held for review"),
+      detail: { milestoneId: EXPORT, linkId: w.row(EXPORT).id, issueId: ENG_142, identifier: "ENG-142", reason, afterPayment: false, acceptedFingerprint },
+    });
+    // Held after an acceptance: no read moves it back.
+    if (reason === "issue_unreachable") w.issues.get(CLOUD)?.set(ENG_142, original);
+    w.done(ENG_142);
+    await readNow(w, EXPORT);
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: reason });
+  });
+
+  it("keeps the acceptance while the issue is what was accepted", async () => {
+    seedFreshSite(w);
+    await acceptedExport(w);
+    w.clock.now += HOUR;
+    expect(await readNow(w, EXPORT)).toMatchObject({ kind: "read", plan: { kind: "keep" }, held: null });
+    expect(w.row(EXPORT)).toMatchObject({ state: "accepted" });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "verified" });
+  });
+
+  it("holds the link alone, as a dispute, when the payment was sent: the milestone is not touched", async () => {
+    seedFreshSite(w);
+    await acceptedExport(w);
+    w.database.rows("payment_intents").push({ id: "intent-1", org_id: ORG, source_type: "milestone", source_id: EXPORT, status: "sent" });
+    w.reopen(ENG_142);
+    expect(await readNow(w, EXPORT)).toMatchObject({ held: "held_after_payment" });
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "reopened", after_payment: true });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "verified", verified: true });
+    expect(entries("jira_acceptance_withdrawn")[0]).toMatchObject({ summary: expect.stringContaining("after its payment was sent"), detail: { afterPayment: true } });
+    expect(stateWords("held", "reopened", true).label).toBe("Changed after payment");
+  });
+
+  it("waits while a person decides the milestone, and takes the acceptance back once their ten minutes are over", async () => {
+    seedFreshSite(w);
+    await acceptedExport(w);
+    Object.assign(w.milestone(EXPORT), { decision_claimed_at: w.iso() });
+    w.reopen(ENG_142);
+    expect(await readNow(w, EXPORT)).toMatchObject({ held: "deferred" });
+    expect(w.row(EXPORT)).toMatchObject({ state: "accepted", completed: false });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "verified" });
+    expect(entries("jira_acceptance_withdrawn")).toHaveLength(0);
+    w.clock.now += 11 * MINUTE;
+    expect(await readNow(w, EXPORT)).toMatchObject({ held: "held" });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+    expect(entries("jira_acceptance_withdrawn")).toHaveLength(1);
+  });
+
+  it.each([
+    ["deleted (404)", (world: JiraWorld): void => void world.issues.get(CLOUD)?.delete(ENG_142)],
+    ["hidden from the connection (403)", (world: JiraWorld): void => void world.jira.forbidden.add(ENG_142)],
+    ["on a site no longer connected", (world: JiraWorld): void => world.connectSouthwind()],
+  ] as const)("accepts nothing from an issue taken back for its deliverables and then %s", async (_what, move) => {
+    seedFreshSite(w);
+    await acceptedExport(w);
+    w.clock.now += MINUTE;
+    w.fakeIssue(ENG_142).remoteLinks.push({ id: 9001, object: { url: "https://github.com/northstar/app/pull/7", title: "PR 7" } });
+    w.change(ENG_142, {});
+    await readNow(w, EXPORT);
+    // Held for its deliverables, still done, with the new version's fingerprint: a person may accept that version.
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "deliverable_changed", completed: true });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+    w.clock.now += MINUTE;
+    move(w);
+    ledger.mockReset();
+    runSoon.mockReset();
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: false, code: "not_ready", message: `Held for review. ${HELD_LINES.issue_unreachable}`, changed: true });
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "issue_unreachable" });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false, verification_status: "unverified" });
+    expect(entries("jira_work_accepted")).toHaveLength(0);
+    expect(runSoon).not.toHaveBeenCalled();
+    // The card no longer offers it, and accepting again stays refused.
+    expect(acceptable(await w.live(EXPORT), { completed: true, archived: false, criteria: true, milestoneStatus: "pending" })).toBe(false);
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: false, code: "not_ready" });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+  });
+
+  it("holds the old site's links with no request once another site is connected, and never reads the new site's issue of the same id", async () => {
+    seedFreshSite(w);
+    await acceptedExport(w);
+    w.connectSouthwind();
+    w.jira.calls.length = 0;
+    expect(await sweep(w, { connectionId: NEW_CONN })).toMatchObject({ outcome: "synced", upkeep: "none" });
+    expect(w.jira.calls).toEqual(["GET /accessible-resources"]);
+    expect(w.restCalls()).toEqual([]);
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "issue_unreachable", cloud_id: CLOUD });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+    expect(w.site(NEW_CONN)).toMatchObject({ cloud_id: NEW_CLOUD });
+    // Held now: the next sweeps leave it alone, still with no request.
+    w.clock.now += 15 * MINUTE;
+    await sweep(w, { connectionId: NEW_CONN });
+    expect(w.restCalls()).toEqual([]);
+    expect(w.jira.calls.some((call) => call.includes(NEW_CLOUD))).toBe(false);
+  });
+});
+
+describe("a delivery only nudges a read (JR15)", () => {
+  it("reads the issue again in every workspace whose webhook it matched, and notes each delivery", async () => {
+    w = jiraWorld(hooks, { secondWorkspace: true });
+    w.seedSite({ webhook_ids: [101], webhook_jql: "project in (10000)" });
+    w.seedSite({ webhook_ids: [202], webhook_jql: "project in (10000)" }, OTHER_CONN, OTHER_ORG);
+    await w.link(EXPORT, ENG_142);
+    await w.link(OTHER_EXPORT, ENG_142, OTHER_ORG);
+    expect(await deliver(w, { webhookIds: [101, 202] })).toBe(2);
+    expect(w.issueReads(ENG_142)).toBe(2);
+    expect(w.row(EXPORT).last_read_at).toBe(w.iso());
+    expect(w.row(OTHER_EXPORT, OTHER_ORG).last_read_at).toBe(w.iso());
+    expect(w.site()?.last_delivery_at).toBe(w.iso());
+    expect(w.site(OTHER_CONN)?.last_delivery_at).toBe(w.iso());
+  });
+
+  it("skips a row whose site the issue's address does not name, and reads one whose address does not parse", async () => {
+    w.seedSite({ webhook_ids: [101] });
+    await w.link(EXPORT, ENG_142);
+    expect(await deliver(w, { self: { host: "ridge.atlassian.net" } })).toBe(0);
+    expect(await deliver(w, { self: { cloudId: NEW_CLOUD } })).toBe(0);
+    expect(w.issueReads()).toBe(0);
+    expect(w.site()?.last_delivery_at).toBeNull();
+    w.clock.now += 10 * 1000;
+    expect(await deliver(w, { self: { host: "northstar.atlassian.net" } })).toBe(1);
+    w.clock.now += 10 * 1000;
+    expect(await deliver(w, { self: null })).toBe(1);
+    expect(w.issueReads()).toBe(2);
+  });
+
+  it("reads nothing for a webhook no row holds, or a connection no longer live", async () => {
+    w.seedSite({ webhook_ids: [101] });
+    await w.link(EXPORT, ENG_142);
+    expect(await deliver(w, { webhookIds: [999] })).toBe(0);
+    Object.assign(w.connection(), { status: "needs_reconnect" });
+    expect(await deliver(w)).toBe(0);
+    expect(w.jira.calls).toEqual([]);
+  });
+
+  it("skips a link whose last read started at least 5 s after the delivery was sent: that read saw the change", async () => {
+    seedFreshSite(w);
+    w.seedSite({ webhook_ids: [101] }, OTHER_CONN, OTHER_ORG);
+    w.database.rows("jira_sites")[0].webhook_ids = [101];
+    await w.link(EXPORT, ENG_142);
+    await readNow(w, EXPORT);
+    const readAt = w.clock.now;
+    w.clock.now += MINUTE;
+    w.jira.calls.length = 0;
+    expect(await deliver(w, { timestamp: readAt - 5000 })).toBe(0);
+    expect(await deliver(w, { timestamp: readAt - 5001 })).toBe(0);
+    expect(w.jira.calls).toEqual([]);
+    expect(await deliver(w, { timestamp: readAt - 4999 })).toBe(1);
+    // A delivery that does not say when it was sent is read.
+    expect(await deliver(w, { timestamp: null })).toBe(1);
+  });
+
+  it("reads a comment and the Done that follows it 30 s later both, never leaving the second for the sweep", async () => {
+    seedFreshSite(w);
+    w.database.rows("jira_sites")[0].webhook_ids = [101];
+    await w.link(EXPORT, ENG_142);
+    await readNow(w, EXPORT);
+    w.clock.now += MINUTE;
+    w.fakeIssue(ENG_142).comments.push({ id: "10300", created: w.jiraTime(w.clock.now), body: { type: "doc", version: 1, content: [] } });
+    w.change(ENG_142, {});
+    const commentSent = w.clock.now;
+    w.clock.now += 1000;
+    expect(await deliver(w, { event: "comment_created", timestamp: commentSent })).toBe(1);
+    w.clock.now = commentSent + 30_000;
+    w.done(ENG_142, w.clock.now);
+    const doneSent = w.clock.now;
+    w.clock.now += 1000;
+    expect(await deliver(w, { timestamp: doneSent })).toBe(1);
+    expect(w.row(EXPORT)).toMatchObject({ state: "ready" });
+    expect(entries("jira_issue_ready")).toHaveLength(1);
+  });
+});
+
+/** Links as the stores keep them, each to its own milestone and issue, with a last read `minutesAgo` before now. */
+function seedLinks(w: JiraWorld, count: number, fields: { status?: string; firstIssue?: number; minutesAgo?: (index: number) => number | null; inJira?: boolean } = {}) {
+  const made: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const issueId = String((fields.firstIssue ?? 20000) + index);
+    const key = `ENG-${issueId}`;
+    const milestoneId = `bbbbbbbb-0000-4000-8000-${String(index).padStart(12, "0")}`;
+    const ago = fields.minutesAgo ? fields.minutesAgo(index) : 30;
+    w.database.rows("milestones").push({
+      id: milestoneId, org_id: ORG, title: `Milestone ${index}`, amount: "100", contractor_id: FERNHILL, status: fields.status ?? "pending", verified: false, verification_method: "unverified",
+      verification_status: "unverified", verification_source: null, verification_detail: null, acceptance_criteria: CRITERIA, decision_claimed_at: null, created_at: `2026-10-01T00:00:${String(index % 60).padStart(2, "0")}Z`,
+    });
+    w.database.rows("jira_issue_links").push({
+      id: crypto.randomUUID(), org_id: ORG, milestone_id: milestoneId, connection_id: CONN, cloud_id: CLOUD, issue_id: issueId, identifier: key, project_id: ENG, project_key: "ENG",
+      issue_title: `Issue ${index}`, issue_url: `${SITE_URL}/browse/${key}`, state: "waiting", held_reason: null, after_payment: false, held_at: null, status_category: "indeterminate",
+      status_name: "In Progress", resolution_name: null, completed: false, completed_at: null, deliverables: [], deliverable_fingerprint: null, attachments_read: 0, remote_links_read: 0,
+      comments_read: 0, more_unread: false, issue_updated_at: "2026-11-08T10:00:00.000Z", last_read_at: ago === null ? null : w.iso(w.clock.now - ago * MINUTE), read_error: null,
+      accepted_by: null, accepted_at: null, accepted_fingerprint: null, accepted_completed_at: null, accepted_criteria_sha256: null, accepted_deliverables: null, linked_by: ADMIN,
+      linked_at: "2026-10-01T00:00:00Z", unlinked_by: null, unlinked_at: null, updated_at: "2026-10-01T00:00:00Z",
+    });
+    if (fields.inJira !== false) {
+      w.issues.get(CLOUD)?.set(issueId, { ...w.fakeIssue(ENG_143), id: issueId, key, title: `Issue ${index}`, updated: "2026-11-08T10:00:00.000+0000" });
+    }
+    made.push(issueId);
+  }
+  return made;
+}
+
+describe("the sweep (JR16)", () => {
+  it("asks once when the issues last changed, then reads only those that changed or are past their floor", async () => {
+    seedFreshSite(w);
+    await w.link(EXPORT, ENG_142);
+    await w.link(DOCS, ENG_143);
+    await w.link(STATUS, OPS_7);
+    w.done(ENG_142);
+    // Never read: every one is read, and no change check is needed for them.
+    expect(await sweep(w)).toMatchObject({ outcome: "synced", upkeep: "fresh", summary: { read: 3, failed: 0, ready: 1 } });
+    expect(readCalls(w)).toEqual(["GET /issue/10042 status", "GET /issue/10042 full", "GET /issue/10042/remotelink", "GET /issue/10043 status", "GET /issue/10107 status"]);
+    expect(usage).toHaveBeenCalledWith({ kind: "connector_sync", action: "jira", provider: "jira", ok: true });
+    await accept(w, EXPORT);
+
+    w.clock.now += 15 * MINUTE;
+    w.jira.calls.length = 0;
+    await sweep(w);
+    expect(readCalls(w)).toEqual([`GET /search/jql id in (${ENG_142}, ${ENG_143}, ${OPS_7}) updated`]);
+
+    w.clock.now += MINUTE;
+    w.change(ENG_143, { title: "Billing export, CSV and PDF" });
+    w.clock.now += 14 * MINUTE;
+    w.jira.calls.length = 0;
+    await sweep(w);
+    expect(readCalls(w)).toEqual([`GET /search/jql id in (${ENG_142}, ${ENG_143}, ${OPS_7}) updated`, "GET /issue/10043 status"]);
+    expect(w.row(DOCS)).toMatchObject({ issue_title: "Billing export, CSV and PDF" });
+
+    // An hour since the accepted issue was read: its floor, in full, as web-link edits may not move `updated`.
+    w.clock.now += 31 * MINUTE;
+    w.jira.calls.length = 0;
+    await sweep(w);
+    expect(readCalls(w)).toEqual([`GET /search/jql id in (${ENG_142}, ${ENG_143}, ${OPS_7}) updated`, "GET /issue/10042 full", "GET /issue/10042/remotelink"]);
+  });
+
+  it("reads every link, oldest read first, at most 20, when Jira refuses the change check, and says so once", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    const ids = seedLinks(w, 25, { minutesAgo: (index) => 100 - index });
+    w.jira.searchRefused = true;
+    expect(await sweep(w)).toMatchObject({ outcome: "synced", summary: { read: 20 } });
+    const read = readCalls(w).filter((call) => call.startsWith("GET /issue/")).map((call) => call.split(" ")[1].replace("/issue/", ""));
+    expect(read).toEqual(ids.slice(0, 20));
+    expect(readCalls(w).filter((call) => call.startsWith("GET /search/"))).toHaveLength(1);
+    expect(warn.mock.calls.filter(([message]) => String(message).includes("change check was refused"))).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it("leaves an issue deleted after its acceptance was taken back out of the change check, so the check answers again", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    await acceptedExport(w);
+    await w.link(DOCS, ENG_143);
+    await readNow(w, DOCS);
+    w.clock.now += MINUTE;
+    w.reopen(ENG_142);
+    await readNow(w, EXPORT);
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "reopened" });
+    // Deleted in Jira: the next change check names it, so Jira refuses it whole and that sweep reads every link.
+    w.issues.get(CLOUD)?.delete(ENG_142);
+    w.clock.now += 15 * MINUTE;
+    w.jira.calls.length = 0;
+    await sweep(w);
+    expect(readCalls(w)).toEqual([`GET /search/jql id in (${ENG_142}, ${ENG_143}) updated`, "GET /issue/10042 status", "GET /issue/10043 status"]);
+    expect(w.row(EXPORT)).toMatchObject({ state: "held", held_reason: "issue_unreachable" });
+    // Held as unreachable now: left out of the check, which answers again, and nothing unchanged is read.
+    w.clock.now += 15 * MINUTE;
+    w.jira.calls.length = 0;
+    await sweep(w);
+    expect(readCalls(w)).toEqual([`GET /search/jql id in (${ENG_143}) updated`]);
+    expect(warn.mock.calls.filter(([message]) => String(message).includes("change check was refused"))).toHaveLength(1);
+    warn.mockRestore();
+  });
+
+  it("is not starved by the links of paid milestones, which stay live as history", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    seedLinks(w, 120, { status: "paid", firstIssue: 30000, minutesAgo: () => null, inJira: false });
+    await w.link(EXPORT, ENG_142);
+    expect(await sweep(w)).toMatchObject({ outcome: "synced", summary: { read: 1 } });
+    expect(readCalls(w)).toEqual(["GET /issue/10042 status"]);
+  });
+
+  it.each([
+    ["30 s old", 30_000, false, false],
+    ["3 minutes old, with no delivery since", 3 * MINUTE, false, true],
+    ["3 minutes old, with a delivery since", 3 * MINUTE, true, false],
+  ] as const)("notes a change no delivery told of only when it is at least 2 minutes old: one %s", async (_what, age, delivered, noted) => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    await w.link(EXPORT, ENG_142);
+    await sweep(w);
+    w.clock.now += 15 * MINUTE;
+    const changedAt = w.clock.now - age;
+    w.change(ENG_142, { title: "Webhook retries with backoff, v2" }, changedAt);
+    if (delivered) Object.assign(w.site() ?? {}, { last_delivery_at: w.iso(changedAt + 10_000) });
+    await sweep(w);
+    expect(w.row(EXPORT)).toMatchObject({ issue_title: "Webhook retries with backoff, v2" });
+    expect(w.site()?.missed_change_at ?? null).toBe(noted ? w.iso() : null);
+  });
+
+  it("asks nothing while Atlassian's shared limit is spent, and runs again when the pause ends", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    await w.link(EXPORT, ENG_142);
+    w.pause.until = w.clock.now + 2 * MINUTE;
+    expect(await sweep(w)).toMatchObject({ outcome: "rate_limited" });
+    expect(w.jira.calls).toEqual([]);
+    expect(w.connection()).toMatchObject({ next_sync_after: w.iso(w.pause.until), failures: 1 });
+    expect(String(w.connection().last_error)).toMatch(/^Jira asked Vestiarion to slow down\. Syncing again at /);
+  });
+
+  it("reads nothing when the limit is spent during the webhook upkeep", async () => {
+    seedFreshSite(w);
+    await w.link(EXPORT, ENG_142);
+    w.jira.quotaSpent = true;
+    // The links are all in ENG now, so the upkeep registers a webhook for ENG alone, and Atlassian refuses it.
+    expect(await sweep(w)).toMatchObject({ outcome: "rate_limited" });
+    expect(w.restCalls()).toEqual(["POST /webhook"]);
+    expect(w.row(EXPORT).last_read_at).toBeNull();
+    expect(w.connection()).toMatchObject({ next_sync_after: w.iso(w.clock.now + 120_000) });
+  });
+
+  it("stops reading the moment Atlassian says its shared limit is spent, and waits for the pause's end", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    await w.link(EXPORT, ENG_142);
+    await w.link(DOCS, ENG_143);
+    w.jira.quotaSpent = true;
+    expect(await sweep(w)).toMatchObject({ outcome: "rate_limited" });
+    expect(w.restCalls()).toEqual(["GET /issue/10042 status"]);
+    expect(w.pause.until).toBe(w.clock.now + 120_000);
+    expect(w.connection()).toMatchObject({ next_sync_after: w.iso(w.clock.now + 120_000) });
+    expect(w.row(EXPORT).read_error).toBe("Jira asked Vestiarion to slow down. It is read again within 15 minutes.");
+    expect(w.row(DOCS).read_error).toBeNull();
+  });
+
+  it("marks a connection whose grant Atlassian refuses to reconnect, in the 90-day words", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    await w.link(EXPORT, ENG_142);
+    w.revokeAtAtlassian();
+    expect(await sweep(w)).toMatchObject({ outcome: "reconnect" });
+    expect(w.jira.calls).toContain("POST /oauth/token");
+    expect(w.connection()).toMatchObject({ status: "needs_reconnect", last_error: syncErrorWords("reconnect", "Jira", null) });
+    expect(String(w.connection().last_error)).toContain("or it went unused for 90 days");
+  });
+});
+
+describe("the agent's own reads (JR16)", () => {
+  it("reads each accepted issue of a milestone verified by Jira in full before the cycle decides, and takes back one reopened", async () => {
+    seedFreshSite(w);
+    await acceptedExport(w);
+    w.reopen(ENG_142);
+    w.jira.calls.length = 0;
+    expect(await w.run(() => refreshJiraMilestones(w.provider))).toMatchObject({ checked: 1, read: 1, withdrawn: 1 });
+    expect(w.jira.calls[0]).toBe("GET /issue/10042 full");
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+  });
+
+  it("reads the releases' accepted issues right before sending, and says when that could not be done", async () => {
+    seedFreshSite(w);
+    await acceptedExport(w);
+    expect(await w.run(() => recheckJiraBeforeSending([EXPORT], w.provider))).toMatchObject({ checked: 1, read: 1, complete: true });
+
+    w.pause.until = w.clock.now + MINUTE;
+    w.jira.calls.length = 0;
+    expect(await w.run(() => recheckJiraBeforeSending([EXPORT], w.provider))).toMatchObject({ checked: 1, read: 0, complete: false });
+    expect(w.jira.calls).toEqual([]);
+    w.pause.until = 0;
+
+    w.jira.down = true;
+    expect(await w.run(() => recheckJiraBeforeSending([EXPORT], w.provider))).toMatchObject({ checked: 1, failed: 1, complete: false });
+    expect(w.row(EXPORT)).toMatchObject({ state: "accepted" });
+    expect(await w.run(() => recheckJiraBeforeSending([], w.provider))).toMatchObject({ checked: 0, complete: true });
+  });
+
+  it("never throws, Jira off or not connected", async () => {
+    expect(await w.run(() => refreshJiraMilestones(null))).toMatchObject({ checked: 0 });
+    Object.assign(w.connection(), { status: "revoked" });
+    expect(await w.run(() => refreshJiraMilestones(w.provider))).toMatchObject({ checked: 0 });
+  });
+});
+
+describe("who may accept (JR12)", () => {
+  const identities = (world: JiraWorld, userId: string) =>
+    world.run(async () => {
+      const context = await jiraContext(world.provider);
+      if ("missing" in context) throw new Error(context.missing);
+      return identitiesOf({ orgId: ORG, userId }, { contractorId: FERNHILL }, context);
+    });
+
+  it("refuses the payee by their email in Vestiarion", async () => {
+    seedFreshSite(w);
+    expect(selfAcceptance(await identities(w, PAYEE_MEMBER))).toBe("payee_member");
+  });
+
+  it("refuses a member whose Atlassian account, found by their email, is the payee's", async () => {
+    seedFreshSite(w);
+    w.jira.accounts.set("admin@business.example", [MAI_ATLASSIAN]);
+    expect(await identities(w, ADMIN)).toMatchObject({ payeeJiraIds: [MAI_ATLASSIAN], memberJiraIds: [MAI_ATLASSIAN] });
+    expect(selfAcceptance(await identities(w, ADMIN))).toBe("payee_jira");
+    expect(w.jira.calls).not.toContain("GET /myself");
+    w.jira.accounts.delete("admin@business.example");
+    expect(selfAcceptance(await identities(w, ADMIN))).toBeNull();
+  });
+
+  it("refuses the person who connected Jira when their own account, /myself, is the payee's", async () => {
+    w = jiraWorld(hooks, { ownerAtlassianIsPayee: true });
+    seedFreshSite(w);
+    const found = await identities(w, OWNER);
+    expect(found).toMatchObject({ payeeJiraIds: [OWNER_ATLASSIAN], memberJiraIds: [OWNER_ATLASSIAN] });
+    expect(selfAcceptance(found)).toBe("payee_jira");
+    expect(w.jira.calls).toContain("GET /myself");
+    // The member's own email is not looked up when /myself answers for them.
+    expect(w.jira.people).toEqual(["mai@fernhill.example"]);
+  });
+
+  it("asks Jira nothing without the payee's email, and checks a payout by email alone", async () => {
+    w = jiraWorld(hooks, { payeeEmail: null });
+    seedFreshSite(w);
+    expect(selfAcceptance(await identities(w, ADMIN))).toBeNull();
+    expect(w.jira.calls).toEqual([]);
+
+    w = jiraWorld(hooks);
+    seedFreshSite(w);
+    await w.link(EXPORT, ENG_142);
+    expect(await w.run(() => approvesOwnJiraPayout({ orgId: ORG, userId: PAYEE_MEMBER }, EXPORT))).toBe(true);
+    expect(await w.run(() => approvesOwnJiraPayout({ orgId: ORG, userId: ADMIN }, EXPORT))).toBe(false);
+    expect(await w.run(() => approvesOwnJiraPayout({ orgId: ORG, userId: PAYEE_MEMBER }, DOCS))).toBe(false);
+    expect(w.jira.calls).toEqual([]);
+  });
+});
+
+describe("what is kept, and what is written (JR18, JR19)", () => {
+  it("keeps no Atlassian account, completer or assignee anywhere, and writes a milestone only through 0149's functions", async () => {
+    seedFreshSite(w);
+    w.jira.accounts.set("admin@business.example", [MAI_ATLASSIAN]);
+    await acceptedExport(w);
+    await w.run(async () => {
+      const context = await jiraContext(w.provider);
+      if ("missing" in context) throw new Error(context.missing);
+      return identitiesOf({ orgId: ORG, userId: ADMIN }, { contractorId: FERNHILL }, context);
+    });
+    w.reopen(ENG_142);
+    await readNow(w, EXPORT);
+    const kept = JSON.stringify([w.database.tables, w.database.requests.map((request) => request.body), w.jira.bodies, ledger.mock.calls]);
+    for (const word of [OWNER_ATLASSIAN, MAI_ATLASSIAN, "accountId", "completed_by", "assignee"]) expect(kept).not.toContain(word);
+    expect(w.database.requests.filter((request) => request.path === "/rest/v1/milestones" && request.method !== "GET")).toEqual([]);
+    expect(w.database.requests.filter((request) => request.path.startsWith("/rest/v1/rpc/")).map((request) => request.path)).toEqual(
+      expect.arrayContaining(["/rest/v1/rpc/accept_jira_issue", "/rest/v1/rpc/hold_jira_acceptance"])
+    );
+  });
+});
+
+// The commands (JR1, JR6, JR7, JR11 to JR14), as the console runs them.
+
+const ISSUE_COMMANDS = ["milestone.link_issue", "milestone.unlink_issue", "milestone.set_issue_criteria", "milestone.accept_issue", "milestone.check_issue"] as const;
+const actor = (userId = ADMIN, fields: Partial<Actor> = {}): Actor => ({ orgId: ORG, userId, role: "admin", mode: "live", surface: { kind: "console" }, ...fields });
+/** What each command is given here: the fake Atlassian, the world's clock, and the deployment's public address. */
+const deps = (): JiraCommandDeps => ({ provider: w.provider, now: () => w.clock.now, origin: ORIGIN });
+const linkIssue = (milestoneId: string, issue: string, who: Actor = actor()) => w.run(() => linkJiraIssue(who, { milestoneId, issue }, deps()));
+const unlinkIssue = (milestoneId: string, who: Actor = actor()) => w.run(() => unlinkJiraIssue(who, { milestoneId }, deps()));
+const checkIssue = (milestoneId: string, who: Actor = actor()) => w.run(() => checkJiraIssue(who, { milestoneId }, deps()));
+const setCriteria = (milestoneId: string, criteria: string, who: Actor = actor()) => w.run(() => setJiraAcceptanceCriteria(who, { milestoneId, criteria }, deps()));
+/** An acceptance of what the card last showed: the link's fingerprint and the milestone's criteria, unless told otherwise. */
+const acceptWork = (milestoneId: string, who: Actor = actor(), shown: { fingerprint?: string; criteriaSha256?: string; confirmed?: boolean } = {}) =>
+  w.run(() =>
+    acceptJiraWork(
+      who,
+      {
+        milestoneId,
+        fingerprint: shown.fingerprint ?? String(w.row(milestoneId)?.deliverable_fingerprint ?? ""),
+        criteriaSha256: shown.criteriaSha256 ?? sha(String(w.milestone(milestoneId).acceptance_criteria ?? "")),
+        confirmed: shown.confirmed ?? true,
+      },
+      deps()
+    )
+  );
+
+/** ENG-142 done in Jira and linked to the export through the command: ready for a person, the webhook already for ENG. */
+async function readyExport() {
+  seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+  w.done(ENG_142);
+  expect(await linkIssue(EXPORT, "ENG-142")).toMatchObject({ ok: true, state: "ready" });
+}
+
+/** A live Asana link of a milestone, as 0115 keeps it. */
+const asanaRow = (milestoneId: string) => ({
+  id: crypto.randomUUID(), org_id: ORG, milestone_id: milestoneId, connection_id: "conn-asana", workspace_gid: "1204081671801519", project_gid: null, task_gid: "1219477646404728",
+  task_name: "Billing export", task_url: null, state: "waiting", held_reason: null, after_payment: false, held_at: null, completed: false, completed_at: null, deliverables: [],
+  deliverable_fingerprint: null, last_read_at: null, read_error: null, accepted_by: null, accepted_at: null, accepted_fingerprint: null, accepted_completed_at: null,
+  accepted_deliverables: null, linked_at: "2026-11-08T08:00:00Z", unlinked_at: null,
+});
+/** A live Linear link of a milestone, as 0147 keeps it. */
+const linearRow = (milestoneId: string) => ({
+  id: crypto.randomUUID(), org_id: ORG, milestone_id: milestoneId, connection_id: "conn-linear", issue_id: "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c02", identifier: "DOC-4", team_id: null,
+  team_key: "DOC", issue_title: "Billing export", issue_url: null, state: "waiting", held_reason: null, after_payment: false, held_at: null, state_type: "started", state_name: "In Progress",
+  completed: false, completed_at: null, archived: false, deliverables: [], deliverable_fingerprint: null, attachments_read: 0, comments_read: 0, more_unread: false, issue_updated_at: null,
+  last_read_at: null, read_error: null, accepted_by: null, accepted_at: null, accepted_fingerprint: null, accepted_completed_at: null, accepted_criteria_sha256: null,
+  accepted_deliverables: null, linked_by: ADMIN, linked_at: "2026-11-08T08:00:00Z", unlinked_by: null, unlinked_at: null, updated_at: "2026-11-08T08:00:00Z",
+});
+
+describe("who may run the commands (JR6, JR7, JR11)", () => {
+  it("is whoever verifies milestones by hand, under Linear's five names, from the console only", () => {
+    for (const command of ISSUE_COMMANDS) {
+      expect(COMMAND_PERMISSIONS[command]).toBe("records.write");
+      for (const surface of ["telegram", "slack", "api", "github", "chrome"] as const) expect(SURFACE_COMMANDS[surface]).not.toContain(command);
+    }
+  });
+
+  it("refuses an approver, a viewer or an accountant before anything is read, in Vestiarion or in Jira", async () => {
+    seedFreshSite(w);
+    for (const role of ["approver", "viewer", "accountant"] as const) {
+      const who = actor(ADMIN, { role });
+      expect(await linkIssue(EXPORT, "ENG-142", who), role).toMatchObject({ ok: false, code: "forbidden" });
+      expect(await unlinkIssue(EXPORT, who), role).toMatchObject({ ok: false, code: "forbidden" });
+      expect(await checkIssue(EXPORT, who), role).toMatchObject({ ok: false, code: "forbidden" });
+      expect(await setCriteria(EXPORT, CRITERIA, who), role).toMatchObject({ ok: false, code: "forbidden" });
+      expect(await acceptWork(EXPORT, who, { fingerprint: "a".repeat(64) }), role).toMatchObject({ ok: false, code: "forbidden" });
+    }
+    expect(w.database.requests).toEqual([]);
+    expect(w.jira.calls).toEqual([]);
+  });
+});
+
+describe("linking through the command (JR6, JR8, JR14)", () => {
+  it("links by the issue's link and by a lower-case key, keeping the site's cloud id and the numeric id, in one request for a waiting issue", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    expect(await linkIssue(EXPORT, `${SITE_URL}/browse/ENG-142?focusedCommentId=10300`)).toMatchObject({ ok: true, state: "waiting", message: expect.stringContaining("Linked to ENG-142") });
+    // Its status, by the key pasted, and nothing else: the webhook already names its project.
+    expect(w.jira.calls).toEqual(["GET /issue/ENG-142 status"]);
+    expect(w.row(EXPORT)).toMatchObject({
+      connection_id: CONN, cloud_id: CLOUD, issue_id: ENG_142, identifier: "ENG-142", project_id: ENG, project_key: "ENG", issue_title: "Webhook retries with backoff",
+      issue_url: `${SITE_URL}/browse/ENG-142`, state: "waiting", status_name: "In Progress", completed: false, deliverable_fingerprint: null, last_read_at: w.iso(), linked_by: ADMIN,
+    });
+    expect(entries("jira_issue_linked")).toHaveLength(1);
+    expect(entries("jira_issue_linked")[0]).toMatchObject({
+      actor: "human",
+      domain: "contractor",
+      detail: {
+        by: ADMIN, milestoneId: EXPORT, linkId: w.row(EXPORT).id, issueId: ENG_142, identifier: "ENG-142", projectKey: "ENG", cloudId: CLOUD, issueUrl: `${SITE_URL}/browse/ENG-142`,
+        completed: false, fingerprint: null,
+      },
+    });
+
+    w.jira.calls.length = 0;
+    expect(await linkIssue(DOCS, "eng-143")).toMatchObject({ ok: true, state: "waiting" });
+    expect(w.jira.calls).toEqual(["GET /issue/ENG-143 status"]);
+    expect(w.row(DOCS)).toMatchObject({ cloud_id: CLOUD, issue_id: ENG_143, identifier: "ENG-143" });
+    // Every read after the link is by the numeric id.
+    w.jira.calls.length = 0;
+    expect(await checkIssue(EXPORT)).toMatchObject({ ok: true, message: expect.stringMatching(/^Read from Jira\. /) });
+    expect(w.jira.calls).toEqual(["GET /issue/10042 status"]);
+  });
+
+  it("reads a done issue's status, then all of it: ready for a person, with what it delivers, and the milestone not verified", async () => {
+    await readyExport();
+    expect(w.jira.calls).toEqual(["GET /issue/ENG-142 status", "GET /issue/10042 full", "GET /issue/10042/remotelink"]);
+    expect(w.row(EXPORT)).toMatchObject({ state: "ready", completed: true, deliverable_fingerprint: expect.stringMatching(HEX64) });
+    expect(entries("jira_issue_linked")[0].detail).toMatchObject({ completed: true, fingerprint: w.row(EXPORT).deliverable_fingerprint });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false, verification_method: "unverified" });
+    expect(runSoon).not.toHaveBeenCalled();
+  });
+
+  it("holds an issue resolved as Won't Do as canceled, in Jira's words, after one status read", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${OPS})`);
+    w.done(OPS_7, w.clock.now - HOUR, `Won${CURLY}t Do`);
+    expect(await linkIssue(STATUS, "OPS-7")).toMatchObject({ ok: true, state: "held", message: expect.stringContaining(`Jira resolved the issue as Won${CURLY}t Do, which is not done.`) });
+    expect(w.jira.calls).toEqual(["GET /issue/OPS-7 status"]);
+    expect(w.row(STATUS)).toMatchObject({ state: "held", held_reason: "canceled", completed: false, resolution_name: `Won${CURLY}t Do` });
+    expect(entries("jira_issue_linked")[0].detail).toMatchObject({ completed: false, fingerprint: null });
+  });
+
+  it("refuses what is not a Jira issue, an issue of another site, one Jira does not show, and one linked already", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    for (const issue of ["ENG", "http://northstar.atlassian.net/browse/ENG-142", "https://northstar.atlassian.net:8443/browse/ENG-142", `${SITE_URL}/browse/ENG-142?q=${"a".repeat(1000)}`]) {
+      expect(await linkIssue(EXPORT, issue), issue).toMatchObject({ ok: false, code: "bad_issue" });
+    }
+    // A pasted link is read for its host and key, never opened, and nothing is asked of Vestiarion's database either.
+    expect(w.database.requests).toEqual([]);
+    expect(await linkIssue(EXPORT, "https://southwind.atlassian.net/browse/ENG-142")).toMatchObject({ ok: false, code: "other_site", message: expect.stringContaining("(northstar.atlassian.net)") });
+    expect(w.jira.calls).toEqual([]);
+    expect(await linkIssue(EXPORT, "ENG-999")).toMatchObject({ ok: false, code: "issue_not_found", message: expect.stringContaining("Jira does not show ENG-999") });
+    expect(w.jira.calls).toEqual(["GET /issue/ENG-999 status"]);
+    expect(w.database.rows("jira_issue_links")).toEqual([]);
+
+    expect(await linkIssue(EXPORT, "ENG-142")).toMatchObject({ ok: true });
+    w.jira.calls.length = 0;
+    expect(await linkIssue(EXPORT, "ENG-143")).toMatchObject({ ok: false, code: "milestone_linked" });
+    expect(w.jira.calls).toEqual([]);
+    // The same issue of this site for another milestone: one issue verifies one milestone.
+    expect(await linkIssue(STATUS, `${SITE_URL}/browse/ENG-142`)).toMatchObject({ ok: false, code: "issue_linked" });
+    expect(w.database.rows("jira_issue_links")).toHaveLength(1);
+  });
+
+  it("links only a pending milestone, and none verified or linked another way, before asking Jira anything", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    for (const status of ["verified", "paid", "closed"]) {
+      w.milestone(DOCS).status = status;
+      expect(await linkIssue(DOCS, "ENG-143"), status).toMatchObject({ ok: false, code: "milestone_not_open" });
+    }
+    w.milestone(DOCS).status = "verified";
+    expect(await linkIssue(DOCS, "ENG-143")).toMatchObject({ message: "This milestone is verified already. Revoke its verification first to accept it from Jira." });
+    w.milestone(DOCS).status = "pending";
+
+    w.milestone(DOCS).verification_source = "https://github.com/fernhill/app/pull/42";
+    expect(await linkIssue(DOCS, "ENG-143")).toMatchObject({ ok: false, code: "github" });
+    w.milestone(DOCS).verification_source = null;
+    w.database.rows("asana_task_links").push(asanaRow(DOCS));
+    expect(await linkIssue(DOCS, "ENG-143")).toMatchObject({ ok: false, code: "asana", message: "This milestone is linked to an Asana task. Unlink the task first to accept the work from Jira." });
+    w.database.rows("asana_task_links")[0].unlinked_at = w.iso();
+    w.database.rows("linear_issue_links").push(linearRow(DOCS));
+    expect(await linkIssue(DOCS, "ENG-143")).toMatchObject({ ok: false, code: "linear", message: "This milestone is linked to a Linear issue. Unlink the issue first to accept the work from Jira." });
+    expect(w.jira.calls).toEqual([]);
+    expect(w.database.rows("jira_issue_links")).toEqual([]);
+    // Unlinked from Linear too: the milestone is Jira's to link.
+    w.database.rows("linear_issue_links")[0].unlinked_at = w.iso();
+    expect(await linkIssue(DOCS, "ENG-143")).toMatchObject({ ok: true });
+  });
+
+  it("makes sure of the webhook for the open links' projects after a link, and links whatever Jira answers about it", async () => {
+    const old = seedFreshSite(w);
+    // The site's webhook names both projects, and the one open link is in ENG: a webhook for ENG alone takes over.
+    expect(await linkIssue(EXPORT, "ENG-142")).toMatchObject({ ok: true });
+    expect(w.restCalls()).toContain("POST /webhook");
+    const made = [...(w.webhooks.get(CLOUD)?.values() ?? [])];
+    expect(made).toEqual([expect.objectContaining({ jqlFilter: `project in (${ENG})`, url: WEBHOOK_URL })]);
+    expect(made[0].id).not.toBe(old);
+    expect(w.site()).toMatchObject({ webhook_ids: [made[0].id], webhook_jql: `project in (${ENG})`, webhook_error: null });
+
+    // Jira refusing the next one is kept on the site row, never the link's failure; the sweep tries again.
+    w.jira.refuseRegistrations = 2;
+    expect(await linkIssue(STATUS, "OPS-7")).toMatchObject({ ok: true, state: "waiting" });
+    expect(w.site()).toMatchObject({ webhook_ids: [made[0].id], webhook_jql: `project in (${ENG})`, webhook_error: "The app already has the most webhooks allowed for this user." });
+    expect(w.row(STATUS)).toMatchObject({ identifier: "OPS-7", project_id: OPS });
+  });
+});
+
+describe("accepting through the command (JR11)", () => {
+  it("reads the issue in full first, verifies the milestone with method jira, writes the detail, and has the agent decide within a minute", async () => {
+    await readyExport();
+    const fingerprint = String(w.row(EXPORT).deliverable_fingerprint);
+    w.jira.calls.length = 0;
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: true, status: "verified", message: "Accepted. The agent decides on pay within a minute, under every guardrail." });
+    expect(w.jira.calls.slice(0, 2)).toEqual(["GET /issue/10042 full", "GET /issue/10042/remotelink"]);
+    expect(w.milestone(EXPORT)).toMatchObject({
+      status: "verified",
+      verified: true,
+      verification_method: "jira",
+      verification_status: "verified",
+      verification_detail: {
+        note: "Accepted by a person against the milestone's acceptance criteria; the Jira issue ENG-142 was done on 2026-11-09.",
+        jiraIssue: `${SITE_URL}/browse/ENG-142`, issueId: ENG_142, identifier: "ENG-142", cloudId: CLOUD, fingerprint, criteriaSha256: sha(CRITERIA), acceptedBy: ADMIN,
+      },
+    });
+    expect(w.row(EXPORT)).toMatchObject({ state: "accepted", accepted_by: ADMIN, accepted_fingerprint: fingerprint, accepted_criteria_sha256: sha(CRITERIA) });
+    expect(entries("jira_work_accepted")).toHaveLength(1);
+    expect(entries("jira_work_accepted")[0]).toMatchObject({
+      actor: "human",
+      domain: "contractor",
+      detail: {
+        by: ADMIN, milestoneId: EXPORT, linkId: w.row(EXPORT).id, issueId: ENG_142, identifier: "ENG-142", issueUrl: `${SITE_URL}/browse/ENG-142`, completedAt: w.iso(w.clock.now - HOUR),
+        statusName: "Done", resolutionName: "Done", fingerprint, criteriaSha256: sha(CRITERIA), payeeJiraMapped: true,
+        deliverables: [{ kind: "link", label: "figma.com/file/AbC123/webhooks", href: "https://www.figma.com/file/AbC123/webhooks" }],
+      },
+    });
+    expect(runSoon).toHaveBeenCalledTimes(1);
+    expect(runSoon).toHaveBeenCalledWith({ orgId: ORG, userId: ADMIN, sandbox: false, kind: "milestone_verified" });
+
+    // Accepted already: a second acceptance is refused, and the agent is not asked again.
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: false, code: "not_ready", message: "This work was accepted already." });
+    expect(entries("jira_work_accepted")).toHaveLength(1);
+    expect(runSoon).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses deliverables other than the ones Jira shows now, criteria other than the milestone's, and an unticked box", async () => {
+    await readyExport();
+    const shown = String(w.row(EXPORT).deliverable_fingerprint);
+    w.fakeIssue(ENG_142).remoteLinks.push({ id: 9001, object: { url: "https://github.com/northstar/app/pull/7", title: "PR 7" } });
+    w.change(ENG_142, {});
+    expect(await acceptWork(EXPORT, actor(), { fingerprint: shown })).toMatchObject({ ok: false, code: "stale", changed: true });
+    expect(w.row(EXPORT).deliverable_fingerprint).not.toBe(shown);
+    expect(await acceptWork(EXPORT, actor(), { criteriaSha256: sha("Something else was agreed.") })).toMatchObject({ ok: false, code: "criteria_changed", changed: true });
+    expect(await acceptWork(EXPORT, actor(), { confirmed: false })).toMatchObject({ ok: false, code: "confirm" });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+    expect(entries("jira_work_accepted")).toHaveLength(0);
+    expect(runSoon).not.toHaveBeenCalled();
+    // Looked at again: the deliverables Jira shows now are accepted.
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: true });
+  });
+
+  it("accepts nothing while the issue is not done, and changes nothing when Jira does not answer", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    await linkIssue(EXPORT, "ENG-142");
+    expect(await acceptWork(EXPORT, actor(), { fingerprint: "a".repeat(64) })).toMatchObject({ ok: false });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+
+    w.done(ENG_142);
+    await checkIssue(EXPORT);
+    w.jira.down = true;
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: false, code: "jira_unavailable", message: "Jira did not answer just now. It is read again within 15 minutes." });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+    expect(w.row(EXPORT)).toMatchObject({ state: "ready" });
+    expect(runSoon).not.toHaveBeenCalled();
+  });
+});
+
+describe("criteria through the command (JR7)", () => {
+  it("makes a done issue held for want of criteria ready once they are written, and keeps them once its work is accepted", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    w.done(ENG_143);
+    expect(await linkIssue(DOCS, "ENG-143")).toMatchObject({ ok: true, state: "held" });
+    expect(w.row(DOCS)).toMatchObject({ state: "held", held_reason: "no_criteria" });
+    expect(await setCriteria(DOCS, "ab")).toMatchObject({ ok: false, code: "criteria" });
+    expect(await setCriteria(DOCS, "x".repeat(2001))).toMatchObject({ ok: false, code: "criteria" });
+    const criteria = "The export, CSV and PDF, with tests.";
+    expect(await setCriteria(DOCS, `  ${criteria}  `)).toMatchObject({ ok: true });
+    expect(w.milestone(DOCS)).toMatchObject({ acceptance_criteria: criteria, acceptance_criteria_by: ADMIN, status: "pending", verified: false });
+    expect(w.row(DOCS)).toMatchObject({ state: "ready", held_reason: null });
+    expect(entries("milestone_criteria_set")[0].detail).toMatchObject({ by: ADMIN, milestoneId: DOCS, criteria, criteriaSha256: sha(criteria), previousSha256: null });
+
+    expect(await acceptWork(DOCS)).toMatchObject({ ok: true });
+    expect(await setCriteria(DOCS, "Something else entirely.")).toMatchObject({ ok: false, code: "accepted" });
+    expect(w.milestone(DOCS).acceptance_criteria).toBe(criteria);
+  });
+
+  it("makes the link ready without marking a read, so Jira's notice of a file added just before the criteria is still read", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    w.database.rows("jira_sites")[0].webhook_ids = [101];
+    w.done(ENG_143);
+    expect(await linkIssue(DOCS, "ENG-143")).toMatchObject({ ok: true, state: "held" });
+    const lastRead = w.row(DOCS).last_read_at;
+    const shown = w.row(DOCS).deliverable_fingerprint;
+    // The contractor adds the final web link; a person saves the criteria 20 s later, before Jira's notice arrives.
+    w.clock.now += MINUTE;
+    w.fakeIssue(ENG_143).remoteLinks.push({ id: 9002, object: { url: "https://github.com/northstar/app/pull/8", title: "PR 8" } });
+    w.change(ENG_143, {});
+    const added = w.clock.now;
+    w.clock.now += 20_000;
+    expect(await setCriteria(DOCS, "The export, CSV and PDF, with tests.")).toMatchObject({ ok: true });
+    expect(w.row(DOCS)).toMatchObject({ state: "ready", held_reason: null, held_at: null, last_read_at: lastRead, deliverable_fingerprint: shown });
+    // The notice is read: the card shows the new version, and accepting the one shown before is refused as stale.
+    w.clock.now += MINUTE;
+    expect(await deliver(w, { issueId: ENG_143, timestamp: added })).toBe(1);
+    expect(w.row(DOCS)).toMatchObject({ state: "ready", last_read_at: w.iso() });
+    expect(w.row(DOCS).deliverable_fingerprint).not.toBe(shown);
+    expect(await acceptWork(DOCS, actor(), { fingerprint: String(shown) })).toMatchObject({ ok: false, code: "stale" });
+  });
+
+  it("moves no link whose hold changed since it was seen: criteria never make an issue Jira no longer shows ready", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    w.done(ENG_143);
+    await linkIssue(DOCS, "ENG-143");
+    const seen = await w.live(DOCS);
+    expect(seen).toMatchObject({ state: "held", heldReason: "no_criteria" });
+    w.issues.get(CLOUD)?.delete(ENG_143);
+    await checkIssue(DOCS);
+    expect(w.row(DOCS)).toMatchObject({ state: "held", held_reason: "issue_unreachable" });
+    expect(await w.run(() => writeState(seen, { state: "ready", heldReason: null }, w.iso()))).toBe(false);
+    expect(await setCriteria(DOCS, "The export, CSV and PDF, with tests.")).toMatchObject({ ok: true });
+    expect(w.row(DOCS)).toMatchObject({ state: "held", held_reason: "issue_unreachable" });
+  });
+});
+
+describe("unlinking through the command (JR13, JR14)", () => {
+  it("takes back an acceptance the agent has not paid, removes the webhook no open link needs, and frees the issue to link again", async () => {
+    await readyExport();
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: true });
+    const linkId = w.row(EXPORT).id;
+    expect(await unlinkIssue(EXPORT)).toMatchObject({ ok: true, message: "Unlinked. Its acceptance was taken back: the milestone waits for verification again." });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false, verification_status: "unverified" });
+    expect(w.database.rows("jira_issue_links").find((row) => row.id === linkId)).toMatchObject({ held_reason: "unlinked", unlinked_by: ADMIN, unlinked_at: w.iso() });
+    expect(entries("jira_issue_unlinked")[0].detail).toMatchObject({ by: ADMIN, milestoneId: EXPORT, linkId, issueId: ENG_142, identifier: "ENG-142", withdrewAcceptance: true });
+    // No open link is left, so no webhook is kept.
+    expect(w.site()).toMatchObject({ webhook_ids: [], webhook_jql: null });
+    expect(w.webhooks.get(CLOUD)?.size).toBe(0);
+    expect(await unlinkIssue(EXPORT)).toMatchObject({ ok: false, code: "not_linked" });
+
+    // The issue is free: the docs take it, held until they have criteria.
+    expect(await linkIssue(DOCS, "ENG-142")).toMatchObject({ ok: true, state: "held" });
+    expect(w.row(DOCS)).toMatchObject({ issue_id: ENG_142, held_reason: "no_criteria" });
+  });
+
+  it("refuses to unlink while a person decides the payment, and unlinks once their ten minutes are over", async () => {
+    await readyExport();
+    await acceptWork(EXPORT);
+    Object.assign(w.milestone(EXPORT), { decision_claimed_at: w.iso() });
+    expect(await unlinkIssue(EXPORT)).toMatchObject({ ok: false, code: "deciding" });
+    expect(w.row(EXPORT)).toMatchObject({ state: "accepted" });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "verified", verified: true });
+    expect(entries("jira_issue_unlinked")).toHaveLength(0);
+    w.clock.now += 11 * MINUTE;
+    expect(await unlinkIssue(EXPORT)).toMatchObject({ ok: true });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+  });
+
+  it("after the payment was sent, unlinks the issue and leaves the milestone and its payment alone", async () => {
+    await readyExport();
+    await acceptWork(EXPORT);
+    w.database.rows("payment_intents").push({ id: "intent-1", org_id: ORG, source_type: "milestone", source_id: EXPORT, status: "sent" });
+    expect(await unlinkIssue(EXPORT)).toMatchObject({ ok: true, message: "Unlinked from Jira." });
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "verified", verified: true });
+    expect(entries("jira_issue_unlinked")[0].detail).toMatchObject({ withdrewAcceptance: false });
+  });
+});
+
+describe("who may accept, through the command (JR12)", () => {
+  it("refuses the payee by their email, and a member whose Atlassian account, found by their email, is the payee's", async () => {
+    await readyExport();
+    expect(await acceptWork(EXPORT, actor(PAYEE_MEMBER))).toMatchObject({ ok: false, code: "self_acceptance", message: "You are this milestone's payee, so someone else accepts the work." });
+    w.jira.accounts.set("admin@business.example", [MAI_ATLASSIAN]);
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: false, code: "self_acceptance", message: "Your Atlassian account is this milestone's payee, so someone else accepts the work." });
+    expect(w.jira.people).toEqual(expect.arrayContaining(["mai@fernhill.example", "admin@business.example"]));
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+    expect(runSoon).not.toHaveBeenCalled();
+    w.jira.accounts.delete("admin@business.example");
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: true });
+  });
+
+  it("refuses the person who connected Jira when their own account, /myself, is the payee's", async () => {
+    w = jiraWorld(hooks, { ownerAtlassianIsPayee: true });
+    await readyExport();
+    w.jira.calls.length = 0;
+    expect(await acceptWork(EXPORT, actor(OWNER, { role: "owner" }))).toMatchObject({ ok: false, code: "self_acceptance", message: "Your Atlassian account is this milestone's payee, so someone else accepts the work." });
+    expect(w.jira.calls).toContain("GET /myself");
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "pending", verified: false });
+  });
+
+  it("asks Jira about no one without the payee's email, and the entry says no account was found", async () => {
+    w = jiraWorld(hooks, { payeeEmail: null });
+    await readyExport();
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: true });
+    expect(w.jira.people).toEqual([]);
+    expect(w.jira.calls.filter((call) => call === "GET /user/search" || call === "GET /myself")).toEqual([]);
+    expect(entries("jira_work_accepted")[0].detail).toMatchObject({ payeeJiraMapped: false });
+  });
+
+  it("refuses the payee's own Pay now on a milestone accepted from Jira, by email, asking Jira nothing", async () => {
+    await readyExport();
+    await acceptWork(EXPORT);
+    w.jira.calls.length = 0;
+    expect(await w.run(() => payMilestoneNow(actor(PAYEE_MEMBER), { milestoneId: EXPORT }))).toMatchObject({ ok: false, code: "self_payout", message: "You are this milestone's payee, so someone else approves paying it." });
+    expect(w.jira.calls).toEqual([]);
+    expect(w.milestone(EXPORT)).toMatchObject({ status: "verified" });
+  });
+});
+
+describe("the connection, through the commands (JR1, JR3)", () => {
+  it("says Jira needs reconnecting when Atlassian refuses the grant, marks the connection, and then asks Jira nothing", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    await linkIssue(EXPORT, "ENG-142");
+    w.revokeAtAtlassian();
+    expect(await checkIssue(EXPORT)).toMatchObject({ ok: false, code: "jira_unavailable", message: "Jira no longer accepts the connection. Reconnect Jira in Settings." });
+    expect(w.jira.calls).toContain("POST /oauth/token");
+    expect(w.connection()).toMatchObject({ status: "needs_reconnect", last_error: syncErrorWords("reconnect", "Jira", null) });
+    w.jira.calls.length = 0;
+    expect(await checkIssue(EXPORT)).toMatchObject({ ok: false, code: "not_connected", message: MISSING_WORDS.reconnect });
+    expect(await linkIssue(DOCS, "ENG-143")).toMatchObject({ ok: false, code: "not_connected" });
+    expect(await acceptWork(EXPORT, actor(), { fingerprint: "a".repeat(64) })).toMatchObject({ ok: false, code: "not_connected" });
+    expect(w.jira.calls).toEqual([]);
+  });
+
+  it("says Jira is not set up, with no request at all, on a deployment with no Jira app (JR1)", async () => {
+    const off: JiraCommandDeps = { provider: null };
+    expect(await w.run(() => linkJiraIssue(actor(), { milestoneId: EXPORT, issue: "ENG-142" }, off))).toEqual({ ok: false, code: "not_set_up", message: "Jira is not set up on this deployment yet." });
+    expect(await w.run(() => acceptJiraWork(actor(), { milestoneId: EXPORT, fingerprint: "a".repeat(64), criteriaSha256: sha(CRITERIA), confirmed: true }, off))).toMatchObject({ ok: false, code: "not_set_up" });
+    expect(await w.run(() => checkJiraIssue(actor(), { milestoneId: EXPORT }, off))).toMatchObject({ ok: false, code: "not_set_up" });
+    expect(w.database.requests).toEqual([]);
+    expect(w.jira.calls).toEqual([]);
+  });
+
+  it("says Jira is not connected once its connection is gone, before asking Jira anything", async () => {
+    Object.assign(w.connection(), { status: "revoked", revoked_at: w.iso() });
+    expect(await linkIssue(EXPORT, "ENG-142")).toEqual({ ok: false, code: "not_connected", message: "Jira is not connected to this workspace. An owner or admin connects it in Settings." });
+    expect(w.jira.calls).toEqual([]);
+  });
+});
+
+describe("what the commands write (JR18, JR19)", () => {
+  it("writes a milestone only through 0149's functions and its criteria, and keeps no Atlassian account", async () => {
+    seedFreshSite(w, CONN, ORG, `project in (${ENG})`);
+    w.done(ENG_142);
+    w.done(ENG_143);
+    await linkIssue(EXPORT, "ENG-142");
+    await linkIssue(DOCS, "ENG-143");
+    await setCriteria(DOCS, "The export, CSV and PDF, with tests.");
+    expect(await acceptWork(EXPORT)).toMatchObject({ ok: true });
+    expect(await acceptWork(DOCS)).toMatchObject({ ok: true });
+    expect(await unlinkIssue(EXPORT)).toMatchObject({ ok: true });
+    const writes = w.database.requests.filter((request) => request.path === "/rest/v1/milestones" && request.method !== "GET");
+    expect(writes.map((request) => Object.keys(request.body as object).sort())).toEqual([["acceptance_criteria", "acceptance_criteria_at", "acceptance_criteria_by"]]);
+    expect(w.database.requests.filter((request) => request.path.startsWith("/rest/v1/rpc/")).map((request) => request.path)).toEqual(
+      expect.arrayContaining(["/rest/v1/rpc/accept_jira_issue", "/rest/v1/rpc/hold_jira_acceptance"])
+    );
+    const kept = JSON.stringify([w.database.tables, w.database.requests.map((request) => request.body), w.jira.bodies, ledger.mock.calls]);
+    for (const word of [OWNER_ATLASSIAN, MAI_ATLASSIAN, "accountId", "completed_by", "assignee"]) expect(kept).not.toContain(word);
+  });
+});

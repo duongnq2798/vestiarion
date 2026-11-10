@@ -191,6 +191,16 @@ const LINEAR: Row[] = [
   link("l1", "ms-l1", "ready", { identifier: "ENG-12", completed_at: "2026-11-01T15:00:00Z" }),
   link("l2", "ms-l2", "held", { identifier: "ENG-14", held_reason: "no_criteria", held_at: "2026-11-02T10:00:00Z" }),
 ];
+// Jira's links: read only on a deployment where Jira is set up (Jira acceptance JR1), which these tests turn on themselves.
+const JIRA: Row[] = [
+  link("j1", "ms-j1", "ready", { identifier: "ENG-142", resolution_name: "Done", completed_at: "2026-11-02T09:00:00Z" }),
+  link("j2", "ms-j2", "held", { identifier: "ENG-150", resolution_name: "Won't Do", held_reason: "canceled", held_at: "2026-11-02T11:00:00Z" }),
+  link("j3", "ms-j3", "held", { identifier: "ENG-151", resolution_name: null, held_reason: "issue_unreachable", held_at: "2026-11-02T12:00:00Z" }),
+  // Changed after its payment was sent; ready on a milestone already paid; unlinked: no work to accept.
+  link("j4", "ms-j4", "held", { identifier: "ENG-152", resolution_name: null, held_reason: "reopened", held_at: "2026-11-02T12:00:00Z", after_payment: true }),
+  link("j5", "ms-j5", "ready", { identifier: "ENG-153", resolution_name: "Done", completed_at: "2026-11-02T09:00:00Z" }),
+  link("j6", "ms-j1", "ready", { identifier: "ENG-154", resolution_name: "Done", unlinked_at: "2026-10-25T08:00:00Z" }),
+];
 const MILESTONES: Row[] = [
   { id: "ms-a1", title: "Logo design", amount: "800", status: "pending", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Studio North" } },
   { id: "ms-a2", title: "Website copy", amount: "450", status: "pending", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Ink and Quill" } },
@@ -200,6 +210,11 @@ const MILESTONES: Row[] = [
   { id: "ms-a6", title: "Old task", amount: "100", status: "pending", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Studio North" } },
   { id: "ms-l1", title: "Checkout flow", amount: "2400", status: "pending", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Kite Labs" } },
   { id: "ms-l2", title: "API docs", amount: "600", status: "pending", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Kite Labs" } },
+  { id: "ms-j1", title: "Webhook retries with backoff", amount: "1200", status: "pending", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Northstar Devs" } },
+  { id: "ms-j2", title: "Rate limit dashboard", amount: "500", status: "pending", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Northstar Devs" } },
+  { id: "ms-j3", title: "CSV export", amount: "300", status: "pending", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Northstar Devs" } },
+  { id: "ms-j4", title: "Login page", amount: "250", status: "paid", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Northstar Devs" } },
+  { id: "ms-j5", title: "Audit log", amount: "350", status: "paid", decided_at: null, created_at: "2026-10-01T08:00:00Z", counterparties: { name: "Northstar Devs" } },
 ];
 
 type Options = {
@@ -262,6 +277,8 @@ function world(options: Options = {}) {
         return answer(ASANA, sent);
       case "/rest/v1/linear_issue_links":
         return answer(LINEAR, sent);
+      case "/rest/v1/jira_issue_links":
+        return answer(JIRA, sent);
       case "/rest/v1/milestones":
         return answer(MILESTONES, sent);
       default:
@@ -707,6 +724,119 @@ describe("all waiting: work to accept (AW4)", () => {
     });
     const items = ofKind((await read()).items, "decision").filter((item) => item.key.endsWith(":ms-held"));
     expect(items).toEqual([expect.objectContaining({ detail: "Milestone held for a person: Menu shoot.", href: "/o/harbor-bakery/contractors#milestone-ms-held" })]);
+  });
+});
+
+describe("all waiting: work to accept from Jira (all waiting AW4; Jira acceptance JR1, JR10, JR22)", () => {
+  const jiraOn = () => {
+    vi.stubEnv("JIRA_CLIENT_ID", "jIrA-cLiEnT_0149");
+    vi.stubEnv("JIRA_CLIENT_SECRET", "test-jira-client-secret");
+  };
+  const jiraItems = (items: TriageItem[]) => ofKind(items, "accept_work").filter((item) => item.key.split(":").pop()?.startsWith("j"));
+  const READY_JIRA = {
+    key: "harbor-bakery:accept_work:j1",
+    kind: "accept_work",
+    workspace: { slug: "harbor-bakery", name: "Harbor Bakery" },
+    title: "Northstar Devs: Webhook retries with backoff",
+    detail: "Done in Jira (ENG-142). Accept it against its criteria.",
+    amount: { value: 1200, currency: "USDC" },
+    since: "2026-11-02T09:00:00Z",
+    // CL15: the milestone's row on Contractors, open: it waits for verification.
+    href: "/o/harbor-bakery/contractors#milestone-ms-j1",
+  };
+
+  it("reads nothing of Jira and lists none of its work while JIRA_CLIENT_ID and JIRA_CLIENT_SECRET are unset, or only one is set (JR1)", async () => {
+    const off = world();
+    const portfolio = await off.read();
+    expect(jiraItems(portfolio.items)).toEqual([]);
+    expect(off.fake.requests.some((sent) => sent.path === "/rest/v1/jira_issue_links")).toBe(false);
+    // Asana's and Linear's work is listed as before.
+    expect(ofKind(portfolio.items, "accept_work").map((item) => item.key.split(":").pop())).toEqual(["a1", "a2", "l1", "l2"]);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubEnv("JIRA_CLIENT_ID", "jIrA-cLiEnT_0149");
+    const half = world();
+    expect(jiraItems((await half.read()).items)).toEqual([]);
+    expect(half.fake.requests.some((sent) => sent.path === "/rest/v1/jira_issue_links")).toBe(false);
+  });
+
+  it("lists ready and held Jira links of milestones waiting for verification, in the Jira card's words", async () => {
+    jiraOn();
+    const { fake, read } = world();
+    const items = jiraItems((await read()).items);
+    expect(items).toEqual([
+      { ...READY_JIRA, canAct: true, who: "You can check it and accept it" },
+      {
+        key: "harbor-bakery:accept_work:j2",
+        kind: "accept_work",
+        workspace: { slug: "harbor-bakery", name: "Harbor Bakery" },
+        title: "Northstar Devs: Rate limit dashboard",
+        // A canceled issue's line names Jira's own resolution, as the card does (JR9).
+        detail: "Held: Jira resolved the issue as Won't Do, which is not done. Nothing is accepted from it: reopen it, or link another issue.",
+        amount: { value: 500, currency: "USDC" },
+        since: "2026-11-02T11:00:00Z",
+        href: "/o/harbor-bakery/contractors#milestone-ms-j2",
+        canAct: true,
+        who: "You can review it",
+      },
+      expect.objectContaining({
+        key: "harbor-bakery:accept_work:j3",
+        title: "Northstar Devs: CSV export",
+        detail:
+          "Held: Jira no longer shows this issue to the connection: it was deleted or archived, the person who connected Jira lost access to its project, or another Jira site is connected now. Restore it, link another issue, or reconnect Jira.",
+        since: "2026-11-02T12:00:00Z",
+        href: "/o/harbor-bakery/contractors#milestone-ms-j3",
+        canAct: true,
+        who: "You can review it",
+      }),
+    ]);
+    // Live links only, ready or held, never one held after its payment, through the workspace's own tenant token; and
+    // only milestones still waiting for verification.
+    const asked = fake.requests.filter((sent) => sent.path === "/rest/v1/jira_issue_links");
+    expect(asked.map((sent) => claimsOf(sent)?.org_id).sort()).toEqual([HARBOR.id, LUMEN.id].sort());
+    expect((TENANT_TABLES as readonly string[]).includes("jira_issue_links")).toBe(true);
+    for (const sent of asked) {
+      const claims = claimsOf(sent);
+      expect([claims?.role, claims?.sub]).toEqual(["vestiarion_tenant", VIEWER]);
+      expect(sent.params.get("org_id")).toBe(`eq.${String(claims?.org_id)}`);
+      expect([sent.params.get("unlinked_at"), sent.params.get("state"), sent.params.get("after_payment"), sent.params.get("limit")]).toEqual(["is.null", "in.(ready,held)", "eq.false", "200"]);
+      expect(sent.params.get("select")).toBe("id,milestone_id,identifier,state,held_reason,held_at,completed_at,linked_at,resolution_name");
+    }
+    const milestones = fake.requests.filter((sent) => sent.path === "/rest/v1/milestones" && sent.params.get("id") && claimsOf(sent)?.org_id === HARBOR.id);
+    expect(milestones.map((sent) => sent.params.get("status"))).toEqual(["eq.pending"]);
+    for (const id of ["ms-j1", "ms-j2", "ms-j3", "ms-j5"]) expect(milestones[0].params.get("id"), id).toContain(id);
+    expect(milestones[0].params.get("id")).not.toContain("ms-j4");
+  });
+
+  it("lists the three tools' work side by side, oldest first, and routes Jira's to an owner or admin", async () => {
+    jiraOn();
+    const owner = await world().read();
+    expect(ofKind(owner.items, "accept_work").map((item) => item.key.split(":").pop())).toEqual(["a1", "a2", "l1", "j1", "l2", "j2", "j3"]);
+    expect(applyFilter(owner.items, triageFilter({ kind: "accept_work", workspace: HARBOR.slug }))).toHaveLength(7);
+    const accountant = jiraItems((await world({ role: "accountant" }).read()).items);
+    expect(accountant[0]).toEqual({ ...READY_JIRA, canAct: false, who: "Waiting on an owner or admin of this workspace" });
+    expect(new Set(accountant.map((item) => `${item.canAct} ${item.who}`))).toEqual(new Set(["false Waiting on an owner or admin of this workspace"]));
+  });
+
+  it("adds nothing, and names nothing unread, before migration 0149, and still lists Asana's and Linear's work", async () => {
+    jiraOn();
+    for (const reply of [
+      { status: 404, body: { code: "PGRST205", message: "Could not find the table 'public.jira_issue_links' in the schema cache" } },
+      { status: 400, body: { code: "42P01", message: 'relation "public.jira_issue_links" does not exist' } },
+    ]) {
+      const portfolio = await world({ extra: (sent) => (sent.path === "/rest/v1/jira_issue_links" ? reply : null) }).read();
+      expect(ofKind(portfolio.items, "accept_work").map((item) => item.key.split(":").pop()), reply.body.code).toEqual(["a1", "a2", "l1", "l2"]);
+      expect(portfolio.workspaces.map((workspace) => workspace.unread), reply.body.code).toEqual([[], []]);
+    }
+  });
+
+  it("names work to accept unread on the workspace's card when Jira's read fails, and the rest still show", async () => {
+    jiraOn();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const portfolio = await world({ extra: (sent) => (claimsOf(sent)?.org_id === HARBOR.id && sent.path === "/rest/v1/jira_issue_links" ? { status: 500, body: { message: "down" } } : null) }).read();
+    expect(unreadOf(portfolio)).toEqual(["work to accept"]);
+    expect(ofKind(portfolio.items, "accept_work")).toEqual([]);
+    expect(harborItems(portfolio.items).length).toBeGreaterThan(5);
   });
 });
 

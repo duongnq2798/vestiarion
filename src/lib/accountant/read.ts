@@ -25,6 +25,9 @@ import { inboxSettingsFromEnv } from "../email-inbox/settings";
 import { decideByOf, lateFeeDayWords, type DecideBy } from "../exceptions";
 import { googleDriveSettingsFromEnv } from "../googledrive/settings";
 import { missingFields, REVIEW_LIMIT, type DraftSource } from "../invoice-drafts/model";
+import { stateWords as jiraStateWords, type HeldReason as JiraHeldReason } from "../jira/acceptance";
+import { isJiraNotSetUp } from "../jira/links";
+import { jiraSettingsFromEnv } from "../jira/settings";
 import { stateWords as linearStateWords, type HeldReason as LinearHeldReason } from "../linear/acceptance";
 import { isLinearNotSetUp } from "../linear/links";
 import { linearSettingsFromEnv } from "../linear/settings";
@@ -42,7 +45,7 @@ import { routeTo, sortTriage, type TriageItem } from "./triage";
  * co-sign and addresses to confirm, 2026-10-22-accountant-queue-design.md AQ3, AQ4; verdicts, invoices to review, work
  * to accept and last month's close, 2026-11-01-accountant-all-waiting-design.md AW1 to AW5): the workspaces a person is
  * a member of, each read in its own scope, through its own tenant client, as that person. Those four kinds read only
- * Vestiarion's own tables and ledger: no model, Google, Asana, Linear, accounting tool or Circle is called (AW1).
+ * Vestiarion's own tables and ledger: no model, Google, Asana, Linear, Jira, accounting tool or Circle is called (AW1).
  *
  * Never a service-role read across tenants. The list of workspaces is the person's own memberships, read afresh on
  * every request from the session's user id (`membershipsOf`, the same read every workspace page's gate makes); each
@@ -599,8 +602,10 @@ async function reviewItems(orgDb: OrgDb, ws: { slug: string; name: string; role:
 type WorkLinkRow = {
   id: string;
   milestone_id: string;
-  /** A Linear issue's identifier ("ENG-12"); absent on an Asana task. */
+  /** A Linear or Jira issue's identifier ("ENG-12"); absent on an Asana task. */
   identifier?: string;
+  /** Jira's resolution, as last read ("Won't Do"); absent on an Asana task and a Linear issue. */
+  resolution_name?: string | null;
   state: "ready" | "held";
   held_reason: string | null;
   held_at: string | null;
@@ -611,11 +616,11 @@ type WorkLinkRow = {
 /**
  * One tool's live links waiting on a person (AW4): ready for acceptance, or held for review. A link held after its payment
  * was sent is left out: there is no work to accept on a paid milestone. Before the tool's migration (0115 for Asana,
- * 0147 for Linear) its table is missing: the tool adds nothing, and nothing is named unread.
+ * 0147 for Linear, 0149 for Jira) its table is missing: the tool adds nothing, and nothing is named unread.
  */
 async function waitingLinks(
   orgDb: OrgDb,
-  table: "asana_task_links" | "linear_issue_links",
+  table: "asana_task_links" | "linear_issue_links" | "jira_issue_links",
   columns: string,
   notReady: (error: { code?: string | null; message?: string }) => boolean
 ): Promise<WorkLinkRow[]> {
@@ -640,22 +645,26 @@ async function waitingLinks(
 const HELD_WORK = { canAct: true, who: "You can review it" } as const;
 
 /**
- * Contractor work to accept (AW4): milestones still waiting for verification whose Asana task or Linear issue is ready
- * for acceptance, or held for review, in the words of the Contractors card. A milestone held for a person is a decision
- * item already, and is not waiting for verification, so it is never listed twice. Each tool only on a deployment where
- * it is set up, as Contractors shows its card (`asanaOnContractors`, `linearOnContractors`): elsewhere no card offers
- * the acceptance an item would send someone to.
+ * Contractor work to accept (AW4): milestones still waiting for verification whose Asana task, Linear issue or Jira issue
+ * is ready for acceptance, or held for review, in the words of the Contractors card. A milestone held for a person is a
+ * decision item already, and is not waiting for verification, so it is never listed twice. Each tool only on a deployment
+ * where it is set up, as Contractors shows its card (`asanaOnContractors`, `linearOnContractors`, `jiraOnContractors`):
+ * elsewhere no card offers the acceptance an item would send someone to. Jira is set up only with both JIRA_CLIENT_ID and
+ * JIRA_CLIENT_SECRET (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR1).
  */
 async function workItems(orgDb: OrgDb, ws: { slug: string; name: string; role: OrgMembership["role"] }): Promise<TriageItem[]> {
-  const [asana, linear] = await Promise.all([
+  const [asana, linear, jira] = await Promise.all([
     asanaSettingsFromEnv()
       ? waitingLinks(orgDb, "asana_task_links", "id, milestone_id, state, held_reason, held_at, completed_at, linked_at", isAsanaNotSetUp)
       : [],
     linearSettingsFromEnv()
       ? waitingLinks(orgDb, "linear_issue_links", "id, milestone_id, identifier, state, held_reason, held_at, completed_at, linked_at", isLinearNotSetUp)
       : [],
+    jiraSettingsFromEnv()
+      ? waitingLinks(orgDb, "jira_issue_links", "id, milestone_id, identifier, state, held_reason, held_at, completed_at, linked_at, resolution_name", isJiraNotSetUp)
+      : [],
   ]);
-  const ids = [...new Set([...asana, ...linear].map((link) => link.milestone_id))];
+  const ids = [...new Set([...asana, ...linear, ...jira].map((link) => link.milestone_id))];
   if (ids.length === 0) return [];
   const reads = await Promise.all(
     Array.from({ length: Math.ceil(ids.length / ID_CHUNK) }, (_, index) =>
@@ -694,6 +703,14 @@ async function workItems(orgDb: OrgDb, ws: { slug: string; name: string; role: O
     ...asana.flatMap((link) => item(link, "Completed in Asana.", asanaStateWords("held", link.held_reason as AsanaHeldReason | null, false).line)),
     ...linear.flatMap((link) =>
       item(link, `Completed in Linear${link.identifier ? ` (${link.identifier})` : ""}.`, linearStateWords("held", link.held_reason as LinearHeldReason | null, false).line)
+    ),
+    // Jira says Done, its status category (JR9); a canceled issue's line names Jira's resolution, as the card does.
+    ...jira.flatMap((link) =>
+      item(
+        link,
+        `Done in Jira${link.identifier ? ` (${link.identifier})` : ""}.`,
+        jiraStateWords("held", link.held_reason as JiraHeldReason | null, false, link.resolution_name ?? null).line
+      )
     ),
   ];
 }

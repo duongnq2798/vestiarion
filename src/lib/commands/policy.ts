@@ -39,15 +39,16 @@ export const COMMAND_PERMISSIONS = {
   /** A bill list, each of its rows then added through `invoice.add` (import design B12); the console only. */
   "invoice.import": "records.write",
   "milestone.add": "records.write",
-  // Contractor work accepted from Asana or Linear: linking a milestone to its task or issue, writing the criteria it is
-  // held to, and accepting the work against them are what verifying a milestone by hand is, a record (Asana acceptance
-  // A4, A5, A8; Linear acceptance LN4, LN5, LN8).
+  // Contractor work accepted from Asana, Linear or Jira: linking a milestone to its task or issue, writing the criteria it
+  // is held to, and accepting the work against them are what verifying a milestone by hand is, a record (Asana acceptance
+  // A4, A5, A8; Linear acceptance LN4, LN5, LN8; Jira acceptance JR6, JR7, JR11).
   "milestone.link_task": "records.write",
   "milestone.unlink_task": "records.write",
   "milestone.set_criteria": "records.write",
   "milestone.accept": "records.write",
   "milestone.check_task": "records.write",
-  // The same for a Linear issue (Linear acceptance LN4, LN5, LN8, LN12): a record, as with Asana.
+  // The same for a Linear or Jira issue (Linear acceptance LN4, LN5, LN8, LN12; Jira acceptance JR6, JR7, JR11, JR16): a
+  // record, as with Asana. Each name covers both tools, with one command for each (`./linear`, `./jira`).
   "milestone.link_issue": "records.write",
   "milestone.unlink_issue": "records.write",
   "milestone.set_issue_criteria": "records.write",

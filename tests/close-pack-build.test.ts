@@ -1077,6 +1077,16 @@ describe("the verification record (close pack CP8)", () => {
       });
     });
 
+    it("is verified for work accepted from Jira, naming who accepted it and no link (Jira acceptance JR11)", () => {
+      const ISSUE = "https://northstar.atlassian.net/browse/ENG-142";
+      const accepted = entry(53, "2026-10-08T09:30:00Z", "jira_work_accepted", { by: OWNER, milestoneId: MS_1, issueId: "10042", identifier: "ENG-142", issueUrl: ISSUE, criteriaSha256: "c".repeat(64) });
+      const check = milestoneRow({ verification_method: "jira", verification_source: null, verification_detail: { jiraIssue: ISSUE, identifier: "ENG-142" } }, [accepted]).checks.milestone;
+      expect(check).toEqual({ kind: "verified", text: "Jira reported the issue done, and owner@pinecrest.test accepted the work against its criteria.", notes: [], at: "2026-10-08T09:30:00Z", entries: [53], warn: false });
+      expect(JSON.stringify(check)).not.toContain("https://");
+      // An acceptance taken back before payment leaves the milestone unverified: missing, as for any other method.
+      expect(milestoneRow({ verified: false, verification_method: "jira", verification_status: "unverified" }, [accepted]).checks.milestone).toMatchObject({ kind: "missing", warn: true });
+    });
+
     it("does not apply to a bill", () => {
       expect(rowOf(buildClosePack(input()), "pay-a").checks.milestone).toMatchObject({ kind: "not_applicable", text: "A bill has no milestone to verify." });
     });

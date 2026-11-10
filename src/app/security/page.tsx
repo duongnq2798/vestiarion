@@ -20,7 +20,7 @@ export default function SecurityPage() {
     <LegalPage
       eyebrow="Trust"
       title="Security"
-      updated="2026-10-28"
+      updated="2026-11-09"
       intro="How Vestiarion protects the data and the money it handles, for anyone reviewing the app, its API or its integrations. Every statement describes what the code does today, and the code is public, so each one can be checked against it. What we do not claim is at the end."
     >
       <LegalSection id="architecture" title="Architecture and data flow">
@@ -124,7 +124,7 @@ export default function SecurityPage() {
           <li>the Circle API key and entity secret a workspace connects;</li>
           <li>each workspace&apos;s Ed25519 ledger signing key;</li>
           <li>each webhook endpoint&apos;s signing secret, and the secret of each webhook Asana sends;</li>
-          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear, Google Sheets and Google Drive;</li>
+          <li>the OAuth access and refresh tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear, Jira, Google Sheets and Google Drive;</li>
           <li>a Slack connection&apos;s bot token and posting address, bound to the workspace and the field;</li>
           <li>a Discord channel webhook&apos;s URL, bound to the workspace and the field;</li>
           <li>
@@ -312,7 +312,7 @@ export default function SecurityPage() {
         <ul>
           <li>
             <strong>Connecting.</strong> Only an owner or admin connects a workspace to Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive,
-            Zoho CRM, Asana, Linear, Google Sheets, Google Drive, Slack or GitHub, and for the first ten only after agreeing to what Vestiarion reads and writes there. The
+            Zoho CRM, Asana, Linear, Jira, Google Sheets, Google Drive, Slack or GitHub, and for the first eleven only after agreeing to what Vestiarion reads and writes there. The
             OAuth state is
             signed under the master key and expires after 10 minutes, a nonce in an HttpOnly cookie must come back with it, and the callback is
             accepted only for the same signed-in person, whose role is read again.
@@ -332,7 +332,7 @@ export default function SecurityPage() {
             accepted only under its Svix signature, within five minutes, and only start a cycle that reads the payout from BlindPay itself.
           </li>
           <li>
-            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear, Google Sheets and Google Drive are encrypted,
+            <strong>Storing.</strong> The tokens of Xero, QuickBooks Online, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear, Jira, Google Sheets and Google Drive are encrypted,
             in a table
             only the platform reads, and are opened only in their own workspace&apos;s scope. They are never shown in the browser, a log, a model&apos;s prompt
             or a webhook.
@@ -346,7 +346,9 @@ export default function SecurityPage() {
             provider could not be reached, and records the disconnection in the ledger, best effort: a ledger write that fails does not stop it.
             Asana&apos;s webhooks are deleted before its grant is revoked, and revoking Pipedrive&apos;s grant uninstalls the app from the company, as
             Pipedrive documents it. Linear&apos;s notices come from the app&apos;s own webhook, which Linear makes for each workspace that authorizes
-            the app and ends when the grant is revoked, so Vestiarion has none to delete. Google&apos;s grant is revoked only when no other workspace is connected with the same Google account, since
+            the app and ends when the grant is revoked, so Vestiarion has none to delete. Atlassian gives apps no way to end their own
+            access, so disconnecting Jira deletes its webhook on the site and then the tokens, revokes nothing at Atlassian, records that in the ledger,
+            and tells the person to remove Vestiarion from Connected apps in their Atlassian account settings. Google&apos;s grant is revoked only when no other workspace is connected with the same Google account, since
             revoking it ends that account&apos;s access for every workspace; disconnecting Google Drive also keeps it while Google Sheets holds the same
             account through the same Google client. Disconnecting Google Sheets does not look at Google Drive: on a deployment with one Google client
             for both, it ends Google Drive&apos;s access for the same account too, which then needs reconnecting.
@@ -421,6 +423,12 @@ export default function SecurityPage() {
             <strong>Linear</strong>: an HMAC-SHA256 of the body under the app&apos;s webhook secret, then the time in the body, refused when it is more
             than 60 seconds away. From a notice about an issue, only which issue to read is taken: the issue is read again from Linear. A notice that
             the app was revoked in a Linear workspace marks that workspace&apos;s connections to reconnect;
+          </li>
+          <li>
+            <strong>Jira</strong>: a JSON Web Token in the Authorization header, signed with the app&apos;s client secret, checked before the body is
+            read: only HS256, HS384 or HS512, compared in constant time, its expiry at most 300 seconds past and its start at most 300 seconds ahead.
+            The webhooks it matched are found in a table only the platform reads; from the body, only which issue to read, its address on the site
+            and when Jira sent it are taken, and the issue is read again from Jira in each workspace it is linked in;
           </li>
           <li>
             <strong>Slack</strong>: an HMAC-SHA256 over the timestamp and the body, refused when the timestamp is more than 5 minutes away;
@@ -552,7 +560,7 @@ export default function SecurityPage() {
             bill&apos;s, or twice for one bill fails CI. The lab does not measure the model&apos;s own judgement.
           </li>
           <li>
-            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear, Google Sheets or Google Drive to
+            Vestiarion trains and fine-tunes no model, and never uses data from Xero, QuickBooks, Zoho Books, HubSpot, Pipedrive, Zoho CRM, Asana, Linear, Jira, Google Sheets or Google Drive to
             train or improve any AI model.
           </li>
         </ul>

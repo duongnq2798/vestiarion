@@ -32,6 +32,7 @@ vi.mock("@/lib/zohocrm/settings", async (original) => ({ ...(await original<type
 vi.mock("@/lib/googlesheets/settings", async (original) => ({ ...(await original<typeof import("@/lib/googlesheets/settings")>()), googleSheetsSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/linear/settings", async (original) => ({ ...(await original<typeof import("@/lib/linear/settings")>()), linearSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/googledrive/settings", async (original) => ({ ...(await original<typeof import("@/lib/googledrive/settings")>()), googleDriveSettingsFromEnv: () => ({}) }));
+vi.mock("@/lib/jira/settings", async (original) => ({ ...(await original<typeof import("@/lib/jira/settings")>()), jiraSettingsFromEnv: () => ({}) }));
 vi.mock("@/lib/connectors/token-store", () => ({ pendingChoice: vi.fn(async () => pending.value) }));
 vi.mock("@/lib/dal/scope", () => ({ withOrg: (_org: string, fn: () => Promise<unknown>) => fn() }));
 vi.mock("@/components/vx/SiteChrome", () => ({ SiteHeader: () => null, SiteFooter: () => null }));
@@ -53,6 +54,7 @@ import ZohoCrmConnectPage from "@/app/integrations/zohocrm/connect/page";
 import GoogleSheetsConnectPage from "@/app/integrations/googlesheets/connect/page";
 import LinearConnectPage from "@/app/integrations/linear/connect/page";
 import GoogleDriveConnectPage from "@/app/integrations/googledrive/connect/page";
+import JiraConnectPage from "@/app/integrations/jira/connect/page";
 import { CONSENT_CHANGED, CONSENT_VERSIONS, consentStatement, HOSTED_MODEL_PROVIDER, namesModelProvider } from "@/lib/connectors/consent";
 import type { ProviderId } from "@/lib/connectors/provider";
 import type { AccountingPanelView } from "@/lib/connectors/panel";
@@ -249,12 +251,13 @@ const anyConnectPage = async (provider: ProviderId, query: Record<string, string
   if (provider === "googlesheets") return renderToStaticMarkup(await GoogleSheetsConnectPage({ searchParams }));
   if (provider === "linear") return renderToStaticMarkup(await LinearConnectPage({ searchParams }));
   if (provider === "googledrive") return renderToStaticMarkup(await GoogleDriveConnectPage({ searchParams }));
+  if (provider === "jira") return renderToStaticMarkup(await JiraConnectPage({ searchParams }));
   return connectPage(provider, query);
 };
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear", "googledrive"] as const)("the %s connect page's statement", (provider) => {
+describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks", "zohocrm", "googlesheets", "linear", "googledrive", "jira"] as const)("the %s connect page's statement", (provider) => {
   it("posts the version it shows, inside the form", async () => {
     memberships.value = [workspace("acme")];
     const form = (await anyConnectPage(provider)).match(/<form[^>]*>[^]*?<\/form>/)?.[0] ?? "";
@@ -270,8 +273,8 @@ describe.each(["xero", "quickbooks", "hubspot", "pipedrive", "asana", "zohobooks
     const terms = `<a href="${escape(HOSTED_MODEL_PROVIDER.terms)}" target="_blank" rel="noopener noreferrer"[^>]*>API terms</a>`;
     const privacy = `<a href="${escape(HOSTED_MODEL_PROVIDER.privacy)}" target="_blank" rel="noopener noreferrer"[^>]*>privacy policy</a>`;
     const naming = consentStatement(provider).filter(namesModelProvider);
-    // Every tool whose facts the agent decides on names it; Asana's, Linear's and Google Sheets' statements do not.
-    expect(naming).toHaveLength(provider === "asana" || provider === "linear" || provider === "googlesheets" ? 0 : 1);
+    // Every tool whose facts the agent decides on names it; Asana's, Linear's, Jira's and Google Sheets' statements do not.
+    expect(naming).toHaveLength(provider === "asana" || provider === "linear" || provider === "jira" || provider === "googlesheets" ? 0 : 1);
     expect(markup.match(new RegExp(terms, "g")) ?? []).toHaveLength(naming.length);
     expect(markup.match(new RegExp(privacy, "g")) ?? []).toHaveLength(naming.length);
     for (const line of naming) {
@@ -430,5 +433,57 @@ describe("the Linear connect page (Linear acceptance LN2, LN16)", () => {
     expect(words).toContain("Only an owner or admin connects Linear");
     expect(words).toContain("Ask an owner or admin of your workspace to connect Linear, or sign in with the account that is one.");
     expect(words).not.toContain("Continue to Linear");
+  });
+});
+
+describe("the Jira connect page (Jira acceptance JR1, JR2, JR22)", () => {
+  const text = (markup: string) => markup.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, " ");
+
+  it("names Jira in words beside the icon for work tools, says what it reads, and goes to Jira", async () => {
+    memberships.value = [workspace("acme")];
+    const markup = await anyConnectPage("jira");
+    const words = text(markup);
+    expect(markup).toMatch(/<h1[^>]*>[^]*?<svg[^>]*lucide-square-kanban[^]*?Connect Jira[^]*?<\/h1>/);
+    // No Atlassian logo: the product's icon for work tools (JR22).
+    expect(markup).not.toContain("/brands/");
+    expect(words).toContain(
+      "Pay contractors for work delivered in Jira. You link a milestone to its Jira issue; when the issue is done, a person accepts the work against the milestone's criteria, and only then does the agent decide on pay, under every guardrail."
+    );
+    expect(words).toContain("What Vestiarion does with Jira's data");
+    for (const line of consentStatement("jira")) expect(words).toContain(line);
+    expect(words).toContain(
+      "Atlassian asks you to allow access as yourself to one Jira site: Vestiarion sees the issues you can see there, and reads only the ones linked to milestones."
+    );
+    expect(words).toContain("Connecting records your agreement, with its date, on the connection and in the workspace's signed ledger.");
+    expect(markup).toMatch(/<button[^>]*type="submit"[^>]*>[^]*?Continue to Jira<\/button>/);
+    expect(words).toContain("Signed in as dana@example.com.");
+    expect(markup).toContain('action="/api/integrations/jira/connect"');
+  });
+
+  it("picks the workspace a Settings card named, among several, with real radio buttons", async () => {
+    memberships.value = [workspace("acme"), workspace("beta", "admin")];
+    const markup = await anyConnectPage("jira", { org: "beta" });
+    const radios = inputs(markup).filter((input) => input.type === "radio");
+    expect(radios.map((radio) => radio.value)).toEqual(["acme", "beta"]);
+    expect(radios.filter((radio) => "checked" in radio).map((radio) => radio.value)).toEqual(["beta"]);
+    const boxes = inputs(markup).filter((input) => input.type === "checkbox");
+    expect(boxes).toEqual([expect.objectContaining({ name: "consent", value: "yes" })]);
+    expect(labelFor(markup, boxes[0].id)).toMatch(/^I agree/);
+  });
+
+  it("says why the connect route sent the person back", async () => {
+    memberships.value = [workspace("acme")];
+    expect(text(await anyConnectPage("jira", { error: "forbidden" }))).toContain("Only an owner or admin of a workspace connects Jira to it.");
+    expect(text(await anyConnectPage("jira", { error: "not_set_up" }))).toContain("Jira is not set up on this deployment yet.");
+    expect(text(await anyConnectPage("jira", { error: "expired" }))).toContain("The time to choose a Jira site ran out. Start again.");
+    expect(text(await anyConnectPage("jira", { consent: "missing" }))).toContain("Tick I agree to connect Jira.");
+  });
+
+  it("tells a person who manages no workspace's integrations who can connect it", async () => {
+    memberships.value = [workspace("acme", "approver")];
+    const words = text(await anyConnectPage("jira"));
+    expect(words).toContain("Only an owner or admin connects Jira");
+    expect(words).toContain("Ask an owner or admin of your workspace to connect Jira, or sign in with the account that is one.");
+    expect(words).not.toContain("Continue to Jira");
   });
 });

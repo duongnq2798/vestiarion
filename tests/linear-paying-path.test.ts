@@ -7,7 +7,8 @@ import { describe, expect, it } from "vitest";
  * (docs/superpowers/specs/2026-10-31-linear-acceptance-design.md LN12, LN13), pinned as source structure, as Asana's is
  * (tests/asana-paying-path.test.ts):
  * - the agent reaches Linear only through the reads of accepted work Asana's go through, `refreshAcceptedWork` and
- *   `recheckAcceptedWork` in src/lib/milestone-verification.ts, which read both tools at once;
+ *   `recheckAcceptedWork` in src/lib/milestone-verification.ts, which read Asana, Linear and Jira at once (Jira
+ *   acceptance JR16);
  * - the payments, the held milestone decisions and the escrow never name Linear;
  * - Linear's code writes a milestone only through 0147's two functions (its verification) and its criteria, never an
  *   amount, a payee, an address or a payment intent;
@@ -36,9 +37,9 @@ describe("the agent and the payments (Linear acceptance LN12, LN13)", () => {
     for (const file of watched) expect(readFileSync(file, "utf8"), path.relative(root, file)).not.toMatch(IMPORTS_LINEAR);
     const verification = read("src/lib/milestone-verification.ts");
     expect(verification).toContain('import { recheckLinearBeforeSending, refreshLinearMilestones } from "./linear/workspace";');
-    // Both tools read at once, so the read before sending still waits at most its one deadline.
-    expect(verification).toMatch(/Promise\.all\(\[refreshAsanaMilestones\(\), refreshLinearMilestones\(\)\]\)/);
-    expect(verification).toMatch(/Promise\.all\(\[recheckBeforeSending\(milestoneIds\), recheckLinearBeforeSending\(milestoneIds\)\]\)/);
+    // The three tools read at once, so the read before sending still waits at most its one deadline (Jira acceptance JR16).
+    expect(verification).toContain("Promise.all([refreshAsanaMilestones(), refreshLinearMilestones(), refreshJiraMilestones()])");
+    expect(verification).toContain("Promise.all([recheckBeforeSending(milestoneIds), recheckLinearBeforeSending(milestoneIds), recheckJiraBeforeSending(milestoneIds)])");
     const orchestrator = read("src/lib/agent/orchestrator.ts");
     expect(orchestrator).toMatch(/if \(!recheck\.linear\.complete\) \{\s*lines\.push\(/);
   });

@@ -25,6 +25,7 @@ export const CONSENT_VERSIONS: Record<ProviderId, string> = {
   googlesheets: "googlesheets-2026-10-25",
   linear: "linear-2026-10-31",
   googledrive: "googledrive-2026-11-01",
+  jira: "jira-2026-11-09",
 };
 
 /**
@@ -43,6 +44,7 @@ export const CONSENT_HISTORY: Record<ProviderId, readonly string[]> = {
   googlesheets: ["googlesheets-2026-10-25"],
   linear: ["linear-2026-10-31"],
   googledrive: ["googledrive-2026-11-01"],
+  jira: ["jira-2026-11-09"],
 };
 
 /**
@@ -155,6 +157,23 @@ const LINEAR_STATEMENT: readonly string[] = [
 ];
 
 /**
+ * Jira's statement (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR2, JR4, JR8, JR12, JR14, JR18, JR19):
+ * read as the Atlassian user who connects, on one site, with the daily check that the connection still reaches it; what
+ * is read of a linked issue and when, and that no Atlassian account ID, name or email is kept; the email lookups that
+ * refuse an acceptance by the payee; the one webhook Vestiarion makes and deletes; that nothing from Jira moves money;
+ * and that Atlassian gives apps no way to end their own access, so a person removes it under Connected apps.
+ */
+const JIRA_STATEMENT: readonly string[] = [
+  "Vestiarion reads Jira as the Atlassian user who connects, on the one Jira site you connect, and sees the issues that person can see there. It reads the site's name and address when you connect, and checks once a day that the connection still reaches the site.",
+  "For each issue linked to a milestone it reads its key, title, project, status and resolution, and when it was done; once the issue is done, also its attachments' names, its web links, and the links in its description and its newest 50 comments. A deliverable that links to another issue on the site is checked at Jira to see that it opens. It keeps the links and names, not the words of the description or the comments, and keeps no Atlassian account ID, name or email.",
+  "When a person accepts the work, it asks Jira which Atlassian account has the payee's email, and which is that person's own, only to refuse an acceptance by the payee. It sends Jira those email addresses for that, and keeps neither them nor the answer.",
+  "It makes one webhook on the site for the projects of the linked issues, so a change there is read again within a minute, renews it before Jira lets it lapse, and deletes it when no linked issue is left open or Jira is disconnected. What a notice says is never used as it is: Vestiarion reads the issue again from Jira. It writes nothing else to Jira.",
+  "An issue done in Jira is never by itself a reason to pay: a person here accepts the work against the milestone's criteria, and the agent then decides the payment under every guardrail. Nothing from Jira sets an amount or a payee.",
+  "Vestiarion never uses Jira data to train or improve any AI model, and never passes it to anyone else without your workspace's say.",
+  "Disconnecting stops the reading at once, and deletes the webhook and the tokens. Atlassian gives apps no way to end their own access, so remove Vestiarion from Connected apps in your Atlassian account settings to end it there too. Acceptances already recorded stay in Vestiarion's signed ledger.",
+];
+
+/**
  * Google Sheets' statement (docs/superpowers/specs/2026-10-25-close-pack-google-sheets-design.md, the connect page): the
  * one Drive permission, what an export writes and reads back, the account's id and masked email, that nothing is shared
  * or comes back, and what disconnecting does with a grant another workspace shares. No model sees any of it.
@@ -192,6 +211,7 @@ export function consentStatement(provider: ProviderId): string[] {
   if (provider === "googlesheets") return [...GOOGLE_SHEETS_STATEMENT];
   if (provider === "linear") return [...LINEAR_STATEMENT];
   if (provider === "googledrive") return [...GOOGLE_DRIVE_STATEMENT];
+  if (provider === "jira") return [...JIRA_STATEMENT];
   return [
     WHAT_IS_READ[provider],
     `The bills you add are shown to this workspace's members and to its agent. ${MODEL_PROVIDER} sees each bill's facts to decide on it, under that provider's own API terms.`,

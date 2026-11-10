@@ -6,6 +6,7 @@ import { readDocumentRequests } from "../document-requests/read";
 import type { DocumentRequestView } from "../document-requests/rules";
 import { checkEvidenceLinks, type LinkAccess } from "../evidence-links/check";
 import { sentDraftsFrom, type SentDraft } from "../invoice-drafts/store";
+import { jiraOnContractors } from "../jira/contractors";
 import { ledgerReadMayBeCut, listCounterpartyEntries, listLedgerEntriesForTargets, type CounterpartyEntry, type LedgerEntry } from "../ledger";
 import { linearOnContractors } from "../linear/contractors";
 import type { Network } from "../network";
@@ -72,6 +73,7 @@ export interface PayeeLinksRead {
 export interface MilestoneEvidence {
   asana: Awaited<ReturnType<typeof asanaOnContractors>>;
   linear: Awaited<ReturnType<typeof linearOnContractors>>;
+  jira: Awaited<ReturnType<typeof jiraOnContractors>>;
   links: Map<string, LinkAccess>;
 }
 
@@ -152,7 +154,7 @@ async function quietly<T>(name: string, read: () => Promise<T>, otherwise: T): P
   return got.read ? got.value : otherwise;
 }
 
-const NO_EVIDENCE: MilestoneEvidence = { asana: null, linear: null, links: new Map() };
+const NO_EVIDENCE: MilestoneEvidence = { asana: null, linear: null, jira: null, links: new Map() };
 
 /**
  * The entries about these invoices and milestones (CL13), `ENTRY_ID_CHUNK` ids a read, merged newest first: the RPC
@@ -241,20 +243,24 @@ async function addressOf(counterparty: CounterpartyRow, network: Network, paymen
   };
 }
 
-/** Each milestone's evidence links, checked before its card offers them (CL7, evidence access E1), as Contractors does. */
+/**
+ * Each milestone's evidence links, checked before its card offers them (CL7, evidence access E1), as Contractors does: its
+ * own and its Asana, Linear and Jira deliverables' (Jira acceptance JR20).
+ */
 async function evidenceOf(milestones: readonly MilestoneRow[]): Promise<MilestoneEvidence> {
   if (milestones.length === 0) return NO_EVIDENCE;
   const ids = milestones.map((milestone) => milestone.id);
-  const [asana, linear] = await Promise.all([asanaOnContractors(ids), linearOnContractors(ids)]);
+  const [asana, linear, jira] = await Promise.all([asanaOnContractors(ids), linearOnContractors(ids), jiraOnContractors(ids)]);
   // The open milestones' first: the check stops at its own limit (25).
   const done = (milestone: MilestoneRow) => milestone.status === "paid" || milestone.status === "closed";
   const hrefs = [...milestones.filter((milestone) => !done(milestone)), ...milestones.filter(done)].flatMap((milestone) => [
     ...(milestone.verification_source?.startsWith("https://") ? [milestone.verification_source] : []),
     ...(asana?.links.get(milestone.id)?.deliverables.flatMap((item) => (item.href ? [item.href] : [])) ?? []),
     ...(linear?.links.get(milestone.id)?.deliverables.flatMap((item) => (item.href ? [item.href] : [])) ?? []),
+    ...(jira?.links.get(milestone.id)?.deliverables.flatMap((item) => (item.href ? [item.href] : [])) ?? []),
   ]);
   const links = await quietly("evidence links", () => checkEvidenceLinks(hrefs), new Map<string, LinkAccess>());
-  return { asana, linear, links };
+  return { asana, linear, jira, links };
 }
 
 /**

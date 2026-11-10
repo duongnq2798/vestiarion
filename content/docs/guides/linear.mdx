@@ -2,12 +2,12 @@ Pay contractors for work they deliver in Linear. You link a milestone to the Lin
 
 Anyone in your Linear workspace can mark an issue done, the contractor included. So an issue done in Linear is never by itself a reason to pay, and nothing from Linear sets an amount or a payee. If the issue is reopened, canceled, archived or deleted, or its deliverables change, after the work was accepted, and Vestiarion reads that before the payment is sent, the acceptance is taken back and the milestone is held for review.
 
-Linear works here as [Asana](/docs/guides/asana) does. Linear refuses a milestone linked to an Asana task, and Contractors offers no Asana card on a milestone linked to Linear.
+Linear works here as [Asana](/docs/guides/asana) does. One work tool verifies a milestone: Linear refuses a milestone linked to an Asana task or a [Jira](/docs/guides/jira) issue, Asana and Jira refuse one linked to a Linear issue, and Contractors offers no other tool's card on a milestone linked to Linear.
 
 ## Before you start
 
 - **An owner or admin** of the workspace connects Linear. Anyone else sees "An owner or admin connects Linear." Linking issues, writing criteria and accepting work are for whoever verifies milestones by hand: an owner or admin.
-- **A milestone** for the contractor, waiting for verification. [Pay a contractor](/docs/guides/pay-a-contractor) adds one. A milestone verified by a GitHub pull request, or linked to an Asana task, is not linked to Linear as well.
+- **A milestone** for the contractor, waiting for verification. [Pay a contractor](/docs/guides/pay-a-contractor) adds one. A milestone verified by a GitHub pull request, or linked to an Asana task or a Jira issue, is not linked to Linear as well.
 - **A Linear issue** for the work, in a team the person who connects Linear can see, with the deliverables attached to it (a pull request, a design file, a document) or linked in its description or comments.
 
 ## 1. Connect Linear
@@ -33,7 +33,7 @@ Vestiarion links only an issue the connection can see:
 - An issue Linear does not show is refused with "Linear does not show that issue to the connected account. Check the ID, or ask whoever connected Linear to join the issue's team."
 - A link to another Linear workspace is refused with "That link is to another Linear workspace than the one connected. Link an issue of the connected workspace."
 - One issue verifies one milestone: an issue linked to another milestone is refused with "That Linear issue is linked to another milestone already: one issue verifies one milestone."
-- A milestone linked to an Asana task is refused with "This milestone is linked to an Asana task. Unlink the task first to accept the work from Linear."
+- A milestone linked to an Asana task is refused with "This milestone is linked to an Asana task. Unlink the task first to accept the work from Linear.", and one linked to a Jira issue with "This milestone is linked to a Jira issue. Unlink the issue first to accept the work from Linear."
 
 The ledger records `linear_issue_linked`. **Unlink the issue** takes the link off, and takes back an acceptance the agent has not paid (`linear_issue_unlinked`).
 
@@ -41,7 +41,7 @@ The ledger records `linear_issue_linked`. **Unlink the issue** takes the link of
 
 The criteria are what the work is held to, taken from your agreement with the contractor. Type them in **Acceptance criteria, from the agreement** and choose **Add the criteria**. Linear never writes them: anyone in your Linear workspace can edit an issue's description, the contractor included, so it is evidence, not the agreement.
 
-When Asana is connected too, a milestone not linked yet asks for its criteria once, under **Accept from Asana**: they are the milestone's, and hold in Linear as well.
+When Asana is connected too, a milestone not linked yet asks for its criteria once, under **Accept from Asana**: they are the milestone's, and hold in Linear as well. Where Jira is connected beside Linear, Linear's card asks for them, and Jira's leaves them to it.
 
 Without criteria, a done issue is held: "The issue is done, but the milestone has no acceptance criteria. Add the criteria from the agreement, then accept the work." Once the work is accepted, its criteria stay as they were accepted: "The work was accepted against these criteria. Unlink the issue to change them." The ledger records `milestone_criteria_set`, with the criteria.
 
@@ -103,7 +103,7 @@ The Linear card in Settings counts, over the last 30 days:
 - **Disputes**: acceptances taken back because the issue was reopened or changed.
 - **From acceptance to the agent's decision**: the median time from an acceptance to the agent's first decision on that milestone.
 
-They count Linear's acceptances only. Asana's card counts its own.
+They count Linear's acceptances only. Asana's and Jira's cards count their own.
 
 ## Why it was paid
 

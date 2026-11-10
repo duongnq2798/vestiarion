@@ -593,6 +593,7 @@ function deliveredMilestone(ctx: Context, milestone: EvidenceMilestone): Evidenc
   }
   if (milestone.verification_method === "asana") return deliveredFromAsana(ctx, milestone);
   if (milestone.verification_method === "linear") return deliveredFromLinear(ctx, milestone);
+  if (milestone.verification_method === "jira") return deliveredFromJira(ctx, milestone);
   if (!milestone.verified) {
     return step("delivered", title, [{ kind: "missing", text: "Not verified yet.", fill: "Verify it on Contractors, or link a merged pull request.", seqs: [] }]);
   }
@@ -698,6 +699,75 @@ function deliveredFromLinear(ctx: Context, milestone: EvidenceMilestone): Eviden
   const deliverables = Array.isArray(accepted?.detail.deliverables) ? accepted.detail.deliverables.length : null;
   return step("delivered", title, [
     { kind: "verified", text: "Linear reported the issue done.", at: completedAt, seqs: [], ...(link ? { link } : {}) },
+    stated(ctx, `The work was accepted against the milestone's acceptance criteria${accepted ? via(accepted.detail) : ""}, as the deliverables shown then.`, accepted, {
+      at: accepted?.ts ?? milestone.verified_at,
+      notes: [
+        ...(deliverables !== null ? [`${deliverables} ${deliverables === 1 ? "deliverable" : "deliverables"} accepted, by their fingerprint ${String(accepted?.detail.fingerprint ?? "").slice(0, 12)}.`] : []),
+        "An issue marked done alone never verifies a milestone: a person accepts it.",
+      ],
+    }),
+  ]);
+}
+
+/** Why a Jira acceptance was taken back (Jira acceptance JR13): Jira has no archived reason of its own (JR10). */
+const JIRA_WITHDRAWN_WORDS: Record<string, string> = {
+  reopened: "was reopened in Jira",
+  canceled: "was resolved in Jira as not done",
+  deliverable_changed: "changed its deliverables in Jira",
+  issue_unreachable: "could no longer be read in Jira",
+  unlinked: "was unlinked",
+};
+
+/**
+ * An issue's link as the reads build it (0149's `jira_issue_links_issue_url_check`, JR8): the site's address as
+ * `jira_sites.site_url` holds it, a lower-case host and nothing else, then `/browse/<KEY>`, and no more.
+ */
+const JIRA_BROWSE = /^https:\/\/[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\/browse\/[A-Z][A-Z0-9_]{0,49}-[0-9]{1,18}$/;
+
+/**
+ * Work accepted from Jira (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR11, JR13, JR22), as Linear's
+ * above: Jira's word that the issue was done, verified outside, beside the person's acceptance against the criteria,
+ * which is what verifies the milestone. The issue's link is offered only in the browse form 0149 keeps, and checked
+ * before it is offered (JR20). An acceptance taken back is missing.
+ */
+function deliveredFromJira(ctx: Context, milestone: EvidenceMilestone): EvidenceStep {
+  const title = "What was delivered";
+  const detail = milestone.verification_detail ?? {};
+  const accepted = newest(ctx.own, (entry) => entry.action === "jira_work_accepted");
+  const withdrawn = newest(ctx.own, (entry) => entry.action === "jira_acceptance_withdrawn");
+  const issue = text(detail.jiraIssue) ?? text(accepted?.detail.issueUrl);
+  const identifier = text(detail.identifier) ?? text(accepted?.detail.identifier);
+  const label = identifier ? `${identifier} in Jira` : "The issue in Jira";
+  const link: EvidenceLink | undefined = issue && JIRA_BROWSE.test(issue) ? { href: issue, label, state: "not_opened", given: true } : undefined;
+  if (!milestone.verified) {
+    const reason = text(detail.heldReason) ?? text(withdrawn?.detail.reason);
+    return step("delivered", title, [
+      {
+        kind: "missing",
+        text: `The acceptance was taken back before payment: the issue ${(reason && JIRA_WITHDRAWN_WORDS[reason]) ?? "changed in Jira"}.`,
+        fill: "A person accepts the work again on Contractors, once the issue is done, against its criteria.",
+        at: withdrawn?.ts ?? null,
+        seqs: withdrawn ? [withdrawn.seq] : [],
+        ...(link ? { link } : {}),
+        warn: true,
+      },
+    ]);
+  }
+  const completedAt = text(detail.completedAt) ?? text(accepted?.detail.completedAt);
+  const deliverables = Array.isArray(accepted?.detail.deliverables) ? accepted.detail.deliverables.length : null;
+  // Jira's own status and resolution, as the person saw them when they accepted (JR9): a site may name its resolutions
+  // its own way, so the page shows them as Jira gave them.
+  const status = text(accepted?.detail.statusName);
+  const resolution = text(accepted?.detail.resolutionName);
+  return step("delivered", title, [
+    {
+      kind: "verified",
+      text: "Jira reported the issue done.",
+      at: completedAt,
+      seqs: [],
+      ...(status ? { notes: [`Its status in Jira was ${status}${resolution ? `, resolved as ${resolution}` : ""}.`] } : {}),
+      ...(link ? { link } : {}),
+    },
     stated(ctx, `The work was accepted against the milestone's acceptance criteria${accepted ? via(accepted.detail) : ""}, as the deliverables shown then.`, accepted, {
       at: accepted?.ts ?? milestone.verified_at,
       notes: [

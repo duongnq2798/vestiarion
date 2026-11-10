@@ -137,7 +137,7 @@ describe("the core's tables take Linear (Linear acceptance LN3)", () => {
       const def = await definition(name);
       for (const provider of [...PROVIDERS_BEFORE, "linear"]) expect(def, `${name} ${provider}`).toContain(`'${provider}'`);
     }
-    await expect(connection(await createOrg(db, "linear-checks-jira"), "jira")).rejects.toThrow(/accounting_connections_provider_check/);
+    await expect(connection(await createOrg(db, "linear-checks-sage"), "sage")).rejects.toThrow(/accounting_connections_provider_check/);
   });
 
   it("lets two workspaces connect the same Linear organization, and keeps one live Linear connection per workspace (LN2)", async () => {
@@ -158,7 +158,7 @@ describe("the core's tables take Linear (Linear acceptance LN3)", () => {
     const id = await milestone(orgId);
     await db.query("update public.milestones set verification_method = 'linear' where id = $1", [id]);
     for (const method of METHODS_BEFORE) await db.query("update public.milestones set verification_method = $2 where id = $1", [id, method]);
-    await expect(db.query("update public.milestones set verification_method = 'jira' where id = $1", [id])).rejects.toThrow(/milestones_verification_method_check/);
+    await expect(db.query("update public.milestones set verification_method = 'sage' where id = $1", [id])).rejects.toThrow(/milestones_verification_method_check/);
     const checks = await db.query<{ conname: string }>(
       "select conname from pg_constraint where conrelid = 'public.milestones'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%verification_method%'"
     );
@@ -175,7 +175,7 @@ describe("the core's tables take Linear (Linear acceptance LN3)", () => {
     }
     await db.query("alter table public.milestones drop constraint milestones_verification_method_check");
     await db.query(
-      `alter table public.milestones add constraint milestones_verification_method_check check (verification_method in (${[...METHODS_BEFORE, "linear", "jira"].map((id) => `'${id}'`).join(", ")}))`
+      `alter table public.milestones add constraint milestones_verification_method_check check (verification_method in (${[...METHODS_BEFORE, "linear", "sage"].map((id) => `'${id}'`).join(", ")}))`
     );
     await db.exec(sql());
     for (const file of ["0115_asana_acceptance.sql", "0145_google_sheets_connector.sql", "0123_zoho_crm_connections.sql", "0101_accounting_connectors.sql"]) {
@@ -183,7 +183,7 @@ describe("the core's tables take Linear (Linear acceptance LN3)", () => {
     }
     expect(await definition("accounting_connections_provider_check")).toContain("'sage'");
     expect(await definition("accounting_tokens_provider_check")).toContain("'sage'");
-    expect(await definition("milestones_verification_method_check")).toContain("'jira'");
+    expect(await definition("milestones_verification_method_check")).toContain("'sage'");
     for (const name of ["accounting_connections_provider_check", "accounting_tokens_provider_check"]) expect(await definition(name)).toContain("'linear'");
     expect(await definition("milestones_verification_method_check")).toContain("'linear'");
   });

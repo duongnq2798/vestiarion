@@ -58,6 +58,7 @@ export const ACTION_LABELS: Record<string, string> = {
   asana: "Asana",
   linear: "Linear",
   googledrive: "Google Drive",
+  jira: "Jira",
 };
 
 export function actionLabel(action: string): string {

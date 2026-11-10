@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { readSource } from "@/lib/docs/content";
+import { syncErrorWords } from "@/lib/connectors/status";
+import { ATTACHMENTS_READ, COMMENTS_READ, REMOTE_LINKS_READ } from "@/lib/jira/map";
 import { SURFACE_COMMANDS } from "@/lib/commands/policy";
 import { GoLiveError, type GoLiveErrorCode } from "@/lib/platform/go-live";
 import { txUrl } from "@/lib/payee-chains";
@@ -54,6 +56,7 @@ type GuideSlug =
   | "guides/zohocrm"
   | "guides/asana"
   | "guides/linear"
+  | "guides/jira"
   | "guides/google-drive"
   | "guides/audit-export"
   | "guides/evidence"
@@ -209,6 +212,16 @@ const LINEAR_ACCEPTANCE = "src/lib/linear/acceptance.ts";
 const LINEAR_COMMANDS = "src/lib/commands/linear.ts";
 const LINEAR_READS = "src/lib/linear/reads.ts";
 const LINEAR_VIEWS = "src/lib/linear/views.ts";
+// Jira's card, a milestone's Jira card, and the connect page, as Linear's (Jira acceptance JR22).
+const JIRA_PANEL = "src/components/JiraPanel.tsx";
+const JIRA_CARD = "src/components/JiraIssueCard.tsx";
+const JIRA_CONNECT_PAGE = "src/app/integrations/jira/connect/page.tsx";
+const JIRA_ACCEPTANCE = "src/lib/jira/acceptance.ts";
+const JIRA_COMMANDS = "src/lib/commands/jira.ts";
+const JIRA_ACTIONS = "src/app/actions/jira.ts";
+const JIRA_READS = "src/lib/jira/reads.ts";
+const JIRA_VIEWS = "src/lib/jira/views.ts";
+const JIRA_WEBHOOKS = "src/lib/jira/webhooks.ts";
 const CRM_WORDS = "src/lib/connectors/crm.ts";
 const CRM_CHANGES = "src/components/CrmDealChanges.tsx";
 // Pipedrive's card and connect page are its own; its list is the CRM list HubSpot's uses, in Pipedrive's words (Pipedrive connector P20).
@@ -566,6 +579,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Month to close", TRIAGE],
     ["The agent decided to pay it, and shadow mode pays nothing until a person agrees. Agree and pay it, or disagree.", "src/lib/accountant/read.ts"],
     ["It also waits for a verdict in shadow mode.", "src/lib/accountant/read.ts"],
+    // Work to accept from Jira says Done, its status category, as the card does (Jira acceptance JR9).
+    ["Done in Jira (ENG-142). Accept it against its criteria.", "src/lib/accountant/read.ts", "`Done in Jira${link.identifier ? ` (${link.identifier})` : \"\"}.`"],
     ["Someone disagreed with the agent in shadow mode: return or reject it.", "src/lib/accountant/read.ts"],
     ["Accept it against its criteria.", "src/lib/accountant/read.ts"],
     ["The close pack has not been downloaded or exported yet.", "src/lib/accountant/read.ts"],
@@ -2794,6 +2809,8 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/asana": [
     ["Connect Asana", ASANA_PANEL],
+    ["This milestone is linked to a Linear issue. Unlink the issue first to accept the work from Asana.", ASANA_COMMANDS],
+    ["This milestone is linked to a Jira issue. Unlink the issue first to accept the work from Asana.", ASANA_COMMANDS],
     ["An owner or admin connects Asana.", ASANA_PANEL],
     ["I agree", ACCOUNTING_CONSENT],
     ["Continue to Asana", ASANA_CONNECT_PAGE],
@@ -2935,6 +2952,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["That link is to another Linear workspace than the one connected. Link an issue of the connected workspace.", LINEAR_COMMANDS],
     ["That Linear issue is linked to another milestone already: one issue verifies one milestone.", LINEAR_COMMANDS],
     ["This milestone is linked to an Asana task. Unlink the task first to accept the work from Linear.", LINEAR_COMMANDS],
+    ["This milestone is linked to a Jira issue. Unlink the issue first to accept the work from Linear.", LINEAR_COMMANDS],
     ["linear_issue_linked", LINEAR_COMMANDS],
     ["Unlink the issue", LINEAR_CARD],
     ["linear_issue_unlinked", LINEAR_COMMANDS],
@@ -2979,6 +2997,88 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
     ["Disconnect Linear", LINEAR_PANEL],
     ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
     ["Acceptances already recorded stay in Vestiarion's signed ledger.", ACCOUNTING_CONSENT],
+  ],
+  "guides/jira": [
+    ["Connect Jira", JIRA_PANEL],
+    ["An owner or admin connects Jira.", JIRA_PANEL],
+    ["I agree", ACCOUNTING_CONSENT],
+    ["Continue to Jira", JIRA_CONNECT_PAGE],
+    ["What Vestiarion does with Jira's data", JIRA_CONNECT_PAGE],
+    ["Atlassian asks you to allow access as yourself to one Jira site", JIRA_CONNECT_PAGE],
+    ["It keeps the links and names, not the words of the description or the comments, and keeps no Atlassian account ID, name or email.", ACCOUNTING_CONSENT],
+    ["Nothing from Jira sets an amount or a payee.", ACCOUNTING_CONSENT, "Nothing from ${label} sets an amount or a payee."],
+    ["Jira is connected. Link a milestone to its Jira issue on Contractors.", JIRA_PANEL],
+    ["accounting_connected", ACCOUNTING_CONNECTIONS],
+    ["This workspace is connected to another Jira site. Disconnect it first, then connect the one you want.", JIRA_PANEL],
+    ["Choose the Jira site to connect", JIRA_CONNECT_PAGE],
+    ["Connect this site", JIRA_CONNECT_PAGE],
+    ["The time to choose a Jira site ran out", JIRA_CONNECT_PAGE],
+    ["Your Atlassian account has no Jira site Vestiarion can read. Connect with the account you use Jira with, or ask the site's admin whether apps are allowed.", JIRA_PANEL],
+    ["Accept from Jira", JIRA_CARD],
+    ["The Jira issue the work is delivered in", JIRA_CARD],
+    ["Link the issue", JIRA_CARD],
+    ["Vestiarion reads the issue through Jira with this workspace's connection, never by opening the link.", JIRA_CARD, "Vestiarion reads the issue through Jira with this workspace&apos;s connection, never by opening the link."],
+    ["That is not a Jira issue. Paste the issue's link from Jira, or its key, such as ENG-123.", JIRA_COMMANDS],
+    ["That issue is on another Jira site than the one connected (your-site.atlassian.net). Link an issue of the connected site.", JIRA_COMMANDS, "That issue is on another Jira site than the one connected (${host}). Link an issue of the connected site."],
+    ["Jira does not show ENG-123 to the connected account. Check the key, or ask whoever connected Jira to open the project.", JIRA_COMMANDS, "Jira does not show ${ref.key} to the connected account. Check the key, or ask whoever connected Jira to open the project."],
+    ["That Jira issue is linked to another milestone already: one issue verifies one milestone.", JIRA_COMMANDS],
+    ["This milestone is linked to an Asana task. Unlink the task first to accept the work from Jira.", JIRA_COMMANDS],
+    ["This milestone is linked to a Linear issue. Unlink the issue first to accept the work from Jira.", JIRA_COMMANDS],
+    ["jira_issue_linked", JIRA_COMMANDS],
+    ["Unlink the issue", JIRA_CARD],
+    ["jira_issue_unlinked", JIRA_COMMANDS],
+    ["Acceptance criteria, from the agreement", JIRA_CARD],
+    ["Add the criteria", JIRA_CARD],
+    ["The issue is done, but the milestone has no acceptance criteria. Add the criteria from the agreement, then accept the work.", JIRA_ACCEPTANCE],
+    ["The work was accepted against these criteria. Unlink the issue to change them.", JIRA_COMMANDS],
+    ["milestone_criteria_set", JIRA_COMMANDS],
+    ["Waiting for the issue", JIRA_ACCEPTANCE],
+    ["Ready for acceptance", JIRA_ACCEPTANCE],
+    ["Held for review", JIRA_ACCEPTANCE],
+    ["Jira resolved the issue as Won't Do, which is not done. Nothing is accepted from it: reopen it, or link another issue.", JIRA_ACCEPTANCE, "Jira resolved the issue as ${resolution}, which is not done. Nothing is accepted from it: reopen it, or link another issue."],
+    ["Done in Jira on Nov 6, 2026 (Done, resolved as Done).", JIRA_VIEWS, "Done in Jira${link.completedAt ? ` on ${utcDay(link.completedAt)}` : \"\"}"],
+    ["Not done in Jira yet. It is read again when it changes there. Deliverables are read once it is done.", JIRA_ACCEPTANCE],
+    ["Check Jira now", JIRA_CARD],
+    ["Check linked issues now", JIRA_PANEL],
+    ["jira_issue_ready", JIRA_READS],
+    ["Deliverables in Jira", JIRA_CARD],
+    ["Web link", JIRA_CARD],
+    ["Link in the description", JIRA_CARD],
+    ["Link in a comment", JIRA_CARD],
+    ["Jira has more than Vestiarion reads: the first 50 attachments, 50 web links and the newest 50 comments were checked.", JIRA_VIEWS, "Jira has more than Vestiarion reads: the first ${ATTACHMENTS_READ} attachments, ${REMOTE_LINKS_READ} web links and the newest ${COMMENTS_READ} comments were checked."],
+    ["I checked each criterion against these deliverables, as shown here.", JIRA_CARD],
+    ["Accept the work", JIRA_CARD],
+    ["Accepted. The agent decides on pay within a minute, under every guardrail.", JIRA_COMMANDS],
+    ["The deliverables changed in Jira since you opened this. Look at them again before accepting.", JIRA_COMMANDS],
+    ["jira_work_accepted", JIRA_ACCEPTANCE],
+    ["Deliverables accepted", JIRA_CARD],
+    ["You are this milestone's payee, so someone else accepts the work.", JIRA_ACCEPTANCE],
+    ["Your Atlassian account is this milestone's payee, so someone else accepts the work.", JIRA_ACCEPTANCE],
+    ["You are this milestone's payee, so someone else approves paying it.", "src/lib/commands/milestones.ts"],
+    ["jira_acceptance_withdrawn", JIRA_ACCEPTANCE],
+    ["The issue was reopened in Jira after the work was accepted, so the acceptance was taken back before any payment. Accept it again once it is done.", JIRA_ACCEPTANCE],
+    ["To take the acceptance back, unlink the issue: the milestone then waits for verification again.", JIRA_CARD],
+    ["Changed after payment", JIRA_ACCEPTANCE],
+    ["The issue changed in Jira after the payment was sent. Review it with the contractor: Vestiarion does not take a payment back.", JIRA_ACCEPTANCE],
+    ["Evidence checked by a person", JIRA_PANEL],
+    ["Disputes", JIRA_PANEL],
+    ["From acceptance to the agent's decision", JIRA_PANEL, "From acceptance to the agent&apos;s decision"],
+    ["Jira last told Vestiarion of a change", JIRA_VIEWS],
+    ["Jira has not told Vestiarion of a change yet. Linked issues are read every 15 minutes.", JIRA_VIEWS],
+    ["Jira's notices are not reaching Vestiarion: the 15-minute check found a change Jira did not send. Linked issues are still read every 15 minutes.", JIRA_VIEWS],
+    ["Jira did not take Vestiarion's webhook:", JIRA_VIEWS],
+    ["Jira reported the issue done.", EVIDENCE_CHAIN],
+    ["Reconnect Jira", JIRA_PANEL],
+    ["Jira no longer shows Vestiarion the Northstar site: the site was removed, or the person who connected Jira lost access to it. Reconnect Jira.", JIRA_WEBHOOKS, "Jira no longer shows Vestiarion the ${siteName} site: the site was removed, or the person who connected Jira lost access to it. Reconnect Jira."],
+    ["Jira did not answer just now. It is read again within 15 minutes.", JIRA_READS, "const RETRY = \"It is read again within 15 minutes.\";"],
+    ["Jira did not answer just now.", JIRA_READS, "Jira did not answer just now. ${RETRY}"],
+    ["Jira asked Vestiarion to slow down.", JIRA_READS, "Jira asked Vestiarion to slow down. ${RETRY}"],
+    ["Jira is not set up on this deployment yet.", JIRA_PANEL],
+    ["Disconnect Jira", JIRA_PANEL],
+    ["Jira is disconnected, and its webhook deleted. Acceptances already recorded stay in Vestiarion.", JIRA_ACTIONS, "Jira is disconnected, and its webhook deleted. Acceptances already recorded stay in Vestiarion. ${AT_ATLASSIAN}"],
+    ["Jira ends its webhook within 30 days.", JIRA_ACTIONS],
+    ["To end Vestiarion's access at Atlassian too, remove it from Connected apps in your Atlassian account settings.", JIRA_ACTIONS],
+    ["accounting_disconnected", ACCOUNTING_CONNECTIONS],
   ],
   "guides/xero": [
     ["Connect Xero", ACCOUNTING_PANEL, "`Connect ${label}`"],
@@ -3679,6 +3779,7 @@ const QUOTED: Record<GuideSlug, Array<readonly [string, string, string?]>> = {
   ],
   "guides/evidence": [
     ["Bills & receivables", APP_NAV],
+    ["Vestiarion checks links on GitHub, Asana, Linear, the connected Jira site and its own file storage only", "src/lib/evidence-links/allow-list.ts"],
     ["Contractors", APP_NAV],
     ["Treasury", APP_NAV],
     ["Audit log", APP_NAV],
@@ -3981,6 +4082,7 @@ const MIN_QUOTED: Record<GuideSlug, number> = {
   "guides/zohocrm": 20,
   "guides/asana": 20,
   "guides/linear": 20,
+  "guides/jira": 20,
   "guides/google-drive": 20,
   "guides/audit-export": 5,
   "guides/evidence": 20,
@@ -4215,5 +4317,18 @@ describe("the way into the guides", () => {
     expect(readSource("")).toContain('href="/docs/guides/go-live"');
     expect(readSource("")).toContain('href="/docs/guides/try-it"');
     expect(readSource("get-started/quickstart")).toContain("Using the app rather than the API? Start with [Go live](/docs/guides/go-live).");
+  });
+});
+
+describe("the Jira guide's built words (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md)", () => {
+  const guide = readSource("guides/jira");
+
+  it("quotes the card's reconnect line as the connector core builds it for Jira (JR3)", () => {
+    expect(guide).toContain(syncErrorWords("reconnect", "Jira", null));
+  });
+
+  it("gives the depths Jira is read to as the reader's own figures (JR8)", () => {
+    expect([ATTACHMENTS_READ, REMOTE_LINKS_READ, COMMENTS_READ]).toEqual([50, 50, 50]);
+    expect(guide).toContain(`Vestiarion reads at most ${ATTACHMENTS_READ} files, ${REMOTE_LINKS_READ} web links and the newest ${COMMENTS_READ} comments of an issue.`);
   });
 });

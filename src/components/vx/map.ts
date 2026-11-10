@@ -816,7 +816,8 @@ function decideMilestone(milestone: MilestoneRow, entries: LedgerEntry[], contex
     ? milestone.verification_status === "verified" ? "merged PR" : milestone.verification_status.replace("_", " ")
     : milestone.verification_method === "manual" ? "manual approval" : milestone.verification_method === "seed" ? "demo fixture"
       : milestone.verification_method === "asana" ? (milestone.verified ? "accepted from Asana" : "acceptance taken back")
-        : milestone.verification_method === "linear" ? (milestone.verified ? "accepted from Linear" : "acceptance taken back") : "not verified";
+        : milestone.verification_method === "linear" ? (milestone.verified ? "accepted from Linear" : "acceptance taken back")
+          : milestone.verification_method === "jira" ? (milestone.verified ? "accepted from Jira" : "acceptance taken back") : "not verified";
   const evidenceLink = milestoneEvidenceLink(milestone.verification_source, githubSource);
   const access = (href: string) => (context.links ? (context.links.get(href) ?? { state: "not_checked" as const, reason: "" }) : undefined);
   const verifiedBy: Evidence = { label: "Verified by", value: verificationLabel, state: milestone.verified ? "ok" : "missing" };

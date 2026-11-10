@@ -157,11 +157,22 @@ export interface AcceptanceKpis {
 
 const PROPOSALS = new Set(["milestone_release", "milestone_hold"]);
 
-/** The card's figures over the last `days` days, from the workspace's contractor entries, in any order. */
-export function acceptanceKpis(events: readonly AcceptanceEvent[], nowMs: number, days = 30): AcceptanceKpis {
+/** Which ledger actions are a tool's acceptances, and its acceptances taken back: Linear's, unless a caller names another's. */
+export interface AcceptanceActions {
+  accepted: string;
+  withdrawn: string;
+}
+
+const LINEAR_ACTIONS: AcceptanceActions = { accepted: ACCEPTED_ACTION, withdrawn: WITHDRAWN_ACTION };
+
+/**
+ * The card's figures over the last `days` days, from the workspace's contractor entries, in any order. Jira's card counts
+ * its own two actions by the same rule (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md JR21).
+ */
+export function acceptanceKpis(events: readonly AcceptanceEvent[], nowMs: number, days = 30, actions: AcceptanceActions = LINEAR_ACTIONS): AcceptanceKpis {
   const from = nowMs - days * 86_400_000;
   const inWindow = events.filter((event) => Date.parse(event.ts) >= from && Date.parse(event.ts) <= nowMs);
-  const accepted = inWindow.filter((event) => event.action === ACCEPTED_ACTION && event.milestoneId);
+  const accepted = inWindow.filter((event) => event.action === actions.accepted && event.milestoneId);
   const proposals = events.filter((event) => PROPOSALS.has(event.action) && event.milestoneId);
   const minutes: number[] = [];
   for (const acceptance of accepted) {
@@ -176,7 +187,7 @@ export function acceptanceKpis(events: readonly AcceptanceEvent[], nowMs: number
     minutes.length === 0 ? null : minutes.length % 2 === 1 ? minutes[(minutes.length - 1) / 2] : (minutes[minutes.length / 2 - 1] + minutes[minutes.length / 2]) / 2;
   return {
     manualChecks: accepted.length,
-    disputes: inWindow.filter((event) => event.action === WITHDRAWN_ACTION).length,
+    disputes: inWindow.filter((event) => event.action === actions.withdrawn).length,
     medianMinutesToProposal: median === null ? null : Math.round(median * 10) / 10,
     proposals: minutes.length,
   };

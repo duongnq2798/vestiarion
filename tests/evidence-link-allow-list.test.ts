@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkTargetOf, requestAllowed, signedTokenExpiry, storageHostOf } from "@/lib/evidence-links/allow-list";
+import { checkTargetOf, NOT_CHECKED_WORDS, requestAllowed, signedTokenExpiry, storageHostOf } from "@/lib/evidence-links/allow-list";
 
 /**
  * Which evidence links Vestiarion may check (docs/superpowers/specs/2026-10-13-role-onboarding-evidence-access-design.md
@@ -204,5 +204,23 @@ describe("signedTokenExpiry", () => {
     expect(signedTokenExpiry(token(1_760_000_000))).toBe(1_760_000_000_000);
     expect(signedTokenExpiry("not-a-token")).toBeNull();
     expect(signedTokenExpiry("a.%%%.c")).toBeNull();
+  });
+});
+
+describe("the words for a link that is not checked (Jira acceptance JR20)", () => {
+  const jiraSite = { host: "northstar.atlassian.net", cloudId: "4f6c3a2e-8b1d-4e7a-9c2f-1a0b3c4d5e6f" };
+
+  it("name every service whose links are checked, the connected Jira site among them", () => {
+    expect(NOT_CHECKED_WORDS.host).toBe("Vestiarion checks links on GitHub, Asana, Linear, the connected Jira site and its own file storage only, and never opens other sites.");
+    expect(NOT_CHECKED_WORDS.path).toBe(
+      "On GitHub, Vestiarion checks pull requests and their comments; on Asana, tasks and attachments; on Linear and the connected Jira site, issues; on its own storage, signed links."
+    );
+  });
+
+  it("are given for a Jira link on a site not connected, and for a page on the connected site that is not an issue's", () => {
+    expect(checkTargetOf("https://northstar.atlassian.net/browse/ENG-142")).toEqual({ notChecked: "host" });
+    expect(checkTargetOf("https://southwind.atlassian.net/browse/ENG-142", { jiraSite })).toEqual({ notChecked: "host" });
+    expect(checkTargetOf("https://northstar.atlassian.net/secure/attachment/10001/handoff.pdf", { jiraSite })).toEqual({ notChecked: "path" });
+    expect(checkTargetOf("https://northstar.atlassian.net/browse/ENG-142", { jiraSite })).toMatchObject({ target: { kind: "jira_issue" } });
   });
 });

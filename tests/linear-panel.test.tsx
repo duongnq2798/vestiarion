@@ -258,28 +258,28 @@ describe("which work tool's card a milestone offers (Linear acceptance LN4, LN16
 
   it("leaves Asana's card as it was where Linear is not configured", () => {
     for (const connected of [true, false]) {
-      expect(workToolCards({ pending: true, asana: tool(connected), linear: null })).toEqual({ asana: true, linear: false, linearCriteria: false });
-      expect(workToolCards({ pending: false, asana: tool(connected), linear: null })).toEqual({ asana: false, linear: false, linearCriteria: false });
-      expect(workToolCards({ pending: false, asana: tool(connected, true), linear: null })).toEqual({ asana: true, linear: false, linearCriteria: false });
+      expect(workToolCards({ pending: true, asana: tool(connected), linear: null })).toEqual({ asana: true, linear: false, linearCriteria: false, jira: false, jiraCriteria: false });
+      expect(workToolCards({ pending: false, asana: tool(connected), linear: null })).toEqual({ asana: false, linear: false, linearCriteria: false, jira: false, jiraCriteria: false });
+      expect(workToolCards({ pending: false, asana: tool(connected, true), linear: null })).toEqual({ asana: true, linear: false, linearCriteria: false, jira: false, jiraCriteria: false });
     }
   });
 
   it("offers no card for linking a milestone in one tool once it is linked in the other", () => {
-    expect(workToolCards({ pending: true, asana: tool(true), linear: tool(true, true) })).toEqual({ asana: false, linear: true, linearCriteria: true });
-    expect(workToolCards({ pending: true, asana: tool(true, true), linear: tool(true) })).toEqual({ asana: true, linear: false, linearCriteria: false });
+    expect(workToolCards({ pending: true, asana: tool(true), linear: tool(true, true) })).toEqual({ asana: false, linear: true, linearCriteria: true, jira: false, jiraCriteria: false });
+    expect(workToolCards({ pending: true, asana: tool(true, true), linear: tool(true) })).toEqual({ asana: true, linear: false, linearCriteria: false, jira: false, jiraCriteria: false });
   });
 
   it("offers an open milestone the connected tool's card, both when both are connected, and both when neither is", () => {
-    expect(workToolCards({ pending: true, asana: tool(false), linear: tool(true) })).toEqual({ asana: false, linear: true, linearCriteria: true });
-    expect(workToolCards({ pending: true, asana: tool(true), linear: tool(false) })).toEqual({ asana: true, linear: false, linearCriteria: false });
+    expect(workToolCards({ pending: true, asana: tool(false), linear: tool(true) })).toEqual({ asana: false, linear: true, linearCriteria: true, jira: false, jiraCriteria: false });
+    expect(workToolCards({ pending: true, asana: tool(true), linear: tool(false) })).toEqual({ asana: true, linear: false, linearCriteria: false, jira: false, jiraCriteria: false });
     // Both connected: Asana's card asks for the criteria, and Linear's leaves them to it.
-    expect(workToolCards({ pending: true, asana: tool(true), linear: tool(true) })).toEqual({ asana: true, linear: true, linearCriteria: false });
-    expect(workToolCards({ pending: true, asana: tool(false), linear: tool(false) })).toEqual({ asana: true, linear: true, linearCriteria: true });
+    expect(workToolCards({ pending: true, asana: tool(true), linear: tool(true) })).toEqual({ asana: true, linear: true, linearCriteria: false, jira: false, jiraCriteria: false });
+    expect(workToolCards({ pending: true, asana: tool(false), linear: tool(false) })).toEqual({ asana: true, linear: true, linearCriteria: true, jira: false, jiraCriteria: false });
   });
 
   it("keeps a linked card on a milestone no longer open, as its history, and offers none to link one", () => {
-    expect(workToolCards({ pending: false, asana: tool(true), linear: tool(true, true) })).toEqual({ asana: false, linear: true, linearCriteria: true });
-    expect(workToolCards({ pending: false, asana: tool(true), linear: tool(true) })).toEqual({ asana: false, linear: false, linearCriteria: false });
+    expect(workToolCards({ pending: false, asana: tool(true), linear: tool(true, true) })).toEqual({ asana: false, linear: true, linearCriteria: true, jira: false, jiraCriteria: false });
+    expect(workToolCards({ pending: false, asana: tool(true), linear: tool(true) })).toEqual({ asana: false, linear: false, linearCriteria: false, jira: false, jiraCriteria: false });
   });
 });
 

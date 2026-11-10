@@ -493,6 +493,24 @@ export default function PrivacyPage() {
             deletes the tokens; the acceptances already recorded stay with the workspace&apos;s signed ledger.
           </li>
           <li>
+            <strong>Jira</strong> (Atlassian), for a workspace an owner or admin connects to one Jira site after agreeing to it, is read from, as
+            that person, and written to only to make, renew and delete one webhook on that site. Vestiarion reads the site&apos;s id, name and
+            address when it is connected, and checks once a day that the connection still reaches the site. For each issue linked to a milestone
+            it reads its key, title, project, status and resolution, and when it was done; once the issue is done, also its attachments&apos;
+            names, its web links (their titles and links) and the links in its description and its newest 50 comments. A deliverable that links
+            to another issue on the site is checked at Jira to see that it opens. It keeps the linked issues&apos; IDs, keys, titles and links,
+            the deliverables&apos; names and links and their fingerprint, the site&apos;s id, name and address, the webhook&apos;s id and the
+            projects it covers, the access granted and the agreement given, and Atlassian&apos;s tokens encrypted, readable only by the server
+            and never shown in the browser, a log, a model&apos;s prompt or a webhook; it does not keep the words of an issue&apos;s description
+            or comments, and keeps no Atlassian account ID, name or email. To refuse an acceptance by the payee, it asks Jira, when a person
+            accepts, which Atlassian account has the email a contractor&apos;s payment notices go to, and which is that person&apos;s own: it
+            sends Jira those email addresses for that, and keeps neither them nor the answer. A notice from Jira carries no issue&apos;s facts
+            that Vestiarion keeps: it only has the issue read again. Vestiarion never uses Jira data to train or improve any AI model, and never
+            passes it to anyone else without the workspace&apos;s say. Disconnecting deletes the webhook and the tokens. Atlassian gives apps no
+            way to end their own access, so a person ends it there by removing Vestiarion from Connected apps in their Atlassian account
+            settings. The acceptances already recorded stay with the workspace&apos;s signed ledger.
+          </li>
+          <li>
             <strong>Google Sheets</strong> (Google Drive), for a workspace an owner or admin connects to a Google account after agreeing to it, is
             written to only when an owner, admin or accountant exports a month&apos;s close pack. Vestiarion asks Google only for access to the files
             it makes, so it cannot see or open any other file in that Drive. Each export makes or updates one spreadsheet for the month in that

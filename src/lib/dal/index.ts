@@ -40,6 +40,11 @@ import { currentContext, currentOrgId } from "../context";
  * `asana_webhooks`, naming the workspace in scope, except the webhook route's lookup of one row by the id in Asana's
  * target address.
  *
+ * A Jira connection's site and webhook (migration 0149, Jira acceptance JR5, JR14, JR15) are one too: only
+ * `src/lib/jira/sites.ts` reads or writes `jira_sites`, naming the workspace in scope, except the webhook route's lookup
+ * of the rows whose webhook ids a delivery names, and its note of when a delivery came. A delivery names webhook ids and
+ * no workspace, so those two run before any workspace is known.
+ *
  * So are the Chrome extension's connections and one-time codes (migration 0121): a request names its workspace only
  * through its token, as with an API key, so only `src/lib/extension/tokens.ts` reads or writes them, by a token's hash
  * or naming the workspace.
@@ -91,6 +96,8 @@ export const TENANT_TABLES = [
   "linear_issue_links",
   // The Google Drive folder a workspace reads its new files from (migration 0148, Google Drive intake GD3).
   "google_drive_folders",
+  // The Jira issues milestones are linked to (migration 0149, Jira acceptance JR5, JR6).
+  "jira_issue_links",
 ] as const;
 export type TenantTable = (typeof TENANT_TABLES)[number];
 
@@ -109,6 +116,10 @@ export const TENANT_RPCS = [
   "accept_linear_issue", "hold_linear_acceptance",
   // Whether migration 0147 has run (Linear acceptance LN3): it reads nothing.
   "linear_connector_ready",
+  // Accepting work delivered in Jira, and taking an acceptance back (migration 0149, Jira acceptance JR11, JR13).
+  "accept_jira_issue", "hold_jira_acceptance",
+  // Whether migration 0149 has run (Jira acceptance JR5): it reads nothing.
+  "jira_connector_ready",
   // Whether migration 0116 has run (Pipedrive connector P2): it reads nothing.
   "pipedrive_connector_ready",
   // Whether migration 0122 has run (Zoho Books connector Z12): it reads nothing.
@@ -148,6 +159,8 @@ export const PLATFORM_TABLES = [
   "discord_webhooks",
   // An accountant's client invite links (migration 0143): the accountant's own, before any workspace exists.
   "accountant_client_links",
+  // A Jira connection's site and webhook (migration 0149): found by webhook id before any workspace is known.
+  "jira_sites",
 ] as const;
 export type PlatformTable = (typeof PLATFORM_TABLES)[number];
 

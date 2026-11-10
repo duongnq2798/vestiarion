@@ -288,6 +288,11 @@ const SHOTS = {
   "hubspot-changed": async () => {},
   "customer-portal-statement": async () => {},
   "customer-portal-from-customers": async () => {},
+  "jira-settings": async () => {},
+  "jira-link": async () => {},
+  "jira-ready": async () => {},
+  "jira-accepted": async () => {},
+  "jira-held": async () => {},
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

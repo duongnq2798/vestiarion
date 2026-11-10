@@ -78,11 +78,11 @@ Code comments and test names cite the ids, for example `// CL5: copy only an add
 - **CL7 Milestones.**
   - Payees only. Rows are `DecisionRows` items built with `milestoneDecision(milestone, entries, { network, riskLevel, waiting, waitsUntil, links })`, using the same inputs Contractors uses:
     - `waiting` and `waitsUntil` from `milestoneWaiting`;
-    - evidence hrefs from `verification_source` plus the Asana and Linear deliverables, read with `asanaOnContractors` and `linearOnContractors` for this counterparty's milestone ids;
+    - evidence hrefs from `verification_source` plus the Asana, Linear and Jira deliverables, read with `asanaOnContractors`, `linearOnContractors` and `jiraOnContractors` for this counterparty's milestone ids (amended 2026-11-09: Jira, as Contractors reads it);
     - those hrefs checked with `checkEvidenceLinks`, open milestones first, at most 25 (its own `MAX_LINKS`).
   - Groups: "Open" (pending, verified, held) and "Closed without paying" (closed). Paid milestones are listed under Payments.
   - Hints: an unconfirmed address gives "Address to confirm". A held milestone gives `heldReason(...).hint`, with `reason.text` in `before`. The other waiting states are already in the card's outcome label ("Waiting for an address", "Payee lock wait").
-  - Each row's `after` slot holds "Open in Contractors", which goes to `milestoneRowPath(id, { paid })`. Pay now, Close without paying, Verify, escrow and the Asana and Linear cards stay on Contractors.
+  - Each row's `after` slot holds "Open in Contractors", which goes to `milestoneRowPath(id, { paid })`. Pay now, Close without paying, Verify, escrow and the Asana, Linear and Jira cards stay on Contractors (amended 2026-11-09).
 - **CL8 Bills and invoices.**
   - Rows are `DecisionRows` items from `invoiceDecision(invoice, counterparty, entries, { network, settlements, asOf })` and `rowDate(invoice, today)`.
   - For a payee the section is "Bills from them", with groups "Open" (`OPEN_STATUSES` plus `processing`, by due date, up to 200) and "Rejected" (latest 10).
@@ -433,7 +433,7 @@ None added. CL14 lists the existing entries the reused controls write. History r
 ## Out of scope
 
 - New actions, ledger actions, tables, columns or indexes. An index on `detail->>counterpartyId` would be a migration.
-- Pay now, Close without paying, Verify, escrow, and Asana or Linear acceptance on the page. Those stay on Contractors and Approvals.
+- Pay now, Close without paying, Verify, escrow, and Asana, Linear or Jira acceptance on the page (amended 2026-11-09). Those stay on Contractors and Approvals.
 - Showing a payee or receipt URL again, ever.
 - Notes, tags, file uploads or merging duplicate counterparties.
 - Links from Bills & receivables rows and Approvals cards beyond the fix paths (later).

@@ -11,16 +11,20 @@ import { carriesOrg, fakeSupabase, orgTestContext, type FakeReply, type Recorded
  * What a counterparty's page reads (docs/superpowers/specs/2026-11-09-counterparty-page-design.md CL2, CL3, CL4, CL13):
  * through the workspace's scope, platform reads naming the workspace and this counterparty, no secret in any select, no
  * payee link read for a member who may not send one, each part best effort, and the entries 25 ids a read. Over a
- * recorded database; Asana, Linear, the evidence link check and the payee chain choice are stood in for.
+ * recorded database; Asana, Linear, Jira, the evidence link check and the payee chain choice are stood in for.
  */
 
-const { checkLinksMock, choosableMock, heldMock } = vi.hoisted(() => ({
+const { checkLinksMock, choosableMock, heldMock, asanaMock, linearMock, jiraMock } = vi.hoisted(() => ({
   checkLinksMock: vi.fn(),
   choosableMock: vi.fn(),
   heldMock: vi.fn(),
+  asanaMock: vi.fn(),
+  linearMock: vi.fn(),
+  jiraMock: vi.fn(),
 }));
-vi.mock("@/lib/asana/contractors", () => ({ asanaOnContractors: vi.fn(async () => null) }));
-vi.mock("@/lib/linear/contractors", () => ({ linearOnContractors: vi.fn(async () => null) }));
+vi.mock("@/lib/asana/contractors", () => ({ asanaOnContractors: asanaMock }));
+vi.mock("@/lib/linear/contractors", () => ({ linearOnContractors: linearMock }));
+vi.mock("@/lib/jira/contractors", () => ({ jiraOnContractors: jiraMock }));
 vi.mock("@/lib/evidence-links/check", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/evidence-links/check")>()),
   checkEvidenceLinks: checkLinksMock,
@@ -226,6 +230,7 @@ beforeEach(() => {
   checkLinksMock.mockReset().mockResolvedValue(new Map());
   choosableMock.mockReset().mockResolvedValue([]);
   heldMock.mockReset().mockResolvedValue(new Set());
+  for (const tool of [asanaMock, linearMock, jiraMock]) tool.mockReset().mockResolvedValue(null);
   errors = vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => {
@@ -345,7 +350,8 @@ describe("a client's page (CL1)", () => {
     expect(page.receipts).toBeNull();
     expect(page.documents).toBeNull();
     expect(page.drafts).toBeNull();
-    expect(page.evidence).toEqual({ asana: null, linear: null, links: new Map() });
+    expect(page.evidence).toEqual({ asana: null, linear: null, jira: null, links: new Map() });
+    for (const tool of [asanaMock, linearMock, jiraMock]) expect(tool).not.toHaveBeenCalled();
     for (const path of ["/rest/v1/milestones", "/rest/v1/payee_links", "/rest/v1/payment_receipts", "/rest/v1/invoice_drafts", "/rest/v1/document_requests"]) {
       expect(paths(db.fake.requests)).not.toContain(path);
     }
@@ -451,6 +457,25 @@ describe("parts, best effort (CL13)", () => {
     const open = "https://github.com/acme/site/pull/2";
     await read({ milestones: [milestone(1, { status: "paid", verification_source: done }), milestone(2, { verification_source: open }), milestone(3, { verification_source: "http://example.test" })] }).result;
     expect(checkLinksMock).toHaveBeenCalledWith([open, done]);
+  });
+
+  it("CL7: checks the Asana, Linear and Jira deliverables' links too, as Contractors does (Jira acceptance JR20)", async () => {
+    // Each tool's link to a milestone, with what it delivered: a link without an address is not checked.
+    const linked = (tool: string, n: number) => ({
+      connected: true,
+      memberEmails: {},
+      links: new Map([[milestoneId(n), { deliverables: [{ kind: "link", label: tool, href: `https://${tool}.example.test/${n}` }, { kind: "file", label: "Unnamed", href: null }] }]]),
+    });
+    asanaMock.mockResolvedValue(linked("asana", 1));
+    linearMock.mockResolvedValue(linked("linear", 2));
+    jiraMock.mockResolvedValue(linked("jira", 3));
+    const own = "https://github.com/acme/site/pull/4";
+    const page = await read({ milestones: [milestone(1), milestone(2, { status: "paid" }), milestone(3), milestone(4, { verification_source: own })] }).result;
+    const asked = [1, 2, 3, 4].map(milestoneId);
+    for (const tool of [asanaMock, linearMock, jiraMock]) expect(tool).toHaveBeenCalledWith(asked);
+    // The open milestones' first, each with its own link and then its tools'.
+    expect(checkLinksMock).toHaveBeenCalledWith(["https://asana.example.test/1", "https://jira.example.test/3", own, "https://linear.example.test/2"]);
+    expect(page.evidence.jira?.links.has(milestoneId(3))).toBe(true);
   });
 });
 

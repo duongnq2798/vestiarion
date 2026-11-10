@@ -3945,6 +3945,13 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
       message: `Checked ${acceptedWork.linear.checked} Linear issue${acceptedWork.linear.checked === 1 ? "" : "s"} accepted for milestones: ${acceptedWork.linear.withdrawn} taken back for review, ${acceptedWork.linear.failed} not read`,
     });
   }
+  // And work accepted from Jira, in the same read (Jira acceptance JR16).
+  if (acceptedWork.jira.checked > 0) {
+    lines.push({
+      domain: "contractor",
+      message: `Checked ${acceptedWork.jira.checked} Jira issue${acceptedWork.jira.checked === 1 ? "" : "s"} accepted for milestones: ${acceptedWork.jira.withdrawn} taken back for review, ${acceptedWork.jira.failed} not read`,
+    });
+  }
 
   });
 
@@ -4677,6 +4684,9 @@ async function executeCycle(ctx: CycleContext): Promise<CycleResult> {
     }
     if (!recheck.linear.complete) {
       lines.push({ domain: "contractor", message: "Linear: not every accepted issue could be read again just before sending; those acceptances stand as given" });
+    }
+    if (!recheck.jira.complete) {
+      lines.push({ domain: "contractor", message: "Jira: not every accepted issue could be read again just before sending; those acceptances stand as given" });
     }
   }
   const verifiedNow = planned.length > 0 && operating ? await stillVerified(db, planned.map((entry) => entry.milestone.id)) : new Set<string>();

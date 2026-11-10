@@ -39,7 +39,7 @@ const PLATFORM_TABLES = [
   "memberships", "invitations", "api_keys", "webhook_endpoints", "webhook_deliveries", "payee_links", "telegram_link_codes", "telegram_links",
   "api_idempotency", "slack_installs", "slack_links", "invoice_inboxes", "github_installations", "github_bounties",
   "growth_leads", "growth_revenue", "org_attribution", "accounting_tokens", "asana_webhooks",
-  "extension_grants", "extension_auth_codes", "discord_webhooks", "accountant_client_links",
+  "extension_grants", "extension_auth_codes", "discord_webhooks", "accountant_client_links", "jira_sites",
 ] as const;
 
 const deleteOrg = (orgId: string, by: string | null = owner) =>
@@ -211,6 +211,13 @@ async function populated(slug: string): Promise<string> {
   await db.query(
     "insert into public.discord_webhooks (org_id, webhook_id, channel_id, name, webhook_url_enc, connected_by) values ($1, '1234567890123456789', '3234567890123456789', 'Finance', $2::jsonb, $3)",
     [orgId, JSON.stringify(ENVELOPE), member]
+  );
+  // A Jira connection's site and webhook go with the connection and the workspace (0149).
+  await db.query(
+    `insert into public.jira_sites (connection_id, org_id, cloud_id, site_url, webhook_ids, webhook_jql)
+     select c.id, $1, c.external_org_id, 'https://northstar.atlassian.net', '{11}', 'project in (10000)'
+       from public.accounting_connections c where c.org_id = $1 and c.provider = 'jira'`,
+    [orgId]
   );
   // The accountant's client link that opened it forgets it (0143): the link stays theirs, used.
   await db.query(

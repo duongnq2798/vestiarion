@@ -35,15 +35,18 @@ const CIRCLE_CONNECT = [
 
 /**
  * Where a form's submission may end up. Each connect page posts to this deployment, which sends the person on to the
- * tool's consent screen: HubSpot, Asana, Linear, Pipedrive, QuickBooks, Xero, and Zoho's accounts server, which
- * forwards an account to its own data center's. Continue with Google is a Server Action that sends them to Supabase
- * Auth, then Google; a browser that submits it before the page's script runs follows those redirects as a form
- * submission.
+ * tool's consent screen: HubSpot, Asana, Linear, Pipedrive, QuickBooks, Xero, Atlassian's for Jira, which may send a
+ * person who is signed out to Atlassian's sign-in first (docs/superpowers/specs/2026-11-09-jira-acceptance-design.md
+ * B11, L4), and Zoho's accounts server, which forwards an account to its own data center's. Continue with Google is a
+ * Server Action that sends them to Supabase Auth, then Google; a browser that submits it before the page's script runs
+ * follows those redirects as a form submission.
  */
 const FORM_TARGETS = [
   "https://app.hubspot.com",
   "https://app.asana.com",
   "https://linear.app",
+  "https://auth.atlassian.com",
+  "https://id.atlassian.com",
   "https://oauth.pipedrive.com",
   "https://appcenter.intuit.com",
   "https://login.xero.com",
