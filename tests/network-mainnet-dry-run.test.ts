@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { configFromEnv } from "@/lib/config";
 import { runWith, runWithConfig } from "@/lib/context";
 import { networkRpcUrl } from "@/lib/circle/arcFees";
-import { bridgeFee, cctpOf } from "@/lib/circle/cctp";
+import { bridgeFee } from "@/lib/circle/cctp";
 import { estimateGateway, gatewayOf } from "@/lib/circle/gateway";
 import { readUsycPrice, usycOf } from "@/lib/circle/usyc";
 import { SimulateProvider } from "@/lib/circle/simulateProvider";
