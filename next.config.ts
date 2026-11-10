@@ -13,9 +13,10 @@ const nextConfig: NextConfig = {
     },
   },
   // The guides' walkthrough videos (public/docs/videos/) are served as public
-  // files and read by no server code. The docs routes' file tracing reaches
-  // public/ through the screenshot sizes' file reads, so without this each of
-  // those functions would carry the MP4s too.
+  // files and read by no server code. The screenshot sizes' file reads name
+  // public/docs/guides/ only (src/lib/docs/screenshots.ts), so the docs routes
+  // trace just those PNGs; this keeps the MP4s out should a read ever reach
+  // further.
   outputFileTracingExcludes: {
     "/*": ["public/docs/videos/**"],
   },

@@ -26,17 +26,26 @@ export function publicFile(src: string): string | null {
   return file.startsWith(root + path.sep) ? file : null;
 }
 
+/** The file name in a screenshot's public path, `/docs/guides/<shot>.png`; null for any other path. */
+function shotFileName(src: string): string | null {
+  return /^\/docs\/guides\/([a-z0-9-]+\.png)$/.exec(src)?.[1] ?? null;
+}
+
 /**
  * A screenshot's size, so the page reserves its space before it loads. The
  * guides are prerendered at build, where `public/` is on disk; a render with
  * no file to read (a missing PNG, or a server without `public/`) leaves the
  * size out rather than fail the page. The docs tests hold every PNG present.
+ *
+ * The read names `public/docs/guides/` itself, so the build traces only the
+ * guides' PNGs into the docs routes. Given a path built elsewhere, Turbopack
+ * cannot tell what is read and traces the whole project into each of them.
  */
 export function screenshotSize(src: string): { width: number; height: number } | null {
-  const file = publicFile(src);
-  if (!file) return null;
+  const name = shotFileName(src);
+  if (!name) return null;
   try {
-    return pngSize(readFileSync(file));
+    return pngSize(readFileSync(path.join(process.cwd(), "public", "docs", "guides", name)));
   } catch {
     return null;
   }
