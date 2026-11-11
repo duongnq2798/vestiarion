@@ -960,9 +960,17 @@ describe("what it does not claim, still true of the code", () => {
     expect(source(".github/workflows/ci.yml")).toMatch(/^on:\s*\n\s+push:\s*\n\s+branches: \[main\]\s*\n\s+pull_request:/m);
   });
 
-  it("no automated dependency updates: when they are turned on, this page says so", () => {
-    expect(existsSync(path.join(process.cwd(), ".github/dependabot.yml"))).toBe(false);
-    expect(notClaimed).toContain("Dependencies are not updated automatically");
+  it("Dependabot opens weekly updates that never merge on their own, and skips Circle's SDK majors", () => {
+    const dependabot = source(".github/dependabot.yml");
+    expect(dependabot).toMatch(/interval: weekly/);
+    expect(dependabot).toMatch(/dependency-name: "@circle-fin\/\*"\s*\n\s+update-types:\s*\n\s+- version-update:semver-major/);
+    const workflows = readdirSync(path.join(process.cwd(), ".github/workflows"));
+    for (const file of workflows) {
+      const workflow = source(`.github/workflows/${file}`);
+      expect(workflow, file).not.toMatch(/dependabot\/fetch-metadata|merge --auto/);
+    }
+    expect(notClaimed.replace(/\s+/g, " ")).toContain("none merges on its own: each needs a passing CI run like any change");
+    expect(notClaimed).not.toContain("Dependencies are not updated automatically");
   });
 });
 

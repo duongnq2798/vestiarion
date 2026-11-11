@@ -1,0 +1,49 @@
+# Weekly dependency updates for the app and its CI (CONTRIBUTING.md).
+#
+# Minor and patch bumps arrive as one pull request a week, so a week's updates are reviewed and verified together.
+# The Next.js packages are their own group: tests/next-packages.test.ts fails unless next, @next/mdx and
+# eslint-config-next move to the same exact version in one change. Circle's SDK majors are left out; they change the
+# wallet and payment calls and are upgraded by hand. Other majors open one pull request each.
+#
+# sdk/, cli/, n8n/ and zapier/ are published to npm, n8n and Zapier by hand, so their dependencies move with a release
+# rather than here.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "02:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    groups:
+      nextjs:
+        patterns:
+          - next
+          - "@next/*"
+          - eslint-config-next
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "@circle-fin/*"
+        update-types:
+          - version-update:semver-major
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "02:00"
+      timezone: Etc/UTC
+    labels:
+      - dependencies
+    groups:
+      actions:
+        patterns:
+          - "*"

@@ -659,7 +659,8 @@ export default function SecurityPage() {
           <li>
             No human second approval is required before merge: GitHub requires a pull request and a passing CI run on <code>main</code>, while the
             independent AI review is how the team works, not a rule GitHub enforces. A pull request need not be up to date with <code>main</code>{" "}
-            before it merges, and release tags and other branches are not protected. Dependencies are not updated automatically.
+            before it merges, and release tags and other branches are not protected. Dependabot opens dependency updates as pull requests each
+            week, but none merges on its own: each needs a passing CI run like any change, and Circle&apos;s SDK majors are upgraded by hand.
           </li>
           <li>
             Rate limits are kept by each server instance, so they slow abuse rather than set a hard quota. API reads are not limited, except the
