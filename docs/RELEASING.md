@@ -120,10 +120,11 @@ gh release create v0.1.0-beta.2 --verify-tag --prerelease --latest=false --gener
 
 GitHub groups the generated list by label, first match wins, as `.github/release.yml` says: Breaking changes
 (`breaking-change`), Security and payment safety (`security`), Database and migrations (`database`), New features
-(`enhancement`), Fixes (`bug`), Accessibility (`accessibility`), Documentation (`documentation`), and Other changes for
-everything else, so nothing merged is dropped. A pull request labelled `ignore-for-release` is left out.
+(`enhancement`), Fixes (`bug`), Accessibility (`accessibility`), Documentation (`documentation`), Dependencies
+(`dependencies`, which Dependabot puts on its pull requests), and Other changes for everything else, so nothing merged is
+dropped. A pull request labelled `ignore-for-release` is left out.
 
-`security`, `enhancement`, `bug`, `accessibility` and `documentation` exist. `breaking-change`, `database` and
+`security`, `enhancement`, `bug`, `accessibility`, `documentation` and `dependencies` exist. `breaking-change`, `database` and
 `ignore-for-release` are to be created when wanted (`gh label create database --color 5319E7`). Until pull requests carry
 labels, the generated list is one "Other changes" section; the curated notes are what readers read.
 

@@ -3,7 +3,8 @@
 # A pull request lands in the first category whose label it carries. One with no label, or with labels no category
 # names, lands in "Other changes": nothing merged is ever left out. Only a pull request labelled ignore-for-release is.
 #
-# Labels that exist on the repository: security, enhancement, bug, accessibility, documentation.
+# Labels that exist on the repository: security, enhancement, bug, accessibility, documentation, dependencies (which
+# Dependabot puts on its pull requests, .github/dependabot.yml).
 # Labels to create before using them (a category whose label does not exist is simply empty):
 #   breaking-change, database, ignore-for-release.
 changelog:
@@ -32,6 +33,9 @@ changelog:
     - title: Documentation
       labels:
         - documentation
+    - title: Dependencies
+      labels:
+        - dependencies
     - title: Other changes
       labels:
         - "*"

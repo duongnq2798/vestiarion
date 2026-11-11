@@ -177,6 +177,16 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   image optimization and uses no `use cache`, but it does use Server Actions and `next/image`. The docs' MDX and the
   lint rules move to 16.4.6 with it, and a test now holds the three packages to one exact version, and the
   lock to Linux builds of the compiler. Nothing changes in how the app looks or works. No migration.
+- **MCP server SDK 2.4.0.** The remote MCP server at `/api/mcp` now runs on `@modelcontextprotocol/server` 2.4.0, up
+  from 2.2.0, with `mcp-handler` 2.3.1. 2.2.0 had two high advisories: a shared server or transport could deliver one
+  HTTP client's messages to another, and one request inside the size limit could exhaust memory during validation.
+  Vestiarion's MCP server builds a fresh server for each request rather than sharing one. The tools and their answers
+  are unchanged.
+- **x402 2.30 and zod 4.6.7.** zod below 4.6.6 could exhaust memory validating oversized constrained collections, and
+  the x402 packages up to 2.28 carried their own copy of it. Both move without a major version.
+- **Weekly dependency updates.** Dependabot now opens the week's minor and patch updates as one pull request each
+  Monday, the Next.js packages as another, and GitHub Actions updates the same way; Circle's SDK majors are left to be
+  upgraded by hand. Release notes gain a Dependencies section.
 
 ## [0.1.0-beta.15] - 2026-11-04
 
