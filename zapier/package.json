@@ -17,11 +17,11 @@
     "verify": "npm run test && npm run validate"
   },
   "dependencies": {
-    "zapier-platform-core": "19.2.1"
+    "zapier-platform-core": "19.3.0"
   },
   "devDependencies": {
     "nock": "14.0.17",
-    "vitest": "5.0.1",
-    "zapier-platform-cli": "19.2.1"
+    "vitest": "5.1.0",
+    "zapier-platform-cli": "19.3.0"
   }
 }
