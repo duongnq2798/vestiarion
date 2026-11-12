@@ -45,7 +45,7 @@ jobs:
 
       # Each check's failures in a row and whether the team was told, from the newest run that saved them.
       - name: Restore the last run's state
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .synthetic-state.json
           key: synthetic-state-${{ github.run_id }}-${{ github.run_attempt }}
@@ -61,7 +61,7 @@ jobs:
       # The script writes the file after every round, so a run that failed or was cancelled still saves its last one.
       - name: Save the state for the next run
         if: always()
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .synthetic-state.json
           key: synthetic-state-${{ github.run_id }}-${{ github.run_attempt }}

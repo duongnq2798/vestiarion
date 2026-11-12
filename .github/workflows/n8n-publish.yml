@@ -48,9 +48,9 @@ jobs:
           echo "::error::Run this workflow on main: provenance names the commit, and n8n's scanner lints the source there."
           exit 1
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -97,7 +97,7 @@ jobs:
         working-directory: n8n
         run: npm run test
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: n8n-tarball
           path: public/n8n/vestiarion-n8n-nodes-vestiarion-${{ inputs.version }}.tgz
@@ -114,11 +114,11 @@ jobs:
       # The OIDC token npm's trusted publishing and the provenance attestation are made from.
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: n8n-tarball
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
