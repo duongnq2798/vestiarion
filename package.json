@@ -104,7 +104,7 @@
     "@types/react-dom": "^19",
     "@vestiarion/sdk": "^0.4.1",
     "@vitest/coverage-v8": "^5.0.1",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.4.6",
     "happy-dom": "21.0.4",
     "solc": "0.8.37",
