@@ -503,6 +503,27 @@ describe("the page's parts (CL1, CL4, CL13)", () => {
   });
 });
 
+describe("Needs you and Waiting on them", () => {
+  it("says what waits on whom under the tiles, each line a link to its part, before Profile", async () => {
+    ACCESS.membership.role = "owner";
+    showing(CONTRACTOR);
+    const markup = await page();
+    const words = text(markup);
+    expect(words).toContain("Needs you Their payment address changed: confirm it before they are paid");
+    expect(words).toContain("Waiting on them Their answer to the payee link · expires Nov 15, 2026 1 milestone still to deliver");
+    expect(markup).toContain('href="#address"');
+    expect(markup).toContain('href="#payee-link"');
+    expect(markup.indexOf("Needs you")).toBeLessThan(markup.indexOf('id="profile"'));
+  });
+
+  it("says nothing waits when nothing does, and that a part was not read rather than none", async () => {
+    showing(CONFIRMED, { milestones: { read: true, value: [] }, invoices: { read: true, value: [PAID_BILL] } });
+    expect(text(await page())).toContain("Needs you Nothing waits on your side. Waiting on them Nothing waits on them.");
+    showing(CONFIRMED, { invoices: { read: false } });
+    expect(text(await page())).toContain("Needs you Some parts were not read just now. Reload the page in a moment.");
+  });
+});
+
 describe("milestone dates (CL9)", () => {
   const PAID: MilestoneRow = { ...MILESTONE, id: "00000000-0000-4000-9000-000000000002", title: "Four September posts", status: "paid", verified: true, tx_ref: TX };
   const HELD: MilestoneRow = { ...MILESTONE, id: "00000000-0000-4000-9000-000000000003", title: "Launch video", status: "held", verified: true };

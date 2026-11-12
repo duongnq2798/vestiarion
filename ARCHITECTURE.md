@@ -2094,6 +2094,12 @@ own signed entries (CL14), and no action, ledger action, table, column or index 
   review (`sentDraftsFrom`: every `sent` draft naming them, from the browser extension or a payee link, under
   "Invoices sent for review") are not read before 0121. The page has no `maxDuration`, and re-reads as the
   list does (`counterpartiesRefreshMs`: every 15 s while its link is out or its address waits, else every minute).
+- **Needs you and Waiting on them.** `nextSteps` (`src/lib/counterparties/page-view.ts`, pure) counts what the parts
+  already read hold, and `NextSteps` draws it under the tiles, each line an in-page link to its part's id. Needs you:
+  an unconfirmed or frozen address, held milestones, the counterparty's own bills (a client's invoices) in
+  `WAITING_STATUSES`. Waiting on them: a payee's missing address, its payee link out or waiting for its invoice (for a
+  writer, as the tile), pending milestones, document requests in state `asked`, and a client's other open invoices. It
+  reads nothing of its own; with a part it rests on unread it says so (`unread`) instead of an empty list.
 - **The address** (CL5). `addressFacts` (`src/lib/counterparties/page-view.ts`, pure) gives its state from the row:
   none, set when added, confirmed, unconfirmed or frozen. It is shown whole and wrapping (`CounterpartyAddressEdit`'s
   `full`), never through `Hash`, whose first-6/last-4 form is what a lookalike copies. `addressOnChainUrl`

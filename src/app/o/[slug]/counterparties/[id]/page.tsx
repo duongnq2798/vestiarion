@@ -7,6 +7,7 @@ import { AutoRefresh } from "@/components/AutoRefresh";
 import { rowDate } from "@/components/bills/build";
 import { CounterpartyAddressBlock, CounterpartyPayoutBlock, CounterpartyProfile, type AddressView } from "@/components/CounterpartyDetails";
 import { CounterpartyHistory } from "@/components/counterparty/CounterpartyHistory";
+import { NextSteps } from "@/components/counterparty/NextSteps";
 import { PayeeLinkHistory } from "@/components/counterparty/PayeeLinkHistory";
 import { SentDrafts } from "@/components/counterparty/SentDrafts";
 import { DocsLink } from "@/components/DocsLink";
@@ -45,6 +46,7 @@ import {
   isPayee,
   milestoneAt,
   milestoneGroups,
+  nextSteps,
   NOT_READ,
   OPEN_SHOWN,
   PART_NOT_READ,
@@ -320,12 +322,13 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
             everyPayment
           )
         : null;
+    const linkPart = payee && grants.seeLinks ? (links ? { read: true as const, value: { active: links.active, waiting: links.waiting } } : { read: false as const }) : null;
     const headerTiles = tiles({
       role: counterparty.role,
       invoices: read.invoices,
       milestones: read.milestones ?? { read: true, value: [] },
       address: { read: true, value: facts.state },
-      payeeLink: payee && grants.seeLinks ? (links ? { read: true, value: { active: links.active, waiting: links.waiting } } : { read: false }) : null,
+      payeeLink: linkPart,
     });
     const refreshMs = counterpartiesRefreshMs({ linksOut: links?.active ? 1 : 0, unconfirmed: facts.state === "unconfirmed" ? 1 : 0 });
     const ownInvoices = invoices?.filter((invoice) => invoice.direction === (payee ? "payable" : "receivable")).length ?? 0;
@@ -345,6 +348,15 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
           })
         : [];
     const drafts = read.drafts?.read ? read.drafts.value : null;
+    // Needs you and Waiting on them, from the parts read above: nothing more is read for them.
+    const steps = nextSteps({
+      role: counterparty.role,
+      address: facts.state,
+      invoices: read.invoices,
+      milestones: read.milestones ?? { read: true, value: [] },
+      payeeLink: linkPart,
+      requests: payee ? (requestsRead ? { read: true, value: requests.map((request) => request.view) } : { read: false }) : null,
+    });
 
     return (
       <ProductShell network={access.membership.network} day={dashboardStats.day} clockMode={dashboardStats.clockMode} lastCycleAt={dashboardStats.lastCycleAt} chainModes={shellModes()} status={await shellStatus()} crumb={visibleText(counterparty.name, 80)}>
@@ -362,12 +374,15 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
         <AutoRefresh intervalMs={refreshMs} />
 
         <div className="space-y-10">
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            {headerTiles.map((tile) => (
-              <StatTile key={tile.label} label={tile.label} tone={tile.held ? "held" : "default"}>
-                <TileFigure value={tile.value} />
-              </StatTile>
-            ))}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              {headerTiles.map((tile) => (
+                <StatTile key={tile.label} label={tile.label} tone={tile.held ? "held" : "default"}>
+                  <TileFigure value={tile.value} />
+                </StatTile>
+              ))}
+            </div>
+            <NextSteps steps={steps} />
           </div>
 
           <Section id="profile" title="Profile">
