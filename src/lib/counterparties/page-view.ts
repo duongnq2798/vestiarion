@@ -1,6 +1,7 @@
-import { OPEN_STATUSES } from "../bills-view";
-import { utcDay } from "../copy";
+import { OPEN_STATUSES, WAITING_STATUSES } from "../bills-view";
+import { plural, utcDay } from "../copy";
 import { addressUnconfirmed } from "../counterparty-address";
+import type { CounterpartySection } from "../counterparty-paths";
 import { MAX_DOCUMENT_NOTE, MAX_DOCUMENT_PO, type DocumentReceivedView, type DocumentRequestView } from "../document-requests/rules";
 import type { Network, PayeeChainEntry } from "../network";
 import { addressOnChainUrl, ChainNotOnNetworkError, chainOn } from "../payee-chains";
@@ -489,4 +490,82 @@ export function tiles(input: {
     shown.push({ label: "Payee link", value: input.payeeLink.read ? { kind: "words", words: payeeLinkTileWords(input.payeeLink.value) } : notRead, held: false });
   }
   return shown;
+}
+
+// --- Needs you and Waiting on them ---
+
+/** One thing waiting, in words, and the part of the page that holds it. */
+export interface NextStep {
+  words: string;
+  section: CounterpartySection;
+}
+
+export interface NextSteps {
+  /** What waits on someone in this workspace: an address to confirm or unfreeze, a held milestone, a bill for a person. */
+  needsYou: NextStep[];
+  /** What waits on the counterparty: their address, their answer to a payee link, work to deliver, documents, a payment. */
+  waitingOnThem: NextStep[];
+  /** A part these rest on could not be read, so either list may be missing something. */
+  unread: boolean;
+}
+
+/**
+ * Needs you and Waiting on them, at the top of a counterparty's page: what the page's own parts already hold, counted
+ * and linked to the part that holds it. Nothing new is read, and a part not read is said, never counted as none.
+ * - Needs you: an address changed and not confirmed, or frozen; milestones held for a decision; their bills (a client's
+ *   invoices) waiting for a person, as Approvals lists them.
+ * - Waiting on them: a payee's address when there is none; a payee link out, or a used one waiting for its invoice;
+ *   milestones still pending, that is not yet delivered; document requests asked and not answered; a client's open
+ *   invoices.
+ */
+export function nextSteps(input: {
+  role: string;
+  address: AddressState;
+  invoices: Part<readonly InvoiceRow[]>;
+  /** A payee's milestones; a client has none. */
+  milestones: Part<readonly MilestoneRow[]>;
+  /** A payee's payee link, for a member who may see it; null otherwise. */
+  payeeLink: Part<{ active: { expiresAt: string } | null; waiting: { until: string } | null }> | null;
+  /** The document requests on a payee's bills; null for a client. */
+  requests: Part<readonly DocumentRequestView[]> | null;
+}): NextSteps {
+  const payee = isPayee(input.role);
+  const needsYou: NextStep[] = [];
+  const waitingOnThem: NextStep[] = [];
+  const counted = (n: number, one: string, many: string) => `${n} ${plural(n, one, many)}`;
+
+  if (input.address === "unconfirmed") needsYou.push({ words: "Their payment address changed: confirm it before they are paid", section: "address" });
+  if (input.address === "frozen") needsYou.push({ words: "Their payment address is frozen until an owner or admin unfreezes it", section: "address" });
+  if (payee && input.address === "none") waitingOnThem.push({ words: "A payment address from them", section: "address" });
+
+  if (payee && input.payeeLink?.read) {
+    const { active, waiting } = input.payeeLink.value;
+    if (active) waitingOnThem.push({ words: `Their answer to the payee link · expires ${utcDay(active.expiresAt)}`, section: "payee-link" });
+    else if (waiting) waitingOnThem.push({ words: `Their invoice through the payee link · until ${utcDay(waiting.until)}`, section: "payee-link" });
+  }
+
+  if (payee && input.milestones.read) {
+    const held = input.milestones.value.filter((milestone) => milestone.status === "held").length;
+    const pending = input.milestones.value.filter((milestone) => milestone.status === "pending").length;
+    if (held > 0) needsYou.push({ words: `${counted(held, "milestone", "milestones")} held for a person to decide`, section: "milestones" });
+    if (pending > 0) waitingOnThem.push({ words: `${counted(pending, "milestone", "milestones")} still to deliver`, section: "milestones" });
+  }
+
+  if (input.invoices.read) {
+    const own = input.invoices.value.filter((invoice) => invoice.direction === (payee ? "payable" : "receivable"));
+    const forAPerson = own.filter((invoice) => WAITING_STATUSES.has(invoice.status)).length;
+    if (forAPerson > 0) {
+      needsYou.push({ words: payee ? `${counted(forAPerson, "bill", "bills")} from them waiting for a person` : `${counted(forAPerson, "invoice", "invoices")} to them waiting for a person`, section: "bills" });
+    }
+    const unpaid = payee ? 0 : own.filter((invoice) => invoiceOpen(invoice) && !WAITING_STATUSES.has(invoice.status)).length;
+    if (unpaid > 0) waitingOnThem.push({ words: `${counted(unpaid, "invoice", "invoices")} to them not paid yet`, section: "bills" });
+  }
+
+  if (payee && input.requests?.read) {
+    const asked = input.requests.value.filter((request) => request.state === "asked").length;
+    if (asked > 0) waitingOnThem.push({ words: `Documents asked for on ${counted(asked, "bill", "bills")}`, section: "documents" });
+  }
+
+  const unread = !input.invoices.read || (payee && !input.milestones.read) || input.payeeLink?.read === false || input.requests?.read === false;
+  return { needsYou, waitingOnThem, unread };
 }

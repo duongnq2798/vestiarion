@@ -8,6 +8,7 @@ import {
   invoiceGroups,
   milestoneAt,
   milestoneGroups,
+  nextSteps,
   NO_EXPLORER,
   NOT_READ,
   OPEN_SHOWN,
@@ -511,5 +512,73 @@ describe("the tiles (CL9, CL13)", () => {
       [{ kind: "words", words: "To confirm" }, true],
       [{ kind: "words", words: "Frozen" }, true],
     ]);
+  });
+});
+
+describe("Needs you and Waiting on them", () => {
+  const read = <T>(value: T) => ({ read: true as const, value });
+  const failed = { read: false as const };
+  const asked = { state: "asked" as const, missing: [], sentAt: iso(-DAY), expiresAt: iso(6 * DAY) };
+  const none = { needsYou: [], waitingOnThem: [], unread: false };
+
+  it("lists what waits on the workspace and what waits on a payee, each with the part that holds it", () => {
+    const steps = nextSteps({
+      role: "contractor",
+      address: "unconfirmed",
+      invoices: read([invoice("held", { status: "held" }), invoice("info", { status: "awaiting_info" }), invoice("open"), invoice("paid", { status: "paid" })]),
+      milestones: read([milestone("held", { status: "held" }), milestone("p1"), milestone("p2"), milestone("verified", { status: "verified" })]),
+      payeeLink: read({ active: { expiresAt: iso(6 * DAY) }, waiting: null }),
+      requests: read([asked, { state: "would_ask" as const, missing: [] }]),
+    });
+    expect(steps).toEqual({
+      needsYou: [
+        { words: "Their payment address changed: confirm it before they are paid", section: "address" },
+        { words: "1 milestone held for a person to decide", section: "milestones" },
+        { words: "2 bills from them waiting for a person", section: "bills" },
+      ],
+      waitingOnThem: [
+        { words: "Their answer to the payee link · expires Nov 15, 2026", section: "payee-link" },
+        { words: "2 milestones still to deliver", section: "milestones" },
+        { words: "Documents asked for on 1 bill", section: "documents" },
+      ],
+      unread: false,
+    });
+  });
+
+  it("waits on a payee for an address when there is none, and for its invoice once a link was used", () => {
+    const steps = nextSteps({ role: "vendor", address: "none", invoices: read([]), milestones: read([]), payeeLink: read({ active: null, waiting: { until: iso(3 * DAY) } }), requests: read([]) });
+    expect(steps.waitingOnThem).toEqual([
+      { words: "A payment address from them", section: "address" },
+      { words: "Their invoice through the payee link · until Nov 12, 2026", section: "payee-link" },
+    ]);
+    expect(nextSteps({ role: "vendor", address: "frozen", invoices: read([]), milestones: read([]), payeeLink: null, requests: read([]) }).needsYou).toEqual([
+      { words: "Their payment address is frozen until an owner or admin unfreezes it", section: "address" },
+    ]);
+  });
+
+  it("waits on a client for its open invoices, and on the workspace for one waiting for a person", () => {
+    const own = (id: string, status: string) => invoice(id, { direction: "receivable", status });
+    const steps = nextSteps({
+      role: "client",
+      address: "none",
+      invoices: read([own("a", "pending"), own("b", "matched"), own("c", "received"), own("d", "held"), invoice("payable", { status: "held" })]),
+      milestones: failed,
+      payeeLink: read({ active: { expiresAt: iso(DAY) }, waiting: null }),
+      requests: null,
+    });
+    // A client has no address to wait for, no payee link and no milestones; its unread milestones are not a gap.
+    expect(steps).toEqual({
+      needsYou: [{ words: "1 invoice to them waiting for a person", section: "bills" }],
+      waitingOnThem: [{ words: "2 invoices to them not paid yet", section: "bills" }],
+      unread: false,
+    });
+  });
+
+  it("is empty with everything read and nothing waiting, and says when a part it rests on was not read", () => {
+    expect(nextSteps({ role: "vendor", address: "confirmed", invoices: read([invoice("paid", { status: "paid" })]), milestones: read([]), payeeLink: read({ active: null, waiting: null }), requests: read([]) })).toEqual(none);
+    for (const gap of [{ invoices: failed }, { milestones: failed }, { payeeLink: failed }, { requests: failed }]) {
+      const steps = nextSteps({ role: "contractor", address: "confirmed", invoices: read([]), milestones: read([]), payeeLink: read({ active: null, waiting: null }), requests: read([]), ...gap });
+      expect(steps, Object.keys(gap)[0]).toEqual({ ...none, unread: true });
+    }
   });
 });
