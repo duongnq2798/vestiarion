@@ -49,7 +49,7 @@
     "n8n:pack": "tsx scripts/n8n-pack.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
+    "@anthropic-ai/sdk": "^1.6.0",
     "@circle-fin/app-kit": "^1.15.2",
     "@circle-fin/developer-controlled-wallets": "^10.8.1",
     "@circle-fin/earn-kit": "^1.7.0",
