@@ -185,8 +185,9 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 - **x402 2.30 and zod 4.6.7.** zod below 4.6.6 could exhaust memory validating oversized constrained collections, and
   the x402 packages up to 2.28 carried their own copy of it. Both move without a major version.
 - **Weekly dependency updates.** Dependabot now opens the week's minor and patch updates as one pull request each
-  Monday, the Next.js packages as another, and GitHub Actions updates the same way; Circle's SDK majors are left to be
-  upgraded by hand. Release notes gain a Dependencies section.
+  Monday, the Next.js packages and Circle's SDKs as one each, and GitHub Actions updates the same way; Circle's SDK
+  majors, the Solidity compiler the contracts were verified with, and Vestiarion's own SDK are left to be upgraded by
+  hand. Release notes gain a Dependencies section.
 
 ## [0.1.0-beta.15] - 2026-11-04
 

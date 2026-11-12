@@ -2,8 +2,13 @@
 #
 # Minor and patch bumps arrive as one pull request a week, so a week's updates are reviewed and verified together.
 # The Next.js packages are their own group: tests/next-packages.test.ts fails unless next, @next/mdx and
-# eslint-config-next move to the same exact version in one change. Circle's SDK majors are left out; they change the
-# wallet and payment calls and are upgraded by hand. Other majors open one pull request each.
+# eslint-config-next move to the same exact version in one change. Circle's SDKs are their own group too, as they
+# carry the wallet and payment calls; their majors are left out and upgraded by hand. Other majors open one pull
+# request each.
+#
+# solc is left out: the contracts pin their compiler (pragma solidity 0.8.37) and are verified on Sourcify and
+# Blockscout against that build. @vestiarion/sdk is left out: it is this repository's own package, and the app and the
+# CLI move to a new release of it together (tests/cli-package.test.ts).
 #
 # sdk/, cli/, n8n/ and zapier/ are published to npm, n8n and Zapier by hand, so their dependencies move with a release
 # rather than here.
@@ -25,6 +30,9 @@ updates:
           - next
           - "@next/*"
           - eslint-config-next
+      circle:
+        patterns:
+          - "@circle-fin/*"
       minor-and-patch:
         update-types:
           - minor
@@ -33,6 +41,8 @@ updates:
       - dependency-name: "@circle-fin/*"
         update-types:
           - version-update:semver-major
+      - dependency-name: solc
+      - dependency-name: "@vestiarion/sdk"
 
   - package-ecosystem: github-actions
     directory: /
