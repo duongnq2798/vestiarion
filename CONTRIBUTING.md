@@ -159,9 +159,11 @@ organization publishes it ([docs/RELEASING.md](docs/RELEASING.md#the-sdk)). Ask 
   code, docs, commit messages and pull request text.
 - A dependency change commits the updated `package-lock.json`. `npm run check:lock` fails when the lockfile no longer
   describes `package.json`.
-- Dependabot opens the week's minor and patch updates as one pull request every Monday, the Next.js packages as another,
-  and each other major on its own (`.github/dependabot.yml`). Circle's SDK majors are not opened: they change wallet and
-  payment calls and are upgraded by hand. A bump merges like any change, on a green `verify`.
+- Dependabot opens the week's minor and patch updates as one pull request every Monday, the Next.js packages and
+  Circle's SDKs as one each, and each other major on its own (`.github/dependabot.yml`). Circle's SDK majors are not
+  opened: they change wallet and payment calls and are upgraded by hand. Nor are `solc`, which the contracts pin
+  (`pragma solidity 0.8.37`) and were verified with, and `@vestiarion/sdk`, which the app and the CLI move to together
+  after a release of it. A bump merges like any change, on a green `verify`.
 
 ## License
 

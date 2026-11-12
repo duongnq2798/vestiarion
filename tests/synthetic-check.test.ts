@@ -754,8 +754,11 @@ function withGithub({ published = null as string | null, answer = ((() => null) 
 
 const DAY_MS = 24 * 60 * 60_000;
 
-/** The commit actions/cache's v4 tag named when the workflow was pinned to it. */
-const CACHE_COMMIT = "0057852bfaa89a56745cba8c7296529d2fc39830";
+/**
+ * The commit the workflow pins actions/cache to. Dependabot moves the commit and its version comment together, so the
+ * tests hold that both steps share one pinned commit rather than naming the commit itself.
+ */
+const CACHE_COMMIT = /uses: actions\/cache\/restore@([0-9a-f]{40}) # v\d[\d.]*\n/.exec(WORKFLOW)?.[1];
 
 describe("the status branch (status page SP1-SP5)", () => {
   it("keeps a round as [1, ms] for a pass and [0, ms, reason] for a failure, the reason clipped as the page reads it", () => {
@@ -1002,13 +1005,13 @@ describe(".github/workflows/synthetic-check.yml (PC4, PC11, PC12)", () => {
   it("restores the newest state and saves this run's under its own key, even after a failure or a cancel", () => {
     const statePath = /--state (\S+) --publish-status\n/.exec(WORKFLOW)?.[1];
     expect(statePath).toBe(".synthetic-state.json");
-    expect(WORKFLOW).toContain(`uses: actions/cache/restore@${CACHE_COMMIT} # v4\n`);
-    expect(WORKFLOW).toContain(`uses: actions/cache/save@${CACHE_COMMIT} # v4\n`);
+    expect(CACHE_COMMIT).toMatch(/^[0-9a-f]{40}$/);
+    expect(WORKFLOW).toMatch(new RegExp(`uses: actions/cache/save@${CACHE_COMMIT} # v\\d[\\d.]*\\n`));
     expect([...WORKFLOW.matchAll(/^ {10}path: (\S+)$/gm)].map((match) => match[1])).toEqual([statePath, statePath]);
     const keys = [...WORKFLOW.matchAll(/^ {10}key: (.+)$/gm)].map((match) => match[1]);
     expect(keys).toEqual(["synthetic-state-${{ github.run_id }}-${{ github.run_attempt }}", "synthetic-state-${{ github.run_id }}-${{ github.run_attempt }}"]);
     expect(WORKFLOW).toContain("restore-keys: synthetic-state-\n");
-    expect(WORKFLOW).toMatch(/- name: Save the state for the next run\n {8}if: always\(\)\n {8}uses: actions\/cache\/save@[0-9a-f]{40} # v4/);
+    expect(WORKFLOW).toMatch(/- name: Save the state for the next run\n {8}if: always\(\)\n {8}uses: actions\/cache\/save@[0-9a-f]{40} # v\d/);
   });
 
   it("runs no action by a tag that could move: each one is pinned to a commit, and none is given the token", () => {
