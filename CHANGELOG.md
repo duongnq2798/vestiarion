@@ -132,6 +132,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   uses for that branch alone; since that permission is the repository's, the token goes only to the script's own step,
   which now fetches the script with `curl` instead of `actions/checkout`, and the job's cache actions are pinned to a
   commit. The token never reaches the log. The page is in the sitemap and the footer's Resources group. No migration.
+- **Needs you and Waiting on them on a counterparty's page**,
+  [Guide](https://www.vestiarion.xyz/docs/guides/pay-a-contractor#one-page-for-each-contractor): under the tiles, what
+  waits on your side (a changed address to confirm or a frozen one, held milestones, their bills waiting for a person)
+  and what waits on them (an address when they have none, their answer to a payee link, milestones still to deliver,
+  documents asked for, a client's unpaid invoices), each line a link to the part that holds it. Both come from what the
+  page already reads, and a part not read just now is said rather than shown as nothing. No migration.
 
 ### Changed
 
