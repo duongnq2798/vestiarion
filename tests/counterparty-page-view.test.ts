@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addressExplorer,
   addressFacts,
+  clientRefunds,
   CLOSED_SHOWN,
   copyOffWords,
   counterpartyTotals,
@@ -568,7 +569,10 @@ describe("Needs you and Waiting on them", () => {
     });
     // A client has no address to wait for, no payee link and no milestones; its unread milestones are not a gap.
     expect(steps).toEqual({
-      needsYou: [{ words: "1 invoice to them waiting for a person", section: "bills" }],
+      needsYou: [
+        { words: "1 invoice to them waiting for a person", section: "bills" },
+        { words: "1 refund to them to pay in Approvals", section: "bills" },
+      ],
       waitingOnThem: [{ words: "2 invoices to them not paid yet", section: "bills" }],
       unread: false,
     });
@@ -580,5 +584,39 @@ describe("Needs you and Waiting on them", () => {
       const steps = nextSteps({ role: "contractor", address: "confirmed", invoices: read([]), milestones: read([]), payeeLink: read({ active: null, waiting: null }), requests: read([]), ...gap });
       expect(steps, Object.keys(gap)[0]).toEqual({ ...none, unread: true });
     }
+  });
+});
+
+describe("a client's refunds", () => {
+  it("lists what the workspace pays a client back: open by due date, then the latest paid", () => {
+    const refunds = clientRefunds(
+      [
+        invoice("late", { due_date: "2026-12-01" }),
+        invoice("held", { status: "held", due_date: "2026-11-15" }),
+        invoice("paid-old", { status: "paid", settled_at: iso(-9 * DAY) }),
+        invoice("paid-new", { status: "paid", settled_at: iso(-DAY) }),
+        invoice("rejected", { status: "rejected" }),
+        invoice("theirs", { direction: "receivable" }),
+      ],
+      "client"
+    );
+    expect(ids(refunds!.open.rows)).toEqual(["held", "late"]);
+    expect(ids(refunds!.paid.rows)).toEqual(["paid-new", "paid-old"]);
+    expect([refunds!.open.count, refunds!.paid.count]).toEqual([2, 2]);
+  });
+
+  it("keeps the latest 10 paid, and has none on a payee's page, whose payables are its bills", () => {
+    const paid = Array.from({ length: 12 }, (_, n) => invoice(`paid-${n}`, { status: "paid", settled_at: iso(-n * DAY) }));
+    const refunds = clientRefunds(paid, "client");
+    expect(refunds!.paid.count).toBe(12);
+    expect(refunds!.paid.rows).toHaveLength(CLOSED_SHOWN);
+    expect(clientRefunds(paid, "vendor")).toBeNull();
+    expect(clientRefunds(paid, "contractor")).toBeNull();
+  });
+
+  it("puts a client's open refunds under Needs you, since only a person pays them", () => {
+    const steps = nextSteps({ role: "client", address: "none", invoices: { read: true, value: [invoice("r1"), invoice("r2", { status: "held" }), invoice("done", { status: "paid" })] }, milestones: { read: true, value: [] }, payeeLink: null, requests: null });
+    expect(steps.needsYou).toEqual([{ words: "2 refunds to them to pay in Approvals", section: "bills" }]);
+    expect(steps.waitingOnThem).toEqual([]);
   });
 });
