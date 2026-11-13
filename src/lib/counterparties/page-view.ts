@@ -323,6 +323,29 @@ export function invoiceGroups(invoices: readonly InvoiceRow[], role: string): In
   return { open: group(open, OPEN_SHOWN), closed: group(paid, CLOSED_SHOWN), paid };
 }
 
+export interface RefundGroups {
+  /** Not paid yet, by due date: the first 200. */
+  open: Group<InvoiceRow>;
+  /** Paid: the latest 10, by when the money left. */
+  paid: Group<InvoiceRow>;
+}
+
+/**
+ * A client's refunds: the bills the workspace pays them, payables to a client. The agent never pays one on its own
+ * (client payables R1, `guardrails.ts`): a person pays each in Approvals. Null on a payee's page, whose payables are
+ * its bills.
+ */
+export function clientRefunds(invoices: readonly InvoiceRow[], role: string): RefundGroups | null {
+  if (isPayee(role)) return null;
+  const refunds = invoices.filter((invoice) => invoice.direction === "payable");
+  const open = refunds.filter(invoiceOpen).sort((a, b) => a.due_date.slice(0, 10).localeCompare(b.due_date.slice(0, 10)));
+  const paid = newestFirst(
+    refunds.filter((invoice) => invoice.status === "paid"),
+    (invoice) => invoice.settled_at ?? invoice.due_date
+  );
+  return { open: group(open, OPEN_SHOWN), paid: group(paid, CLOSED_SHOWN) };
+}
+
 export interface MilestoneGroups {
   /** "Open": pending, verified or held, in the order read. */
   open: MilestoneRow[];
@@ -513,7 +536,7 @@ export interface NextSteps {
  * Needs you and Waiting on them, at the top of a counterparty's page: what the page's own parts already hold, counted
  * and linked to the part that holds it. Nothing new is read, and a part not read is said, never counted as none.
  * - Needs you: an address changed and not confirmed, or frozen; milestones held for a decision; their bills (a client's
- *   invoices) waiting for a person, as Approvals lists them.
+ *   invoices) waiting for a person, as Approvals lists them; a client's refunds not paid yet.
  * - Waiting on them: a payee's address when there is none; a payee link out, or a used one waiting for its invoice;
  *   milestones still pending, that is not yet delivered; document requests asked and not answered; a client's open
  *   invoices.
@@ -559,6 +582,9 @@ export function nextSteps(input: {
     }
     const unpaid = payee ? 0 : own.filter((invoice) => invoiceOpen(invoice) && !WAITING_STATUSES.has(invoice.status)).length;
     if (unpaid > 0) waitingOnThem.push({ words: `${counted(unpaid, "invoice", "invoices")} to them not paid yet`, section: "bills" });
+    // A refund to a client is never paid by the agent: each one waits for a person.
+    const refunds = clientRefunds(input.invoices.value, input.role)?.open.count ?? 0;
+    if (refunds > 0) needsYou.push({ words: `${counted(refunds, "refund", "refunds")} to them to pay in Approvals`, section: "bills" });
   }
 
   if (payee && input.requests?.read) {

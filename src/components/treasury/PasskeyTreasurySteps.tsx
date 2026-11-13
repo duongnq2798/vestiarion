@@ -2,7 +2,7 @@
 
 import { KeyRound, RefreshCw, ShieldCheck, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, useSyncExternalStore, type ReactNode } from "react";
 import { parseEther, type Hex } from "viem";
 import {
   choosePasskeyTreasuryAction,
@@ -293,10 +293,10 @@ function PendingSetupStep({ orgSlug, status, label }: { orgSlug: string; status:
       }
       if ((await settle(orgSlug, pending.contract, outcome, say, label)) === "verified") router.refresh();
     });
+  // Once for the workspace the page opens on: an effect event, so `check` reads what is kept as it runs.
+  const checkOnOpen = useEffectEvent(() => void check());
   useEffect(() => {
-    void check();
-    // Once for the step the page opens on: \`check\` reads what is kept as it runs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    checkOnOpen();
   }, [orgSlug]);
   return (
     <>

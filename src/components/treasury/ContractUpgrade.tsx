@@ -2,7 +2,7 @@
 
 import { ArrowUpCircle, KeyRound, RefreshCw, ShieldOff, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import type { Hex } from "viem";
 import { preparePasskeyUpgradeAction, prepareUpgradeAction, recordPasskeyUpgradeAction, recordUpgradeAction } from "@/app/actions/wallet-treasury";
 import { openTreasury } from "@/components/treasury/PasskeyTreasurySteps";
@@ -261,19 +261,20 @@ export default function ContractUpgrade({ orgSlug, status, network }: { orgSlug:
     });
 
   // A step sent before the page was reloaded is asked about again once, after it has painted; steps behind are forgotten.
+  // An effect event, so it runs once for each step the page opens on and reads what is kept as it runs.
+  const upgradeState = upgrade?.state;
+  const askAgain = useEffectEvent((slug: string, state: typeof upgradeState) => {
+    const passkeyKept = keptPasskeyUpgrade(slug);
+    setKept(passkeyKept);
+    const store = sentStore();
+    const current = state ? STEP_OF[state] : null;
+    for (const step of Object.values(STEP_OF)) if (step !== current) forgetSent(store, slug, step);
+    if (passkeyKept || (current && sentHash(store, slug, current))) void checkAgain();
+  });
   useEffect(() => {
-    const soon = setTimeout(() => {
-      const passkeyKept = keptPasskeyUpgrade(orgSlug);
-      setKept(passkeyKept);
-      const store = sentStore();
-      const current = upgrade ? STEP_OF[upgrade.state] : null;
-      for (const step of Object.values(STEP_OF)) if (step !== current) forgetSent(store, orgSlug, step);
-      if (passkeyKept || (current && sentHash(store, orgSlug, current))) void checkAgain();
-    }, 0);
+    const soon = setTimeout(() => askAgain(orgSlug, upgradeState), 0);
     return () => clearTimeout(soon);
-    // Once for each step the page opens on: what is kept is read as it runs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgSlug, upgrade?.state]);
+  }, [orgSlug, upgradeState]);
 
   if (!status.wallet || !status.contract || (!upgrade && !note)) return null;
 
