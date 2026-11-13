@@ -2097,9 +2097,14 @@ own signed entries (CL14), and no action, ledger action, table, column or index 
 - **Needs you and Waiting on them.** `nextSteps` (`src/lib/counterparties/page-view.ts`, pure) counts what the parts
   already read hold, and `NextSteps` draws it under the tiles, each line an in-page link to its part's id. Needs you:
   an unconfirmed or frozen address, held milestones, the counterparty's own bills (a client's invoices) in
-  `WAITING_STATUSES`. Waiting on them: a payee's missing address, its payee link out or waiting for its invoice (for a
-  writer, as the tile), pending milestones, document requests in state `asked`, and a client's other open invoices. It
-  reads nothing of its own; with a part it rests on unread it says so (`unread`) instead of an empty list.
+  `WAITING_STATUSES`, and a client's open refunds. Waiting on them: a payee's missing address, its payee link out or
+  waiting for its invoice (for a writer, as the tile), pending milestones, document requests in state `asked`, and a
+  client's other open invoices. It reads nothing of its own; with a part it rests on unread it says so (`unread`)
+  instead of an empty list.
+- **A client's refunds.** `clientRefunds` (`page-view.ts`, pure) takes a client's payables, the refunds the
+  workspace owes it, which the agent never pays (client payables R1 in `guardrails.ts`): open by due date (200 shown),
+  then the latest 10 paid, under **Refunds to them** and **Refunded** in the `bills` part. They are left out of what
+  the client owes and of Payments from them, which are its receivables.
 - **The address** (CL5). `addressFacts` (`src/lib/counterparties/page-view.ts`, pure) gives its state from the row:
   none, set when added, confirmed, unconfirmed or frozen. It is shown whole and wrapping (`CounterpartyAddressEdit`'s
   `full`), never through `Hash`, whose first-6/last-4 form is what a lookalike copies. `addressOnChainUrl`

@@ -395,6 +395,24 @@ describe("a client's page (CL1, CL8, CL9)", () => {
     expect(words).not.toContain("Receipt");
     expect(payeeLinkControl).toHaveLength(0);
   });
+
+  it("lists the refunds owed to a client under its invoices, each to pay in Approvals, and none where there are none", async () => {
+    const receivable = invoice({ direction: "receivable", counterparty_name: CLIENT.name });
+    const refund = invoice({ id: "00000000-0000-4000-8000-000000000031", counterparty_name: CLIENT.name, memo: "Refund for a cancelled order", status: "held" });
+    const refunded = invoice({ id: "00000000-0000-4000-8000-000000000032", counterparty_name: CLIENT.name, memo: "Refund for a late delivery", status: "paid", tx_ref: TX, paid_amount: 120 });
+    showing(CLIENT, { invoices: { read: true, value: [receivable, refund, refunded] } });
+    const markup = await page();
+    const words = text(markup);
+    expect(words).toContain("The agent never pays a client: each refund waits for a person, who pays it in Approvals.");
+    expect(words).toMatch(/Refunds to them 1 .*Refund for a cancelled order.* Refunded 1 .*Refund for a late delivery/);
+    expect(markup).toContain(refund.id);
+    expect(words).toContain("Needs you 1 refund to them to pay in Approvals");
+    // A refund is money out: it is not what the client owes, nor a payment from them.
+    expect(words).toContain("Owed by them 120.00 USDC Paid by them 0.00 USDC");
+    expect(words).toContain("Payments from them 0 payments · 0.00 USDC No payments yet.");
+    showing(CLIENT);
+    expect(text(await page())).not.toContain("Refunds to them");
+  });
 });
 
 describe("the address's explorer link (CL5)", () => {

@@ -138,6 +138,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   and what waits on them (an address when they have none, their answer to a payee link, milestones still to deliver,
   documents asked for, a client's unpaid invoices), each line a link to the part that holds it. Both come from what the
   page already reads, and a part not read just now is said rather than shown as nothing. No migration.
+- **A client's refunds on its page**,
+  [Guide](https://www.vestiarion.xyz/docs/guides/pay-a-contractor#one-page-for-each-contractor): a client's page now
+  lists, under its invoices, **Refunds to them**, what the workspace pays the client back, open by due date, and the
+  latest 10 **Refunded**. They were on Bills & receivables alone before. The agent never pays a client, so each refund
+  waits for a person in Approvals, and an open one is listed under Needs you. A refund is not counted in what the client
+  owes, nor in its payments. No migration.
 
 ### Changed
 

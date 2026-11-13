@@ -39,6 +39,7 @@ import { readCounterpartyPage } from "@/lib/counterparties/page-read";
 import {
   addressExplorer,
   addressFacts,
+  clientRefunds,
   CLOSED_SHOWN,
   copyOffWords,
   counterpartyTotals,
@@ -310,6 +311,7 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
     };
 
     const bills = invoices ? invoiceGroups(invoices, counterparty.role) : null;
+    const refunds = invoices ? clientRefunds(invoices, counterparty.role) : null;
     const work = milestones ? milestoneGroups(milestones) : null;
     const totals = invoices && milestones ? counterpartyTotals(counterparty.role, invoices, milestones) : null;
     const paidRows =
@@ -460,9 +462,17 @@ export default async function CounterpartyPage({ params, searchParams }: Counter
               <Line>Nothing open: every bill from them is paid, under Payments.</Line>
             ) : (
               <>
-                <InvoiceGroup title="Open" group={bills.open} shown={OPEN_SHOWN} slug={slug} item={(invoice) => invoiceItem(invoice, false)} />
+                <InvoiceGroup title="Open" first group={bills.open} shown={OPEN_SHOWN} slug={slug} item={(invoice) => invoiceItem(invoice, false)} />
                 <InvoiceGroup title={payee ? "Rejected" : "Received"} group={bills.closed} shown={CLOSED_SHOWN} slug={slug} item={(invoice) => invoiceItem(invoice, false)} />
               </>
+            )}
+            {/* A client's refunds: what the workspace pays them back, which only a person pays (client payables R1). */}
+            {refunds && refunds.open.count + refunds.paid.count > 0 && (
+              <div className="mt-6">
+                <p className="text-xs text-ink-3">The agent never pays a client: each refund waits for a person, who pays it in Approvals.</p>
+                <InvoiceGroup title="Refunds to them" first group={refunds.open} shown={OPEN_SHOWN} slug={slug} item={(invoice) => invoiceItem(invoice, false)} />
+                <InvoiceGroup title="Refunded" group={refunds.paid} shown={CLOSED_SHOWN} slug={slug} item={(invoice) => invoiceItem(invoice, false)} />
+              </div>
             )}
           </Section>
 
@@ -618,11 +628,12 @@ function CopyOffNote({ off }: { off: CopyOff }) {
 }
 
 /** CL8: one group of bills or invoices, with how many it holds and, when it shows fewer, how many it shows. */
-function InvoiceGroup({ title, group, shown, slug, item }: { title: string; group: Group<InvoiceRow>; shown: number; slug: string; item: (invoice: InvoiceRow) => DecisionRowItem }) {
+function InvoiceGroup({ title, first = false, group, shown, slug, item }: { title: string; first?: boolean; group: Group<InvoiceRow>; shown: number; slug: string; item: (invoice: InvoiceRow) => DecisionRowItem }) {
   if (group.count === 0) return null;
   return (
     <>
-      <RowGroupHeading title={title} count={group.count} action={group.count > shown ? <span className="text-[0.8125rem] text-ink-3">{title === "Open" ? `The first ${shown}` : `The latest ${shown}`}</span> : undefined} />
+      {/* An open group shows the first by due date; a closed one, the latest. */}
+      <RowGroupHeading title={title} count={group.count} action={group.count > shown ? <span className="text-[0.8125rem] text-ink-3">{first ? `The first ${shown}` : `The latest ${shown}`}</span> : undefined} />
       <DecisionRows orgSlug={slug} items={group.rows.map(item)} />
     </>
   );
