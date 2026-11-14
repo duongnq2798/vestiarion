@@ -1,5 +1,6 @@
 "use client";
 
+import { unstable_rethrow } from "next/navigation";
 import { startTransition, useActionState, useEffect, useRef, type FormEvent } from "react";
 import { AGENT_EXPECTED_EVENT } from "@/lib/agent-activity";
 import { toast } from "./Toaster";
@@ -40,6 +41,32 @@ function restoreFocus(form: HTMLFormElement | null, submitter: HTMLElement | nul
 }
 
 /**
+ * What a form says when its action never answered: the connection dropped, a deploy restarted the server, or the
+ * server failed (docs/superpowers/specs/2026-11-14-loading-states-design.md L6). The action may have run all the same,
+ * so the person is sent to see where it stands before trying again.
+ */
+export const ACTION_UNANSWERED = "Vestiarion did not answer, so this may not have gone through. Check your connection, then reload the page to see where it stands before you try again.";
+
+/**
+ * The action's own result, or, when the call itself fails, a refusal saying so: the form stays as it was, with what
+ * the person typed, instead of the whole section giving way to an error screen. A redirect or a not-found from the
+ * action is Next's to follow, so it goes on.
+ */
+export async function answered<State extends ActionResult>(
+  action: (previous: State, formData: FormData) => Promise<State>,
+  previous: State,
+  formData: FormData
+): Promise<State> {
+  try {
+    return await action(previous, formData);
+  } catch (error) {
+    unstable_rethrow(error);
+    console.error(error);
+    return { ...previous, ok: false, message: ACTION_UNANSWERED };
+  }
+}
+
+/**
  * A form wired to a server action that keeps what the person typed when the
  * action refuses it.
  *
@@ -68,7 +95,7 @@ export function useActionForm<State extends ActionResult>(
   // `Awaited`-free signature sidesteps that inference dead end; the runtime
   // behaviour is exactly `useActionState`'s two-argument, payload-taking form.
   const [state, dispatch, pending] = (useActionState as <S>(action: (state: S, payload: FormData) => Promise<S>, initialState: S) => [S, (payload: FormData) => void, boolean])(
-    action,
+    (previous, formData) => answered(action, previous, formData),
     initial
   );
   // The result last acted on. Each submission produces a new state object, so

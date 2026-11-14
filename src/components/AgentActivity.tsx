@@ -1,14 +1,21 @@
 "use client";
 
-import { Clock, LoaderCircle } from "lucide-react";
+import { Clock } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { toast } from "@/components/ui/Toaster";
 import { followLink } from "@/components/vx/ScrollToHash";
 import { AGENT_EXPECTED_EVENT, EXPECT_AGENT_MS, nextPollMs, TOLD_ONE_BY_ONE, workingLabel, type ActivityItem } from "@/lib/agent-activity";
 import { isValidSlug, orgHref } from "@/lib/auth/org-paths";
 import { utcMinute } from "@/lib/copy";
+
+/** How long one read of the agent's state may take before it is given up on. */
+export const ACTIVITY_TIMEOUT_MS = 10_000;
+/** Reads missed in a row before the line says it is not current: one miss is the network's hiccup, three are not. */
+export const STALE_AFTER_FAILURES = 3;
+export const ACTIVITY_STALE = "not updating, retrying";
 
 /** The route's answer (src/app/api/agent/activity/route.ts). */
 interface ActivityAnswer {
@@ -33,6 +40,7 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
   const [running, setRunning] = useState<{ startedAt: string } | null>(null);
   const [lastCycleAt, setLastCycleAt] = useState(initialLastCycleAt);
   const [now, setNow] = useState(() => Date.now());
+  const [stale, setStale] = useState(false);
   const cursor = useRef<number | null>(null);
   const expectingUntil = useRef(0);
 
@@ -41,6 +49,7 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
     let wasRunning = false;
+    let failures = 0;
 
     const schedule = (delay: number) => {
       clearTimeout(timer);
@@ -53,26 +62,33 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
       try {
         const since = cursor.current;
         const query = since === null ? "" : `&since=${since}`;
-        const response = await fetch(`/api/agent/activity?org=${encodeURIComponent(slug as string)}${query}`, { cache: "no-store" });
-        if (response.ok) {
-          const answer = (await response.json()) as ActivityAnswer;
-          if (stopped) return;
-          setRunning(answer.running);
-          setLastCycleAt(answer.lastCycleAt);
-          if (since !== null && answer.items.length > 0) {
-            // A toast clicked on the page it links (a milestone's row, on Contractors) still opens its part there.
-            tell(answer.items, since, (path) => followLink(router, orgHref(slug as string, path)));
-          }
-          // A cycle starting (its payables read "Deciding now"), one finished, or anything new, is shown on the page
-          // at once rather than at its next refresh.
-          const started = since !== null && !wasRunning && answer.running !== null;
-          const finished = wasRunning && answer.running === null;
-          if (started || finished || answer.items.length > 0) router.refresh();
-          wasRunning = answer.running !== null;
-          cursor.current = Math.max(since ?? 0, answer.head, ...answer.items.map((item) => item.seq));
+        // A request that hangs is given up on, so polling never stops behind it (loading states L6).
+        const response = await fetch(`/api/agent/activity?org=${encodeURIComponent(slug as string)}${query}`, {
+          cache: "no-store",
+          signal: AbortSignal.timeout(ACTIVITY_TIMEOUT_MS),
+        });
+        if (!response.ok) throw new Error(`activity answered ${response.status}`);
+        const answer = (await response.json()) as ActivityAnswer;
+        if (stopped) return;
+        setRunning(answer.running);
+        setLastCycleAt(answer.lastCycleAt);
+        if (since !== null && answer.items.length > 0) {
+          // A toast clicked on the page it links (a milestone's row, on Contractors) still opens its part there.
+          tell(answer.items, since, (path) => followLink(router, orgHref(slug as string, path)));
         }
+        // A cycle starting (its payables read "Deciding now"), one finished, or anything new, is shown on the page
+        // at once rather than at its next refresh.
+        const started = since !== null && !wasRunning && answer.running !== null;
+        const finished = wasRunning && answer.running === null;
+        if (started || finished || answer.items.length > 0) router.refresh();
+        wasRunning = answer.running !== null;
+        cursor.current = Math.max(since ?? 0, answer.head, ...answer.items.map((item) => item.seq));
+        failures = 0;
+        setStale(false);
       } catch {
-        // Asked again at the next interval.
+        // Asked again at the next interval; after a few misses in a row the line says it is not current.
+        failures += 1;
+        if (!stopped && failures >= STALE_AFTER_FAILURES) setStale(true);
       }
       schedule(nextPollMs({ running: wasRunning, expectingUntil: expectingUntil.current, now: Date.now() }));
     }
@@ -109,7 +125,7 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
     <span aria-live="polite" className="inline-flex max-w-full items-center gap-1.5 align-middle">
       {running ? (
         <>
-          <LoaderCircle aria-hidden className="size-3.5 shrink-0 text-agent motion-safe:animate-spin" />
+          <Spinner className="size-3.5 text-agent" />
           <span className="truncate font-medium text-agent">{workingLabel(running.startedAt, now)}</span>
         </>
       ) : (
@@ -118,6 +134,7 @@ export function AgentActivity({ lastCycleAt: initialLastCycleAt }: { lastCycleAt
           <span className="truncate">{lastCycleAt ? `Last cycle ${utcMinute(lastCycleAt)}` : "No cycle recorded yet"}</span>
         </>
       )}
+      {stale && <span className="shrink-0 text-ink-3">· {ACTIVITY_STALE}</span>}
     </span>
   );
 }

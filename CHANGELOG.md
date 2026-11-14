@@ -147,6 +147,18 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **Waiting looks the same everywhere, and never blinks.** A button is taken the moment it is pressed and cannot be
+  pressed twice, but its spinner appears only once the work has run for 150 ms and then stays for at least half a
+  second, so an action that answers at once shows no change at all; it keeps its colour and width while busy, so nothing
+  beside it moves. Following a link, a filter or a tab included, draws a thin bar along the top of the window once the
+  next page takes longer than a moment, and it fills and fades when the page lands. A form whose action never answers,
+  because the connection dropped or the server restarted, keeps what was typed and says it may not have gone through,
+  instead of replacing the section with an error screen. A page outside a workspace that fails to load now shows the
+  site's own error screen, with Try again and a link to the status page, instead of the browser's bare one. The agent's
+  line in every workspace header gives up on a request that hangs and keeps asking, and says "not updating, retrying"
+  after three misses in a row. The rules are in the
+  [visual system](https://github.com/duongnq2798/vestiarion/blob/main/docs/design/visual-system.md#loading-waiting-and-failing).
+  No migration.
 - **Analytics no longer sees which record a page is about.** Every id in a workspace page's address, such as a
   counterparty's, a project's, a deal's or a payment's evidence, now reaches Google Analytics as `:id`, as in
   `/o/:org/projects/:id`, and the page's title and a referrer from this site follow; a part of the address that is not
