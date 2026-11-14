@@ -5,6 +5,7 @@ import { ConnectorConsent } from "@/components/ConnectorConsent";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
+import { NativeSubmitButton } from "@/components/ui/NativeSubmitButton";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { membershipsOf } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
@@ -125,9 +126,9 @@ export default async function JiraConnectPage({ searchParams }: ConnectPageProps
                 <input type="hidden" name="org" value={chosen.slug} />
                 <input type="hidden" name="choice" value={sites.id} />
                 <NativeRadioGroup legend="Site" name="organisation" required options={sites.choices.map((choice) => ({ value: choice.externalOrgId, label: choice.name }))} />
-                <Button type="submit" icon={<Link2 aria-hidden />}>
+                <NativeSubmitButton icon={<Link2 aria-hidden />}>
                   Connect this site
-                </Button>
+                </NativeSubmitButton>
               </form>
             </>
           ) : (
@@ -180,9 +181,9 @@ export default async function JiraConnectPage({ searchParams }: ConnectPageProps
                     Tick I agree to connect Jira.
                   </p>
                 )}
-                <Button type="submit" icon={<Link2 aria-hidden />}>
+                <NativeSubmitButton icon={<Link2 aria-hidden />}>
                   Continue to Jira
-                </Button>
+                </NativeSubmitButton>
               </form>
               <p className="mt-4 text-sm text-ink-3">Signed in as {user.email ?? "you"}.</p>
             </>

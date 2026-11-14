@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
+import { NativeSubmitButton } from "@/components/ui/NativeSubmitButton";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { membershipsOf } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
@@ -124,9 +125,9 @@ export default async function GoogleDriveConnectPage({ searchParams }: ConnectPa
                     Tick I agree to connect Google Drive.
                   </p>
                 )}
-                <Button type="submit" icon={<Link2 aria-hidden />}>
+                <NativeSubmitButton icon={<Link2 aria-hidden />}>
                   Continue to Google
-                </Button>
+                </NativeSubmitButton>
               </form>
               <p className="mt-4 text-sm text-ink-3">Signed in as {user.email ?? "you"}.</p>
             </>
