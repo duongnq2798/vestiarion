@@ -4,6 +4,7 @@ import { WatchLink } from "@/components/DocsLink";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SectionHeader } from "@/components/ui/SectionHeader";
+import { SubmitButton } from "@/components/ui/SubmitButton";
 import { cn } from "@/components/ui/cn";
 import { orgHref } from "@/lib/auth/org-paths";
 import { videoFor } from "@/lib/docs/videos";
@@ -26,8 +27,8 @@ export const DISMISS_FOR_GOOD = "Hide this checklist for good. It does not come 
  * steps to real payments under "To pay on Arc".
  *
  * `dismiss`, given where the page can record it, offers "Don't show again" (R4); `confirmLimits`, given to a person who
- * may change the agent's limits, offers "Keep these limits" on that step (R1). Both are forms: nothing here runs in the
- * browser.
+ * may change the agent's limits, offers "Keep these limits" on that step (R1). Both are forms, whose buttons show they are
+ * working until the page answers.
  */
 export function GettingStarted({
   slug,
@@ -110,9 +111,9 @@ export function GettingStarted({
           {keepLimits && (
             <form action={confirmLimits} className="mt-2">
               <input type="hidden" name="orgSlug" value={slug} />
-              <Button type="submit" size="sm" variant="ghost" icon={<Check aria-hidden />}>
+              <SubmitButton size="sm" variant="ghost" icon={<Check aria-hidden />}>
                 Keep these limits
-              </Button>
+              </SubmitButton>
             </form>
           )}
         </div>
@@ -141,9 +142,9 @@ export function GettingStarted({
               <form action={dismiss}>
                 <input type="hidden" name="orgSlug" value={slug} />
                 <input type="hidden" name="role" value={role} />
-                <Button type="submit" size="sm" variant="ghost" icon={<EyeOff aria-hidden />} title={DISMISS_FOR_GOOD} aria-describedby={`${titleId}-dismiss`}>
+                <SubmitButton size="sm" variant="ghost" icon={<EyeOff aria-hidden />} title={DISMISS_FOR_GOOD} aria-describedby={`${titleId}-dismiss`}>
                   {DONT_SHOW_AGAIN}
-                </Button>
+                </SubmitButton>
                 <span id={`${titleId}-dismiss`} className="sr-only">
                   {DISMISS_FOR_GOOD}
                 </span>

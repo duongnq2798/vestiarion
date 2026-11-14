@@ -28,6 +28,7 @@ export function AddDetailsDialog({
   variant = "secondary",
   size = "sm",
   suggestedPo = null,
+  disabled = false,
 }: {
   orgSlug: string;
   payable: Pick<WaitingPayable, "id" | "counterpartyName" | "poReference" | "goodsReceived">;
@@ -40,6 +41,8 @@ export function AddDetailsDialog({
    * person to check and add; nothing is added until they do.
    */
   suggestedPo?: string | null;
+  /** Off while another decision on the same invoice is on its way (Approvals). */
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -49,7 +52,7 @@ export function AddDetailsDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size={size} variant={variant} icon={<ClipboardCheck />}>
+        <Button size={size} variant={variant} icon={<ClipboardCheck />} disabled={disabled}>
           Add details
         </Button>
       </DialogTrigger>

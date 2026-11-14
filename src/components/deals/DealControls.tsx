@@ -59,7 +59,7 @@ export function CancelDealButton({
   stops: string;
 }) {
   const formId = useId();
-  const { state, formProps } = useActionForm(changeDealAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps, pending } = useActionForm(changeDealAction, INITIAL, { toastOnSuccess: true });
   return (
     <form id={formId} {...formProps} className="flex flex-col items-start gap-1">
       <input type="hidden" name="orgSlug" value={orgSlug} />
@@ -69,7 +69,7 @@ export function CancelDealButton({
       <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
       <ConfirmDialog
         trigger={
-          <Button type="button" size="sm" variant="secondary" icon={<XCircle />}>
+          <Button type="button" size="sm" variant="secondary" icon={<XCircle />} loading={pending}>
             Cancel deal
           </Button>
         }
