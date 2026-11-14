@@ -51,11 +51,18 @@ function click(label: string) {
   act(() => button(label).click());
 }
 
-/** Lets the check run: it waits for the page to show it is checking first (CB2). */
+/**
+ * Lets the check run until its summary is announced: it waits for the page to show it is checking first (CB2), after a
+ * frame or a timer, so a slow run is waited for rather than given a fixed time.
+ */
 async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  });
+  const until = Date.now() + 5000;
+  while (live() === "") {
+    if (Date.now() > until) throw new Error("the check did not finish in 5 s");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+  }
 }
 
 /** A day counted from the person's own today, `YYYY-MM-DD`. */
@@ -125,9 +132,7 @@ describe("the checker (CB2, CB3, CB10)", () => {
     click("Try the sample list");
     click("Check 13 bills");
     expect(button("Check 13 bills").getAttribute("aria-busy")).toBe("true");
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    });
+    await settle();
     expect(frames).toHaveBeenCalled();
     expect(text()).toContain("3. What it found");
     expect(live()).toContain("2 likely duplicates");
