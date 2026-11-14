@@ -2,6 +2,7 @@
 
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
+import { announceNavigation } from "@/components/ui/NavigationProgress";
 
 /**
  * Opens the element a fragment (`#seq-42`) names and brings it into view. A row folded away (a counterparty's, which
@@ -24,6 +25,7 @@ export function openFragment(fragment: string): void {
 export function followLink(router: { push(href: string): void }, href: string): void {
   const url = new URL(href, window.location.href);
   const samePage = url.pathname === window.location.pathname && url.search === window.location.search;
+  announceNavigation(href);
   router.push(href);
   if (samePage && url.hash) openFragment(url.hash);
 }

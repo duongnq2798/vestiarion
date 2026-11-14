@@ -6,6 +6,7 @@ import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useState, type ReactElement } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { useBusyIndicator } from "@/components/ui/busy";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import {
@@ -114,9 +115,9 @@ export function SectionNav({ orgSlug, layoutId, collapsed = false }: { orgSlug: 
   );
 }
 
-/** A fixed-size dot that lights while its link's page is loading, so nothing shifts. */
+/** A fixed-size dot that lights while its link's page is loading, so nothing shifts; a page that opens at once lights nothing. */
 function PendingHint() {
-  const { pending } = useLinkStatus();
+  const pending = useBusyIndicator(useLinkStatus().pending);
   return (
     <span
       aria-hidden

@@ -6,6 +6,7 @@ import { createContext, startTransition, useContext, useEffect, useMemo, useStat
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "@/components/ui/Avatar";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/Command";
+import { announceNavigation } from "@/components/ui/NavigationProgress";
 import { DOCS_TARGET, quickActions, sectionGroups, shortcutLabel, workspaceTargets } from "./command-items";
 import { useOptionalFrame, useWide } from "./FrameContext";
 import { NAV_ICONS } from "./nav-icons";
@@ -68,6 +69,7 @@ export function CommandPaletteProvider({
 
   function go(href: string) {
     setOpen(false);
+    announceNavigation(href);
     router.push(href);
   }
 
@@ -143,6 +145,7 @@ export function CommandPaletteProvider({
               keywords={["Sign out", "log out", "logout"]}
               onSelect={() => {
                 setOpen(false);
+                announceNavigation("/login");
                 startTransition(async () => {
                   await signOut();
                 });

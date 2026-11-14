@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useId } from "react";
+import { announceNavigation } from "@/components/ui/NavigationProgress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import type { SortOption } from "./types";
 
@@ -18,7 +19,9 @@ export function SortSelect({ value, options }: { value: string; options: SortOpt
         value={value}
         onValueChange={(next) => {
           const option = options.find((candidate) => candidate.value === next);
-          if (option) router.push(option.href, { scroll: false });
+          if (!option) return;
+          announceNavigation(option.href);
+          router.push(option.href, { scroll: false });
         }}
       >
         <SelectTrigger id={id} size="sm" className="w-auto min-w-[10.5rem]">

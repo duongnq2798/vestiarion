@@ -6,6 +6,7 @@ import { startTransition, type ReactNode } from "react";
 import { signOut } from "@/app/login/actions";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
+import { announceNavigation } from "@/components/ui/NavigationProgress";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   DropdownMenu,
@@ -94,11 +95,13 @@ export function AccountMenu({
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem
-          onSelect={() =>
+          onSelect={() => {
+            // The menu closes at once; the bar along the top says the way out is on its way.
+            announceNavigation("/login");
             startTransition(async () => {
               await signOut();
-            })
-          }
+            });
+          }}
         >
           <LogOut aria-hidden />
           Sign out
