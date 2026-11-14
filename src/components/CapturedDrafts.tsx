@@ -74,16 +74,17 @@ function Discard({ orgSlug, draftId }: { orgSlug: string; draftId: string }) {
  * Shown as text, whatever it holds.
  */
 function CapturedText({ orgSlug, draftId, fromPayee }: { orgSlug: string; draftId: string; fromPayee: boolean }) {
-  const [state, setState] = useState<{ status: "idle" | "loading" | "done"; text?: string | null; message?: string }>({ status: "idle" });
+  // "failed" is a read that never answered: opening the section again asks again.
+  const [state, setState] = useState<{ status: "idle" | "loading" | "done" | "failed"; text?: string | null; message?: string }>({ status: "idle" });
   return (
     <details
       className="disclosure group/disclosure rounded-2xl border border-line bg-surface shadow-surface"
       onToggle={(event) => {
-        if (!event.currentTarget.open || state.status !== "idle") return;
+        if (!event.currentTarget.open || state.status === "loading" || state.status === "done") return;
         setState({ status: "loading" });
         void readCapturedTextAction(orgSlug, draftId)
           .then((answer) => setState(answer.ok ? { status: "done", text: answer.text ?? null } : { status: "done", message: answer.message }))
-          .catch(() => setState({ status: "done", message: "That did not work. Try again in a moment." }));
+          .catch(() => setState({ status: "failed", message: "Vestiarion did not answer. Close this and open it again to try again." }));
       }}
     >
       <summary className="flex cursor-pointer list-none select-none items-center gap-2 rounded-2xl px-4 py-3 text-sm font-medium text-ink-2 transition-colors duration-150 ease-standard hover:text-ink [&::-webkit-details-marker]:hidden">
@@ -92,7 +93,7 @@ function CapturedText({ orgSlug, draftId, fromPayee }: { orgSlug: string; draftI
       </summary>
       <div className="px-4 pb-4" aria-live="polite">
         {state.status === "loading" && <p className="text-xs text-ink-3">Reading…</p>}
-        {state.status === "done" && state.message && <p className="text-xs text-refused">{state.message}</p>}
+        {(state.status === "done" || state.status === "failed") && state.message && <p className="text-xs text-refused">{state.message}</p>}
         {state.status === "done" && !state.message && (
           <pre className={cn("max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-2 p-3 font-mono text-xs text-ink-2", !state.text && "font-sans")}>
             {state.text ??

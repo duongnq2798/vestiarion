@@ -2,7 +2,7 @@
 
 import { KeyRound, RefreshCw, ShieldCheck, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useEffectEvent, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import { parseEther, type Hex } from "viem";
 import {
   choosePasskeyTreasuryAction,
@@ -232,6 +232,7 @@ function AgentStep({ orgSlug }: { orgSlug: string }) {
  */
 function FundStep({ status, label, network }: { status: WalletTreasuryStatus; label: string; network: Network }) {
   const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState === "visible") router.refresh();
@@ -254,7 +255,7 @@ function FundStep({ status, label, network }: { status: WalletTreasuryStatus; la
       </p>
       <p className="text-xs text-ink-3">This page checks for it every 10 seconds.</p>
       <div>
-        <Button type="button" variant="secondary" size="sm" onClick={() => router.refresh()}>
+        <Button type="button" variant="secondary" size="sm" icon={<RefreshCw />} loading={refreshing} onClick={() => startRefresh(() => router.refresh())}>
           Refresh
         </Button>
       </div>
@@ -440,6 +441,8 @@ function RecoveryStep({ orgSlug, status, label }: { orgSlug: string; status: Wal
   const { busy, note, run } = usePasskeyStep("recovery");
   const [words, setWords] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Which of the step's actions is running: the dialog closes on Skip, so its trigger is what shows it working.
+  const [skipping, setSkipping] = useState(false);
 
   const create = () =>
     run(async () => {
@@ -476,12 +479,15 @@ function RecoveryStep({ orgSlug, status, label }: { orgSlug: string; status: Wal
       say(`${label} has not confirmed it yet. Reload this page to check again.`);
     });
 
-  const skip = () =>
-    run(async () => {
+  const skip = async () => {
+    setSkipping(true);
+    await run(async () => {
       const skipped = await skipRecoveryAction(orgSlug);
       if (!skipped.ok) throw new PasskeyTreasuryError(skipped.message);
       router.refresh();
     });
+    setSkipping(false);
+  };
 
   let phrase: ReactNode;
   if (words) {
@@ -497,7 +503,7 @@ function RecoveryStep({ orgSlug, status, label }: { orgSlug: string; status: Wal
         </ol>
         <Checkbox id="passkey-treasury-saved" checked={saved} onCheckedChange={(value) => setSaved(value === true)} label="I wrote these twelve words down and keep them offline." />
         <div>
-          <Button type="button" icon={<KeyRound />} loading={busy} disabled={!saved} onClick={register}>
+          <Button type="button" icon={<KeyRound />} loading={busy && !skipping} disabled={!saved || skipping} onClick={register}>
             Register with your passkey
           </Button>
         </div>
@@ -506,7 +512,7 @@ function RecoveryStep({ orgSlug, status, label }: { orgSlug: string; status: Wal
   } else {
     phrase = (
       <div>
-        <Button type="button" icon={<ShieldCheck />} loading={busy} onClick={create}>
+        <Button type="button" icon={<ShieldCheck />} loading={busy && !skipping} disabled={skipping} onClick={create}>
           Create a recovery phrase
         </Button>
       </div>
@@ -525,7 +531,7 @@ function RecoveryStep({ orgSlug, status, label }: { orgSlug: string; status: Wal
       <div>
         <ConfirmDialog
           trigger={
-            <Button type="button" variant="ghost" size="sm">
+            <Button type="button" variant="ghost" size="sm" loading={skipping} disabled={busy}>
               Skip: I understand that losing this passkey loses this wallet
             </Button>
           }

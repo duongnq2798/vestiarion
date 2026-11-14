@@ -9,6 +9,7 @@ import { Field } from "@/components/ui/Field";
 import { FileInput } from "@/components/ui/FileInput";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input, Textarea } from "@/components/ui/Input";
+import { ACTION_UNANSWERED } from "@/components/ui/useActionForm";
 import { MAX_DOCUMENT_NOTE, MAX_DOCUMENT_PO, MAX_VENDOR_DOCUMENT_BYTES, missingWords, sniffDocumentType, type MissingDocument } from "@/lib/document-requests/rules";
 
 const INITIAL: DocumentSubmitResult = { ok: false, message: "" };
@@ -86,26 +87,36 @@ export function DocumentUploadForm({ token, request }: { token: string; request:
       return;
     }
     startTransition(async () => {
-      const type = await typeOf(file);
-      const started = await startDocumentUploadAction(token, file.size, type);
-      if (!started.ok || !started.url) {
-        setState({ ok: false, message: started.message, field: "file" });
-        return;
-      }
-      let put: Response | null = null;
       try {
-        put = await fetch(started.url, { method: "PUT", body: file, headers: { "content-type": type, "x-upsert": "true" } });
-      } catch {
-        put = null;
+        await send(file, formData);
+      } catch (failure) {
+        // Vestiarion never answered: the form and the file chosen stay, to send again once the page says where it stands.
+        console.error("document upload", failure instanceof Error ? failure.message : failure);
+        setState({ ok: false, message: ACTION_UNANSWERED });
       }
-      if (!put?.ok) {
-        setState({ ok: false, message: NOT_SENT, field: "file" });
-        return;
-      }
-      const result = await submitDocumentAction(INITIAL, formData);
-      if (!result.ok && result.field === "file") letGo();
-      setState(result);
     });
+  }
+
+  async function send(file: File, formData: FormData) {
+    const type = await typeOf(file);
+    const started = await startDocumentUploadAction(token, file.size, type);
+    if (!started.ok || !started.url) {
+      setState({ ok: false, message: started.message, field: "file" });
+      return;
+    }
+    let put: Response | null = null;
+    try {
+      put = await fetch(started.url, { method: "PUT", body: file, headers: { "content-type": type, "x-upsert": "true" } });
+    } catch {
+      put = null;
+    }
+    if (!put?.ok) {
+      setState({ ok: false, message: NOT_SENT, field: "file" });
+      return;
+    }
+    const result = await submitDocumentAction(INITIAL, formData);
+    if (!result.ok && result.field === "file") letGo();
+    setState(result);
   }
 
   const error = (field: "poReference" | "note") => (state.field === field ? state.message : undefined);

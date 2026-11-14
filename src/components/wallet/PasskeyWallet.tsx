@@ -35,6 +35,7 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
   const [balance, setBalance] = useState<bigint | null>(null);
   const [screen, setScreen] = useState<Screen>({ kind: "closed" });
   const [busy, setBusy] = useState(false);
+  const [reading, setReading] = useState(false);
   const [error, setError] = useState("");
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
@@ -56,6 +57,7 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
   }
 
   async function readBalance(opened: OpenPasskeyWallet): Promise<bigint | null> {
+    setReading(true);
     try {
       const value = await opened.balance();
       setBalance(value);
@@ -64,6 +66,8 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
       console.error("passkey wallet balance", failure instanceof Error ? failure.message : failure);
       setBalance(null);
       return null;
+    } finally {
+      setReading(false);
     }
   }
 
@@ -153,7 +157,7 @@ export function PasskeyWallet({ configured }: { configured: boolean }) {
           <Row term="USDC">
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {balance === null ? "Could not be read" : `${usdcText(balance)} USDC on ${network}`}
-              <Button type="button" variant="link" icon={<RefreshCw />} onClick={() => readBalance(wallet)} disabled={busy}>
+              <Button type="button" variant="link" icon={<RefreshCw />} loading={reading} onClick={() => readBalance(wallet)} disabled={busy}>
                 Refresh
               </Button>
             </span>

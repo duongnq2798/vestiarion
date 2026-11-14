@@ -247,7 +247,8 @@ export function VendorChecker({ listDate, listDay }: { listDate: string; listDay
 
   async function checkName() {
     const typed = name.trim();
-    if (typed === "") return;
+    // Enter while a check runs is the same press as the busy button's: it waits for the answer.
+    if (typed === "" || loading) return;
     setLoading(true);
     setProblem("");
     try {
