@@ -1,11 +1,10 @@
 "use client";
 
-import { RotateCcw } from "lucide-react";
 import { useEffect } from "react";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/components/ui/cn";
 import { Eyebrow } from "@/components/ui/Eyebrow";
+import { RetryButton } from "@/components/ui/RetryButton";
 import { CONTENT_FRAME } from "@/components/vx/frame";
 import { FrameBanners } from "@/components/vx/FrameContext";
 import { WorkspaceHeader } from "@/components/vx/WorkspaceHeader";
@@ -34,9 +33,7 @@ export default function WorkspaceError({ error, retry }: { error: Error & { dige
             Try this section again, or choose another one from the navigation — the rest of the workspace is still available.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Button icon={<RotateCcw />} onClick={() => retry()}>
-              Try again
-            </Button>
+            <RetryButton retry={retry} />
             {error.digest && <span className="font-mono text-xs text-ink-3">Server log reference {error.digest}</span>}
           </div>
         </Card>
