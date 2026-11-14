@@ -39,6 +39,16 @@ CSS `duration-micro/overlay/sheet/page/exit/reveal` mirrors `MOTION.duration`: 1
 
 Nothing moves at rest. Use finite CSS motion only to explain a transition. Reduced motion, no JavaScript, a hidden tab and jumping past a section must all leave meaningful content visible. `Heading` and `Section` add no client boundary. The landing shell remains synchronous, with data-dependent evidence behind Suspense. Page-specific journey motion belongs to the landing PR, not the global primitives.
 
+## Loading, waiting and failing
+
+One rule set for every wait, in `docs/superpowers/specs/2026-11-14-loading-states-design.md`:
+
+- **A button's work:** pass `loading`, or use `SubmitButton`. The button is disabled and `aria-busy` the moment the work starts, so it cannot be pressed twice, and it keeps its colour and width. Its spinner appears only after 150 ms and stays for at least 500 ms (`useBusyIndicator` in `ui/busy.ts`), so an action that answers at once shows no change and nothing blinks. A long action names itself with `pendingLabel` ("Saving…").
+- **A section that loads:** a `loading.tsx` skeleton in the shape of the page, under the same frame, so it lands without a jump. A placeholder is `Skeleton`, never a bare spinner or "Loading…".
+- **Following a link:** `NavigationProgress` draws a thin bar along the top once the next page takes longer than 150 ms, for any link, a filter or tab included. A navigation started from code calls `announceNavigation()` first.
+- **Progress with a known end:** `ProgressBar` with a `value`; without one it sweeps.
+- **Failing:** a form whose action never answers keeps what was typed and says so (`ACTION_UNANSWERED`), instead of an error screen. A page that fails shows its error screen with `RetryButton`: `o/[slug]/error.tsx` inside a workspace, `error.tsx` elsewhere, `global-error.tsx` when the root layout itself fails. Polling gives up on a hung request (a timeout) and keeps asking; after a few misses in a row it says it is not current.
+
 ## Evidence and rollout
 
 The landing must label proof as the team's workspace. Every displayed time, date, transaction and observed step comes from an eligible ledger/payment record, with verification links. Explain general process separately from observed events; omit unsupported details. Distinguish ledger recording time from chain confirmation time. A Base payment needs the confirmed Base mint as well as the Arc burn; a burn alone is not receipt on Base. Signature verification proves the signed hash link, not the public paraphrase. Never create a shared receipt link during a page read.
