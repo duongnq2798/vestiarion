@@ -12,11 +12,21 @@ const FINISH_MS = 350;
 const NAVIGATION_EVENT = "vestiarion:navigation-start";
 
 /**
- * Shows the bar for a navigation started from code, `router.push` or `router.replace`, which no link click announces:
- * call it just before. The bar ends once the address changes, like a link's.
+ * Shows the bar for a navigation started from code, `router.push` or `router.replace`, or by a server action that
+ * redirects, which no link click announces: call it just before. The bar ends once the address changes, like a link's.
+ * Given the address it goes to, it stays quiet when that is the page already open, which would never land.
  */
-export function announceNavigation() {
+export function announceNavigation(href?: string) {
+  if (href !== undefined) {
+    const here = new URL(window.location.href);
+    const to = new URL(href, here);
+    if (to.origin !== here.origin || samePage(to, here)) return;
+  }
   window.dispatchEvent(new Event(NAVIGATION_EVENT));
+}
+
+function samePage(to: URL, here: URL): boolean {
+  return to.pathname === here.pathname && to.search === here.search;
 }
 
 /**
@@ -30,7 +40,7 @@ export function leavesThePage(event: MouseEvent, here: URL): string | null {
   if (link.target && link.target !== "_self") return null;
   const to = new URL(link.getAttribute("href") ?? "", here);
   if (to.origin !== here.origin) return null;
-  if (to.pathname === here.pathname && to.search === here.search) return null;
+  if (samePage(to, here)) return null;
   return to.pathname + to.search;
 }
 

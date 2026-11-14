@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/components/ui/cn";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/Command";
 import { Kbd } from "@/components/ui/Kbd";
+import { announceNavigation } from "@/components/ui/NavigationProgress";
 import { shortcutLabel } from "@/components/vx/command-items";
 import { isSearchShortcut, searchDocs, searchHref, type SearchEntry } from "@/lib/docs/search";
 
@@ -72,7 +73,9 @@ export function DocsSearchProvider({ index, children }: { index: SearchEntry[]; 
 
   function go(entry: SearchEntry) {
     onOpenChange(false);
-    router.push(searchHref(entry));
+    const href = searchHref(entry);
+    announceNavigation(href);
+    router.push(href);
   }
 
   const searching = query.trim() !== "";

@@ -2,6 +2,7 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { useRef, type KeyboardEvent } from "react";
+import { useBusyIndicator } from "@/components/ui/busy";
 import { cn } from "@/components/ui/cn";
 import { Spinner } from "@/components/ui/Spinner";
 import type { BillsTab } from "@/lib/bills-view";
@@ -15,10 +16,10 @@ export interface BillsTabLink {
   count?: number;
 }
 
-/** A small mark while the tab's content is read from the server. */
+/** A small mark while the tab's content is read from the server, only when that takes longer than a moment. */
 function Pending() {
   const { pending } = useLinkStatus();
-  return pending ? <Spinner className="size-3.5 text-ink-3" /> : null;
+  return useBusyIndicator(pending) ? <Spinner className="size-3.5 text-ink-3" /> : null;
 }
 
 /**

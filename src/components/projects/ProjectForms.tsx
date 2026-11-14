@@ -7,6 +7,7 @@ import { assignToProjectAction, changeProjectAction, createProjectAction, setPro
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
+import { announceNavigation } from "@/components/ui/NavigationProgress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
 import { useActionForm } from "@/components/ui/useActionForm";
@@ -44,7 +45,10 @@ export function NewProjectForm({ orgSlug, idempotencyKey }: { orgSlug: string; i
     toastOnSuccess: true,
     resetOnSuccess: true,
     onSuccess: (result) => {
-      if (result.projectId) router.push(`/o/${orgSlug}/projects/${result.projectId}`);
+      if (!result.projectId) return;
+      const href = `/o/${orgSlug}/projects/${result.projectId}`;
+      announceNavigation(href);
+      router.push(href);
     },
   });
   const error = (field: ProjectFormField) => (!state.ok && state.field === field ? state.message : undefined);

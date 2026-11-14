@@ -139,6 +139,9 @@ export default function AddUsdcFromChain({ network, recipient, recipientLabel }:
         }
         setSeen(arrival?.state === "seen");
         setStale(Date.now() - Date.parse(following.sentAt) > FORGET_AFTER_MS);
+      } catch (failure) {
+        // Iris did not answer this time: what is shown stands, and the next tick asks again.
+        console.warn("inbound arrival", failure instanceof Error ? failure.message : failure);
       } finally {
         asking = false;
       }

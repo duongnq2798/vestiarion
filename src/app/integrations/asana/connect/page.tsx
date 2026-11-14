@@ -6,6 +6,7 @@ import { ConnectorConsent } from "@/components/ConnectorConsent";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
+import { NativeSubmitButton } from "@/components/ui/NativeSubmitButton";
 import { BrandMark } from "@/components/vx/BrandMarks";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { asanaSettingsFromEnv } from "@/lib/asana/settings";
@@ -114,9 +115,9 @@ export default async function AsanaConnectPage({ searchParams }: ConnectPageProp
                     Tick I agree to connect Asana.
                   </p>
                 )}
-                <Button type="submit" icon={<Link2 aria-hidden />}>
+                <NativeSubmitButton icon={<Link2 aria-hidden />}>
                   Continue to Asana
-                </Button>
+                </NativeSubmitButton>
               </form>
               <p className="mt-4 text-sm text-ink-3">Signed in as {user.email ?? "you"}.</p>
             </>

@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/Checkbox";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
+import { announceNavigation } from "@/components/ui/NavigationProgress";
 import { RadioGroup } from "@/components/ui/RadioGroup";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
@@ -106,7 +107,10 @@ export function DealForm({
   const { state, formProps } = useActionForm(createDealAction, INITIAL, {
     toastOnSuccess: true,
     onSuccess: (result) => {
-      if (result.dealId) router.push(orgHref(orgSlug, `/invoices/deals/${result.dealId}`));
+      if (!result.dealId) return;
+      const href = orgHref(orgSlug, `/invoices/deals/${result.dealId}`);
+      announceNavigation(href);
+      router.push(href);
     },
   });
 

@@ -8,7 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * Loading states (docs/superpowers/specs/2026-11-14-loading-states-design.md): when work shows as running and for how
  * long (L2), a button's busy state (L1, L3), the bar while a link is followed (L4), a form whose action never answered
- * (L6), the error screens' retry (L7), and the agent's status line when it cannot be read (L6).
+ * (L6), the error screens' retry (L7), the agent's status line when it cannot be read (L6), and the pieces the product's
+ * screens use them through (L8).
  */
 
 const navigation = vi.hoisted(() => ({ pathname: "/o/acme/invoices", search: "" }));
@@ -23,9 +24,11 @@ vi.mock("next/navigation", async (original) => ({
 import { AgentActivity, ACTIVITY_STALE, STALE_AFTER_FAILURES } from "@/components/AgentActivity";
 import { BUSY_DELAY_MS, BUSY_MIN_MS, useBusyIndicator } from "@/components/ui/busy";
 import { Button } from "@/components/ui/Button";
+import { NativeSubmitButton } from "@/components/ui/NativeSubmitButton";
 import { announceNavigation, leavesThePage, NAVIGATION_GIVE_UP_MS, NavigationProgress } from "@/components/ui/NavigationProgress";
 import { RetryButton } from "@/components/ui/RetryButton";
 import { ACTION_UNANSWERED, answered } from "@/components/ui/useActionForm";
+import { SiteLoading } from "@/components/vx/SiteLoading";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -197,6 +200,19 @@ describe("the bar while a link is followed (L4)", () => {
     advance(BUSY_MIN_MS);
     expect(bar()).toBe("idle");
   });
+
+  it("stays quiet for code that goes to the page already open, which would never land", () => {
+    navigation.pathname = "/o/acme/invoices";
+    navigation.search = "sort=due";
+    window.history.replaceState(null, "", "/o/acme/invoices?sort=due");
+    act(() => root.render(<NavigationProgress />));
+    act(() => announceNavigation("/o/acme/invoices?sort=due#bill-4"));
+    advance(BUSY_DELAY_MS);
+    expect(bar()).toBe("idle");
+    act(() => announceNavigation("/o/acme/invoices?sort=amount"));
+    advance(BUSY_DELAY_MS);
+    expect(bar()).toBe("running");
+  });
 });
 
 describe("a form whose action never answered (L6)", () => {
@@ -260,5 +276,53 @@ describe("the agent's status line when it cannot be read (L6)", () => {
       await vi.advanceTimersByTimeAsync(25_000);
     });
     expect(container.textContent).not.toContain(ACTIVITY_STALE);
+  });
+});
+
+describe("the pieces the screens use (L8)", () => {
+  it("makes a form the browser sends itself busy once it is sent, and ready again when Back brings the page back", () => {
+    act(() =>
+      root.render(
+        <form>
+          <NativeSubmitButton>Connect</NativeSubmitButton>
+        </form>
+      )
+    );
+    const form = container.querySelector("form")!;
+    const button = container.querySelector("button")!;
+    expect(button.type).toBe("submit");
+    expect(button.disabled).toBe(false);
+    act(() => void form.dispatchEvent(new Event("submit", { cancelable: true })));
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    const back = new Event("pageshow") as PageTransitionEvent;
+    Object.defineProperty(back, "persisted", { value: true });
+    act(() => void window.dispatchEvent(back));
+    expect(button.disabled).toBe(false);
+  });
+
+  it("leaves a form whose own handler stopped the sending as it was", () => {
+    act(() =>
+      root.render(
+        <form>
+          <NativeSubmitButton>Connect</NativeSubmitButton>
+        </form>
+      )
+    );
+    const form = container.querySelector("form")!;
+    form.addEventListener("submit", (event) => event.preventDefault(), { capture: true });
+    act(() => void form.dispatchEvent(new Event("submit", { cancelable: true })));
+    expect(container.querySelector("button")!.disabled).toBe(false);
+  });
+
+  it("draws a page outside a workspace in the site's frame, saying it is loading", () => {
+    for (const shape of ["column", "form", "record", "wide"] as const) {
+      const html = renderToStaticMarkup(<SiteLoading shape={shape} />);
+      expect(html).toContain('role="status"');
+      expect(html).toContain('aria-busy="true"');
+      expect(html).toContain('id="main"');
+      expect(html).toContain("<header");
+      expect(html).toContain("<footer");
+    }
   });
 });

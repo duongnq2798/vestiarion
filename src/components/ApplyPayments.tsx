@@ -12,6 +12,7 @@ import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { ACTION_UNANSWERED } from "@/components/ui/useActionForm";
 import { Hash, Money } from "@/components/vx/Primitives";
 import { REASON_MAX } from "@/lib/allocations/model";
 import type { PaymentView, SuggestionView } from "@/lib/allocations/view";
@@ -72,13 +73,20 @@ function PaymentCard({ orgSlug, network, payment, canWrite }: { orgSlug: string;
     new Promise<boolean>((resolve) => {
       startTransition(async () => {
         setNote(null);
-        const result = await applyPaymentAction(orgSlug, {
-          paymentId: payment.id,
-          version: payment.version,
-          lines: input.lines,
-          fees: input.fees,
-          suggestion: input.suggestion ? { rule: input.suggestion.rule, why: input.suggestion.why } : null,
-        });
+        let result: { ok: boolean; message: string };
+        try {
+          result = await applyPaymentAction(orgSlug, {
+            paymentId: payment.id,
+            version: payment.version,
+            lines: input.lines,
+            fees: input.fees,
+            suggestion: input.suggestion ? { rule: input.suggestion.rule, why: input.suggestion.why } : null,
+          });
+        } catch (failure) {
+          // Never answered: the dialog and what was typed stay, and the page is read again to show where it stands.
+          console.error("apply payment", failure instanceof Error ? failure.message : failure);
+          result = { ok: false, message: ACTION_UNANSWERED };
+        }
         setNote({ tone: result.ok ? "neutral" : "error", text: result.message });
         // A payment someone changed meanwhile is shown again as it is now, as is one applied.
         router.refresh();

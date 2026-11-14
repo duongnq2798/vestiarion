@@ -669,6 +669,8 @@ function Decisions({
   // Both forms report in one place: whichever was submitted last.
   const [last, setLast] = useState<"approve" | "return" | null>(null);
   const shown = last === "approve" ? approveForm.state : last === "return" ? returnForm.state : INITIAL;
+  // While one decision is on its way, the others wait: a return or a rejection must not race a payment going out.
+  const deciding = approveForm.pending || returnForm.pending;
 
   // Above the figure for two approvals: the viewer's approval pays it only when someone else approved it first (T8).
   const two = payable.twoApprovals ?? null;
@@ -708,7 +710,7 @@ function Decisions({
               size="touch"
               icon={<Banknote />}
               loading={approveForm.pending}
-              disabled={blocked !== null}
+              disabled={blocked !== null || returnForm.pending}
               aria-describedby={blocked ? blockedId : undefined}
               className="max-sm:w-full"
             >
@@ -747,11 +749,11 @@ function Decisions({
               : undefined
           }
         />
-        {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} size="touch" suggestedPo={suggestedPo} />}
+        {canAddDetails && <AddDetailsDialog orgSlug={orgSlug} payable={payable} size="touch" suggestedPo={suggestedPo} disabled={deciding} />}
         {attach && <AttachDocumentDialog orgSlug={orgSlug} invoiceId={payable.id} vendorName={payable.counterpartyName} mode={attach} size="touch" />}
         {(!payable.paymentSent || payable.lastAttempt?.state === "unanswered") && payable.lastAttempt?.state !== "in_flight" && (
           <>
-            <RejectDialog orgSlug={orgSlug} payable={payable} />
+            <RejectDialog orgSlug={orgSlug} payable={payable} disabled={deciding} />
             <form id={returnId} className="contents" {...returnForm.formProps} onSubmit={submitting("return", returnForm.formProps.onSubmit)}>
               <input type="hidden" name="orgSlug" value={orgSlug} />
               <input type="hidden" name="invoiceId" value={payable.id} />
@@ -761,7 +763,7 @@ function Decisions({
               formId={returnId}
               tone="primary"
               trigger={
-                <Button size="touch" variant="ghost" icon={<Undo2 />} loading={returnForm.pending}>
+                <Button size="touch" variant="ghost" icon={<Undo2 />} loading={returnForm.pending} disabled={approveForm.pending}>
                   Return to agent
                 </Button>
               }
@@ -831,7 +833,7 @@ function ApprovalGuidance({
   );
 }
 
-function RejectDialog({ orgSlug, payable }: { orgSlug: string; payable: WaitingPayable }) {
+function RejectDialog({ orgSlug, payable, disabled = false }: { orgSlug: string; payable: WaitingPayable; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const { state, formProps } = useActionForm(reject, INITIAL, { resetOnSuccess: true, onSuccess: close });
@@ -840,7 +842,7 @@ function RejectDialog({ orgSlug, payable }: { orgSlug: string; payable: WaitingP
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="touch" variant="danger" icon={<X />}>
+        <Button size="touch" variant="danger" icon={<X />} disabled={disabled}>
           Reject
         </Button>
       </DialogTrigger>

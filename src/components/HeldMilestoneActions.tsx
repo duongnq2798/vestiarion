@@ -170,7 +170,7 @@ export function HeldMilestoneActions({
                   />
                 </>
               )}
-              {reason.canClose && <CloseDialog orgSlug={orgSlug} milestone={milestone} />}
+              {reason.canClose && <CloseDialog orgSlug={orgSlug} milestone={milestone} disabled={payForm.pending} />}
               {blocked && (
                 <p id={blockedId} className="text-xs text-ink-3">
                   {blocked}
@@ -191,7 +191,16 @@ export function HeldMilestoneActions({
   );
 }
 
-function CloseDialog({ orgSlug, milestone }: { orgSlug: string; milestone: { id: string; title: string; contractorName: string } }) {
+function CloseDialog({
+  orgSlug,
+  milestone,
+  disabled = false,
+}: {
+  orgSlug: string;
+  milestone: { id: string; title: string; contractorName: string };
+  /** Off while the milestone's payment is on its way: closing it must not race the payment. */
+  disabled?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const done = useCallback(() => setOpen(false), []);
   const { state, formProps } = useActionForm(close, INITIAL, { resetOnSuccess: true, onSuccess: done });
@@ -200,7 +209,7 @@ function CloseDialog({ orgSlug, milestone }: { orgSlug: string; milestone: { id:
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="touch" variant="danger" icon={<CircleSlash />}>
+        <Button size="touch" variant="danger" icon={<CircleSlash />} disabled={disabled}>
           Close without paying
         </Button>
       </DialogTrigger>

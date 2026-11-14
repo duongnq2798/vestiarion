@@ -87,7 +87,7 @@ export function AddCostForm({
 /** Remove: the cost is kept with who removed it, and counted nowhere. Asked first. */
 export function RemoveCostButton({ orgSlug, dealId, costId, label }: { orgSlug: string; dealId: string; costId: string; label: string }) {
   const formId = useId();
-  const { state, formProps } = useActionForm(removeDealCostAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps, pending } = useActionForm(removeDealCostAction, INITIAL, { toastOnSuccess: true });
   return (
     <form id={formId} {...formProps} className="flex flex-col items-end gap-1">
       <input type="hidden" name="orgSlug" value={orgSlug} />
@@ -95,7 +95,7 @@ export function RemoveCostButton({ orgSlug, dealId, costId, label }: { orgSlug: 
       <input type="hidden" name="costId" value={costId} />
       <ConfirmDialog
         trigger={
-          <Button type="button" size="sm" variant="ghost" icon={<Trash2 />} aria-label={`Remove ${label}`}>
+          <Button type="button" size="sm" variant="ghost" icon={<Trash2 />} loading={pending} aria-label={`Remove ${label}`}>
             Remove
           </Button>
         }

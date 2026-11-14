@@ -185,14 +185,14 @@ export function CommissionPlanForm({
 /** End a plan: what it earned stays to review; money applied from now on earns nothing under it. Asked first. */
 export function EndPlanButton({ orgSlug, planId, partner }: { orgSlug: string; planId: string; partner: string }) {
   const formId = useId();
-  const { state, formProps } = useActionForm(endCommissionPlanAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps, pending } = useActionForm(endCommissionPlanAction, INITIAL, { toastOnSuccess: true });
   return (
     <form id={formId} {...formProps} className="flex flex-col items-start gap-1">
       <input type="hidden" name="orgSlug" value={orgSlug} />
       <input type="hidden" name="planId" value={planId} />
       <ConfirmDialog
         trigger={
-          <Button type="button" size="sm" variant="ghost" icon={<CircleStop />}>
+          <Button type="button" size="sm" variant="ghost" icon={<CircleStop />} loading={pending}>
             End plan
           </Button>
         }
@@ -228,7 +228,7 @@ export function CreatePayableButton({
   amount: string;
 }) {
   const formId = useId();
-  const { state, formProps } = useActionForm(createCommissionPayableAction, INITIAL, { toastOnSuccess: true });
+  const { state, formProps, pending } = useActionForm(createCommissionPayableAction, INITIAL, { toastOnSuccess: true });
   return (
     <form id={formId} {...formProps} className="flex flex-col items-start gap-1">
       <input type="hidden" name="orgSlug" value={orgSlug} />
@@ -237,7 +237,7 @@ export function CreatePayableButton({
       <input type="hidden" name="lineIds" value={lineIds.join(",")} />
       <ConfirmDialog
         trigger={
-          <Button type="button" size="sm" icon={<FilePlus2 />}>
+          <Button type="button" size="sm" icon={<FilePlus2 />} loading={pending}>
             Create payable
           </Button>
         }

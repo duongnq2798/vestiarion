@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { cn } from "@/components/ui/cn";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/DropdownMenu";
+import { announceNavigation } from "@/components/ui/NavigationProgress";
 import { dialogMotion, dialogPanel, overlayBackdrop } from "@/components/ui/overlay";
 import { Sheet, SheetContent } from "@/components/ui/Sheet";
 import { orgHref } from "@/lib/auth/org-paths";
@@ -200,6 +201,7 @@ export function NewMenu({ orgSlug, counterparties, billCurrency, importWorkspace
                       onClick={() => {
                         const href = orgHref(orgSlug, afterSaveHref(item.kind, direction.current));
                         close();
+                        announceNavigation(href);
                         router.push(href, { scroll: false });
                       }}
                     >

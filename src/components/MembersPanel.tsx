@@ -23,6 +23,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
 import { FormMessage } from "@/components/ui/FormMessage";
 import { Input } from "@/components/ui/Input";
+import { announceNavigation } from "@/components/ui/NavigationProgress";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubmitButton } from "@/components/ui/SubmitButton";
@@ -299,7 +300,9 @@ export default function MembersPanel({
   const router = useRouter();
   const leave = useActionForm(removeMemberAction, INITIAL, {
     onSuccess: (result) => {
-      if (result.left) router.replace("/onboarding");
+      if (!result.left) return;
+      announceNavigation("/onboarding");
+      router.replace("/onboarding");
     },
   });
 

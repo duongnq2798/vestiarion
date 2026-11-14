@@ -6,6 +6,7 @@ import { ConnectorConsent } from "@/components/ConnectorConsent";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { NativeCheckbox, NativeRadioGroup } from "@/components/ui/NativeChoice";
+import { NativeSubmitButton } from "@/components/ui/NativeSubmitButton";
 import { SiteFooter, SiteHeader } from "@/components/vx/SiteChrome";
 import { membershipsOf } from "@/lib/auth/membership";
 import { can } from "@/lib/auth/roles";
@@ -117,9 +118,9 @@ export default async function GoogleSheetsConnectPage({ searchParams }: ConnectP
                     Tick I agree to connect Google Sheets.
                   </p>
                 )}
-                <Button type="submit" icon={<Link2 aria-hidden />}>
+                <NativeSubmitButton icon={<Link2 aria-hidden />}>
                   Continue to Google
-                </Button>
+                </NativeSubmitButton>
               </form>
               <p className="mt-4 text-sm text-ink-3">Signed in as {user.email ?? "you"}.</p>
             </>
