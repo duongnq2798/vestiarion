@@ -1,8 +1,8 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
 import type { ComponentProps, ReactNode } from "react";
+import { ButtonBusy } from "./ButtonBusy";
 import { cn } from "./cn";
-import { Spinner } from "./Spinner";
 
 /**
  * One button for the whole product. Variants name intent, not colour:
@@ -14,7 +14,8 @@ export const buttonVariants = cva(
   [
     "relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap font-semibold",
     "transition duration-micro ease-standard",
-    "disabled:pointer-events-none disabled:opacity-60 aria-busy:cursor-progress",
+    // A busy button is disabled but keeps its colour: work that answers at once shows no change at all (L2).
+    "disabled:pointer-events-none disabled:opacity-60 aria-busy:cursor-progress aria-busy:disabled:opacity-100",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
   ],
   {
@@ -49,7 +50,10 @@ export type ButtonProps = ComponentProps<"button"> &
      * `loading` and `icon` apply to a `<button>` only — a link has no busy or disabled state.
      */
     asChild?: boolean;
-    /** Disables the button, marks it busy and shows a spinner in the leading icon’s place. */
+    /**
+     * Disables the button and marks it busy at once, and shows a spinner in the leading icon’s place once the work has
+     * run for a moment (`ButtonBusy`). A button whose work can run passes it from the first render, `false` included.
+     */
     loading?: boolean;
     /** A leading icon. */
     icon?: ReactNode;
@@ -57,8 +61,9 @@ export type ButtonProps = ComponentProps<"button"> &
 
 const ICON_ONLY = new Set(["icon", "icon-sm"]);
 
-export function Button({ className, variant, size, asChild = false, loading = false, icon, type, disabled, children, ...props }: ButtonProps) {
+export function Button({ className, variant, size, asChild = false, loading, icon, type, disabled, children, ...props }: ButtonProps) {
   const iconOnly = size != null && ICON_ONLY.has(size);
+  const busy = loading === true;
   if (process.env.NODE_ENV !== "production" && iconOnly && !asChild && !props["aria-label"] && !props["aria-labelledby"]) {
     console.error("Button: an icon-only button needs an aria-label, or it has no accessible name.");
   }
@@ -74,9 +79,18 @@ export function Button({ className, variant, size, asChild = false, loading = fa
   }
 
   return (
-    <button type={type ?? "button"} className={classes} disabled={disabled || loading} aria-busy={loading || undefined} {...props}>
-      {loading ? <Spinner /> : icon}
-      {loading && iconOnly ? null : children}
+    <button type={type ?? "button"} className={classes} disabled={disabled || busy} aria-busy={busy || undefined} {...props}>
+      {/* Only a button that can be busy carries the client part; every other one stays plain markup. */}
+      {loading === undefined ? (
+        <>
+          {icon}
+          {children}
+        </>
+      ) : (
+        <ButtonBusy loading={busy} icon={icon} iconOnly={iconOnly}>
+          {children}
+        </ButtonBusy>
+      )}
     </button>
   );
 }
