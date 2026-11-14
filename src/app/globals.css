@@ -162,6 +162,42 @@
   --focus-ring: var(--color-agent);
 }
 
+/*
+ * The bar along the top of the window while a link is followed (NavigationProgress, loading states L4): it creeps
+ * towards the end while the page is on its way, never reaching it, then fills and fades once the page lands. Under
+ * reduced motion it neither creeps nor fills: it shows, then fades.
+ */
+@utility navigation-progress {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 90;
+  height: 2px;
+  pointer-events: none;
+  background: var(--color-agent);
+  transform-origin: left;
+  transform: scaleX(0);
+  opacity: 0;
+
+  &[data-navigation="running"] {
+    opacity: 1;
+    animation: navigation-creep 10s cubic-bezier(0.1, 0.7, 0.3, 1) forwards;
+  }
+
+  &[data-navigation="done"] {
+    transform: scaleX(1);
+    opacity: 0;
+    transition:
+      transform 200ms var(--ease-standard),
+      opacity 250ms var(--ease-standard) 100ms;
+  }
+}
+
+@keyframes navigation-creep {
+  from { transform: scaleX(0.08); }
+  to { transform: scaleX(0.9); }
+}
+
 /* A loading placeholder: the raised colour with a slow band of light across it. */
 @utility skeleton {
   background-color: var(--color-raised);

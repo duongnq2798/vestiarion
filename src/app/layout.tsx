@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import { FirstTouch } from "@/components/analytics/FirstTouch";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+import { NavigationProgress } from "@/components/ui/NavigationProgress";
 import { Toaster } from "@/components/ui/Toaster";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { THEME_COLOR } from "@/components/ui/tokens";
@@ -73,6 +74,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
         >
           Skip to content
         </a>
+        {/* Reads the address's query, so it waits for it apart from the page; it renders nothing until a link is followed. */}
+        <Suspense fallback={null}>
+          <NavigationProgress />
+        </Suspense>
         <TooltipProvider delayDuration={300} skipDelayDuration={150}>
           {children}
         </TooltipProvider>
