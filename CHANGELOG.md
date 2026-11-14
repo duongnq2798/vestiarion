@@ -147,6 +147,17 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Changed
 
+- **Every action and page now shows it is working.** While Approve and pay is sending, Return to agent, Reject and Add
+  details wait, and while a milestone pays, Close waits, so no second decision races a payment. Cancel deal, Remove,
+  End plan and Create payable show they are working after their confirmation, as do Keep these limits and Don't show
+  again on the checklist, the passkey wallet's Refresh and the treasury's Skip and Refresh. Connecting an integration
+  takes one press: its button is busy until the provider's page opens. Signing out, choosing a sort, and opening a
+  page from the command palette or the docs search draw the bar along the top. The vendor check ignores Enter while a
+  check runs. A page opened from a link outside a workspace (a payee's, a customer's statement, an offer, a document
+  request, the accountant console, onboarding, your account) shows its frame at once while it is read. Applying a
+  payment by hand or sending a document for a bill keeps what was typed when Vestiarion does not answer; the captured
+  text of a draft is asked for again when its section is opened again; a page that refreshes itself waits for the last
+  refresh before asking again.
 - **Waiting looks the same everywhere, and never blinks.** A button is taken the moment it is pressed and cannot be
   pressed twice, but its spinner appears only once the work has run for 150 ms and then stays for at least half a
   second, so an action that answers at once shows no change at all; it keeps its colour and width while busy, so nothing
