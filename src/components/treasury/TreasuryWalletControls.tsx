@@ -2,7 +2,7 @@
 
 import { Ban, KeyRound, Play, RefreshCw, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useState, useSyncExternalStore } from "react";
 import type { Hex } from "viem";
 import { recordWalletControlAction } from "@/app/actions/wallet-treasury";
 import { openTreasury } from "@/components/treasury/PasskeyTreasurySteps";
@@ -129,13 +129,13 @@ export default function TreasuryWalletControls({ orgSlug, status, network }: { o
     }
   };
 
+  // Once for the panel the page opens on, after it has painted. An effect event, so `check` reads what is kept as it runs.
+  const checkKept = useEffectEvent((slug: string) => {
+    if (pendingControl(browserKeepingStore(), slug)) void check();
+  });
   useEffect(() => {
-    // Once for the panel the page opens on, after it has painted: `check` reads what is kept as it runs.
-    const soon = setTimeout(() => {
-      if (pendingControl(browserKeepingStore(), orgSlug)) void check();
-    }, 0);
+    const soon = setTimeout(() => checkKept(orgSlug), 0);
     return () => clearTimeout(soon);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgSlug]);
 
   if (!status.wallet || !status.contract) return null;

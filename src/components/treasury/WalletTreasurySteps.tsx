@@ -2,7 +2,7 @@
 
 import { ShieldCheck, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import {
   createAgentWalletAction,
   prepareAgentGasAction,
@@ -181,21 +181,23 @@ export default function WalletTreasurySteps({ orgSlug, status, network }: { orgS
   const open = () => wallet.open(status.wallet);
 
   // A transaction sent for this step before the page was reloaded or closed is asked about again, not sent twice.
-  useEffect(() => {
+  // An effect event, so it runs once for each step the page opens on: `run`, `router` and the label do not change what is asked.
+  const askAgain = useEffectEvent((slug: string, current: typeof status.step) => {
     const store = sentStore();
-    for (const kept of ["deploy", "approve"] as const) if (kept !== status.step) forgetSent(store, orgSlug, kept);
-    if (status.step !== "deploy" && status.step !== "approve") return;
-    const step: SentStep = status.step;
-    const hash = sentHash(store, orgSlug, step);
+    for (const kept of ["deploy", "approve"] as const) if (kept !== current) forgetSent(store, slug, kept);
+    if (current !== "deploy" && current !== "approve") return;
+    const step: SentStep = current;
+    const hash = sentHash(store, slug, step);
     if (!hash) return;
     void run(async (say) => {
       say("Checking the transaction your wallet sent…");
-      const outcome = await recordSent({ store, orgSlug, step, hash, record: recordStep(orgSlug, step), tries: 1, waitMs: POLL_MS });
+      const outcome = await recordSent({ store, orgSlug: slug, step, hash, record: recordStep(slug, step), tries: 1, waitMs: POLL_MS });
       if (outcome === "verified") router.refresh();
       else say(notConfirmed(profile.label));
     });
-    // Once for each step the page opens on: `run`, `router` and the label do not change what is asked.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+  useEffect(() => {
+    askAgain(orgSlug, status.step);
   }, [orgSlug, status.step]);
 
   let body: ReactNode = null;
