@@ -2,6 +2,7 @@ import { z } from "zod";
 import { utcDay } from "../copy";
 import { platformDb, unwrap, type PlatformRpc } from "../dal";
 import type { Network } from "../network";
+import { sharedRead } from "./shared-read";
 
 /**
  * The open numbers (docs/superpowers/specs/2026-09-30-open-numbers-design.md):
@@ -17,7 +18,10 @@ import type { Network } from "../network";
  * They return aggregates only, split into customers' workspaces, ours, and the
  * total (R3); this module validates the documents, merges them into one set of
  * figures per side, and keeps it for 60 seconds per period and network, so a
- * busy public page cannot hammer the database (R9).
+ * busy public page cannot hammer the database (R9). Each document is read
+ * through the copy every instance shares (`sharedRead`): the landing, /studios
+ * and /open, which read the same all-time figures, ask the database once every
+ * few minutes between them, and a slow read never holds a page.
  */
 
 const figure = z.coerce.number();
@@ -195,43 +199,62 @@ function memoKey(period: Period, network: Network): string {
 }
 
 /**
- * Reads one function whose figures stand on their own: when it cannot be read
+ * One function's document for the period and network, validated: the copy every instance shares, or the database's
+ * own answer when `fresh`. A read that failed, or a document of the wrong shape, throws inside the read, so it is
+ * never kept. A rolling period's start moves with each request, so the copy is keyed by the period's name, as the
+ * memory below is: a "Last 7 days" kept for a few minutes counts the seven days before it was read.
+ */
+function readDocument<T>(fn: PlatformRpc, schema: z.ZodType<T>, period: Period, network: Network, fresh: boolean): Promise<T> {
+  const params = { p_since: period.since ? period.since.toISOString() : null, p_network: network };
+  const read = async () => schema.parse(unwrap(await platformDb().rpc(fn, params)));
+  return fresh ? read() : sharedRead([fn, memoKey(period, network)], read);
+}
+
+/**
+ * One function whose figures stand on their own: when it cannot be read
  * (before its migration is applied, say), every side gets `missing` and the
  * rest of /open still shows.
  */
-function readSides<S>(fn: PlatformRpc, params: { p_since: string | null; p_network: Network }, schema: z.ZodType<{ sides: Record<SideKey, S> }>, missing: S) {
-  return Promise.resolve(platformDb().rpc(fn, params))
-    .then((result) => schema.parse(unwrap(result)).sides)
+function readSides<S>(fn: PlatformRpc, document: Promise<{ sides: Record<SideKey, S> }>, missing: S): Promise<Record<SideKey, S>> {
+  return document
+    .then((value) => value.sides)
     .catch((error: unknown): Record<SideKey, S> => {
       console.error(`open numbers: ${fn} not read`, error instanceof Error ? error.message : error);
       return { customers: missing, ours: missing, total: missing };
     });
 }
 
-async function fetchOpenNumbers(period: Period, network: Network): Promise<OpenNumbers> {
-  const params = { p_since: period.since ? period.since.toISOString() : null, p_network: network };
-  const [numbers, first, outcomes, verdicts] = await Promise.all([
-    platformDb().rpc("open_numbers", params),
-    readSides("open_first_payments", params, firstPaymentsSchema, NO_FIRSTS),
-    readSides<OutcomeSide>("open_outcomes", params, outcomesSchema, NO_OUTCOMES),
-    readSides<VerdictSide>("open_verdicts", params, verdictsSchema, NO_VERDICTS),
+async function fetchOpenNumbers(period: Period, network: Network, fresh: boolean): Promise<OpenNumbers> {
+  const read = <T>(fn: PlatformRpc, schema: z.ZodType<T>) => readDocument(fn, schema, period, network, fresh);
+  const [document, first, outcomes, verdicts] = await Promise.all([
+    read("open_numbers", openNumbersSchema),
+    readSides("open_first_payments", read("open_first_payments", firstPaymentsSchema), NO_FIRSTS),
+    readSides<OutcomeSide>("open_outcomes", read("open_outcomes", outcomesSchema), NO_OUTCOMES),
+    readSides<VerdictSide>("open_verdicts", read("open_verdicts", verdictsSchema), NO_VERDICTS),
   ]);
-  const document = openNumbersSchema.parse(unwrap(numbers));
   const merge = (side: SideKey): SideNumbers => ({ ...document.sides[side], ...first[side], ...outcomes[side], ...verdicts[side] });
   return { ...document, sides: { customers: merge("customers"), ours: merge("ours"), total: merge("total") } };
 }
 
-/** One network's open numbers for a period, read at most once a minute per period and network on this instance. */
+/**
+ * One network's open numbers for a period, as the public pages show them: read at most once a minute per period and
+ * network on this instance, from the copy every instance shares.
+ */
 export function readOpenNumbers(period: Period, network: Network = "arc-testnet", now: number = Date.now()): Promise<OpenNumbers> {
   const key = memoKey(period, network);
   const held = memo.get(key);
   if (held && now - held.at <= MEMO_MS) return held.value;
-  const value = fetchOpenNumbers(period, network);
+  const value = fetchOpenNumbers(period, network, false);
   memo.set(key, { at: now, value });
   value.catch(() => {
     if (memo.get(key)?.value === value) memo.delete(key);
   });
   return value;
+}
+
+/** One network's open numbers for a period, read from the database now, past the shared copy: for `npm run numbers`. */
+export function readFreshOpenNumbers(period: Period, network: Network): Promise<OpenNumbers> {
+  return fetchOpenNumbers(period, network, true);
 }
 
 /** Puts a person on the team (`member` true) or takes them off; true when that changed anything. */

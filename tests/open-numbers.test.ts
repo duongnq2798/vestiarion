@@ -5,12 +5,23 @@ import {
   dailySeries,
   listTeam,
   parsePeriod,
+  readFreshOpenNumbers,
   readOpenNumbers,
   setTeamMember,
   type DailyPayments,
   type Period,
 } from "@/lib/platform/open-numbers";
 import { fakeSupabase, type FakeReply, type RecordedRequest } from "./support/fake-supabase";
+
+// Next's data cache is not here (tests/shared-read.test.ts runs it): each read passes straight through, and what it
+// would be kept under is recorded.
+const { keptAs } = vi.hoisted(() => ({ keptAs: [] as Array<{ key: string[]; revalidate: unknown }> }));
+vi.mock("next/cache", () => ({
+  unstable_cache: (read: () => Promise<unknown>, key: string[], options: { revalidate?: unknown }) => {
+    keptAs.push({ key, revalidate: options.revalidate });
+    return read;
+  },
+}));
 
 const config = configFromEnv({ NEXT_PUBLIC_SUPABASE_URL: "https://tests.supabase.invalid", SUPABASE_SERVICE_ROLE_KEY: "k" });
 const NOW = new Date("2026-09-30T12:00:00Z");
@@ -276,6 +287,39 @@ describe("readOpenNumbers", () => {
   it("refuses a document of the wrong shape", async () => {
     const { result } = platform(() => readOpenNumbers(since("2026-09-23"), "arc-testnet", 1_000), () => ({ body: { sides: {} } }));
     await expect(result).rejects.toThrow();
+  });
+
+  it("reads each document through the copy every instance shares, kept under the function, the network and the period", async () => {
+    keptAs.length = 0;
+    const { result } = platform(() => readOpenNumbers(since("2026-09-12"), "arc-mainnet", 1_000), reply);
+    await result;
+    const period = "arc-mainnet:since:2026-09-12T00:00:00.000Z";
+    expect(keptAs.map((kept) => kept.key).sort()).toEqual([
+      ["shared-read", "open_first_payments", period],
+      ["shared-read", "open_numbers", period],
+      ["shared-read", "open_outcomes", period],
+      ["shared-read", "open_verdicts", period],
+    ]);
+    expect(new Set(keptAs.map((kept) => kept.revalidate))).toEqual(new Set([300]));
+  });
+
+  it("keeps a rolling period under its name, since its start moves with each request", async () => {
+    keptAs.length = 0;
+    const { fake, result } = platform(() => readOpenNumbers(parsePeriod({ period: "7d" }, NOW), "arc-testnet", 1_000), reply);
+    await result;
+    expect(fake.requests[0].body).toEqual({ p_since: "2026-09-23T12:00:00.000Z", p_network: "arc-testnet" });
+    expect(keptAs.map((kept) => kept.key[2])).toEqual(Array(4).fill("arc-testnet:7d"));
+  });
+
+  it("reads the database now for npm run numbers, past the shared copy and the memory", async () => {
+    keptAs.length = 0;
+    const period = since("2026-09-11");
+    for (let round = 0; round < 2; round += 1) {
+      const { fake, result } = platform(() => readFreshOpenNumbers(period, "arc-testnet"), reply);
+      expect((await result).sides.ours.usdcPaid).toBe(3);
+      expect(fake.requests).toHaveLength(4);
+    }
+    expect(keptAs).toEqual([]);
   });
 });
 

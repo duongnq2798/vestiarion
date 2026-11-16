@@ -7,10 +7,18 @@ import { decisionOutcome, recentDecisionView, type DecisionFacts } from "@/lib/l
  * one went out; and the read of `recent_team_decisions()`, which shows nothing when it fails.
  */
 
-const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
+const { rpc, keptAs } = vi.hoisted(() => ({ rpc: vi.fn(), keptAs: [] as Array<{ key: string[]; revalidate: unknown }> }));
 vi.mock("@/lib/dal", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/dal")>()),
   platformDb: () => ({ rpc }),
+}));
+// Next's data cache is not here (tests/shared-read.test.ts runs it): the read passes straight through, and what it
+// would be kept under is recorded.
+vi.mock("next/cache", () => ({
+  unstable_cache: (read: () => Promise<unknown>, key: string[], options: { revalidate?: unknown }) => {
+    keptAs.push({ key, revalidate: options.revalidate });
+    return read;
+  },
 }));
 
 import { earlierThan, readRecentDecisions } from "@/lib/platform/recent-decisions";
@@ -193,6 +201,13 @@ describe("readRecentDecisions", () => {
     expect(found?.pastWeek).toEqual({ mainnet: 4, testnet: 57 });
     expect(found?.decisions).toHaveLength(1);
     expect(found?.decisions[0]).toMatchObject({ seq: 2588, headline: "Paid a 0.20 USDC bill.", outcome: { kind: "paid" } });
+  });
+
+  it("reads through the copy every instance shares, kept a few minutes", async () => {
+    rpc.mockResolvedValue({ data: FOUND, error: null });
+    keptAs.length = 0;
+    await readRecentDecisions(at());
+    expect(keptAs).toEqual([{ key: ["shared-read", "recent_team_decisions", "12"], revalidate: 300 }]);
   });
 
   it("reads at most once a minute", async () => {

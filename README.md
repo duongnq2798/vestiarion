@@ -80,10 +80,11 @@ nothing else: no wallet, no USDC, no API key, nothing to install.
    and hash link and answers "Chain intact". Under **Download**, **Signed JSON** exports the chain, and
    [`verify-ledger-export.mjs`](https://www.vestiarion.xyz/tools/verify-ledger-export.mjs) checks it on your own machine
    with Node.js alone ([Verify an audit export](https://www.vestiarion.xyz/docs/guides/audit-export)).
-5. **Check production.** [Open numbers](https://www.vestiarion.xyz/open) reads production on every load: workspaces,
-   payments, decisions and what code refused, per network, with our own payments linked to the explorer under "Verify it
-   yourself". [Mainnet proof](#mainnet-proof) walks through the first payment on Arc mainnet: held by code as a first
-   payment to a new address, approved by a second person, and paid through the owner's spending-limit contract.
+5. **Check production.** [Open numbers](https://www.vestiarion.xyz/open) reads production, each read kept a few
+   minutes for every visitor: workspaces, payments, decisions and what code refused, per network, with our own payments
+   linked to the explorer under "Verify it yourself". [Mainnet proof](#mainnet-proof) walks through the first payment on
+   Arc mainnet: held by code as a first payment to a new address, approved by a second person, and paid through the
+   owner's spending-limit contract.
 
 **Watch instead:** [the demo](https://youtu.be/9Tgl1eMhlbw) (2:59),
 [the full product tour](https://youtu.be/ds6cu4__1J4) (7:22), and [a short video for each main flow](#watch-each-flow),

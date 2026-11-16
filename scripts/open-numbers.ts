@@ -43,15 +43,16 @@ async function team(argv: string[]) {
 }
 
 async function numbers(argv: string[]) {
-  const { dailySeries, parsePeriod, readOpenNumbers } = await import("../src/lib/platform/open-numbers");
+  const { dailySeries, parsePeriod, readFreshOpenNumbers } = await import("../src/lib/platform/open-numbers");
   const { funnelRows, readFunnel } = await import("../src/lib/platform/funnel");
   const { ARC_MAINNET, ARC_TESTNET } = await import("../src/lib/network");
   const period = parsePeriod({ since: option(argv, "--since"), period: option(argv, "--period") });
   if (period.fallback) throw new Error(`That period could not be read. Usage: ${USAGE}`);
 
-  // Each network apart, as /open shows them: nothing is added across them (network foundation N7).
+  // Each network apart, as /open shows them: nothing is added across them (network foundation N7). Read from the
+  // database now: the copy the public pages share, which can be a few minutes old, is theirs alone.
   for (const network of [ARC_MAINNET, ARC_TESTNET]) {
-    const numbers = await readOpenNumbers(period, network.id);
+    const numbers = await readFreshOpenNumbers(period, network.id);
     console.log(`\n== ${network.label}: ${period.label} — read ${numbers.generatedAt}\n`);
     const rows = Object.keys(numbers.sides.total) as Array<keyof typeof numbers.sides.total>;
     const table = Object.fromEntries(

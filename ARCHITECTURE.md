@@ -938,6 +938,16 @@ mainnet plan).
     and how many agreed; /open shows customers' share beneath the agent's cards once one is given, and a row in Every
     figure. Read like `open_outcomes`: until it can be read, its figures are dashes and the rest of /open shows.
   - Their one-argument versions stay for older code.
+  - The pages read each function's document through `sharedRead` (`src/lib/platform/shared-read.ts`): Next's data
+    cache keeps one validated copy per function, network and period for every instance, for 5 minutes, and past that
+    serves it at once while the database is read again after the response. The landing, /studios and /open read the
+    same all-time figures, and the production check opens / and /open together every 10 minutes: before, each page on
+    each instance ran all four aggregates, `open_outcomes` among them (in November 2026, about 1.1 s and 83,000 buffer reads a call),
+    and under that load some reads met the database's 8-second statement timeout, which showed dashes or hid a
+    network. A read that failed, or a document of the wrong shape, throws inside the read and is never kept, so the copy
+    kept before stays. A rolling period is kept under its name ("7d"), counting the days before it was read. /open says
+    figures can be a few minutes old, and its badge and the landing's line give the time they were read.
+    `npm run numbers` reads the database directly (`readFreshOpenNumbers`).
   - `open_funnel(p_since, p_network)` (0089, `docs/superpowers/specs/2026-10-09-activation-funnel-design.md`) counts
     the workspaces opened in the period and how many reached each step: a real bill, the agent's decision on one, a
     confirmed live payment, payments on two UTC days, a verdict, two people. `npm run numbers` prints it per network
@@ -1028,7 +1038,7 @@ mainnet plan).
     a simulated payment's decision), one decision per bill (its newest) out of the newest 500, and counts each
     network's decisions in the past 7 days apart.
     Its rows carry no signature and no workspace id. `src/lib/platform/recent-decisions.ts` reads it at most once a
-    minute; `recentDecisionView` says what came of each (paid, held, refused by code...) and why, and links a
+    minute, through `sharedRead` like the open numbers (one copy for every instance, 5 minutes); `recentDecisionView` says what came of each (paid, held, refused by code...) and why, and links a
     transaction only when one went out. The list shows rows strictly older than the latest decision. Until 0100 runs,
     or when the read fails, the latest decision stands alone.
 - **The landing's team journey**: `landing_team_journeys()` (0134) is a stable, read-only, service-role-only

@@ -12,6 +12,14 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Fixed
+
+- **Open numbers and the landing's figures no longer go missing while the database is busy.** The figures on
+  [Open numbers](https://www.vestiarion.xyz/open), on the landing and on /studios, and the landing's list of the agent's
+  earlier decisions, are now read once for every visitor in a few minutes and kept, rather than on every page load. A
+  slow read happens after the page is sent, and one that fails keeps the figures read before, where a network's numbers
+  used to show dashes or disappear. Figures can be a few minutes old: the time they were read is shown beside them.
+
 ## [0.1.0-beta.16] - 2026-11-15
 
 ### Added

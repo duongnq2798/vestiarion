@@ -289,14 +289,14 @@ async function Payments({ source }: { source: Promise<LandingNumbers> }) {
   return <PaymentFigures {...await source} />;
 }
 
-/** When the figures were read, under the links: every one is read from production as the page loads. */
+/** When the figures were read, under the links: every one is read from production, kept a few minutes for every visitor. */
 async function ReadAt({ source }: { source: Promise<LandingNumbers> }) {
   const { mainnet, testnet } = await source;
   const at = testnet?.generatedAt ?? mainnet?.generatedAt;
   if (!at) return null;
   return (
     <p className="mt-3 text-xs text-ink-3">
-      Figures read from Vestiarion&apos;s production database as this page loaded, <time dateTime={at}>{utcMinute(at)}</time>.
+      Figures read from Vestiarion&apos;s production database on <time dateTime={at}>{utcMinute(at)}</time>.
     </p>
   );
 }

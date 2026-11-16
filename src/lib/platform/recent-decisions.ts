@@ -2,6 +2,7 @@ import { z } from "zod";
 import { platformDb } from "../dal";
 import { recentDecisionView, type DecisionFacts, type RecentDecisionView } from "../latest-decision";
 import { NETWORK_IDS } from "../network";
+import { sharedRead } from "./shared-read";
 
 /**
  * What the landing reads for the agent's earlier decisions (docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md
@@ -60,14 +61,20 @@ export const SHOWN = 3;
 const MEMO_MS = 60_000;
 let memo: { at: number; value: Promise<Found> } | null = null;
 
-async function fetchRecent(): Promise<Found> {
-  const result = await platformDb().rpc("recent_team_decisions", { p_limit: READ });
-  if (result.error) throw new Error(result.error.message);
-  const found = foundSchema.parse(result.data);
-  return { decisions: found.decisions, pastWeek: { mainnet: found.pastWeek["arc-mainnet"], testnet: found.pastWeek["arc-testnet"] } };
+/** The decisions as validated, from the copy every instance shares: a failed read or a wrong shape throws, so it is never kept. */
+function fetchRecent(): Promise<Found> {
+  return sharedRead(["recent_team_decisions", String(READ)], async () => {
+    const result = await platformDb().rpc("recent_team_decisions", { p_limit: READ });
+    if (result.error) throw new Error(result.error.message);
+    const found = foundSchema.parse(result.data);
+    return { decisions: found.decisions, pastWeek: { mainnet: found.pastWeek["arc-mainnet"], testnet: found.pastWeek["arc-testnet"] } };
+  });
 }
 
-/** The agent's earlier decisions in the team's workspaces, read at most once a minute on this instance; null when they cannot be read. */
+/**
+ * The agent's earlier decisions in the team's workspaces, read at most once a minute on this instance, from the copy
+ * every instance shares; null when they cannot be read.
+ */
 export async function readRecentDecisions(now: number = Date.now()): Promise<RecentDecisions | null> {
   if (!memo || now - memo.at > MEMO_MS) {
     const value = fetchRecent();
