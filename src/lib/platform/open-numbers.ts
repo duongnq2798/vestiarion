@@ -17,7 +17,8 @@ import type { Network } from "../network";
  * They return aggregates only, split into customers' workspaces, ours, and the
  * total (R3); this module validates the documents, merges them into one set of
  * figures per side, and keeps it for 60 seconds per period and network, so a
- * busy public page cannot hammer the database (R9).
+ * busy public page cannot hammer the database (R9). The landing shows no
+ * outcome and reads without `open_outcomes`, the costliest of them.
  */
 
 const figure = z.coerce.number();
@@ -190,8 +191,14 @@ export function dailySeries(daily: DailyPayments[], period: Period, now: Date = 
 const MEMO_MS = 60_000;
 const memo = new Map<string, { at: number; value: Promise<OpenNumbers> }>();
 
-function memoKey(period: Period, network: Network): string {
-  return `${network}:${period.key === "since" && period.since ? `since:${period.since.toISOString()}` : period.key}`;
+function memoKey(period: Period, network: Network, outcomes: boolean): string {
+  const key = `${network}:${period.key === "since" && period.since ? `since:${period.since.toISOString()}` : period.key}`;
+  return outcomes ? key : `${key}:no-outcomes`;
+}
+
+export interface ReadOptions {
+  /** False to leave out open_outcomes, whose figures are then all null as when it cannot be read. True by default. */
+  outcomes?: boolean;
 }
 
 /**
@@ -208,12 +215,14 @@ function readSides<S>(fn: PlatformRpc, params: { p_since: string | null; p_netwo
     });
 }
 
-async function fetchOpenNumbers(period: Period, network: Network): Promise<OpenNumbers> {
+async function fetchOpenNumbers(period: Period, network: Network, withOutcomes: boolean): Promise<OpenNumbers> {
   const params = { p_since: period.since ? period.since.toISOString() : null, p_network: network };
   const [numbers, first, outcomes, verdicts] = await Promise.all([
     platformDb().rpc("open_numbers", params),
     readSides("open_first_payments", params, firstPaymentsSchema, NO_FIRSTS),
-    readSides<OutcomeSide>("open_outcomes", params, outcomesSchema, NO_OUTCOMES),
+    withOutcomes
+      ? readSides<OutcomeSide>("open_outcomes", params, outcomesSchema, NO_OUTCOMES)
+      : { customers: NO_OUTCOMES, ours: NO_OUTCOMES, total: NO_OUTCOMES },
     readSides<VerdictSide>("open_verdicts", params, verdictsSchema, NO_VERDICTS),
   ]);
   const document = openNumbersSchema.parse(unwrap(numbers));
@@ -221,12 +230,25 @@ async function fetchOpenNumbers(period: Period, network: Network): Promise<OpenN
   return { ...document, sides: { customers: merge("customers"), ours: merge("ours"), total: merge("total") } };
 }
 
-/** One network's open numbers for a period, read at most once a minute per period and network on this instance. */
-export function readOpenNumbers(period: Period, network: Network = "arc-testnet", now: number = Date.now()): Promise<OpenNumbers> {
-  const key = memoKey(period, network);
-  const held = memo.get(key);
-  if (held && now - held.at <= MEMO_MS) return held.value;
-  const value = fetchOpenNumbers(period, network);
+/**
+ * One network's open numbers for a period, read at most once a minute per period and network on this instance. A read
+ * without outcomes takes the full figures when they are held, and is held apart from them otherwise, so /open never
+ * gets a set without its outcomes.
+ */
+export function readOpenNumbers(
+  period: Period,
+  network: Network = "arc-testnet",
+  now: number = Date.now(),
+  { outcomes = true }: ReadOptions = {},
+): Promise<OpenNumbers> {
+  const fresh = (key: string) => {
+    const held = memo.get(key);
+    return held && now - held.at <= MEMO_MS ? held.value : null;
+  };
+  const key = memoKey(period, network, outcomes);
+  const held = fresh(memoKey(period, network, true)) ?? fresh(key);
+  if (held) return held;
+  const value = fetchOpenNumbers(period, network, outcomes);
   memo.set(key, { at: now, value });
   value.catch(() => {
     if (memo.get(key)?.value === value) memo.delete(key);
@@ -250,9 +272,9 @@ export async function listTeam(): Promise<Array<{ email: string; addedAt: string
  * One network's all-time open numbers for the landing (docs/superpowers/specs/2026-10-08-landing-proof-design.md P3),
  * or null when they could not be read: the database's message is logged, and the landing shows the other network.
  */
-export async function readAllTimeOrNull(network: Network): Promise<OpenNumbers | null> {
+export async function readAllTimeOrNull(network: Network, options: ReadOptions = {}): Promise<OpenNumbers | null> {
   try {
-    return await readOpenNumbers(parsePeriod({}), network);
+    return await readOpenNumbers(parsePeriod({}), network, undefined, options);
   } catch (error) {
     console.error(`landing: ${network} open numbers not read`, error instanceof Error ? error.message : error);
     return null;

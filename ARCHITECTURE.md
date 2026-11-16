@@ -1066,7 +1066,9 @@ mainnet plan).
     does not recenter the positioning copy. The frame is HTML, not a screenshot.
 - **The landing's proof**: independently streamed latest/recent team decisions and public measurements from every
   workspace, never the founding workspace alone. Historical `featured-proof.ts` is no longer imported by the landing.
-  - The measurements are the open numbers, all time (`readAllTimeOrNull`), in three groups. Customer activity is
+  - The measurements are the open numbers, all time (`readAllTimeOrNull`), in three groups. They show no outcome, so the
+    landing reads them without `open_outcomes` (`{ outcomes: false }`), the costliest of the four functions, held apart
+    from /open's full set in the minute's memo; a full set already held answers it. Customer activity is
     customers' own figures alone, on Arc testnet, with where customers stand on Arc mainnet. Agent decisions gives
     each network's model decisions and code refusals beside their sum, and customers' shadow-mode verdicts; a verdict
     count that cannot be read says so, never "None yet". Payments settled gives each network on its own, real USDC

@@ -74,8 +74,9 @@ async function proofFacts(): Promise<ProofFacts> {
  * stream the numbers, latest signed decision and recent decisions without delaying the positioning or calls to action.
  */
 export default function LandingPage() {
-  const mainnet = readAllTimeOrNull("arc-mainnet");
-  const testnet = readAllTimeOrNull("arc-testnet");
+  // The proof shows no outcome figure, so it skips open_outcomes, the costliest open-numbers read.
+  const mainnet = readAllTimeOrNull("arc-mainnet", { outcomes: false });
+  const testnet = readAllTimeOrNull("arc-testnet", { outcomes: false });
   const numbers = Promise.all([mainnet, testnet]).then(([mainnetNumbers, testnetNumbers]) => ({ mainnet: mainnetNumbers, testnet: testnetNumbers }));
   const journey = readTeamJourneys();
   const recent = readRecentDecisions();

@@ -50,8 +50,8 @@ describe("the landing page, while every read is pending", () => {
     expect(page).not.toBeInstanceOf(Promise);
     expect(reads.readTeamJourneys).toHaveBeenCalled();
     expect(reads.readRecentDecisions).toHaveBeenCalled();
-    expect(reads.readAllTimeOrNull).toHaveBeenCalledWith("arc-mainnet");
-    expect(reads.readAllTimeOrNull).toHaveBeenCalledWith("arc-testnet");
+    expect(reads.readAllTimeOrNull).toHaveBeenCalledWith("arc-mainnet", { outcomes: false });
+    expect(reads.readAllTimeOrNull).toHaveBeenCalledWith("arc-testnet", { outcomes: false });
   });
 
   it("has the hero and every section before the proof in its first HTML, and the proof's fallbacks", async () => {

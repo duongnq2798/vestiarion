@@ -12,6 +12,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ## [Unreleased]
 
+### Fixed
+
+- **The landing page's figures time out less often.** Each time the landing loaded, it read for both networks how the
+  agent's decisions turned out, the costliest of the public figures to count, and shows none of them. When it loaded
+  together with Open numbers, the database could hit its time limit and the figures said they could not be read. The
+  landing no longer reads those outcomes; Open numbers and /studios still show them. No migration.
+
 ## [0.1.0-beta.16] - 2026-11-15
 
 ### Added

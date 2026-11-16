@@ -5,6 +5,7 @@ import {
   dailySeries,
   listTeam,
   parsePeriod,
+  readAllTimeOrNull,
   readOpenNumbers,
   setTeamMember,
   type DailyPayments,
@@ -271,6 +272,35 @@ describe("readOpenNumbers", () => {
     const testnet = platform(() => readOpenNumbers(period, "arc-testnet", 2_000), reply);
     await testnet.result;
     expect(testnet.fake.requests).toHaveLength(4);
+  });
+
+  it("leaves out open_outcomes when the landing asks, with no outcome figures and nothing logged, and holds that apart from /open's figures", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const landing = platform(() => readAllTimeOrNull("arc-mainnet", { outcomes: false }), reply);
+    const numbers = await landing.result;
+    expect(landing.fake.requests.map((request) => request.path).sort()).toEqual([
+      "/rest/v1/rpc/open_first_payments",
+      "/rest/v1/rpc/open_numbers",
+      "/rest/v1/rpc/open_verdicts",
+    ]);
+    expect(numbers?.sides.customers).toMatchObject({ payments: 2, firstPayments: 2, verdictsGiven: 3 });
+    for (const side of [numbers?.sides.customers, numbers?.sides.ours, numbers?.sides.total]) {
+      for (const key of Object.keys(OUTCOME_SIDE)) expect(side).toHaveProperty(key, null);
+    }
+    expect(logged).not.toHaveBeenCalled();
+    logged.mockRestore();
+    const open = platform(() => readOpenNumbers(parsePeriod({}), "arc-mainnet"), reply);
+    expect((await open.result).sides.customers.decisionsCarriedOut).toBe(5);
+    expect(open.fake.requests).toHaveLength(4);
+  });
+
+  it("answers a read without outcomes from the full figures held for the period", async () => {
+    const period = since("2026-09-14");
+    const full = platform(() => readOpenNumbers(period, "arc-testnet", 1_000), reply);
+    await full.result;
+    const without = platform(() => readOpenNumbers(period, "arc-testnet", 2_000, { outcomes: false }), reply);
+    expect((await without.result).sides.customers.decisionsCarriedOut).toBe(5);
+    expect(without.fake.requests).toEqual([]);
   });
 
   it("refuses a document of the wrong shape", async () => {
