@@ -1,5 +1,5 @@
-import { keccak_256 } from "@noble/hashes/sha3";
-import { bytesToHex } from "@noble/hashes/utils";
+import { keccak_256 } from "@noble/hashes/sha3.js";
+import { bytesToHex } from "@noble/hashes/utils.js";
 
 /**
  * Whether an address's mix of capital and small letters matches its EIP-55 checksum (payment safety A1,
@@ -10,7 +10,8 @@ import { bytesToHex } from "@noble/hashes/utils";
 export function checksumMatches(address: string): boolean {
   const body = address.replace(/^0x/, "");
   if (body === body.toLowerCase() || body === body.toUpperCase()) return true;
-  const hash = bytesToHex(keccak_256(body.toLowerCase()));
+  // EIP-55 hashes the lowercase hex as text; the hash is given its bytes, which @noble/hashes 2 requires.
+  const hash = bytesToHex(keccak_256(new TextEncoder().encode(body.toLowerCase())));
   for (let i = 0; i < body.length; i += 1) {
     const char = body[i];
     if (!/[a-fA-F]/.test(char)) continue;
