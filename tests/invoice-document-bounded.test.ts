@@ -79,8 +79,11 @@ describe("readPdfBounded", () => {
 
   it("stops a worker that fills its heap, as unreadable, and says which limit stopped it", async () => {
     // A slow runner can take longer than the default 15 s to fill even a small heap, so the memory case gets a long
-    // timeout: the heap limit, not the clock, must be what stops it.
-    const small = { ...PDF_LIMITS, timeoutMs: 90_000, maxOldGenerationSizeMb: 24, maxYoungGenerationSizeMb: 4, maxChars: MAX_DOCUMENT_CHARS };
+    // timeout: the heap limit, not the clock, must be what stops it. The time to fill it grows with its size (seconds
+    // more at 24 MB), so the heap is 16 MB, a little over the least the reader loads and reads an invoice in (13 MB with
+    // unpdf 2.1.0). An invoice read under the same limits shows the file fills the heap, not loading the reader.
+    const small = { ...PDF_LIMITS, timeoutMs: 90_000, maxOldGenerationSizeMb: 16, maxYoungGenerationSizeMb: 4, maxChars: MAX_DOCUMENT_CHARS };
+    expect((await pdfPagesInWorker(fixture("northwind-inv-2207.pdf"), small)).pages.join("\n")).toContain("INV-2207");
     const full = await pdfPagesInWorker(nestedFormsPdf({ fanOut: 10, depth: 6 }), small).catch((error: unknown) => error);
     expect(full).toBeInstanceOf(PdfWorkerRefusal);
     // Its own heap filled: the file's doing, whatever else ran.
@@ -88,7 +91,7 @@ describe("readPdfBounded", () => {
     const slow = await pdfPagesInWorker(nestedFormsPdf({ fanOut: 10, depth: 6 }), { ...PDF_LIMITS, timeoutMs: 500, maxChars: MAX_DOCUMENT_CHARS }).catch((error: unknown) => error);
     // Nothing else was parsed meanwhile: the time it took is the file's own.
     expect(slow).toMatchObject({ why: "timeout", retry: false });
-    const refused = await readPdfBounded(nestedFormsPdf({ fanOut: 10, depth: 6 }), { maxOldGenerationSizeMb: 24, maxYoungGenerationSizeMb: 4 }).catch((error: unknown) => error);
+    const refused = await readPdfBounded(nestedFormsPdf({ fanOut: 10, depth: 6 }), { maxOldGenerationSizeMb: 16, maxYoungGenerationSizeMb: 4 }).catch((error: unknown) => error);
     expect(refused).toBeInstanceOf(DocumentReadError);
   }, 180_000);
 

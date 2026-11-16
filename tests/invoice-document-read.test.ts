@@ -1,8 +1,17 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DocumentReadError, MAX_DOCUMENT_BYTES, MAX_DOCUMENT_CHARS, readDocument } from "@/lib/invoice-document/read";
 import { inflateBombPdf, INVOICE_LINE, lzwLiterals, nestedFormsPdf, onePagePdf, pagesPdf, streamObject, withUnmeasuredStream } from "./support/pdf-files";
+
+// The limits a PDF the pre-scan cannot measure is read under, as one object the reader reads them from on each call,
+// so a test can shorten its time limit. Their real values, 15 s among them, are pinned in
+// tests/invoice-document-request-pdf.test.ts.
+const { requestLimits } = vi.hoisted(() => ({ requestLimits: {} as { timeoutMs: number } }));
+vi.mock("@/lib/invoice-document/pdf-worker", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/invoice-document/pdf-worker")>();
+  return { ...actual, REQUEST_PDF_LIMITS: Object.assign(requestLimits, actual.REQUEST_PDF_LIMITS) };
+});
 
 /**
  * Reading an invoice document (invoice from a document D1, D2), with the real reader: a PDF's text layer, a scan, a
@@ -120,8 +129,11 @@ describe("reading an invoice document", () => {
     expect(error.message).toBe("This PDF could not be read. Paste the invoice's text instead.");
   }, 30_000);
 
-  it("stops a PDF the pre-scan cannot measure at 15 s when it keeps pdf.js busy, and the thread that asked keeps running (RB2)", async () => {
-    // About 95 s on the thread that parses it, with unpdf 1.8.1.
+  it("stops a PDF the pre-scan cannot measure at its time limit when it keeps pdf.js busy, and the thread that asked keeps running (RB2)", async () => {
+    // About 95 s on the thread that parses it, with unpdf 1.8.1. The limit is 15 s; a second here, so the test does not
+    // wait out the real one, and the stop is still the reader's time limit, read from REQUEST_PDF_LIMITS.
+    const real = requestLimits.timeoutMs;
+    requestLimits.timeoutMs = 1_000;
     const bytes = withUnmeasuredStream(nestedFormsPdf({ fanOut: 10, depth: 6 }));
     let ticks = 0;
     const timer = setInterval(() => ticks++, 25);
@@ -131,8 +143,9 @@ describe("reading an invoice document", () => {
       expect(error.code).toBe("unsupported");
     } finally {
       clearInterval(timer);
+      requestLimits.timeoutMs = real;
     }
-    expect(Date.now() - started).toBeLessThan(40_000);
-    expect(ticks).toBeGreaterThan(100);
-  }, 60_000);
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(ticks).toBeGreaterThan(10);
+  }, 30_000);
 });
