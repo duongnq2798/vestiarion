@@ -53,6 +53,24 @@ key composite (`org_id, ...`) and widens `cycle_snapshots`'s unique key to
 `(org_id, cycle_run_id)`, so the database itself refuses a link into another
 organization's row.
 
+**Platform tables: row level security on, no policy, on purpose.** Supabase's
+advisor lists 35 tables as "RLS enabled, no policy": the tables in
+`PLATFORM_TABLES` (`src/lib/dal/index.ts`), and `deleted_orgs`,
+`org_attribution` and `platform_team`. With no policy, row level security
+refuses every row to every role that does not bypass it, and `anon`,
+`authenticated` and `vestiarion_tenant` hold no privilege on any of them, so
+among the roles requests use, the service role alone reads and writes them: the
+first through `platformDb()`, the other three never through `platformDb().from()`,
+only inside SECURITY DEFINER functions (operator scripts that connect to the
+database as its owner read `platform_team` too). A table a request reads
+for its own workspace is a tenant table instead, in `TENANT_TABLES` with
+0018's two policies. `tests/platform-tables-rls.test.ts` holds this after every
+migration: every table in `public` has row level security on, the ones with no
+policy are exactly these, and none grants the other roles anything. Every
+function in `public` runs with a fixed `search_path`, and none that is
+SECURITY DEFINER can be executed by `public`, `anon` or `authenticated`
+(0150, `tests/db-hygiene-migration.test.ts`).
+
 The public `/security` page (`src/app/security/page.tsx`) sets these lines out
 for security reviewers, with encryption, approvals, connector tokens, webhook
 signing, the ledger, retention and the subprocessors, and says what is not
@@ -934,6 +952,8 @@ mainnet plan).
   mainnet first, and the first one's headline figures sit under the page's heading, named as that network's. One with no
   payment yet, or whose numbers cannot be read, is a compact card after them.
   - `open_numbers`, `open_first_payments` and `open_outcomes` take `(p_since, p_network)` and count one network.
+    `open_outcomes` finds a person's approvals of a payable through the ledger's invoice index (0150, with 0075's figures):
+    before it, it read all of the workspace's entries once per payable, the costliest statement on production.
   - `open_verdicts(p_since, p_network)` (0086) counts the shadow mode verdicts given on payables, never a sample payee's,
     and how many agreed; /open shows customers' share beneath the agent's cards once one is given, and a row in Every
     figure. Read like `open_outcomes`: until it can be read, its figures are dashes and the rest of /open shows.
@@ -1026,7 +1046,9 @@ mainnet plan).
     read list of earlier decisions. `LatestPanel` also remains available for pages that show the full card: (`docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md`):
     `recent_team_decisions()` (0100), the service role's alone, reads the same workspaces on the same terms (and never
     a simulated payment's decision), one decision per bill (its newest) out of the newest 500, and counts each
-    network's decisions in the past 7 days apart.
+    network's decisions in the past 7 days apart. Since 0150 it reads those decisions once for all three, through
+    `ledger_entries_agent_choice_idx`, a partial index of the agent's choices on bills and milestones under the same
+    filter, which `latest_team_decision()` shares.
     Its rows carry no signature and no workspace id. `src/lib/platform/recent-decisions.ts` reads it at most once a
     minute; `recentDecisionView` says what came of each (paid, held, refused by code...) and why, and links a
     transaction only when one went out. The list shows rows strictly older than the latest decision. Until 0100 runs,
