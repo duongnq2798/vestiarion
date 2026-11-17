@@ -18,6 +18,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   agent's decisions turned out, the costliest of the public figures to count, and shows none of them. When it loaded
   together with Open numbers, the database could hit its time limit and the figures said they could not be read. The
   landing no longer reads those outcomes; Open numbers and /studios still show them. No migration.
+- **Open numbers and the landing's earlier decisions cost the database less to count, with the same figures.** How
+  the agent's decisions turned out read every one of a workspace's ledger entries once per bill, to find the
+  approvals people gave; it now finds them by the bill, about a twentieth of the reading. The landing's list of earlier
+  decisions read the team's entries three times and now reads them once. Migration `0150_db_hygiene.sql`, which also
+  settles what the database's advisors flagged: two functions now run with a fixed search path, three trigger
+  functions can no longer be called through the browser's roles, and four tables get an index on their workspace.
 
 ## [0.1.0-beta.16] - 2026-11-15
 
