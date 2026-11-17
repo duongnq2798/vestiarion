@@ -1,4 +1,6 @@
--- Database hygiene: what Supabase's advisors flagged, and the two costliest reads by database time (pg_stat_statements).
+-- Database hygiene: what Supabase's advisors flagged, and the two reads that cost the most per call (pg_stat_statements:
+-- open_outcomes, about 1.1 s, and recent_team_decisions, about 1.0 s, mean). open_numbers, second by total time at about
+-- 0.5 s a call, is not changed here.
 --
 -- 1. advance_sim_day and append_ledger_entry run with a fixed search_path, as every other function here does.
 --    advance_sim_day names its table with its schema, so it takes the empty path. append_ledger_entry names
@@ -10,8 +12,10 @@
 --    function, are SECURITY DEFINER and anon and authenticated could execute them through PUBLIC. Nothing calls them: a
 --    trigger fires whatever its function's EXECUTE privilege. EXECUTE is revoked from public, anon and authenticated;
 --    for rls_auto_enable only where it exists, as Supabase creates it and these migrations do not.
--- 3. Four foreign keys on org_id alone had no index (accounting_tokens, growth_revenue, jira_sites,
---    webhook_deliveries), so deleting a workspace read each of those tables in full. Each gets one.
+-- 3. Seven foreign keys on org_id alone had no index a workspace's delete can use, so it read each of those tables in
+--    full: four had none (accounting_tokens, growth_revenue, jira_sites, webhook_deliveries), and three only partial
+--    ones whose predicate the delete does not meet (counterparty_bank_accounts, policy_proposals, report_shares). Each
+--    gets a plain one.
 -- 4. open_outcomes(p_since, p_network): its resolutions found a person's approvals of each payable by reading all of
 --    the payable's workspace's ledger entries, once per payable (337,675 buffer reads a call on production on Nov 17).
 --    It now also says the approval names an invoice, which matching the payable's id already requires, so they are
@@ -21,6 +25,10 @@
 --    it read each team workspace's entries, three times over (23,120 reads, 13,467 read once). ledger_entries_agent_choice_idx
 --    holds only the agent's choices on bills and milestones, under the same filter as team_decisions and
 --    latest_team_decision, so that read touches those entries alone. 0100's body otherwise.
+--
+-- Lock order: the file runs in one transaction and holds each index's SHARE lock until it commits, on every re-run too.
+-- A ledger append locks ledger_entries and then, through 0028's webhook trigger, webhook_deliveries, so the ledger's
+-- index is made before any other: in the other order the file and an append could each wait on the other.
 --
 -- Idempotent throughout: scripts/migrate.ts re-runs every migration each time.
 
@@ -40,11 +48,19 @@ begin
   end if;
 end $$;
 
+-- 5's index first (lock order, above).
+create index if not exists ledger_entries_agent_choice_idx on public.ledger_entries (org_id, seq)
+  where actor = 'agent'
+    and action in ('ap_pay', 'ap_schedule', 'ap_hold', 'ap_request_info', 'ap_flag_fraud', 'milestone_release', 'milestone_hold');
+
 -- 3.
 create index if not exists accounting_tokens_org_idx on public.accounting_tokens (org_id);
 create index if not exists growth_revenue_org_idx on public.growth_revenue (org_id);
 create index if not exists jira_sites_org_idx on public.jira_sites (org_id);
 create index if not exists webhook_deliveries_org_idx on public.webhook_deliveries (org_id);
+create index if not exists counterparty_bank_accounts_org_idx on public.counterparty_bank_accounts (org_id);
+create index if not exists policy_proposals_org_idx on public.policy_proposals (org_id);
+create index if not exists report_shares_org_idx on public.report_shares (org_id);
 
 -- 4.
 create or replace function public.open_outcomes(p_since timestamptz, p_network text) returns jsonb
@@ -193,11 +209,7 @@ $$;
 revoke execute on function public.open_outcomes(timestamptz, text) from public, anon, authenticated;
 grant execute on function public.open_outcomes(timestamptz, text) to service_role;
 
--- 5.
-create index if not exists ledger_entries_agent_choice_idx on public.ledger_entries (org_id, seq)
-  where actor = 'agent'
-    and action in ('ap_pay', 'ap_schedule', 'ap_hold', 'ap_request_info', 'ap_flag_fraud', 'milestone_release', 'milestone_hold');
-
+-- 5. (its index is made above)
 create or replace function public.recent_team_decisions(p_limit integer default 6) returns jsonb
 language sql
 stable
@@ -288,5 +300,6 @@ grant execute on function public.recent_team_decisions(integer) to service_role;
 -- 0075's open_outcomes and 0100's recent_team_decisions bodies, re-run;
 -- drop index if exists public.ledger_entries_agent_choice_idx;
 -- drop index if exists public.accounting_tokens_org_idx, public.growth_revenue_org_idx, public.jira_sites_org_idx, public.webhook_deliveries_org_idx;
+-- drop index if exists public.counterparty_bank_accounts_org_idx, public.policy_proposals_org_idx, public.report_shares_org_idx;
 -- alter function public.advance_sim_day(uuid) reset search_path;
 -- alter function public.append_ledger_entry(uuid, text, text, text, text, jsonb, text, text, text) reset search_path;

@@ -59,8 +59,10 @@ advisor lists 35 tables as "RLS enabled, no policy": the tables in
 `org_attribution` and `platform_team`. With no policy, row level security
 refuses every row to every role that does not bypass it, and `anon`,
 `authenticated` and `vestiarion_tenant` hold no privilege on any of them, so
-the service role alone reads and writes them: the first through `platformDb()`,
-the other three only inside SECURITY DEFINER functions. A table a request reads
+among the roles requests use, the service role alone reads and writes them: the
+first through `platformDb()`, the other three never through `platformDb().from()`,
+only inside SECURITY DEFINER functions (operator scripts that connect to the
+database as its owner read `platform_team` too). A table a request reads
 for its own workspace is a tenant table instead, in `TENANT_TABLES` with
 0018's two policies. `tests/platform-tables-rls.test.ts` holds this after every
 migration: every table in `public` has row level security on, the ones with no

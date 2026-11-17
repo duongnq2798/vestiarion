@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { applyMigrations, asRole, createDatabase, createUser, FOUNDING_ORG_ID } from "./support/pglite";
+import { applyMigrations, asRole, createDatabase, createUser, FOUNDING_ORG_ID, MIGRATIONS_DIR } from "./support/pglite";
 
 /**
  * Migration 0150, database hygiene: the functions Supabase's advisors flagged (a mutable search_path, SECURITY DEFINER
@@ -283,15 +285,27 @@ describe("0150 settles the advisors' findings", () => {
     await expect(asRole(db, "anon", (tx) => tx.query("select public.payment_intents_network()"))).rejects.toThrow(/permission denied/);
   });
 
-  it("indexes every foreign key on org_id alone", async () => {
+  it("indexes every foreign key on org_id alone with an index a workspace's delete can use", async () => {
+    // A partial index counts only when its predicate is org_id IS NOT NULL, which the delete's `where org_id = $1` meets.
     const unindexed = await db.query<{ tbl: string }>(`
       select c.conrelid::regclass::text as tbl
         from pg_catalog.pg_constraint c
        where c.contype = 'f' and c.connamespace = 'public'::regnamespace
          and c.conkey = array[(select attnum from pg_catalog.pg_attribute where attrelid = c.conrelid and attname = 'org_id')]
-         and not exists (select 1 from pg_catalog.pg_index i where i.indrelid = c.conrelid and i.indkey[0] = c.conkey[1])
+         and not exists (
+               select 1 from pg_catalog.pg_index i
+                where i.indrelid = c.conrelid and i.indkey[0] = c.conkey[1]
+                  and (i.indpred is null or pg_get_expr(i.indpred, i.indrelid) = '(org_id IS NOT NULL)'))
        order by 1`);
     expect(unindexed.rows).toEqual([]);
+  });
+
+  it("makes the ledger's index before any other table's, in the order a ledger append locks them", () => {
+    const sql = readFileSync(path.join(MIGRATIONS_DIR, "0150_db_hygiene.sql"), "utf8");
+    const indexes = [...sql.matchAll(/^create index if not exists (\w+) on public\.(\w+)/gm)].map((match) => match[2]);
+    expect(indexes[0]).toBe("ledger_entries");
+    expect(indexes.slice(1)).not.toContain("ledger_entries");
+    expect(indexes).toContain("webhook_deliveries");
   });
 
   it("holds the agent's choices on bills and milestones in a partial index of the ledger", async () => {

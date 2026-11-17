@@ -23,7 +23,8 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   approvals people gave; it now finds them by the bill, about a twentieth of the reading. The landing's list of earlier
   decisions read the team's entries three times and now reads them once. Migration `0150_db_hygiene.sql`, which also
   settles what the database's advisors flagged: two functions now run with a fixed search path, three trigger
-  functions can no longer be called through the browser's roles, and four tables get an index on their workspace.
+  functions can no longer be called through the browser's roles, and seven tables get an index on their workspace that
+  deleting a workspace can use.
 
 ## [0.1.0-beta.16] - 2026-11-15
 
