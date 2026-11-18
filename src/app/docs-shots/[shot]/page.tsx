@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { WaitingHeading } from "@/components/approvals/WaitingHeading";
 import { MotionProvider } from "@/components/ui/MotionProvider";
 import { PageHead } from "@/components/vx/Shell";
 import { sectionTitle } from "@/components/vx/nav";
@@ -39,6 +40,7 @@ export default async function DocsShotPage({ params }: Props) {
           className="mx-auto w-[760px] bg-ground p-8"
         >
           {shot.page && <PageHead title={sectionTitle(shot.page)} sub={shot.sub} />}
+          {shot.page === "approvals" && <WaitingHeading />}
           {shot.render()}
         </div>
       </main>

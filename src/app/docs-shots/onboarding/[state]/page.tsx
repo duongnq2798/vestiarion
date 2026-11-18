@@ -4,6 +4,7 @@ import { confirmLimitsAction, dismissChecklistAction } from "@/app/actions/onboa
 import { AccountantConsole } from "@/components/accountant/AccountantConsole";
 import { AgentBudgetPanel } from "@/components/AgentBudgetPanel";
 import ApprovalCard from "@/components/ApprovalCard";
+import { WaitingHeading } from "@/components/approvals/WaitingHeading";
 import { cn } from "@/components/ui/cn";
 import { MotionProvider } from "@/components/ui/MotionProvider";
 import { SectionHeader } from "@/components/ui/SectionHeader";
@@ -62,6 +63,7 @@ function ApproverShot() {
     <>
       <PageHead title={sectionTitle("approvals")} sub="Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle." />
       <GettingStarted slug={ONBOARDING_SLUG} checklist={APPROVER_CHECKLIST} isOwner={false} dismiss={dismissChecklistAction} />
+      <WaitingHeading />
       <ApprovalCard orgSlug={ONBOARDING_SLUG} payable={HELD_VIDEO_WAITING} canDecide canEdit={false} viewerId="docs-sample-approver" sandbox={false} exception={exception} viewerEmail="sam@northstar.example" />
     </>
   );

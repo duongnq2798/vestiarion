@@ -14,6 +14,12 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
 
 ### Fixed
 
+- **Bills and Approvals read better with a screen reader and in low contrast.** On an approval card, the cost lines
+  (the invoice, the fee, what the payee receives) and what a vendor sent with a document were labelled in a grey that
+  read 4.29:1 on their tinted box, under the 4.5:1 that WCAG AA asks; they are now a shade darker. Approvals' waiting
+  list now has a heading of its own for screen readers, so its cards no longer jump from the page title straight to a
+  third-level heading, and an empty Bills or Receivables list is titled one level under the page. An axe pass over
+  sample renders of both pages, at desktop and phone widths, finds nothing now.
 - **The landing page's figures time out less often.** Each time the landing loaded, it read for both networks how the
   agent's decisions turned out, the costliest of the public figures to count, and shows none of them. When it loaded
   together with Open numbers, the database could hit its time limit and the figures said they could not be read. The

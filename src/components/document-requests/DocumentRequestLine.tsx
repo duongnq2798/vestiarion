@@ -65,7 +65,10 @@ function CheckLine({ view, vendorName, goodsReceived }: { view: DocumentReceived
   );
 }
 
-/** What the vendor sent: the purchase order number and note they typed, and a members-only link to open the file. */
+/**
+ * What the vendor sent: the purchase order number and note they typed, and a members-only link to open the file. The
+ * labels are ink-2, as the line sits on raised.
+ */
 function Received({ orgSlug, view }: { orgSlug: string; view: DocumentReceivedView }) {
   return (
     <>
@@ -73,13 +76,13 @@ function Received({ orgSlug, view }: { orgSlug: string; view: DocumentReceivedVi
         <dl className="grid gap-1 text-xs">
           {view.poReference && (
             <div className="flex flex-wrap gap-x-2">
-              <dt className="text-ink-3">Purchase order they typed</dt>
+              <dt className="text-ink-2">Purchase order they typed</dt>
               <dd className="font-mono break-all text-ink">{view.poReference}</dd>
             </div>
           )}
           {view.note && (
             <div className="flex flex-wrap gap-x-2">
-              <dt className="text-ink-3">Their note</dt>
+              <dt className="text-ink-2">Their note</dt>
               <dd className="min-w-0 overflow-hidden whitespace-pre-line break-words text-ink">{view.note}</dd>
             </div>
           )}
