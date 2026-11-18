@@ -8,7 +8,8 @@
 #
 # solc is left out: the contracts pin their compiler (pragma solidity 0.8.37) and are verified on Sourcify and
 # Blockscout against that build. @vestiarion/sdk is left out: it is this repository's own package, and the app and the
-# CLI move to a new release of it together (tests/cli-package.test.ts).
+# CLI move to a new release of it together (tests/cli-package.test.ts). @types/node majors are left out too: the types
+# follow the Node major that CI and production run (24) and move when Node does, in the same change.
 #
 # sdk/, cli/, n8n/ and zapier/ are published to npm, n8n and Zapier by hand, so their dependencies move with a release
 # rather than here.
@@ -43,6 +44,9 @@ updates:
           - version-update:semver-major
       - dependency-name: solc
       - dependency-name: "@vestiarion/sdk"
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /

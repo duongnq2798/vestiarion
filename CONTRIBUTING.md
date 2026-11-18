@@ -163,7 +163,8 @@ organization publishes it ([docs/RELEASING.md](docs/RELEASING.md#the-sdk)). Ask 
   Circle's SDKs as one each, and each other major on its own (`.github/dependabot.yml`). Circle's SDK majors are not
   opened: they change wallet and payment calls and are upgraded by hand. Nor are `solc`, which the contracts pin
   (`pragma solidity 0.8.37`) and were verified with, and `@vestiarion/sdk`, which the app and the CLI move to together
-  after a release of it. A bump merges like any change, on a green `verify`.
+  after a release of it. Nor are `@types/node` majors: the types follow the Node major that CI and production run
+  (24), and move with it. A bump merges like any change, on a green `verify`.
 
 ## License
 
