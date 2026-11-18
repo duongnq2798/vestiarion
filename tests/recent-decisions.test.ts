@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decisionOutcome, recentDecisionView, type DecisionFacts } from "@/lib/latest-decision";
+import { nextCache } from "./support/fake-next-cache";
 
 /**
  * The agent's earlier decisions in words (docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md D2, D3):
@@ -12,6 +13,8 @@ vi.mock("@/lib/dal", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/dal")>()),
   platformDb: () => ({ rpc }),
 }));
+// The shared cache (public-cache.ts) over Next.js's unstable_cache; a test reads through it only once it stubs NEXT_RUNTIME.
+vi.mock("next/cache", async () => (await import("./support/fake-next-cache")).nextCache);
 
 import { earlierThan, readRecentDecisions } from "@/lib/platform/recent-decisions";
 
@@ -175,7 +178,7 @@ describe("earlierThan", () => {
   });
 });
 
-// Each test reads at its own minute, past the previous one's memo.
+// Each test reads at its own minute.
 let minute = 0;
 const at = () => NOW + (minute += 5) * 60_000;
 
@@ -183,6 +186,11 @@ const FOUND = { decisions: [{ ...paid, seq: "2588", amount: "0.2" }], pastWeek: 
 
 beforeEach(() => {
   rpc.mockReset();
+  nextCache.clear();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("readRecentDecisions", () => {
@@ -195,19 +203,23 @@ describe("readRecentDecisions", () => {
     expect(found?.decisions[0]).toMatchObject({ seq: 2588, headline: "Paid a 0.20 USDC bill.", outcome: { kind: "paid" } });
   });
 
-  it("reads at most once a minute", async () => {
+  it("is read through the shared cache, kept a minute (PF1, PF2)", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
     rpc.mockResolvedValue({ data: FOUND, error: null });
     const now = at();
     await readRecentDecisions(now);
-    await readRecentDecisions(now + 30_000);
+    expect((await readRecentDecisions(now + 30_000))?.pastWeek).toEqual({ mainnet: 4, testnet: 57 });
     expect(rpc).toHaveBeenCalledTimes(1);
+    expect(nextCache.registered).toContainEqual({ keyParts: ["public-figures", "", "recent-team-decisions"], revalidate: 60 });
   });
 
-  it("shows nothing when the function is not there yet or the read fails, and tries again next time", async () => {
+  it("shows nothing when the function is not there yet or the read fails, keeps nothing of it, and tries again next time (PF3)", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
     const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
     rpc.mockResolvedValue({ data: null, error: { message: "Could not find the function public.recent_team_decisions" } });
     const now = at();
     expect(await readRecentDecisions(now)).toBeNull();
+    expect(nextCache.entries.size).toBe(0);
     rpc.mockResolvedValue({ data: FOUND, error: null });
     expect(await readRecentDecisions(now + 1_000)).not.toBeNull();
     quiet.mockRestore();

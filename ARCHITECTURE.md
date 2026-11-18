@@ -951,6 +951,16 @@ mainnet plan).
 - **`/open`:** one section per network. A network where a payment settled in the period gets the full section, Arc
   mainnet first, and the first one's headline figures sit under the page's heading, named as that network's. One with no
   payment yet, or whose numbers cannot be read, is a compact card after them.
+  - **The shared cache** (`src/lib/platform/public-cache.ts`, `docs/superpowers/specs/2026-11-19-public-figures-cache-design.md`):
+    every document /open, the landing and /studios read goes through `publicRead`, Next.js's `unstable_cache`, which
+    Vercel keeps in its data cache for every instance of the deployment. The open numbers keep one entry per function,
+    period and network (a rolling period by its name), so the landing's three documents are /open's; the landing's
+    evidence readers below keep their whole result, the workspace's id already stripped. An entry is fresh for a
+    minute, then answers the next request at once while it is read again behind it, so a visit after a quiet spell
+    does not wait on a cold database connection, and its figures can be older than a minute: /open and the landing
+    say when they were read, and /open's copy says how they are kept. A read that throws is never kept, and an entry
+    stays until a read succeeds, so a figure is never a stale zero. Keys hold `VERCEL_DEPLOYMENT_ID`; outside Next.js
+    (`npm run numbers`, the tests) each call reads the database itself.
   - `open_numbers`, `open_first_payments` and `open_outcomes` take `(p_since, p_network)` and count one network.
     `open_outcomes` finds a person's approvals of a payable through the ledger's invoice index (0150, with 0075's figures):
     before it, it read all of the workspace's entries once per payable, the costliest statement on production.
@@ -1038,8 +1048,8 @@ mainnet plan).
     transaction) and the entry's signed chain fields; never its summary, reasoning, names or ids. Since 0088 the
     transaction includes the payment a person sent after the agent held it (a shadow mode verdict, an approval): the
     bill's or milestone's confirmed payment intent.
-  - `src/lib/platform/latest-decision.ts` reads it at most once a minute and adds the signing workspace's public keys;
-    the workspace's id stays there. `src/lib/latest-decision.ts` says it in words.
+  - `src/lib/platform/latest-decision.ts` reads it through the shared cache (above, a minute) and adds the signing
+    workspace's public keys; the workspace's id stays there, never in the cache. `src/lib/latest-decision.ts` says it in words.
   - The reader's browser checks the signature and the link to the entry before it with `verifySignedLink`, the
     receipt verifier's half that needs no body. Until 0087 runs, or when the read fails, there is no band.
   - The landing shows it as a line under the agent's decisions (`LatestLine`, in the proof), with an independently
@@ -1049,15 +1059,15 @@ mainnet plan).
     network's decisions in the past 7 days apart. Since 0150 it reads those decisions once for all three, through
     `ledger_entries_agent_choice_idx`, a partial index of the agent's choices on bills and milestones under the same
     filter, which `latest_team_decision()` shares.
-    Its rows carry no signature and no workspace id. `src/lib/platform/recent-decisions.ts` reads it at most once a
-    minute; `recentDecisionView` says what came of each (paid, held, refused by code...) and why, and links a
+    Its rows carry no signature and no workspace id. `src/lib/platform/recent-decisions.ts` reads it through the
+    shared cache; `recentDecisionView` says what came of each (paid, held, refused by code...) and why, and links a
     transaction only when one went out. The list shows rows strictly older than the latest decision. Until 0100 runs,
     or when the read fails, the latest decision stands alone.
 - **The landing's team journey**: `landing_team_journeys()` (0134) is a stable, read-only, service-role-only
   function. It selects the newest eligible direct and Base payments independently from live Arc mainnet workspaces
   created by the platform team or the founding workspace; customer/sample bills, simulated/failed/pending payments,
   Gateway routes and unconfirmed Base mints are excluded. Joins use both workspace and target identities.
-  - `src/lib/platform/team-journeys.ts` caches successful reads for about one minute and discards failures. The private
+  - `src/lib/platform/team-journeys.ts` keeps successful reads a minute in the shared cache and never a failure. The private
     workspace identity is used only inside `withOrg` to fetch signing public keys and, for a schedule, the selected
     entry's detail matched by sequence, action, actor and signed body hash, then stripped. No landing read
     writes, creates a receipt link, sends a payment or changes a workspace.
@@ -1089,8 +1099,8 @@ mainnet plan).
 - **The landing's proof**: independently streamed latest/recent team decisions and public measurements from every
   workspace, never the founding workspace alone. Historical `featured-proof.ts` is no longer imported by the landing.
   - The measurements are the open numbers, all time (`readAllTimeOrNull`), in three groups. They show no outcome, so the
-    landing reads them without `open_outcomes` (`{ outcomes: false }`), the costliest of the four functions, held apart
-    from /open's full set in the minute's memo; a full set already held answers it. Customer activity is
+    landing reads them without `open_outcomes` (`{ outcomes: false }`), the costliest of the four functions; its three
+    documents are the shared cache's entries /open reads. Customer activity is
     customers' own figures alone, on Arc testnet, with where customers stand on Arc mainnet. Agent decisions gives
     each network's model decisions and code refusals beside their sum, and customers' shadow-mode verdicts; a verdict
     count that cannot be read says so, never "None yet". Payments settled gives each network on its own, real USDC

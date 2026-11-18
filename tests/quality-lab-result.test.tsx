@@ -116,10 +116,10 @@ describe("the Quality Lab on /open (QL7)", () => {
     expect(page).not.toContain("every figure on this page");
   });
 
-  it("says in its lede that the lab's result is not read at load, and comes from its scenarios and its replay of the team's decisions", async () => {
+  it("says in its lede that the lab's result is not read from the database, and comes from its scenarios and its replay of the team's decisions", async () => {
     const page = text(renderToStaticMarkup(await OpenPage({ searchParams: Promise.resolve({}) })));
     expect(page).toContain(
-      "The Quality Lab's result below is not read when the page loads: it comes from the tests that run its scenarios, and replay the team's own exported shadow-mode decisions, on every change."
+      "The Quality Lab's result below is not read from the database: it comes from the tests that run its scenarios, and replay the team's own exported shadow-mode decisions, on every change."
     );
   });
 });

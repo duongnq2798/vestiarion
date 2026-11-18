@@ -2,6 +2,7 @@ import { z } from "zod";
 import { platformDb } from "../dal";
 import { recentDecisionView, type DecisionFacts, type RecentDecisionView } from "../latest-decision";
 import { NETWORK_IDS } from "../network";
+import { publicRead } from "./public-cache";
 
 /**
  * What the landing reads for the agent's earlier decisions (docs/superpowers/specs/2026-10-11-landing-recent-decisions-design.md
@@ -57,28 +58,19 @@ type Found = { decisions: DecisionFacts[]; pastWeek: RecentDecisions["pastWeek"]
 const READ = 12;
 /** How many earlier decisions the landing lists: a few, with the full count on Open numbers. */
 export const SHOWN = 3;
-const MEMO_MS = 60_000;
-let memo: { at: number; value: Promise<Found> } | null = null;
 
-async function fetchRecent(): Promise<Found> {
+/** Kept a minute in the shared cache (public-cache.ts); a read that fails throws, so it is never kept. */
+const readFound = publicRead("recent-team-decisions", async function fetchRecent(): Promise<Found> {
   const result = await platformDb().rpc("recent_team_decisions", { p_limit: READ });
   if (result.error) throw new Error(result.error.message);
   const found = foundSchema.parse(result.data);
   return { decisions: found.decisions, pastWeek: { mainnet: found.pastWeek["arc-mainnet"], testnet: found.pastWeek["arc-testnet"] } };
-}
+});
 
-/** The agent's earlier decisions in the team's workspaces, read at most once a minute on this instance; null when they cannot be read. */
+/** The agent's earlier decisions in the team's workspaces, said as of `now`; null when they cannot be read. */
 export async function readRecentDecisions(now: number = Date.now()): Promise<RecentDecisions | null> {
-  if (!memo || now - memo.at > MEMO_MS) {
-    const value = fetchRecent();
-    memo = { at: now, value };
-    // A failed read is not kept: the next page load tries again.
-    value.catch(() => {
-      if (memo?.value === value) memo = null;
-    });
-  }
   try {
-    const found = await memo.value;
+    const found = await readFound();
     return { decisions: found.decisions.map((facts) => recentDecisionView(facts, now)), pastWeek: found.pastWeek };
   } catch (error) {
     console.error("recent decisions not read", error instanceof Error ? error.message : error);
