@@ -972,6 +972,15 @@ describe("what it does not claim, still true of the code", () => {
     expect(notClaimed.replace(/\s+/g, " ")).toContain("none merges on its own: each needs a passing CI run like any change");
     expect(notClaimed).not.toContain("Dependencies are not updated automatically");
   });
+
+  it("leaves @types/node majors to a change of the Node version itself", () => {
+    const dependabot = source(".github/dependabot.yml");
+    expect(dependabot).toMatch(/dependency-name: "@types\/node"\s*\n\s+update-types:\s*\n\s+- version-update:semver-major/);
+    const ci = source(".github/workflows/ci.yml");
+    const majors = new Set([...ci.matchAll(/node-version: (\d+)/g)].map((match) => match[1]));
+    expect([...majors]).toEqual(["24"]);
+    expect(source("package.json")).toMatch(/"@types\/node": "\^24\./);
+  });
 });
 
 describe("reporting a vulnerability", () => {
