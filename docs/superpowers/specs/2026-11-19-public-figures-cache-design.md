@@ -64,4 +64,20 @@ calls the reader itself; Next.js compiles `NEXT_RUNTIME` into its server bundles
 
 ## Measured
 
-Filled in from production after the change is deployed (see the pull request).
+On production from Vietnam on Nov 18, with `curl`: five rounds 3 minutes apart, each one load after the idle gap and one
+right after it, total time. Before, 17:07-17:19 UTC; after, from 18:04 UTC, once #614 was deployed.
+
+| | `/open` after idle | `/open` warm | `/` after idle | `/` warm |
+| --- | --- | --- | --- | --- |
+| Before, each round | 0.70, 2.61, 0.58, 3.93, 3.98 s | 1.00, 0.73, 0.66, 0.72, 1.09 s | 3.43, 1.96, 1.11, 0.74, 0.91 s | 1.21, 0.97, 0.90, 0.72, 0.81 s |
+| After, each round | 0.89, 0.86, 0.98, 0.79, 0.85 s | 0.84, 0.66, 0.76, 0.68, 0.71 s | 1.23, 0.68, 0.84, 0.75, 0.68 s | 0.65, 0.75, 0.71, 0.69, 0.65 s |
+| Median, before → after | 2.61 → 0.86 s | 0.73 → 0.71 s | 1.11 → 0.75 s | 0.90 → 0.69 s |
+
+- The first load after a quiet spell now costs about what a warm one does. Before, it took 0.6 to 4.0 s, depending on
+  whether it reached an instance whose memo was still fresh.
+- Concurrent loads of `/open` showed one read time per instance before (two among eight, 17:31:58 and 17:32:11), and
+  one read time across all twelve after (18:04:12.746507). The twelve took 1.5-2.7 s each: twelve function instances
+  starting at once right after a deploy. That start is not the database's, and no data cache saves it.
+- A load at 18:17:12, three minutes past the round before, was answered in 0.85 s, and the entry was read again behind
+  it: the next loads showed 18:17:13.978058 (PF2).
+- No runtime log line from 18:00 to 18:40 UTC: no read failed and no refresh failed.
