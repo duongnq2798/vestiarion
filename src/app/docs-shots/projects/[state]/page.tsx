@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import ApprovalCard from "@/components/ApprovalCard";
+import { WaitingHeading } from "@/components/approvals/WaitingHeading";
 import { AddToProjectForm, NewProjectForm } from "@/components/projects/ProjectForms";
 import { EarmarkNote, ProjectCash, ProjectDealsList, ProjectFigureTiles, ProjectPlan, ProjectsList, ProjectsTreasuryCard, ProjectWorkList } from "@/components/projects/ProjectViews";
 import { cn } from "@/components/ui/cn";
@@ -121,6 +122,7 @@ function HeldShot({ which }: { which: "held-bill" | "same-work" }) {
   return (
     <>
       <PageHead title={sectionTitle("approvals")} sub="Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle." />
+      <WaitingHeading />
       <ApprovalCard orgSlug={DESIGN_SLUG} payable={waiting} canDecide canEdit viewerId="docs-sample-owner" sandbox={false} exception={exception} viewerEmail="olivia@northstar.example" />
       <section className="mt-10">
         <SectionHeader title="The same bill's card on Bills & receivables" meta="the rule named, with its figures" />

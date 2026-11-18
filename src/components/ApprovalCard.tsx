@@ -50,7 +50,8 @@ const cosign = withSuccessToast(cosignInvoiceAction);
 
 /**
  * The card's cost lines (approval total cost TC1, TC2): the invoice, a discount that still applies, the route's fee, what
- * leaves and what the payee receives, read as Approve and pay would pay it now.
+ * leaves and what the payee receives, read as Approve and pay would pay it now. Its text is ink-2 at the quietest:
+ * ink-3 reads 4.29:1 on raised, under AA.
  */
 function CostBreakdown({ cost }: { cost: ApprovalCost }) {
   return (
@@ -58,12 +59,12 @@ function CostBreakdown({ cost }: { cost: ApprovalCost }) {
       <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
         {cost.lines.map((line) => (
           <div key={line.label} className="contents">
-            <dt className={line.total ? "font-medium text-ink" : "text-ink-3"}>{line.label}</dt>
+            <dt className={line.total ? "font-medium text-ink" : "text-ink-2"}>{line.label}</dt>
             <dd className={`text-right tabular-nums ${line.total ? "font-semibold text-ink" : "text-ink-2"}`}>{line.value}</dd>
           </div>
         ))}
       </dl>
-      {cost.note && <p className="mt-1.5 text-ink-3">{cost.note}</p>}
+      {cost.note && <p className="mt-1.5 text-ink-2">{cost.note}</p>}
     </div>
   );
 }

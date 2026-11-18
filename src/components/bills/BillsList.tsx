@@ -17,7 +17,8 @@ import type { BillRowItem, ListData } from "./types";
 /**
  * A tab's list on Bills & receivables (docs/superpowers/specs/2026-10-12-bills-tabs-design.md B6, B8, B9): its quick
  * filters with their counts, the search and the order, one row per bill, 25 to a page. A row says who, what, when, how
- * much, where it stands, what is in its way and what to do next; its name opens its detail.
+ * much, where it stands, what is in its way and what to do next; its name opens its detail. An empty list is titled
+ * h2: the tab panel has no heading of its own, so it sits right under the page's h1.
  */
 export function BillsList({ list, slugHref, above, below }: { list: ListData; slugHref: (path: string) => string; above?: ReactNode; below?: ReactNode }) {
   const { page } = list;
@@ -25,7 +26,7 @@ export function BillsList({ list, slugHref, above, below }: { list: ListData; sl
     return (
       <div className="space-y-4">
         {above}
-        <EmptyState compact title={list.empty.title} body={list.empty.body} action={list.empty.action} />
+        <EmptyState compact titleAs="h2" title={list.empty.title} body={list.empty.body} action={list.empty.action} />
         {below}
       </div>
     );
@@ -89,7 +90,7 @@ export function BillsList({ list, slugHref, above, below }: { list: ListData; sl
       {above}
 
       {page.total === 0 ? (
-        <EmptyState compact title={list.empty.title} body={list.empty.body} action={list.empty.action} />
+        <EmptyState compact titleAs="h2" title={list.empty.title} body={list.empty.body} action={list.empty.action} />
       ) : (
         <BillRows label={list.label} rows={page.rows} slugHref={slugHref} />
       )}

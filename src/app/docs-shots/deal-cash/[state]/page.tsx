@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import ApprovalCard from "@/components/ApprovalCard";
+import { WaitingHeading } from "@/components/approvals/WaitingHeading";
 import { BillRows } from "@/components/bills/BillsList";
 import type { BillRowItem } from "@/components/bills/types";
 import { DealCashReadiness } from "@/components/deals/DealCashReadiness";
@@ -107,6 +108,7 @@ function ApprovalsShot() {
   return (
     <>
       <PageHead title={sectionTitle("approvals")} sub="Payables the agent would not pay on its own, oldest due date first. Pay one now, reject it, or return it to the agent's next cycle." />
+      <WaitingHeading />
       <div className="space-y-4">
         {HELD_BILLS.map((bill) => (
           <ApprovalCard key={bill.id} orgSlug={DESIGN_SLUG} payable={bill} canDecide canEdit viewerId={viewer.userId} sandbox={false} exception={facts(bill)} viewerEmail={viewer.email} />
