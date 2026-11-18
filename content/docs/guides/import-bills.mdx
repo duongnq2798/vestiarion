@@ -62,7 +62,7 @@ To look over a list before you import it, the free [bill list check](/check-bill
 
 Open **Bills & receivables**, choose **New**, then **Import a list**. The list opens in a wide panel beside the page.
 
-- **Choose a CSV file, or drop one here.** Excel's "CSV UTF-8" keeps names in any language. A file saved as plain "CSV" is read too; if its names look wrong, the panel says "This file is not saved as UTF-8." Save it as "CSV UTF-8", or paste the rows instead.
+- **Choose a CSV file, or drop one here.** Excel's "CSV UTF-8" keeps names in any language. A file saved as plain "CSV" is read too. When it is not UTF-8, the panel says "This file is not saved as UTF-8." If its names then look wrong, save it as "CSV UTF-8", or paste the rows instead.
 - **Or paste rows from Excel or Google Sheets.** Select the rows with their column names, copy them, paste them, and choose **Read the pasted rows**.
 
 A comma, semicolon or tab between columns is found by itself, and so are quoted fields. A quote inside a cell, such as the inch mark in 12" pipe, is kept as written. Starting from nothing? **Copy a CSV template** gives Vestiarion's own column names and one sample row.
@@ -77,7 +77,7 @@ The panel lists each part of an invoice with the column it found for it, and the
   caption="The columns of a pasted list, matched and confirmed before any row is read."
 />
 
-- Columns are matched from the names businesses give them: Vendor, Supplier, Payee or Customer for the counterparty; Amount, Total, Amount due or Balance for the amount; Due date, Due or Payment due for the due date; Invoice no, Number or Reference for the invoice number; PO or PO number for the purchase order; and Currency, Memo or Description, Goods received and Direction. A bill's late fee comes from `late_fee_percent_month` (a percent a month) or `late_fee_amount` (a fixed amount), with `late_fee_starts_on`, the first day it applies; a column named Late fee (%) is read as a percent a month, and one named just Late fee is left for you to match, since it may hold either. A column called just "Date" is never taken for the due date.
+- Columns are matched from the names businesses give them: Vendor, Supplier, Payee or Customer for the counterparty; Amount, Total, Amount due or Balance for the amount; Due date, Due or Payment due for the due date; Invoice no, Number or Reference for the invoice number; PO or PO number for the purchase order; Currency, Memo or Description, Goods received and Direction; and Discount or Early payment discount (a percent), with Discount deadline, the last day it applies, for an early-payment discount. A bill's late fee comes from `late_fee_percent_month` (a percent a month) or `late_fee_amount` (a fixed amount), with `late_fee_starts_on`, the first day it applies; a column named Late fee (%) is read as a percent a month, and one named just Late fee is left for you to match, since it may hold either. A column called just "Date" is never taken for the due date.
 - Change any match, or set it to **Not in the list**. The fields your list does not have wait folded under **Not in the list**: open it to choose a column for one. Counterparty, Amount and Due date are needed. Any column not chosen is left out.
 - **The first row holds column names** is ticked when the first row looks like names. Untick it for a list of bills alone; its columns are then called Column A, Column B, and so on.
 
@@ -86,8 +86,8 @@ Then answer what only you can say. Each question appears only when the list need
 - **These rows are**: **Bills to pay** or **Invoices to collect**, when the list has no direction column. Nothing is chosen for you.
 - **Day first (15/10/2026)** or **Month first (10/15/2026)**, when no date in the list settles it. A date such as 25/10/2026 settles it; a list of dates like 03/04/2026 does not, and Vestiarion never guesses. When the list writes its years with two digits, the year could come first or last, so **Year first (26/10/15)** is offered too: 26.10.15 is 15 October 2026 written year first, and 26 October 2015 written day first. A date with a four-digit year, or one that only one order fits, such as 10/15/26, settles where the year is. Only the ways the list's dates can be written are offered.
 - **1,234.50** or **1.234,50**, when no amount settles how the list writes its numbers.
-- The currency of the bills, or of the rows that leave it blank.
-- **The goods or services on every bill were received**, when the list has no column that says so. Tick it only if they all were: the agent waits for goods to be marked received before it pays a bill.
+- The currency of the bills, or of the rows that leave it blank. This one is always asked, with a currency already chosen when the list is read, so check it. In shadow mode for bills in your own currency, such as EUR, it is that currency. Otherwise, shadow mode for bills in USDC included, it is USDC, or EURC when at least one amount in the column matched as Amount is written with a currency sign or code, such as €1.200,00, and every such amount is in euros. It is not chosen again when you change a column or **The first row holds column names**, so a list read without column names starts at USDC.
+- **The goods or services on every bill were received**, when the list has no column that says so and **Invoices to collect** is not chosen. Tick it only if they all were: the agent waits for goods to be marked received before it pays a bill.
 
 An answer counts only while its question is shown. If you choose another column and the list's own dates or amounts then settle it, the question goes, and they are read as the list writes them.
 
@@ -154,6 +154,7 @@ The list itself is not kept. A payable's decision trail says "A person added it,
 | Message | What to do |
 | --- | --- |
 | A quoted field is never closed. Check the list's quotes, then try again. | A cell starts with a quote that nothing closes. Close the quote or remove it in the spreadsheet, then give the list again. |
+| Choose a file of at most 1 MB. | Split the list. |
 | The list must be smaller than 1 MB. | Split the list. |
 | Import at most 200 bills at a time. Split the list. | Import the list in parts. |
 | Choose whether the list's dates are day first or month first. | Answer the question about dates. |
