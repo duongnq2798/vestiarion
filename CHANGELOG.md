@@ -31,6 +31,13 @@ Integrators: changes to the API (`/api/v1`) and webhooks are listed, entry by en
   settles what the database's advisors flagged: two functions now run with a fixed search path, three trigger
   functions can no longer be called through the browser's roles, and seven tables get an index on their workspace that
   deleting a workspace can use.
+- **Open numbers and the landing open without waiting on a cold database connection.** The figures and the agent's
+  latest decisions were kept for a minute by each server on its own, so most visits still read the database, and after
+  a quiet spell its first answer took about two seconds. They are now kept for a minute in a cache every server shares,
+  and once that minute is past the next visit is shown the figures last read while newer ones are read behind it.
+  Figures can therefore be older than a minute after a quiet spell: each page says when its figures were read, and
+  Open numbers says how they are kept. A figure that cannot be read still says so, and a failed read is never kept.
+  No migration.
 
 ## [0.1.0-beta.16] - 2026-11-15
 

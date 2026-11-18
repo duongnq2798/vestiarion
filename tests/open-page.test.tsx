@@ -101,6 +101,15 @@ describe("the /open page", () => {
     expect(metadata.alternates?.canonical).toBe("/open");
   });
 
+  it("says when its figures were read, and that they are kept a minute and can be older after a quiet spell (PF2)", async () => {
+    const page = text(await render());
+    expect(page).toContain("Live · read Sep 30, 2026, 12:00 UTC");
+    expect(page).toContain("Figures are kept a minute between reads, and can be older after a quiet spell: the time above says when they were read.");
+    expect(page).toContain("Figures are kept for a minute after they are read.");
+    expect(page).not.toContain("up to a minute old");
+    expect(page).not.toContain("when this page loads");
+  });
+
   it("shows every row for customers, our workspaces and the total", async () => {
     const markup = await render();
     const table = figureTable(markup);

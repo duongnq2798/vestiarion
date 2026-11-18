@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nextCache } from "./support/fake-next-cache";
 
 /**
  * What the landing reads for its latest decision (docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md R4):
@@ -18,6 +19,8 @@ vi.mock("@/lib/dal/scope", () => ({
   },
 }));
 vi.mock("@/lib/ledger", () => ({ ledgerPublicKeyPems: () => ({ "0123456789abcdef": "-----BEGIN PUBLIC KEY-----\nMCow\n-----END PUBLIC KEY-----\n" }) }));
+// The shared cache (public-cache.ts) over Next.js's unstable_cache; a test reads through it only once it stubs NEXT_RUNTIME.
+vi.mock("next/cache", async () => (await import("./support/fake-next-cache")).nextCache);
 
 import { readLatestDecision } from "@/lib/platform/latest-decision";
 
@@ -47,13 +50,18 @@ const FOUND = {
   signingKeyId: "0123456789abcdef",
 };
 
-// Each test reads at its own minute, past the previous one's memo.
+// Each test reads at its own minute.
 let minute = 0;
 const at = () => Date.parse("2026-10-08T12:00:00Z") + (minute += 5) * 60_000;
 
 beforeEach(() => {
   rpc.mockReset();
   scopes.length = 0;
+  nextCache.clear();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("readLatestDecision", () => {
@@ -74,14 +82,26 @@ describe("readLatestDecision", () => {
     expect(JSON.stringify(shown)).not.toContain(ORG);
   });
 
-  it("reads it once a minute at most", async () => {
+  it("is read through the shared cache, kept a minute without the workspace's id (PF1, PF2)", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
     rpc.mockResolvedValue({ data: FOUND, error: null });
     const now = at();
-    await readLatestDecision(now);
-    await readLatestDecision(now + 30_000);
+    const first = await readLatestDecision(now);
+    expect(await readLatestDecision(now + 30_000)).toMatchObject({ seq: first?.seq, link: first?.link, publicKeys: first?.publicKeys });
     expect(rpc).toHaveBeenCalledTimes(1);
-    await readLatestDecision(now + 61_000);
-    expect(rpc).toHaveBeenCalledTimes(2);
+    expect(nextCache.registered).toContainEqual({ keyParts: ["public-figures", "", "latest-team-decision"], revalidate: 60 });
+    expect([...nextCache.entries.values()].join()).not.toContain(ORG);
+  });
+
+  it("never keeps a failed read in the shared cache, so the next page load reads again (PF3)", async () => {
+    vi.stubEnv("NEXT_RUNTIME", "nodejs");
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    rpc.mockResolvedValueOnce({ data: null, error: { message: "upstream connect error" } }).mockResolvedValue({ data: FOUND, error: null });
+    const now = at();
+    expect(await readLatestDecision(now)).toBeNull();
+    expect(nextCache.entries.size).toBe(0);
+    expect(await readLatestDecision(now + 1_000)).toMatchObject({ seq: 1899 });
+    quiet.mockRestore();
   });
 
   it("reads the payment that followed, and goes without it before 0088 runs", async () => {

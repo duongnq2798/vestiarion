@@ -3,13 +3,13 @@ import { db, platformDb } from "../dal";
 import { withOrg } from "../dal/scope";
 import { ledgerPublicKeyPems } from "../ledger";
 import { teamJourneyDecision, teamJourneyView, type TeamJourney, type TeamJourneys } from "../team-journey";
+import { publicRead } from "./public-cache";
 
 const row = z.object({ orgId: z.string().uuid() }).passthrough();
 const document = z.object({ direct: row.nullable(), base: row.nullable() });
-const MEMO_MS = 60_000;
-let memo: { at: number; value: Promise<TeamJourneys> } | null = null;
 
-async function fetchJourneys(): Promise<TeamJourneys> {
+/** Kept a minute in the shared cache (public-cache.ts), stripped of the workspace's id; a failed read throws, so it is never kept. */
+const readJourneys = publicRead("landing-team-journeys", async function fetchJourneys(): Promise<TeamJourneys> {
   const result = await platformDb().rpc("landing_team_journeys");
   // Until the additive migration is released, an existing service-role function can select one eligible team scope.
   // This may find fewer bills than the platform RPC; it never widens eligibility or invents a historical fixture.
@@ -38,7 +38,7 @@ async function fetchJourneys(): Promise<TeamJourneys> {
   }
   const [direct, base] = await Promise.all([shown(found.direct), shown(found.base)]);
   return { direct, base };
-}
+});
 
 interface ScopedIntent {
   source_id: string; amount: number | string; token: string; chain: string | null; network: string;
@@ -117,12 +117,8 @@ async function readSelectedTeamScope(): Promise<TeamJourneys> {
   });
 }
 
-/** One minute per instance. An unavailable migration/read returns null; an empty successful read has two null slots. */
-export async function readTeamJourneys(now = Date.now()): Promise<TeamJourneys | null> {
-  if (!memo || now - memo.at > MEMO_MS) {
-    const value = fetchJourneys(); memo = { at: now, value };
-    value.catch(() => { if (memo?.value === value) memo = null; });
-  }
-  try { return await memo.value; }
+/** From the shared cache. An unavailable migration/read returns null; an empty successful read has two null slots. */
+export async function readTeamJourneys(): Promise<TeamJourneys | null> {
+  try { return await readJourneys(); }
   catch { console.error("landing: team journeys unavailable"); return null; }
 }

@@ -61,8 +61,9 @@ const PROMISES: ReadonlyArray<{ title: string; body: string }> = [
 
 /**
  * The open numbers (docs/superpowers/specs/2026-09-30-open-numbers-design.md):
- * platform-wide usage, public, read on every request through the aggregate
- * functions, one network at a time. A network where a payment settled in the
+ * platform-wide usage, public, read through the aggregate functions one
+ * network at a time, each document kept a minute in the shared cache
+ * (src/lib/platform/public-cache.ts). A network where a payment settled in the
  * period gets the full section, customers' figures first, and the first such
  * network's headline figures sit under the heading. A network with no payment
  * yet, or whose numbers cannot be read, is a compact card after them, so a
@@ -96,14 +97,14 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
             <Heading as="h1" size="section" className="mt-3 text-ink">Vestiarion, in production</Heading>
             <p className="mt-5 text-lede leading-relaxed text-ink-2">
               Who uses Vestiarion, what its agent decided, what stopped it, and what settled. Every figure is read from Vestiarion&apos;s production
-              database when this page loads, with nothing entered by hand. The Quality Lab&apos;s result below is not read when the page loads:
+              database, with nothing entered by hand. The Quality Lab&apos;s result below is not read from the database:
               it comes from the tests that run its scenarios, and replay the team&apos;s own exported shadow-mode decisions, on every change.
             </p>
           </header>
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
             <PeriodNav period={period} />
-            <p className="text-xs text-ink-3">Figures can be up to a minute old. Days are UTC.</p>
+            <p className="text-xs text-ink-3">Figures are kept a minute between reads, and can be older after a quiet spell: the time above says when they were read. Days are UTC.</p>
           </div>
           {period.fallback && <p className="mt-3 text-sm text-ink-2">That period could not be read, so this shows all time.</p>}
 
@@ -171,7 +172,10 @@ export default async function OpenPage({ searchParams }: OpenPageProps) {
                 </li>
                 <li>Rows marked now are totals at the moment of reading; the others cover the period chosen above.</li>
                 <li>A deleted workspace takes its activity out of these figures with it.</li>
-                <li>Figures can be up to a minute old.</li>
+                <li>
+                  Figures are kept for a minute after they are read. The first visit after a quiet spell is shown the figures last read while newer
+                  ones are read for the next, and the time at the top of the page says when they were read.
+                </li>
               </Method>
               <Method title="Customers and our workspaces">
                 <li>

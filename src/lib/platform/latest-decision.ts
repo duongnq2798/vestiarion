@@ -4,6 +4,7 @@ import { withOrg } from "../dal/scope";
 import { latestDecisionView, type LatestDecisionFacts, type LatestDecisionView } from "../latest-decision";
 import { ledgerPublicKeyPems } from "../ledger";
 import { NETWORK_IDS } from "../network";
+import { publicRead } from "./public-cache";
 
 /**
  * What the landing reads for its latest decision (docs/superpowers/specs/2026-10-08-landing-owner-hero-design.md R4):
@@ -51,10 +52,8 @@ const foundSchema = z.object({
 
 type Found = { facts: LatestDecisionFacts; publicKeys: Record<string, string> } | null;
 
-const MEMO_MS = 60_000;
-let memo: { at: number; value: Promise<Found> } | null = null;
-
-async function fetchLatest(): Promise<Found> {
+/** Kept a minute in the shared cache (public-cache.ts); a read that fails throws, so it is never kept. */
+const readFound = publicRead("latest-team-decision", async function fetchLatest(): Promise<Found> {
   const result = await platformDb().rpc("latest_team_decision");
   if (result.error) throw new Error(result.error.message);
   if (result.data === null) return null;
@@ -64,20 +63,12 @@ async function fetchLatest(): Promise<Found> {
     facts: { ...rest, link: { body_hash: bodyHash, signature, prev_hash: prevHash, hash, signing_key_id: signingKeyId } },
     publicKeys,
   };
-}
+});
 
-/** The team's latest decision as the landing shows it, read at most once a minute on this instance; null when there is none to show. */
+/** The team's latest decision as the landing shows it, said as of `now`; null when there is none to show or it could not be read. */
 export async function readLatestDecision(now: number = Date.now()): Promise<LatestDecisionShown | null> {
-  if (!memo || now - memo.at > MEMO_MS) {
-    const value = fetchLatest();
-    memo = { at: now, value };
-    // A failed read is not kept: the next page load tries again.
-    value.catch(() => {
-      if (memo?.value === value) memo = null;
-    });
-  }
   try {
-    const found = await memo.value;
+    const found = await readFound();
     return found ? { ...latestDecisionView(found.facts, now), publicKeys: found.publicKeys } : null;
   } catch (error) {
     console.error("latest decision not read", error instanceof Error ? error.message : error);

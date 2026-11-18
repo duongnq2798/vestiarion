@@ -47,7 +47,8 @@ const LOCATION_MAX = 120;
 /**
  * What a round opens (PC1). Each text is in the source it comes from and holds nothing React escapes, an apostrophe
  * above all (PC3): tests/synthetic-check.test.ts holds both, and that every free tool is here and in the sitemap. The
- * landing and the open numbers read the database on every request, so their budget is longer.
+ * landing and the open numbers read the database, through a cache kept a minute (src/lib/platform/public-cache.ts),
+ * so their budget is longer; a round's load past that minute is what has the cache read again.
  *
  * @type {readonly Check[]}
  */

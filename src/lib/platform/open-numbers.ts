@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { utcDay } from "../copy";
-import { platformDb, unwrap, type PlatformRpc } from "../dal";
+import { platformDb, unwrap } from "../dal";
 import type { Network } from "../network";
+import { publicRead } from "./public-cache";
 
 /**
  * The open numbers (docs/superpowers/specs/2026-09-30-open-numbers-design.md):
@@ -15,10 +16,11 @@ import type { Network } from "../network";
  * (docs/superpowers/specs/2026-10-01-open-outcomes-design.md). Each counts one
  * network, so Arc mainnet is never added to Arc testnet (network foundation N7).
  * They return aggregates only, split into customers' workspaces, ours, and the
- * total (R3); this module validates the documents, merges them into one set of
- * figures per side, and keeps it for 60 seconds per period and network, so a
- * busy public page cannot hammer the database (R9). The landing shows no
- * outcome and reads without `open_outcomes`, the costliest of them.
+ * total (R3); this module validates the documents and merges them into one set
+ * of figures per side. Each document is kept a minute per period and network in
+ * the shared cache (public-cache.ts), so a busy public page cannot hammer the
+ * database (R9) and a visitor seldom waits on a cold connection. The landing
+ * shows no outcome and reads without `open_outcomes`, the costliest of them.
  */
 
 const figure = z.coerce.number();
@@ -188,72 +190,67 @@ export function dailySeries(daily: DailyPayments[], period: Period, now: Date = 
   return series;
 }
 
-const MEMO_MS = 60_000;
-const memo = new Map<string, { at: number; value: Promise<OpenNumbers> }>();
-
-function memoKey(period: Period, network: Network, outcomes: boolean): string {
-  const key = `${network}:${period.key === "since" && period.since ? `since:${period.since.toISOString()}` : period.key}`;
-  return outcomes ? key : `${key}:no-outcomes`;
-}
-
 export interface ReadOptions {
   /** False to leave out open_outcomes, whose figures are then all null as when it cannot be read. True by default. */
   outcomes?: boolean;
 }
+
+/** The four functions /open reads. */
+type OpenRpc = "open_numbers" | "open_first_payments" | "open_outcomes" | "open_verdicts";
+
+/**
+ * A period as the shared cache keys it: all time, a rolling period by name, or a dated one by its first instant. A
+ * rolling period's start is worked out when its document is read, so the entry is the same on every request.
+ */
+function periodName(period: Period): string {
+  return period.key === "since" && period.since ? `since:${period.since.toISOString()}` : period.key;
+}
+
+function startOf(name: string, now: number): string | null {
+  if (name.startsWith("since:")) return name.slice("since:".length);
+  if (name === "7d" || name === "30d") return new Date(now - ROLLING[name].days * DAY_MS).toISOString();
+  return null;
+}
+
+/**
+ * One function's document for a period and network, from the shared cache, as the database answered it: it is checked
+ * on every read, never before it is kept. An error throws, so a document that could not be read is never kept.
+ */
+const readDocument = publicRead("open-numbers", async (fn: OpenRpc, name: string, network: Network): Promise<unknown> =>
+  unwrap(await platformDb().rpc(fn, { p_since: startOf(name, Date.now()), p_network: network })),
+);
 
 /**
  * Reads one function whose figures stand on their own: when it cannot be read
  * (before its migration is applied, say), every side gets `missing` and the
  * rest of /open still shows.
  */
-function readSides<S>(fn: PlatformRpc, params: { p_since: string | null; p_network: Network }, schema: z.ZodType<{ sides: Record<SideKey, S> }>, missing: S) {
-  return Promise.resolve(platformDb().rpc(fn, params))
-    .then((result) => schema.parse(unwrap(result)).sides)
+function readSides<S>(fn: OpenRpc, name: string, network: Network, schema: z.ZodType<{ sides: Record<SideKey, S> }>, missing: S) {
+  return readDocument(fn, name, network)
+    .then((document) => schema.parse(document).sides)
     .catch((error: unknown): Record<SideKey, S> => {
       console.error(`open numbers: ${fn} not read`, error instanceof Error ? error.message : error);
       return { customers: missing, ours: missing, total: missing };
     });
 }
 
-async function fetchOpenNumbers(period: Period, network: Network, withOutcomes: boolean): Promise<OpenNumbers> {
-  const params = { p_since: period.since ? period.since.toISOString() : null, p_network: network };
-  const [numbers, first, outcomes, verdicts] = await Promise.all([
-    platformDb().rpc("open_numbers", params),
-    readSides("open_first_payments", params, firstPaymentsSchema, NO_FIRSTS),
-    withOutcomes
-      ? readSides<OutcomeSide>("open_outcomes", params, outcomesSchema, NO_OUTCOMES)
-      : { customers: NO_OUTCOMES, ours: NO_OUTCOMES, total: NO_OUTCOMES },
-    readSides<VerdictSide>("open_verdicts", params, verdictsSchema, NO_VERDICTS),
-  ]);
-  const document = openNumbersSchema.parse(unwrap(numbers));
-  const merge = (side: SideKey): SideNumbers => ({ ...document.sides[side], ...first[side], ...outcomes[side], ...verdicts[side] });
-  return { ...document, sides: { customers: merge("customers"), ours: merge("ours"), total: merge("total") } };
-}
-
 /**
- * One network's open numbers for a period, read at most once a minute per period and network on this instance. A read
- * without outcomes takes the full figures when they are held, and is held apart from them otherwise, so /open never
- * gets a set without its outcomes.
+ * One network's open numbers for a period. Each function's document comes from the shared cache on its own, so one
+ * that cannot be read is read again on the next request while the others are answered from the cache.
  */
-export function readOpenNumbers(
-  period: Period,
-  network: Network = "arc-testnet",
-  now: number = Date.now(),
-  { outcomes = true }: ReadOptions = {},
-): Promise<OpenNumbers> {
-  const fresh = (key: string) => {
-    const held = memo.get(key);
-    return held && now - held.at <= MEMO_MS ? held.value : null;
-  };
-  const key = memoKey(period, network, outcomes);
-  const held = fresh(memoKey(period, network, true)) ?? fresh(key);
-  if (held) return held;
-  const value = fetchOpenNumbers(period, network, outcomes);
-  memo.set(key, { at: now, value });
-  value.catch(() => {
-    if (memo.get(key)?.value === value) memo.delete(key);
-  });
-  return value;
+export async function readOpenNumbers(period: Period, network: Network = "arc-testnet", { outcomes = true }: ReadOptions = {}): Promise<OpenNumbers> {
+  const name = periodName(period);
+  const [numbers, first, outcomeSides, verdicts] = await Promise.all([
+    readDocument("open_numbers", name, network),
+    readSides("open_first_payments", name, network, firstPaymentsSchema, NO_FIRSTS),
+    outcomes
+      ? readSides<OutcomeSide>("open_outcomes", name, network, outcomesSchema, NO_OUTCOMES)
+      : { customers: NO_OUTCOMES, ours: NO_OUTCOMES, total: NO_OUTCOMES },
+    readSides<VerdictSide>("open_verdicts", name, network, verdictsSchema, NO_VERDICTS),
+  ]);
+  const document = openNumbersSchema.parse(numbers);
+  const merge = (side: SideKey): SideNumbers => ({ ...document.sides[side], ...first[side], ...outcomeSides[side], ...verdicts[side] });
+  return { ...document, sides: { customers: merge("customers"), ours: merge("ours"), total: merge("total") } };
 }
 
 /** Puts a person on the team (`member` true) or takes them off; true when that changed anything. */
@@ -274,7 +271,7 @@ export async function listTeam(): Promise<Array<{ email: string; addedAt: string
  */
 export async function readAllTimeOrNull(network: Network, options: ReadOptions = {}): Promise<OpenNumbers | null> {
   try {
-    return await readOpenNumbers(parsePeriod({}), network, undefined, options);
+    return await readOpenNumbers(parsePeriod({}), network, options);
   } catch (error) {
     console.error(`landing: ${network} open numbers not read`, error instanceof Error ? error.message : error);
     return null;
