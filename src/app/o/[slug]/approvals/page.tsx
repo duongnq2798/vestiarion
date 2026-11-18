@@ -4,6 +4,7 @@ import { Inbox } from "lucide-react";
 import { dismissChecklistAction } from "@/app/actions/onboarding";
 import ApprovalCard from "@/components/ApprovalCard";
 import { ApprovalSelection } from "@/components/approvals/ApprovalSelection";
+import { WaitingHeading } from "@/components/approvals/WaitingHeading";
 import { ProposalCard } from "@/components/ProposalCard";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -175,6 +176,7 @@ export default async function ApprovalsPage({ params }: { params: Promise<{ slug
         {/* Several bills approved with one confirmation (docs/superpowers/specs/2026-10-30-approve-many-design.md): the
             selection, its bar and its keys, here only (AM13). It stays when the list empties, so the result of the bills
             it just paid is still read. */}
+        <WaitingHeading />
         <ApprovalSelection orgSlug={slug} order={waiting.map((payable) => payable.id)} sandbox={paysSimulated(capability)}>
           {waiting.length === 0 ? (
             <EmptyState icon={<Inbox />} title="Nothing is waiting for a decision." body="When the agent holds or flags a payable, it appears here." />
