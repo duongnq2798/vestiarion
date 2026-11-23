@@ -74,7 +74,7 @@
     "lucide-react": "^1.72.0",
     "mcp-handler": "2.4.0",
     "micromark-util-decode-numeric-character-reference": "2.0.2",
-    "motion": "^13.4.4",
+    "motion": "^14.14.0",
     "next": "16.4.6",
     "pg": "^8.23.1",
     "radix-ui": "^1.8.1",
